@@ -69,9 +69,35 @@ export const SCHEMA = `
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- OAuth tokens
+  CREATE TABLE IF NOT EXISTS oauth_tokens (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL UNIQUE,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT,
+    expires_at TEXT,
+    token_type TEXT DEFAULT 'Bearer',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Webhook configs (v0.2)
+  CREATE TABLE IF NOT EXISTS webhook_configs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    source TEXT NOT NULL CHECK(source IN ('github', 'gitlab', 'bitbucket')),
+    secret TEXT NOT NULL,
+    branch_filter TEXT DEFAULT 'main',
+    enabled INTEGER DEFAULT 1 CHECK(enabled IN (0, 1)),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(project_id, source)
+  );
+
   -- Indexes
   CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id);
   CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id);
   CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id);
   CREATE INDEX IF NOT EXISTS idx_domain_mappings_project ON domain_mappings(project_id);
+  CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens(provider);
+  CREATE INDEX IF NOT EXISTS idx_webhook_configs_project_source ON webhook_configs(project_id, source);
 `;

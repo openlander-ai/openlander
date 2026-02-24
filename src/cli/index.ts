@@ -6,7 +6,7 @@ const program = new Command();
 program
   .name('openlander')
   .description('AI agent that deploys your app from a chat')
-  .version('0.1.0');
+  .version('0.2.0');
 
 program
   .command('onboard')
@@ -24,7 +24,7 @@ program
   .action(async (options: { port: string; host: string }) => {
     const port = parseInt(options.port, 10);
 
-    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim(`v0.1.0\n`));
+    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim(`v0.2.0\n`));
 
     // Load config
     const { loadConfig, getDbPath, isOnboarded } = await import('../config/index.js');
@@ -78,7 +78,9 @@ program
     const { createServer } = await import('../web/server.js');
     createServer({ port, host: options.host }, ctx);
 
-    console.log(pc.green(`\n  \u2713 Server running at ${pc.bold(`http://${options.host}:${String(port)}`)}`));
+    console.log(
+      pc.green(`\n  \u2713 Server running at ${pc.bold(`http://${options.host}:${String(port)}`)}`),
+    );
     console.log(pc.dim(`  API: http://localhost:${String(port)}/api`));
     console.log(pc.dim(`  Health: http://localhost:${String(port)}/health\n`));
 
@@ -130,10 +132,41 @@ program
     }
 
     // LLM status
-    if (config.llm.apiKey) {
+    if (config.llm.apiKey || config.llm.authToken) {
       console.log(pc.green(`  LLM: ${config.llm.provider} (${config.llm.model})`));
     } else {
       console.log(pc.yellow('  LLM: not configured'));
+    }
+
+    // v0.2: Health monitoring status
+    console.log(pc.bold('  Health Monitoring:'));
+    console.log(
+      pc.dim('    Healthcheck interval: ' + String(config.monitoring.healthcheckIntervalSec) + 's'),
+    );
+
+    // v0.2: Webhook status
+    const webhookProjects = projects.filter((p) => {
+      // Check if any webhook configs exist for this project
+      const ghConfig = db.getWebhookConfig(p.id, 'github');
+      const glConfig = db.getWebhookConfig(p.id, 'gitlab');
+      const bbConfig = db.getWebhookConfig(p.id, 'bitbucket');
+      return ghConfig || glConfig || bbConfig;
+    });
+    if (webhookProjects.length > 0) {
+      console.log(pc.bold(`  Webhooks (${String(webhookProjects.length)} projects):`));
+      for (const p of webhookProjects) {
+        console.log(`    ${pc.bold(p.name)}`);
+      }
+    }
+
+    // v0.2: OAuth status
+    const oauthProviders = ['anthropic', 'openai', 'google'] as const;
+    const authenticatedProviders = oauthProviders.filter((p) => db.getOAuthTokens(p) != null);
+    if (authenticatedProviders.length > 0) {
+      console.log(pc.bold('  OAuth:'));
+      for (const p of authenticatedProviders) {
+        console.log(pc.green(`    ✓ ${p}`));
+      }
     }
 
     console.log();

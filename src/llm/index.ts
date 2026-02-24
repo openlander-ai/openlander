@@ -6,19 +6,27 @@
  * - OpenRouter (free models, no credit card)
  * - Anthropic Claude
  * - OpenAI
- * - Ollama (v0.3+)
+ * - Ollama (local, no API key)
  *
  * The agent uses function calling / tool use to invoke
  * the deployment pipeline. The LLM never executes commands directly.
  */
 
 import { GeminiProvider } from './gemini.js';
+import { AnthropicProvider } from './anthropic.js';
+import { OpenAIProvider } from './openai.js';
+import { OpenRouterProvider } from './openrouter.js';
+import { OllamaProvider } from './ollama.js';
 import { LLMNotConfiguredError } from '../errors.js';
 
 export interface LLMConfig {
   provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
   apiKey: string;
   model?: string;
+  /** Ollama base URL (default: http://localhost:11434) */
+  ollamaBaseUrl?: string;
+  /** OAuth access token (used instead of apiKey when OAuth is configured) */
+  authToken?: string;
 }
 
 export interface ChatMessage {
@@ -48,26 +56,24 @@ export interface LLMClient {
  * Create an LLM client based on provider config.
  */
 export function createLLMClient(config: LLMConfig): LLMClient {
-  if (!config.apiKey) {
+  const apiKey = config.authToken ?? config.apiKey;
+
+  // Ollama doesn't need an API key
+  if (config.provider !== 'ollama' && !apiKey) {
     throw new LLMNotConfiguredError();
   }
 
   switch (config.provider) {
     case 'gemini':
-      return new GeminiProvider(config.apiKey, config.model ?? 'gemini-2.0-flash');
-    case 'openrouter':
-      // OpenRouter is OpenAI-compatible — will be implemented in v0.2
-      // For now, can use Gemini as default
-      return new GeminiProvider(config.apiKey, config.model);
+      return new GeminiProvider(apiKey, config.model ?? 'gemini-2.0-flash');
     case 'anthropic':
-      // TODO: implement Anthropic provider (v0.2)
-      throw new Error('Anthropic provider not yet implemented. Use Gemini or OpenRouter.');
+      return new AnthropicProvider(apiKey, config.model ?? 'claude-sonnet-4-20250514');
     case 'openai':
-      // TODO: implement OpenAI provider (v0.2)
-      throw new Error('OpenAI provider not yet implemented. Use Gemini or OpenRouter.');
+      return new OpenAIProvider(apiKey, config.model ?? 'gpt-4o');
+    case 'openrouter':
+      return new OpenRouterProvider(apiKey, config.model ?? 'google/gemini-2.0-flash-exp:free');
     case 'ollama':
-      // TODO: implement Ollama provider (v0.3)
-      throw new Error('Ollama provider not yet implemented (planned for v0.3).');
+      return new OllamaProvider(config.model ?? 'llama3.2', config.ollamaBaseUrl);
     default:
       throw new Error(`Unknown LLM provider: ${String(config.provider)}`);
   }

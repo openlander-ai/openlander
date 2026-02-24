@@ -45,6 +45,8 @@ export interface LLMProviderConfig {
   provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
   apiKey: string;
   model: string;
+  /** v0.2: OAuth access token (used instead of apiKey when OAuth is active) */
+  authToken: string;
   /** v0.5: Ollama endpoint for local models */
   ollamaEndpoint: string;
 }
@@ -116,6 +118,7 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
     provider: 'gemini',
     apiKey: '',
     model: 'gemini-2.0-flash',
+    authToken: '',
     ollamaEndpoint: 'http://localhost:11434',
   },
   server: {

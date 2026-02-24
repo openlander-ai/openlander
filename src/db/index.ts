@@ -53,6 +53,27 @@ export interface DomainMappingRow {
   created_at: string;
 }
 
+export interface OAuthTokenRow {
+  id: string;
+  provider: string;
+  access_token: string;
+  refresh_token: string | null;
+  expires_at: string | null;
+  token_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookConfigRow {
+  id: string;
+  project_id: string;
+  source: 'github' | 'gitlab' | 'bitbucket';
+  secret: string;
+  branch_filter: string;
+  enabled: 0 | 1;
+  created_at: string;
+}
+
 // --- Database class ---
 
 /**
@@ -381,6 +402,85 @@ export class Database {
   /** Delete a domain mapping. */
   deleteDomainMapping(id: string): void {
     this.db.prepare('DELETE FROM domain_mappings WHERE id = ?').run(id);
+  }
+
+  getOAuthTokens(provider: string): OAuthTokenRow | undefined {
+    return this.db.prepare('SELECT * FROM oauth_tokens WHERE provider = ?').get(provider) as
+      | OAuthTokenRow
+      | undefined;
+  }
+
+  upsertOAuthTokens(token: {
+    id: string;
+    provider: string;
+    accessToken: string;
+    refreshToken: string | null;
+    expiresAt: string | null;
+    tokenType: string;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT INTO oauth_tokens (id, provider, access_token, refresh_token, expires_at, token_type)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(provider) DO UPDATE SET
+           access_token = excluded.access_token,
+           refresh_token = excluded.refresh_token,
+           expires_at = excluded.expires_at,
+           token_type = excluded.token_type,
+           updated_at = CURRENT_TIMESTAMP`,
+      )
+      .run(
+        token.id,
+        token.provider,
+        token.accessToken,
+        token.refreshToken,
+        token.expiresAt,
+        token.tokenType,
+      );
+  }
+
+  deleteOAuthTokens(provider: string): void {
+    this.db.prepare('DELETE FROM oauth_tokens WHERE provider = ?').run(provider);
+  }
+
+  getWebhookConfig(
+    projectId: string,
+    source: WebhookConfigRow['source'],
+  ): WebhookConfigRow | undefined {
+    return this.db
+      .prepare('SELECT * FROM webhook_configs WHERE project_id = ? AND source = ? LIMIT 1')
+      .get(projectId, source) as WebhookConfigRow | undefined;
+  }
+
+  setWebhookConfig(config: {
+    id: string;
+    projectId: string;
+    source: WebhookConfigRow['source'];
+    secret: string;
+    branchFilter?: string;
+    enabled?: boolean;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT INTO webhook_configs (id, project_id, source, secret, branch_filter, enabled)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(project_id, source) DO UPDATE SET
+           secret = excluded.secret,
+           branch_filter = excluded.branch_filter,
+           enabled = excluded.enabled`,
+      )
+      .run(
+        config.id,
+        config.projectId,
+        config.source,
+        config.secret,
+        config.branchFilter ?? 'main',
+        config.enabled === false ? 0 : 1,
+      );
+  }
+
+  setWebhookEnabled(id: string, enabled: boolean): void {
+    this.db.prepare('UPDATE webhook_configs SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
   }
 
   // ===== Utility =====

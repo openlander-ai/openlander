@@ -5,6 +5,10 @@ import { TraefikManager } from './pipeline/traefik.js';
 import { EnvManager } from './pipeline/env.js';
 import { Agent } from './agent/index.js';
 import { createLLMClient } from './llm/index.js';
+import { HealthMonitor } from './monitor/health.js';
+import { WebhookManager } from './webhook/index.js';
+import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
+import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 
 /**
@@ -20,7 +24,11 @@ export interface AppContext {
   pipeline: DeployPipeline;
   traefik: TraefikManager;
   env: EnvManager;
-  agent: Agent | null; // null if no LLM configured
+  agent: Agent | null;
+  // v0.2 modules
+  healthMonitor: HealthMonitor;
+  webhookManager: WebhookManager;
+  cloudflare: CloudflareTunnelManager;
 }
 
 /** Create the application context from config. */
@@ -33,12 +41,14 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
   // Create agent only if LLM is configured
   let agent: Agent | null = null;
-  if (config.llm.apiKey) {
+  if (config.llm.apiKey || config.llm.authToken || config.llm.provider === 'ollama') {
     try {
       const llm = createLLMClient({
         provider: config.llm.provider,
         apiKey: config.llm.apiKey,
         model: config.llm.model,
+        authToken: config.llm.authToken || undefined,
+        ollamaBaseUrl: config.llm.ollamaEndpoint || undefined,
       });
       agent = new Agent(llm, db);
     } catch {
@@ -46,10 +56,22 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     }
   }
 
-  return { config, db, docker, pipeline, traefik, env, agent };
+  // v0.2: Health monitoring
+  const healthMonitor = new HealthMonitor(docker, db, eventBus, {
+    intervalMs: config.monitoring.healthcheckIntervalSec * 1000,
+  });
+
+  // v0.2: Webhook auto-redeploy
+  const webhookManager = new WebhookManager(pipeline, db, eventBus);
+
+  // v0.2: Cloudflare production tunnels
+  const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
+
+  return { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare };
 }
 
 /** Shutdown the application context. */
 export function shutdownAppContext(ctx: AppContext): void {
+  ctx.healthMonitor.stop();
   ctx.db.close();
 }

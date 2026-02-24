@@ -7,6 +7,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 import { createApiRoutes } from './api/routes.js';
+import { createWebhookRoutes } from './api/webhook-routes.js';
+import { createDomainRoutes } from './api/domain-routes.js';
+import { createAuthRoutes } from './api/auth-routes.js';
 import type { AppContext } from '../app.js';
 
 export interface ServerOptions {
@@ -39,7 +42,7 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   app.get('/health', (c) =>
     c.json({
       status: 'ok',
-      version: '0.1.0',
+      version: '0.2.0',
       llmConfigured: ctx.agent !== null,
       timestamp: new Date().toISOString(),
     }),
@@ -48,6 +51,18 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   // API routes
   const apiRoutes = createApiRoutes(ctx);
   app.route('/api', apiRoutes);
+
+  // v0.2: Webhook auto-redeploy routes
+  const webhookRoutes = createWebhookRoutes(ctx);
+  app.route('/api', webhookRoutes);
+
+  // v0.2: Domain management routes
+  const domainRoutes = createDomainRoutes(ctx);
+  app.route('/api', domainRoutes);
+
+  // v0.2: OAuth authentication routes
+  const authRoutes = createAuthRoutes(ctx);
+  app.route('/auth', authRoutes);
 
   // Static file serving for Chat UI
   // Resolve web/dist relative to project root (2 levels up from src/web/)
@@ -58,16 +73,10 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
     const indexHtml = readFileSync(join(webDistPath, 'index.html'), 'utf-8');
 
     // Serve static assets (JS, CSS, images, etc.)
-    app.use(
-      '/assets/*',
-      serveStatic({ root: webDistPath }),
-    );
+    app.use('/assets/*', serveStatic({ root: webDistPath }));
 
     // Serve other static files (favicon, etc.)
-    app.use(
-      '/favicon*',
-      serveStatic({ root: webDistPath }),
-    );
+    app.use('/favicon*', serveStatic({ root: webDistPath }));
 
     // SPA fallback: serve index.html for all non-API, non-asset routes
     app.get('*', (c) => {
@@ -84,6 +93,9 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
     port: options.port,
     hostname: options.host,
   });
+
+  // v0.2: Start health monitoring
+  ctx.healthMonitor.start();
 }
 
 /**
