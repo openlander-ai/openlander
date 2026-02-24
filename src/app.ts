@@ -8,6 +8,9 @@ import { createLLMClient } from './llm/index.js';
 import { HealthMonitor } from './monitor/health.js';
 import { WebhookManager } from './webhook/index.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
+import { BlueGreenDeployer } from './pipeline/blue-green.js';
+import { DatabaseProvisioner } from './pipeline/db-provision.js';
+import { BuildDebugger } from './agent/debugger.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 
@@ -29,6 +32,10 @@ export interface AppContext {
   healthMonitor: HealthMonitor;
   webhookManager: WebhookManager;
   cloudflare: CloudflareTunnelManager;
+  // v0.3 modules
+  blueGreen: BlueGreenDeployer;
+  dbProvisioner: DatabaseProvisioner;
+  buildDebugger: BuildDebugger | null;
 }
 
 /** Create the application context from config. */
@@ -67,7 +74,30 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   // v0.2: Cloudflare production tunnels
   const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
 
-  return { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare };
+  // v0.3: Blue-green deployer
+  const blueGreen = new BlueGreenDeployer(docker, db, eventBus);
+
+  // v0.3: Database provisioner
+  const dbProvisioner = new DatabaseProvisioner(docker, db);
+
+  // v0.3: Build debugger (requires LLM)
+  let buildDebugger: BuildDebugger | null = null;
+  if (config.llm.apiKey || config.llm.authToken || config.llm.provider === 'ollama') {
+    try {
+      const llm = createLLMClient({
+        provider: config.llm.provider,
+        apiKey: config.llm.apiKey,
+        model: config.llm.model,
+        authToken: config.llm.authToken || undefined,
+        ollamaBaseUrl: config.llm.ollamaEndpoint || undefined,
+      });
+      buildDebugger = new BuildDebugger(llm);
+    } catch {
+      // LLM not available
+    }
+  }
+
+  return { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger };
 }
 
 /** Shutdown the application context. */

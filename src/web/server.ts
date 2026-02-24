@@ -42,7 +42,7 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   app.get('/health', (c) =>
     c.json({
       status: 'ok',
-      version: '0.2.0',
+      version: '0.3.0',
       llmConfigured: ctx.agent !== null,
       timestamp: new Date().toISOString(),
     }),

@@ -35,6 +35,11 @@ export interface ToolParameter {
  * - expose_public: Create a TryCloudflare tunnel
  * - unexpose_public: Remove public URL
  * - get_system_stats: Host resource usage
+ * v0.3 tools (new):
+ * - rollback_project: Rollback to previous image
+ * - provision_database: Provision a database sidecar
+ * - deploy_blue_green: Zero-downtime deployment
+ * - debug_build_error: Analyze build failures with LLM
  */
 export function createTools(ctx: AppContext): ToolDefinition[] {
   return [
@@ -241,6 +246,104 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
           summary: formatStatsSummary(stats),
           ...stats,
         });
+      },
+    },
+    // --- v0.3 Tools ---
+    {
+      name: 'rollback_project',
+      description: 'Rollback a project to its previous Docker image. Useful when a deploy broke something.',
+      parameters: {
+        project_name: {
+          type: 'string',
+          description: 'Name of the project to rollback',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        const projectName = args['project_name'] as string;
+        const project = ctx.db.getProjectByName(projectName);
+        if (!project) throw new ProjectNotFoundError(projectName);
+
+        const result = await ctx.pipeline.rollback(project.id);
+        return result;
+      },
+    },
+    {
+      name: 'provision_database',
+      description: 'Provision a database (SQLite or PostgreSQL) for a project. Sets DATABASE_URL env var automatically.',
+      parameters: {
+        project_name: {
+          type: 'string',
+          description: 'Name of the project',
+          required: true,
+        },
+        db_type: {
+          type: 'string',
+          description: 'Database type: "sqlite" or "postgres" (default: postgres)',
+          required: false,
+        },
+      },
+      execute: async (args) => {
+        const projectName = args['project_name'] as string;
+        const project = ctx.db.getProjectByName(projectName);
+        if (!project) throw new ProjectNotFoundError(projectName);
+
+        const dbType = (args['db_type'] as string | undefined) === 'sqlite' ? 'sqlite' : 'postgres';
+        const result = await ctx.dbProvisioner.provision(project.id, { type: dbType });
+        return { status: 'provisioned', project: projectName, ...result };
+      },
+    },
+    {
+      name: 'deploy_blue_green',
+      description: 'Deploy a project with zero downtime using blue-green strategy. Builds new version, health-checks it, then switches traffic.',
+      parameters: {
+        project_name: {
+          type: 'string',
+          description: 'Name of the project to deploy',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        const projectName = args['project_name'] as string;
+        const project = ctx.db.getProjectByName(projectName);
+        if (!project) throw new ProjectNotFoundError(projectName);
+
+        const result = await ctx.blueGreen.deploy(project.id);
+        return result;
+      },
+    },
+    {
+      name: 'debug_build_error',
+      description: 'Analyze a failed build and suggest fixes using AI. Reads build logs and Dockerfile to diagnose the issue.',
+      parameters: {
+        project_name: {
+          type: 'string',
+          description: 'Name of the project with the build error',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        if (!ctx.buildDebugger) {
+          return { error: 'Build debugger requires an LLM provider. Configure one first.' };
+        }
+
+        const projectName = args['project_name'] as string;
+        const project = ctx.db.getProjectByName(projectName);
+        if (!project) throw new ProjectNotFoundError(projectName);
+
+        const lastDeploy = ctx.db.getLastDeployLog(project.id);
+        if (!lastDeploy || lastDeploy.status !== 'failed') {
+          return { error: 'No failed build found for this project.' };
+        }
+
+        const diagnosis = await ctx.buildDebugger.diagnose({
+          buildLog: lastDeploy.build_log ?? 'No build log available',
+          projectName,
+          imageTag: project.image_tag ?? `openlander/${projectName}:latest`,
+          failedStep: 'build',
+        });
+
+        return diagnosis;
       },
     },
   ];

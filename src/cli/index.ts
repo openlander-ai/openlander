@@ -6,7 +6,7 @@ const program = new Command();
 program
   .name('openlander')
   .description('AI agent that deploys your app from a chat')
-  .version('0.2.0');
+  .version('0.3.0');
 
 program
   .command('onboard')
@@ -24,7 +24,7 @@ program
   .action(async (options: { port: string; host: string }) => {
     const port = parseInt(options.port, 10);
 
-    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim(`v0.2.0\n`));
+    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim(`v0.3.0\n`));
 
     // Load config
     const { loadConfig, getDbPath, isOnboarded } = await import('../config/index.js');
@@ -93,6 +93,35 @@ program
     };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
+  });
+
+program
+  .command('mcp')
+  .description('Start the MCP server (for Claude Code, Cursor, etc.)')
+  .action(async () => {
+    const { loadConfig, getDbPath, isOnboarded } = await import('../config/index.js');
+
+    if (!isOnboarded()) {
+      console.error('Not configured. Run `openlander onboard` first.');
+      process.exit(1);
+    }
+
+    const config = loadConfig();
+
+    // Create app context
+    const { createAppContext } = await import('../app.js');
+    const ctx = createAppContext(config, getDbPath());
+
+    // Register tools with agent
+    if (ctx.agent) {
+      const { createTools } = await import('../agent/tools.js');
+      const tools = createTools(ctx);
+      ctx.agent.setTools(tools);
+    }
+
+    // Start MCP server on stdio
+    const { startMcpServer } = await import('../mcp/server.js');
+    await startMcpServer(ctx);
   });
 
 program

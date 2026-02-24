@@ -17,6 +17,10 @@ import { OpenLanderError, ProjectNotFoundError } from '../../errors.js';
  * - GET    /projects/:id        — Get project details
  * - POST   /projects/:id/stop   — Stop a project
  * - POST   /projects/:id/redeploy — Redeploy a project
+ * - POST   /projects/:id/rollback — Rollback to previous image (v0.3)
+ * - POST   /projects/:id/blue-green — Blue-green deploy (v0.3)
+ * - POST   /projects/:id/provision-db — Provision database sidecar (v0.3)
+ * - POST   /projects/:id/debug-build — Debug build errors with AI (v0.3)
  * - DELETE /projects/:id        — Remove a project
  * - GET    /projects/:id/logs   — Get project logs
  * - GET    /projects/:id/env    — Get env vars (masked)
@@ -125,6 +129,67 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     const result = await ctx.pipeline.redeploy(project.id);
     return c.json(result, result.success ? 200 : 500);
+  });
+
+  // v0.3: Rollback
+  api.post('/projects/:id/rollback', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const result = await ctx.pipeline.rollback(project.id);
+    return c.json(result, result.success ? 200 : 500);
+  });
+
+  // v0.3: Blue-green deployment
+  api.post('/projects/:id/blue-green', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req.json<{ health_check_path?: string }>().catch((): { health_check_path?: string } => ({}));
+    const result = await ctx.blueGreen.deploy(project.id, {
+      healthCheckPath: body.health_check_path,
+    });
+    return c.json(result, result.success ? 200 : 500);
+  });
+
+  // v0.3: Database provisioning
+  api.post('/projects/:id/provision-db', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req.json<{ type?: 'sqlite' | 'postgres'; db_name?: string }>().catch((): { type?: 'sqlite' | 'postgres'; db_name?: string } => ({}));
+    const result = await ctx.dbProvisioner.provision(project.id, {
+      type: body.type ?? 'postgres',
+      dbName: body.db_name,
+    });
+    return c.json({ status: 'provisioned', project: project.name, ...result });
+  });
+
+  // v0.3: Build error debugging
+  api.post('/projects/:id/debug-build', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    if (!ctx.buildDebugger) {
+      return c.json({ error: 'LLM_NOT_CONFIGURED', message: 'Build debugger requires an LLM provider.' }, 400);
+    }
+
+    const lastDeploy = ctx.db.getLastDeployLog(project.id);
+    if (!lastDeploy || lastDeploy.status !== 'failed') {
+      return c.json({ error: 'NO_FAILED_BUILD', message: 'No failed build found for this project.' }, 404);
+    }
+
+    const diagnosis = await ctx.buildDebugger.diagnose({
+      buildLog: lastDeploy.build_log ?? 'No build log available',
+      projectName: project.name,
+      imageTag: project.image_tag ?? `openlander/${project.name}:latest`,
+      failedStep: 'build',
+    });
+    return c.json(diagnosis);
   });
 
   api.delete('/projects/:id', async (c) => {
