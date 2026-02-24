@@ -100,8 +100,8 @@ export interface MCPConfig {
 
 export interface ChannelConfig {
   slack: { enabled: boolean; token: string; signingSecret: string };
-  discord: { enabled: boolean; token: string };
-  telegram: { enabled: boolean; token: string };
+  discord: { enabled: boolean; token: string; applicationId: string; publicKey: string };
+  telegram: { enabled: boolean; token: string; webhookSecret: string };
 }
 
 export interface LocalModelConfig {
@@ -152,8 +152,8 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
   },
   channels: {
     slack: { enabled: false, token: '', signingSecret: '' },
-    discord: { enabled: false, token: '' },
-    telegram: { enabled: false, token: '' },
+    discord: { enabled: false, token: '', applicationId: '', publicKey: '' },
+    telegram: { enabled: false, token: '', webhookSecret: '' },
   },
   localModel: {
     preferLocal: false,

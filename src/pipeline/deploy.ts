@@ -10,6 +10,7 @@ import { CloudflareTunnel } from './tunnel.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { DockerfileNotFoundError } from '../errors.js';
+import { ensureDockerfile } from './dockerfile-gen.js';
 
 /**
  * Project configuration for a deployment.
@@ -105,13 +106,18 @@ export class DeployPipeline {
 
       buildLog += `[clone] ${config.repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
 
-      // Step 2: Verify Dockerfile exists
+      // Step 2: Auto-generate Dockerfile if missing (v0.4)
+      const dockerfileResult = ensureDockerfile(cloneResult.path);
       const dockerfilePath = join(cloneResult.path, 'Dockerfile');
       if (!existsSync(dockerfilePath)) {
         throw new DockerfileNotFoundError(cloneResult.path);
       }
 
-      buildLog += '[dockerfile] Found Dockerfile\n';
+      if (dockerfileResult.generated && dockerfileResult.detection) {
+        buildLog += `[dockerfile] Auto-generated for ${dockerfileResult.detection.framework} (${dockerfileResult.detection.language})\n`;
+      } else {
+        buildLog += '[dockerfile] Found Dockerfile\n';
+      }
 
       // Step 3: docker build
       const imageTag = `openlander/${projectName}:latest`;

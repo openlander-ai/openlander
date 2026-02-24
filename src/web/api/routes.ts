@@ -192,6 +192,41 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return c.json(diagnosis);
   });
 
+  // v0.4: Preview deployments
+  api.post('/previews/deploy', async (c) => {
+    const body = await c.req.json<{ repo_url: string; branch: string; project_id?: string; ttl_ms?: number }>();
+    if (!body.repo_url || !body.branch) {
+      return c.json({ error: 'MISSING_FIELD', message: 'repo_url and branch are required' }, 400);
+    }
+    const result = await ctx.previewDeployer.deploy({
+      repoUrl: body.repo_url,
+      branch: body.branch,
+      projectId: body.project_id,
+      ttlMs: body.ttl_ms,
+      sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+    });
+    return c.json(result, result.success ? 200 : 500);
+  });
+
+  api.get('/previews', (c) => {
+    const previews = ctx.previewDeployer.list();
+    return c.json({
+      count: previews.length,
+      previews: previews.map((p) => ({
+        branch: p.branch,
+        url: p.url,
+        port: p.port,
+        createdAt: p.createdAt.toISOString(),
+      })),
+    });
+  });
+
+  api.delete('/previews/:id', async (c) => {
+    const previewId = c.req.param('id');
+    await ctx.previewDeployer.cleanup(previewId);
+    return c.json({ status: 'cleaned_up', previewId });
+  });
+
   api.delete('/projects/:id', async (c) => {
     const id = c.req.param('id');
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);

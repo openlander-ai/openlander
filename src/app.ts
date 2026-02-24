@@ -11,6 +11,8 @@ import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
 import { BlueGreenDeployer } from './pipeline/blue-green.js';
 import { DatabaseProvisioner } from './pipeline/db-provision.js';
 import { BuildDebugger } from './agent/debugger.js';
+import { ChannelManager } from './channels/base.js';
+import { PreviewDeployer } from './pipeline/preview.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 
@@ -36,6 +38,9 @@ export interface AppContext {
   blueGreen: BlueGreenDeployer;
   dbProvisioner: DatabaseProvisioner;
   buildDebugger: BuildDebugger | null;
+  // v0.4 modules
+  channelManager: ChannelManager;
+  previewDeployer: PreviewDeployer;
 }
 
 /** Create the application context from config. */
@@ -97,11 +102,26 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     }
   }
 
-  return { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger };
+  // v0.4: Channel manager
+  const channelManager = new ChannelManager(
+    { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger } as AppContext,
+  );
+
+  // v0.4: Preview deployer
+  const previewDeployer = new PreviewDeployer(docker, db);
+
+  const ctx: AppContext = { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger, channelManager, previewDeployer };
+
+  // Re-assign the channelManager's context reference (it was created with partial context)
+  // ChannelManager already holds the reference, no update needed
+
+  return ctx;
 }
 
 /** Shutdown the application context. */
 export function shutdownAppContext(ctx: AppContext): void {
   ctx.healthMonitor.stop();
+  void ctx.channelManager.stop();
+  void ctx.previewDeployer.cleanupAll();
   ctx.db.close();
 }

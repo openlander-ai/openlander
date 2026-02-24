@@ -346,6 +346,64 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         return diagnosis;
       },
     },
+    // --- v0.4 Tools ---
+    {
+      name: 'preview_deploy',
+      description: 'Deploy an ephemeral preview environment for a specific branch. Great for testing PRs before merging.',
+      parameters: {
+        repo_url: {
+          type: 'string',
+          description: 'Git repository URL',
+          required: true,
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch name to preview',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        const result = await ctx.previewDeployer.deploy({
+          repoUrl: args['repo_url'] as string,
+          branch: args['branch'] as string,
+          sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+        });
+        return result;
+      },
+    },
+    {
+      name: 'cleanup_preview',
+      description: 'Remove an ephemeral preview deployment. Pass the preview ID returned by preview_deploy.',
+      parameters: {
+        preview_id: {
+          type: 'string',
+          description: 'Preview deployment ID to clean up',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        const previewId = args['preview_id'] as string;
+        await ctx.previewDeployer.cleanup(previewId);
+        return { status: 'cleaned_up', previewId };
+      },
+    },
+    {
+      name: 'list_previews',
+      description: 'List all active preview deployments.',
+      parameters: {},
+      execute: () => {
+        const previews = ctx.previewDeployer.list();
+        return Promise.resolve({
+          count: previews.length,
+          previews: previews.map((p) => ({
+            branch: p.branch,
+            url: p.url,
+            port: p.port,
+            createdAt: p.createdAt.toISOString(),
+          })),
+        });
+      },
+    },
   ];
 }
 

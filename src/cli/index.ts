@@ -6,7 +6,7 @@ const program = new Command();
 program
   .name('openlander')
   .description('AI agent that deploys your app from a chat')
-  .version('0.3.0');
+  .version('0.4.0');
 
 program
   .command('onboard')
@@ -24,7 +24,7 @@ program
   .action(async (options: { port: string; host: string }) => {
     const port = parseInt(options.port, 10);
 
-    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim(`v0.3.0\n`));
+    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim(`v0.4.0\n`));
 
     // Load config
     const { loadConfig, getDbPath, isOnboarded } = await import('../config/index.js');

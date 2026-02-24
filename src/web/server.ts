@@ -10,6 +10,9 @@ import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
 import { createDomainRoutes } from './api/domain-routes.js';
 import { createAuthRoutes } from './api/auth-routes.js';
+import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
+import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
+import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
 import type { AppContext } from '../app.js';
 
 export interface ServerOptions {
@@ -42,7 +45,7 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   app.get('/health', (c) =>
     c.json({
       status: 'ok',
-      version: '0.3.0',
+      version: '0.4.0',
       llmConfigured: ctx.agent !== null,
       timestamp: new Date().toISOString(),
     }),
@@ -63,6 +66,38 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   // v0.2: OAuth authentication routes
   const authRoutes = createAuthRoutes(ctx);
   app.route('/auth', authRoutes);
+
+  // v0.4: Channel webhook routes
+  if (ctx.config.channels.slack.enabled) {
+    const slackChannel = new SlackChannel({
+      token: ctx.config.channels.slack.token,
+      signingSecret: ctx.config.channels.slack.signingSecret,
+      channelManager: ctx.channelManager,
+    });
+    ctx.channelManager.register('slack', slackChannel);
+    app.post('/webhooks/slack', createSlackWebhookHandler(slackChannel));
+  }
+
+  if (ctx.config.channels.discord.enabled) {
+    const discordChannel = new DiscordChannel({
+      applicationId: ctx.config.channels.discord.applicationId,
+      publicKey: ctx.config.channels.discord.publicKey,
+      token: ctx.config.channels.discord.token,
+      channelManager: ctx.channelManager,
+    });
+    ctx.channelManager.register('discord', discordChannel);
+    app.post('/webhooks/discord', createDiscordInteractionHandler(discordChannel));
+  }
+
+  if (ctx.config.channels.telegram.enabled) {
+    const telegramChannel = new TelegramChannel({
+      token: ctx.config.channels.telegram.token,
+      channelManager: ctx.channelManager,
+      webhookSecret: ctx.config.channels.telegram.webhookSecret || undefined,
+    });
+    ctx.channelManager.register('telegram', telegramChannel);
+    app.post('/webhooks/telegram', createTelegramWebhookHandler(telegramChannel));
+  }
 
   // Static file serving for Chat UI
   // Resolve web/dist relative to project root (2 levels up from src/web/)
@@ -96,6 +131,9 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
 
   // v0.2: Start health monitoring
   ctx.healthMonitor.start();
+
+  // v0.4: Start channel connections
+  void ctx.channelManager.start();
 }
 
 /**
