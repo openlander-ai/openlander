@@ -26,25 +26,37 @@ export function createSetupRoutes(ctx: AppContext): Hono {
    * Frontend calls this on load to decide: show setup or show chat.
    */
   api.get('/setup/status', async (c) => {
-    const [dockerOk, traefikOk] = await Promise.all([
-      ctx.docker.ping().catch(() => false),
+    const [dockerStatus, traefikOk] = await Promise.all([
+      ctx.docker.status(),
       ctx.traefik.isRunning().catch(() => false),
     ]);
 
+    const dockerOk = dockerStatus.state === 'running';
     const llmConfigured = ctx.agent !== null;
     const config = loadConfig();
 
-    // "ready" = can deploy and chat. Minimum: Docker + LLM.
-    // Traefik is recommended but not blocking (containers still work without routing).
     const ready = dockerOk && llmConfigured;
+
+    let dockerMessage: string;
+    if (dockerStatus.state === 'running') {
+      dockerMessage = 'Docker is running.';
+    } else if (dockerStatus.state === 'not_installed') {
+      dockerMessage = 'Docker is not installed. Install it to continue.';
+    } else if (dockerStatus.state === 'not_running') {
+      dockerMessage = 'Docker is installed but the daemon is not running. Start it to continue.';
+    } else if (dockerStatus.state === 'permission_denied' && dockerStatus.groupFixed) {
+      dockerMessage = 'Permission fixed! Restart OpenLander for the change to take effect. (Ctrl+C, then `openlander start`)';
+    } else {
+      dockerMessage = 'Docker is installed but your user lacks permission. Add yourself to the docker group.';
+    }
 
     return c.json({
       ready,
       docker: {
         ok: dockerOk,
-        message: dockerOk
-          ? 'Docker is running'
-          : 'Docker is not running. Please install and start Docker.',
+        state: dockerStatus.state,
+        groupFixed: dockerStatus.state === 'permission_denied' ? dockerStatus.groupFixed : undefined,
+        message: dockerMessage,
       },
       traefik: {
         ok: traefikOk,

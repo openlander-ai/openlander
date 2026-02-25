@@ -101,18 +101,15 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="font-semibold text-lg">Docker Engine</h3>
                 <Badge variant={status.docker.ok ? 'default' : 'destructive'}>
-                  {status.docker.ok ? 'Running' : 'Stopped'}
+                  {status.docker.ok ? 'Running' : status.docker.state === 'not_installed' ? 'Not Installed' : status.docker.state === 'permission_denied' ? 'Permission Denied' : 'Stopped'}
                 </Badge>
               </div>
               <p className="text-muted-foreground text-sm">
-                {status.docker.message || 'Required to build and run containers.'}
+                {status.docker.message}
               </p>
               {!status.docker.ok && (
                 <div className="mt-3 space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Docker is required to build and run containers. Install it using one of the methods below, then click <strong>Refresh</strong>.
-                  </p>
-                  <DockerInstallGuide />
+                  <DockerFixGuide state={status.docker.state} />
                   <Button onClick={refetch} variant="outline" size="sm">
                     Refresh Docker Status
                   </Button>
@@ -240,14 +237,35 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
 
 const DOCKER_LINUX_CMD = 'curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER';
 const DOCKER_MAC_CMD = 'brew install --cask docker';
+const DOCKER_START_LINUX = 'sudo systemctl start docker';
+const DOCKER_START_MAC = 'open -a Docker';
+const DOCKER_PERM_CMD = 'sudo usermod -aG docker $USER && newgrp docker';
 const DOCKER_AGENT_PROMPT = 'Install Docker on this machine and start the daemon';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = useCallback(async () => {
+    try {
+      // Modern clipboard API (requires secure context)
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback: textarea + execCommand
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Last resort: prompt user to copy manually
+      window.prompt('Copy this command:', text);
+    }
   }, [text]);
   return (
     <button
@@ -261,7 +279,54 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function DockerInstallGuide() {
+function DockerFixGuide({ state }: { state?: string }) {
+  if (state === 'permission_denied') {
+    return (
+      <div className="space-y-3 text-sm">
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium">Fix: Add your user to the docker group</span>
+            <CopyButton text={DOCKER_PERM_CMD} />
+          </div>
+          <code className="block text-xs bg-background rounded p-2 font-mono break-all">
+            {DOCKER_PERM_CMD}
+          </code>
+          <p className="text-xs text-muted-foreground mt-1">
+            Then log out and back in (or restart your terminal) for the group change to take effect.
+          </p>
+        </div>
+        <AgentHint prompt="Add the current user to the docker group and restart the Docker daemon" />
+      </div>
+    );
+  }
+
+  if (state === 'not_running') {
+    return (
+      <div className="space-y-3 text-sm">
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium">Linux / WSL2</span>
+            <CopyButton text={DOCKER_START_LINUX} />
+          </div>
+          <code className="block text-xs bg-background rounded p-2 font-mono">
+            {DOCKER_START_LINUX}
+          </code>
+        </div>
+        <div className="rounded-md border bg-muted/30 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-medium">macOS</span>
+            <CopyButton text={DOCKER_START_MAC} />
+          </div>
+          <code className="block text-xs bg-background rounded p-2 font-mono">
+            {DOCKER_START_MAC}
+          </code>
+        </div>
+        <AgentHint prompt="Start the Docker daemon on this machine" />
+      </div>
+    );
+  }
+
+  // not_installed (default)
   return (
     <div className="space-y-3 text-sm">
       <div className="rounded-md border bg-muted/30 p-3">
@@ -276,7 +341,6 @@ function DockerInstallGuide() {
           After install, log out and back in (or run <code className="bg-muted px-1 rounded">newgrp docker</code>).
         </p>
       </div>
-
       <div className="rounded-md border bg-muted/30 p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="font-medium">macOS</span>
@@ -292,15 +356,20 @@ function DockerInstallGuide() {
           </a>.
         </p>
       </div>
+      <AgentHint prompt={DOCKER_AGENT_PROMPT} />
+    </div>
+  );
+}
 
-      <div className="rounded-md border border-dashed bg-primary/5 p-3">
-        <p className="text-xs text-muted-foreground">
-          <strong>Using an AI coding tool?</strong> Paste this into your agent (Claude Code, Cursor, etc.):
-        </p>
-        <div className="flex items-center justify-between mt-1">
-          <code className="text-xs font-mono">{DOCKER_AGENT_PROMPT}</code>
-          <CopyButton text={DOCKER_AGENT_PROMPT} />
-        </div>
+function AgentHint({ prompt }: { prompt: string }) {
+  return (
+    <div className="rounded-md border border-dashed bg-primary/5 p-3">
+      <p className="text-xs text-muted-foreground">
+        <strong>Using an AI coding tool?</strong> Paste this into your agent:
+      </p>
+      <div className="flex items-center justify-between mt-1">
+        <code className="text-xs font-mono">{prompt}</code>
+        <CopyButton text={prompt} />
       </div>
     </div>
   );

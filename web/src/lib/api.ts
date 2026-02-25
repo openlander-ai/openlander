@@ -76,7 +76,7 @@ export async function getSystemStats(): Promise<SystemStats> {
 
 export interface SetupStatus {
   ready: boolean;
-  docker: { ok: boolean; message: string };
+  docker: { ok: boolean; state?: string; groupFixed?: boolean; message: string };
   traefik: { ok: boolean; message: string };
   llm: { ok: boolean; provider: string; model: string; message: string };
 }

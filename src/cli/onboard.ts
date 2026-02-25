@@ -2,172 +2,100 @@ import { execSync } from 'node:child_process';
 import { platform } from 'node:os';
 import pc from 'picocolors';
 
-import { loadConfig, saveConfig, getConfigPath } from '../config/index.js';
-import type { OpenLanderConfig } from '../config/index.js';
 import { Docker } from '../pipeline/docker.js';
-import { TraefikManager } from '../pipeline/traefik.js';
+
 /**
- * Interactive onboarding wizard.
+ * Ensure Docker is installed, running, and accessible.
  *
- * Steps:
- * 1. Check Docker installation
- * 2. Set up Traefik reverse proxy container
- * 3. Configure LLM API key
- * 4. (Optional) Cloudflare tunnel token
- * 5. (Optional) SSH key for private repos
+ * Called automatically by `openlander` before starting the server.
+ * Handles three failure states:
+ *   - not_installed → offer auto-install (Linux) or show instructions (macOS)
+ *   - not_running   → try to start the daemon
+ *   - permission_denied → add user to docker group
  */
-export async function runOnboard(): Promise<void> {
-  console.log(pc.bold(pc.cyan('\n  🛬 OpenLander Setup\n')));
-  console.log(pc.dim('  Interactive onboarding — follow the prompts.\n'));
-
-  const config = loadConfig();
-
-  // Step 1: Check Docker
-  console.log(pc.bold('  Step 1/5:'), 'Checking Docker...');
+export async function ensureDocker(): Promise<void> {
+  console.log(pc.dim('  Checking Docker...'));
   const docker = new Docker();
-  const dockerOk = await docker.ping();
-  if (!dockerOk) {
-    console.log(pc.red('  \u2717 Docker is not running.\n'));
+  const status = await docker.status();
+
+  if (status.state === 'running') {
+    console.log(pc.green('  ✓ Docker running'));
+    return;
+  }
+
+  if (status.state === 'not_installed') {
+    console.log(pc.red('  ✗ Docker not installed\n'));
     const installed = await tryInstallDocker();
     if (!installed) {
       process.exit(1);
     }
-    // Re-check after install
-    const retryOk = await docker.ping();
-    if (!retryOk) {
-      console.log(pc.red('  \u2717 Docker still not responding. Please start the Docker daemon and try again.'));
-      console.log(pc.dim('    Linux: sudo systemctl start docker'));
-      console.log(pc.dim('    macOS: open -a Docker\n'));
+    // Re-check
+    const retry = await docker.status();
+    if (retry.state !== 'running') {
+      console.log(
+        pc.red('  ✗ Docker installed but not responding. Please start the daemon and try again.'),
+      );
       process.exit(1);
     }
+    console.log(pc.green('  ✓ Docker running'));
+    return;
   }
-  console.log(pc.green('  \u2713 Docker is running\n'));
 
-  // Step 2: Set up Traefik
-  console.log(pc.bold('  Step 2/5:'), 'Setting up Traefik reverse proxy...');
-  const traefik = new TraefikManager(docker);
-  const traefikRunning = await traefik.isRunning();
-  if (traefikRunning) {
-    console.log(pc.green('  ✓ Traefik is already running\n'));
-  } else {
+  if (status.state === 'not_running') {
+    console.log(pc.yellow('  ⚠ Docker daemon not running. Trying to start...'));
     try {
-      await traefik.start();
-      console.log(pc.green('  ✓ Traefik started\n'));
-    } catch (error) {
-      console.log(pc.red('  ✗ Failed to start Traefik:'), (error as Error).message);
-      console.log(pc.dim('    You can set it up manually later.\n'));
+      execSync('sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null', {
+        stdio: 'inherit',
+        timeout: 15000,
+      });
+      const retry = await docker.status();
+      if (retry.state === 'running') {
+        console.log(pc.green('  ✓ Docker started'));
+        return;
+      }
+    } catch {
+      // fall through
     }
+    console.log(pc.red('  ✗ Could not start Docker.\n'));
+    console.log(pc.dim('    Linux:  sudo systemctl start docker'));
+    console.log(pc.dim('    macOS:  open -a Docker\n'));
+    process.exit(1);
   }
 
-  // Step 3: LLM API key
-  console.log(pc.bold('  Step 3/5:'), 'Configure LLM provider...');
-  await configureLLM(config);
-
-  // Step 4: Cloudflare (optional)
-  console.log(pc.bold('  Step 4/5:'), 'Cloudflare tunnel (optional)...');
-  await configureCloudflare(config);
-
-  // Step 5: SSH key (optional)
-  console.log(pc.bold('  Step 5/5:'), 'SSH key for private repos (optional)...');
-  await configureSSH(config);
-
-  // Save config
-  saveConfig(config);
-  console.log(pc.green(`\n  ✓ Configuration saved to ${getConfigPath()}\n`));
-
-  console.log(pc.bold(pc.cyan('  Setup complete! Start the server with:\n')));
-  console.log(pc.bold('    openlander start\n'));
-}
-
-async function configureLLM(config: OpenLanderConfig): Promise<void> {
-  try {
-    const { select, input } = await import('@inquirer/prompts');
-
-    const provider = await select({
-      message: '  LLM Provider:',
-      choices: [
-        { name: 'Google Gemini (free tier available)', value: 'gemini' },
-        { name: 'OpenRouter (free models, no credit card)', value: 'openrouter' },
-        { name: 'Anthropic Claude', value: 'anthropic' },
-        { name: 'OpenAI', value: 'openai' },
-        { name: 'Skip (configure later)', value: 'skip' },
-      ],
-    });
-
-    if (provider === 'skip') {
-      console.log(pc.yellow('  ⚠ No LLM configured — chat features will be unavailable\n'));
-      return;
+  if (status.state === 'permission_denied') {
+    console.log(pc.yellow('  ⚠ Docker permission denied. Fixing...'));
+    const fixed = await tryFixDockerPermission();
+    if (fixed) {
+      // Verify with sg
+      const retry = await docker.status();
+      if (retry.state === 'running') {
+        console.log(pc.green('  ✓ Docker running'));
+        return;
+      }
     }
-
-    config.llm.provider = provider as OpenLanderConfig['llm']['provider'];
-
-    const apiKey = await input({
-      message: '  API Key:',
-      validate: (value) => (value.length > 0 ? true : 'API key is required'),
-    });
-
-    config.llm.apiKey = apiKey;
-
-    // Set default model based on provider
-    const modelDefaults: Record<string, string> = {
-      gemini: 'gemini-2.0-flash',
-      openrouter: 'google/gemini-2.0-flash-exp:free',
-      anthropic: 'claude-sonnet-4-20250514',
-      openai: 'gpt-4o-mini',
-    };
-
-    config.llm.model = modelDefaults[provider] ?? 'gemini-2.0-flash';
-    console.log(pc.green(`  ✓ ${provider} configured (${config.llm.model})\n`));
-  } catch {
-    console.log(pc.yellow('  ⚠ Skipped — configure LLM manually in ~/.openlander/config.json\n'));
+    console.log(pc.red('  ✗ Could not fix Docker permissions.\n'));
+    console.log(pc.dim('    Run: sudo usermod -aG docker $USER'));
+    console.log(pc.dim('    Then log out and back in, and run `openlander` again.\n'));
+    process.exit(1);
   }
 }
 
-async function configureCloudflare(config: OpenLanderConfig): Promise<void> {
+async function tryFixDockerPermission(): Promise<boolean> {
   try {
-    const { confirm, input } = await import('@inquirer/prompts');
-
-    const wantCloudflare = await confirm({
-      message: '  Set up Cloudflare tunnel for public URLs?',
-      default: false,
-    });
-
-    if (!wantCloudflare) {
-      console.log(pc.dim('  Skipped — TryCloudflare (temporary URLs) still available\n'));
-      return;
-    }
-
-    config.cloudflare.apiToken = await input({
-      message: '  Cloudflare API Token:',
-      validate: (value) => (value.length > 0 ? true : 'Token is required'),
-    });
-
-    console.log(pc.green('  ✓ Cloudflare configured\n'));
-  } catch {
-    console.log(pc.dim('  Skipped\n'));
-  }
-}
-
-async function configureSSH(config: OpenLanderConfig): Promise<void> {
-  try {
-    const { input } = await import('@inquirer/prompts');
-    const { existsSync } = await import('node:fs');
-
-    const sshKeyPath = await input({
-      message: '  SSH key path (for private repos):',
-      default: config.git.sshKeyPath,
-    });
-
-    if (existsSync(sshKeyPath)) {
-      config.git.sshKeyPath = sshKeyPath;
-      console.log(pc.green(`  ✓ SSH key found at ${sshKeyPath}\n`));
-    } else {
-      console.log(
-        pc.yellow(`  ⚠ SSH key not found at ${sshKeyPath}. Private repos may not work.\n`),
-      );
+    const user = execSync('whoami', { encoding: 'utf8', stdio: 'pipe' }).trim();
+    console.log(pc.dim(`  Adding ${user} to docker group...`));
+    execSync(`sudo usermod -aG docker ${user}`, { stdio: 'inherit' });
+    // Try newgrp to activate immediately
+    try {
+      execSync('sg docker -c "docker info"', { stdio: 'pipe', timeout: 5000 });
+      return true;
+    } catch {
+      // sg didn't work — user needs to re-login
+      console.log(pc.yellow('  ⚠ Group added. Please log out and back in for it to take effect.'));
+      return false;
     }
   } catch {
-    console.log(pc.dim('  Skipped\n'));
+    return false;
   }
 }
 
@@ -201,26 +129,28 @@ async function tryInstallDocker(): Promise<boolean> {
 
     // Add current user to docker group
     try {
-      const user = execSync('whoami', { encoding: 'utf8' }).trim();
+      const user = execSync('whoami', { encoding: 'utf8', stdio: 'pipe' }).trim();
       execSync(`sudo usermod -aG docker ${user}`, { stdio: 'inherit' });
       console.log(pc.dim(`  Added ${user} to docker group.`));
     } catch {
-      console.log(pc.yellow('  \u26a0 Could not add user to docker group. You may need to run: sudo usermod -aG docker $USER'));
+      console.log(
+        pc.yellow('  ⚠ Could not add user to docker group. Run: sudo usermod -aG docker $USER'),
+      );
     }
 
-    // Try to start Docker daemon
+    // Start daemon
     try {
       execSync('sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null', {
         stdio: 'inherit',
       });
     } catch {
-      console.log(pc.yellow('  \u26a0 Could not auto-start Docker. Please start it manually.'));
+      console.log(pc.yellow('  ⚠ Could not auto-start Docker.'));
     }
 
-    console.log(pc.green('  \u2713 Docker installed\n'));
+    console.log(pc.green('  ✓ Docker installed\n'));
     return true;
   } catch (error) {
-    console.log(pc.red('  \u2717 Docker installation failed:'), (error as Error).message);
+    console.log(pc.red('  ✗ Docker installation failed:'), (error as Error).message);
     console.log(pc.dim('    Install manually: curl -fsSL https://get.docker.com | sh\n'));
     return false;
   }

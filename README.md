@@ -66,23 +66,19 @@ Mac Mini + OpenLander:   ~$600 once, $0/month
 
 ## Quick Start
 
-> **Platform**: Linux (primary) and macOS. Windows is not supported.
+> **Platform**: Linux (primary) and macOS. Windows is not supported (WSL2 works).
 
 ```bash
 npm install -g openlander
-
-openlander start
-# → Opens http://localhost:3000
-# → Web UI guides you through setup (Docker check, LLM key, Traefik)
-# → Start deploying from the chat
+openlander
 ```
 
-Or use the CLI wizard:
-
-```bash
-openlander onboard   # Interactive terminal setup
-openlander start     # Then open the web UI
-```
+That's it. OpenLander will:
+1. Check Docker (install if missing, fix permissions if needed)
+2. Start the Traefik reverse proxy
+3. Launch the web UI at `http://localhost:3000`
+4. Prompt you to add an LLM API key (Gemini free tier works)
+5. You're ready to deploy
 
 ## Features (v0.1)
 

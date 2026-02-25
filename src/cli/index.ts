@@ -6,39 +6,25 @@ const program = new Command();
 program
   .name('openlander')
   .description('AI agent that deploys your app from a chat')
-  .version('0.4.0');
-
-program
-  .command('onboard')
-  .description('Interactive setup: Docker check, Traefik, API keys')
-  .action(async () => {
-    const { runOnboard } = await import('./onboard.js');
-    await runOnboard();
-  });
-
-program
-  .command('start')
-  .description('Start the OpenLander server')
+  .version('0.4.0')
   .option('-p, --port <port>', 'Port to listen on', '3000')
   .option('--host <host>', 'Host to bind to', '0.0.0.0')
   .action(async (options: { port: string; host: string }) => {
     const port = parseInt(options.port, 10);
 
-    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim(`v0.4.0\n`));
+    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim('v0.4.0\n'));
 
-    // Load config
-    const { loadConfig, getDbPath, isOnboarded } = await import('../config/index.js');
+    // ── Step 1: Ensure Docker is ready ───────────────────────────
+    const { ensureDocker } = await import('./onboard.js');
+    await ensureDocker();
 
-    if (!isOnboarded()) {
-      console.log(pc.yellow('  ⚠ Not configured yet. Run `openlander onboard` first.\n'));
-      console.log(pc.dim('  Starting with defaults (no LLM configured)...\n'));
-    }
+    // ── Step 2: Load config & create app context ─────────────────
+    const { loadConfig, getDbPath } = await import('../config/index.js');
 
     const config = loadConfig();
     config.server.port = port;
     config.server.host = options.host;
 
-    // Create app context
     const { createAppContext } = await import('../app.js');
     const ctx = createAppContext(config, getDbPath());
 
@@ -49,40 +35,43 @@ program
       ctx.agent.setTools(tools);
     }
 
-    // Check Docker
-    const dockerOk = await ctx.docker.ping();
-    if (!dockerOk) {
-      console.log(
-        pc.yellow('  ⚠ Docker is not running. Deployment features will be unavailable.\n'),
-      );
-    } else {
-      console.log(pc.green('  ✓ Docker connected'));
-    }
-
-    // Check Traefik
+    // ── Step 3: Traefik (auto-start, non-blocking) ───────────────
     const traefikOk = await ctx.traefik.isRunning();
-    if (!traefikOk) {
-      console.log(pc.yellow('  ⚠ Traefik not running. Run `openlander onboard` to set it up.'));
-    } else {
+    if (traefikOk) {
       console.log(pc.green('  ✓ Traefik running'));
+    } else {
+      try {
+        await ctx.traefik.start();
+        console.log(pc.green('  ✓ Traefik started'));
+      } catch {
+        console.log(pc.yellow('  ⚠ Traefik could not start — set it up from the web UI'));
+      }
     }
 
-    // LLM status
+    // ── Step 4: LLM status ───────────────────────────────────────
     if (ctx.agent) {
       console.log(pc.green(`  ✓ LLM: ${config.llm.provider} (${config.llm.model})`));
     } else {
-      console.log(pc.yellow('  ⚠ No LLM configured — chat features unavailable'));
+      console.log(pc.yellow('  ⚠ No LLM configured — set it up from the web UI'));
     }
 
-    // Start server
+    // ── Step 5: Start server ─────────────────────────────────────
     const { createServer } = await import('../web/server.js');
     createServer({ port, host: options.host }, ctx);
 
     console.log(
-      pc.green(`\n  \u2713 Server running at ${pc.bold(`http://${options.host}:${String(port)}`)}`),
+      pc.green(`\n  ✓ Server running at ${pc.bold(`http://${options.host}:${String(port)}`)}`),
     );
     console.log(pc.dim(`  API: http://localhost:${String(port)}/api`));
-    console.log(pc.dim(`  Health: http://localhost:${String(port)}/health\n`));
+    console.log(pc.dim(`  Health: http://localhost:${String(port)}/health`));
+
+    if (!ctx.agent) {
+      console.log(
+        pc.cyan(`\n  → Open ${pc.bold(`http://localhost:${String(port)}`)} to finish setup\n`),
+      );
+    } else {
+      console.log();
+    }
 
     // Graceful shutdown
     const { shutdownAppContext } = await import('../app.js');
@@ -102,24 +91,21 @@ program
     const { loadConfig, getDbPath, isOnboarded } = await import('../config/index.js');
 
     if (!isOnboarded()) {
-      console.error('Not configured. Run `openlander onboard` first.');
+      console.error('Not configured. Run `openlander` first.');
       process.exit(1);
     }
 
     const config = loadConfig();
 
-    // Create app context
     const { createAppContext } = await import('../app.js');
     const ctx = createAppContext(config, getDbPath());
 
-    // Register tools with agent
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
       const tools = createTools(ctx);
       ctx.agent.setTools(tools);
     }
 
-    // Start MCP server on stdio
     const { startMcpServer } = await import('../mcp/server.js');
     await startMcpServer(ctx);
   });
@@ -137,13 +123,11 @@ program
 
     console.log(pc.bold(pc.cyan('\n  🛬 OpenLander Status\n')));
 
-    // System stats
     const stats = getSystemStats();
     console.log(pc.bold('  System:'));
     console.log('  ' + formatStatsSummary(stats).split('\n').join('\n  '));
     console.log();
 
-    // Projects
     const projects = db.listProjects();
     if (projects.length === 0) {
       console.log(pc.dim('  No projects deployed yet.\n'));
@@ -160,22 +144,18 @@ program
       console.log();
     }
 
-    // LLM status
     if (config.llm.apiKey || config.llm.authToken) {
       console.log(pc.green(`  LLM: ${config.llm.provider} (${config.llm.model})`));
     } else {
       console.log(pc.yellow('  LLM: not configured'));
     }
 
-    // v0.2: Health monitoring status
     console.log(pc.bold('  Health Monitoring:'));
     console.log(
       pc.dim('    Healthcheck interval: ' + String(config.monitoring.healthcheckIntervalSec) + 's'),
     );
 
-    // v0.2: Webhook status
     const webhookProjects = projects.filter((p) => {
-      // Check if any webhook configs exist for this project
       const ghConfig = db.getWebhookConfig(p.id, 'github');
       const glConfig = db.getWebhookConfig(p.id, 'gitlab');
       const bbConfig = db.getWebhookConfig(p.id, 'bitbucket');
@@ -188,7 +168,6 @@ program
       }
     }
 
-    // v0.2: OAuth status
     const oauthProviders = ['anthropic', 'openai', 'google'] as const;
     const authenticatedProviders = oauthProviders.filter((p) => db.getOAuthTokens(p) != null);
     if (authenticatedProviders.length > 0) {

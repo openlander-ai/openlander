@@ -1,6 +1,13 @@
+import { execSync } from 'node:child_process';
 import Dockerode from 'dockerode';
 
 import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
+
+export type DockerStatus =
+  | { state: 'running' }
+  | { state: 'not_installed' }
+  | { state: 'not_running' }
+  | { state: 'permission_denied'; groupFixed?: boolean };
 
 export interface RunContainerOptions {
   imageTag: string;
@@ -39,6 +46,49 @@ export class Docker {
     } catch {
       return false;
     }
+  }
+
+  /** Detailed Docker status: not_installed / not_running / permission_denied / running. */
+  async status(): Promise<DockerStatus> {
+    // 1. Check if docker binary exists
+    try {
+      execSync('docker --version', { stdio: 'pipe' });
+    } catch {
+      return { state: 'not_installed' };
+    }
+
+    // 2. Try dockerode ping (works if current process has docker group)
+    try {
+      await this.client.ping();
+      return { state: 'running' };
+    } catch {
+      // fall through
+    }
+
+    // 3. Try `sg docker` — reads /etc/group at runtime, picks up usermod
+    //    changes even without restarting the server process.
+    try {
+      execSync('sg docker -c "docker info"', { stdio: 'pipe', timeout: 5000 });
+      return { state: 'running' };
+    } catch {
+      // sg failed too
+    }
+
+    // 4. Determine permission vs daemon-not-running
+    try {
+      execSync('docker info', { stdio: 'pipe', timeout: 5000, encoding: 'utf8' });
+      return { state: 'running' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const stderr = (err as { stderr?: Buffer })?.stderr?.toString() ?? '';
+      const combined = msg + stderr;
+      if (combined.includes('permission denied') || combined.includes('Permission denied') || combined.includes('EACCES')) {
+        const groupFixed = isUserInDockerGroup();
+        return { state: 'permission_denied', groupFixed };
+      }
+    }
+
+    return { state: 'not_running' };
   }
 
   /** Verify Docker is running, throw typed error if not. */
@@ -175,5 +225,16 @@ export class Docker {
   /** Get the underlying dockerode client (for Traefik manager). */
   getClient(): Dockerode {
     return this.client;
+  }
+}
+
+/** Check if current user is in the docker group (reads /etc/group). */
+function isUserInDockerGroup(): boolean {
+  try {
+    const user = execSync('whoami', { encoding: 'utf8', stdio: 'pipe' }).trim();
+    const groups = execSync(`groups ${user}`, { encoding: 'utf8', stdio: 'pipe' });
+    return groups.includes('docker');
+  } catch {
+    return false;
   }
 }
