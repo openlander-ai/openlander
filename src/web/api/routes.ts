@@ -5,6 +5,8 @@ import { nanoid } from 'nanoid';
 import type { AppContext } from '../../app.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
 import { OpenLanderError, ProjectNotFoundError } from '../../errors.js';
+import { createGitProvider } from '../../git-providers/index.js';
+import { loadConfig } from '../../config/index.js';
 
 /**
  * REST API routes for OpenLander.
@@ -294,6 +296,43 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     ctx.pipeline.closeTunnel(project.id);
     return c.json({ status: 'unexposed', project: project.name });
+  });
+
+  // --- GitHub Repos ---
+
+  api.get('/repos', async (c) => {
+    const config = loadConfig();
+    const ghConfig = config.gitProviders.github;
+    if (!ghConfig.token) {
+      return c.json({ error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token. Add one in setup.' }, 400);
+    }
+    const provider = createGitProvider('github', ghConfig);
+    const page = parseInt(c.req.query('page') ?? '1', 10);
+    const visibility = (c.req.query('visibility') as 'all' | 'public' | 'private') ?? 'all';
+    const result = await provider.listRepos({ page, perPage: 30, visibility });
+    return c.json({
+      count: result.repos.length,
+      hasMore: result.hasMore,
+      repos: result.repos,
+    });
+  });
+
+  api.get('/repos/search', async (c) => {
+    const config = loadConfig();
+    const ghConfig = config.gitProviders.github;
+    if (!ghConfig.token) {
+      return c.json({ error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token. Add one in setup.' }, 400);
+    }
+    const provider = createGitProvider('github', ghConfig);
+    const query = c.req.query('q') ?? '';
+    if (!query) {
+      return c.json({ error: 'MISSING_FIELD', message: 'q (query) parameter is required' }, 400);
+    }
+    const result = await provider.searchRepos(query);
+    return c.json({
+      total: result.total,
+      repos: result.repos,
+    });
   });
 
   // --- System ---

@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
 import type { OpenLanderConfig } from '../../config/index.js';
+import { createGitProvider } from '../../git-providers/index.js';
 
 /**
  * Setup / onboarding API routes.
@@ -71,6 +72,13 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         message: llmConfigured
           ? `${config.llm.provider} (${config.llm.model})`
           : 'No LLM configured. Add an API key to enable chat.',
+      },
+      github: {
+        ok: Boolean(config.gitProviders.github.token),
+        username: config.gitProviders.github.username || null,
+        message: config.gitProviders.github.token
+          ? `Connected as ${config.gitProviders.github.username || 'unknown'}`
+          : 'No GitHub token configured. Add one to browse and deploy private repos.',
       },
     });
   });
@@ -193,6 +201,65 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         500,
       );
     }
+  });
+
+  /**
+   * POST /setup/github
+   *
+   * Save and validate a GitHub Personal Access Token.
+   * On success, caches the username in config.
+   *
+   * Body: { token: string }
+   */
+  api.post('/setup/github', async (c) => {
+    const body = await c.req.json<{ token: string }>();
+
+    if (!body.token) {
+      return c.json({ error: 'MISSING_FIELD', message: 'token is required' }, 400);
+    }
+
+    // Validate the token against GitHub API
+    const provider = createGitProvider('github', { token: body.token, username: '' });
+    const validation = await provider.validateToken();
+
+    if (!validation.valid) {
+      return c.json({
+        status: 'invalid',
+        error: validation.error ?? 'Token validation failed',
+        message: 'GitHub token is invalid or expired. Generate a new one at github.com/settings/tokens.',
+      }, 400);
+    }
+
+    // Save validated token + username
+    updateConfig({
+      gitProviders: {
+        github: {
+          token: body.token,
+          username: validation.user?.username ?? '',
+        },
+      },
+    });
+
+    return c.json({
+      status: 'connected',
+      username: validation.user?.username,
+      scopes: validation.scopes,
+      message: `Connected to GitHub as ${validation.user?.username ?? 'unknown'}.`,
+    });
+  });
+
+  /**
+   * DELETE /setup/github
+   *
+   * Disconnect GitHub — removes stored token.
+   */
+  api.delete('/setup/github', (c) => {
+    updateConfig({
+      gitProviders: {
+        github: { token: '', username: '' },
+      },
+    });
+    return c.json({ status: 'disconnected', message: 'GitHub disconnected.' });
   });
 
   /**
