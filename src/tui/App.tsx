@@ -10,9 +10,6 @@ import { StatusBar } from './components/StatusBar.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { DashboardPanel } from './components/DashboardPanel.js';
-import { createModuleLogger } from '../lib/logger.js';
-
-const log = createModuleLogger('tui');
 
 // Socket path for daemon connection
 const SOCKET_PATH = join(getDataDir(), 'openlander.sock');
@@ -45,7 +42,7 @@ export function App({ ctx }: AppProps): React.ReactElement {
   const rows = stdout.rows;
   const isWideMode = columns >= 100;
 
-  // Stats for status bar (polled from daemon)
+  // Stats for status bar (received from DashboardPanel via callback)
   const [projectCount, setProjectCount] = useState(0);
   const [cpuPercent, setCpuPercent] = useState<number | null>(null);
   const [buildingCount, setBuildingCount] = useState(0);
@@ -55,34 +52,15 @@ export function App({ ctx }: AppProps): React.ReactElement {
     setMode('dashboard');
   }, []);
 
-  // Poll stats from daemon for status bar
-  useEffect(() => {
-    if (status !== 'connected' || mode !== 'dashboard') return;
-
-    const poll = async () => {
-      try {
-        const [projectsRes, stats] = await Promise.all([
-          client.listProjects(),
-          client.getSystemStats(),
-        ]);
-        setProjectCount(projectsRes.count);
-        setCpuPercent(stats.cpu.usagePercent);
-        const building = projectsRes.projects.filter((p) => p.status === 'building').length;
-        setBuildingCount(building);
-      } catch (err) {
-        log.debug({ err }, 'Failed to poll stats from daemon');
-        // daemon not connected or error — keep last values
-      }
-    };
-
-    void poll();
-    const timer = setInterval(() => {
-      void poll();
-    }, 5000);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [client, status, mode]);
+  // Receive stats from DashboardPanel (no duplicate polling)
+  const handleStatsUpdate = useCallback(
+    (data: { projectCount: number; cpuPercent: number | null; buildingCount: number }) => {
+      setProjectCount(data.projectCount);
+      setCpuPercent(data.cpuPercent);
+      setBuildingCount(data.buildingCount);
+    },
+    [],
+  );
 
   // Reset Ctrl+C count after 2 seconds
   useEffect(() => {
@@ -172,6 +150,7 @@ export function App({ ctx }: AppProps): React.ReactElement {
       client={status === 'connected' ? client : null}
       height={contentHeight}
       focus={activePanel === 'right'}
+      onStatsUpdate={handleStatsUpdate}
     />
   );
 
@@ -193,9 +172,7 @@ export function App({ ctx }: AppProps): React.ReactElement {
         setShowHelp(false);
       }}
     />
-  ) : (
-    undefined
-  );
+  ) : undefined;
 
   return (
     <>

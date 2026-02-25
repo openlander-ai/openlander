@@ -10,14 +10,16 @@ import type {
   ProjectStats,
 } from '../../ipc/client.js';
 import type { SystemStats } from '../../monitor/stats.js';
-import { createModuleLogger } from '../../lib/logger.js';
-
-const log = createModuleLogger('tui');
 
 interface DashboardPanelProps {
   client: OpenLanderClient | null;
   height: number;
   focus: boolean;
+  onStatsUpdate?: (data: {
+    projectCount: number;
+    cpuPercent: number | null;
+    buildingCount: number;
+  }) => void;
 }
 
 // Status icons and colors for projects
@@ -315,127 +317,119 @@ function McpClientsSection({ enabled }: { enabled: boolean }): React.ReactElemen
 }
 
 // Main DashboardPanel component
-export function DashboardPanel({ client, height, focus }: DashboardPanelProps): React.ReactElement {
-  // State for system data
+export function DashboardPanel({
+  client,
+  height,
+  focus,
+  onStatsUpdate,
+}: DashboardPanelProps): React.ReactElement {
+  // State for all dashboard data
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [systemLoading, setSystemLoading] = useState(true);
-
-  // State for projects
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectStats, setProjectStats] = useState<Map<string, ProjectStats>>(new Map());
   const [selectedIndex, setSelectedIndex] = useState(0);
-
-  // State for activity
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
 
   // Scroll offset for when content exceeds height
   const [scrollOffset, _setScrollOffset] = useState(0);
 
-  // Refs for dedup
-  const lastStatsRef = useRef('');
-  const lastHealthRef = useRef('');
+  // Display-value dedup keys (only re-render when what user SEES changes)
+  const lastDisplayKeyRef = useRef('');
+  const onStatsUpdateRef = useRef(onStatsUpdate);
+  onStatsUpdateRef.current = onStatsUpdate;
 
-  // Poll system stats every 10 seconds
+  // --- Single consolidated polling interval (30s) ---
   useEffect(() => {
     if (!client) return;
 
-    const fetchSystem = async () => {
-      try {
-        const [stats, healthResp] = await Promise.all([client.getSystemStats(), client.ping()]);
-        const sJson = JSON.stringify(stats);
-        const hJson = JSON.stringify(healthResp);
-        if (sJson !== lastStatsRef.current) {
-          lastStatsRef.current = sJson;
-          setSystemStats(stats);
-        }
-        if (hJson !== lastHealthRef.current) {
-          lastHealthRef.current = hJson;
-          setHealth(healthResp);
-        }
-        setSystemLoading(false);
-      } catch (err) {
-        log.debug({ err }, 'Failed to fetch system stats from daemon');
-        setSystemLoading(false);
+    const fetchAll = async () => {
+      // Fetch all data in parallel
+      const [statsResult, healthResult, projectsResult, activityResult] = await Promise.allSettled([
+        client.getSystemStats(),
+        client.ping(),
+        client.listProjects(),
+        client.getActivity(10),
+      ]);
+
+      // Build a display-key from only the VALUES that appear on screen
+      // CPU rounded to integer, memory to 0.1GB, uptime to minutes, disk to integer
+      let displayKey = '';
+      let newStats: SystemStats | null = null;
+      let newHealth: HealthResponse | null = null;
+      let newProjects: Project[] = [];
+      let newActivity: ActivityEvent[] = [];
+
+      if (statsResult.status === 'fulfilled') {
+        newStats = statsResult.value;
+        const s = newStats;
+        displayKey += `cpu:${String(Math.round(s.cpu.usagePercent))}|mem:${(s.memory.usedMB / 1024).toFixed(1)}/${(s.memory.totalMB / 1024).toFixed(1)}|disk:${String(Math.round(s.disk.usagePercent))}|up:${String(Math.floor(s.uptime.seconds / 60))}|`;
       }
-    };
 
-    void fetchSystem();
-    const interval = setInterval(() => {
-      void fetchSystem();
-    }, 10000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [client]);
+      if (healthResult.status === 'fulfilled') {
+        newHealth = healthResult.value;
+        displayKey += `docker:${String(newHealth.dockerContainers)}|`;
+      }
 
-  // Poll projects every 10 seconds
-  useEffect(() => {
-    if (!client) return;
+      if (projectsResult.status === 'fulfilled') {
+        newProjects = projectsResult.value.projects;
+        // Project display: name+status+port for each
+        for (const p of newProjects) {
+          displayKey += `${p.name}:${p.status}:${String(p.port ?? '')}|`;
+        }
+      }
 
-    const fetchProjects = async () => {
-      try {
-        const result = await client.listProjects();
-        setProjects(result.projects);
+      if (activityResult.status === 'fulfilled') {
+        newActivity = activityResult.value;
+        // Activity display: timestamp+message for each
+        for (const e of newActivity) {
+          displayKey += `${e.timestamp}:${e.message}|`;
+        }
+      }
 
-        // Fetch stats for running projects
+      // Only update state if display would change
+      if (displayKey !== lastDisplayKeyRef.current) {
+        lastDisplayKeyRef.current = displayKey;
+        if (newStats) setSystemStats(newStats);
+        if (newHealth) setHealth(newHealth);
+        setProjects(newProjects);
+        setActivity(newActivity);
+
+        // Fetch per-project stats for running projects
         const statsMap = new Map<string, ProjectStats>();
-        for (const project of result.projects) {
+        for (const project of newProjects) {
           if (project.status === 'running') {
             try {
-              const stats = await client.getProjectStats(project.id);
-              statsMap.set(project.id, stats);
-            } catch (err) {
-              log.debug({ err, projectId: project.id }, 'Failed to get project stats');
+              const ps = await client.getProjectStats(project.id);
+              statsMap.set(project.id, ps);
+            } catch {
               // Project may not have a container
             }
           }
         }
         setProjectStats(statsMap);
-      } catch (err) {
-        log.debug({ err }, 'Failed to list projects');
-        // Ignore errors
+
+        // Notify parent (for status bar)
+        const building = newProjects.filter((p) => p.status === 'building').length;
+        onStatsUpdateRef.current?.({
+          projectCount: newProjects.length,
+          cpuPercent: newStats ? Math.round(newStats.cpu.usagePercent) : null,
+          buildingCount: building,
+        });
       }
+
+      if (systemLoading) setSystemLoading(false);
     };
 
-    void fetchProjects();
-    const interval = setInterval(() => {
-      void fetchProjects();
-    }, 10000);
+    void fetchAll();
+    const timer = setInterval(() => {
+      void fetchAll();
+    }, 30000);
     return () => {
-      clearInterval(interval);
+      clearInterval(timer);
     };
-  }, [client]);
-
-  // Refs for activity dedup
-  const lastActivityRef = useRef('');
-
-  // Poll activity every 10 seconds
-  useEffect(() => {
-    if (!client) return;
-
-    const fetchActivity = async () => {
-      try {
-        const events = await client.getActivity(10);
-        const json = JSON.stringify(events);
-        if (json !== lastActivityRef.current) {
-          lastActivityRef.current = json;
-          setActivity(events);
-        }
-      } catch (err) {
-        log.debug({ err }, 'Failed to get activity from daemon');
-        // Ignore errors
-      }
-    };
-
-    void fetchActivity();
-    const interval = setInterval(() => {
-      void fetchActivity();
-    }, 10000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [client]);
+  }, [client, systemLoading]);
 
   // Handle keyboard navigation when focused
   useInput(
