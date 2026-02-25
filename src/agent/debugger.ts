@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LLMClient, ChatMessage } from '../llm/index.js';
+import { matchRecipe } from './recipes.js';
 
 export interface BuildDiagnosis {
   /** One-line summary of the error */
@@ -148,8 +149,19 @@ export class BuildDebugger {
     failedStep: string;
   }): Promise<BuildDiagnosis> {
     const buildLog = truncateBuildLog(context.buildLog);
-    const dockerfile = context.dockerfile ?? 'Not available';
 
+    // Fast path: check known error patterns before making an LLM call.
+    const recipe = matchRecipe(context.buildLog);
+    if (recipe) {
+      return {
+        summary: recipe.title,
+        rootCause: recipe.diagnosis,
+        suggestedFixes: [{ description: recipe.fix, confidence: 'high' }],
+        rawAnalysis: `[Matched recipe: ${recipe.title}]`,
+      };
+    }
+
+    const dockerfile = context.dockerfile ?? 'Not available';
     const userPrompt = `Project: ${context.projectName}
 Image: ${context.imageTag}
 Failed Step: ${context.failedStep}

@@ -15,6 +15,7 @@ import { ChannelManager } from './channels/base.js';
 import { PreviewDeployer } from './pipeline/preview.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
+import { buildContextSnapshot } from './agent/prompts.js';
 
 /**
  * Application context — wires all modules together.
@@ -62,7 +63,8 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
         authToken: config.llm.authToken || undefined,
         ollamaBaseUrl: config.llm.ollamaEndpoint || undefined,
       });
-      agent = new Agent(llm, db);
+      // contextProvider: lazily captures `ctx` — resolved when chat() is called, not here
+      agent = new Agent(llm, db, () => buildContextSnapshot(db), config.llm.provider);
     } catch {
       // LLM provider not available — agent will be null
     }

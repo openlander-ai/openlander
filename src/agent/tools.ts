@@ -35,11 +35,19 @@ export interface ToolParameter {
  * - expose_public: Create a TryCloudflare tunnel
  * - unexpose_public: Remove public URL
  * - get_system_stats: Host resource usage
- * v0.3 tools (new):
+ * v0.2 tools (new):
+ * - restart_project: Restart a running container
+ * - map_domain: Map a custom domain via Cloudflare
+ * - list_domains: List all domain mappings
+ * v0.3 tools:
  * - rollback_project: Rollback to previous image
  * - provision_database: Provision a database sidecar
  * - deploy_blue_green: Zero-downtime deployment
  * - debug_build_error: Analyze build failures with LLM
+ * v0.4 tools:
+ * - preview_deploy: Ephemeral branch preview
+ * - cleanup_preview: Remove preview
+ * - list_previews: List active previews
  */
 export function createTools(ctx: AppContext): ToolDefinition[] {
   return [
@@ -400,6 +408,69 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
             url: p.url,
             port: p.port,
             createdAt: p.createdAt.toISOString(),
+          })),
+        });
+      },
+    },
+    // --- v0.2 Tools (added in agent enhancement) ---
+    {
+      name: 'restart_project',
+      description: 'Restart a running project container. Stops and starts it again with the same configuration.',
+      parameters: {
+        project_name: {
+          type: 'string',
+          description: 'Name of the project to restart',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        const projectName = args['project_name'] as string;
+        const project = ctx.db.getProjectByName(projectName);
+        if (!project) throw new ProjectNotFoundError(projectName);
+
+        await ctx.pipeline.stop(project.id);
+        const result = await ctx.pipeline.redeploy(project.id);
+        return { status: 'restarted', project: projectName, ...result };
+        return { status: 'restarted', project: projectName };
+      },
+    },
+    {
+      name: 'map_domain',
+      description: 'Map a custom domain to a project via Cloudflare DNS and Tunnel. Requires Cloudflare to be configured.',
+      parameters: {
+        project_name: {
+          type: 'string',
+          description: 'Name of the project',
+          required: true,
+        },
+        domain: {
+          type: 'string',
+          description: 'Domain to map (e.g., api.myapp.com)',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        const projectName = args['project_name'] as string;
+        const domain = args['domain'] as string;
+        const project = ctx.db.getProjectByName(projectName);
+        if (!project) throw new ProjectNotFoundError(projectName);
+
+        await ctx.cloudflare.createTunnel(project.id, domain);
+        return { status: 'mapped', project: projectName, domain, url: `https://${domain}` };
+      },
+    },
+    {
+      name: 'list_domains',
+      description: 'List all custom domain mappings across all projects.',
+      parameters: {},
+      execute: () => {
+        const mappings = ctx.db.listDomainMappings();
+        return Promise.resolve({
+          count: mappings.length,
+          domains: mappings.map((m) => ({
+            domain: m.domain,
+            projectId: m.project_id,
+            status: m.status,
           })),
         });
       },

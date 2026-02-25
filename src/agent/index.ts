@@ -1,12 +1,18 @@
 import type { LLMClient, ChatMessage, LLMResponse } from '../llm/index.js';
 import type { Database } from '../db/index.js';
-import { SYSTEM_PROMPT } from './prompts.js';
+import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
 import type { ToolDefinition } from './tools.js';
 
 /**
  * OpenLander AI Agent.
  *
- * Single agent with ~10 tools. NOT multi-agent.
+ * Single agent with ~20 tools. NOT multi-agent.
+ *
+ * Architecture changes (v0.4.1):
+ *   - Agentic loop: LLM → tool → result → LLM → ... (max 10 steps)
+ *   - Dynamic system prompt: rebuilt each turn with live server state
+ *   - History management: sliding window to prevent token overflow
+ *   - Model overlay: thin behavioral corrections per LLM provider
  *
  * The agent's role is limited to:
  * 1. Intent parsing: "deploy this" → deploy tool call
@@ -16,6 +22,16 @@ import type { ToolDefinition } from './tools.js';
  * All execution is handled by the deterministic pipeline.
  * The LLM never runs Docker commands directly.
  */
+
+/** Maximum tool-call loop iterations per user message. */
+const MAX_TOOL_STEPS = 10;
+
+/** Maximum conversation history messages before trimming. */
+const MAX_HISTORY_MESSAGES = 40;
+
+/** Number of recent messages to keep when trimming. */
+const KEEP_RECENT = 30;
+
 export class Agent {
   private history: ChatMessage[] = [];
   private tools: ToolDefinition[] = [];
@@ -23,12 +39,9 @@ export class Agent {
   constructor(
     private readonly llm: LLMClient,
     private readonly db: Database,
-  ) {
-    this.history.push({
-      role: 'system',
-      content: SYSTEM_PROMPT,
-    });
-  }
+    private readonly contextProvider?: ContextProvider,
+    private readonly provider: LLMProvider = 'gemini',
+  ) {}
 
   /** Register tools for the agent to use. */
   setTools(tools: ToolDefinition[]): void {
@@ -45,8 +58,16 @@ export class Agent {
     return this.db;
   }
 
-  /** Process a user message and return the agent's response. */
+  /**
+   * Process a user message and return the agent's response.
+   *
+   * Implements an agentic loop: the LLM may call tools, receive results,
+   * and call more tools — up to MAX_TOOL_STEPS iterations.
+   */
   async chat(userMessage: string, sessionId?: string): Promise<AgentResponse> {
+    // Rebuild system prompt with fresh context on each turn
+    this.refreshSystemPrompt();
+
     this.history.push({ role: 'user', content: userMessage });
 
     // Save user message to DB
@@ -60,61 +81,78 @@ export class Agent {
       });
     }
 
-    const response = await this.llm.chat(this.history);
+    const allToolResults: ToolResult[] = [];
 
-    // If the LLM wants to call tools, execute them
-    if (response.toolCalls && response.toolCalls.length > 0) {
-      const toolResults = await this.executeTools(response.toolCalls);
+    // --- Agentic Loop ---
+    for (let step = 0; step < MAX_TOOL_STEPS; step++) {
+      const response = await this.llm.chat(this.history);
 
-      // Build assistant message with tool results
-      const resultSummary = toolResults
+      // No tool calls → final text response
+      if (!response.toolCalls || response.toolCalls.length === 0) {
+        this.history.push({ role: 'assistant', content: response.content });
+        this.trimHistory();
+
+        // Save final response to DB
+        if (sessionId) {
+          const { nanoid } = await import('nanoid');
+          this.db.saveChatMessage({
+            id: nanoid(12),
+            sessionId,
+            role: 'assistant',
+            content: response.content,
+            toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
+          });
+        }
+
+        return {
+          message: response.content,
+          toolResults: allToolResults.length > 0 ? allToolResults : undefined,
+        };
+      }
+
+      // Execute tools
+      const stepResults = await this.executeTools(response.toolCalls);
+      allToolResults.push(...stepResults);
+
+      // Add assistant message to history
+      this.history.push({
+        role: 'assistant',
+        content: response.content || `[Calling ${stepResults.map((r) => r.toolName).join(', ')}]`,
+      });
+
+      // Add tool results as a user message so the LLM can see them.
+      // NOTE: Ideally each provider would use native tool_result message types.
+      // Using a formatted user message is the most portable approach across all 5 providers.
+      const resultsText = stepResults
         .map((r) =>
           r.success
-            ? `Tool ${r.toolName}: ${JSON.stringify(r.result)}`
-            : `Tool ${r.toolName} failed: ${r.error ?? 'unknown'}`
+            ? `${r.toolName}: ${JSON.stringify(r.result)}`
+            : `${r.toolName} FAILED: ${r.error ?? 'unknown'}`,
         )
         .join('\n');
 
-      // Send tool results back to LLM for natural language response
-      this.history.push({ role: 'assistant', content: response.content || resultSummary });
-
-      // Save to DB
-      if (sessionId) {
-        const { nanoid } = await import('nanoid');
-        this.db.saveChatMessage({
-          id: nanoid(12),
-          sessionId,
-          role: 'assistant',
-          content: response.content || resultSummary,
-          toolCalls: toolResults,
-        });
-      }
-
-      return {
-        message: response.content || resultSummary,
-        toolResults,
-      };
-    }
-
-    this.history.push({ role: 'assistant', content: response.content });
-
-    // Save to DB
-    if (sessionId) {
-      const { nanoid } = await import('nanoid');
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId,
-        role: 'assistant',
-        content: response.content,
+      this.history.push({
+        role: 'user',
+        content: `[Tool Results]\n${resultsText}`,
       });
     }
 
-    return { message: response.content };
+    // Max steps exhausted
+    const fallbackMessage =
+      '⚠️ Reached the maximum number of steps for this request. ' +
+      'Here is what was completed so far.';
+
+    this.history.push({ role: 'assistant', content: fallbackMessage });
+    this.trimHistory();
+
+    return { message: fallbackMessage, toolResults: allToolResults };
   }
 
   /**
    * Process a user message with streaming SSE events.
    * Yields ChatStreamEvent objects for real-time UI updates.
+   *
+   * Supports multi-step tool execution — yields events for each step.
    */
   async chatStream(
     userMessage: string,
@@ -124,7 +162,9 @@ export class Agent {
     const { nanoid } = await import('nanoid');
     const resolvedSessionId = sessionId ?? nanoid(12);
 
-    // Emit session event
+    // Rebuild system prompt with fresh context
+    this.refreshSystemPrompt();
+
     await onEvent({ type: 'session', sessionId: resolvedSessionId });
 
     this.history.push({ role: 'user', content: userMessage });
@@ -137,29 +177,56 @@ export class Agent {
       content: userMessage,
     });
 
-    // Emit thinking event
     await onEvent({ type: 'thinking' });
 
-    let response: LLMResponse;
-    try {
-      response = await this.llm.chat(this.history);
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      await onEvent({ type: 'error', error: errMsg });
-      return;
-    }
+    const allToolResults: ToolResult[] = [];
 
-    // If the LLM wants to call tools, execute them with streaming
-    if (response.toolCalls && response.toolCalls.length > 0) {
-      const toolResults: ToolResult[] = [];
+    // --- Agentic Loop (streaming) ---
+    for (let step = 0; step < MAX_TOOL_STEPS; step++) {
+      let response: LLMResponse;
+      try {
+        response = await this.llm.chat(this.history);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        await onEvent({ type: 'error', error: errMsg });
+        return;
+      }
+
+      // No tool calls → final text response
+      if (!response.toolCalls || response.toolCalls.length === 0) {
+        this.history.push({ role: 'assistant', content: response.content });
+        this.trimHistory();
+
+        this.db.saveChatMessage({
+          id: nanoid(12),
+          sessionId: resolvedSessionId,
+          role: 'assistant',
+          content: response.content,
+          toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
+        });
+
+        await onEvent({ type: 'message', content: response.content });
+        await onEvent({
+          type: 'done',
+          toolResults: allToolResults.length > 0 ? allToolResults : undefined,
+        });
+        return;
+      }
+
+      // Execute tools with streaming events
+      const stepResults: ToolResult[] = [];
 
       for (const call of response.toolCalls) {
         await onEvent({ type: 'tool_call', toolName: call.name, arguments: call.arguments });
 
         const tool = this.tools.find((t) => t.name === call.name);
         if (!tool) {
-          const result: ToolResult = { toolName: call.name, success: false, error: `Unknown tool: ${call.name}` };
-          toolResults.push(result);
+          const result: ToolResult = {
+            toolName: call.name,
+            success: false,
+            error: `Unknown tool: ${call.name}`,
+          };
+          stepResults.push(result);
           await onEvent({ type: 'tool_result', ...result });
           continue;
         }
@@ -167,7 +234,7 @@ export class Agent {
         try {
           const execResult = await tool.execute(call.arguments);
           const result: ToolResult = { toolName: call.name, success: true, result: execResult };
-          toolResults.push(result);
+          stepResults.push(result);
           await onEvent({ type: 'tool_result', ...result });
         } catch (error) {
           const result: ToolResult = {
@@ -175,44 +242,54 @@ export class Agent {
             success: false,
             error: error instanceof Error ? error.message : String(error),
           };
-          toolResults.push(result);
+          stepResults.push(result);
           await onEvent({ type: 'tool_result', ...result });
         }
       }
 
-      const resultSummary = toolResults
-        .map((r) => r.success ? `Tool ${r.toolName}: ${JSON.stringify(r.result)}` : `Tool ${r.toolName} failed: ${r.error ?? 'unknown'}`)
-        .join('\n');
+      allToolResults.push(...stepResults);
 
-      const content = response.content || resultSummary;
-      this.history.push({ role: 'assistant', content });
-
-      // Save to DB
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId: resolvedSessionId,
+      // Add to history for the next loop iteration
+      this.history.push({
         role: 'assistant',
-        content,
-        toolCalls: toolResults,
+        content: response.content || `[Calling ${stepResults.map((r) => r.toolName).join(', ')}]`,
       });
 
-      await onEvent({ type: 'message', content });
-      await onEvent({ type: 'done', toolResults });
-      return;
+      const resultsText = stepResults
+        .map((r) =>
+          r.success
+            ? `${r.toolName}: ${JSON.stringify(r.result)}`
+            : `${r.toolName} FAILED: ${r.error ?? 'unknown'}`,
+        )
+        .join('\n');
+
+      this.history.push({
+        role: 'user',
+        content: `[Tool Results]\n${resultsText}`,
+      });
+
+      // Emit thinking event for the next iteration
+      if (step < MAX_TOOL_STEPS - 1) {
+        await onEvent({ type: 'thinking' });
+      }
     }
 
-    // No tool calls — just a text response
-    this.history.push({ role: 'assistant', content: response.content });
+    // Max steps exhausted
+    const fallback = '⚠️ Reached the maximum number of steps. Here is what was completed so far.';
+
+    this.history.push({ role: 'assistant', content: fallback });
+    this.trimHistory();
 
     this.db.saveChatMessage({
       id: nanoid(12),
       sessionId: resolvedSessionId,
       role: 'assistant',
-      content: response.content,
+      content: fallback,
+      toolCalls: allToolResults,
     });
 
-    await onEvent({ type: 'message', content: response.content });
-    await onEvent({ type: 'done' });
+    await onEvent({ type: 'message', content: fallback });
+    await onEvent({ type: 'done', toolResults: allToolResults });
   }
 
   /** Get the conversation history. */
@@ -222,7 +299,50 @@ export class Agent {
 
   /** Clear conversation history (keeps system prompt). */
   clearHistory(): void {
-    this.history = [this.history[0] ?? { role: 'system' as const, content: '' }]; // Keep system prompt
+    this.history = [];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Rebuild the system prompt with fresh context and replace it in history.
+   * Called at the start of every chat() / chatStream() turn.
+   */
+  private refreshSystemPrompt(): void {
+    const contextSnapshot = this.contextProvider ? this.contextProvider() : '';
+    const systemContent = buildSystemPrompt(contextSnapshot, this.provider);
+
+    // Replace or insert system message at position 0
+    const first = this.history[0];
+    if (first && first.role === 'system') {
+      this.history[0] = { role: 'system', content: systemContent };
+    } else {
+      this.history.unshift({ role: 'system', content: systemContent });
+    }
+  }
+
+  /**
+   * Trim conversation history to prevent token overflow.
+   * Keeps the system prompt + a sliding window of recent messages.
+   */
+  private trimHistory(): void {
+    if (this.history.length <= MAX_HISTORY_MESSAGES) {
+      return;
+    }
+
+    const system: ChatMessage = this.history[0] ?? { role: 'system', content: '' };
+    const trimmed = this.history.length - MAX_HISTORY_MESSAGES;
+    const recent = this.history.slice(-KEEP_RECENT);
+
+    // Insert a note about trimmed history
+    const trimNote: ChatMessage = {
+      role: 'system',
+      content: `[Earlier conversation trimmed — ${String(trimmed)} messages removed for context management.]`,
+    };
+
+    this.history = [system, trimNote, ...recent];
   }
 
   /** Execute tool calls from the LLM. */
