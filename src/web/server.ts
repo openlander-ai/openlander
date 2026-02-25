@@ -10,6 +10,7 @@ import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
 import { createDomainRoutes } from './api/domain-routes.js';
 import { createAuthRoutes } from './api/auth-routes.js';
+import { createSetupRoutes } from './api/setup-routes.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
@@ -54,6 +55,9 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   // API routes
   const apiRoutes = createApiRoutes(ctx);
   app.route('/api', apiRoutes);
+
+  const setupRoutes = createSetupRoutes(ctx);
+  app.route('/api', setupRoutes);
 
   // v0.2: Webhook auto-redeploy routes
   const webhookRoutes = createWebhookRoutes(ctx);

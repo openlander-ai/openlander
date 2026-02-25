@@ -66,14 +66,22 @@ Mac Mini + OpenLander:   ~$600 once, $0/month
 
 ## Quick Start
 
+> **Platform**: Linux (primary) and macOS. Windows is not supported.
+
 ```bash
 npm install -g openlander
 
-openlander onboard
-# → Checks Docker installation
-# → Sets up Traefik reverse proxy
-# → Configures LLM API key (or use Gemini Flash for free)
-# → Opens http://localhost:3000 — your deployment chat UI
+openlander start
+# → Opens http://localhost:3000
+# → Web UI guides you through setup (Docker check, LLM key, Traefik)
+# → Start deploying from the chat
+```
+
+Or use the CLI wizard:
+
+```bash
+openlander onboard   # Interactive terminal setup
+openlander start     # Then open the web UI
 ```
 
 ## Features (v0.1)
@@ -141,14 +149,14 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 ## Requirements
 
-- **Node.js** ≥ 22
+- **Platform**: Linux or macOS (Windows is not supported)
+- **Node.js** >= 22
 - **Docker** installed and running
-- **LLM API key** — one of:
+  - **LLM API key** (configured during web setup or CLI onboard) \u2014 one of:
   - [Google Gemini](https://ai.google.dev/) (free tier available)
   - [OpenRouter](https://openrouter.ai/) (free tier, no credit card)
   - [Anthropic Claude](https://console.anthropic.com/)
   - [OpenAI](https://platform.openai.com/)
-
 ## Contributing
 
 OpenLander is in early development. Contributions welcome!

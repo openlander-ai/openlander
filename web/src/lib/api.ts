@@ -73,3 +73,38 @@ export async function getSystemStats(): Promise<SystemStats> {
   const res = await fetch('/api/system/stats');
   return res.json();
 }
+
+export interface SetupStatus {
+  ready: boolean;
+  docker: { ok: boolean; message: string };
+  traefik: { ok: boolean; message: string };
+  llm: { ok: boolean; provider: string; model: string; message: string };
+}
+
+export async function getSetupStatus(): Promise<SetupStatus> {
+  const res = await fetch('/api/setup/status');
+  if (!res.ok) throw new Error('Failed to fetch setup status');
+  return res.json();
+}
+
+export async function configureLLM(provider: string, apiKey: string, model?: string): Promise<any> {
+  const res = await fetch('/api/setup/llm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, api_key: apiKey, model }),
+  });
+  if (!res.ok) throw new Error('Failed to configure LLM');
+  return res.json();
+}
+
+export async function startTraefik(): Promise<any> {
+  const res = await fetch('/api/setup/traefik', { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to start Traefik');
+  return res.json();
+}
+
+export async function completeSetup(): Promise<any> {
+  const res = await fetch('/api/setup/complete', { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to complete setup');
+  return res.json();
+}
