@@ -118,12 +118,12 @@ export class EventBus {
         if (result instanceof Promise) {
           promises.push(
             result.catch((err: unknown) => {
-              log.error({ err, event: String(event) }, 'Error in handler');
+              log.error({ err, event }, 'Error in handler');
             }),
           );
         }
       } catch (err) {
-        log.error({ err, event: String(event) }, 'Error in handler');
+        log.error({ err, event }, 'Error in handler');
       }
     }
 

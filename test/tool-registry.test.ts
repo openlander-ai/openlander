@@ -104,7 +104,7 @@ describe('Tool Registry', () => {
     const deployProject = getTool(ctx, 'deploy_project');
 
     const valid = deployProject.inputSchema.safeParse({
-      repo_url: 'https://github.com/openlander/openlander',
+      repo_url: 'https://github.com/openlander-ai/OpenLander',
       branch: 'main',
       name: 'openlander',
     });

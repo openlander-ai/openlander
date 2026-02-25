@@ -67,7 +67,8 @@ export class GitHubProvider implements GitProvider {
 
   async validateToken(): Promise<TokenValidation> {
     try {
-      const res = await this.request<GHApiUser>('/user');
+      const res = await this.request('/user');
+      const userData = res.data as GHApiUser;
       const scopes = (res.headers.get('x-oauth-scopes') ?? '')
         .split(',')
         .map((s) => s.trim())
@@ -75,7 +76,7 @@ export class GitHubProvider implements GitProvider {
 
       return {
         valid: true,
-        user: mapUser(res.data),
+      user: mapUser(userData),
         scopes,
       };
     } catch (error) {
@@ -94,11 +95,13 @@ export class GitHubProvider implements GitProvider {
     const sort = opts?.sort ?? 'pushed';
     const type = opts?.visibility ?? 'all';
 
-    const res = await this.request<GHApiRepo[]>(
-      `/user/repos?page=${page}&per_page=${perPage}&sort=${sort}&type=${type}&direction=desc`,
+    const res = await this.request(
+      `/user/repos?page=${String(page)}&per_page=${String(perPage)}&sort=${sort}&type=${type}&direction=desc`,
     );
 
-    const repos = res.data.map((r) => mapRepo(r));
+    const repoData = res.data as GHApiRepo[];
+
+    const repos = repoData.map((r) => mapRepo(r));
     const linkHeader = res.headers.get('link') ?? '';
     const hasMore = linkHeader.includes('rel="next"');
 
@@ -111,25 +114,29 @@ export class GitHubProvider implements GitProvider {
 
     // Search user's own repos + repos they have access to
     const encodedQuery = encodeURIComponent(`${query} user:@me`);
-    const res = await this.request<GHSearchResult>(
-      `/search/repositories?q=${encodedQuery}&page=${page}&per_page=${perPage}&sort=updated`,
+    const res = await this.request(
+      `/search/repositories?q=${encodedQuery}&page=${String(page)}&per_page=${String(perPage)}&sort=updated`,
     );
+    const searchData = res.data as GHSearchResult;
 
     return {
-      repos: res.data.items.map((r) => mapRepo(r)),
-      total: res.data.total_count,
+      repos: searchData.items.map((r) => mapRepo(r)),
+      total: searchData.total_count,
     };
   }
 
+
   async getRepo(owner: string, name: string): Promise<GitRepo> {
-    const res = await this.request<GHApiRepo>(`/repos/${owner}/${name}`);
-    return mapRepo(res.data);
+    const res = await this.request(`/repos/${owner}/${name}`);
+    return mapRepo(res.data as GHApiRepo);
+
   }
+
 
   async hasDockerfile(owner: string, name: string, branch?: string): Promise<boolean> {
     try {
       const ref = branch ?? 'HEAD';
-      await this.request<unknown>(`/repos/${owner}/${name}/contents/Dockerfile?ref=${ref}`);
+      await this.request(`/repos/${owner}/${name}/contents/Dockerfile?ref=${ref}`);
       return true;
     } catch (err) {
       log.debug({ err, owner, name }, 'Dockerfile check failed — assuming not present');
@@ -144,7 +151,7 @@ export class GitHubProvider implements GitProvider {
 
   // --- Internal ---
 
-  private async request<T>(path: string): Promise<{ data: T; headers: Headers }> {
+  private async request(path: string): Promise<{ data: unknown; headers: Headers }> {
     const url = `${this.apiBase}${path}`;
     const res = await fetch(url, {
       headers: {
@@ -160,10 +167,10 @@ export class GitHubProvider implements GitProvider {
       if (res.status === 401) throw new Error('Invalid or expired GitHub token');
       if (res.status === 403) throw new Error('GitHub token lacks required permissions');
       if (res.status === 404) throw new Error('GitHub resource not found');
-      throw new Error(`GitHub API error ${res.status}: ${body.slice(0, 200)}`);
+      throw new Error(`GitHub API error ${String(res.status)}: ${body.slice(0, 200)}`);
     }
 
-    const data = (await res.json()) as T;
+    const data = await res.json();
     return { data, headers: res.headers };
   }
 }

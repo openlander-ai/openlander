@@ -280,7 +280,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
         const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
         const cpuPercent =
           systemDelta > 0
-            ? (cpuDelta / systemDelta) * (stats.cpu_stats.cpu_usage.percpu_usage?.length ?? 1) * 100
+            ? (cpuDelta / systemDelta) * (stats.cpu_stats.cpu_usage.percpu_usage.length) * 100
             : 0;
 
         return c.json({
@@ -563,11 +563,13 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const follow = c.req.query('follow');
 
     if (follow && project.container_id) {
+      const containerId = project.container_id;
       return stream(c, async (s) => {
+
         c.header('Content-Type', 'application/x-ndjson');
 
         try {
-          const container = ctx.docker.getClient().getContainer(project.container_id!);
+          const container = ctx.docker.getClient().getContainer(containerId);
           const logStream = await container.logs({
             follow: true,
             stdout: true,
@@ -578,7 +580,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
           logStream.on('data', (chunk: Buffer) => {
             const headerSize = 8;
             const streamType = chunk[0] === 1 ? 'stdout' : 'stderr';
-            const line = chunk.slice(headerSize).toString('utf8').trim();
+            const line = chunk.subarray(headerSize).toString('utf8').trim();
 
             if (line) {
               const logEntry = {
@@ -603,7 +605,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
           });
         } catch (err) {
           log.debug({ err, projectId: project.id }, 'Log streaming failed');
-          void s.write(JSON.stringify({ error: 'Failed to stream logs' }) + '\n');
           void s.write(JSON.stringify({ error: 'Failed to stream logs' }) + '\n');
           void s.close();
         }
@@ -678,7 +679,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     }
     const provider = createGitProvider('github', ghConfig);
     const page = parseInt(c.req.query('page') ?? '1', 10);
-    const visibility = (c.req.query('visibility') as 'all' | 'public' | 'private') ?? 'all';
+    const visibility = (c.req.query('visibility') ?? 'all') as 'all' | 'public' | 'private';
     const result = await provider.listRepos({ page, perPage: 30, visibility });
     return c.json({
       count: result.repos.length,

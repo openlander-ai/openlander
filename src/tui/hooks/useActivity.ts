@@ -49,7 +49,7 @@ export function useActivity(client: OpenLanderClient, maxEvents = 50): UseActivi
         // Fallback to polling
         const poll = setInterval(() => {
           void client.getActivity(maxEvents).then(
-            (data) => setEvents(data),
+            (data) => { setEvents(data); },
             () => {
               /* ignore */
             },
@@ -57,7 +57,7 @@ export function useActivity(client: OpenLanderClient, maxEvents = 50): UseActivi
         }, 5000);
 
         // Cleanup polling on abort
-        controller.signal.addEventListener('abort', () => clearInterval(poll), { once: true });
+        controller.signal.addEventListener('abort', () => { clearInterval(poll); }, { once: true });
       }
     })();
 

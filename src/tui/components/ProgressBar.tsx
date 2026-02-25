@@ -53,7 +53,7 @@ export function ProgressBar({ percent, width = 20, label }: ProgressBarProps): R
       {label && <Text dimColor>{label}</Text>}
       <Text color={barColor}>{filled}</Text>
       <Text dimColor>{empty}</Text>
-      <Text color={percentColor}>{`${clampedPercent}%`}</Text>
+      <Text color={percentColor}>{`${String(clampedPercent)}%`}</Text>
     </Box>
   );
 }

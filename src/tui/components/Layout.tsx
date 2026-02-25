@@ -23,8 +23,8 @@ export function Layout({
   activePanel = 'left',
 }: LayoutProps): React.ReactElement {
   const { stdout } = useStdout();
-  const columns = stdout?.columns ?? 80;
-  const rows = stdout?.rows ?? 24;
+  const columns = stdout.columns;
+  const rows = stdout.rows;
 
   const isWideMode = columns >= 100;
 

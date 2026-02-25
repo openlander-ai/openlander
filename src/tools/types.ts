@@ -17,7 +17,7 @@ export interface ToolExecutionContext {
 export type ToolExecuteFn = (
   args: Record<string, unknown>,
   context: ToolExecutionContext,
-) => Promise<unknown> | unknown;
+) => unknown;
 
 export interface ToolSpec {
   name: string;

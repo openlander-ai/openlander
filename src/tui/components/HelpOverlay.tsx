@@ -29,8 +29,8 @@ const SHORTCUTS: ShortcutRow[] = [
  */
 export function HelpOverlay({ onClose }: HelpOverlayProps): React.ReactElement {
   const { stdout } = useStdout();
-  const columns = stdout?.columns ?? 80;
-  const rows = stdout?.rows ?? 24;
+  const columns = stdout.columns;
+  const rows = stdout.rows;
 
   // Listen for Escape key to close
   useInput((_input, key) => {

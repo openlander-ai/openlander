@@ -77,9 +77,9 @@ function formatUptime(seconds: number): string {
   const mins = Math.floor((seconds % 3600) / 60);
 
   if (days > 0) {
-    return `${days}d ${hours}h`;
+    return `${String(days)}d ${String(hours)}h`;
   }
-  return `${hours}h ${mins}m`;
+  return `${String(hours)}h ${String(mins)}m`;
 }
 
 // Helper: truncate string with ellipsis
@@ -217,15 +217,15 @@ function ProjectsSection({
 
   return (
     <Box flexDirection="column" marginTop={1}>
-      <SectionHeader title={`Projects (${projects.length})`} />
+      <SectionHeader title={`Projects (${String(projects.length)})`} />
       {projects.map((project, index) => {
         const isSelected = focus && index === selectedIndex;
         const icon = PROJECT_STATUS_ICON[project.status] ?? '?';
         const color = PROJECT_STATUS_COLOR[project.status] ?? 'white';
         const stats = projectStats.get(project.id);
         const memoryMB = stats?.memoryUsage ? Math.round(stats.memoryUsage / 1024 / 1024) : 0;
-        const memoryStr = memoryMB > 0 ? `${memoryMB}M` : '';
-        const portStr = project.port ? `:${project.port}` : '';
+        const memoryStr = memoryMB > 0 ? `${String(memoryMB)}M` : '';
+        const portStr = project.port ? `:${String(project.port)}` : '';
         const domain = project.publicUrl ?? project.url;
 
         return (
@@ -279,7 +279,7 @@ function ActivitySection({ events }: { events: ActivityEvent[] }): React.ReactEl
           const user = truncate(event.user, 8);
 
           return (
-            <Box key={`${event.timestamp}-${index}`}>
+            <Box key={`${event.timestamp}-${String(index)}`}>
               <Text dimColor>{time} </Text>
               <Text>{user.padEnd(8)} </Text>
               <Text color={color}>{icon} </Text>
@@ -351,8 +351,8 @@ export function DashboardPanel({ client, height, focus }: DashboardPanelProps): 
     };
 
     void fetchSystem();
-    const interval = setInterval(fetchSystem, 2000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => { void fetchSystem(); }, 2000);
+    return () => { clearInterval(interval); };
   }, [client]);
 
   // Poll projects every 3 seconds
@@ -385,8 +385,8 @@ export function DashboardPanel({ client, height, focus }: DashboardPanelProps): 
     };
 
     void fetchProjects();
-    const interval = setInterval(fetchProjects, 3000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => { void fetchProjects(); }, 3000);
+    return () => { clearInterval(interval); };
   }, [client]);
 
   // Poll activity every 5 seconds
@@ -404,8 +404,8 @@ export function DashboardPanel({ client, height, focus }: DashboardPanelProps): 
     };
 
     void fetchActivity();
-    const interval = setInterval(fetchActivity, 5000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => { void fetchActivity(); }, 5000);
+    return () => { clearInterval(interval); };
   }, [client]);
 
   // Handle keyboard navigation when focused

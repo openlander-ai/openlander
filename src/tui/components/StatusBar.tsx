@@ -26,10 +26,10 @@ export function StatusBar({
   const isSplitMode = panelMode === 'split';
 
   // Format CPU display
-  const cpuDisplay = cpuPercent !== null ? `${cpuPercent}%` : '—';
+  const cpuDisplay = cpuPercent !== null ? `${String(cpuPercent)}%` : '—';
 
   // Format building indicator
-  const buildingDisplay = buildingCount > 0 ? ` | ${buildingCount} building` : '';
+  const buildingDisplay = buildingCount > 0 ? ` | ${String(buildingCount)} building` : '';
 
   return (
     <Box

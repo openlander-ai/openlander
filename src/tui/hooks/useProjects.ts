@@ -7,7 +7,7 @@ const log = createModuleLogger('tui');
 export interface UseProjectsResult {
   projects: Project[];
   loading: boolean;
-  refresh: () => void;
+  refresh: () => Promise<void>;
 }
 
 /**
@@ -42,7 +42,7 @@ export function useProjects(client: OpenLanderClient | null, intervalMs = 3000):
     const timer = setInterval(() => {
       void refresh();
     }, intervalMs);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); };
   }, [refresh, intervalMs]);
 
   return { projects, loading, refresh };

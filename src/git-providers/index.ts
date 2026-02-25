@@ -55,7 +55,7 @@ export function createConfiguredProviders(
   const providers = new Map<GitProviderType, GitProvider>();
 
   for (const [type, config] of Object.entries(gitProviders)) {
-    if (config?.token) {
+    if (config.token) {
       try {
         const provider = createGitProvider(type as GitProviderType, config);
         providers.set(type as GitProviderType, provider);

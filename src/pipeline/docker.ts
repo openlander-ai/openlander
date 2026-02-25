@@ -89,7 +89,7 @@ export class Docker {
       return { state: 'running' };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      const stderr = (err as { stderr?: Buffer })?.stderr?.toString() ?? '';
+      const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? '';
       const combined = msg + stderr;
       if (combined.includes('permission denied') || combined.includes('Permission denied') || combined.includes('EACCES')) {
         const groupFixed = isUserInDockerGroup();

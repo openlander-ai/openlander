@@ -40,7 +40,7 @@ export function useSystemStats(
     const timer = setInterval(() => {
       void fetch();
     }, intervalMs);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); };
   }, [client, intervalMs]);
 
   return { stats };

@@ -38,7 +38,7 @@ export async function ensureDocker(): Promise<void> {
       try {
         execSync(cmd, { stdio: 'inherit' });
         process.exit(0);
-      } catch (e) {
+      } catch {
         // sg failed, fall through to normal error handling
       }
     }
@@ -87,7 +87,7 @@ export async function ensureDocker(): Promise<void> {
     process.exit(1);
   }
 
-  if (status.state === 'permission_denied') {
+  else {
     console.log(pc.yellow('  ⚠ Docker permission denied. Fixing...'));
     const fixed = await tryFixDockerPermission();
     if (fixed) {
@@ -105,7 +105,7 @@ export async function ensureDocker(): Promise<void> {
   }
 }
 
-async function tryFixDockerPermission(): Promise<boolean> {
+function tryFixDockerPermission(): Promise<boolean> {
   try {
     const user = execSync('whoami', { encoding: 'utf8', stdio: 'pipe' }).trim();
     console.log(pc.dim(`  Adding ${user} to docker group...`));
@@ -113,19 +113,19 @@ async function tryFixDockerPermission(): Promise<boolean> {
     // Try newgrp to activate immediately
     try {
       execSync('sg docker -c "docker info"', { stdio: 'pipe', timeout: 5000 });
-      return true;
+      return Promise.resolve(true);
     } catch (err) {
       log.debug({ err }, 'sg docker test failed — user needs to re-login');
       console.log(pc.yellow('  ⚠ Group added. Please log out and back in for it to take effect.'));
-      return false;
+      return Promise.resolve(false);
       // sg didn't work — user needs to re-login
       console.log(pc.yellow('  ⚠ Group added. Please log out and back in for it to take effect.'));
-      return false;
+      return Promise.resolve(false);
     }
   } catch (err) {
       log.debug({ err }, 'Docker permission fix failed');
-      return false;
-    return false;
+      return Promise.resolve(false);
+    return Promise.resolve(false);
   }
 }
 

@@ -35,8 +35,9 @@ export function Onboarding({ ctx, onComplete }: OnboardingProps): React.ReactEle
   const handleNext = () => {
     const steps: OnboardingStep[] = ['welcome', 'docker', 'git', 'llm', 'traefik', 'ready'];
     const currentIndex = steps.indexOf(step);
-    if (currentIndex < steps.length - 1) {
-      setStep(steps[currentIndex + 1]!);
+    const nextStep = steps[currentIndex + 1];
+    if (nextStep) {
+      setStep(nextStep);
     }
   };
 

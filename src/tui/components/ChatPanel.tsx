@@ -123,7 +123,7 @@ export function ChatPanel({
         setMessages((prev) => [
           ...prev,
           {
-            id: `tool-${Date.now()}`,
+            id: `tool-${String(Date.now())}`,
             role: 'assistant',
             content: '',
             type: 'tool_start',
@@ -141,13 +141,16 @@ export function ChatPanel({
             (m) => m.type === 'tool_start' && m.toolName === event.toolName,
           );
           if (lastToolIdx !== -1) {
-            updated[lastToolIdx] = {
-              ...updated[lastToolIdx]!,
-              type: 'tool_result',
-              toolStatus: event.success ? 'success' : 'error',
-              toolDuration: event.success ? 0 : undefined, // Duration would need to be tracked
-              content: event.error ?? '',
-            };
+            const item = updated[lastToolIdx];
+            if (item) {
+              updated[lastToolIdx] = {
+                ...item,
+                type: 'tool_result',
+                toolStatus: event.success ? 'success' : 'error',
+                toolDuration: event.success ? 0 : undefined, // Duration would need to be tracked
+                content: event.error ?? '',
+              };
+            }
           }
           return updated;
         });
@@ -159,7 +162,7 @@ export function ChatPanel({
         setMessages((prev) => [
           ...prev,
           {
-            id: `msg-${Date.now()}`,
+            id: `msg-${String(Date.now())}`,
             role: 'assistant',
             content: event.content,
             type: 'text',
@@ -174,7 +177,7 @@ export function ChatPanel({
         setMessages((prev) => [
           ...prev,
           {
-            id: `error-${Date.now()}`,
+            id: `error-${String(Date.now())}`,
             role: 'assistant',
             content: event.error,
             type: 'error',
@@ -196,7 +199,7 @@ export function ChatPanel({
 
       // Add user message
       const userMessage: DisplayMessage = {
-        id: `user-${Date.now()}`,
+        id: `user-${String(Date.now())}`,
         role: 'user',
         content: text,
         type: 'text',
@@ -240,7 +243,7 @@ export function ChatPanel({
                   setMessages((prev) => [
                     ...prev,
                     {
-                      id: `error-${Date.now()}`,
+                      id: `error-${String(Date.now())}`,
                       role: 'assistant',
                       content: errorMsg,
                       type: 'error',
@@ -264,7 +267,7 @@ export function ChatPanel({
         setMessages((prev) => [
           ...prev,
           {
-            id: `error-${Date.now()}`,
+            id: `error-${String(Date.now())}`,
             role: 'assistant',
             content: 'Daemon not connected. Start with: openlander daemon',
             type: 'error',
@@ -282,7 +285,7 @@ export function ChatPanel({
         setMessages((prev) => [
           ...prev,
           {
-            id: `error-${Date.now()}`,
+            id: `error-${String(Date.now())}`,
             role: 'assistant',
             content: errorMsg,
             type: 'error',
@@ -310,7 +313,7 @@ export function ChatPanel({
             const completed = `/${commandName}`;
             setInputValue('');
             setShowCommandPicker(false);
-            sendMessage(completed);
+            void sendMessage(completed);
             return;
           }
         }
@@ -318,7 +321,7 @@ export function ChatPanel({
 
       setInputValue('');
       setShowCommandPicker(false);
-      sendMessage(text);
+      void sendMessage(text);
     },
     [showCommandPicker, commandPickerIndex, sendMessage],
   );
@@ -368,7 +371,10 @@ export function ChatPanel({
           }
           const newIndex = Math.min(chatHistory.length - 1, historyIndex + 1);
           setHistoryIndex(newIndex);
-          setInputValue(chatHistory[chatHistory.length - 1 - newIndex]!.text);
+          const historyEntry = chatHistory[chatHistory.length - 1 - newIndex];
+          if (historyEntry) {
+            setInputValue(historyEntry.text);
+          }
         }
         return;
       }
@@ -381,7 +387,10 @@ export function ChatPanel({
         } else if (historyIndex > 0) {
           const newIndex = historyIndex - 1;
           setHistoryIndex(newIndex);
-          setInputValue(chatHistory[chatHistory.length - 1 - newIndex]!.text);
+          const historyEntry = chatHistory[chatHistory.length - 1 - newIndex];
+          if (historyEntry) {
+            setInputValue(historyEntry.text);
+          }
         } else if (historyIndex === 0) {
           setHistoryIndex(-1);
           setInputValue(historyRef.current);

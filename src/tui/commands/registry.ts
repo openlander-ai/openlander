@@ -209,7 +209,8 @@ export function parseSlashCommand(input: string): ParsedCommand | null {
   const tokens = tokenize(trimmed);
   if (tokens.length === 0) return null;
 
-  const name = tokens[0]!;
+  const name = tokens[0];
+  if (!name) return null;
   const command = findCommand(name);
   if (!command) return null;
 
@@ -220,7 +221,8 @@ export function parseSlashCommand(input: string): ParsedCommand | null {
 
   let i = 1;
   while (i < tokens.length) {
-    const token = tokens[i]!;
+    const token = tokens[i];
+    if (!token) continue;
 
     if (token.startsWith('--')) {
       // Long flag: --name or --name value
@@ -286,7 +288,7 @@ function tokenize(input: string): string[] {
         inQuotes = false;
         // Don't include closing quote in token
       } else {
-        current += char;
+        if (char) current += char;
       }
     } else if (char === '"' || char === "'") {
       inQuotes = true;
@@ -298,7 +300,7 @@ function tokenize(input: string): string[] {
         current = '';
       }
     } else {
-      current += char;
+      if (char) current += char;
     }
   }
 

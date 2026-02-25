@@ -46,7 +46,7 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): React.ReactElement {
       }
     };
 
-    setupTraefik();
+    void setupTraefik();
   }, [ctx, onNext]);
 
   const renderContent = () => {

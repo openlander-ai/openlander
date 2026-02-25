@@ -45,7 +45,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       dockerMessage = 'Docker is not installed. Install it to continue.';
     } else if (dockerStatus.state === 'not_running') {
       dockerMessage = 'Docker is installed but the daemon is not running. Start it to continue.';
-    } else if (dockerStatus.state === 'permission_denied' && dockerStatus.groupFixed) {
+    } else if (dockerStatus.groupFixed) {
       dockerMessage = 'Permission fixed! Restart OpenLander for the change to take effect. (Ctrl+C, then `openlander start`)';
     } else {
       dockerMessage = 'Docker is installed but your user lacks permission. Add yourself to the docker group.';

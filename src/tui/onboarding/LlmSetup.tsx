@@ -40,7 +40,7 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): React.ReactElement
   const handleProviderSelect = useCallback((item: { value: string }) => {
     const selectedProvider = item.value as LlmProvider;
     setProvider(selectedProvider);
-    setModel(MODEL_DEFAULTS[selectedProvider] ?? '');
+    setModel(MODEL_DEFAULTS[selectedProvider]);
 
     if (selectedProvider === 'ollama') {
       // Ollama doesn't need API key - save and proceed
@@ -70,7 +70,7 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): React.ReactElement
         llm: {
           provider,
           apiKey: provider === 'ollama' ? '' : apiKey.trim(),
-          model: (model.trim() || MODEL_DEFAULTS[provider]) ?? '',
+          model: model.trim() || MODEL_DEFAULTS[provider],
         },
       });
       // Auto-advance after brief delay
@@ -139,7 +139,7 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): React.ReactElement
               <TextInput value={model} onChange={setModel} onSubmit={handleModelSubmit} />
             </Box>
             <Box marginTop={1}>
-              <Text dimColor>Default: {MODEL_DEFAULTS[provider!]}</Text>
+              <Text dimColor>Default: {provider ? MODEL_DEFAULTS[provider] : ''}</Text>
             </Box>
           </Box>
         );

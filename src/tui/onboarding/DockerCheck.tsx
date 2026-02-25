@@ -35,7 +35,7 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): React.ReactElement {
         setState('not_installed');
       } else if (status.state === 'not_running') {
         setState('not_running');
-      } else if (status.state === 'permission_denied') {
+      } else {
         setState('permission_denied');
       }
     } catch (err) {
@@ -46,8 +46,7 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): React.ReactElement {
   }, [ctx.docker, onNext]);
 
   useEffect(() => {
-    checkDocker();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void checkDocker();
   }, [retryCount]);
 
   useInput((input, key) => {

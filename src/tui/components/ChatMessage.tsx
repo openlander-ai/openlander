@@ -41,7 +41,7 @@ function formatToolDescription(toolName: string): string {
 /** Format duration in seconds */
 function formatDuration(seconds: number): string {
   if (seconds < 1) {
-    return `${Math.round(seconds * 1000)}ms`;
+    return `${String(Math.round(seconds * 1000))}ms`;
   }
   return `${seconds.toFixed(1)}s`;
 }
@@ -104,7 +104,7 @@ export function ChatMessage({ message }: ChatMessageProps): React.ReactElement {
         </Box>
       );
 
-    case 'tool_result':
+    case 'tool_result': {
       if (toolStatus === 'error') {
         return (
           <Box paddingX={1}>
@@ -123,6 +123,7 @@ export function ChatMessage({ message }: ChatMessageProps): React.ReactElement {
           </Text>
         </Box>
       );
+    }
 
     case 'progress':
       return (
@@ -155,7 +156,7 @@ export function ChatMessage({ message }: ChatMessageProps): React.ReactElement {
       );
 
     case 'text':
-    default:
+    default: {
       // Regular assistant text
       if (!content) {
         return <Box />;
@@ -172,5 +173,6 @@ export function ChatMessage({ message }: ChatMessageProps): React.ReactElement {
           ))}
         </Box>
       );
+    }
   }
 }

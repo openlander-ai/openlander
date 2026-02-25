@@ -60,10 +60,10 @@ export function useDaemon(socketPath: string, pingIntervalMs = 10000): UseDaemon
     const poll = async () => {
       if (cancelled) return;
       const ok = await checkHealth();
-      if (cancelled) return;
+
       // Fast retry until first successful connection, then slow poll
       const interval = ok || connectedRef.current ? pingIntervalMs : FAST_INTERVAL;
-      timer = setTimeout(poll, interval);
+      timer = setTimeout(() => { void poll(); }, interval);
     };
 
     void poll();
