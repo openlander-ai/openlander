@@ -32,7 +32,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "husky"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.0",
@@ -60,6 +61,8 @@
     "@types/react": "^19.2.14",
     "eslint": "^9.20.0",
     "eslint-config-prettier": "^10.0.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "pino-pretty": "^13.1.3",
     "prettier": "^3.5.2",
     "tsup": "^8.4.0",
@@ -79,12 +82,21 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/openlander/openlander.git"
+    "url": "https://github.com/openlander-ai/OpenLander.git"
   },
   "license": "MIT",
   "author": "OpenLander Contributors",
-  "homepage": "https://github.com/openlander/openlander",
+  "homepage": "https://github.com/openlander-ai/OpenLander",
   "bugs": {
-    "url": "https://github.com/openlander/openlander/issues"
+    "url": "https://github.com/openlander-ai/OpenLander/issues"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }

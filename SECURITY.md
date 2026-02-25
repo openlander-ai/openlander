@@ -14,7 +14,7 @@ If you discover a security vulnerability in OpenLander, please report it respons
 
 ### How to Report
 
-1. Go to the [Security Advisories](https://github.com/openlander/openlander/security/advisories) page
+1. Go to the [Security Advisories](https://github.com/openlander-ai/OpenLander/security/advisories) page
 2. Click "Report a vulnerability"
 3. Provide a detailed description of the vulnerability
 

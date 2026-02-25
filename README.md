@@ -203,7 +203,7 @@ The agent will handle the installation for your platform.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and how to submit changes.
 
-- Bug reports and feature requests → [Issues](https://github.com/openlander/openlander/issues)
+- Bug reports and feature requests → [Issues](https://github.com/openlander-ai/OpenLander/issues)
 - Security vulnerabilities → [Security Policy](SECURITY.md)
 
 ## License
