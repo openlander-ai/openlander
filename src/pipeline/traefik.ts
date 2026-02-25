@@ -1,3 +1,6 @@
+import { createModuleLogger } from '../lib/logger.js';
+const log = createModuleLogger('traefik');
+
 import type { Docker } from './docker.js';
 
 const TRAEFIK_CONTAINER_NAME = 'openlander-traefik';
@@ -22,7 +25,9 @@ export class TraefikManager {
         filters: { name: [TRAEFIK_CONTAINER_NAME] },
       });
       return containers.length > 0;
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to check Traefik running status');
+      return false;
       return false;
     }
   }
@@ -63,7 +68,8 @@ export class TraefikManager {
       await new Promise<void>((resolve, reject) => {
         client.modem.followProgress(stream, (err: Error | null) => { if (err) { reject(err); } else { resolve(); } });
       });
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Traefik image pull failed — may already exist locally');
       // Image might already exist locally
     }
 
@@ -103,7 +109,8 @@ export class TraefikManager {
   async stop(): Promise<void> {
     try {
       await this.docker.removeContainer(TRAEFIK_CONTAINER_NAME);
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to remove Traefik container — may already be removed');
       // Already removed
     }
   }

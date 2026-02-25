@@ -6,6 +6,9 @@ import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createGitProvider } from '../git-providers/index.js';
 import { loadConfig } from '../config/index.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('agent-tools');
 
 /**
  * Tool definitions for the OpenLander agent.
@@ -717,7 +720,9 @@ function findDockerfiles(dir: string, maxDepth = 3): string[] {
     let entries: string[];
     try {
       entries = readdirSync(current);
-    } catch {
+    } catch (err) {
+      log.debug({ err, current }, 'Failed to read directory during Dockerfile scan');
+      return;
       return;
     }
     for (const entry of entries) {
@@ -730,7 +735,9 @@ function findDockerfiles(dir: string, maxDepth = 3): string[] {
         } else if (stat.isDirectory()) {
           walk(fullPath, depth + 1);
         }
-      } catch {
+      } catch (err) {
+        log.debug({ err, fullPath }, 'Failed to stat file during Dockerfile scan');
+        continue;
         continue;
       }
     }

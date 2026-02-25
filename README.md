@@ -46,13 +46,13 @@ Agent:  Last 30 lines:
 
 Those are great tools — for people who already understand infrastructure.
 
-|              | Coolify / Dokploy            | OpenLander                        |
-| ------------ | ---------------------------- | --------------------------------- |
-| Analogy      | Self-service gas station     | Full-service gas station          |
-| Interface    | Dashboard (forms & buttons)  | Chat (natural language)           |
-| Target       | Devs with infra knowledge    | Anyone who can build an app w/ AI |
-| Install      | `docker compose`             | `npm i -g`                        |
-| Config       | You figure it out            | Agent figures it out              |
+|           | Coolify / Dokploy           | OpenLander                        |
+| --------- | --------------------------- | --------------------------------- |
+| Analogy   | Self-service gas station    | Full-service gas station          |
+| Interface | Dashboard (forms & buttons) | TUI chat (natural language)       |
+| Target    | Devs with infra knowledge   | Anyone who can build an app w/ AI |
+| Install   | `docker compose`            | `npm i -g`                        |
+| Config    | You figure it out           | Agent figures it out              |
 
 OpenLander isn't a competitor — it's a different category.
 
@@ -73,90 +73,103 @@ npm install -g openlander
 openlander
 ```
 
-That's it. OpenLander will:
+OpenLander will:
+
 1. Check Docker (install if missing, fix permissions if needed)
 2. Start the Traefik reverse proxy
-3. Launch the web UI at `http://localhost:3000`
+3. Launch the TUI — dashboard + chat interface right in your terminal
 4. Prompt you to add an LLM API key (Gemini free tier works)
 5. You're ready to deploy
 
-## Features (v0.1)
+## Features
 
 - **Chat-driven deployment** — Describe what you want in plain English
 - **Git → Docker → URL** — Clone, build, run, expose. One conversation.
 - **Traefik auto-routing** — Each project gets its own subdomain. No port conflicts.
 - **Public sharing** — Instant public URL via TryCloudflare. No domain needed.
-- **Environment variables** — Manage secrets through chat or web UI
-- **Logs & monitoring** — Check container logs and system resources
-- **BYOK (Bring Your Own Key)** — Works with Gemini Flash (free), Claude, OpenAI, or any OpenRouter model
+- **Production domains** — Permanent URLs via Cloudflare Tunnel. Multi-domain mapping.
+- **Environment variables** — Manage secrets through chat or TUI
+- **Logs & monitoring** — Container logs, health checks, system resource tracking
+- **Auto-redeploy** — Git push webhook triggers automatic redeployment
+- **Rollback & blue-green** — One-command rollback, zero-downtime deploys
+- **Monorepo support** — Scan Dockerfiles, parallel builds, parent-child project model
+- **MCP server** — Deploy from Claude Code, Cursor, or any MCP client
+- **Multi-channel** — Slack, Discord, Telegram bots for remote management
+- **Auto-Dockerfile** — No Dockerfile? Auto-generates one for Next.js, FastAPI, Gradio, Streamlit
+- **Build debugger** — Recipe-based fast-path + LLM analysis for build errors
+- **BYOK (Bring Your Own Key)** — Gemini Flash (free), Claude, OpenAI, OpenRouter, or Ollama (local)
 - **Private repos** — SSH key auth. Works with GitHub, GitLab, Bitbucket, Gitea.
+- **DB provisioning** — PostgreSQL, MySQL, Redis containers on demand
 
 ## How It Works
 
 ```
-User (Web Chat UI)
+User (TUI — terminal chat + dashboard)
     ↓
 AI Agent (LLM — intent parsing + conversation + error explanation)
     ↓
-Deploy Pipeline (deterministic — rule-based, sequential execution)
+Deploy Pipeline (deterministic — rule-based execution)
     ├─ git clone
-    ├─ docker build (uses existing Dockerfile)
+    ├─ docker build (Dockerfile or auto-generated template)
     ├─ docker run (auto port + Traefik labels)
-    └─ expose (TryCloudflare / Cloudflare Tunnel)
+    ├─ expose (TryCloudflare / Cloudflare Tunnel)
+    └─ monitor (health checks + resource tracking)
     ↓
-Infrastructure (Docker + Traefik + Cloudflare)
+Infrastructure (Docker + Traefik + Cloudflare + SQLite)
 ```
 
 **Key principle**: Execution is deterministic (rule-based). The LLM only handles conversation, clarification, and error explanation — never makes deployment decisions.
 
 ## External Access
 
-| Mode           | Use Case    | Implementation              | Domain Required |
-| -------------- | ----------- | --------------------------- | --------------- |
-| 🔒 Internal    | Same network | Local IP + Traefik          | No              |
-| 🌐 Quick Share | Demo/review  | TryCloudflare (temp URL)    | No              |
-| 🌐 Production  | Always-on    | Cloudflare Tunnel (permanent) | Yes           |
+| Mode           | Use Case     | Implementation                | Domain Required |
+| -------------- | ------------ | ----------------------------- | --------------- |
+| 🔒 Internal    | Same network | Local IP + Traefik            | No              |
+| 🌐 Quick Share | Demo/review  | TryCloudflare (temp URL)      | No              |
+| 🌐 Production  | Always-on    | Cloudflare Tunnel (permanent) | Yes             |
 
 Default is **Internal** (safe). Say "make it public" to switch.
 
 ## Tech Stack
 
-| Area           | Technology                         |
-| -------------- | ---------------------------------- |
-| Language       | TypeScript (strict mode, ESM)      |
-| Runtime        | Node.js ≥ 22                       |
-| Install        | npm global package                 |
-| Web UI         | Chat-based (Hono)                  |
-| Docker         | dockerode                          |
-| Reverse Proxy  | Traefik (Docker label routing)     |
-| Tunnel         | TryCloudflare / Cloudflare Tunnel  |
-| AI             | BYOK — Gemini Flash / Claude / OpenAI / OpenRouter |
-| Database       | SQLite                             |
+| Area          | Technology                                                  |
+| ------------- | ----------------------------------------------------------- |
+| Language      | TypeScript (strict mode, ESM)                               |
+| Runtime       | Node.js >= 22                                               |
+| Install       | npm global package                                          |
+| TUI           | Ink (React-based terminal UI)                               |
+| Docker        | dockerode                                                   |
+| Reverse Proxy | Traefik (Docker label routing)                              |
+| Tunnel        | TryCloudflare / Cloudflare Tunnel                           |
+| AI            | BYOK — Gemini Flash / Claude / OpenAI / OpenRouter / Ollama |
+| Database      | SQLite                                                      |
 
 ## Roadmap
 
-| Version | Focus                    | Highlights                                              |
-| ------- | ------------------------ | ------------------------------------------------------- |
-| **v0.1** | **Repo → URL (MVP)**   | Git clone → Docker → Traefik → URL. Chat UI. REST API.  |
-| v0.2    | Daily Operations         | Auto-redeploy, monitoring, production domains, Ollama   |
-| v0.3    | Coding Agent Integration | MCP server (Claude Code / Cursor), rollback, blue-green |
-| v0.4    | Multi-Channel            | Slack/Discord/Telegram bots, auto-Dockerfile generation |
-| v0.5    | Full Self-Hosting        | Fine-tuned model (`openlander-agent-8b`), zero API cost |
+| Version  | Focus                    | Status  | Highlights                                                         |
+| -------- | ------------------------ | ------- | ------------------------------------------------------------------ |
+| **v0.1** | Repo → URL (MVP)         | Done    | Git clone → Docker → Traefik → URL. TUI chat. REST API.            |
+| **v0.2** | Daily Operations         | Done    | Auto-redeploy, monitoring, production domains, Ollama              |
+| **v0.3** | Coding Agent Integration | Done    | MCP server (23 tools), rollback, blue-green, DB provisioning       |
+| **v0.4** | Multi-Channel + Advanced | Done    | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy |
+| v0.5     | Full Self-Hosting        | Next    | Fine-tuned model (openlander-agent-8b), zero API cost              |
+| v0.6     | TUI Polish               | Planned | OpenCode-inspired UI/UX, rich agent interaction display            |
 
 ## Requirements
 
 - **Platform**: Linux or macOS (Windows is not supported, but WSL2 on Windows works)
 - **Node.js** >= 22
 - **Docker** installed and running (see below)
-- **LLM API key** (configured during web setup or CLI onboard) — one of:
+- **LLM API key** (configured during setup) — one of:
   - [Google Gemini](https://ai.google.dev/) (free tier available)
   - [OpenRouter](https://openrouter.ai/) (free tier, no credit card)
   - [Anthropic Claude](https://console.anthropic.com/)
   - [OpenAI](https://platform.openai.com/)
+  - [Ollama](https://ollama.com/) (fully local, no API key needed)
 
 ### Installing Docker
 
-OpenLander needs Docker to build and run containers. The **web setup wizard** and **`openlander onboard`** will detect Docker and guide you through installation.
+OpenLander needs Docker to build and run containers. The `openlander onboard` command will detect Docker and guide you through installation.
 
 **Option 1: Auto-install (Linux / WSL2)**
 
@@ -185,13 +198,13 @@ Install Docker on this machine and start the daemon
 ```
 
 The agent will handle the installation for your platform.
+
 ## Contributing
 
-OpenLander is in early development. Contributions welcome!
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and how to submit changes.
 
-- 🐛 Bug reports and feature requests → [Issues](https://github.com/openlander/openlander/issues)
-- 📖 Documentation improvements → always welcome
-- 🔧 Code contributions → please open an issue first to discuss
+- Bug reports and feature requests → [Issues](https://github.com/openlander/openlander/issues)
+- Security vulnerabilities → [Security Policy](SECURITY.md)
 
 ## License
 

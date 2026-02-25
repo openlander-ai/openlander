@@ -1,3 +1,6 @@
+import { createModuleLogger } from '../lib/logger.js';
+const log = createModuleLogger('docker');
+
 import { execSync } from 'node:child_process';
 import Dockerode from 'dockerode';
 
@@ -43,7 +46,9 @@ export class Docker {
     try {
       await this.client.ping();
       return true;
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Docker ping failed');
+      return false;
       return false;
     }
   }
@@ -53,7 +58,9 @@ export class Docker {
     // 1. Check if docker binary exists
     try {
       execSync('docker --version', { stdio: 'pipe' });
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Docker binary check failed');
+      return { state: 'not_installed' };
       return { state: 'not_installed' };
     }
 
@@ -61,7 +68,8 @@ export class Docker {
     try {
       await this.client.ping();
       return { state: 'running' };
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Dockerode ping failed — trying sg docker');
       // fall through
     }
 
@@ -70,7 +78,8 @@ export class Docker {
     try {
       execSync('sg docker -c "docker info"', { stdio: 'pipe', timeout: 5000 });
       return { state: 'running' };
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'sg docker check failed');
       // sg failed too
     }
 
@@ -234,7 +243,9 @@ function isUserInDockerGroup(): boolean {
     const user = execSync('whoami', { encoding: 'utf8', stdio: 'pipe' }).trim();
     const groups = execSync(`groups ${user}`, { encoding: 'utf8', stdio: 'pipe' });
     return groups.includes('docker');
-  } catch {
+  } catch (err) {
+      log.debug({ err }, 'Failed to check docker group membership');
+      return false;
     return false;
   }
 }

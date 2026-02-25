@@ -1,3 +1,6 @@
+import { createModuleLogger } from '../lib/logger.js';
+const log = createModuleLogger('blue-green');
+
 import type { Docker } from './docker.js';
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
@@ -213,7 +216,8 @@ export class BlueGreenDeployer {
       try {
         const response = await fetch(`http://localhost:${String(port)}${path}`);
         if (response.ok) return true;
-      } catch {
+      } catch (err) {
+        log.debug({ err }, 'Health check probe failed — container not ready yet');
         // Container not ready yet
       }
       if (i < retries - 1) {
@@ -230,13 +234,15 @@ export class BlueGreenDeployer {
   private async cleanupContainer(containerId: string): Promise<void> {
     try {
       await this.docker.stopContainer(containerId);
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to stop green container during cleanup');
       // Container may already be stopped
     }
 
     try {
       await this.docker.removeContainer(containerId);
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to remove green container during cleanup');
       // Container may already be removed
     }
 }

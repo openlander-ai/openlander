@@ -3,6 +3,9 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import type { DeployPipeline } from '../pipeline/deploy.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('webhook');
 
 export interface WebhookResult {
   accepted: boolean;
@@ -147,7 +150,9 @@ function parsePushPayload(source: WebhookSource, body: string): ParsedPushEvent 
   let payload: unknown;
   try {
     payload = JSON.parse(body);
-  } catch {
+  } catch (err) {
+    log.warn({ err }, 'Failed to parse webhook payload JSON');
+    return null;
     return null;
   }
 

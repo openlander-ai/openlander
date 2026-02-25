@@ -1,3 +1,6 @@
+import { createModuleLogger } from '../lib/logger.js';
+const log = createModuleLogger('dockerfile-gen');
+
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -431,7 +434,9 @@ function readPackageJson(packageJsonPath: string): PackageJsonLike {
       devDependencies: readStringRecord(parsed.devDependencies),
       scripts: readStringRecord(parsed.scripts),
     };
-  } catch {
+  } catch (err) {
+    log.debug({ err }, 'Failed to parse package.json — returning empty config');
+    return {};
     return {};
   }
 }
@@ -443,7 +448,9 @@ function readTextIfExists(filePath: string): string {
 
   try {
     return readFileSync(filePath, 'utf8');
-  } catch {
+  } catch (err) {
+    log.debug({ err }, 'Failed to read file — returning empty string');
+    return '';
     return '';
   }
 }

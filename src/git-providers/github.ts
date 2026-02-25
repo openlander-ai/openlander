@@ -15,6 +15,9 @@ import type {
   SearchReposOptions,
   SearchReposResult,
 } from './types.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('github');
 
 const DEFAULT_API_BASE = 'https://api.github.com';
 
@@ -128,7 +131,9 @@ export class GitHubProvider implements GitProvider {
       const ref = branch ?? 'HEAD';
       await this.request<unknown>(`/repos/${owner}/${name}/contents/Dockerfile?ref=${ref}`);
       return true;
-    } catch {
+    } catch (err) {
+      log.debug({ err, owner, name }, 'Dockerfile check failed — assuming not present');
+      return false;
       return false;
     }
   }

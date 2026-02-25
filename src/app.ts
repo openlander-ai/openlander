@@ -17,6 +17,9 @@ import { JobManager } from './pipeline/job-manager.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import { buildContextSnapshot } from './agent/prompts.js';
+import { createModuleLogger } from './lib/logger.js';
+
+const log = createModuleLogger('app');
 
 /**
  * Application context — wires all modules together.
@@ -68,7 +71,8 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
       });
       // contextProvider: lazily captures `ctx` — resolved when chat() is called, not here
       agent = new Agent(llm, db, () => buildContextSnapshot(db), config.llm.provider);
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'LLM client creation failed — agent will be null');
       // LLM provider not available — agent will be null
     }
   }
@@ -102,7 +106,8 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
         ollamaBaseUrl: config.llm.ollamaEndpoint || undefined,
       });
       buildDebugger = new BuildDebugger(llm);
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Build debugger LLM client creation failed');
       // LLM not available
     }
   }

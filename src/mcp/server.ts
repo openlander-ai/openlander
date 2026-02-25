@@ -12,6 +12,9 @@ import type { AppContext } from '../app.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { createGitProvider } from '../git-providers/index.js';
 import { loadConfig } from '../config/index.js';
+const log = createModuleLogger('mcp');
+
+import { createModuleLogger } from '../lib/logger.js';
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -603,12 +606,12 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
           throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
       }
     } catch (error) {
-      console.error('[MCP] Tool execution error:', error);
+      log.error({ error }, 'Tool execution error');
       return errorResponse(error);
     }
   });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('[MCP] OpenLander MCP server started on stdio transport');
+  log.info('OpenLander MCP server started on stdio transport');
 }

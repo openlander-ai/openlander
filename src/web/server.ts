@@ -1,7 +1,9 @@
-import { serve } from '@hono/node-server';
+import { serve, createAdaptorServer } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
+import { existsSync, unlinkSync, chmodSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
@@ -12,6 +14,36 @@ import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
 import type { AppContext } from '../app.js';
+const log = createModuleLogger('web');
+
+import { createModuleLogger } from '../lib/logger.js';
+
+// --- Uptime Tracking ---
+
+let serverStartTime = Date.now();
+
+/**
+ * Format uptime in human-readable form (e.g., "14d 3h", "2h 45m", "5m 12s").
+ */
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${String(days)}d`);
+  if (hours > 0) parts.push(`${String(hours)}h`);
+  if (mins > 0) parts.push(`${String(mins)}m`);
+  if (parts.length === 0) parts.push(`${String(secs)}s`);
+
+  return parts.join(' ');
+}
+
+/** Get seconds since server start. */
+export function getServerUptime(): number {
+  return Math.floor((Date.now() - serverStartTime) / 1000);
+}
 
 export interface ServerOptions {
   port: number;
@@ -27,7 +59,13 @@ export interface ServerOptions {
  * - Webhook endpoints at /webhooks/*
  * - OAuth routes at /auth/*
  */
-export function createServer(options: ServerOptions, ctx: AppContext): void {
+// --- Shared Hono app builder ---
+
+/**
+ * Build the Hono application with all routes and middleware.
+ * Shared by both TCP createServer and Unix socket startDaemon.
+ */
+function createApp(ctx: AppContext): Hono {
   const app = new Hono();
 
   // Middleware
@@ -40,15 +78,31 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
     }),
   );
 
-  // Health check
-  app.get('/health', (c) =>
-    c.json({
+  // Health check (enhanced with uptime)
+  app.get('/health', async (c) => {
+    const uptimeSeconds = getServerUptime();
+    const uptime = formatUptime(uptimeSeconds);
+
+    let dockerContainers = 0;
+    try {
+      const containers = await ctx.docker.getClient().listContainers({
+        filters: { label: ['openlander.managed=true'] },
+      });
+      dockerContainers = containers.length;
+    } catch (err) {
+      log.debug({ err }, 'Docker container list failed during health check');
+      // Docker not accessible
+    }
+
+    return c.json({
       status: 'ok',
       version: '0.4.0',
       llmConfigured: ctx.agent !== null,
       timestamp: new Date().toISOString(),
-    }),
-  );
+      uptime,
+      dockerContainers,
+    });
+  });
 
   // API routes
   const apiRoutes = createApiRoutes(ctx);
@@ -101,7 +155,7 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
     app.post('/webhooks/telegram', createTelegramWebhookHandler(telegramChannel));
   }
 
-  // Root endpoint — headless API server info
+  // Root endpoint — server info
   app.get('/', (c) =>
     c.json({
       name: 'OpenLander',
@@ -111,6 +165,24 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
       api: '/api',
     }),
   );
+
+  return app;
+}
+
+// --- TCP Server (existing behavior) ---
+
+/**
+ * Create and start the OpenLander headless API server.
+ *
+ * Serves:
+ * - REST API at /api/*
+ * - Health check at /health
+ * - Webhook endpoints at /webhooks/*
+ * - OAuth routes at /auth/*
+ */
+export function createServer(options: ServerOptions, ctx: AppContext): void {
+  serverStartTime = Date.now();
+  const app = createApp(ctx);
 
   // Start server
   serve({
@@ -126,3 +198,58 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   void ctx.channelManager.start();
 }
 
+// --- Unix Socket Daemon ---
+
+export interface DaemonOptions {
+  socketPath: string;
+}
+
+/**
+ * Start the OpenLander daemon, listening on a Unix socket.
+ *
+ * Used by `openlander start` for the daemon/client architecture.
+ * TUI clients connect via the Unix socket to interact with the daemon.
+ */
+export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<void> {
+  serverStartTime = Date.now();
+  const app = createApp(ctx);
+
+  // Ensure socket directory exists
+  mkdirSync(dirname(options.socketPath), { recursive: true });
+
+  // Clean up stale socket file
+  if (existsSync(options.socketPath)) {
+    unlinkSync(options.socketPath);
+  }
+
+  // Create HTTP server bound to Unix socket
+  const server = createAdaptorServer(app);
+
+  const ready = new Promise<void>((resolve) => {
+    server.listen(options.socketPath, () => {
+      chmodSync(options.socketPath, 0o666);
+      log.info({ socketPath: options.socketPath }, 'Daemon listening');
+      resolve();
+    });
+  });
+
+  // v0.2: Start health monitoring
+  ctx.healthMonitor.start();
+
+  // v0.4: Start channel connections
+  void ctx.channelManager.start();
+
+  // Handle graceful shutdown
+  const cleanup = (): void => {
+    log.info('Daemon shutting down');
+    server.close();
+    if (existsSync(options.socketPath)) {
+      unlinkSync(options.socketPath);
+    }
+  };
+
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
+
+  return ready;
+}

@@ -2,6 +2,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LLMClient, ChatMessage } from '../llm/index.js';
 import { matchRecipe } from './recipes.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('debugger');
 
 export interface BuildDiagnosis {
   /** One-line summary of the error */
@@ -183,7 +186,8 @@ Diagnose this build failure. Respond ONLY with the JSON format specified.`;
 
     try {
       return parseDiagnosis(response.content);
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Failed to parse LLM diagnosis response');
       return {
         summary: 'Build failed (could not parse LLM response)',
         rootCause: response.content,

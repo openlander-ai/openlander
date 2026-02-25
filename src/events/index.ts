@@ -9,8 +9,11 @@
  * for single-agent architecture.
  */
 
-// --- Event types ---
+import { createModuleLogger } from '../lib/logger.js';
 
+const log = createModuleLogger('events');
+
+// --- Event types ---
 export type EventType =
   // Deploy lifecycle
   | 'deploy:start'
@@ -115,12 +118,12 @@ export class EventBus {
         if (result instanceof Promise) {
           promises.push(
             result.catch((err: unknown) => {
-              console.error(`[EventBus] Error in handler for '${event}':`, err);
+              log.error({ err, event: String(event) }, 'Error in handler');
             }),
           );
         }
       } catch (err) {
-        console.error(`[EventBus] Error in handler for '${event}':`, err);
+        log.error({ err, event: String(event) }, 'Error in handler');
       }
     }
 

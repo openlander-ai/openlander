@@ -38,6 +38,19 @@ coverage/
 tmp/
 temp/
 
-# Web frontend
-web/node_modules/
-web/dist/
+# Web frontend (unused — TUI replaced it)
+web/
+
+
+# Runtime data
+.openlander/
+*.sock
+
+# Internal dev files (not part of OSS release)
+.sisyphus/
+instruction.md
+requirements-v3.md
+tui-spec.md
+PROJECT_STATUS.md
+skills_index.json
+readme.html

@@ -23,6 +23,8 @@ export interface ProjectRow {
   dockerfile_path: string;
   created_at: string;
   updated_at: string;
+  deploy_lock_session: string | null;
+  deploy_lock_at: string | null;
 }
 
 export interface DeployLogRow {
@@ -118,6 +120,12 @@ export class Database {
     }
     if (!colNames.has('dockerfile_path')) {
       this.db.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
+    }
+    if (!colNames.has('deploy_lock_session')) {
+      this.db.exec('ALTER TABLE projects ADD COLUMN deploy_lock_session TEXT DEFAULT NULL');
+    }
+    if (!colNames.has('deploy_lock_at')) {
+      this.db.exec('ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL');
     }
 
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
@@ -536,6 +544,51 @@ export class Database {
     this.db.prepare('UPDATE webhook_configs SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
   }
 
+  // ===== Deploy Lock =====
+
+  /** Acquire a deploy lock for a project. Returns true if lock was acquired. */
+  acquireDeployLock(projectId: string, sessionId: string): boolean {
+    this.cleanExpiredDeployLocks();
+    const project = this.getProject(projectId);
+    if (!project) return false;
+    if (project.deploy_lock_session && project.deploy_lock_session !== sessionId) {
+      return false;
+    }
+    this.db
+      .prepare(
+        `UPDATE projects SET deploy_lock_session = ?, deploy_lock_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      )
+      .run(sessionId, projectId);
+    return true;
+  }
+
+  /** Release a deploy lock for a project. */
+  releaseDeployLock(projectId: string): void {
+    this.db
+      .prepare(
+        `UPDATE projects SET deploy_lock_session = NULL, deploy_lock_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      )
+      .run(projectId);
+  }
+
+  /** Get deploy lock info for a project. */
+  getDeployLockInfo(projectId: string): { session: string; lockedAt: string } | null {
+    const project = this.getProject(projectId);
+    if (!project?.deploy_lock_session || !project.deploy_lock_at) return null;
+    return { session: project.deploy_lock_session, lockedAt: project.deploy_lock_at };
+  }
+
+  /** Clean expired deploy locks (default: 10 min timeout). Returns count of cleaned locks. */
+  cleanExpiredDeployLocks(timeoutMinutes = 10): number {
+    const result = this.db
+      .prepare(
+        `UPDATE projects SET deploy_lock_session = NULL, deploy_lock_at = NULL
+         WHERE deploy_lock_session IS NOT NULL
+         AND deploy_lock_at < datetime('now', '-' || ? || ' minutes')`,
+      )
+      .run(timeoutMinutes);
+    return result.changes;
+  }
   // ===== Utility =====
 
   /** Run a function inside a transaction. */

@@ -1,0 +1,59 @@
+name: Bug Report
+description: Report a bug in OpenLander
+title: '[Bug]: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Run `openlander daemon`
+        2. Run `openlander start`
+        3. Type "Deploy https://..."
+        4. See error...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OpenLander Version
+      description: Run `openlander --version`
+      placeholder: '0.1.0'
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux
+        - macOS
+        - WSL2
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js Version
+      placeholder: '22.x'
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Paste any error messages or logs
+      render: shell

@@ -1,6 +1,9 @@
 import { createPublicKey, verify } from 'node:crypto';
 import type { Context } from 'hono';
 import type { Channel, ChannelManager, ChannelMessage } from './base.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('discord');
 
 const MAX_TIMESTAMP_SKEW_SECONDS = 60 * 5;
 
@@ -79,7 +82,9 @@ export function verifyDiscordSignature(
     const keyObject = createPublicKey({ key: spkiKey, format: 'der', type: 'spki' });
 
     return verify(null, Buffer.from(timestamp + body), keyObject, Buffer.from(signature, 'hex'));
-  } catch {
+  } catch (err) {
+    log.debug({ err }, 'Discord signature verification failed');
+    return false;
     return false;
   }
 }

@@ -1,3 +1,6 @@
+import { createModuleLogger } from '../lib/logger.js';
+const log = createModuleLogger('deploy');
+
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { nanoid } from 'nanoid';
@@ -482,7 +485,8 @@ export class DeployPipeline {
       try {
         await this.docker.stopContainer(project.container_id);
         await this.docker.removeContainer(project.container_id);
-      } catch {
+      } catch (err) {
+        log.warn({ err }, 'Container cleanup during redeploy failed');
         // Container might already be stopped
       }
     }
@@ -534,7 +538,8 @@ export class DeployPipeline {
         try {
           await this.docker.stopContainer(project.container_id);
           await this.docker.removeContainer(project.container_id);
-        } catch {
+        } catch (err) {
+        log.warn({ err }, 'Container cleanup during rollback failed');
           // Container might already be stopped
         }
       }
@@ -635,7 +640,8 @@ export class DeployPipeline {
     if (project.container_id) {
       try {
         await this.docker.removeContainer(project.container_id);
-      } catch {
+      } catch (err) {
+        log.debug({ err }, 'Container removal during project delete failed — may not exist');
         // Container might not exist
       }
     }

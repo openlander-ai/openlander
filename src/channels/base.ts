@@ -1,6 +1,8 @@
 import type { AppContext } from '../app.js';
 import { type EventBus, eventBus } from '../events/index.js';
+import { createModuleLogger } from '../lib/logger.js';
 
+const log = createModuleLogger('channels');
 export type ChannelType = 'slack' | 'discord' | 'telegram';
 
 /**
@@ -54,7 +56,7 @@ export class ChannelManager {
           await this.events.emit('channel:connect', { channelType: type });
         }
       } catch (error) {
-        console.error(`[ChannelManager] Failed to start ${type} channel:`, error);
+        log.error({ error, channelType: type }, 'Failed to start channel');
       }
     }
   }
@@ -65,7 +67,7 @@ export class ChannelManager {
       try {
         await channel.stop();
       } catch (error) {
-        console.error(`[ChannelManager] Failed to stop ${type} channel:`, error);
+        log.error({ error, channelType: type }, 'Failed to stop channel');
       }
     }
   }
@@ -101,14 +103,12 @@ export class ChannelManager {
 
     const channel = this.channels.get(msg.channelType);
     if (!channel) {
-      console.error(`[ChannelManager] No registered channel for type: ${msg.channelType}`);
+      log.error({ channelType: msg.channelType }, 'No registered channel for type');
       return;
     }
 
     if (!this.ctx.agent) {
-      console.warn(
-        `[ChannelManager] Agent is not configured; message ignored for ${msg.channelType}`,
-      );
+      log.warn({ channelType: msg.channelType }, 'Agent is not configured; message ignored');
       return;
     }
 
@@ -122,9 +122,9 @@ export class ChannelManager {
 
       await channel.sendMessage(msg.channelId, response.message);
     } catch (error) {
-      console.error(
-        `[ChannelManager] Failed to process message from ${msg.channelType}:${msg.channelId}`,
-        error,
+      log.error(
+        { error, channelType: msg.channelType, channelId: msg.channelId },
+        'Failed to process message',
       );
     }
   }

@@ -1,6 +1,9 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('config');
 
 /**
  * OpenLander configuration system.
@@ -216,7 +219,9 @@ export function loadConfig(): OpenLanderConfig {
     const raw = readFileSync(CONFIG_PATH, 'utf-8');
     const saved = JSON.parse(raw) as Partial<OpenLanderConfig>;
     return deepMerge(DEFAULT_CONFIG, saved);
-  } catch {
+  } catch (err) {
+    log.debug({ err }, 'Config file corrupted — returning defaults');
+    return { ...DEFAULT_CONFIG };
     // Corrupted config — return defaults
     return { ...DEFAULT_CONFIG };
   }

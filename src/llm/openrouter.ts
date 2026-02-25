@@ -1,6 +1,9 @@
 import type { LLMClient, ChatMessage, LLMResponse, ToolCall } from './index.js';
 import type { ToolDefinition } from '../agent/tools.js';
 import { LLMProviderError } from '../errors.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('openrouter');
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -161,7 +164,8 @@ export class OpenRouterProvider implements LLMClient {
       let parsedArguments: unknown;
       try {
         parsedArguments = JSON.parse(toolCall.function.arguments);
-      } catch {
+      } catch (err) {
+        log.debug({ err, tool: toolCall.function.name }, 'Failed to parse tool arguments JSON');
         throw new LLMProviderError(
           'openrouter',
           `Invalid JSON arguments for tool ${toolCall.function.name}`,

@@ -1,3 +1,6 @@
+import { createModuleLogger } from '../lib/logger.js';
+const log = createModuleLogger('cloudflare');
+
 import { nanoid } from 'nanoid';
 
 import type { CloudflareConfig } from '../config/index.js';
@@ -112,7 +115,9 @@ export class CloudflareTunnelManager {
     let zone: CloudflareZone;
     try {
       zone = await this.findZoneForDomain(normalizedDomain);
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Domain verification failed — zone not found');
+      return false;
       return false;
     }
 

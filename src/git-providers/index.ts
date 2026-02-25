@@ -8,6 +8,9 @@
 
 import type { GitProvider, GitProviderType, GitProviderConfig } from './types.js';
 import { GitHubProvider } from './github.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('git');
 
 export type {
   GitProvider,
@@ -56,7 +59,8 @@ export function createConfiguredProviders(
       try {
         const provider = createGitProvider(type as GitProviderType, config);
         providers.set(type as GitProviderType, provider);
-      } catch {
+      } catch (err) {
+        log.debug({ err, type }, 'Failed to initialize git provider — skipping');
         // Skip providers that fail to initialize
       }
     }

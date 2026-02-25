@@ -3,6 +3,9 @@ import { platform } from 'node:os';
 import pc from 'picocolors';
 
 import { Docker } from '../pipeline/docker.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('onboard');
 
 /**
  * Ensure Docker is installed, running, and accessible.
@@ -74,7 +77,8 @@ export async function ensureDocker(): Promise<void> {
         console.log(pc.green('  ✓ Docker started'));
         return;
       }
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Docker start command failed');
       // fall through
     }
     console.log(pc.red('  ✗ Could not start Docker.\n'));
@@ -110,12 +114,17 @@ async function tryFixDockerPermission(): Promise<boolean> {
     try {
       execSync('sg docker -c "docker info"', { stdio: 'pipe', timeout: 5000 });
       return true;
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'sg docker test failed — user needs to re-login');
+      console.log(pc.yellow('  ⚠ Group added. Please log out and back in for it to take effect.'));
+      return false;
       // sg didn't work — user needs to re-login
       console.log(pc.yellow('  ⚠ Group added. Please log out and back in for it to take effect.'));
       return false;
     }
-  } catch {
+  } catch (err) {
+      log.debug({ err }, 'Docker permission fix failed');
+      return false;
     return false;
   }
 }
@@ -153,7 +162,8 @@ async function tryInstallDocker(): Promise<boolean> {
       const user = execSync('whoami', { encoding: 'utf8', stdio: 'pipe' }).trim();
       execSync(`sudo usermod -aG docker ${user}`, { stdio: 'inherit' });
       console.log(pc.dim(`  Added ${user} to docker group.`));
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Failed to add user to docker group');
       console.log(
         pc.yellow('  ⚠ Could not add user to docker group. Run: sudo usermod -aG docker $USER'),
       );
@@ -164,7 +174,9 @@ async function tryInstallDocker(): Promise<boolean> {
       execSync('sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null', {
         stdio: 'inherit',
       });
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Failed to auto-start Docker after install');
+      console.log(pc.yellow('  ⚠ Could not auto-start Docker.'));
       console.log(pc.yellow('  ⚠ Could not auto-start Docker.'));
     }
 

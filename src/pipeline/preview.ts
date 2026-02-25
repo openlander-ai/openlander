@@ -1,3 +1,6 @@
+import { createModuleLogger } from '../lib/logger.js';
+const log = createModuleLogger('preview');
+
 import { nanoid } from 'nanoid';
 
 import type { Docker } from './docker.js';
@@ -165,7 +168,7 @@ export class PreviewDeployer {
 
     try {
       await this.docker.stopContainer(preview.containerId);
-    } catch { /* best-effort stop */ }
+    } catch (err) { log.debug({ err }, 'Best-effort stop during preview cleanup'); }
 
     try {
       await this.docker.removeContainer(preview.containerId);

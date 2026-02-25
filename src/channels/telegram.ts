@@ -1,7 +1,9 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
 import type { Channel, ChannelManager, ChannelMessage } from './base.js';
+import { createModuleLogger } from '../lib/logger.js';
 
+const log = createModuleLogger('telegram');
 interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessage;
@@ -157,7 +159,9 @@ export function createTelegramWebhookHandler(
     let update: TelegramUpdate;
     try {
       update = await c.req.json<TelegramUpdate>();
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Failed to parse Telegram update JSON — returning ok');
+      return c.json({ ok: true }, 200);
       return c.json({ ok: true }, 200);
     }
 
@@ -177,7 +181,7 @@ export function createTelegramWebhookHandler(
     };
 
     void channel.forwardIncomingMessage(incoming).catch((error: unknown) => {
-      console.error('[TelegramChannel] Failed to process incoming update:', error);
+      log.error({ error }, 'Failed to process incoming update');
     });
 
     return c.json({ ok: true }, 200);

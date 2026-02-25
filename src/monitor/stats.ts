@@ -1,5 +1,8 @@
 import { cpus, totalmem, freemem, loadavg, uptime, hostname } from 'node:os';
 import { statfsSync } from 'node:fs';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('monitor');
 
 /**
  * System resource monitoring.
@@ -58,7 +61,8 @@ export function getSystemStats(): SystemStats {
       freeGB: round(freeBytes / 1e9),
       usagePercent: round((usedBytes / totalBytes) * 100),
     };
-  } catch {
+  } catch (err) {
+    log.debug({ err }, 'statfs not available on this platform');
     // statfs not available on all platforms
   }
 

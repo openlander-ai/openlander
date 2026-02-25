@@ -2,7 +2,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
 
 import type { Channel, ChannelManager, ChannelMessage } from './base.js';
+import { createModuleLogger } from '../lib/logger.js';
 
+const log = createModuleLogger('slack');
 const SLACK_API_URL = 'https://slack.com/api/chat.postMessage';
 const MAX_TIMESTAMP_SKEW_SECONDS = 60 * 5;
 
@@ -178,7 +180,9 @@ export function createSlackWebhookHandler(
     let payload: SlackWebhookPayload;
     try {
       payload = JSON.parse(rawBody) as SlackWebhookPayload;
-    } catch {
+    } catch (err) {
+      log.debug({ err }, 'Failed to parse Slack webhook payload JSON');
+      return c.json({ error: 'invalid_json' }, 400);
       return c.json({ error: 'invalid_json' }, 400);
     }
 
@@ -188,7 +192,7 @@ export function createSlackWebhookHandler(
 
     if ('event' in payload) {
       void channel.handleMessageEvent(payload.event).catch((error: unknown) => {
-        console.error('[SlackChannel] Failed to process incoming message:', error);
+        log.error({ error }, 'Failed to process incoming message');
       });
     }
 
