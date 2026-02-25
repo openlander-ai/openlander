@@ -102,5 +102,5 @@ export const SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_domain_mappings_project ON domain_mappings(project_id);
   CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens(provider);
   CREATE INDEX IF NOT EXISTS idx_webhook_configs_project_source ON webhook_configs(project_id, source);
-  CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);
+
 `;

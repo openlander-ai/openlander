@@ -104,6 +104,23 @@ export class Database {
   /** Create tables if they don't exist. */
   private initialize(): void {
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  private migrate(): void {
+    const columns = this.db
+      .prepare("PRAGMA table_info('projects')")
+      .all() as Array<{ name: string }>;
+    const colNames = new Set(columns.map((c) => c.name));
+
+    if (!colNames.has('parent_project_id')) {
+      this.db.exec('ALTER TABLE projects ADD COLUMN parent_project_id TEXT REFERENCES projects(id) ON DELETE CASCADE');
+    }
+    if (!colNames.has('dockerfile_path')) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
+    }
+
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
   }
 
   // ===== Projects =====
