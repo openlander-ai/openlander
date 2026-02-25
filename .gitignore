@@ -38,8 +38,8 @@ coverage/
 tmp/
 temp/
 
-# Web frontend (unused — TUI replaced it)
-web/
+# Web frontend (removed — TUI replaced it)
+/web/
 
 
 # Runtime data
