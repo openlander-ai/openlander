@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { theme } from '../theme.js';
@@ -332,30 +332,44 @@ export function DashboardPanel({ client, height, focus }: DashboardPanelProps): 
   // Scroll offset for when content exceeds height
   const [scrollOffset, _setScrollOffset] = useState(0);
 
-  // Poll system stats every 2 seconds
+  // Refs for dedup
+  const lastStatsRef = useRef('');
+  const lastHealthRef = useRef('');
+
+  // Poll system stats every 10 seconds
   useEffect(() => {
     if (!client) return;
 
     const fetchSystem = async () => {
       try {
         const [stats, healthResp] = await Promise.all([client.getSystemStats(), client.ping()]);
-        setSystemStats(stats);
-        setHealth(healthResp);
+        const sJson = JSON.stringify(stats);
+        const hJson = JSON.stringify(healthResp);
+        if (sJson !== lastStatsRef.current) {
+          lastStatsRef.current = sJson;
+          setSystemStats(stats);
+        }
+        if (hJson !== lastHealthRef.current) {
+          lastHealthRef.current = hJson;
+          setHealth(healthResp);
+        }
         setSystemLoading(false);
-} catch (err) {
+      } catch (err) {
         log.debug({ err }, 'Failed to fetch system stats from daemon');
-        setSystemLoading(false);
-        setSystemLoading(false);
         setSystemLoading(false);
       }
     };
 
     void fetchSystem();
-    const interval = setInterval(() => { void fetchSystem(); }, 2000);
-    return () => { clearInterval(interval); };
+    const interval = setInterval(() => {
+      void fetchSystem();
+    }, 10000);
+    return () => {
+      clearInterval(interval);
+    };
   }, [client]);
 
-  // Poll projects every 3 seconds
+  // Poll projects every 10 seconds
   useEffect(() => {
     if (!client) return;
 
@@ -385,18 +399,29 @@ export function DashboardPanel({ client, height, focus }: DashboardPanelProps): 
     };
 
     void fetchProjects();
-    const interval = setInterval(() => { void fetchProjects(); }, 3000);
-    return () => { clearInterval(interval); };
+    const interval = setInterval(() => {
+      void fetchProjects();
+    }, 10000);
+    return () => {
+      clearInterval(interval);
+    };
   }, [client]);
 
-  // Poll activity every 5 seconds
+  // Refs for activity dedup
+  const lastActivityRef = useRef('');
+
+  // Poll activity every 10 seconds
   useEffect(() => {
     if (!client) return;
 
     const fetchActivity = async () => {
       try {
         const events = await client.getActivity(10);
-        setActivity(events);
+        const json = JSON.stringify(events);
+        if (json !== lastActivityRef.current) {
+          lastActivityRef.current = json;
+          setActivity(events);
+        }
       } catch (err) {
         log.debug({ err }, 'Failed to get activity from daemon');
         // Ignore errors
@@ -404,8 +429,12 @@ export function DashboardPanel({ client, height, focus }: DashboardPanelProps): 
     };
 
     void fetchActivity();
-    const interval = setInterval(() => { void fetchActivity(); }, 5000);
-    return () => { clearInterval(interval); };
+    const interval = setInterval(() => {
+      void fetchActivity();
+    }, 10000);
+    return () => {
+      clearInterval(interval);
+    };
   }, [client]);
 
   // Handle keyboard navigation when focused

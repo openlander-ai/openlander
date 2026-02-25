@@ -254,14 +254,20 @@ export class OpenLanderClient {
   // ---------------------------------------------------------------------------
 
   async getActivity(limit = 50): Promise<ActivityEvent[]> {
-    return this.get<ActivityEvent[]>(`/api/activity?limit=${String(limit)}`);
+    const res = await this.get<{ activities: ActivityEvent[] }>(
+      `/api/activity?limit=${String(limit)}`,
+    );
+    return res.activities;
   }
 
   async *streamActivity(signal?: AbortSignal): AsyncGenerator<ActivityEvent> {
     yield* this.streamNDJSON<ActivityEvent>('/api/activity/stream', signal);
   }
 
-  async *streamBuildProgress(projectId: string, signal?: AbortSignal): AsyncGenerator<BuildProgressEvent> {
+  async *streamBuildProgress(
+    projectId: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<BuildProgressEvent> {
     yield* this.streamNDJSON<BuildProgressEvent>(`/api/projects/${projectId}/build/stream`, signal);
   }
 
@@ -362,10 +368,14 @@ export class OpenLanderClient {
         }
       });
 
-      signal?.addEventListener('abort', () => {
-        req.destroy();
-        reject(new Error('Aborted'));
-      }, { once: true });
+      signal?.addEventListener(
+        'abort',
+        () => {
+          req.destroy();
+          reject(new Error('Aborted'));
+        },
+        { once: true },
+      );
 
       req.end();
     });
@@ -395,7 +405,7 @@ export class OpenLanderClient {
         try {
           yield JSON.parse(buffer.trim()) as T;
         } catch (err) {
-        log.debug({ err, buffer: buffer.trim() }, 'Skipping malformed trailing NDJSON data');
+          log.debug({ err, buffer: buffer.trim() }, 'Skipping malformed trailing NDJSON data');
           // Skip malformed trailing data
         }
       }

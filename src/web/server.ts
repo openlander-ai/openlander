@@ -8,7 +8,6 @@ import { dirname } from 'node:path';
 import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
 import { createDomainRoutes } from './api/domain-routes.js';
-import { createAuthRoutes } from './api/auth-routes.js';
 import { createSetupRoutes } from './api/setup-routes.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
@@ -119,9 +118,6 @@ function createApp(ctx: AppContext): Hono {
   const domainRoutes = createDomainRoutes(ctx);
   app.route('/api', domainRoutes);
 
-  // v0.2: OAuth authentication routes
-  const authRoutes = createAuthRoutes(ctx);
-  app.route('/auth', authRoutes);
 
   // v0.4: Channel webhook routes
   if (ctx.config.channels.slack.enabled) {

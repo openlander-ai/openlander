@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { OpenLanderClient } from '../../ipc/client.js';
 import type { SystemStats } from '../../monitor/stats.js';
 import { createModuleLogger } from '../../lib/logger.js';
@@ -15,32 +15,40 @@ export interface UseSystemStatsResult {
  */
 export function useSystemStats(
   client: OpenLanderClient | null,
-  intervalMs = 5000,
+  intervalMs = 10000,
 ): UseSystemStatsResult {
   const [stats, setStats] = useState<SystemStats | null>(null);
+  const lastJsonRef = useRef('');
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchStats = async () => {
       if (!client) {
-        // Daemon not connected — clear stats
-        setStats(null);
+        if (lastJsonRef.current !== '') {
+          setStats(null);
+          lastJsonRef.current = '';
+        }
         return;
       }
 
       try {
         const response = await client.getSystemStats();
-        setStats(response);
+        const json = JSON.stringify(response);
+        if (json !== lastJsonRef.current) {
+          lastJsonRef.current = json;
+          setStats(response);
+        }
       } catch (err) {
         log.debug({ err }, 'Failed to get system stats from daemon');
-        // Daemon error — keep existing stats
       }
     };
 
-    void fetch();
+    void fetchStats();
     const timer = setInterval(() => {
-      void fetch();
+      void fetchStats();
     }, intervalMs);
-    return () => { clearInterval(timer); };
+    return () => {
+      clearInterval(timer);
+    };
   }, [client, intervalMs]);
 
   return { stats };

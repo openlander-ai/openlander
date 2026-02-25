@@ -16,7 +16,7 @@ export interface UseDaemonResult {
  * Manage daemon connection state.
  * Pings the daemon periodically to maintain health status.
  */
-export function useDaemon(socketPath: string, pingIntervalMs = 10000): UseDaemonResult {
+export function useDaemon(socketPath: string, pingIntervalMs = 30000): UseDaemonResult {
   const clientRef = useRef<OpenLanderClient>(new OpenLanderClient(socketPath));
   const [status, setStatus] = useState<DaemonStatus>('connecting');
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -27,14 +27,21 @@ export function useDaemon(socketPath: string, pingIntervalMs = 10000): UseDaemon
   const checkHealth = useCallback(async (): Promise<boolean> => {
     try {
       const response = await clientRef.current.ping();
-      setHealth(response);
-      setStatus('connected');
-      setError(null);
-      connectedRef.current = true;
+      // Only update state if something changed
+      if (!connectedRef.current) {
+        setHealth(response);
+        setStatus('connected');
+        setError(null);
+        connectedRef.current = true;
+      }
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      setError(msg);
+      if (connectedRef.current) {
+        // Was connected, now failed — update state
+        setError(msg);
+        connectedRef.current = false;
+      }
 
       if (clientRef.current.isSocketPresent()) {
         setStatus('error');
@@ -63,7 +70,9 @@ export function useDaemon(socketPath: string, pingIntervalMs = 10000): UseDaemon
 
       // Fast retry until first successful connection, then slow poll
       const interval = ok || connectedRef.current ? pingIntervalMs : FAST_INTERVAL;
-      timer = setTimeout(() => { void poll(); }, interval);
+      timer = setTimeout(() => {
+        void poll();
+      }, interval);
     };
 
     void poll();

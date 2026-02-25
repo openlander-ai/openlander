@@ -469,7 +469,7 @@ export function ChatPanel({
         paddingX={1}
       >
         {!client ? (
-          <Text dimColor>💬 Chat unavailable — daemon not connected</Text>
+          <Text dimColor>Chat unavailable — daemon not connected</Text>
         ) : isStreaming ? (
           <Box gap={1}>
             <Text color="yellow">
@@ -479,7 +479,7 @@ export function ChatPanel({
           </Box>
         ) : (
           <Box>
-            <Text color={theme.user}>💬 </Text>
+            <Text color={theme.user}>❯ </Text>
             <TextInput
               value={inputValue}
               onChange={setInputValue}
