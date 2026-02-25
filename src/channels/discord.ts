@@ -1,6 +1,14 @@
-import { verify } from 'node:crypto';
+import { createPublicKey, verify } from 'node:crypto';
 import type { Context } from 'hono';
 import type { Channel, ChannelManager, ChannelMessage } from './base.js';
+
+const MAX_TIMESTAMP_SKEW_SECONDS = 60 * 5;
+
+/**
+ * SPKI DER prefix for Ed25519 public keys (OID 1.3.101.112).
+ * Prepend to a raw 32-byte Ed25519 key to create valid SPKI DER.
+ */
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 
@@ -55,13 +63,22 @@ export function verifyDiscordSignature(
   timestamp: string,
   body: string,
 ): boolean {
+  const parsedTimestamp = Number(timestamp);
+  if (!Number.isFinite(parsedTimestamp)) {
+    return false;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (Math.abs(nowSeconds - parsedTimestamp) > MAX_TIMESTAMP_SKEW_SECONDS) {
+    return false;
+  }
+
   try {
-    return verify(
-      'ed25519',
-      Buffer.from(timestamp + body),
-      Buffer.from(publicKey, 'hex'),
-      Buffer.from(signature, 'hex'),
-    );
+    const rawKey = Buffer.from(publicKey, 'hex');
+    const spkiKey = Buffer.concat([ED25519_SPKI_PREFIX, rawKey]);
+    const keyObject = createPublicKey({ key: spkiKey, format: 'der', type: 'spki' });
+
+    return verify(null, Buffer.from(timestamp + body), keyObject, Buffer.from(signature, 'hex'));
   } catch {
     return false;
   }
