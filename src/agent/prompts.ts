@@ -51,10 +51,27 @@ export function buildContextSnapshot(db: Database): string {
   const projects = db.listProjects();
   const stats = getSystemStats();
 
-  const projectLines =
-    projects.length > 0
-      ? projects.map((p: ProjectRow) => formatProjectLine(p)).join('\n')
-      : '(no projects deployed yet)';
+  // Scale project listing based on count to prevent context distraction.
+  // 0: show "no projects" message
+  // 1-5: show full details per project
+  // 6+: show summary counts + only running/error projects
+  const MAX_DETAILED_PROJECTS = 5;
+  let projectLines: string;
+
+  if (projects.length === 0) {
+    projectLines = '(no projects deployed yet)';
+  } else if (projects.length <= MAX_DETAILED_PROJECTS) {
+    projectLines = projects.map((p: ProjectRow) => formatProjectLine(p)).join('\n');
+  } else {
+    const running = projects.filter((p) => p.status === 'running');
+    const errored = projects.filter((p) => p.status === 'error');
+    const stopped = projects.filter((p) => p.status === 'stopped');
+    const important = [...running, ...errored];
+    projectLines = [
+      `${String(running.length)} running, ${String(errored.length)} error, ${String(stopped.length)} stopped — use list_projects for full details`,
+      ...important.map((p: ProjectRow) => formatProjectLine(p)),
+    ].join('\n');
+  }
 
   return `## Current Server State (auto-injected)
 Projects deployed: ${String(projects.length)}
@@ -120,7 +137,7 @@ Choose the right tool based on user intent:
 | Stop a project                | stop_project         | Confirm first.                           |
 | Remove a project entirely     | remove_project       | Confirm first — this deletes everything. |
 | Restart a project             | restart_project      | Stops then starts same container.        |
-| View logs                     | get_logs             | Default 50 lines. User can request more. |
+| View logs                     | get_logs             | Default 20 lines. User can request more. |
 | Make project public           | expose_public        | Creates temporary TryCloudflare URL.     |
 | Remove public access          | unexpose_public      | Reverts to internal-only.                |
 | Connect a custom domain       | map_domain           | Requires Cloudflare setup.               |
@@ -135,6 +152,9 @@ Choose the right tool based on user intent:
 | Preview a branch              | preview_deploy       | Ephemeral environment for PRs.           |
 | Clean up a preview            | cleanup_preview      | Removes the ephemeral deploy.            |
 | List active previews          | list_previews        | Shows all branch previews.               |
+| Check deploy progress          | get_deploy_status    | Phase info during active builds.         |
+| Scan repo for Dockerfiles      | scan_dockerfiles     | Use before deploy to detect monorepo.    |
+| Deploy monorepo services       | deploy_monorepo      | After scan confirms multiple Dockerfiles.|
 
 ## Multi-Step Operations
 You can and SHOULD chain multiple tools when the user's request requires it.
@@ -157,6 +177,17 @@ Example — "Deploy my-app to api.mycompany.com":
 1. Call deploy_project
 2. Call map_domain with the custom domain
 3. Report the permanent URL
+
+Example — "Deploy a monorepo":
+1. Call scan_dockerfiles to check for multiple Dockerfiles
+2. If isMonorepo is true, call deploy_monorepo with the dockerfiles array
+3. If only one Dockerfile, use deploy_project normally
+4. Report all service URLs (parent/frontend, parent/backend, etc.)
+
+Example — "Deploy 3 repos at once":
+1. Call deploy_project for each repo (they run in parallel)
+2. Use get_deploy_status to monitor progress
+3. Report results as each completes
 
 ## Output Format
 - Status emojis: ✅ success · ❌ failure · ⚠️ warning · 🔒 internal · 🌐 public · 🔄 in progress

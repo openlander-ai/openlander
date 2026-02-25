@@ -1,12 +1,18 @@
 import type { AppContext } from '../app.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { ProjectNotFoundError } from '../errors.js';
+import { cloneRepo } from '../pipeline/git.js';
+import { readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 /**
  * Tool definitions for the OpenLander agent.
  *
  * Each tool maps to a pipeline operation.
  * The LLM calls these via function calling — execution is deterministic.
+ *
+ * Description format (per tool-design best practice):
+ *   What it does → When to use → Returns → Errors → Notes
  */
 
 export interface ToolDefinition {
@@ -54,7 +60,7 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     {
       name: 'deploy_project',
       description:
-        'Deploy a project from a git repository URL. Clones, builds, and runs the container.',
+        'Deploy a project from a git repository URL. Clones the repo, builds a Docker image from the Dockerfile, and runs it as a container with auto-assigned port and Traefik routing. Use when user provides a repo URL or says "deploy", "launch", "set up this app". Returns { projectId, name, status, port, url }. Errors: CLONE_FAILED (bad URL or private repo without SSH key), BUILD_FAILED (Dockerfile error — suggest debug_build_error next), ALREADY_EXISTS (project name taken). Only works with repos that have a Dockerfile.',
       parameters: {
         repo_url: {
           type: 'string',
@@ -85,7 +91,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'stop_project',
-      description: 'Stop a running project container.',
+      description:
+        'Stop a running project container gracefully. Use when user wants to pause or shut down a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT remove the project; use remove_project for full cleanup.',
       parameters: {
         project_name: {
           type: 'string',
@@ -104,7 +111,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'remove_project',
-      description: 'Remove a project and its container entirely.',
+      description:
+        'Permanently remove a project — deletes the container, image, and database record. DESTRUCTIVE — cannot be undone. Use only when user explicitly wants to delete a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND. To just stop without deleting, use stop_project instead.',
       parameters: {
         project_name: {
           type: 'string',
@@ -123,7 +131,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'get_logs',
-      description: 'Get recent container logs for a project.',
+      description:
+        'Get recent container stdout/stderr logs for a project. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of the most recent 20 lines. Errors: PROJECT_NOT_FOUND. If logs show a build error, suggest debug_build_error for diagnosis.',
       parameters: {
         project_name: {
           type: 'string',
@@ -132,7 +141,7 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         },
         lines: {
           type: 'number',
-          description: 'Number of log lines to return (default: 50)',
+          description: 'Number of log lines to return (default: 20)',
           required: false,
         },
       },
@@ -141,14 +150,15 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         const project = ctx.db.getProjectByName(projectName);
         if (!project) throw new ProjectNotFoundError(projectName);
 
-        const lines = (args['lines'] as number | undefined) ?? 50;
+        const lines = (args['lines'] as number | undefined) ?? 20;
         const logs = await ctx.pipeline.getLogs(project.id, lines);
         return { project: projectName, logs };
       },
     },
     {
       name: 'list_projects',
-      description: 'List all deployed projects with their status and URLs.',
+      description:
+        'List all deployed projects with name, status (running/stopped/error), ports, local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
       parameters: {},
       execute: () => {
         const projects = ctx.db.listProjects();
@@ -168,7 +178,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'set_env_vars',
-      description: 'Set environment variables for a project. Triggers a redeploy.',
+      description:
+        'Set environment variables for a project and trigger a redeploy if running. Use when user needs to configure DATABASE_URL, API keys, or other env vars. The variables parameter must be a JSON string of key-value pairs. Returns { status, project, keys[] }. Status is "updated_and_redeployed" if project was running, "updated" otherwise. Errors: PROJECT_NOT_FOUND, JSON parse error if variables is malformed.',
       parameters: {
         project_name: {
           type: 'string',
@@ -205,7 +216,7 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     {
       name: 'expose_public',
       description:
-        'Create a public URL for a project via TryCloudflare. Generates a temporary public URL.',
+        'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
       parameters: {
         project_name: {
           type: 'string',
@@ -227,7 +238,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'unexpose_public',
-      description: 'Remove the public URL for a project.',
+      description:
+        'Remove the public TryCloudflare tunnel URL for a project. Use when user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
       parameters: {
         project_name: {
           type: 'string',
@@ -246,7 +258,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'get_system_stats',
-      description: 'Get host system resource usage (CPU, memory, disk).',
+      description:
+        'Get host system resource usage — CPU load, memory, and disk space. Use when user asks about server health, capacity, or before deploying to check if resources are available. Returns { summary, cpu, memory, disk } with percentage usage and warnings. Always available, no errors.',
       parameters: {},
       execute: () => {
         const stats = getSystemStats();
@@ -259,7 +272,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     // --- v0.3 Tools ---
     {
       name: 'rollback_project',
-      description: 'Rollback a project to its previous Docker image. Useful when a deploy broke something.',
+      description:
+        'Rollback a project to its previous Docker image. Use when a recent deploy broke something and user wants to revert. Returns the rollback result with previous image info. Errors: PROJECT_NOT_FOUND, NO_PREVIOUS_IMAGE if this is the first deploy.',
       parameters: {
         project_name: {
           type: 'string',
@@ -278,7 +292,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'provision_database',
-      description: 'Provision a database (SQLite or PostgreSQL) for a project. Sets DATABASE_URL env var automatically.',
+      description:
+        'Provision a database sidecar (PostgreSQL or SQLite) for a project. Automatically sets DATABASE_URL in the project env vars and redeploys. Use when user says they need a database. Defaults to PostgreSQL. Returns { status, connectionUrl, type }. Errors: PROJECT_NOT_FOUND, ALREADY_PROVISIONED.',
       parameters: {
         project_name: {
           type: 'string',
@@ -303,7 +318,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'deploy_blue_green',
-      description: 'Deploy a project with zero downtime using blue-green strategy. Builds new version, health-checks it, then switches traffic.',
+      description:
+        'Deploy a project with zero downtime using blue-green strategy. Builds a new version alongside the current one, runs health checks, then switches traffic atomically. Use for production projects where downtime is unacceptable. Returns deployment result with old/new container info. Errors: PROJECT_NOT_FOUND, HEALTH_CHECK_FAILED (new version unhealthy — old version kept running).',
       parameters: {
         project_name: {
           type: 'string',
@@ -322,7 +338,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'debug_build_error',
-      description: 'Analyze a failed build and suggest fixes using AI. Reads build logs and Dockerfile to diagnose the issue.',
+      description:
+        'Analyze a failed build and suggest fixes using AI. Matches against known error patterns first (fast), then uses LLM analysis (thorough). Use when a deploy_project call failed or user reports a build error. Returns { summary, rootCause, suggestedFixes[] }. Errors: PROJECT_NOT_FOUND, NO_FAILED_BUILD if the last deploy succeeded, NO_LLM if build debugger is not configured.',
       parameters: {
         project_name: {
           type: 'string',
@@ -357,7 +374,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     // --- v0.4 Tools ---
     {
       name: 'preview_deploy',
-      description: 'Deploy an ephemeral preview environment for a specific branch. Great for testing PRs before merging.',
+      description:
+        'Deploy an ephemeral preview environment for a specific branch. Creates a separate container that does not affect the main deployment. Use when user wants to test a PR or feature branch before merging. Returns { previewId, branch, url, port }. The preview is temporary — clean up with cleanup_preview when done.',
       parameters: {
         repo_url: {
           type: 'string',
@@ -381,7 +399,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'cleanup_preview',
-      description: 'Remove an ephemeral preview deployment. Pass the preview ID returned by preview_deploy.',
+      description:
+        'Remove an ephemeral preview deployment created by preview_deploy. Pass the preview_id that was returned. Use when testing is done or to free resources. Returns { status, previewId }. Errors: PREVIEW_NOT_FOUND if the ID is invalid.',
       parameters: {
         preview_id: {
           type: 'string',
@@ -397,7 +416,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'list_previews',
-      description: 'List all active preview deployments.',
+      description:
+        'List all active preview deployments with branch, URL, port, and creation time. Use to check what previews exist before creating new ones or to find a preview URL. Returns { count, previews[] }. Always available, no errors.',
       parameters: {},
       execute: () => {
         const previews = ctx.previewDeployer.list();
@@ -415,7 +435,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     // --- v0.2 Tools (added in agent enhancement) ---
     {
       name: 'restart_project',
-      description: 'Restart a running project container. Stops and starts it again with the same configuration.',
+      description:
+        'Restart a running project by stopping and redeploying it with the same configuration. Use when user reports the app is hung, unresponsive, or needs a fresh start after config changes. Returns { status, project } with redeploy result. Errors: PROJECT_NOT_FOUND.',
       parameters: {
         project_name: {
           type: 'string',
@@ -431,12 +452,12 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         await ctx.pipeline.stop(project.id);
         const result = await ctx.pipeline.redeploy(project.id);
         return { status: 'restarted', project: projectName, ...result };
-        return { status: 'restarted', project: projectName };
       },
     },
     {
       name: 'map_domain',
-      description: 'Map a custom domain to a project via Cloudflare DNS and Tunnel. Requires Cloudflare to be configured.',
+      description:
+        'Map a custom domain to a project via Cloudflare DNS and Tunnel for a permanent public URL. Use when user wants their own domain (e.g., api.myapp.com) instead of a temporary TryCloudflare URL. Requires Cloudflare configuration. Returns { status, project, domain, url }. Errors: PROJECT_NOT_FOUND, CLOUDFLARE_NOT_CONFIGURED.',
       parameters: {
         project_name: {
           type: 'string',
@@ -461,7 +482,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     },
     {
       name: 'list_domains',
-      description: 'List all custom domain mappings across all projects.',
+      description:
+        'List all custom domain mappings across all projects with domain name, project ID, and status. Use to check existing domain configurations. Returns { count, domains[] }. Always available, no errors.',
       parameters: {},
       execute: () => {
         const mappings = ctx.db.listDomainMappings();
@@ -475,6 +497,128 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         });
       },
     },
+    {
+      name: 'get_deploy_status',
+      description:
+        'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed) and timing. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }.',
+      parameters: {
+        project_name: {
+          type: 'string',
+          description: 'Specific project name to check. Omit for all active deploys.',
+          required: false,
+        },
+      },
+      execute: (args) => {
+        const projectName = args['project_name'] as string | undefined;
+        if (projectName) {
+          const project = ctx.db.getProjectByName(projectName);
+          if (!project) throw new ProjectNotFoundError(projectName);
+          const status = ctx.jobManager.getStatus(project.id);
+          const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
+          return Promise.resolve({
+            active: isActive ? 1 : 0,
+            jobs: status
+              ? [
+                  {
+                    name: projectName,
+                    phase: status.phase,
+                    elapsed: `${String(Math.round((Date.now() - status.startedAt.getTime()) / 1000))}s`,
+                    error: status.errorSummary,
+                  },
+                ]
+              : [],
+          });
+        }
+        const jobs = ctx.jobManager.getActiveJobs();
+        return Promise.resolve({
+          active: jobs.length,
+          jobs: jobs.map((j) => ({
+            name: j.projectName,
+            phase: j.phase,
+            elapsed: `${String(Math.round((Date.now() - j.startedAt.getTime()) / 1000))}s`,
+            error: j.errorSummary,
+          })),
+        });
+      },
+    },
+    {
+      name: 'scan_dockerfiles',
+      description:
+        'Clone a repo and scan for all Dockerfiles. Use BEFORE deploy_project when you suspect a monorepo (multiple services). Returns paths like ["Dockerfile", "frontend/Dockerfile", "backend/Dockerfile"]. If only one Dockerfile is found, use deploy_project normally. If multiple are found, deploy each as a child project with the dockerfile_path parameter. Errors: CLONE_FAILED.',
+      parameters: {
+        repo_url: {
+          type: 'string',
+          description: 'Git repository URL to scan',
+          required: true,
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch to scan (default: main)',
+          required: false,
+        },
+      },
+      execute: async (args) => {
+        const repoUrl = args['repo_url'] as string;
+        const branch = (args['branch'] as string | undefined) ?? undefined;
+        const cloneResult = await cloneRepo({
+          repoUrl,
+          branch,
+          sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+        });
+        const dockerfiles = findDockerfiles(cloneResult.path);
+        const relativePaths = dockerfiles.map((f) => relative(cloneResult.path, f));
+        return {
+          repoUrl,
+          clonePath: cloneResult.path,
+          commitSha: cloneResult.commitSha,
+          dockerfiles: relativePaths,
+          isMonorepo: relativePaths.length > 1,
+        };
+      },
+    },
+    {
+      name: 'deploy_monorepo',
+      description:
+        'Deploy a monorepo with multiple services. Use AFTER scan_dockerfiles confirms multiple Dockerfiles. Pass the clone_path and dockerfiles array from scan_dockerfiles result. Creates a parent project and builds all services in parallel, each with its own container and port. Returns { parentProjectId, parentName, children[] }. Errors: BUILD_FAILED on individual services (others continue).',
+      parameters: {
+        repo_url: {
+          type: 'string',
+          description: 'Git repository URL',
+          required: true,
+        },
+        clone_path: {
+          type: 'string',
+          description: 'Path to already-cloned repo (from scan_dockerfiles)',
+          required: true,
+        },
+        commit_sha: {
+          type: 'string',
+          description: 'Commit SHA (from scan_dockerfiles)',
+          required: true,
+        },
+        dockerfiles: {
+          type: 'string',
+          description: 'JSON array of Dockerfile paths (from scan_dockerfiles), e.g. ["frontend/Dockerfile", "backend/Dockerfile"]',
+          required: true,
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch (default: main)',
+          required: false,
+        },
+      },
+      execute: async (args) => {
+        const dockerfiles = JSON.parse(args['dockerfiles'] as string) as string[];
+        const result = await ctx.pipeline.deployMonorepo({
+          repoUrl: args['repo_url'] as string,
+          clonePath: args['clone_path'] as string,
+          commitSha: args['commit_sha'] as string,
+          dockerfiles,
+          branch: (args['branch'] as string | undefined) ?? undefined,
+        });
+        return result;
+      },
+    },
   ];
 }
 
@@ -483,3 +627,32 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
  * Use createTools(ctx) for wired tools.
  */
 export const TOOLS: ToolDefinition[] = [];
+
+function findDockerfiles(dir: string, maxDepth = 3): string[] {
+  const results: string[] = [];
+  function walk(current: string, depth: number): void {
+    if (depth > maxDepth) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(current);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith('.') || entry === 'node_modules' || entry === 'vendor') continue;
+      const fullPath = join(current, entry);
+      try {
+        const stat = statSync(fullPath);
+        if (stat.isFile() && entry === 'Dockerfile') {
+          results.push(fullPath);
+        } else if (stat.isDirectory()) {
+          walk(fullPath, depth + 1);
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+  walk(dir, 0);
+  return results;
+}

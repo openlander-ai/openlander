@@ -11,6 +11,10 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { AppContext } from '../app.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 
+// ---------------------------------------------------------------------------
+// Zod schemas
+// ---------------------------------------------------------------------------
+
 const deployProjectSchema = z.object({
   repo_url: z.string().min(1),
   branch: z.string().optional(),
@@ -26,13 +30,59 @@ const getLogsSchema = z.object({
   lines: z.number().int().positive().optional(),
 });
 
+const setEnvVarsSchema = z.object({
+  project_name: z.string().min(1),
+  variables: z.string().min(1),
+});
+
+const domainSchema = z.object({
+  project_name: z.string().min(1),
+  domain: z.string().min(1),
+});
+
+const provisionDbSchema = z.object({
+  project_name: z.string().min(1),
+  db_type: z.string().optional(),
+});
+
+const previewDeploySchema = z.object({
+  repo_url: z.string().min(1),
+  branch: z.string().min(1),
+});
+
+const previewIdSchema = z.object({
+  preview_id: z.string().min(1),
+});
+
+const deployStatusSchema = z.object({
+  project_name: z.string().optional(),
+});
+
+const scanDockerfilesSchema = z.object({
+  repo_url: z.string().min(1),
+  branch: z.string().optional(),
+});
+
+const deployMonorepoSchema = z.object({
+  repo_url: z.string().min(1),
+  clone_path: z.string().min(1),
+  commit_sha: z.string().min(1),
+  dockerfiles: z.string().min(1),
+  branch: z.string().optional(),
+});
+
 const emptySchema = z.object({}).strict();
 
 function toInputSchema(schema: unknown) {
   return zodToJsonSchema(schema as Parameters<typeof zodToJsonSchema>[0]);
 }
 
+// ---------------------------------------------------------------------------
+// Tool metadata (all 20 tools — includes redeploy which is MCP-only)
+// ---------------------------------------------------------------------------
+
 const tools = [
+  // --- v0.1 ---
   {
     name: 'deploy_project',
     description: 'Deploy a project from a git repository URL.',
@@ -54,11 +104,6 @@ const tools = [
     inputSchema: toInputSchema(projectNameSchema),
   },
   {
-    name: 'rollback_project',
-    description: 'Rollback a project to its previous image when available.',
-    inputSchema: toInputSchema(projectNameSchema),
-  },
-  {
     name: 'get_logs',
     description: 'Get recent container logs for a project.',
     inputSchema: toInputSchema(getLogsSchema),
@@ -69,11 +114,99 @@ const tools = [
     inputSchema: toInputSchema(emptySchema),
   },
   {
+    name: 'set_env_vars',
+    description: 'Set environment variables for a project. Triggers redeploy if running.',
+    inputSchema: toInputSchema(setEnvVarsSchema),
+  },
+  {
+    name: 'expose_public',
+    description: 'Create a temporary public URL via TryCloudflare tunnel.',
+    inputSchema: toInputSchema(projectNameSchema),
+  },
+  {
+    name: 'unexpose_public',
+    description: 'Remove the public TryCloudflare tunnel URL for a project.',
+    inputSchema: toInputSchema(projectNameSchema),
+  },
+  {
     name: 'get_system_stats',
     description: 'Get host system resource usage.',
     inputSchema: toInputSchema(emptySchema),
   },
+  // --- v0.2 ---
+  {
+    name: 'restart_project',
+    description: 'Restart a project by stopping and redeploying it.',
+    inputSchema: toInputSchema(projectNameSchema),
+  },
+  {
+    name: 'map_domain',
+    description: 'Map a custom domain to a project via Cloudflare DNS and Tunnel.',
+    inputSchema: toInputSchema(domainSchema),
+  },
+  {
+    name: 'list_domains',
+    description: 'List all custom domain mappings.',
+    inputSchema: toInputSchema(emptySchema),
+  },
+  // --- v0.3 ---
+  {
+    name: 'rollback_project',
+    description: 'Rollback a project to its previous image when available.',
+    inputSchema: toInputSchema(projectNameSchema),
+  },
+  {
+    name: 'provision_database',
+    description: 'Provision a database sidecar (PostgreSQL or SQLite) for a project.',
+    inputSchema: toInputSchema(provisionDbSchema),
+  },
+  {
+    name: 'deploy_blue_green',
+    description: 'Deploy with zero downtime using blue-green strategy.',
+    inputSchema: toInputSchema(projectNameSchema),
+  },
+  {
+    name: 'debug_build_error',
+    description: 'Analyze a failed build and suggest fixes using AI.',
+    inputSchema: toInputSchema(projectNameSchema),
+  },
+  // --- v0.4 ---
+  {
+    name: 'preview_deploy',
+    description: 'Deploy an ephemeral preview environment for a branch.',
+    inputSchema: toInputSchema(previewDeploySchema),
+  },
+  {
+    name: 'cleanup_preview',
+    description: 'Remove an ephemeral preview deployment.',
+    inputSchema: toInputSchema(previewIdSchema),
+  },
+  {
+    name: 'list_previews',
+    description: 'List all active preview deployments.',
+    inputSchema: toInputSchema(emptySchema),
+  },
+  // --- Parallel + Monorepo ---
+  {
+    name: 'get_deploy_status',
+    description: 'Get real-time deployment status for active builds.',
+    inputSchema: toInputSchema(deployStatusSchema),
+  },
+  {
+    name: 'scan_dockerfiles',
+    description: 'Clone a repo and scan for all Dockerfiles (monorepo detection).',
+    inputSchema: toInputSchema(scanDockerfilesSchema),
+  },
+  {
+    name: 'deploy_monorepo',
+    description: 'Deploy a monorepo with multiple services in parallel.',
+    inputSchema: toInputSchema(deployMonorepoSchema),
+  },
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function parseInput<T>(schema: z.ZodType<T>, input: unknown): T {
   const parsed = schema.safeParse(input);
@@ -89,6 +222,14 @@ function getProjectIdByName(ctx: AppContext, name: string): string {
     throw new McpError(ErrorCode.InvalidParams, `Project not found: ${name}`);
   }
   return project.id;
+}
+
+function getProjectByName(ctx: AppContext, name: string) {
+  const project = ctx.db.getProjectByName(name);
+  if (!project) {
+    throw new McpError(ErrorCode.InvalidParams, `Project not found: ${name}`);
+  }
+  return project;
 }
 
 function successResponse(result: unknown): { content: Array<{ type: 'text'; text: string }> } {
@@ -108,10 +249,14 @@ function errorResponse(error: unknown): {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Server
+// ---------------------------------------------------------------------------
+
 export async function startMcpServer(ctx: AppContext): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(
-    { name: 'openlander', version: '0.3.0' },
+    { name: 'openlander', version: '0.4.0' },
     { capabilities: { tools: {} } },
   );
 
@@ -123,6 +268,7 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
       const rawArgs = request.params.arguments ?? {};
 
       switch (toolName) {
+        // --- v0.1 ---
         case 'deploy_project': {
           const args = parseInput(deployProjectSchema, rawArgs);
           const result = await ctx.pipeline.deploy({
@@ -156,13 +302,6 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
           return successResponse(result);
         }
 
-        case 'rollback_project': {
-          const args = parseInput(projectNameSchema, rawArgs);
-          const projectId = getProjectIdByName(ctx, args.project_name);
-          const result = await ctx.pipeline.rollback(projectId);
-          return successResponse(result);
-        }
-
         case 'get_logs': {
           const args = parseInput(getLogsSchema, rawArgs);
           const projectId = getProjectIdByName(ctx, args.project_name);
@@ -191,6 +330,44 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
           });
         }
 
+        case 'set_env_vars': {
+          const args = parseInput(setEnvVarsSchema, rawArgs);
+          const project = getProjectByName(ctx, args.project_name);
+          const vars = JSON.parse(args.variables) as Record<string, string>;
+          const changed = ctx.env.setBulk(project.id, vars);
+
+          if (changed && project.status === 'running') {
+            await ctx.pipeline.redeploy(project.id);
+            return successResponse({
+              status: 'updated_and_redeployed',
+              project: args.project_name,
+              keys: Object.keys(vars),
+            });
+          }
+          return successResponse({
+            status: 'updated',
+            project: args.project_name,
+            keys: Object.keys(vars),
+          });
+        }
+
+        case 'expose_public': {
+          const args = parseInput(projectNameSchema, rawArgs);
+          const project = getProjectByName(ctx, args.project_name);
+          if (!project.assigned_port) {
+            return successResponse({ error: 'Project is not running — deploy it first' });
+          }
+          const url = await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+          return successResponse({ status: 'exposed', project: args.project_name, publicUrl: url });
+        }
+
+        case 'unexpose_public': {
+          const args = parseInput(projectNameSchema, rawArgs);
+          const projectId = getProjectIdByName(ctx, args.project_name);
+          ctx.pipeline.closeTunnel(projectId);
+          return successResponse({ status: 'unexposed', project: args.project_name });
+        }
+
         case 'get_system_stats': {
           parseInput(emptySchema, rawArgs);
           const stats = getSystemStats();
@@ -198,6 +375,154 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
             summary: formatStatsSummary(stats),
             ...stats,
           });
+        }
+
+        // --- v0.2 ---
+        case 'restart_project': {
+          const args = parseInput(projectNameSchema, rawArgs);
+          const projectId = getProjectIdByName(ctx, args.project_name);
+          await ctx.pipeline.stop(projectId);
+          const result = await ctx.pipeline.redeploy(projectId);
+          return successResponse({ status: 'restarted', project: args.project_name, ...result });
+        }
+
+        case 'map_domain': {
+          const args = parseInput(domainSchema, rawArgs);
+          const projectId = getProjectIdByName(ctx, args.project_name);
+          await ctx.cloudflare.createTunnel(projectId, args.domain);
+          return successResponse({
+            status: 'mapped',
+            project: args.project_name,
+            domain: args.domain,
+            url: `https://${args.domain}`,
+          });
+        }
+
+        case 'list_domains': {
+          parseInput(emptySchema, rawArgs);
+          const mappings = ctx.db.listDomainMappings();
+          return successResponse({
+            count: mappings.length,
+            domains: mappings.map((m) => ({
+              domain: m.domain,
+              projectId: m.project_id,
+              status: m.status,
+            })),
+          });
+        }
+
+        // --- v0.3 ---
+        case 'rollback_project': {
+          const args = parseInput(projectNameSchema, rawArgs);
+          const projectId = getProjectIdByName(ctx, args.project_name);
+          const result = await ctx.pipeline.rollback(projectId);
+          return successResponse(result);
+        }
+
+        case 'provision_database': {
+          const args = parseInput(provisionDbSchema, rawArgs);
+          const projectId = getProjectIdByName(ctx, args.project_name);
+          const dbType = args.db_type === 'sqlite' ? 'sqlite' : 'postgres';
+          const result = await ctx.dbProvisioner.provision(projectId, { type: dbType });
+          return successResponse({ status: 'provisioned', project: args.project_name, ...result });
+        }
+
+        case 'deploy_blue_green': {
+          const args = parseInput(projectNameSchema, rawArgs);
+          const projectId = getProjectIdByName(ctx, args.project_name);
+          const result = await ctx.blueGreen.deploy(projectId);
+          return successResponse(result);
+        }
+
+        case 'debug_build_error': {
+          if (!ctx.buildDebugger) {
+            return successResponse({ error: 'Build debugger requires an LLM provider.' });
+          }
+          const args = parseInput(projectNameSchema, rawArgs);
+          const project = getProjectByName(ctx, args.project_name);
+          const lastDeploy = ctx.db.getLastDeployLog(project.id);
+          if (!lastDeploy || lastDeploy.status !== 'failed') {
+            return successResponse({ error: 'No failed build found for this project.' });
+          }
+          const diagnosis = await ctx.buildDebugger.diagnose({
+            buildLog: lastDeploy.build_log ?? 'No build log available',
+            projectName: args.project_name,
+            imageTag: project.image_tag ?? `openlander/${args.project_name}:latest`,
+            failedStep: 'build',
+          });
+          return successResponse(diagnosis);
+        }
+
+        // --- v0.4 ---
+        case 'preview_deploy': {
+          const args = parseInput(previewDeploySchema, rawArgs);
+          const result = await ctx.previewDeployer.deploy({
+            repoUrl: args.repo_url,
+            branch: args.branch,
+            sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+          });
+          return successResponse(result);
+        }
+
+        case 'cleanup_preview': {
+          const args = parseInput(previewIdSchema, rawArgs);
+          await ctx.previewDeployer.cleanup(args.preview_id);
+          return successResponse({ status: 'cleaned_up', previewId: args.preview_id });
+        }
+
+        case 'list_previews': {
+          parseInput(emptySchema, rawArgs);
+          const previews = ctx.previewDeployer.list();
+          return successResponse({
+            count: previews.length,
+            previews: previews.map((p) => ({
+              branch: p.branch,
+              url: p.url,
+              port: p.port,
+              createdAt: p.createdAt.toISOString(),
+            })),
+          });
+        }
+
+        // --- Parallel + Monorepo ---
+        case 'get_deploy_status': {
+          const args = parseInput(deployStatusSchema, rawArgs);
+          if (args.project_name) {
+            const project = getProjectByName(ctx, args.project_name);
+            const status = ctx.jobManager.getStatus(project.id);
+            const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
+            return successResponse({
+              active: isActive ? 1 : 0,
+              jobs: status ? [{ name: args.project_name, phase: status.phase }] : [],
+            });
+          }
+          const jobs = ctx.jobManager.getActiveJobs();
+          return successResponse({
+            active: jobs.length,
+            jobs: jobs.map((j) => ({ name: j.projectName, phase: j.phase })),
+          });
+        }
+
+        case 'scan_dockerfiles': {
+          const args = parseInput(scanDockerfilesSchema, rawArgs);
+          const agentTools = (await import('../agent/tools.js')).createTools(ctx);
+          const tool = agentTools.find((t) => t.name === 'scan_dockerfiles');
+          if (!tool) throw new McpError(ErrorCode.InternalError, 'scan_dockerfiles tool not available');
+          const result = await tool.execute({ repo_url: args.repo_url, branch: args.branch });
+          return successResponse(result);
+        }
+
+        case 'deploy_monorepo': {
+          const args = parseInput(deployMonorepoSchema, rawArgs);
+          const dockerfiles = JSON.parse(args.dockerfiles) as string[];
+          const result = await ctx.pipeline.deployMonorepo({
+            repoUrl: args.repo_url,
+            clonePath: args.clone_path,
+            commitSha: args.commit_sha,
+            dockerfiles,
+            branch: args.branch,
+          });
+          return successResponse(result);
         }
 
         default:
