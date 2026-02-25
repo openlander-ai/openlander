@@ -2,6 +2,18 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { theme } from '../theme.js';
+import {
+  PROJECT_STATUS_ICON,
+  PROJECT_STATUS_COLOR,
+  miniBar,
+  getColorForPercent,
+  formatMemory,
+  formatUptime,
+  truncate,
+  formatTime,
+  getActivityIcon,
+  getActivityColor,
+} from '../dashboard-utils.js';
 import type {
   OpenLanderClient,
   Project,
@@ -22,116 +34,8 @@ interface DashboardPanelProps {
   }) => void;
 }
 
-// Status icons and colors for projects
-const PROJECT_STATUS_ICON: Record<string, string> = {
-  running: '●',
-  building: '◐',
-  stopped: '○',
-  error: '✖',
-};
-
-const PROJECT_STATUS_COLOR: Record<string, string> = {
-  running: theme.statusRunning,
-  building: theme.statusBuilding,
-  stopped: theme.statusStopped,
-  error: theme.statusError,
-};
-
-// Activity type icons and colors
-const ACTIVITY_ICON: Record<string, string> = {
-  success: '✅',
-  progress: '🔄',
-  error: '❌',
-  info: 'ℹ️',
-};
-
-const ACTIVITY_COLOR: Record<string, string> = {
-  success: theme.success,
-  progress: theme.progress,
-  error: theme.error,
-  info: theme.info,
-};
-
-// Helper: create a 3-char bar for percentage
-function miniBar(percent: number): string {
-  const filled = Math.round(percent / 33.33);
-  const blocks = filled >= 3 ? '◼◼◼' : filled === 2 ? '◼◼◻' : filled === 1 ? '◼◻◻' : '◻◻◻';
-  return blocks;
-}
-
-// Helper: get color based on percentage
-function getColorForPercent(percent: number): string {
-  if (percent > 80) return theme.resourceCrit;
-  if (percent > 60) return theme.resourceWarn;
-  return theme.resourceOk;
-}
-
-// Helper: format memory (MB to GB with 1 decimal)
-function formatMemory(mb: number): string {
-  const gb = mb / 1024;
-  return gb.toFixed(1);
-}
-
-// Helper: format uptime
-function formatUptime(seconds: number): string {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-
-  if (days > 0) {
-    return `${String(days)}d ${String(hours)}h`;
-  }
-  return `${String(hours)}h ${String(mins)}m`;
-}
-
-// Helper: truncate string with ellipsis
-function truncate(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen - 3) + '...';
-}
-
-// Helper: format timestamp to HH:MM
-function formatTime(timestamp: string): string {
-  const date = new Date(timestamp);
-  const hours = date.getHours().toString().padStart(2, '0');
-  const mins = date.getMinutes().toString().padStart(2, '0');
-  return `${hours}:${mins}`;
-}
-
-// Helper: get activity icon based on message content
-function getActivityIcon(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes('error') || lower.includes('failed')) return ACTIVITY_ICON.error ?? 'ℹ️';
-  if (lower.includes('started') || lower.includes('building') || lower.includes('progress'))
-    return ACTIVITY_ICON.progress ?? 'ℹ️';
-  if (
-    lower.includes('success') ||
-    lower.includes('deployed') ||
-    lower.includes('updated') ||
-    lower.includes('completed')
-  )
-    return ACTIVITY_ICON.success ?? 'ℹ️';
-  return ACTIVITY_ICON.info ?? 'ℹ️';
-}
-
-// Helper: get activity color based on message content
-function getActivityColor(message: string): string {
-  const lower = message.toLowerCase();
-  if (lower.includes('error') || lower.includes('failed')) return ACTIVITY_COLOR.error ?? 'cyan';
-  if (lower.includes('started') || lower.includes('building') || lower.includes('progress'))
-    return ACTIVITY_COLOR.progress ?? 'cyan';
-  if (
-    lower.includes('success') ||
-    lower.includes('deployed') ||
-    lower.includes('updated') ||
-    lower.includes('completed')
-  )
-    return ACTIVITY_COLOR.success ?? 'cyan';
-  return ACTIVITY_COLOR.info ?? 'cyan';
-}
-
 // Section header component
-function SectionHeader({ title }: { title: string }): React.ReactElement {
+export function SectionHeader({ title }: { title: string }): React.ReactElement {
   return (
     <Box>
       <Text bold color={theme.sectionTitle}>{`▸ ${title}`}</Text>
@@ -140,7 +44,7 @@ function SectionHeader({ title }: { title: string }): React.ReactElement {
 }
 
 // System section component
-function SystemSection({
+export function SystemSection({
   stats,
   health,
   loading,
@@ -197,7 +101,7 @@ function SystemSection({
 }
 
 // Projects section component
-function ProjectsSection({
+export function ProjectsSection({
   projects,
   projectStats,
   selectedIndex,
@@ -265,7 +169,7 @@ function ProjectsSection({
 }
 
 // Activity section component
-function ActivitySection({ events }: { events: ActivityEvent[] }): React.ReactElement {
+export function ActivitySection({ events }: { events: ActivityEvent[] }): React.ReactElement {
   const displayEvents = events.slice(0, 10);
 
   return (
@@ -295,7 +199,7 @@ function ActivitySection({ events }: { events: ActivityEvent[] }): React.ReactEl
 }
 
 // MCP Clients section component
-function McpClientsSection({ enabled }: { enabled: boolean }): React.ReactElement {
+export function McpClientsSection({ enabled }: { enabled: boolean }): React.ReactElement {
   return (
     <Box flexDirection="column" marginTop={1}>
       <SectionHeader title="MCP Clients" />
