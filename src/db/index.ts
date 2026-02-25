@@ -19,6 +19,8 @@ export interface ProjectRow {
   image_tag: string | null;
   previous_image_tag: string | null;
   public_url: string | null;
+  parent_project_id: string | null;
+  dockerfile_path: string;
   created_at: string;
   updated_at: string;
 }
@@ -112,13 +114,22 @@ export class Database {
     name: string;
     repoUrl: string;
     branch?: string;
+    parentProjectId?: string;
+    dockerfilePath?: string;
   }): ProjectRow {
     this.db
       .prepare(
-        `INSERT INTO projects (id, name, repo_url, branch)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT INTO projects (id, name, repo_url, branch, parent_project_id, dockerfile_path)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(project.id, project.name, project.repoUrl, project.branch ?? 'main');
+      .run(
+        project.id,
+        project.name,
+        project.repoUrl,
+        project.branch ?? 'main',
+        project.parentProjectId ?? null,
+        project.dockerfilePath ?? 'Dockerfile',
+      );
 
     const created = this.getProject(project.id);
     if (!created) throw new Error(`Failed to create project ${project.id}`);
@@ -158,6 +169,8 @@ export class Database {
       imageTag: string | null;
       previousImageTag: string | null;
       publicUrl: string | null;
+      parentProjectId: string | null;
+      dockerfilePath: string;
     }>,
   ): void {
     const setClauses: string[] = [];
@@ -191,6 +204,14 @@ export class Database {
       setClauses.push('public_url = ?');
       values.push(updates.publicUrl);
     }
+    if (updates.parentProjectId !== undefined) {
+      setClauses.push('parent_project_id = ?');
+      values.push(updates.parentProjectId);
+    }
+    if (updates.dockerfilePath !== undefined) {
+      setClauses.push('dockerfile_path = ?');
+      values.push(updates.dockerfilePath);
+    }
 
     if (setClauses.length === 0) return;
 
@@ -203,6 +224,21 @@ export class Database {
   /** Delete a project and all associated data (cascading). */
   deleteProject(id: string): void {
     this.db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  }
+
+  /** Get child projects (services) of a parent project. */
+  getChildProjects(parentId: string): ProjectRow[] {
+    return this.db
+      .prepare('SELECT * FROM projects WHERE parent_project_id = ? ORDER BY name ASC')
+      .all(parentId) as ProjectRow[];
+  }
+
+  /** Check if a project is a parent (has children). */
+  isParentProject(id: string): boolean {
+    const row = this.db
+      .prepare('SELECT COUNT(*) as cnt FROM projects WHERE parent_project_id = ?')
+      .get(id) as { cnt: number };
+    return row.cnt > 0;
   }
 
   // ===== Ports =====

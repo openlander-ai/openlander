@@ -208,4 +208,90 @@ describe('Database', () => {
       expect(sessions).toHaveLength(2);
     });
   });
+
+  describe('Monorepo (parent-child projects)', () => {
+    it('creates a parent project with children', () => {
+      db.createProject({ id: 'parent1', name: 'my-saas', repoUrl: 'https://github.com/test/saas' });
+      db.createProject({
+        id: 'child1',
+        name: 'my-saas/frontend',
+        repoUrl: 'https://github.com/test/saas',
+        parentProjectId: 'parent1',
+        dockerfilePath: 'frontend/Dockerfile',
+      });
+      db.createProject({
+        id: 'child2',
+        name: 'my-saas/backend',
+        repoUrl: 'https://github.com/test/saas',
+        parentProjectId: 'parent1',
+        dockerfilePath: 'backend/Dockerfile',
+      });
+
+      const children = db.getChildProjects('parent1');
+      expect(children).toHaveLength(2);
+      expect(children[0]!.name).toBe('my-saas/backend');
+      expect(children[1]!.name).toBe('my-saas/frontend');
+    });
+
+    it('isParentProject returns true for parents', () => {
+      db.createProject({ id: 'p1', name: 'parent', repoUrl: 'https://github.com/test/repo' });
+      db.createProject({ id: 'c1', name: 'parent/svc', repoUrl: 'https://github.com/test/repo', parentProjectId: 'p1' });
+
+      expect(db.isParentProject('p1')).toBe(true);
+      expect(db.isParentProject('c1')).toBe(false);
+    });
+
+    it('stores dockerfile_path correctly', () => {
+      db.createProject({
+        id: 'c1',
+        name: 'app/api',
+        repoUrl: 'https://github.com/test/app',
+        dockerfilePath: 'api/Dockerfile',
+      });
+
+      const project = db.getProject('c1');
+      expect(project!.dockerfile_path).toBe('api/Dockerfile');
+    });
+
+    it('defaults dockerfile_path to Dockerfile', () => {
+      db.createProject({ id: 'p1', name: 'simple', repoUrl: 'https://github.com/test/simple' });
+      const project = db.getProject('p1');
+      expect(project!.dockerfile_path).toBe('Dockerfile');
+    });
+
+    it('defaults parent_project_id to null', () => {
+      db.createProject({ id: 'p1', name: 'standalone', repoUrl: 'https://github.com/test/standalone' });
+      const project = db.getProject('p1');
+      expect(project!.parent_project_id).toBeNull();
+    });
+
+    it('cascading delete removes children when parent is deleted', () => {
+      db.createProject({ id: 'parent', name: 'group', repoUrl: 'https://github.com/test/group' });
+      db.createProject({ id: 'child1', name: 'group/a', repoUrl: 'https://github.com/test/group', parentProjectId: 'parent' });
+      db.createProject({ id: 'child2', name: 'group/b', repoUrl: 'https://github.com/test/group', parentProjectId: 'parent' });
+
+      db.deleteProject('parent');
+
+      expect(db.getProject('parent')).toBeUndefined();
+      expect(db.getProject('child1')).toBeUndefined();
+      expect(db.getProject('child2')).toBeUndefined();
+    });
+
+    it('getChildProjects returns empty for non-parent', () => {
+      db.createProject({ id: 'p1', name: 'solo', repoUrl: 'https://github.com/test/solo' });
+      expect(db.getChildProjects('p1')).toHaveLength(0);
+    });
+
+    it('updateProject can set parentProjectId and dockerfilePath', () => {
+      db.createProject({ id: 'p1', name: 'late-parent', repoUrl: 'https://github.com/test/lp' });
+      db.createProject({ id: 'c1', name: 'orphan', repoUrl: 'https://github.com/test/lp' });
+
+      db.updateProject('c1', { parentProjectId: 'p1', dockerfilePath: 'services/api/Dockerfile' });
+
+      const updated = db.getProject('c1');
+      expect(updated!.parent_project_id).toBe('p1');
+      expect(updated!.dockerfile_path).toBe('services/api/Dockerfile');
+      expect(db.isParentProject('p1')).toBe(true);
+    });
+  });
 });
