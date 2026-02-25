@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plane, Menu, Cpu, MemoryStick } from 'lucide-react';
-import type { SystemStats } from '@/hooks/use-system-stats';
+import type { SystemStats } from '@/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -32,9 +32,14 @@ export function Header({ stats, onMenuClick }: HeaderProps) {
     return () => clearInterval(interval);
   }, []);
 
-  const formatMemory = (bytes: number) => {
-    const gb = bytes / (1024 * 1024 * 1024);
-    return `${gb.toFixed(1)} GB`;
+  const formatMemory = (mem: number | { usedMB?: number; totalMB?: number; usagePercent?: number }) => {
+    if (typeof mem === 'number') {
+      const gb = mem / (1024 * 1024 * 1024);
+      return `${gb.toFixed(1)} GB`;
+    }
+    if (mem?.usagePercent != null) return `${mem.usagePercent.toFixed(0)}%`;
+    if (mem?.usedMB != null) return `${(mem.usedMB / 1024).toFixed(1)} GB`;
+    return '—';
   };
 
   return (
@@ -60,7 +65,7 @@ export function Header({ stats, onMenuClick }: HeaderProps) {
           <div className="hidden md:flex items-center gap-4">
             <div className="flex items-center gap-1.5" title="CPU Usage">
               <Cpu className="h-3.5 w-3.5" />
-              <span>{stats.cpu.toFixed(0)}%</span>
+              <span>{typeof stats.cpu === 'number' ? stats.cpu.toFixed(0) : stats.cpu?.usagePercent?.toFixed(0) ?? '—'}%</span>
             </div>
             <div className="flex items-center gap-1.5" title="Memory Usage">
               <MemoryStick className="h-3.5 w-3.5" />

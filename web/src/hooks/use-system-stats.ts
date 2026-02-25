@@ -1,10 +1,5 @@
 import { useState, useEffect } from 'react';
-
-export interface SystemStats {
-  cpu: number;
-  memory: number;
-  uptime: number;
-}
+import type { SystemStats } from '../types';
 
 export interface UseSystemStatsReturn {
   stats: SystemStats | null;

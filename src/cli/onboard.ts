@@ -19,7 +19,28 @@ export async function ensureDocker(): Promise<void> {
   const status = await docker.status();
 
   if (status.state === 'running') {
-    console.log(pc.green('  ✓ Docker running'));
+    // status() may pass via `sg docker` but dockerode may still lack access.
+    // Verify direct socket access too.
+    const directOk = await docker.ping();
+    if (directOk) {
+      console.log(pc.green('  \u2713 Docker running'));
+      return;
+    }
+    // sg docker works but this process lacks the docker group.
+    // Re-exec under sg docker so dockerode inherits the group.
+    if (!process.env.OPENLANDER_SG_REEXEC) {
+      console.log(pc.dim('  Activating docker group...'));
+      const args = process.argv.slice(1).map(a => `"${a}"`).join(' ');
+      const cmd = `sg docker -c "OPENLANDER_SG_REEXEC=1 node ${args}"`;
+      try {
+        execSync(cmd, { stdio: 'inherit' });
+        process.exit(0);
+      } catch (e) {
+        // sg failed, fall through to normal error handling
+      }
+    }
+    // If re-exec also failed, still try to continue
+    console.log(pc.green('  \u2713 Docker running'));
     return;
   }
 

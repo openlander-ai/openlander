@@ -14,6 +14,7 @@
   },
   "files": [
     "dist",
+    "web/dist",
     "LICENSE",
     "README.md"
   ],
@@ -31,8 +32,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist",
-    "prepublishOnly": "npm run build"
+    "clean": "rm -rf dist web/dist",
+    "build:web": "npm run build --prefix web",
+    "prepublishOnly": "npm run build:web && npm run build"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.0",

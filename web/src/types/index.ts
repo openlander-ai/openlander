@@ -35,9 +35,9 @@ export interface ChatMessage {
 }
 
 export interface SystemStats {
-  cpu: number;
-  memory: number;
-  uptime: number;
+  cpu: number | { cores: number; usagePercent: number; loadAvg1m: number };
+  memory: number | { totalMB: number; usedMB: number; usagePercent: number };
+  uptime: number | { seconds: number; formatted: string };
 }
 
 export interface DeployResult {
