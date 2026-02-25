@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useSetup } from '@/hooks/use-setup';
 import { configureLLM, startTraefik, completeSetup } from '@/lib/api';
 import {
@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, XCircle, Loader2, Brain, Network, ArrowRight, Terminal } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, Brain, Network, ArrowRight, Terminal, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function SetupScreen({ onComplete }: { onComplete: () => void }) {
@@ -108,8 +108,14 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 {status.docker.message || 'Required to build and run containers.'}
               </p>
               {!status.docker.ok && (
-                <div className="mt-3 text-sm bg-destructive/10 text-destructive p-3 rounded-md">
-                  Please install and start Docker Desktop or Docker Engine, then refresh this page.
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Docker is required to build and run containers. Install it using one of the methods below, then click <strong>Refresh</strong>.
+                  </p>
+                  <DockerInstallGuide />
+                  <Button onClick={refetch} variant="outline" size="sm">
+                    Refresh Docker Status
+                  </Button>
                 </div>
               )}
             </div>
@@ -226,6 +232,76 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
           </Button>
         </CardFooter>
       </Card>
+    </div>
+  );
+}
+
+/* Docker Install Guide ------------------------------------------------- */
+
+const DOCKER_LINUX_CMD = 'curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER';
+const DOCKER_MAC_CMD = 'brew install --cask docker';
+const DOCKER_AGENT_PROMPT = 'Install Docker on this machine and start the daemon';
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [text]);
+  return (
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-muted hover:bg-muted/80 transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
+function DockerInstallGuide() {
+  return (
+    <div className="space-y-3 text-sm">
+      <div className="rounded-md border bg-muted/30 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-medium">Linux / WSL2</span>
+          <CopyButton text={DOCKER_LINUX_CMD} />
+        </div>
+        <code className="block text-xs bg-background rounded p-2 font-mono break-all">
+          {DOCKER_LINUX_CMD}
+        </code>
+        <p className="text-xs text-muted-foreground mt-1">
+          After install, log out and back in (or run <code className="bg-muted px-1 rounded">newgrp docker</code>).
+        </p>
+      </div>
+
+      <div className="rounded-md border bg-muted/30 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-medium">macOS</span>
+          <CopyButton text={DOCKER_MAC_CMD} />
+        </div>
+        <code className="block text-xs bg-background rounded p-2 font-mono">
+          {DOCKER_MAC_CMD}
+        </code>
+        <p className="text-xs text-muted-foreground mt-1">
+          Or download{' '}
+          <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener" className="underline hover:text-foreground">
+            Docker Desktop
+          </a>.
+        </p>
+      </div>
+
+      <div className="rounded-md border border-dashed bg-primary/5 p-3">
+        <p className="text-xs text-muted-foreground">
+          <strong>Using an AI coding tool?</strong> Paste this into your agent (Claude Code, Cursor, etc.):
+        </p>
+        <div className="flex items-center justify-between mt-1">
+          <code className="text-xs font-mono">{DOCKER_AGENT_PROMPT}</code>
+          <CopyButton text={DOCKER_AGENT_PROMPT} />
+        </div>
+      </div>
     </div>
   );
 }

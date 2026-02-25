@@ -149,14 +149,46 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 ## Requirements
 
-- **Platform**: Linux or macOS (Windows is not supported)
+- **Platform**: Linux or macOS (Windows is not supported, but WSL2 on Windows works)
 - **Node.js** >= 22
-- **Docker** installed and running
-  - **LLM API key** (configured during web setup or CLI onboard) \u2014 one of:
+- **Docker** installed and running (see below)
+- **LLM API key** (configured during web setup or CLI onboard) — one of:
   - [Google Gemini](https://ai.google.dev/) (free tier available)
   - [OpenRouter](https://openrouter.ai/) (free tier, no credit card)
   - [Anthropic Claude](https://console.anthropic.com/)
   - [OpenAI](https://platform.openai.com/)
+
+### Installing Docker
+
+OpenLander needs Docker to build and run containers. The **web setup wizard** and **`openlander onboard`** will detect Docker and guide you through installation.
+
+**Option 1: Auto-install (Linux / WSL2)**
+
+The `openlander onboard` command will offer to install Docker automatically if it's not found.
+
+**Option 2: Manual install**
+
+```bash
+# Linux / WSL2
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Log out and back in, then:
+sudo systemctl start docker
+
+# macOS
+brew install --cask docker
+# Or download Docker Desktop: https://www.docker.com/products/docker-desktop/
+```
+
+**Option 3: Ask your AI coding agent**
+
+If you're using Claude Code, Cursor, or another AI coding tool, just tell it:
+
+```
+Install Docker on this machine and start the daemon
+```
+
+The agent will handle the installation for your platform.
 ## Contributing
 
 OpenLander is in early development. Contributions welcome!

@@ -1,10 +1,11 @@
+import { execSync } from 'node:child_process';
+import { platform } from 'node:os';
 import pc from 'picocolors';
 
 import { loadConfig, saveConfig, getConfigPath } from '../config/index.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { Docker } from '../pipeline/docker.js';
 import { TraefikManager } from '../pipeline/traefik.js';
-
 /**
  * Interactive onboarding wizard.
  *
@@ -26,11 +27,21 @@ export async function runOnboard(): Promise<void> {
   const docker = new Docker();
   const dockerOk = await docker.ping();
   if (!dockerOk) {
-    console.log(pc.red('  ✗ Docker is not running. Please install and start Docker first.'));
-    console.log(pc.dim('    https://docs.docker.com/get-docker/\n'));
-    process.exit(1);
+    console.log(pc.red('  \u2717 Docker is not running.\n'));
+    const installed = await tryInstallDocker();
+    if (!installed) {
+      process.exit(1);
+    }
+    // Re-check after install
+    const retryOk = await docker.ping();
+    if (!retryOk) {
+      console.log(pc.red('  \u2717 Docker still not responding. Please start the Docker daemon and try again.'));
+      console.log(pc.dim('    Linux: sudo systemctl start docker'));
+      console.log(pc.dim('    macOS: open -a Docker\n'));
+      process.exit(1);
+    }
   }
-  console.log(pc.green('  ✓ Docker is running\n'));
+  console.log(pc.green('  \u2713 Docker is running\n'));
 
   // Step 2: Set up Traefik
   console.log(pc.bold('  Step 2/5:'), 'Setting up Traefik reverse proxy...');
@@ -157,5 +168,60 @@ async function configureSSH(config: OpenLanderConfig): Promise<void> {
     }
   } catch {
     console.log(pc.dim('  Skipped\n'));
+  }
+}
+
+async function tryInstallDocker(): Promise<boolean> {
+  const os = platform();
+
+  if (os === 'darwin') {
+    console.log(pc.yellow('  Docker is not installed. Install options:'));
+    console.log(pc.dim('    1. brew install --cask docker'));
+    console.log(pc.dim('    2. Download from https://www.docker.com/products/docker-desktop/'));
+    console.log();
+    return false;
+  }
+
+  // Linux / WSL
+  try {
+    const { confirm } = await import('@inquirer/prompts');
+    const shouldInstall = await confirm({
+      message: '  Docker not found. Install automatically? (requires sudo)',
+      default: true,
+    });
+
+    if (!shouldInstall) {
+      console.log(pc.dim('    Install manually: curl -fsSL https://get.docker.com | sh'));
+      console.log(pc.dim('    https://docs.docker.com/engine/install/\n'));
+      return false;
+    }
+
+    console.log(pc.dim('  Downloading and installing Docker...'));
+    execSync('curl -fsSL https://get.docker.com | sh', { stdio: 'inherit' });
+
+    // Add current user to docker group
+    try {
+      const user = execSync('whoami', { encoding: 'utf8' }).trim();
+      execSync(`sudo usermod -aG docker ${user}`, { stdio: 'inherit' });
+      console.log(pc.dim(`  Added ${user} to docker group.`));
+    } catch {
+      console.log(pc.yellow('  \u26a0 Could not add user to docker group. You may need to run: sudo usermod -aG docker $USER'));
+    }
+
+    // Try to start Docker daemon
+    try {
+      execSync('sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null', {
+        stdio: 'inherit',
+      });
+    } catch {
+      console.log(pc.yellow('  \u26a0 Could not auto-start Docker. Please start it manually.'));
+    }
+
+    console.log(pc.green('  \u2713 Docker installed\n'));
+    return true;
+  } catch (error) {
+    console.log(pc.red('  \u2717 Docker installation failed:'), (error as Error).message);
+    console.log(pc.dim('    Install manually: curl -fsSL https://get.docker.com | sh\n'));
+    return false;
   }
 }
