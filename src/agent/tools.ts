@@ -4,6 +4,8 @@ import { ProjectNotFoundError } from '../errors.js';
 import { cloneRepo } from '../pipeline/git.js';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { createGitProvider } from '../git-providers/index.js';
+import { loadConfig } from '../config/index.js';
 
 /**
  * Tool definitions for the OpenLander agent.
@@ -617,6 +619,86 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
           branch: (args['branch'] as string | undefined) ?? undefined,
         });
         return Promise.resolve({ ...result, hint: 'Use get_deploy_status to check progress.' });
+      },
+    },
+    // --- Git Provider Tools ---
+    {
+      name: 'list_github_repos',
+      description:
+        'List repositories from the user\'s connected GitHub account, sorted by most recently pushed. Use when user asks "show my repos", "what can I deploy?", or needs to find a project by name. Returns { count, repos[] } with name, description, language, private flag, and clone URL. Errors: GITHUB_NOT_CONFIGURED if no GitHub token is set — tell user to add one in settings. Supports pagination with page parameter.',
+      parameters: {
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (default: 1, 30 repos per page)',
+          required: false,
+        },
+        visibility: {
+          type: 'string',
+          description: 'Filter by visibility: "all", "public", or "private" (default: all)',
+          required: false,
+        },
+      },
+      execute: async (args) => {
+        const config = loadConfig();
+        const ghConfig = config.gitProviders.github;
+        if (!ghConfig.token) {
+          return { error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token configured. Add one in settings to browse repos.' };
+        }
+        const provider = createGitProvider('github', ghConfig);
+        const page = (args['page'] as number | undefined) ?? 1;
+        const visibility = (args['visibility'] as 'all' | 'public' | 'private' | undefined) ?? 'all';
+        const result = await provider.listRepos({ page, perPage: 30, visibility });
+        return {
+          count: result.repos.length,
+          hasMore: result.hasMore,
+          repos: result.repos.map((r) => ({
+            name: r.name,
+            fullName: r.fullName,
+            description: r.description,
+            language: r.language,
+            private: r.isPrivate,
+            defaultBranch: r.defaultBranch,
+            stars: r.stars,
+            cloneUrl: r.isPrivate ? provider.getAuthCloneUrl(r.fullName) : r.cloneUrl,
+            htmlUrl: r.htmlUrl,
+            updatedAt: r.updatedAt,
+          })),
+        };
+      },
+    },
+    {
+      name: 'search_github_repos',
+      description:
+        'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with clone URLs ready for deploy_project. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call deploy_project with the clone URL.',
+      parameters: {
+        query: {
+          type: 'string',
+          description: 'Search query — matches repo name, description, and README',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        const config = loadConfig();
+        const ghConfig = config.gitProviders.github;
+        if (!ghConfig.token) {
+          return { error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token configured. Add one in settings to search repos.' };
+        }
+        const provider = createGitProvider('github', ghConfig);
+        const query = args['query'] as string;
+        const result = await provider.searchRepos(query);
+        return {
+          total: result.total,
+          repos: result.repos.map((r) => ({
+            name: r.name,
+            fullName: r.fullName,
+            description: r.description,
+            language: r.language,
+            private: r.isPrivate,
+            defaultBranch: r.defaultBranch,
+            cloneUrl: r.isPrivate ? provider.getAuthCloneUrl(r.fullName) : r.cloneUrl,
+            htmlUrl: r.htmlUrl,
+          })),
+        };
       },
     },
   ];

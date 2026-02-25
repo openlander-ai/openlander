@@ -10,6 +10,8 @@ import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { AppContext } from '../app.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
+import { createGitProvider } from '../git-providers/index.js';
+import { loadConfig } from '../config/index.js';
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -69,6 +71,15 @@ const deployMonorepoSchema = z.object({
   commit_sha: z.string().min(1),
   dockerfiles: z.string().min(1),
   branch: z.string().optional(),
+});
+
+const listGithubReposSchema = z.object({
+  page: z.number().int().positive().optional(),
+  visibility: z.enum(['all', 'public', 'private']).optional(),
+});
+
+const searchGithubReposSchema = z.object({
+  query: z.string().min(1),
 });
 
 const emptySchema = z.object({}).strict();
@@ -201,6 +212,17 @@ const tools = [
     name: 'deploy_monorepo',
     description: 'Start deploying a monorepo with multiple services in parallel. Returns immediately while builds run in background.',
     inputSchema: toInputSchema(deployMonorepoSchema),
+  },
+  // --- Git Provider ---
+  {
+    name: 'list_github_repos',
+    description: 'List repositories from the connected GitHub account, sorted by most recently pushed.',
+    inputSchema: toInputSchema(listGithubReposSchema),
+  },
+  {
+    name: 'search_github_repos',
+    description: 'Search GitHub repositories by name or keyword. Resolves project names to deployable repo URLs.',
+    inputSchema: toInputSchema(searchGithubReposSchema),
   },
 ] as const;
 
@@ -523,6 +545,58 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
             branch: args.branch,
           });
           return successResponse({ ...result, hint: 'Use get_deploy_status to check progress.' });
+        }
+
+        // --- Git Provider ---
+        case 'list_github_repos': {
+          const args = parseInput(listGithubReposSchema, rawArgs);
+          const config = loadConfig();
+          const ghConfig = config.gitProviders.github;
+          if (!ghConfig.token) {
+            return successResponse({ error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token configured.' });
+          }
+          const ghProvider = createGitProvider('github', ghConfig);
+          const listResult = await ghProvider.listRepos({
+            page: args.page,
+            perPage: 30,
+            visibility: args.visibility,
+          });
+          return successResponse({
+            count: listResult.repos.length,
+            hasMore: listResult.hasMore,
+            repos: listResult.repos.map((r) => ({
+              name: r.name,
+              fullName: r.fullName,
+              description: r.description,
+              language: r.language,
+              private: r.isPrivate,
+              cloneUrl: r.isPrivate ? ghProvider.getAuthCloneUrl(r.fullName) : r.cloneUrl,
+              htmlUrl: r.htmlUrl,
+            })),
+          });
+        }
+
+        case 'search_github_repos': {
+          const args = parseInput(searchGithubReposSchema, rawArgs);
+          const searchConfig = loadConfig();
+          const searchGhConfig = searchConfig.gitProviders.github;
+          if (!searchGhConfig.token) {
+            return successResponse({ error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token configured.' });
+          }
+          const searchProvider = createGitProvider('github', searchGhConfig);
+          const searchResult = await searchProvider.searchRepos(args.query);
+          return successResponse({
+            total: searchResult.total,
+            repos: searchResult.repos.map((r) => ({
+              name: r.name,
+              fullName: r.fullName,
+              description: r.description,
+              language: r.language,
+              private: r.isPrivate,
+              cloneUrl: r.isPrivate ? searchProvider.getAuthCloneUrl(r.fullName) : r.cloneUrl,
+              htmlUrl: r.htmlUrl,
+            })),
+          });
         }
 
         default:
