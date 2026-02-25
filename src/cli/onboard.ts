@@ -31,7 +31,7 @@ export async function ensureDocker(): Promise<void> {
     if (!process.env.OPENLANDER_SG_REEXEC) {
       console.log(pc.dim('  Activating docker group...'));
       const args = process.argv.slice(1).map(a => `"${a}"`).join(' ');
-      const cmd = `sg docker -c "OPENLANDER_SG_REEXEC=1 node ${args}"`;
+      const cmd = `sg docker -c "OPENLANDER_SG_REEXEC=1 ${process.execPath} ${args}"`;
       try {
         execSync(cmd, { stdio: 'inherit' });
         process.exit(0);
