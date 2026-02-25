@@ -85,7 +85,7 @@ const tools = [
   // --- v0.1 ---
   {
     name: 'deploy_project',
-    description: 'Deploy a project from a git repository URL.',
+    description: 'Start deploying a project from a git repository URL. Returns immediately while build runs in background.',
     inputSchema: toInputSchema(deployProjectSchema),
   },
   {
@@ -199,7 +199,7 @@ const tools = [
   },
   {
     name: 'deploy_monorepo',
-    description: 'Deploy a monorepo with multiple services in parallel.',
+    description: 'Start deploying a monorepo with multiple services in parallel. Returns immediately while builds run in background.',
     inputSchema: toInputSchema(deployMonorepoSchema),
   },
 ] as const;
@@ -271,14 +271,14 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
         // --- v0.1 ---
         case 'deploy_project': {
           const args = parseInput(deployProjectSchema, rawArgs);
-          const result = await ctx.pipeline.deploy({
+          const result = ctx.pipeline.startDeploy({
             repoUrl: args.repo_url,
             branch: args.branch,
             name: args.name,
             sshKeyPath: ctx.config.git.sshKeyPath || undefined,
             trigger: 'api',
           });
-          return successResponse(result);
+          return successResponse({ ...result, hint: 'Use get_deploy_status to check progress.' });
         }
 
         case 'stop_project': {
@@ -515,14 +515,14 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
         case 'deploy_monorepo': {
           const args = parseInput(deployMonorepoSchema, rawArgs);
           const dockerfiles = JSON.parse(args.dockerfiles) as string[];
-          const result = await ctx.pipeline.deployMonorepo({
+          const result = ctx.pipeline.startMonorepoDeploy({
             repoUrl: args.repo_url,
             clonePath: args.clone_path,
             commitSha: args.commit_sha,
             dockerfiles,
             branch: args.branch,
           });
-          return successResponse(result);
+          return successResponse({ ...result, hint: 'Use get_deploy_status to check progress.' });
         }
 
         default:

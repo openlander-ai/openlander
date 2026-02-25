@@ -31,6 +31,8 @@ export interface ProjectConfig {
   sshKeyPath?: string;
   /** Deployment trigger source */
   trigger?: 'chat' | 'webhook' | 'api';
+  /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
+  _projectId?: string;
 }
 
 /**
@@ -58,6 +60,8 @@ export interface MonorepoConfig {
   envVars?: Record<string, string>;
   visibility?: 'internal' | 'quick-share' | 'production';
   trigger?: 'chat' | 'webhook' | 'api';
+  /** @internal Pre-allocated parent ID from startMonorepoDeploy(). Do not set manually. */
+  _parentId?: string;
 }
 
 export interface MonorepoResult {
@@ -66,6 +70,18 @@ export interface MonorepoResult {
   parentName: string;
   children: DeployResult[];
   buildDurationMs: number;
+}
+
+export interface StartDeployResult {
+  projectId: string;
+  projectName: string;
+  status: 'building';
+}
+
+export interface StartMonorepoResult {
+  parentProjectId: string;
+  parentName: string;
+  status: 'building';
 }
 
 /**
@@ -91,22 +107,80 @@ export class DeployPipeline {
     private readonly jobManager?: JobManager,
   ) {}
 
-  async deploy(config: ProjectConfig): Promise<DeployResult> {
-    const startTime = Date.now();
+  /**
+   * Start a deployment in the background (non-blocking).
+   * Returns immediately with the project ID. Build runs asynchronously.
+   * Use JobManager.getStatus() or the get_deploy_status tool to check progress.
+   */
+  startDeploy(config: ProjectConfig): StartDeployResult {
     const projectName = config.name ?? extractProjectName(config.repoUrl);
     const projectId = nanoid(12);
-    const trigger = config.trigger ?? 'chat';
 
-    // Create project record in DB
+    // Create project record NOW so get_deploy_status works immediately
     this.db.createProject({
       id: projectId,
       name: projectName,
       repoUrl: config.repoUrl,
       branch: config.branch,
     });
-
     this.db.updateProject(projectId, { status: 'building' });
     this.jobManager?.trackJob(projectId, projectName);
+
+    // Fire-and-forget: run the deploy pipeline in background
+    // Pass _projectId so deploy() reuses the pre-created record instead of creating a new one
+    void this.deploy({ ...config, name: projectName, _projectId: projectId }).catch(() => {
+      // Error handling is done inside deploy()
+    });
+
+    return { projectId, projectName, status: 'building' };
+  }
+
+  /**
+   * Start a monorepo deployment in the background (non-blocking).
+   * Returns immediately with the parent project ID.
+   */
+  startMonorepoDeploy(config: MonorepoConfig): StartMonorepoResult {
+    const parentName = config.clonePath.split('/').pop() ?? extractProjectName(config.repoUrl);
+    const parentId = nanoid(12);
+
+    // Create parent record NOW for immediate status queries
+    this.db.createProject({
+      id: parentId,
+      name: parentName,
+      repoUrl: config.repoUrl,
+      branch: config.branch,
+    });
+    this.db.updateProject(parentId, { status: 'building' });
+    this.jobManager?.trackJob(parentId, parentName);
+
+    // Fire-and-forget: run the monorepo deploy in background
+    void this.deployMonorepo({ ...config, _parentId: parentId }).catch(() => {
+      // Error handling is done inside deployMonorepo()
+    });
+
+    return { parentProjectId: parentId, parentName, status: 'building' };
+  }
+
+  async deploy(config: ProjectConfig): Promise<DeployResult> {
+    const startTime = Date.now();
+    const projectName = config.name ?? extractProjectName(config.repoUrl);
+    const trigger = config.trigger ?? 'chat';
+
+    // Use pre-allocated projectId from startDeploy() if available,
+    // otherwise create a new one (synchronous callers like redeploy, CLI)
+    const projectId = config._projectId ?? nanoid(12);
+
+    if (!config._projectId) {
+      // Create project record in DB (skipped when called from startDeploy)
+      this.db.createProject({
+        id: projectId,
+        name: projectName,
+        repoUrl: config.repoUrl,
+        branch: config.branch,
+      });
+      this.db.updateProject(projectId, { status: 'building' });
+      this.jobManager?.trackJob(projectId, projectName);
+    }
 
     await eventBus.emit('deploy:start', { projectId, repoUrl: config.repoUrl });
 
@@ -269,17 +343,21 @@ export class DeployPipeline {
   async deployMonorepo(config: MonorepoConfig): Promise<MonorepoResult> {
     const startTime = Date.now();
     const parentName = config.clonePath.split('/').pop() ?? extractProjectName(config.repoUrl);
-    const parentId = nanoid(12);
     const trigger = config.trigger ?? 'chat';
 
-    this.db.createProject({
-      id: parentId,
-      name: parentName,
-      repoUrl: config.repoUrl,
-      branch: config.branch,
-    });
-    this.db.updateProject(parentId, { status: 'building' });
-    this.jobManager?.trackJob(parentId, parentName);
+    // Use pre-allocated parentId from startMonorepoDeploy() if available
+    const parentId = config._parentId ?? nanoid(12);
+
+    if (!config._parentId) {
+      this.db.createProject({
+        id: parentId,
+        name: parentName,
+        repoUrl: config.repoUrl,
+        branch: config.branch,
+      });
+      this.db.updateProject(parentId, { status: 'building' });
+      this.jobManager?.trackJob(parentId, parentName);
+    }
 
     const childResults = await Promise.all(
       config.dockerfiles.map(async (dockerfilePath): Promise<DeployResult> => {

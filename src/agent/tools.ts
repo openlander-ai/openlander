@@ -60,7 +60,7 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     {
       name: 'deploy_project',
       description:
-        'Deploy a project from a git repository URL. Clones the repo, builds a Docker image from the Dockerfile, and runs it as a container with auto-assigned port and Traefik routing. Use when user provides a repo URL or says "deploy", "launch", "set up this app". Returns { projectId, name, status, port, url }. Errors: CLONE_FAILED (bad URL or private repo without SSH key), BUILD_FAILED (Dockerfile error — suggest debug_build_error next), ALREADY_EXISTS (project name taken). Only works with repos that have a Dockerfile.',
+        'Start deploying a project from a git repository URL. Returns immediately with { projectId, projectName, status: "building" } while the build runs in the background. ALWAYS follow up with get_deploy_status to check progress and report the result to the user. Errors: CLONE_FAILED (bad URL or private repo without SSH key), BUILD_FAILED (Dockerfile error — suggest debug_build_error next), ALREADY_EXISTS (project name taken). Only works with repos that have a Dockerfile.',
       parameters: {
         repo_url: {
           type: 'string',
@@ -78,15 +78,15 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
           required: false,
         },
       },
-      execute: async (args) => {
-        const result = await ctx.pipeline.deploy({
+      execute: (args) => {
+        const result = ctx.pipeline.startDeploy({
           repoUrl: args['repo_url'] as string,
           branch: (args['branch'] as string | undefined) ?? undefined,
           name: (args['name'] as string | undefined) ?? undefined,
           sshKeyPath: ctx.config.git.sshKeyPath || undefined,
           trigger: 'chat',
         });
-        return result;
+        return Promise.resolve({ ...result, hint: 'Use get_deploy_status to check progress.' });
       },
     },
     {
@@ -579,7 +579,7 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
     {
       name: 'deploy_monorepo',
       description:
-        'Deploy a monorepo with multiple services. Use AFTER scan_dockerfiles confirms multiple Dockerfiles. Pass the clone_path and dockerfiles array from scan_dockerfiles result. Creates a parent project and builds all services in parallel, each with its own container and port. Returns { parentProjectId, parentName, children[] }. Errors: BUILD_FAILED on individual services (others continue).',
+        'Start deploying a monorepo with multiple services in the background. Use AFTER scan_dockerfiles confirms multiple Dockerfiles. Returns immediately with { parentProjectId, parentName, status: "building" } while all services build in parallel. Use get_deploy_status to check progress. Errors: BUILD_FAILED on individual services (others continue).',
       parameters: {
         repo_url: {
           type: 'string',
@@ -607,16 +607,16 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
           required: false,
         },
       },
-      execute: async (args) => {
+      execute: (args) => {
         const dockerfiles = JSON.parse(args['dockerfiles'] as string) as string[];
-        const result = await ctx.pipeline.deployMonorepo({
+        const result = ctx.pipeline.startMonorepoDeploy({
           repoUrl: args['repo_url'] as string,
           clonePath: args['clone_path'] as string,
           commitSha: args['commit_sha'] as string,
           dockerfiles,
           branch: (args['branch'] as string | undefined) ?? undefined,
         });
-        return result;
+        return Promise.resolve({ ...result, hint: 'Use get_deploy_status to check progress.' });
       },
     },
   ];

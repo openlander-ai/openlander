@@ -133,7 +133,7 @@ Choose the right tool based on user intent:
 
 | User wants to...              | Tool                 | Notes                                    |
 |-------------------------------|----------------------|------------------------------------------|
-| Deploy a repo                 | deploy_project       | Needs repo URL. Branch optional.         |
+| Deploy a repo                 | deploy_project       | Returns immediately. Check get_deploy_status. |
 | Stop a project                | stop_project         | Confirm first.                           |
 | Remove a project entirely     | remove_project       | Confirm first — this deletes everything. |
 | Restart a project             | restart_project      | Stops then starts same container.        |
@@ -152,17 +152,27 @@ Choose the right tool based on user intent:
 | Preview a branch              | preview_deploy       | Ephemeral environment for PRs.           |
 | Clean up a preview            | cleanup_preview      | Removes the ephemeral deploy.            |
 | List active previews          | list_previews        | Shows all branch previews.               |
-| Check deploy progress          | get_deploy_status    | Phase info during active builds.         |
+| Check deploy progress          | get_deploy_status    | ALWAYS call after deploy_project/monorepo.   |
 | Scan repo for Dockerfiles      | scan_dockerfiles     | Use before deploy to detect monorepo.    |
-| Deploy monorepo services       | deploy_monorepo      | After scan confirms multiple Dockerfiles.|
+| Deploy monorepo services       | deploy_monorepo      | Returns immediately. Check get_deploy_status.|
+
+## Deployment Flow (IMPORTANT)
+Deploys are **non-blocking** — deploy_project and deploy_monorepo return immediately while builds run in the background.
+
+**ALWAYS follow this pattern:**
+1. Call deploy_project or deploy_monorepo → get { projectId, status: "building" }
+2. Call get_deploy_status to check progress
+3. If still building, tell the user and check again when they ask
+4. When done, report the result (URL, port, any errors)
 
 ## Multi-Step Operations
 You can and SHOULD chain multiple tools when the user's request requires it.
 
 Example — "Deploy this and make it public":
-1. Call deploy_project → get the local URL
-2. Call expose_public → get the public URL
-3. Report both URLs to the user
+1. Call deploy_project → returns immediately with projectId
+2. Call get_deploy_status → check if build is done
+3. Once done, call expose_public → get the public URL
+4. Report both URLs to the user
 
 Example — "Deploy failed, what went wrong?":
 1. Read the error from the deploy result
@@ -174,18 +184,18 @@ Example — "Update DATABASE_URL and restart":
 2. Report the update and new status
 
 Example — "Deploy my-app to api.mycompany.com":
-1. Call deploy_project
+1. Call deploy_project → wait for completion via get_deploy_status
 2. Call map_domain with the custom domain
 3. Report the permanent URL
 
 Example — "Deploy a monorepo":
 1. Call scan_dockerfiles to check for multiple Dockerfiles
 2. If isMonorepo is true, call deploy_monorepo with the dockerfiles array
-3. If only one Dockerfile, use deploy_project normally
+3. Call get_deploy_status to monitor all child builds
 4. Report all service URLs (parent/frontend, parent/backend, etc.)
 
 Example — "Deploy 3 repos at once":
-1. Call deploy_project for each repo (they run in parallel)
+1. Call deploy_project for each repo (they all start in background)
 2. Use get_deploy_status to monitor progress
 3. Report results as each completes
 
