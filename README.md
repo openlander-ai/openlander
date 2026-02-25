@@ -146,14 +146,14 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 ## Roadmap
 
-| Version  | Focus                    | Status  | Highlights                                                         |
-| -------- | ------------------------ | ------- | ------------------------------------------------------------------ |
-| **v0.1** | Repo → URL (MVP)         | Done    | Git clone → Docker → Traefik → URL. TUI chat. REST API.            |
-| **v0.2** | Daily Operations         | Done    | Auto-redeploy, monitoring, production domains, Ollama              |
-| **v0.3** | Coding Agent Integration | Done    | MCP server (23 tools), rollback, blue-green, DB provisioning       |
-| **v0.4** | Multi-Channel + Advanced | Done    | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy |
-| v0.5     | Full Self-Hosting        | Next    | Fine-tuned model (openlander-agent-8b), zero API cost              |
-| v0.6     | TUI Polish               | Planned | OpenCode-inspired UI/UX, rich agent interaction display            |
+| Version  | Focus                    | Status | Highlights                                                         |
+| -------- | ------------------------ | ------ | ------------------------------------------------------------------ |
+| **v0.1** | Repo → URL (MVP)         | Done   | Git clone → Docker → Traefik → URL. TUI chat. REST API.            |
+| **v0.2** | Daily Operations         | Done   | Auto-redeploy, monitoring, production domains, Ollama              |
+| **v0.3** | Coding Agent Integration | Done   | MCP server (23 tools), rollback, blue-green, DB provisioning       |
+| **v0.4** | Multi-Channel + Advanced | Done   | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy |
+| v0.5     | Full Self-Hosting        | TBD    | Fine-tuned model (openlander-agent-8b), zero API cost              |
+| v0.6     | TUI Polish               | TBD    | OpenCode-inspired UI/UX, rich agent interaction display            |
 
 ## Requirements
 
