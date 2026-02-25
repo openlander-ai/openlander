@@ -12,7 +12,7 @@ program
   .action(async (options: { port: string; host: string }) => {
     const port = parseInt(options.port, 10);
 
-    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim('v0.4.0\n'));
+    console.log(pc.bold(pc.cyan('\n  🛬 OpenLander')), pc.dim('v0.4.0'));
 
     // ── Step 1: Ensure Docker is ready ───────────────────────────
     const { ensureDocker } = await import('./onboard.js');
@@ -37,41 +37,23 @@ program
 
     // ── Step 3: Traefik (auto-start, non-blocking) ───────────────
     const traefikOk = await ctx.traefik.isRunning();
-    if (traefikOk) {
-      console.log(pc.green('  ✓ Traefik running'));
-    } else {
+    if (!traefikOk) {
       try {
         await ctx.traefik.start();
         console.log(pc.green('  ✓ Traefik started'));
       } catch {
-        console.log(pc.yellow('  ⚠ Traefik could not start — set it up from the web UI'));
+        console.log(pc.yellow('  ⚠ Traefik could not start'));
       }
     }
 
-    // ── Step 4: LLM status ───────────────────────────────────────
-    if (ctx.agent) {
-      console.log(pc.green(`  ✓ LLM: ${config.llm.provider} (${config.llm.model})`));
-    } else {
-      console.log(pc.yellow('  ⚠ No LLM configured — set it up from the web UI'));
-    }
-
-    // ── Step 5: Start server ─────────────────────────────────────
+    // ── Step 4: Start headless API server ─────────────────────────
     const { createServer } = await import('../web/server.js');
     createServer({ port, host: options.host }, ctx);
+    console.log(pc.dim(`  API server on port ${String(port)}`));
 
-    console.log(
-      pc.green(`\n  ✓ Server running at ${pc.bold(`http://${options.host}:${String(port)}`)}`),
-    );
-    console.log(pc.dim(`  API: http://localhost:${String(port)}/api`));
-    console.log(pc.dim(`  Health: http://localhost:${String(port)}/health`));
-
-    if (!ctx.agent) {
-      console.log(
-        pc.cyan(`\n  → Open ${pc.bold(`http://localhost:${String(port)}`)} to finish setup\n`),
-      );
-    } else {
-      console.log();
-    }
+    // ── Step 5: Launch Terminal UI ───────────────────────────────
+    const { startTUI } = await import('../tui/index.js');
+    startTUI(ctx);
 
     // Graceful shutdown
     const { shutdownAppContext } = await import('../app.js');
