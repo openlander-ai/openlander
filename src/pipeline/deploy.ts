@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import type { Docker } from './docker.js';
@@ -11,6 +11,7 @@ import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { DockerfileNotFoundError } from '../errors.js';
 import { ensureDockerfile } from './dockerfile-gen.js';
+import type { JobManager } from './job-manager.js';
 
 /**
  * Project configuration for a deployment.
@@ -48,6 +49,25 @@ export interface DeployResult {
   error?: string;
 }
 
+export interface MonorepoConfig {
+  repoUrl: string;
+  branch?: string;
+  clonePath: string;
+  commitSha: string;
+  dockerfiles: string[];
+  envVars?: Record<string, string>;
+  visibility?: 'internal' | 'quick-share' | 'production';
+  trigger?: 'chat' | 'webhook' | 'api';
+}
+
+export interface MonorepoResult {
+  success: boolean;
+  parentProjectId: string;
+  parentName: string;
+  children: DeployResult[];
+  buildDurationMs: number;
+}
+
 /**
  * Deterministic deployment pipeline.
  *
@@ -68,6 +88,7 @@ export class DeployPipeline {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
+    private readonly jobManager?: JobManager,
   ) {}
 
   async deploy(config: ProjectConfig): Promise<DeployResult> {
@@ -85,6 +106,7 @@ export class DeployPipeline {
     });
 
     this.db.updateProject(projectId, { status: 'building' });
+    this.jobManager?.trackJob(projectId, projectName);
 
     await eventBus.emit('deploy:start', { projectId, repoUrl: config.repoUrl });
 
@@ -92,6 +114,7 @@ export class DeployPipeline {
 
     try {
       // Step 1: git clone
+      this.jobManager?.updatePhase(projectId, 'cloning');
       const cloneResult = await cloneRepo({
         repoUrl: config.repoUrl,
         branch: config.branch,
@@ -122,6 +145,7 @@ export class DeployPipeline {
       // Step 3: docker build
       const imageTag = `openlander/${projectName}:latest`;
       const buildStart = Date.now();
+      this.jobManager?.updatePhase(projectId, 'building');
       await this.docker.buildImage(cloneResult.path, imageTag);
       const buildDuration = Date.now() - buildStart;
 
@@ -138,6 +162,7 @@ export class DeployPipeline {
       const envVars = { ...config.envVars, ...this.db.getEnvVars(projectId) };
       const traefikLabels = buildTraefikLabels(projectName, port);
 
+      this.jobManager?.updatePhase(projectId, 'starting');
       const containerId = await this.docker.runContainer({
         imageTag,
         name: `ol-${projectName}`,
@@ -197,6 +222,7 @@ export class DeployPipeline {
         totalDurationMs: totalDuration,
       });
 
+      this.jobManager?.updatePhase(projectId, 'done');
       return {
         success: true,
         projectId,
@@ -211,6 +237,7 @@ export class DeployPipeline {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       const failStep = this.detectFailStep(buildLog);
+      this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
 
       this.db.updateProject(projectId, { status: 'error' });
 
@@ -237,6 +264,127 @@ export class DeployPipeline {
         buildDurationMs: Date.now() - startTime,
       };
     }
+  }
+
+  async deployMonorepo(config: MonorepoConfig): Promise<MonorepoResult> {
+    const startTime = Date.now();
+    const parentName = config.clonePath.split('/').pop() ?? extractProjectName(config.repoUrl);
+    const parentId = nanoid(12);
+    const trigger = config.trigger ?? 'chat';
+
+    this.db.createProject({
+      id: parentId,
+      name: parentName,
+      repoUrl: config.repoUrl,
+      branch: config.branch,
+    });
+    this.db.updateProject(parentId, { status: 'building' });
+    this.jobManager?.trackJob(parentId, parentName);
+
+    const childResults = await Promise.all(
+      config.dockerfiles.map(async (dockerfilePath): Promise<DeployResult> => {
+        const serviceName = deriveServiceName(dockerfilePath);
+        const childName = `${parentName}/${serviceName}`;
+        const childId = nanoid(12);
+        const imageTag = `openlander/${childName.replace('/', '-')}:latest`;
+
+        this.db.createProject({
+          id: childId,
+          name: childName,
+          repoUrl: config.repoUrl,
+          branch: config.branch,
+          parentProjectId: parentId,
+          dockerfilePath,
+        });
+        this.db.updateProject(childId, { status: 'building' });
+        this.jobManager?.trackJob(childId, childName);
+
+        try {
+          this.jobManager?.updatePhase(childId, 'building');
+          const contextPath = join(config.clonePath, dirname(dockerfilePath));
+          await this.docker.buildImage(contextPath, imageTag);
+
+          this.jobManager?.updatePhase(childId, 'starting');
+          const port = allocatePort(this.db);
+          const envVars = { ...config.envVars, ...this.db.getEnvVars(childId) };
+          const traefikLabels = buildTraefikLabels(childName.replace('/', '-'), port);
+
+          const containerId = await this.docker.runContainer({
+            imageTag,
+            name: `ol-${childName.replace('/', '-')}`,
+            port,
+            envVars,
+            traefikLabels,
+          });
+
+          const internalUrl = `http://${childName.replace('/', '-')}.localhost`;
+
+          this.db.updateProject(childId, {
+            status: 'running',
+            assignedPort: port,
+            containerId,
+            imageTag,
+            visibility: config.visibility ?? 'internal',
+          });
+
+          this.db.createDeployLog({
+            id: nanoid(12),
+            projectId: childId,
+            status: 'success',
+            trigger,
+            commitSha: config.commitSha,
+            buildLog: `[monorepo] ${dockerfilePath} → ${imageTag}\n`,
+            durationMs: Date.now() - startTime,
+          });
+
+          this.jobManager?.updatePhase(childId, 'done');
+
+          return {
+            success: true,
+            projectId: childId,
+            projectName: childName,
+            containerId,
+            url: internalUrl,
+            port,
+            commitSha: config.commitSha,
+            buildDurationMs: Date.now() - startTime,
+          };
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          this.db.updateProject(childId, { status: 'error' });
+          this.jobManager?.updatePhase(childId, 'failed', errorMsg);
+
+          this.db.createDeployLog({
+            id: nanoid(12),
+            projectId: childId,
+            status: 'failed',
+            trigger,
+            buildLog: `[monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`,
+            durationMs: Date.now() - startTime,
+          });
+
+          return {
+            success: false,
+            projectId: childId,
+            projectName: childName,
+            error: errorMsg,
+            buildDurationMs: Date.now() - startTime,
+          };
+        }
+      }),
+    );
+
+    const allSuccess = childResults.every((r) => r.success);
+    this.db.updateProject(parentId, { status: allSuccess ? 'running' : 'error' });
+    this.jobManager?.updatePhase(parentId, allSuccess ? 'done' : 'failed');
+
+    return {
+      success: allSuccess,
+      parentProjectId: parentId,
+      parentName,
+      children: childResults,
+      buildDurationMs: Date.now() - startTime,
+    };
   }
 
   /** Redeploy an existing project (pull latest, rebuild, swap containers). */
@@ -380,20 +528,29 @@ export class DeployPipeline {
 
   /** Stop a project's container. */
   async stop(projectId: string): Promise<void> {
+    const children = this.db.getChildProjects(projectId);
+    if (children.length > 0) {
+      await Promise.all(children.map((c) => this.stop(c.id)));
+      this.db.updateProject(projectId, { status: 'stopped' });
+      return;
+    }
+
     const project = this.db.getProject(projectId);
     if (!project?.container_id) return;
 
     await this.docker.stopContainer(project.container_id);
     this.db.updateProject(projectId, { status: 'stopped' });
-
-    // Stop tunnel if exists
     this.closeTunnel(projectId);
-
     await eventBus.emit('container:stop', { projectId, containerId: project.container_id });
   }
 
   /** Remove a project entirely. */
   async remove(projectId: string): Promise<void> {
+    const children = this.db.getChildProjects(projectId);
+    if (children.length > 0) {
+      await Promise.all(children.map((c) => this.remove(c.id)));
+    }
+
     const project = this.db.getProject(projectId);
     if (!project) return;
 
@@ -407,11 +564,7 @@ export class DeployPipeline {
 
     this.closeTunnel(projectId);
     this.db.deleteProject(projectId);
-
-    await eventBus.emit('container:remove', {
-      projectId,
-      containerId: project.container_id ?? '',
-    });
+    await eventBus.emit('container:remove', { projectId, containerId: project.container_id ?? '' });
   }
 
   /** Create a TryCloudflare tunnel for a project. */
@@ -472,4 +625,10 @@ function extractProjectName(repoUrl: string): string {
 
   const parts = cleaned.split('/');
   return parts[parts.length - 1] ?? 'project';
+}
+
+function deriveServiceName(dockerfilePath: string): string {
+  const dir = dirname(dockerfilePath);
+  if (dir === '.' || dir === '') return 'main';
+  return dir.split('/')[0] ?? 'service';
 }

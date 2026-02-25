@@ -349,32 +349,24 @@ export class Agent {
   private async executeTools(
     toolCalls: NonNullable<LLMResponse['toolCalls']>,
   ): Promise<ToolResult[]> {
-    const results: ToolResult[] = [];
-
-    for (const call of toolCalls) {
-      const tool = this.tools.find((t) => t.name === call.name);
-      if (!tool) {
-        results.push({
-          toolName: call.name,
-          success: false,
-          error: `Unknown tool: ${call.name}`,
-        });
-        continue;
-      }
-
-      try {
-        const result = await tool.execute(call.arguments);
-        results.push({ toolName: call.name, success: true, result });
-      } catch (error) {
-        results.push({
-          toolName: call.name,
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    return results;
+    return Promise.all(
+      toolCalls.map(async (call): Promise<ToolResult> => {
+        const tool = this.tools.find((t) => t.name === call.name);
+        if (!tool) {
+          return { toolName: call.name, success: false, error: `Unknown tool: ${call.name}` };
+        }
+        try {
+          const result = await tool.execute(call.arguments);
+          return { toolName: call.name, success: true, result };
+        } catch (error) {
+          return {
+            toolName: call.name,
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }),
+    );
   }
 }
 

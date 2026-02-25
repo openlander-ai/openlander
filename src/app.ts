@@ -13,6 +13,7 @@ import { DatabaseProvisioner } from './pipeline/db-provision.js';
 import { BuildDebugger } from './agent/debugger.js';
 import { ChannelManager } from './channels/base.js';
 import { PreviewDeployer } from './pipeline/preview.js';
+import { JobManager } from './pipeline/job-manager.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import { buildContextSnapshot } from './agent/prompts.js';
@@ -42,13 +43,15 @@ export interface AppContext {
   // v0.4 modules
   channelManager: ChannelManager;
   previewDeployer: PreviewDeployer;
+  jobManager: JobManager;
 }
 
 /** Create the application context from config. */
 export function createAppContext(config: OpenLanderConfig, dbPath: string): AppContext {
   const db = new Database(dbPath);
   const docker = new Docker(config.docker.socketPath);
-  const pipeline = new DeployPipeline(docker, db);
+  const jobManager = new JobManager();
+  const pipeline = new DeployPipeline(docker, db, jobManager);
   const traefik = new TraefikManager(docker);
   const env = new EnvManager(db);
 
@@ -106,13 +109,13 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
   // v0.4: Channel manager
   const channelManager = new ChannelManager(
-    { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger } as AppContext,
+    { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger, jobManager } as AppContext,
   );
 
   // v0.4: Preview deployer
   const previewDeployer = new PreviewDeployer(docker, db);
 
-  const ctx: AppContext = { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger, channelManager, previewDeployer };
+  const ctx: AppContext = { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger, channelManager, previewDeployer, jobManager };
 
   // Re-assign the channelManager's context reference (it was created with partial context)
   // ChannelManager already holds the reference, no update needed
