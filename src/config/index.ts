@@ -37,6 +37,8 @@ export interface OpenLanderConfig {
   /** v0.4: Channel/bot settings */
   channels: ChannelConfig;
 
+  /** v0.5: Git hosting providers (GitHub, GitLab, etc.) */
+  gitProviders: GitProvidersConfig;
   /** v0.5: Local model settings */
   localModel: LocalModelConfig;
 }
@@ -111,6 +113,22 @@ export interface LocalModelConfig {
   modelName: string;
 }
 
+export interface GitProviderEntry {
+  /** Personal Access Token or API token */
+  token: string;
+  /** Cached username (set after token validation) */
+  username: string;
+  /** Base API URL (for self-hosted instances) */
+  baseUrl?: string;
+}
+
+export interface GitProvidersConfig {
+  github: GitProviderEntry;
+  // gitlab: GitProviderEntry;  // future
+  // bitbucket: GitProviderEntry;  // future
+  // gitea: GitProviderEntry;  // future
+}
+
 // --- Defaults ---
 
 const DEFAULT_CONFIG: OpenLanderConfig = {
@@ -154,6 +172,9 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
     slack: { enabled: false, token: '', signingSecret: '' },
     discord: { enabled: false, token: '', applicationId: '', publicKey: '' },
     telegram: { enabled: false, token: '', webhookSecret: '' },
+  },
+  gitProviders: {
+    github: { token: '', username: '' },
   },
   localModel: {
     preferLocal: false,
