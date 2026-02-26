@@ -73,7 +73,7 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
                     <box flexDirection="row">
                       <text fg={theme.textDim}>Chat</text>
                       <text fg={theme.textDim}> │ </text>
-                      <text backgroundColor={theme.secondary} fg={theme.background} bold={true}>
+                      <text backgroundColor={theme.secondary} fg={theme.text} bold={true}>
                         {' '}
                         Status{' '}
                       </text>
@@ -81,7 +81,7 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
                   }
                 >
                   <box flexDirection="row">
-                    <text backgroundColor={theme.secondary} fg={theme.background} bold={true}>
+                    <text backgroundColor={theme.secondary} fg={theme.text} bold={true}>
                       {' '}
                       Chat{' '}
                     </text>

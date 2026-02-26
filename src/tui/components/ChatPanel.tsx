@@ -722,7 +722,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           {/* New messages indicator */}
           <Show when={hasNewMessages()}>
             <box justifyContent="center" flexShrink={0}>
-              <text backgroundColor={theme.primary} fg={theme.background} bold={true}>
+              <text backgroundColor={theme.primary} fg={theme.text} bold={true}>
                 {' '}
                 ↓ New messages — press Enter or Ctrl+J to scroll down{' '}
               </text>
