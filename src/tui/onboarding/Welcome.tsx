@@ -15,11 +15,12 @@ export interface WelcomeProps {
 export function Welcome({ onNext }: WelcomeProps): JSX.Element {
   const { exit } = useExit();
 
-  useKeyboard((evt) => {
-    if (evt.key === 'return') {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
+    if (evt.name === 'return') {
       onNext();
     }
-    if (evt.char && evt.char.toLowerCase() === 'q') {
+    if (evt.name === 'q') {
       exit();
     }
   });

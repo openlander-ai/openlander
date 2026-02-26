@@ -45,22 +45,23 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
 
   createEffect(() => {
     // Track retryCount to re-trigger
-    const _count = retryCount();
+    void retryCount();
     void checkDocker();
   });
 
-  useKeyboard((evt) => {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
     if (state() === 'success') {
-      if (evt.key === 'return') {
+      if (evt.name === 'return') {
         onNext();
       }
       return;
     }
 
-    if (evt.key === 'return') {
+    if (evt.name === 'return') {
       setRetryCount((c) => c + 1);
     }
-    if (evt.char && evt.char.toLowerCase() === 'q') {
+    if (evt.name === 'q') {
       exit();
     }
   });

@@ -85,23 +85,24 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
     }
   });
 
-  useKeyboard((evt) => {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
     const s = step();
 
     // Provider selection navigation
     if (s === 'provider') {
-      if (evt.key === 'up') {
+      if (evt.name === 'up') {
         setProviderIndex((i) => Math.max(0, i - 1));
-      } else if (evt.key === 'down') {
+      } else if (evt.name === 'down') {
         setProviderIndex((i) => Math.min(LLM_PROVIDERS.length - 1, i + 1));
-      } else if (evt.key === 'return') {
+      } else if (evt.name === 'return') {
         const item = LLM_PROVIDERS[providerIndex()];
         if (item) handleProviderSelect(item.value);
       }
       return;
     }
 
-    if (evt.key === 'return') {
+    if (evt.name === 'return') {
       if (s === 'api_key') {
         handleApiKeySubmit();
       } else if (s === 'model') {

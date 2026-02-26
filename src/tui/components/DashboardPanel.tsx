@@ -347,12 +347,13 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
     });
   });
 
-  useKeyboard((evt) => {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
     if (!focus()) return;
-    if (evt.key === 'up') {
+    if (evt.name === 'up') {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : projects().length - 1));
     }
-    if (evt.key === 'down') {
+    if (evt.name === 'down') {
       setSelectedIndex((prev) => (prev < projects().length - 1 ? prev + 1 : 0));
     }
   });

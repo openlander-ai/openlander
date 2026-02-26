@@ -96,14 +96,15 @@ export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
     setSelectedIndex(idx);
   });
 
-  useKeyboard((evt) => {
-    if (evt.key === 'escape') {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
+    if (evt.name === 'escape') {
       props.onClose();
-    } else if (evt.key === 'up') {
+    } else if (evt.name === 'up') {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
-    } else if (evt.key === 'down') {
+    } else if (evt.name === 'down') {
       setSelectedIndex((prev) => Math.min(MODELS.length - 1, prev + 1));
-    } else if (evt.key === 'enter') {
+    } else if (evt.name === 'enter') {
       const entry = MODELS[selectedIndex()];
       if (entry) {
         props.onSelect(entry.provider, entry.model);

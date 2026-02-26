@@ -190,16 +190,17 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
     }
   });
 
-  useKeyboard((evt) => {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
     const s = state();
 
     // Menu navigation
     if (s === 'menu') {
-      if (evt.key === 'up') {
+      if (evt.name === 'up') {
         setMenuIndex((i) => Math.max(0, i - 1));
-      } else if (evt.key === 'down') {
+      } else if (evt.name === 'down') {
         setMenuIndex((i) => Math.min(menuItems.length - 1, i + 1));
-      } else if (evt.key === 'return') {
+      } else if (evt.name === 'return') {
         const item = menuItems[menuIndex()];
         if (item) handleMenuSelect(item.value);
       }
@@ -209,11 +210,11 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
     // Key selection navigation
     if (s === 'select_key') {
       const keys = existingKeys();
-      if (evt.key === 'up') {
+      if (evt.name === 'up') {
         setKeyIndex((i) => Math.max(0, i - 1));
-      } else if (evt.key === 'down') {
+      } else if (evt.name === 'down') {
         setKeyIndex((i) => Math.min(keys.length - 1, i + 1));
-      } else if (evt.key === 'return') {
+      } else if (evt.name === 'return') {
         const key = keys[keyIndex()];
         if (key) {
           handleKeySelect(key.path);
@@ -222,7 +223,7 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
       return;
     }
 
-    if (evt.key === 'return' && (s === 'success' || s === 'error')) {
+    if (evt.name === 'return' && (s === 'success' || s === 'error')) {
       if (s === 'success') {
         onNext();
       } else {

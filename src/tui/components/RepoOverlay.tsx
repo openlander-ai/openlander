@@ -52,15 +52,16 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
     return props.repos.slice(start, end);
   });
 
-  useKeyboard((evt) => {
-    if (evt.key === 'escape') {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
+    if (evt.name === 'escape') {
       props.onClose();
     } else if (!props.loading && !props.error && props.repos.length > 0) {
-      if (evt.key === 'up') {
+      if (evt.name === 'up') {
         selectedIndex = Math.max(0, selectedIndex - 1);
-      } else if (evt.key === 'down') {
+      } else if (evt.name === 'down') {
         selectedIndex = Math.min(props.repos.length - 1, selectedIndex + 1);
-      } else if (evt.key === 'enter') {
+      } else if (evt.name === 'enter') {
         const repo = props.repos[selectedIndex];
         if (repo) {
           props.onSelect(repo.fullName);
@@ -124,7 +125,7 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
                 const { start } = visibleRange();
                 const actualIndex = start + index();
                 const isSelected = () => selectedIndex === actualIndex;
-                const icon = repo.isPrivate ? '🔒' : '📂';
+                const icon = repo.isPrivate ? '◆' : '○';
                 const descWidth = contentWidth - repo.fullName.length - 8;
                 const desc = truncateDesc(repo.description, descWidth);
 

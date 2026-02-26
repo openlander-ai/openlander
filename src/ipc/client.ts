@@ -76,6 +76,19 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+export interface DeployResponse {
+  success: boolean;
+  projectId: string;
+  projectName: string;
+  containerId?: string;
+  url?: string;
+  publicUrl?: string;
+  port?: number;
+  commitSha?: string;
+  buildDurationMs?: number;
+  error?: string;
+}
+
 export type { SystemStats } from '../monitor/stats.js';
 
 export interface HealthResponse {
@@ -208,7 +221,7 @@ export class OpenLanderClient {
   async deploy(
     repoUrl: string,
     options?: { branch?: string; name?: string; envVars?: Record<string, string> },
-  ): Promise<{ success: boolean; message?: string }> {
+  ): Promise<DeployResponse> {
     return this.post('/api/projects/deploy', {
       repo_url: repoUrl,
       branch: options?.branch,

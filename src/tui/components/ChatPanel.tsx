@@ -81,6 +81,8 @@ export interface ChatPanelProps {
   onClear?: () => void;
   onExit?: () => void;
   onCommandResult?: (result: SlashCommandResult) => void;
+  /** External system messages injected from outside (e.g. deploy progress). */
+  externalMessages?: DisplayMessage[];
 }
 
 interface ChatHistoryEntry {
@@ -130,6 +132,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [isStreaming, setIsStreaming] = createSignal(false);
   const [inputValue, setInputValue] = createSignal('');
   let sessionIdRef = `tui-${Date.now().toString(36)}`;
+
+  // --- External message injection (deploy progress, etc.) ---
+  let lastExternalCount = 0;
+  createEffect(() => {
+    const ext = props.externalMessages;
+    if (!ext || ext.length <= lastExternalCount) return;
+    const newMsgs = ext.slice(lastExternalCount);
+    lastExternalCount = ext.length;
+    setMessages((prev) => [...prev, ...newMsgs]);
+  });
 
   // --- Chat history for up/down navigation ---
   const [chatHistory, setChatHistory] = createSignal<ChatHistoryEntry[]>([]);
@@ -498,13 +510,11 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   // --- Textarea key down (history, tab complete, picker interaction) ---
   const handlePromptKeyDown = (event: unknown) => {
     const evt = event as {
-      key?: string;
       name?: string;
       ctrl?: boolean;
-      char?: string;
       preventDefault?: () => void;
     };
-    const key = evt.key ?? evt.name ?? '';
+    const key = evt.name ?? '';
 
     // ── When command picker is visible, intercept navigation keys ──
     if (showCommandPicker()) {
@@ -582,25 +592,26 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   };
 
   // --- Global keyboard shortcuts (non-input-specific) ---
-  useKeyboard((evt) => {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
     if (!focus()) return;
-    if (evt.ctrl && evt.char === 'l') {
+    if (evt.ctrl && evt.name === 'l') {
       setMessages([]);
       props.onClear?.();
       return;
     }
     // Ctrl+J: jump to bottom (dismiss new messages indicator)
-    if (evt.ctrl && evt.char === 'j') {
+    if (evt.ctrl && evt.name === 'j') {
       scrollToBottom();
       return;
     }
     // Page Up / Page Down for manual scrolling
-    if (evt.key === 'pageup') {
+    if (evt.name === 'pageup') {
       setScrollOffset((prev) => Math.max(0, prev - messageAreaHeight()));
       setIsAtBottom(false);
       return;
     }
-    if (evt.key === 'pagedown') {
+    if (evt.name === 'pagedown') {
       const totalLines = calculateMessageLines(messages());
       const maxOffset = Math.max(0, totalLines - messageAreaHeight());
       const newOffset = Math.min(maxOffset, scrollOffset() + messageAreaHeight());

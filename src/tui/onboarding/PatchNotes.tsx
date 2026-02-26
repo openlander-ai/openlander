@@ -12,8 +12,9 @@ export interface PatchNotesProps {
  * Used in Ready.tsx and for version-update splash screens.
  */
 export function PatchNotes({ version, onDismiss }: PatchNotesProps): JSX.Element {
-  useKeyboard((evt) => {
-    if (evt.key === 'return' && onDismiss) {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
+    if (evt.name === 'return' && onDismiss) {
       onDismiss();
     }
   });

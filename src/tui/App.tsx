@@ -16,10 +16,27 @@ import { ConnectOverlay } from './components/ConnectOverlay.js';
 import { RepoOverlay } from './components/RepoOverlay.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { DashboardPanel } from './components/DashboardPanel.js';
+import type { DisplayMessage } from './components/ChatMessage.js';
+import type { DeployResponse, BuildProgressEvent } from '../ipc/client.js';
 
 // Socket path for daemon connection
 const SOCKET_PATH = join(getDataDir(), 'openlander.sock');
 
+/** Map build progress event type to terminal-native symbol. */
+function getBuildEventSymbol(event: BuildProgressEvent): string {
+  switch (event.type) {
+    case 'status':
+      return '▸';
+    case 'log':
+      return '▸';
+    case 'error':
+      return '✗';
+    case 'complete':
+      return '✓';
+    default:
+      return '▸';
+  }
+}
 interface AppProps {
   ctx: AppContext;
 }
@@ -51,6 +68,15 @@ export function App(props: AppProps): JSX.Element {
   >([]);
   const [reposLoading, setReposLoading] = createSignal(false);
   const [reposError, setReposError] = createSignal<string | null>(null);
+
+  // Deploy progress messages injected into ChatPanel
+  const [deployMessages, setDeployMessages] = createSignal<DisplayMessage[]>([]);
+  let deployAbortController: AbortController | null = null;
+
+  // Abort deploy stream on unmount
+  onCleanup(() => {
+    deployAbortController?.abort();
+  });
   // Handle model selection
   const handleModelSelect = (provider: string, model: string) => {
     // Update config
@@ -172,10 +198,112 @@ export function App(props: AppProps): JSX.Element {
     setReposLoading(false);
   };
 
-  // Handle repo selection
-  const handleRepoSelect = (_repoFullName: string) => {
+  // Handle repo selection — trigger deployment directly (no LLM)
+  const handleRepoSelect = (repoFullName: string) => {
     setShowRepo(false);
-    // TODO: Insert deploy command into chat or trigger deployment
+    const c = status() === 'connected' ? client : null;
+    if (!c) {
+      setDeployMessages((prev) => [
+        ...prev,
+        {
+          id: `deploy-err-${String(Date.now())}`,
+          role: 'system' as const,
+          content: '✗ Cannot deploy — daemon not connected.',
+          type: 'error' as const,
+          timestamp: Date.now(),
+        },
+      ]);
+      return;
+    }
+
+    // Construct repo URL from fullName (e.g. "user/repo" → "https://github.com/user/repo")
+    const repoUrl = `https://github.com/${repoFullName}`;
+
+    // Add initial deploy message
+    setDeployMessages((prev) => [
+      ...prev,
+      {
+        id: `deploy-start-${String(Date.now())}`,
+        role: 'system' as const,
+        content: `⟳ Deploying ${repoFullName}...`,
+        type: 'text' as const,
+        timestamp: Date.now(),
+      },
+    ]);
+
+    // Fire deploy and stream progress
+    void (async () => {
+      let deployResult: DeployResponse | null = null;
+      try {
+        deployResult = await c.deploy(repoUrl);
+      } catch (err) {
+        setDeployMessages((prev) => [
+          ...prev,
+          {
+            id: `deploy-err-${String(Date.now())}`,
+            role: 'system' as const,
+            content: `✗ Deploy failed: ${err instanceof Error ? err.message : String(err)}`,
+            type: 'error' as const,
+            timestamp: Date.now(),
+          },
+        ]);
+        return;
+      }
+
+      if (!deployResult.success) {
+        setDeployMessages((prev) => [
+          ...prev,
+          {
+            id: `deploy-fail-${String(Date.now())}`,
+            role: 'system' as const,
+            content: `✗ Deploy failed: ${deployResult.error ?? 'Unknown error'}`,
+            type: 'error' as const,
+            timestamp: Date.now(),
+          },
+        ]);
+        return;
+      }
+
+      // Stream build progress
+      deployAbortController = new AbortController();
+      try {
+        for await (const event of c.streamBuildProgress(
+          deployResult.projectId,
+          deployAbortController.signal,
+        )) {
+          const symbol = getBuildEventSymbol(event);
+          setDeployMessages((prev) => [
+            ...prev,
+            {
+              id: `deploy-progress-${String(Date.now())}-${String(Math.random())}`,
+              role: 'system' as const,
+              content: `${symbol} ${event.message}`,
+              type: event.type === 'error' ? ('error' as const) : ('text' as const),
+              timestamp: Date.now(),
+            },
+          ]);
+
+          if (event.type === 'complete') {
+            const url = deployResult.url ?? `http://${deployResult.projectName}.localhost`;
+            const port = deployResult.port ? `:${String(deployResult.port)}` : '';
+            setDeployMessages((prev) => [
+              ...prev,
+              {
+                id: `deploy-done-${String(Date.now())}`,
+                role: 'system' as const,
+                content: `✓ Deployed — ${url}${port}`,
+                type: 'text' as const,
+                timestamp: Date.now(),
+              },
+            ]);
+          }
+        }
+      } catch {
+        // Stream ended or aborted — normal when deploy completes quickly
+      } finally {
+        deployAbortController = null;
+      }
+    })();
   };
 
   // Reset Ctrl+C count after 2 seconds
@@ -196,13 +324,14 @@ export function App(props: AppProps): JSX.Element {
 
   // Global keyboard shortcuts (safe — no-op if renderer not ready)
   try {
-    useKeyboard((evt) => {
+    useKeyboard((event) => {
+      const evt = event as { name?: string; ctrl?: boolean };
       // Don't handle shortcuts during setup
       if (mode() === 'setup') return;
 
       // Help/Model/Connect/Repo overlay shortcuts
       if (showHelp() || showModelSelector() || showConnect() || showRepo()) {
-        if (evt.key === 'escape') {
+        if (evt.name === 'escape') {
           setShowHelp(false);
           setShowModelSelector(false);
           setShowConnect(false);
@@ -212,7 +341,7 @@ export function App(props: AppProps): JSX.Element {
       }
 
       // Ctrl+C: first press shows warning, second press quits
-      if (evt.ctrl && evt.char === 'c') {
+      if (evt.ctrl && evt.name === 'c') {
         if (ctrlCCount() >= 1) {
           exit();
         } else {
@@ -222,19 +351,19 @@ export function App(props: AppProps): JSX.Element {
       }
 
       // Tab: panel switch
-      if (evt.key === 'tab') {
+      if (evt.name === 'tab') {
         setActivePanel((prev) => (prev === 'left' ? 'right' : 'left'));
         return;
       }
 
       // ? for help
-      if (evt.char === '?') {
+      if (evt.name === '?') {
         setShowHelp(true);
         return;
       }
 
       // q to quit (only when dashboard panel is focused, not during chat input)
-      if (evt.char === 'q' && activePanel() === 'right') {
+      if (evt.name === 'q' && activePanel() === 'right') {
         exit();
         return;
       }
@@ -263,6 +392,7 @@ export function App(props: AppProps): JSX.Element {
               client={connectedClient}
               height={contentHeight}
               focus={activePanel() === 'left'}
+              externalMessages={deployMessages()}
               onModal={(modal: string) => {
                 if (modal === 'help') setShowHelp(true);
                 if (modal === 'model') setShowModelSelector(true);

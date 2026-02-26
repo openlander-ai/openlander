@@ -29,8 +29,9 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
   const columns = () => dims().width;
   const rows = () => dims().height;
 
-  useKeyboard((evt) => {
-    if (evt.key === 'escape') {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
+    if (evt.name === 'escape') {
       props.onClose();
     }
   });

@@ -45,25 +45,26 @@ export function ConnectOverlay(props: ConnectOverlayProps): JSX.Element {
 
   const selectedProvider = () => PROVIDERS[selectedIndex()];
 
-  useKeyboard((evt) => {
+  useKeyboard((event) => {
+    const evt = event as { name?: string; ctrl?: boolean };
     if (state() === 'select-provider') {
-      if (evt.key === 'escape') {
+      if (evt.name === 'escape') {
         props.onClose();
-      } else if (evt.key === 'up') {
+      } else if (evt.name === 'up') {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
-      } else if (evt.key === 'down') {
+      } else if (evt.name === 'down') {
         setSelectedIndex((prev) => Math.min(PROVIDERS.length - 1, prev + 1));
-      } else if (evt.key === 'enter') {
+      } else if (evt.name === 'enter') {
         setState('enter-token');
       }
     } else if (state() === 'enter-token') {
-      if (evt.key === 'escape') {
+      if (evt.name === 'escape') {
         setState('select-provider');
         setTokenInput('');
       }
       // Enter is handled by textarea's onSubmit
     } else if (state() === 'result') {
-      if (evt.key === 'escape' || evt.key === 'enter') {
+      if (evt.name === 'escape' || evt.name === 'enter') {
         props.onClose();
       }
     }
