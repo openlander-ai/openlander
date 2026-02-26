@@ -15,7 +15,7 @@
 - [x] Flex 레이아웃 전환 (explicit height → flex)
 - [x] 중앙 빈 상태 프롬프트 → 첫 메시지 후 하단 이동
 - [x] 슬래시 커맨드 피커 오버레이 (↑↓, Mouse, Enter, Esc)
-- [x] Tier 1 슬래시 커맨드 8개: `/help`, `/model`, `/compact`, `/connect`, `/repo`, `/projects`, `/clear`, `/exit`
+- [x] 슬래시 커맨드 9개: `/help`, `/model`, `/git`, `/repo`, `/tunnel`, `/env`, `/compact`, `/clear`, `/exit`
 - [x] 모델 선택 오버레이 (`/model`)
 - [x] Git 프로바이더 연동 오버레이 (`/connect`) + 토큰 검증
 - [x] 레포 브라우저 오버레이 (`/repo`) + IPC 배포 트리거
@@ -24,18 +24,22 @@
 - [x] 73개 단위 테스트 (52 slash-command + 21 slash-picker)
 - [x] 문서 재구조화 (`docs/planning/`, `docs/analysis/`)
 
-### 현재 슬래시 커맨드 (8개)
+### 최종 슬래시 커맨드 (9개)
 
-| 명령어      | 동작                                | 상태                               |
-| ----------- | ----------------------------------- | ---------------------------------- |
-| `/help`     | 오버레이 → 명령어 목록              | ✅                                 |
-| `/model`    | 오버레이 → LLM 모델 선택            | ✅                                 |
-| `/compact`  | 채팅 컨텍스트 요약                  | ⚠️ action만 발행, 요약 로직 미구현 |
-| `/connect`  | 오버레이 → Git 프로바이더 토큰 입력 | ✅                                 |
-| `/repo`     | 오버레이 → 레포 브라우저 → 배포     | ✅                                 |
-| `/projects` | 사이드바 토글                       | ✅                                 |
-| `/clear`    | 채팅 클리어                         | ✅                                 |
-| `/exit`     | 앱 종료                             | ✅                                 |
+> 설정 5개 (GUI 피커 오버레이) + TUI 시스템 4개. `/` 입력 시 9개 바로 표시.
+> `/stop`, `/restart`, `/logs` → 채팅 자연어로 대체 (슬래시에서 제거).
+
+| 명령어     | 동작                              | 상태                               |
+| ---------- | --------------------------------- | ---------------------------------- |
+| `/help`    | 오버레이 → 명령어 목록            | ✅                                 |
+| `/model`   | 오버레이 → LLM 모델 선택          | ✅                                 |
+| `/git`     | 오버레이 → Git 프로바이더 관리    | ✅ (기존 `/connect` 리네임)        |
+| `/repo`    | 오버레이 → 레포 브라우저 → 배포   | ✅                                 |
+| `/tunnel`  | 오버레이 → Cloudflare Tunnel 설정 | 🆕 Phase 1 골격                    |
+| `/env`     | 오버레이 → 환경변수 관리          | 🆕 Phase 1 골격                    |
+| `/compact` | 채팅 컨텍스트 요약                | ⚠️ action만 발행, 요약 로직 미구현 |
+| `/clear`   | 채팅 클리어                       | ✅                                 |
+| `/exit`    | 앱 종료                           | ✅                                 |
 
 ---
 
@@ -70,7 +74,7 @@
   |------|-----------|---------------|
   | **모니터링** (기본) | 앱 시작, 빌드 완료 3초 후, Esc | System + Projects + Activity + Alerts |
   | **배포** | 빌드 시작 시 자동 | 상단: System+Projects (축소) / 하단: Build 패널 |
-  | **디버깅** | 프로젝트 Enter 또는 `/logs` | 상단: 프로젝트 Info / 하단: 실시간 로그 |
+  | **디버깅** | 프로젝트 Enter (Status 패널에서) | 상단: 프로젝트 Info / 하단: 실시간 로그 |
 - **구현**:
   1. `src/tui/state/mode.ts` — 모드 상태 관리 (signal/store)
   2. 모드 enum: `monitoring | deploying | debugging`
@@ -275,17 +279,17 @@
 > 특정 프로젝트 상세 + 실시간 로그.
 > 참고: `ui-ux-layout.md` §모드 3: 디버깅
 
-### T-DEBUG-01: `/logs` 커맨드
+### T-DEBUG-01: 디버깅 모드 진입
 
 - **우선순위**: 🔴 P0 | **난이도**: M
-- **설명**: `/logs <project> [-n 100]`. 디버깅 모드 진입 트리거.
+- **설명**: Status 패널에서 프로젝트 Enter → 디버깅 모드 진입. 채팅에서 "로그 보여줘" → LLM이 디버깅 모드 진입 트리거.
 - **구현**:
-  1. `registry.ts`에 `logs` 추가 → `{ action: 'debug', project, lines }`
-  2. 실행 시 디버깅 모드 진입 (`enterDebugMode(project)`)
-  3. Compose 프로젝트: `/logs litellm` → 서비스 선택 UI, `/logs litellm/db` → 직접 진입
-  4. `-n` 플래그로 초기 표시 줄 수 지정 (기본 50)
-- **의존성**: T-ARCH-01
-- **테스트**: 커맨드 파싱 (project, -n, project/service 형식)
+  1. Status 패널 프로젝트 목록에서 Enter → `enterDebugMode(projectId)` 호출
+  2. 채팅 자연어 "로그 보여줘", "frontend 로그 보여줘" → LLM이 디버깅 모드 진입 트리거
+  3. Compose 프로젝트: 서비스 목록 표시 → 선택 → 해당 서비스 디버깅
+  4. 초기 표시 줄 수: 기본 50줄
+- **의존성**: T-ARCH-01, T-ARCH-03
+- **테스트**: 프로젝트 Enter → 디버깅 모드 진입 확인
 
 ### T-DEBUG-02: 프로젝트 Info + 실시간 로그 뷰
 
@@ -311,68 +315,60 @@
 
 ---
 
-## Phase 5: 컨테이너 제어 커맨드
+## Phase 5: 컨테이너 제어 (자연어 채팅)
 
-> 기본 운영 명령어. 모든 결과는 채팅에 시스템 메시지로 표시.
-> 참고: `tui-spec.md` §슬래시 명령 상세
+> 기본 운영 명령어. **모두 채팅 자연어로 실행** (슬래시 명령 아님).
+> LLM이 의도를 파악하여 IPC 함수 호출. 결과는 채팅에 시스템 메시지로 표시.
 
-### T-CMD-01: `/stop`, `/start`, `/restart`
+### T-CMD-01: 자연어 컨테이너 제어 (stop, start, restart)
 
 - **우선순위**: 🔴 P0 | **난이도**: M
-- **설명**: 프로젝트 컨테이너 제어. 인자로 프로젝트명 필수.
+- **설명**: "frontend 중지해줘", "backend 재시작해줘" 등 자연어로 컨테이너 제어.
 - **구현**:
-  1. `registry.ts`에 3개 추가 → `{ action: 'container-control', operation, project }`
-  2. IPC `stopProject()`, `startProject()`, `restartProject()` 연동
-  3. 프로젝트명 없으면 에러 메시지
-  4. 결과 채팅 피드백: `✅ frontend stopped` / `❌ frontend not found`
-  5. Compose 프로젝트: `/stop litellm` → `docker compose down`, `/restart litellm/db` → 서비스 단위
-- **테스트**: 커맨드 파싱 (프로젝트명 필수 검증, Compose 서비스 형식)
+  1. LLM 에이전트가 의도 파악 → IPC `stopProject()`, `startProject()`, `restartProject()` 호출
+  2. 프로젝트명 모호하면 LLM이 확인 질문
+  3. 결과 채팅 피드백: `✅ frontend stopped` / `❌ frontend not found`
+  4. Compose 프로젝트: "litellm 중지해줘" → `docker compose down`, "litellm의 db만 재시작" → 서비스 단위
+- **테스트**: LLM 에이전트 tool call 검증
 
-### T-CMD-02: `/status`
+### T-CMD-02: 자연어 상태 확인
 
 - **우선순위**: 🟡 P1 | **난이도**: S
-- **설명**: `/status [project]`. 인자 없으면 전체, 있으면 상세.
+- **설명**: "프로젝트 상태 보여줘", "frontend 상세 보여줘" 등 자연어.
 - **구현**:
-  1. `registry.ts`에 추가
-  2. 전체: 프로젝트 목록 테이블 (이름, 상태, 포트, URL)
-  3. 상세: 프로젝트 Info (디버깅 모드와 동일 데이터, 채팅에 텍스트로 출력)
-- **의존성**: IPC `getProjects()` / `getProject()`
+  1. 전체: 프로젝트 목록 테이블 (이름, 상태, 포트, URL) 채팅에 출력
+  2. 상세: 프로젝트 Info (디버깅 모드와 동일 데이터, 채팅에 텍스트로)
+- **의존성**: IPC `listProjects()` / `getProjectStats()`
 
-### T-CMD-03: `/env`
+### T-CMD-03: `/env` 오버레이 구현
 
 - **우선순위**: 🟡 P1 | **난이도**: M
-- **설명**: `/env <project>` 조회, `/env <project> KEY=VALUE` 설정
+- **설명**: `/env` 슬래시 명령 → 환경변수 관리 오버레이. env-spec.md 참조.
 - **구현**:
-  1. 조회: 마스킹 목록 (`API_KEY=sk-...****`)
-  2. 설정: KEY=VALUE 파싱, IPC `setEnv()` 호출
-  3. `--remove KEY`: 삭제
-  4. `--redeploy`: 변경 후 자동 재배포
-- **의존성**: 없음
+  1. 오버레이에서 현재 프로젝트 환경변수 목록 표시
+  2. 마스킹 표시 (KEY, SECRET, TOKEN, PASSWORD 포함 시 `sk-...****`)
+  3. 추가/수정/삭제 인라인 UI
+  4. 변경 후 재배포 제안
+- **의존성**: env-spec.md Part 2
 
-### T-CMD-04: `/remove`
+### T-CMD-04: 자연어 프로젝트 삭제
 
 - **우선순위**: 🟡 P1 | **난이도**: M
-- **설명**: `/remove <project>`. 확인 필수.
+- **설명**: "frontend 삭제해줘" → LLM이 확인 후 삭제.
 - **구현**:
-  1. 확인 프롬프트: "정말 삭제하시겠습니까? (y/N)"
-  2. y 입력 시 IPC `removeProject()` → 컨테이너 + 이미지 삭제
+  1. LLM이 확인 질문: "정말 삭제하시겠습니까?"
+  2. 확인 시 IPC `removeProject()` → 컨테이너 + 이미지 삭제
   3. 결과 피드백
-- **의존성**: 인라인 확인 프롬프트 패턴
 
-### T-CMD-05: `/redeploy`
+### T-CMD-05: 자연어 재배포
 
 - **우선순위**: 🟡 P1 | **난이도**: M
-- **설명**: `/redeploy <project>`. git pull → 재빌드 → 재배포.
+- **설명**: "frontend 재배포해줘" → git pull → 재빌드 → 재배포.
 - **구현**:
-  1. IPC `redeploy(project)` 호출
+  1. LLM이 IPC `redeploy(project)` 호출
   2. 배포 모드 자동 진입 (T-ARCH-01)
   3. 빌드 파이프라인 + 로그 표시 (T-DEPLOY-02 재활용)
 - **의존성**: T-DEPLOY-02
-
-### T-CMD-06: `/deploy` 직접 URL 입력
-
-- **우선순위**: 🔴 P0 | **난이도**: 이미 T-DEPLOY-01에 포함
-- _T-DEPLOY-01로 통합_
 
 ---
 
@@ -554,13 +550,13 @@ T-DEPLOY-03  스마트 자동 스크롤
 T-KEY-01     Ctrl+C 취소
 ```
 
-### Phase 4 + 5: 디버깅 + 컨테이너 제어
+### Phase 4 + 5: 디버깅 + 컨테이너 제어 (자연어)
 
 ```
-T-DEBUG-01   /logs
+T-DEBUG-01   디버깅 모드 진입 (Status 패널 Enter + 자연어)
 T-DEBUG-02   Info + 로그 뷰
-T-CMD-01     /stop, /start, /restart
-T-CMD-05     /redeploy
+T-CMD-01     자연어 컨테이너 제어 (stop, start, restart)
+T-CMD-05     자연어 재배포
 ```
 
 ### Phase 6: Compose
@@ -589,7 +585,7 @@ T-INFRA-02   다중 Git 프로바이더
 
 ## 참고사항
 
-- **슬래시 명령 원칙**: LLM을 거치지 않고 직접 실행. 결과는 채팅에 시스템 메시지로 표시.
+- **슬래시 명령 원칙**: LLM을 거치지 않고 직접 실행. 9개 유지 (help, model, git, repo, tunnel, env, compact, clear, exit). 컨테이너 제어(/stop, /restart)와 디버깅(/logs)은 채팅 자연어로 대체.
 - **빌드 실패 원칙**: "누가 만든 파일이냐"로 대응 범위 결정. 유저 코드는 절대 수정 안 함.
 - **Compose 원칙**: 원본 docker-compose.yml 절대 수정 안 함. override 파일만 사용.
 - **테마**: OpenCode 다크 테마 유지. 추후 브랜딩 커스터마이징 예정.
@@ -601,14 +597,14 @@ T-INFRA-02   다중 Git 프로바이더
 
 ## 총 Task 수
 
-| Phase                | Task 수 | P0     | P1     | P2    |
-| -------------------- | ------- | ------ | ------ | ----- |
-| 1. 레이아웃 아키텍처 | 5       | 4      | 1      | 0     |
-| 2. 모니터링 모드     | 4       | 2      | 2      | 0     |
-| 3. 배포 모드         | 5       | 3      | 1      | 1     |
-| 4. 디버깅 모드       | 3       | 2      | 1      | 0     |
-| 5. 컨테이너 제어     | 5       | 1      | 4      | 0     |
-| 6. Compose 모드      | 5       | 0      | 4      | 1     |
-| 7. 채팅 & 폴리시     | 9       | 1      | 3      | 5     |
-| 8. 인프라 & 장기     | 3       | 0      | 2      | 1     |
-| **합계**             | **39**  | **13** | **18** | **8** |
+| Phase                     | Task 수 | P0     | P1     | P2    |
+| ------------------------- | ------- | ------ | ------ | ----- |
+| 1. 레이아웃 아키텍처      | 5       | 4      | 1      | 0     |
+| 2. 모니터링 모드          | 4       | 2      | 2      | 0     |
+| 3. 배포 모드              | 5       | 3      | 1      | 1     |
+| 4. 디버깅 모드            | 3       | 2      | 1      | 0     |
+| 5. 컨테이너 제어 (자연어) | 5       | 1      | 4      | 0     |
+| 6. Compose 모드           | 5       | 0      | 4      | 1     |
+| 7. 채팅 & 폴리시          | 9       | 1      | 3      | 5     |
+| 8. 인프라 & 장기          | 3       | 0      | 2      | 1     |
+| **합계**                  | **39**  | **13** | **18** | **8** |
