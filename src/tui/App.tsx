@@ -375,8 +375,26 @@ export function App(props: AppProps): JSX.Element {
         return;
       }
 
-      // Ctrl+C: first press shows warning, second press quits
+      // Ctrl+C: cancel active work first, then double-tap to quit
       if (evt.ctrl && evt.name === 'c') {
+        // If there's an active deploy stream, abort it first
+        if (deployAbortController) {
+          deployAbortController.abort();
+          deployAbortController = null;
+          returnToMonitoring();
+          setDeployMessages((prev) => [
+            ...prev,
+            {
+              id: `deploy-cancel-${String(Date.now())}`,
+              role: 'system' as const,
+              content: '⚠ Deploy cancelled by user.',
+              type: 'text' as const,
+              timestamp: Date.now(),
+            },
+          ]);
+          return;
+        }
+        // No active work — double-tap to quit
         if (ctrlCCount() >= 1) {
           exit();
         } else {

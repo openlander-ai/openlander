@@ -53,6 +53,7 @@ export function StatusPanel(props: StatusPanelProps): JSX.Element {
             projectId={props.deployingState?.projectId ?? ''}
             client={props.client}
             height={Math.floor(props.height * 0.6)}
+            focus={props.focus}
           />
         </box>
       </Match>
