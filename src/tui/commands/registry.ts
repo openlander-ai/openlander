@@ -229,7 +229,7 @@ const commands: SlashCommand[] = [
 
 /** Get all registered commands. */
 export function getAllCommands(): SlashCommand[] {
-  return commands;
+  return [...commands];
 }
 
 /** Find an exact command match by name. */
@@ -281,10 +281,12 @@ export function parseSlashCommand(input: string): ParsedCommand | null {
       const flagName = token.slice(2);
       if (!flagName) {
         // '--' alone, treat as positional
+        positional.push(token);
         rawArgs.push(token);
         i++;
         continue;
       }
+
       const nextToken = tokens[i + 1];
       if (nextToken && !nextToken.startsWith('-')) {
         flags[flagName] = nextToken;
