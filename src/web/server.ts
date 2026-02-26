@@ -67,8 +67,10 @@ export interface ServerOptions {
 function createApp(ctx: AppContext): Hono {
   const app = new Hono();
 
-  // Middleware
-  app.use('*', logger());
+  // Middleware — suppress HTTP request logs when TUI is active
+  if (!process.env['OPENLANDER_TUI']) {
+    app.use('*', logger());
+  }
   app.use(
     '/api/*',
     cors({
@@ -117,7 +119,6 @@ function createApp(ctx: AppContext): Hono {
   // v0.2: Domain management routes
   const domainRoutes = createDomainRoutes(ctx);
   app.route('/api', domainRoutes);
-
 
   // v0.4: Channel webhook routes
   if (ctx.config.channels.slack.enabled) {
