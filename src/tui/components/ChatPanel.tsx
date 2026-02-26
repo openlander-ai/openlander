@@ -11,6 +11,65 @@ import { parseSlashCommand, type SlashCommandResult } from '../commands/registry
 import { theme } from '../theme.js';
 
 // ---------------------------------------------------------------------------
+// Compaction Helpers
+// ---------------------------------------------------------------------------
+
+/** Format messages for context summarization. */
+function formatMessagesForCompaction(msgs: DisplayMessage[]): string {
+  return msgs
+    .filter(
+      (m) =>
+        m.type === 'text' || m.type === undefined || m.type === 'error' || m.type === 'tool_result',
+    )
+    .map((m) => {
+      const role = m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System';
+      let line = `[${role}]: ${m.content}`;
+      if (m.toolName) line += ` (tool: ${m.toolName})`;
+      return line;
+    })
+    .join('\n');
+}
+
+/** Prompt for summarizing a deployment conversation. */
+const COMPACTION_PROMPT = `You are summarizing a deployment conversation for OpenLander, an AI-powered deployment tool.
+
+Analyze the conversation above and provide a structured summary that enables seamless continuation. This summary will replace all previous messages — it must contain everything needed to continue working.
+
+IMPORTANT RULES:
+- User Requests must be VERBATIM (exact wording, not paraphrased)
+- Constraints must be VERBATIM (only what the user actually said)
+- Do NOT invent or assume constraints that weren't explicitly stated
+- Be specific about infrastructure state (container names, ports, URLs)
+- Include error messages verbatim if they are still relevant
+
+Use this template:
+
+## User Requests (As-Is)
+[List each user request exactly as stated — do NOT paraphrase]
+
+## Deployments
+[What repos were deployed, container names, ports, URLs, health status]
+[If no deployments yet, write "None"]
+
+## Infrastructure State
+[Running containers, active domains/tunnels, configured env vars, build status]
+[If not applicable, write "N/A"]
+
+## Work Completed
+[What actions were taken, what was accomplished]
+
+## Decisions Made
+[Technical decisions with rationale — Dockerfile choices, environment config, network setup, etc.]
+
+## Pending Tasks
+[What remains to be done, known issues, next steps]
+[If nothing pending, write "None"]
+
+## User Constraints (Verbatim Only)
+[ONLY constraints explicitly stated by the user — do NOT invent]
+[If none, write "None"]`;
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -18,7 +77,7 @@ export interface ChatPanelProps {
   client: OpenLanderClient | null;
   height: number;
   focus: boolean;
-  onModal?: (modal: 'help') => void;
+  onModal?: (modal: string) => void;
   onClear?: () => void;
   onExit?: () => void;
   onCommandResult?: (result: SlashCommandResult) => void;
@@ -317,6 +376,63 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
               }
             }
             break;
+          case 'compact': {
+            if (!client()) break;
+            const c = client();
+            if (!c) break;
+
+            const currentMessages = messages();
+            if (currentMessages.length === 0) {
+              // Nothing to compact
+              setMessages([
+                {
+                  id: `system-${String(Date.now())}`,
+                  role: 'system',
+                  content: 'Nothing to compact — chat is empty.',
+                  type: 'text',
+                  timestamp: Date.now(),
+                },
+              ]);
+              break;
+            }
+
+            // Format context and build compaction message
+            const context = formatMessagesForCompaction(currentMessages);
+            const compactionMessage = `${context}\n\n---\n\n${COMPACTION_PROMPT}`;
+
+            // Show compacting indicator
+            setMessages([
+              {
+                id: `system-${String(Date.now())}`,
+                role: 'system',
+                content: '⟳ Compacting context...',
+                type: 'text',
+                timestamp: Date.now(),
+              },
+            ]);
+
+            // Reset session for fresh start
+            sessionIdRef = `tui-${Date.now().toString(36)}`;
+
+            // Send compaction prompt to LLM in the new session
+            setIsStreaming(true);
+            try {
+              await c.chatStream(compactionMessage, sessionIdRef, handleStreamEvent);
+            } catch (err) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `error-${String(Date.now())}`,
+                  role: 'assistant',
+                  content: err instanceof Error ? err.message : String(err),
+                  type: 'error',
+                  timestamp: Date.now(),
+                },
+              ]);
+              setIsStreaming(false);
+            }
+            break;
+          }
           case 'toggle-sidebar':
             break;
         }

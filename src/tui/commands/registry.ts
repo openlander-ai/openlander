@@ -14,10 +14,11 @@ export interface SlashCommand {
 }
 
 export type SlashCommandResult =
-  | { action: 'modal'; modal: 'help' }
+  | { action: 'modal'; modal: 'help' | 'model' | 'connect' | 'repo' }
   | { action: 'agent'; message: string }
   | { action: 'clear' }
   | { action: 'exit' }
+  | { action: 'compact' }
   | { action: 'toggle-sidebar' };
 
 /** Parsed command with separated args, flags, and positional arguments. */
@@ -33,6 +34,26 @@ const commands: SlashCommand[] = [
     name: 'help',
     description: 'Show available commands',
     handler: () => ({ action: 'modal', modal: 'help' }),
+  },
+  {
+    name: 'model',
+    description: 'Switch LLM model',
+    handler: () => ({ action: 'modal', modal: 'model' }),
+  },
+  {
+    name: 'compact',
+    description: 'Compact chat context (summarize and start fresh)',
+    handler: () => ({ action: 'compact' }),
+  },
+  {
+    name: 'connect',
+    description: 'Connect a Git provider (GitHub, GitLab, etc.)',
+    handler: () => ({ action: 'modal', modal: 'connect' }),
+  },
+  {
+    name: 'repo',
+    description: 'Browse repositories from connected providers',
+    handler: () => ({ action: 'modal', modal: 'repo' }),
   },
   {
     name: 'deploy',
