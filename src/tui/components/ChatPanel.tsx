@@ -9,6 +9,7 @@ import { ChatMessage, type DisplayMessage } from './ChatMessage.js';
 import { SlashCommandPicker, getMatchCount, getMatchAt } from './SlashCommandPicker.js';
 import { parseSlashCommand, type SlashCommandResult } from '../commands/registry.js';
 import { theme } from '../theme.js';
+import { VERSION } from '../../version.js';
 
 // ---------------------------------------------------------------------------
 // Compaction Helpers
@@ -334,22 +335,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     // Auto-scroll to bottom when user sends a message
     scrollToBottom();
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `user-${String(Date.now())}`,
-        role: 'user',
-        content: text,
-        type: 'text',
-        timestamp: Date.now(),
-      },
-    ]);
-
-    setChatHistory((prev) =>
-      [...prev, { text, timestamp: Date.now() }].slice(-MAX_HISTORY_ENTRIES),
-    );
-    setHistoryIndex(-1);
-
+    // ── Slash commands: execute without adding to chat history ──
     if (text.startsWith('/')) {
       const parsed = parseSlashCommand(text);
       if (parsed) {
@@ -427,6 +413,23 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
         return;
       }
     }
+
+    // ── Normal chat message: add to messages + history, send to LLM ──
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `user-${String(Date.now())}`,
+        role: 'user',
+        content: text,
+        type: 'text',
+        timestamp: Date.now(),
+      },
+    ]);
+
+    setChatHistory((prev) =>
+      [...prev, { text, timestamp: Date.now() }].slice(-MAX_HISTORY_ENTRIES),
+    );
+    setHistoryIndex(-1);
 
     if (!client()) {
       setMessages((prev) => [
@@ -653,7 +656,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
 
             {/* Version + hint */}
             <box flexShrink={0} flexDirection="column" alignItems="center">
-              <text fg={theme.textMuted}>v0.1.0</text>
+              <text fg={theme.textMuted}>v{VERSION}</text>
               <Show
                 when={client()}
                 fallback={
