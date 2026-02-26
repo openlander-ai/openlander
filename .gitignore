@@ -48,9 +48,6 @@ temp/
 
 # Internal dev files (not part of OSS release)
 .sisyphus/
-instruction.md
-requirements-v3.md
-tui-spec.md
-PROJECT_STATUS.md
 skills_index.json
 readme.html
+runtime_err.txt
