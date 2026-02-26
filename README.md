@@ -82,29 +82,44 @@ OpenLander will:
 
 1. Check Docker (install if missing, fix permissions if needed)
 2. Start the Traefik reverse proxy
-3. Launch the TUI — dashboard + chat interface right in your terminal
+3. Launch the TUI — 3-mode adaptive dashboard + chat interface right in your terminal
 4. Prompt you to add an LLM API key (Gemini free tier works)
 5. You're ready to deploy
 
 ## Features
 
+### TUI (Terminal UI)
+
+- **3-mode adaptive layout** — Monitoring, Deploying, Debugging modes with automatic transitions
+- **9 slash commands** — `/help`, `/model`, `/git`, `/repo`, `/tunnel`, `/env`, `/compact`, `/clear`, `/exit`
+- **Responsive panels** — Chat + status panels with adaptive breakpoints (60:40 / 65:35 / single)
+- **OpenCode-inspired design** — Dark theme, keyboard-first navigation, Tab panel switching
+
+### Deployment
+
 - **Chat-driven deployment** — Describe what you want in plain English
-- **Git → Docker → URL** — Clone, build, run, expose. One conversation.
+- **Git \u2192 Docker \u2192 URL** — Clone, build, run, expose. One conversation.
 - **Traefik auto-routing** — Each project gets its own subdomain. No port conflicts.
 - **Public sharing** — Instant public URL via TryCloudflare. No domain needed.
 - **Production domains** — Permanent URLs via Cloudflare Tunnel. Multi-domain mapping.
 - **Environment variables** — Manage secrets through chat or TUI
-- **Logs & monitoring** — Container logs, health checks, system resource tracking
 - **Auto-redeploy** — Git push webhook triggers automatic redeployment
 - **Rollback & blue-green** — One-command rollback, zero-downtime deploys
+
+### Infrastructure
+
+- **Logs & monitoring** — Container logs, health checks, system resource tracking
 - **Monorepo support** — Scan Dockerfiles, parallel builds, parent-child project model
-- **MCP server** — Deploy from Claude Code, Cursor, or any MCP client
-- **Multi-channel** — Slack, Discord, Telegram bots for remote management
 - **Auto-Dockerfile** — No Dockerfile? Auto-generates one for Next.js, FastAPI, Gradio, Streamlit
 - **Build debugger** — Recipe-based fast-path + LLM analysis for build errors
+- **DB provisioning** — PostgreSQL, MySQL, Redis containers on demand
+
+### Integration
+
+- **MCP server** — Deploy from Claude Code, Cursor, or any MCP client
+- **Multi-channel** — Slack, Discord, Telegram bots for remote management
 - **BYOK (Bring Your Own Key)** — Gemini Flash (free), Claude, OpenAI, OpenRouter, or Ollama (local)
 - **Private repos** — SSH key auth. Works with GitHub, GitLab, Bitbucket, Gitea.
-- **DB provisioning** — PostgreSQL, MySQL, Redis containers on demand
 
 ## How It Works
 
@@ -137,29 +152,32 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 ## Tech Stack
 
-| Area          | Technology                                                  |
-| ------------- | ----------------------------------------------------------- |
-| Language      | TypeScript (strict mode, ESM)                               |
-| Runtime       | [Bun](https://bun.sh)                                       |
-| Install       | npm global package                                          |
-| TUI           | [OpenTUI](https://github.com/anomalyco/opentui) + Solid.js  |
-| ORM           | [Drizzle ORM](https://orm.drizzle.team) + bun:sqlite        |
-| Docker        | dockerode                                                   |
-| Reverse Proxy | Traefik (Docker label routing)                              |
-| Tunnel        | TryCloudflare / Cloudflare Tunnel                           |
-| AI            | BYOK — Gemini Flash / Claude / OpenAI / OpenRouter / Ollama |
-| Database      | SQLite (via Drizzle ORM)                                    |
+| Area          | Technology                                                       |
+| ------------- | ---------------------------------------------------------------- |
+| Language      | TypeScript (strict mode, ESM)                                    |
+| Runtime       | [Bun](https://bun.sh)                                            |
+| Build         | [tsup](https://tsup.egoist.dev) (esbuild)                        |
+| Install       | npm global package                                               |
+| TUI           | [OpenTUI](https://github.com/anomalyco/opentui) + Solid.js       |
+| ORM           | [Drizzle ORM](https://orm.drizzle.team) + bun:sqlite             |
+| Docker        | dockerode                                                        |
+| Reverse Proxy | Traefik (Docker label routing)                                   |
+| Tunnel        | TryCloudflare / Cloudflare Tunnel                                |
+| AI            | BYOK \u2014 Gemini Flash / Claude / OpenAI / OpenRouter / Ollama |
+| Database      | SQLite (via Drizzle ORM)                                         |
+| Test          | Vitest + Node.js (with bun:sqlite shim)                          |
 
 ## Roadmap
 
-| Version  | Focus                    | Status   | Highlights                                                             |
-| -------- | ------------------------ | -------- | ---------------------------------------------------------------------- |
-| **v0.1** | Repo → URL (MVP)         | Done     | Git clone → Docker → Traefik → URL. TUI chat. REST API.                |
-| **v0.2** | Daily Operations         | Done     | Auto-redeploy, monitoring, production domains, Ollama                  |
-| **v0.3** | Coding Agent Integration | Done     | MCP server (23 tools), rollback, blue-green, DB provisioning           |
-| **v0.4** | Multi-Channel + Advanced | Done     | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy     |
-| v0.5     | Full Self-Hosting        | TBD      | Fine-tuned model (openlander-agent-8b), zero API cost                  |
-| **v0.6** | **TUI Polish**           | **Done** | **Bun runtime, OpenTUI + Solid.js, Drizzle ORM, OpenCode-inspired UI** |
+| Version  | Focus                    | Status          | Highlights                                                             |
+| -------- | ------------------------ | --------------- | ---------------------------------------------------------------------- |
+| **v0.1** | Repo \u2192 URL (MVP)    | Done            | Git clone \u2192 Docker \u2192 Traefik \u2192 URL. TUI chat. REST API. |
+| **v0.2** | Daily Operations         | Done            | Auto-redeploy, monitoring, production domains, Ollama                  |
+| **v0.3** | Coding Agent Integration | Done            | MCP server (23 tools), rollback, blue-green, DB provisioning           |
+| **v0.4** | Multi-Channel + Advanced | Done            | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy     |
+| **v0.6** | TUI Rewrite              | Done            | Bun runtime, OpenTUI + Solid.js, Drizzle ORM, OpenCode-inspired UI     |
+| **v0.7** | TUI Polish               | **In Progress** | 3-mode layout, 9 slash commands, adaptive panels, build failure tiers  |
+| v0.8     | Full Self-Hosting        | Planned         | Fine-tuned model, zero API cost                                        |
 
 ## Requirements
 
