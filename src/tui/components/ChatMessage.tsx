@@ -112,10 +112,10 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
     if (role() === 'user') {
       return (
         <text>
-          <text bold={true} color={theme.secondary}>
+          <span bold={true} color={theme.secondary}>
             You:{' '}
-          </text>
-          <text>{content()}</text>
+          </span>
+          <span>{content()}</span>
         </text>
       );
     }

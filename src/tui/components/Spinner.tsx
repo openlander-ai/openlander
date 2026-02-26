@@ -17,5 +17,5 @@ export function Spinner(props: SpinnerProps) {
   }, 80);
   onCleanup(() => clearInterval(timer));
 
-  return <text color={props.color}>{DOTS[frame()]}</text>;
+  return <span color={props.color}>{DOTS[frame()]}</span>;
 }

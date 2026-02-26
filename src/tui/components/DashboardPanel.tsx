@@ -223,7 +223,7 @@ export function McpClientsSection({ enabled }: { enabled: boolean }): JSX.Elemen
           <text dim={true}>MCP server active (stdio)</text>
           <text dim={true}>No clients connected yet</text>
           <text dim={true}>
-            Run: <text color={theme.secondary}>openlander mcp install --claude-code</text>
+            Run: <span color={theme.secondary}>openlander mcp install --claude-code</span>
           </text>
         </box>
       </Show>

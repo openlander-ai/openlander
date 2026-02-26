@@ -61,13 +61,13 @@ export function CommandDisplay(props: CommandDisplayProps): JSX.Element {
       flexDirection="column"
     >
       <text>
-        <text color={theme.muted}>{' └ '}</text>
-        <text bold={true}>Bash</text>
+        <span color={theme.muted}>{' └ '}</span>
+        <b>Bash</b>
       </text>
       <text>
         {'  '}
-        <text color={theme.secondary}>$ </text>
-        <text color={theme.text}>{props.command}</text>
+        <span color={theme.secondary}>$ </span>
+        <span color={theme.text}>{props.command}</span>
       </text>
       <Show when={props.output || props.status === 'running'}>
         <>
@@ -137,9 +137,9 @@ export function FileEditDisplay(props: FileEditDisplayProps): JSX.Element {
       flexDirection="column"
     >
       <text>
-        <text color={theme.muted}>{' └ '}</text>
-        <text bold={true}>{actionLabel()}</text>
-        <text color={theme.secondary}>: {props.filePath}</text>
+        <span color={theme.muted}>{' └ '}</span>
+        <b>{actionLabel()}</b>
+        <span color={theme.secondary}>: {props.filePath}</span>
       </text>
       <For each={visibleLines()}>
         {(line) => {
@@ -251,12 +251,12 @@ export function BuildResultDisplay(props: BuildResultDisplayProps): JSX.Element 
       flexDirection="column"
     >
       <text>
-        <text color={theme.muted}>{' └ '}</text>
-        <text bold={true}>{props.label}</text>
-        <text color={props.success ? theme.success : theme.error}>
+        <span color={theme.muted}>{' └ '}</span>
+        <b>{props.label}</b>
+        <span color={props.success ? theme.success : theme.error}>
           : {statusText()}
           {durationText()}
-        </text>
+        </span>
       </text>
       <For each={visibleLines()}>
         {(line) => (

@@ -449,22 +449,19 @@ export function ChatPanel({
               <text> </text>
               <text dim={true}>v0.1.0</text>
               <text> </text>
-              <Show
-                when={client}
-                fallback={
-                  <text color={theme.warning}>
-                    Daemon not connected. Run: <text bold={true}>openlander daemon</text>
-                  </text>
-                }
-              >
+              {client ? (
                 <>
                   <text dim={true}>Deploy anything with a chat. Type to get started.</text>
                   <text dim={true}>
-                    Press <text color={theme.secondary}>/</text> for commands,{' '}
-                    <text color={theme.secondary}>?</text> for help
+                    Press <span color={theme.secondary}>/</span> for commands,{' '}
+                    <span color={theme.secondary}>?</span> for help
                   </text>
                 </>
-              </Show>
+              ) : (
+                <text color={theme.warning}>
+                  Daemon not connected. Run: <b>openlander daemon</b>
+                </text>
+              )}
             </box>
           }
         >
@@ -502,29 +499,7 @@ export function ChatPanel({
         borderRight={false}
         paddingX={1}
       >
-        <Show when={!client} fallback={
-          <Show when={isStreaming()} fallback={
-            <box>
-              <text color={theme.primary}>❯ </text>
-              <TextInput
-                value={inputValue()}
-                onChange={setInputValue}
-                onSubmit={handleSubmit}
-                placeholder="Ask the agent anything... (/help for commands)"
-                showCursor={focus}
-              />
-            </box>
-          }>
-            <box gap={1}>
-              <text color={theme.primary}>
-                <Spinner color={theme.primary} />
-              </text>
-              <text dim={true}> Waiting for response...</text>
-            </box>
-          </Show>
-        }>
-          <text dim={true}>Chat unavailable — daemon not connected</text>
-        </Show>
+        {!client ? (
           <text dim={true}>Chat unavailable — daemon not connected</text>
         ) : isStreaming() ? (
           <box gap={1}>
