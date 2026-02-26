@@ -129,13 +129,13 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
                     >
                       {' '}
                       {info().connected ? '●' : '○'} {provider.icon} {provider.label}
-                      {info().connected ? (
-                        <text fg={theme.success}> Connected ({info().username || 'unknown'})</text>
-                      ) : (
-                        <text fg={theme.textDim}> Not connected</text>
-                      )}
                       {isSelected() ? ' ' : ''}
                     </text>
+                    {info().connected ? (
+                      <text fg={theme.success}> Connected ({info().username || 'unknown'})</text>
+                    ) : (
+                      <text fg={theme.textDim}> Not connected</text>
+                    )}
                   </box>
                 );
               }}
