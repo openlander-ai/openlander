@@ -1,6 +1,6 @@
 # OpenLander — 요구사항 정의서 v4.0
 
-> **v3 → v4 주요 변경**: 웹 UI → TUI (Ink) 전환, 버전별 구현 체크리스트 추가, TUI UI/UX 고도화 로드맵 추가
+> **v3 → v4 주요 변경**: 웹 UI → TUI (@opentui/solid) 전환, 버전별 구현 체크리스트 추가, TUI UI/UX 고도화 로드맵 추가
 
 ## 한 줄 정의
 
@@ -69,17 +69,17 @@ Mac Mini + OpenLander:   ~$600 once, $0/month
 
 ## 기술 스택
 
-| 영역          | 기술                               | 이유                                          |
-| ------------- | ---------------------------------- | --------------------------------------------- |
-| 언어          | TypeScript                         | npm 글로벌 설치 경험 (OpenCode/OpenClaw 방식) |
-| 런타임        | Node.js ≥22                        |                                               |
-| 배포          | npm 패키지 (`npm i -g openlander`) | 한 줄 설치                                    |
-| **TUI**       | **Ink (React 기반 터미널 UI)**     | **메인 인터페이스 — 터미널에서 직접 조작**    |
-| Docker 제어   | dockerode                          | Node.js Docker API                            |
-| 리버스 프록시 | Traefik                            | Docker 라벨 기반 자동 라우팅                  |
-| 외부 접근     | TryCloudflare / Cloudflare Tunnel  | 무료 + 도메인 없이 시작 가능                  |
-| AI 에이전트   | LLM API (BYOK)                     | Gemini Flash(무료) ~ Claude/GPT               |
-| DB            | SQLite                             | 프로젝트 상태, 배포 로그, 채팅                |
+| 영역          | 기술                                        | 이유                                          |
+| ------------- | ------------------------------------------- | --------------------------------------------- |
+| 언어          | TypeScript                                  | npm 글로벌 설치 경험 (OpenCode/OpenClaw 방식) |
+| 런타임        | Node.js ≥22                                 |                                               |
+| 배포          | npm 패키지 (`npm i -g openlander`)          | 한 줄 설치                                    |
+| **TUI**       | **@opentui/solid (SolidJS 기반 터미널 UI)** | **메인 인터페이스 — 터미널에서 직접 조작**    |
+| Docker 제어   | dockerode                                   | Node.js Docker API                            |
+| 리버스 프록시 | Traefik                                     | Docker 라벨 기반 자동 라우팅                  |
+| 외부 접근     | TryCloudflare / Cloudflare Tunnel           | 무료 + 도메인 없이 시작 가능                  |
+| AI 에이전트   | LLM API (BYOK)                              | Gemini Flash(무료) ~ Claude/GPT               |
+| DB            | SQLite                                      | 프로젝트 상태, 배포 로그, 채팅                |
 
 ---
 
@@ -88,7 +88,7 @@ Mac Mini + OpenLander:   ~$600 once, $0/month
 ```
 ┌─────────────────────────────────────────────────┐
 │  접근 채널                                       │
-│  ├─ TUI (메인 — Ink 기반 터미널 UI)              │
+│  ├─ TUI (메인 — @opentui/solid 기반 터미널 UI)   │
 │  ├─ REST API                                    │
 │  ├─ MCP 서버 (v0.3 — 코딩 에이전트 연동)          │
 │  └─ Slack/Discord/Telegram 봇 (v0.4)            │
@@ -351,12 +351,12 @@ openlander onboard --install-daemon
 
 ## 접근 채널
 
-| 채널                   | Phase | 사용 상황                              |
-| ---------------------- | ----- | -------------------------------------- |
-| **TUI (Ink)**          | v0.1  | 메인 인터페이스 (터미널 채팅+대시보드) |
-| REST API               | v0.1  | TUI가 호출 + 외부 연동 기반            |
-| MCP 서버               | v0.3  | Claude Code/Cursor에서 배포 명령       |
-| Slack/Discord/Telegram | v0.4  | 이동 중 배포/관리                      |
+| 채널                     | Phase | 사용 상황                              |
+| ------------------------ | ----- | -------------------------------------- |
+| **TUI (@opentui/solid)** | v0.1  | 메인 인터페이스 (터미널 채팅+대시보드) |
+| REST API                 | v0.1  | TUI가 호출 + 외부 연동 기반            |
+| MCP 서버                 | v0.3  | Claude Code/Cursor에서 배포 명령       |
+| Slack/Discord/Telegram   | v0.4  | 이동 중 배포/관리                      |
 
 **MCP 시나리오 (킬러 기능):**
 
@@ -431,20 +431,20 @@ openlander onboard --install-daemon
 ### v0.6 — TUI UI/UX 고도화 🎯 In Progress
 
 > 백엔드 기능(v0.1~v0.4)이 모두 완료된 상태. 이제 **인터페이스 품질**에 집중.
-> 레퍼런스: Claude Code / OpenCode의 깔끔한 터미널 UI (동일한 TS + Ink 스택).
+> 레퍼런스: Claude Code / OpenCode의 깔끔한 터미널 UI (동일한 TS + @opentui/solid 스택).
 
 **구현 완료:**
 
 - [x] ChatView — 전체 대화 히스토리 스크롤, 유저/에이전트 메시지 구분 (색상/아이콘)
 - [x] 에이전트 스트리밍 — `chatStream()` 연동, thinking/tool_call/tool_result/message 실시간 표시
 - [x] ToolCallDisplay — 도구 호출 인라인 표시 (아이콘 + 상태 + 소요시간)
-- [x] 슬래시 커맨드 시스템 — 15개 커맨드: `/help`, `/connect`, `/deploy`, `/logs`, `/stop`, `/start`, `/remove`, `/status`, `/projects`, `/redeploy`, `/public`, `/env`, `/clear`, `/exit`
+- [x] 슬래시 커맨드 시스템 — 9개 커맨드: /repo, /git, /model, /tunnel, /env, /compact, /clear, /exit, /help
 - [x] SlashCommandPicker — `/` 입력 시 자동완성 드롭다운 (↑↓ 탐색, Tab 완성, Enter 실행)
 - [x] ChatInput — 슬래시 커맨드 감지, 입력 히스토리 (↑↓), 포커스 스타일링
-- [x] Modal 시스템 — 풀스크린 오버레이 (ConnectModal, HelpModal)
-- [x] ConnectModal — `/connect`로 LLM 프로바이더 + 채널(Slack/Discord/Telegram) 연동
-- [x] HelpModal — `/help`로 전체 명령어 + 키보드 단축키 안내
-- [x] Dashboard 레이아웃 개편 — 채팅 중심 (기본), 사이드바 토글 (`/projects` 또는 Tab)
+- [x] 오버레이 시스템 — 풀스크린 오버레이 (RepoOverlay, GitOverlay, ModelOverlay, TunnelOverlay, EnvOverlay, HelpOverlay)
+- [x] 전용 오버레이 — /repo, /git, /model, /tunnel, /env, /help 각각 전용 오버레이
+- [x] HelpOverlay — /help로 전체 명령어 + 키보드 단축키 안내
+- [x] Dashboard 레이아웃 개편 — 채팅 중심 (기본), 사이드바 토글 (Tab)
 - [x] 상태바 — 프로젝트 수, 실행 상태, 컨텍스트 기반 힌트
 - [x] 입력 히스토리 — ↑↓로 이전 입력 탐색 (50개 보관)
 
@@ -557,7 +557,7 @@ openlander/
 ├── src/
 │   ├── cli/
 │   │   └── commands.ts            # CLI 명령어
-│   ├── tui/                       # TUI (Ink 기반)
+│   ├── tui/                       # TUI (@opentui/solid 기반)
 │   │   ├── index.tsx              # TUI 엔트리포인트
 │   │   ├── App.tsx                # 메인 앱 (Setup ↔ Dashboard 전환)
 │   │   ├── components/

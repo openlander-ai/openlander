@@ -138,8 +138,8 @@ Response: NDJSON 스트림 (전체 활동 로그)
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**비율**: 좌측 채팅 55% / 우측 대시보드 45% (터미널 너비에 따라 반응형)
-**최소 너비**: 100 컬럼. 미만이면 단일 패널 모드 (탭으로 전환)
+**비율**: 좌측 채팅 60% / 우측 대시보드 40% (터미널 너비에 따라 반응형)
+**최소 너비**: 80 컬럼. 미만이면 단일 패널 모드 (탭으로 전환)
 
 ### 좌측: 채팅 패널
 
@@ -186,12 +186,12 @@ Response: NDJSON 스트림 (전체 활동 로그)
 **입력 영역:**
 
 ```
-> 일반 채팅 입력 (자연어)
-> /deploy github.com/user/repo    ← 슬래시 명령
-> /status                         ← 프로젝트 상태
-> /logs backend                   ← 로그 조회
-> /env backend API_KEY=xxx        ← 환경변수
-> /stop backend                   ← 중지
+> backend 로그 보여줘              ← 자연어 (에이전트가 처리)
+> /repo                           ← 레포 선택 → 배포
+> /git                            ← Git 연결 관리
+> /model                          ← LLM 모델 변경
+> /env                            ← 환경변수 관리
+> /compact                        ← 컨텍스트 압축
 > /help                           ← 도움말
 ```
 
@@ -251,7 +251,7 @@ Docker:      실행 중 컨테이너 수
 Uptime:      데몬 가동 시간
 ```
 
-- 2초마다 갱신
+- 5초마다 갱신
 - CPU/MEM이 80% 넘으면 빨간색 하이라이트
 
 #### 2. Projects (항상 표시)
@@ -308,8 +308,8 @@ Uptime:      데몬 가동 시간
 ### 반응형 동작
 
 ```
-터미널 너비 ≥ 100:  좌우 분할 (55:45)
-터미널 너비 < 100:  단일 패널 모드
+터미널 너비 ≥ 80:   좌우 분할 (60:40)
+터미널 너비 < 80:   단일 패널 모드
   - Tab으로 Chat ↔ Dashboard 전환
   - 하단 상태바에 요약 표시: "5 projects | CPU 23% | 1 building"
 ```
@@ -337,55 +337,28 @@ Uptime:      데몬 가동 시간
 
 ## 슬래시 명령 상세
 
-### 배포 명령
+> 슬래시 명령은 9개로 제한. 배포/로그/중지/재시작 등 운영 작업은 자연어 채팅으로 처리.
 
-```
-/deploy <repo-url> [--name <name>] [--env KEY=VALUE]
-```
+| 명령어     | 설명                    | 비고                          |
+| ---------- | ----------------------- | ----------------------------- |
+| `/repo`    | 레포 선택 → 배포 트리거 | 오버레이에서 레포 선택        |
+| `/git`     | Git 연결 관리           | SSH 키, 인증 설정             |
+| `/model`   | LLM 모델 변경           | 프로바이더/모델 선택          |
+| `/tunnel`  | Cloudflare Tunnel 설정  | Quick Share / 프로덕션 도메인 |
+| `/env`     | 환경변수 관리           | 프로젝트별 조회/수정          |
+| `/compact` | 컨텍스트 압축           | 채팅 히스토리 요약            |
+| `/clear`   | 화면 클리어             |                               |
+| `/exit`    | 종료                    |                               |
+| `/help`    | 도움말                  | 명령어 + 단축키 안내          |
 
-- `repo-url`: GitHub/GitLab SSH 또는 HTTPS URL
-- `--name`: 프로젝트 이름 지정 (기본값: 레포 이름)
-- `--env`: 초기 환경변수 설정 (복수 가능)
-- 예: `/deploy github.com/user/app --name my-app --env PORT=3000`
+**자연어로 대체된 작업** (슬래시 커맨드 아님):
 
-### 프로젝트 관리
-
-```
-/status [project]           # 전체 또는 특정 프로젝트 상태
-/logs <project> [-n 100]    # 로그 조회 (기본 50줄)
-/stop <project>             # 컨테이너 중지
-/start <project>            # 컨테이너 시작
-/restart <project>          # 재시작
-/remove <project>           # 컨테이너 + 이미지 삭제 (확인 필요)
-/redeploy <project>         # git pull → 재빌드 → 재배포
-```
-
-### 환경변수
-
-```
-/env <project>                     # 환경변수 목록 (마스킹)
-/env <project> KEY=VALUE           # 환경변수 추가/수정
-/env <project> --remove KEY        # 환경변수 삭제
-/env <project> --redeploy          # 변경 후 자동 재배포
-```
-
-### 외부 접근
-
-```
-/expose <project>                  # Quick Share (TryCloudflare)
-/unexpose <project>                # 외부 접근 해제
-/domain <project> <domain>         # 커스텀 도메인 매핑
-/domains                           # 전체 도메인 매핑 목록
-```
-
-### 시스템
-
-```
-/help                              # 명령어 목록
-/system                            # 시스템 리소스 상세
-/cleanup                           # 미사용 컨테이너/이미지 정리 제안
-/config                            # 설정 보기/수정
-```
+- 배포: "github.com/user/repo 배포해줘"
+- 로그: "backend 로그 보여줘"
+- 중지/시작/재시작: "backend 중지해줘"
+- 상태: "서버 상태 어때?"
+- 정리: "안 쓰는 컨테이너 정리해줘"
+- 알림 전체 보기: "알림 전체 보여줘"
 
 ### 자동완성 규칙
 
@@ -871,8 +844,8 @@ $ openlander
 
 ### 온보딩 구현 노트
 
-- 각 Screen은 Ink 컴포넌트 1개. state로 현재 단계 관리.
-- 화면 전환 시 `console.clear()` 또는 Ink의 `<Static>` 활용.
+- 각 Screen은 @opentui/solid 컴포넌트 1개. 시그널로 현재 단계 관리.
+- 화면 전환 시 `console.clear()` 활용.
 - 키보드: ↑↓ 선택, Enter 확인, q 종료, r 재시도.
 - 자동 단계(Docker 확인, Traefik 세팅)는 스피너 표시 후 결과.
 - SSH key 테스트: `ssh -T git@github.com` 실행해서 결과 파싱.
@@ -977,7 +950,7 @@ openlander/
 │   │
 │   ├── tui/
 │   │   ├── index.ts                  # TUI 엔트리포인트
-│   │   ├── app.tsx                   # 루트 컴포넌트 (Ink)
+│   │   ├── app.tsx                   # 루트 컴포넌트 (@opentui/solid)
 │   │   ├── components/
 │   │   │   ├── Layout.tsx            # 좌우 분할 레이아웃
 │   │   │   ├── ChatPanel.tsx         # 좌측 채팅 패널
@@ -1036,25 +1009,16 @@ openlander/
 
 ## TUI 기술 스택
 
-| 라이브러리                     | 용도                                                     |
-| ------------------------------ | -------------------------------------------------------- |
-| **Ink** (+ React)              | TUI 프레임워크. React 컴포넌트 기반으로 터미널 UI 렌더링 |
-| **ink-text-input**             | 채팅 입력 영역                                           |
-| **ink-spinner**                | 로딩 스피너                                              |
-| **cli-boxes** 또는 Ink `<Box>` | 레이아웃 박스                                            |
-| **chalk**                      | 색상 (Ink 내부에서도 사용)                               |
+| 라이브러리                     | 용도                                              |
+| ------------------------------ | ------------------------------------------------- |
+| **@opentui/solid** (+ SolidJS) | TUI 프레임워크. SolidJS 기반으로 터미널 UI 렌더링 |
+| **chalk**                      | 색상                                              |
 
-**Ink를 선택한 이유:**
+**@opentui/solid를 선택한 이유:**
 
-- React 기반이라 컴포넌트 재사용/상태관리가 자연스러움
-- OpenCode도 Ink 사용 (검증된 선택)
-- hooks로 비동기 데이터 페칭이 깔끔
-- 커뮤니티가 활발하고 예제가 많음
-
-**대안 (참고):**
-
-- blessed/neo-blessed: 더 낮은 레벨, 세밀한 제어 가능하지만 개발 속도 느림
-- bubbletea (Go): 언어가 다름. 참고만.
+- SolidJS 기반이라 세밀한 반응성 + 경량 렌더링
+- Ink(React) 대비 번들 크기 및 성능 우위
+- OpenCode TUI 스택과 동일 (검증된 선택)
 
 ---
 
@@ -1164,7 +1128,7 @@ $ openlander mcp install --claude-code
   → 🔄 Redeploying...
   → ✅ 재배포 완료 (8s)
 
-  You: /status
+  You: 프로젝트 상태 보여줘
   → (전체 프로젝트 상태 테이블)
 
   You: 서버 리소스 어때?
@@ -1306,7 +1270,7 @@ ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL;
 ### v1.0 — TUI + MCP 리팩토링 (현재)
 
 - [ ] Daemon/클라이언트 분리 (Unix socket IPC)
-- [ ] TUI 메인 인터페이스 (Ink)
+  - [ ] TUI 메인 인터페이스 (@opentui/solid)
   - [ ] 온보딩 (화면 전환형, Git SSH 연동 + LLM + Docker/Traefik)
   - [ ] 좌우 분할 레이아웃
   - [ ] 채팅 패널 (자연어 + 슬래시 명령)
@@ -1343,12 +1307,12 @@ ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL;
    → 기존 웹서버를 소켓 바인딩으로 변경
    → SessionStore 구현
 
-2. 온보딩 (Ink)
+2. 온보딩 (@opentui/solid)
    → 화면 전환형 단계별 온보딩
    → Git SSH 연동 (핵심), LLM 설정, Docker/Traefik 확인
    → config.json 존재 시 스킵
 
-3. TUI 기본 프레임 (Ink)
+3. TUI 기본 프레임 (@opentui/solid)
    → Layout, ChatPanel, DashboardPanel 골격
    → IPC 클라이언트
 
