@@ -164,6 +164,58 @@ const commands: SlashCommand[] = [
         : { action: 'agent', message: 'Show current configuration' },
   },
   {
+    name: 'git',
+    description: 'Manage Git authentication (SSH keys, providers)',
+    usage: '/git <ssh-keygen|ssh-add|provider> [options]',
+    handler: (args) => {
+      const lower = args.toLowerCase().trim();
+      if (lower.startsWith('ssh-keygen')) {
+        return {
+          action: 'agent',
+          message:
+            `Generate a new SSH key pair for Git authentication. ${args.replace(/^ssh-keygen\s*/i, '')}`.trim(),
+        };
+      }
+      if (lower.startsWith('ssh-add')) {
+        return {
+          action: 'agent',
+          message:
+            `Add SSH key to the agent and display the public key for adding to Git provider. ${args.replace(/^ssh-add\s*/i, '')}`.trim(),
+        };
+      }
+      if (lower.startsWith('provider')) {
+        return {
+          action: 'agent',
+          message: `Configure Git provider settings. ${args.replace(/^provider\s*/i, '')}`.trim(),
+        };
+      }
+      return {
+        action: 'agent',
+        message: args
+          ? `Git operation: ${args}`
+          : 'Show Git authentication status and configured providers',
+      };
+    },
+  },
+  {
+    name: 'ssh',
+    description: 'Manage SSH keys for private repo access',
+    usage: '/ssh [keygen|add|list]',
+    handler: (args) => {
+      const lower = args.toLowerCase().trim();
+      if (lower === 'keygen' || lower === 'generate') {
+        return { action: 'agent', message: 'Generate a new SSH key pair for Git authentication' };
+      }
+      if (lower === 'add') {
+        return { action: 'agent', message: 'Add SSH key to the agent and show public key' };
+      }
+      if (lower === 'list' || lower === 'ls') {
+        return { action: 'agent', message: 'List all SSH keys available for Git' };
+      }
+      return { action: 'agent', message: args ? `SSH operation: ${args}` : 'Show SSH key status' };
+    },
+  },
+  {
     name: 'clear',
     description: 'Clear chat history',
     handler: () => ({ action: 'clear' }),

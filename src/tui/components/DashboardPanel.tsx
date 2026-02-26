@@ -138,13 +138,17 @@ export function ProjectsSection({
           <Box key={project.id} flexDirection="column">
             <Box>
               {isSelected && (
-                <Text inverse color="cyan">
+                <Text inverse color={theme.secondary}>
                   {' '}
                 </Text>
               )}
               {!isSelected && <Text> </Text>}
               <Text color={color}>{icon} </Text>
-              <Text color={isSelected ? 'cyan' : undefined} bold={isSelected} inverse={isSelected}>
+              <Text
+                color={isSelected ? theme.secondary : undefined}
+                bold={isSelected}
+                inverse={isSelected}
+              >
                 {truncate(project.name, 12).padEnd(12)}
               </Text>
               <Text dimColor> {portStr.padEnd(6)}</Text>
@@ -208,7 +212,7 @@ export function McpClientsSection({ enabled }: { enabled: boolean }): React.Reac
           <Text dimColor>MCP server active (stdio)</Text>
           <Text dimColor>No clients connected yet</Text>
           <Text dimColor>
-            Run: <Text color="cyan">openlander mcp install --claude-code</Text>
+            Run: <Text color={theme.secondary}>openlander mcp install --claude-code</Text>
           </Text>
         </Box>
       ) : (

@@ -2,6 +2,14 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { ProgressBar } from './ProgressBar.js';
 import { theme } from '../theme.js';
+import {
+  ThinkingDisplay,
+  CommandDisplay,
+  FileEditDisplay,
+  TodoListDisplay,
+  BuildResultDisplay,
+  OrchestrationDisplay,
+} from './AgentDisplay.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -12,7 +20,20 @@ export interface DisplayMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   /** Message type for specialized rendering */
-  type?: 'text' | 'tool_start' | 'tool_result' | 'url' | 'warning' | 'error' | 'progress';
+  type?:
+    | 'text'
+    | 'tool_start'
+    | 'tool_result'
+    | 'url'
+    | 'warning'
+    | 'error'
+    | 'progress'
+    | 'command'
+    | 'file_edit'
+    | 'thinking'
+    | 'todo'
+    | 'build_result'
+    | 'orchestration';
   /** Tool name for tool_start/tool_result types */
   toolName?: string;
   /** Tool execution status */
@@ -21,6 +42,24 @@ export interface DisplayMessage {
   toolDuration?: number;
   /** Progress percentage (0-100) for progress type */
   progress?: number;
+  /** Command string for command type */
+  command?: string;
+  /** Command/build output text */
+  output?: string;
+  /** File path for file_edit type */
+  filePath?: string;
+  /** Diff text for file_edit type */
+  diff?: string;
+  /** File action for file_edit type */
+  fileAction?: 'edit' | 'create' | 'delete';
+  /** Todo items for todo type */
+  todoItems?: Array<{ content: string; status: 'pending' | 'in_progress' | 'completed' }>;
+  /** Build success flag */
+  buildSuccess?: boolean;
+  /** Build duration string */
+  buildDuration?: string;
+  /** Orchestration steps for orchestration type */
+  orchestrationSteps?: string[];
   /** Timestamp in milliseconds */
   timestamp: number;
 }
@@ -72,107 +111,165 @@ export interface ChatMessageProps {
 export function ChatMessage({ message }: ChatMessageProps): React.ReactElement {
   const { role, content, type, toolName, toolStatus, toolDuration, progress } = message;
 
-  // User messages
-  if (role === 'user') {
-    return (
-      <Box paddingX={1}>
-        <Text bold color={theme.user}>
-          {'You: '}
-        </Text>
-        <Text color={theme.user}>{content}</Text>
-      </Box>
-    );
-  }
-
-  // System messages
-  if (role === 'system') {
-    return (
-      <Box paddingX={1}>
-        <Text dimColor>{content}</Text>
-      </Box>
-    );
-  }
-
-  // Assistant messages - render based on type
-  switch (type) {
-    case 'tool_start':
+  // Helper to render content based on type
+  const renderContent = () => {
+    // User messages — inline "You: content"
+    if (role === 'user') {
       return (
-        <Box paddingX={1}>
+        <Text>
+          <Text bold color={theme.secondary}>
+            You:{' '}
+          </Text>
+          <Text>{content}</Text>
+        </Text>
+      );
+    }
+
+    // System messages
+    if (role === 'system') {
+      return <Text dimColor>{content}</Text>;
+    }
+
+    // Assistant messages
+    switch (type) {
+      case 'tool_start':
+        return (
           <Text color={theme.progress}>
             🔄 {toolName ? formatToolDescription(toolName) : content} 중...
           </Text>
-        </Box>
-      );
+        );
 
-    case 'tool_result': {
-      if (toolStatus === 'error') {
-        return (
-          <Box paddingX={1}>
+      case 'tool_result': {
+        if (toolStatus === 'error') {
+          return (
             <Text color={theme.error}>
               ❌ {toolName ? formatToolDescription(toolName) : content} 실패
             </Text>
-          </Box>
-        );
-      }
-      // Success
-      const durationText = toolDuration !== undefined ? ` (${formatDuration(toolDuration)})` : '';
-      return (
-        <Box paddingX={1}>
+          );
+        }
+        const durationText = toolDuration !== undefined ? ` (${formatDuration(toolDuration)})` : '';
+        return (
           <Text color={theme.success}>
             ✅ {toolName ? formatToolDescription(toolName) : content} 완료{durationText}
           </Text>
-        </Box>
-      );
-    }
+        );
+      }
 
-    case 'progress':
-      return (
-        <Box paddingX={1}>
-          <ProgressBar percent={progress ?? 0} label={content || undefined} />
-        </Box>
-      );
+      case 'progress':
+        return <ProgressBar percent={progress ?? 0} label={content || undefined} />;
 
-    case 'url':
-      return (
-        <Box paddingX={1}>
+      case 'url':
+        return (
           <Text color={theme.url} underline>
             {content}
           </Text>
-        </Box>
-      );
+        );
 
-    case 'warning':
-      return (
-        <Box paddingX={1}>
-          <Text color={theme.warning}>⚠️ {content}</Text>
-        </Box>
-      );
+      case 'warning':
+        return <Text color={theme.warning}>⚠️ {content}</Text>;
 
-    case 'error':
-      return (
-        <Box paddingX={1}>
-          <Text color={theme.error}>❌ {content}</Text>
-        </Box>
-      );
+      case 'error':
+        return <Text color={theme.error}>❌ {content}</Text>;
 
-    case 'text':
-    default: {
-      // Regular assistant text
-      if (!content) {
-        return <Box />;
+      case 'command':
+        return (
+          <CommandDisplay
+            command={message.command ?? ''}
+            output={message.output}
+            status={message.toolStatus}
+          />
+        );
+
+      case 'file_edit':
+        return (
+          <FileEditDisplay
+            filePath={message.filePath ?? ''}
+            diff={message.diff}
+            action={message.fileAction}
+          />
+        );
+
+      case 'thinking':
+        return <ThinkingDisplay label={content || 'Thinking...'} />;
+
+      case 'todo':
+        return <TodoListDisplay items={message.todoItems ?? []} />;
+
+      case 'build_result':
+        return (
+          <BuildResultDisplay
+            label={message.toolName ?? 'Build'}
+            output={message.output ?? ''}
+            success={message.buildSuccess ?? false}
+            duration={message.buildDuration}
+          />
+        );
+
+      case 'orchestration':
+        return (
+          <OrchestrationDisplay
+            title={content || 'Plan'}
+            steps={message.orchestrationSteps ?? []}
+          />
+        );
+
+      case 'text':
+      default: {
+        // Regular assistant text
+        if (!content) {
+          return null;
+        }
+        // Wrap long lines similar to ChatView
+        const lines = content.split('\n');
+        return (
+          <Box flexDirection="column">
+            {lines.map((line, i) => (
+              <Text key={`${message.id}-line-${String(i)}`}>
+                {i === 0 ? '' : '  '}
+                {line}
+              </Text>
+            ))}
+          </Box>
+        );
       }
-      // Wrap long lines similar to ChatView
-      const lines = content.split('\n');
-      return (
-        <Box flexDirection="column" paddingX={1}>
-          {lines.map((line, i) => (
-            <Text key={`${message.id}-line-${String(i)}`}>
-              {i === 0 ? '' : '  '}
-              {line}
-            </Text>
-          ))}
-        </Box>
-      );
     }
+  };
+
+  // Check if it's an AgentDisplay type (these have their own borders)
+  const isAgentDisplayType = [
+    'command',
+    'file_edit',
+    'thinking',
+    'todo',
+    'build_result',
+    'orchestration',
+  ].includes(type || '');
+
+  // If it's an AgentDisplay type, render directly with padding but NO extra border
+  if (isAgentDisplayType) {
+    return <Box paddingX={1}>{renderContent()}</Box>;
   }
+
+  // Determine border color based on role and type
+  let borderColor: string = theme.primary; // default: assistant orange
+  if (role === 'user') borderColor = theme.secondary;
+  else if (role === 'system') borderColor = theme.muted;
+
+  if (type === 'error') borderColor = theme.error;
+  else if (type === 'warning') borderColor = theme.warning;
+
+  return (
+    <Box
+      borderStyle="bold"
+      borderLeft
+      borderRight={false}
+      borderTop={false}
+      borderBottom={false}
+      borderColor={borderColor}
+      paddingLeft={1}
+      flexDirection="column"
+    >
+      {renderContent()}
+    </Box>
+  );
 }

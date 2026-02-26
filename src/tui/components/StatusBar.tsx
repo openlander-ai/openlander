@@ -43,66 +43,88 @@ export function StatusBar({
       justifyContent="space-between"
     >
       {/* Left side: Keyboard hints */}
-      <Box gap={2}>
+      <Box gap={1}>
         {isSplitMode ? (
           // Split mode shortcuts
           <>
             <Box>
-              <Text dimColor>[</Text>
-              <Text color={theme.warning}>Tab</Text>
-              <Text dimColor>] Panel</Text>
+              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+                {' '}
+                Tab{' '}
+              </Text>
+              <Text dimColor> Panel</Text>
             </Box>
             <Box>
-              <Text dimColor>[</Text>
-              <Text color={theme.warning}>/</Text>
-              <Text dimColor>] Commands</Text>
+              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+                {' '}
+                /{' '}
+              </Text>
+              <Text dimColor> Commands</Text>
             </Box>
             <Box>
-              <Text dimColor>[</Text>
-              <Text color={theme.warning}>?</Text>
-              <Text dimColor>] Help</Text>
+              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+                {' '}
+                ?{' '}
+              </Text>
+              <Text dimColor> Help</Text>
             </Box>
             <Box>
-              <Text dimColor>[</Text>
-              <Text color={theme.warning}>Ctrl+C</Text>
-              <Text dimColor>] Exit</Text>
+              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+                {' '}
+                ^C{' '}
+              </Text>
+              <Text dimColor> Exit</Text>
             </Box>
           </>
         ) : (
           // Single mode shortcuts with panel indicator
           <>
             <Box>
-              <Text dimColor>[</Text>
-              <Text color={theme.warning}>Tab</Text>
-              <Text dimColor>] </Text>
+              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+                {' '}
+                Tab{' '}
+              </Text>
+              <Text> </Text>
               {activePanel === 'left' ? (
                 <>
-                  <Text color={theme.user}>Chat</Text>
-                  <Text dimColor>→</Text>
+                  <Text backgroundColor={theme.secondary} color="#212121" bold>
+                    {' '}
+                    Chat{' '}
+                  </Text>
+                  <Text dimColor> │ </Text>
                   <Text dimColor>Dashboard</Text>
                 </>
               ) : (
                 <>
                   <Text dimColor>Chat</Text>
-                  <Text dimColor>←</Text>
-                  <Text color={theme.user}>Dashboard</Text>
+                  <Text dimColor> │ </Text>
+                  <Text backgroundColor={theme.secondary} color="#212121" bold>
+                    {' '}
+                    Dashboard{' '}
+                  </Text>
                 </>
               )}
             </Box>
             <Box>
-              <Text dimColor>[</Text>
-              <Text color={theme.warning}>/</Text>
-              <Text dimColor>] Commands</Text>
+              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+                {' '}
+                /{' '}
+              </Text>
+              <Text dimColor> Commands</Text>
             </Box>
             <Box>
-              <Text dimColor>[</Text>
-              <Text color={theme.warning}>?</Text>
-              <Text dimColor>] Help</Text>
+              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+                {' '}
+                ?{' '}
+              </Text>
+              <Text dimColor> Help</Text>
             </Box>
             <Box>
-              <Text dimColor>[</Text>
-              <Text color={theme.warning}>Ctrl+C</Text>
-              <Text dimColor>] Exit</Text>
+              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+                {' '}
+                ^C{' '}
+              </Text>
+              <Text dimColor> Exit</Text>
             </Box>
           </>
         )}
@@ -111,8 +133,8 @@ export function StatusBar({
       {/* Right side: Summary (only in single mode) */}
       {!isSplitMode && (
         <Box>
-          <Text dimColor>
-            {projectCount} project{projectCount !== 1 ? 's' : ''} | CPU {cpuDisplay}
+          <Text color={theme.muted}>
+            {projectCount} project{projectCount !== 1 ? 's' : ''} │ CPU {cpuDisplay}
             {buildingDisplay}
           </Text>
         </Box>

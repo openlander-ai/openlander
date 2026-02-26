@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import TextInput from 'ink-text-input';
+import TextInput from '../components/IMETextInput.js';
 
 import type { ScreenProps } from './index.js';
 import { updateConfig } from '../../config/index.js';

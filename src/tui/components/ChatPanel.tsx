@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import TextInput from './IMETextInput.js';
 import Spinner from 'ink-spinner';
 import type { OpenLanderClient } from '../../ipc/client.js';
 import type { ChatStreamEvent } from '../../agent/index.js';
@@ -118,7 +118,38 @@ export function ChatPanel({
         setIsStreaming(true);
         break;
 
-      case 'tool_call':
+      case 'tool_call': {
+        // Classify tool calls by name for specialized rendering
+        const args = event.arguments as Record<string, string>;
+        let messageType: DisplayMessage['type'] = 'tool_start';
+        const baseMsg: Partial<DisplayMessage> = {
+          toolName: event.toolName,
+        };
+
+        if (
+          event.toolName === 'execute_command' ||
+          event.toolName === 'bash' ||
+          event.toolName === 'run_command'
+        ) {
+          messageType = 'command';
+          baseMsg.command = args.command ?? args.cmd ?? '';
+          baseMsg.toolStatus = 'running';
+        } else if (
+          event.toolName === 'edit_file' ||
+          event.toolName === 'write_file' ||
+          event.toolName === 'create_file' ||
+          event.toolName === 'delete_file'
+        ) {
+          messageType = 'file_edit';
+          baseMsg.filePath = args.path ?? args.file ?? args.filePath ?? '';
+          baseMsg.fileAction =
+            event.toolName === 'create_file'
+              ? 'create'
+              : event.toolName === 'delete_file'
+                ? 'delete'
+                : 'edit';
+        }
+
         // Add tool_start message
         setMessages((prev) => [
           ...prev,
@@ -126,29 +157,50 @@ export function ChatPanel({
             id: `tool-${String(Date.now())}`,
             role: 'assistant',
             content: '',
-            type: 'tool_start',
-            toolName: event.toolName,
+            type: messageType,
             timestamp: Date.now(),
+            ...baseMsg,
           },
         ]);
         break;
+      }
 
       case 'tool_result':
         // Update the last tool_start message with result
         setMessages((prev) => {
           const updated = [...prev];
           const lastToolIdx = updated.findIndex(
-            (m) => m.type === 'tool_start' && m.toolName === event.toolName,
+            (m) =>
+              (m.type === 'tool_start' || m.type === 'command' || m.type === 'file_edit') &&
+              m.toolName === event.toolName,
           );
           if (lastToolIdx !== -1) {
             const item = updated[lastToolIdx];
             if (item) {
-              updated[lastToolIdx] = {
-                ...item,
-                type: 'tool_result',
+              const updates: Partial<DisplayMessage> = {
                 toolStatus: event.success ? 'success' : 'error',
                 toolDuration: event.success ? 0 : undefined, // Duration would need to be tracked
                 content: event.error ?? '',
+              };
+
+              if (item.type === 'command') {
+                updates.output =
+                  typeof event.result === 'string'
+                    ? event.result
+                    : JSON.stringify(event.result, null, 2);
+              } else if (item.type === 'file_edit') {
+                // If result is a diff string, use it. Otherwise just show success/fail
+                if (typeof event.result === 'string') {
+                  updates.diff = event.result;
+                }
+              } else {
+                // Standard tool result
+                updates.type = 'tool_result';
+              }
+
+              updated[lastToolIdx] = {
+                ...item,
+                ...updates,
               };
             }
           }
@@ -411,23 +463,39 @@ export function ChatPanel({
       <Box flexDirection="column" flexGrow={1} overflow="hidden">
         {messages.length === 0 && !isStreaming ? (
           // Welcome message
-          <Box flexDirection="column" paddingX={1}>
-            <Text color={theme.user} bold>
-              Welcome to OpenLander
+          <Box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
+            <Text color={theme.primary} bold>
+              {'  ___                   _                    _           '}
             </Text>
+            <Text color={theme.primary} bold>
+              {' / _ \\ _ __   ___ _ __ | |    __ _ _ __   __| | ___ _ __ '}
+            </Text>
+            <Text color={theme.primary} bold>
+              {"| | | | '_ \\ / _ \\ '_ \\| |   / _` | '_ \\ / _` |/ _ \\ '__|"}
+            </Text>
+            <Text color={theme.primary} bold>
+              {'| |_| | |_) |  __/ | | | |__| (_| | | | | (_| |  __/ |   '}
+            </Text>
+            <Text color={theme.primary} bold>
+              {' \\___/| .__/ \\___|_| |_|_____\\__,_|_| |_|\\__,_|\\___|_|   '}
+            </Text>
+            <Text color={theme.primary} bold>
+              {'      |_|                                                  '}
+            </Text>
+            <Text> </Text>
+            <Text dimColor>v0.1.0</Text>
             <Text> </Text>
             {client ? (
               <>
+                <Text dimColor>Deploy anything with a chat. Type to get started.</Text>
                 <Text dimColor>
-                  Ask the agent anything — deploy a repo, check logs, manage projects.
-                </Text>
-                <Text dimColor>
-                  Type <Text color={theme.user}>/help</Text> to see all slash commands.
+                  Press <Text color={theme.secondary}>/</Text> for commands,{' '}
+                  <Text color={theme.secondary}>?</Text> for help
                 </Text>
               </>
             ) : (
-              <Text color="yellow">
-                Daemon not connected. Start with: <Text bold>openlander daemon</Text>
+              <Text color={theme.warning}>
+                Daemon not connected. Run: <Text bold>openlander daemon</Text>
               </Text>
             )}
           </Box>
@@ -441,10 +509,10 @@ export function ChatPanel({
             {/* Thinking indicator */}
             {isStreaming && (
               <Box paddingX={1} gap={1}>
-                <Text color="yellow">
+                <Text color={theme.primary}>
                   <Spinner type="dots" />
                 </Text>
-                <Text color="yellow">Thinking…</Text>
+                <Text color={theme.primary}>Thinking…</Text>
               </Box>
             )}
           </Box>
@@ -472,14 +540,14 @@ export function ChatPanel({
           <Text dimColor>Chat unavailable — daemon not connected</Text>
         ) : isStreaming ? (
           <Box gap={1}>
-            <Text color="yellow">
+            <Text color={theme.primary}>
               <Spinner type="dots" />
             </Text>
             <Text dimColor> Waiting for response...</Text>
           </Box>
         ) : (
           <Box>
-            <Text color={theme.user}>❯ </Text>
+            <Text color={theme.primary}>❯ </Text>
             <TextInput
               value={inputValue}
               onChange={setInputValue}
