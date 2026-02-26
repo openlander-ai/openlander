@@ -15,7 +15,7 @@
 - [x] Flex 레이아웃 전환 (explicit height → flex)
 - [x] 중앙 빈 상태 프롬프트 → 첫 메시지 후 하단 이동
 - [x] 슬래시 커맨드 피커 오버레이 (↑↓, Mouse, Enter, Esc)
-- [x] 슬래시 커맨드 9개: `/help`, `/model`, `/git`, `/repo`, `/tunnel`, `/env`, `/compact`, `/clear`, `/exit`
+- [x] 슬래시 커맨드 9개: `/repo`, `/git`, `/model`, `/tunnel`, `/env`, `/compact`, `/clear`, `/exit`, `/help`
 - [x] Phase 1 전체 구현: 3-모드 상태 머신 (monitoring/deploying/debugging)
 - [x] 적응형 우측 패널 (StatusPanel) + BuildPanel/ProjectInfo/LogViewer 골격
 - [x] 포커스 관리 시스템 (state/focus.ts, Tab 전환)
@@ -37,17 +37,17 @@
 > 설정 5개 (GUI 피커 오버레이) + TUI 시스템 4개. `/` 입력 시 9개 바로 표시.
 > `/stop`, `/restart`, `/logs` → 채팅 자연어로 대체 (슬래시에서 제거).
 
-| 명령어     | 동작                              | 상태                               |
-| ---------- | --------------------------------- | ---------------------------------- |
-| `/help`    | 오버레이 → 명령어 목록            | ✅                                 |
-| `/model`   | 오버레이 → LLM 모델 선택          | ✅                                 |
-| `/git`     | 오버레이 → Git 프로바이더 관리    | ✅                                 |
-| `/repo`    | 오버레이 → 레포 브라우저 → 배포   | ✅                                 |
-| `/tunnel`  | 오버레이 → Cloudflare Tunnel 설정 | ✅ 골격 (Phase 8 완성 예정)        |
-| `/env`     | 오버레이 → 환경변수 관리          | ✅ 골격 (Phase 8 완성 예정)        |
-| `/compact` | 채팅 컨텍스트 요약                | ⚠️ action만 발행, 요약 로직 미구현 |
-| `/clear`   | 채팅 클리어                       | ✅                                 |
-| `/exit`    | 앱 종료                           | ✅                                 |
+| 명령어     | 동작                   | 상태                               |
+| ---------- | ---------------------- | ---------------------------------- |
+| `/repo`    | 레포 선택 → 배포       | ✅                                 |
+| `/git`     | Git 연결 관리          | ✅                                 |
+| `/model`   | LLM 모델 변경          | ✅                                 |
+| `/tunnel`  | Cloudflare Tunnel 설정 | ✅ 골격 (Phase 8 완성 예정)        |
+| `/env`     | 환경변수 관리          | ✅ 골격 (Phase 8 완성 예정)        |
+| `/compact` | 컨텍스트 압축          | ⚠️ action만 발행, 압축 로직 미구현 |
+| `/clear`   | 화면 클리어            | ✅                                 |
+| `/exit`    | 종료                   | ✅                                 |
+| `/help`    | 도움말                 | ✅                                 |
 
 ---
 
@@ -182,7 +182,7 @@
   2. 최대 5건 표시 (최신순)
   3. 형식: `14:32 dongbin ✅ frontend`
   4. 상태별 색상 (success=green, building=yellow, error=red)
-  5. IPC `/api/activity?follow=true` NDJSON 스트리밍 또는 `eventBus` 구독
+  5. IPC `getActivityFeed()` 스트리밍 또는 `eventBus` 구독
 - **의존성**: T-ARCH-02
 
 ### T-MON-04: Alerts 섹션
@@ -192,16 +192,16 @@
 - **감지 항목**:
   | Alert | 조건 | 제안 |
   |-------|------|------|
-  | 디스크 부족 | DSK > 80% | `/cleanup` 실행 권장 |
+  | 디스크 부족 | DSK > 80% | "정리해줘"로 정리 권장 |
   | 미사용 프로젝트 | 2주 이상 요청 없음 | 중지 시 확보 가능 메모리 표시 |
-  | 컨테이너 재시작 반복 | 24시간 내 3회 이상 | `/logs <project>` 확인 권장 |
+  | 컨테이너 재시작 반복 | 24시간 내 3회 이상 | "로그 보여줘"로 확인 권장 |
   | 빌드 이미지 누적 | dangling 이미지 3개+ | 정리 시 확보 가능 용량 표시 |
 - **구현**:
   1. `<AlertsSection>` 컴포넌트 — 조건부 렌더링 (이슈 있을 때만)
-  2. 최대 3건, 심각도 순 정렬. 초과 시 `+N more — /alerts`
+  2. 최대 3건, 심각도 순 정렬. 초과 시 `+N more`
   3. 데몬 측 주기적 체크 (30초 폴링)
-  4. `/alerts` 명령어 추가 (전체 목록)
-  5. `/cleanup` 명령어 추가 (docker image prune 제안)
+  4. "알림 보여줘" 자연어 → 전체 Alert 목록 채팅 출력
+  5. "정리해줘" 자연어 → docker image prune 제안
   6. dismiss 기능 (동일 Alert 반복 방지)
 - **의존성**: T-ARCH-02, 데몬 측 Alert 감지 로직 필요
 
@@ -211,18 +211,6 @@
 
 > 빌드 시작 시 자동 전환. 파이프라인 시각화 + 빌드 로그.
 > 참고: `ui-ux-layout.md` §모드 2: 배포, `ui-ux-build-compose.md` §Part 1
-
-### T-DEPLOY-01: `/deploy` 커맨드
-
-- **우선순위**: 🔴 P0 | **난이도**: M
-- **설명**: `/deploy <repo-url> [--name <name>] [--env KEY=VALUE]`
-- **구현**:
-  1. `registry.ts`에 `deploy` 추가 → `{ action: 'deploy', repoUrl, name, env }`
-  2. `--name`, `--env` 플래그 파싱 (복수 env 지원)
-  3. 실행 시 IPC `deploy(repoUrl, options)` 호출
-  4. `/repo`에서 선택 → deploy와 동일 흐름으로 통합
-- **의존성**: 없음
-- **테스트**: 커맨드 파싱 단위테스트 (URL, --name, --env 조합)
 
 ### T-DEPLOY-02: Build 패널
 
@@ -265,7 +253,7 @@
   1. 빌드 로그 실패 시점(Docker step)으로 Tier 자동 분류
   2. Tier 1: 데몬 내 하드코딩 (LLM 불필요), 자동 재시도 최대 2회, 채팅에 1줄 알림
   3. Tier 2: LLM에 빌드 에러 + Dockerfile 전달 → diff 생성 → 채팅에 diff 표시 → y/n 인라인 프롬프트
-  4. Tier 3: 핵심 에러 추출 표시 + "소스 코드 수정이 필요합니다. 수정 후 `/deploy`로 다시 시도해주세요."
+  4. Tier 3: 핵심 에러 추출 표시 + "소스 코드 수정이 필요합니다. 수정 후 재배포를 다시 시도해주세요."
   5. 전체 로그는 디버깅 모드에서 확인 가능하도록 안내
 - **핵심 원칙**: "누가 만든 파일이냐"로 범위 결정. 유저 코드는 절대 수정 안 함.
 - **의존성**: T-DEPLOY-02, 데몬 측 Tier 분류 로직
@@ -307,7 +295,7 @@
   1. `<ProjectInfo>` — Status, Port, Domain, Image, Uptime, CPU, MEM, Last deploy
   2. `<LogViewer>` — `<ScrollableLog>` 재활용, IPC `docker logs -f` 스트리밍
   3. Status 패널에서 프로젝트 Enter → 동일 뷰 진입
-  4. Chat에서 `/logs` → 동일 뷰 진입 (Chat 포커스 유지)
+  4. Chat에서 "로그 보여줘" → 동일 뷰 진입 (Chat 포커스 유지)
 - **의존성**: T-ARCH-02, T-DEPLOY-03 (ScrollableLog)
 
 ### T-DEBUG-03: 디버깅 단축키
@@ -348,17 +336,6 @@
   2. 상세: 프로젝트 Info (디버깅 모드와 동일 데이터, 채팅에 텍스트로)
 - **의존성**: IPC `listProjects()` / `getProjectStats()`
 
-### T-CMD-03: `/env` 오버레이 구현
-
-- **우선순위**: 🟡 P1 | **난이도**: M
-- **설명**: `/env` 슬래시 명령 → 환경변수 관리 오버레이. env-spec.md 참조.
-- **구현**:
-  1. 오버레이에서 현재 프로젝트 환경변수 목록 표시
-  2. 마스킹 표시 (KEY, SECRET, TOKEN, PASSWORD 포함 시 `sk-...****`)
-  3. 추가/수정/삭제 인라인 UI
-  4. 변경 후 재배포 제안
-- **의존성**: env-spec.md Part 2
-
 ### T-CMD-04: 자연어 프로젝트 삭제
 
 - **우선순위**: 🟡 P1 | **난이도**: M
@@ -393,7 +370,7 @@
   1. 클론 후 감지: `docker-compose.yml`, `docker-compose.yaml`, `compose.yml`, `compose.yaml`
   2. 감지 시 `docker compose up -d --build` 실행
   3. 감지 분기: compose 있음 → Compose 모드 / Dockerfile만 → Single 모드 / 둘 다 없음 → Auto-Detect (T-COMPOSE-05)
-- **의존성**: T-DEPLOY-01
+- **의존성**: 없음
 
 ### T-COMPOSE-02: 포트 충돌 → override 자동 생성
 
@@ -429,7 +406,7 @@
   3. Enter로 펼침/접음 토글
   4. 외부 도메인 있는 서비스만 URL 표시
   5. 내부 전용 서비스(db, redis): 포트 대신 `—`
-- **의존성**: T-MON-02
+- **의존성**: T-MON-02, T-COMPOSE-01
 
 ### T-COMPOSE-05: Auto-Detect (Dockerfile/Compose 없는 레포)
 
@@ -527,18 +504,40 @@
   1. Git 프로바이더 인터페이스 (`src/git/provider.ts`)
   2. GitHub 구현 (현재 코드 리팩토링)
   3. GitLab 구현
-  4. `/connect` 오버레이에서 프로바이더 선택 UI
+  4. `/git` 오버레이에서 프로바이더 선택 UI
 
 ### T-INFRA-03: Vercel AI SDK 마이그레이션 조사
 
 - **우선순위**: 🟢 P2 | **난이도**: L (조사만)
 - **구현**: 현재 에이전트 코드 분석 → Vercel AI SDK 매핑 → 마이그레이션 계획 문서
 
+### T-INFRA-04: `/env` 오버레이 완성
+
+- **우선순위**: 🟡 P1 | **난이도**: M
+- **설명**: `/env` 슬래시 명령 → 환경변수 관리 오버레이 완성. 골격은 구현 완료.
+- **구현**:
+  1. 오버레이에서 현재 프로젝트 환경변수 목록 표시
+  2. 마스킹 표시 (KEY, SECRET, TOKEN, PASSWORD 포함 시 `sk-...****`)
+  3. 추가/수정/삭제 인라인 UI
+  4. 변경 후 재배포 제안
+- **의존성**: env-spec.md Part 2
+
+### T-INFRA-05: `/tunnel` 오버레이 완성
+
+- **우선순위**: 🟡 P1 | **난이도**: M
+- **설명**: `/tunnel` 슬래시 명령 → Cloudflare Tunnel 설정 오버레이 완성. 골격은 구현 완료.
+- **구현**:
+  1. Cloudflare Tunnel 연동 설정 UI
+  2. 터널 상태 표시 (활성/비활성)
+  3. 프로젝트별 터널 매핑
+  4. 인증 토큰 관리
+- **의존성**: Cloudflare Tunnel API 조사 필요
+
 ---
 
 ## 실행 순서 (권장)
 
-### Phase 1 → 2: 기반 + 모니터링 (데모 최소 조건)
+### Phase 1 → 2: 기반 + 모니터링 ✅ 완료
 
 ```
 T-ARCH-01  3-모드 상태 머신
@@ -552,7 +551,6 @@ T-MON-02   Projects 섹션
 ### Phase 3: 배포 (핵심 가치)
 
 ```
-T-DEPLOY-01  /deploy 커맨드
 T-DEPLOY-02  Build 패널 + 파이프라인
 T-DEPLOY-03  스마트 자동 스크롤
 T-KEY-01     Ctrl+C 취소
@@ -564,6 +562,8 @@ T-KEY-01     Ctrl+C 취소
 T-DEBUG-01   디버깅 모드 진입 (Status 패널 Enter + 자연어)
 T-DEBUG-02   Info + 로그 뷰
 T-CMD-01     자연어 컨테이너 제어 (stop, start, restart)
+T-CMD-02     자연어 상태 확인
+T-CMD-04     자연어 프로젝트 삭제
 T-CMD-05     자연어 재배포
 ```
 
@@ -582,10 +582,13 @@ T-COMPOSE-04  서비스 그룹 표시
 T-MON-03     Activity 섹션
 T-MON-04     Alerts 섹션
 T-DEPLOY-04  Build Failure 3-Tier
+T-KEY-02     Ctrl+L 화면 클리어
 T-CHAT-01    마크다운 렌더링
 T-COMPACT-01 /compact 실제 구현
 T-INFRA-01   i18n
 T-INFRA-02   다중 Git 프로바이더
+T-INFRA-04   /env 오버레이 완성
+T-INFRA-05   /tunnel 오버레이 완성
 ... (나머지 P2 항목)
 ```
 
@@ -593,7 +596,7 @@ T-INFRA-02   다중 Git 프로바이더
 
 ## 참고사항
 
-- **슬래시 명령 원칙**: LLM을 거치지 않고 직접 실행. 9개 유지 (help, model, git, repo, tunnel, env, compact, clear, exit). 컨테이너 제어(/stop, /restart)와 디버깅(/logs)은 채팅 자연어로 대체.
+- **슬래시 명령 원칙**: LLM을 거치지 않고 직접 실행. 9개 유지 (repo, git, model, tunnel, env, compact, clear, exit, help). 컨테이너 제어(/stop, /restart)와 디버깅(/logs)은 채팅 자연어로 대체.
 - **빌드 실패 원칙**: "누가 만든 파일이냐"로 대응 범위 결정. 유저 코드는 절대 수정 안 함.
 - **Compose 원칙**: 원본 docker-compose.yml 절대 수정 안 함. override 파일만 사용.
 - **테마**: OpenCode 다크 테마 유지. 추후 브랜딩 커스터마이징 예정.
@@ -609,10 +612,10 @@ T-INFRA-02   다중 Git 프로바이더
 | ------------------------- | ------- | ------ | ------ | ----- |
 | 1. 레이아웃 아키텍처      | 5       | 4      | 1      | 0     |
 | 2. 모니터링 모드          | 4       | 2      | 2      | 0     |
-| 3. 배포 모드              | 5       | 3      | 1      | 1     |
+| 3. 배포 모드              | 4       | 2      | 1      | 1     |
 | 4. 디버깅 모드            | 3       | 2      | 1      | 0     |
-| 5. 컨테이너 제어 (자연어) | 5       | 1      | 4      | 0     |
+| 5. 컨테이너 제어 (자연어) | 4       | 1      | 3      | 0     |
 | 6. Compose 모드           | 5       | 0      | 4      | 1     |
 | 7. 채팅 & 폴리시          | 9       | 1      | 3      | 5     |
-| 8. 인프라 & 장기          | 3       | 0      | 2      | 1     |
-| **합계**                  | **39**  | **13** | **18** | **8** |
+| 8. 인프라 & 장기          | 5       | 0      | 4      | 1     |
+| **합계**                  | **39**  | **12** | **19** | **8** |

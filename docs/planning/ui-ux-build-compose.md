@@ -93,7 +93,7 @@ Dockerfile, docker-compose, .dockerignore 등 OpenLander가 생성/관리하는 
   to parameter of type 'number'
 
 소스 코드 수정이 필요합니다.
-수정 후 /deploy 로 다시 시도해주세요.
+수정 후 재배포를 다시 시도해주세요.
 ```
 
 **규칙:**
@@ -345,7 +345,7 @@ Compose 프로젝트 선택 시, 어떤 서비스의 로그를 볼지 선택 단
 ```
 ┌─ Chat ─────────────────────┬─ litellm ─────────────────────┐
 │                             │ ▸ Services                    │
-│ You: /logs litellm          │   > ● litellm  :4001  256M   │
+│ You: litellm 로그 보여줘   │   > ● litellm  :4001  256M   │
 │                             │     ● db        —     128M   │
 │ Select a service:           │     ● redis     —     64M    │
 │                             │                               │
@@ -356,20 +356,23 @@ Compose 프로젝트 선택 시, 어떤 서비스의 로그를 볼지 선택 단
 
 서비스 선택 후 → 기존 디버깅 모드(Info + Logs)와 동일.
 
-또는 직접 지정: `/logs litellm/db` → db 서비스 로그 바로 표시.
+또는 직접 지정: "litellm의 db 로그 보여줘" → db 서비스 로그 바로 표시.
 
 ---
 
-### Compose 관련 슬래시 명령
+### Compose 프로젝트 조작
 
-| 명령                           | 동작                                     |
+> 배포: `/repo` 오버레이에서 레포 선택 시 compose 자동 감지.
+> 운영: 모든 컨테이너 제어는 채팅 자연어로 실행 (슬래시 명령 아님).
+
+| 방식                           | 동작                                     |
 | ------------------------------ | ---------------------------------------- |
-| `/deploy <repo>`               | compose 감지 시 자동으로 Compose 모드    |
-| `/logs <project>`              | 서비스 선택 UI 표시                      |
-| `/logs <project>/<service>`    | 특정 서비스 로그 직접 표시               |
-| `/stop <project>`              | `docker compose down` (전체 서비스 중지) |
-| `/restart <project>`           | `docker compose restart`                 |
-| `/restart <project>/<service>` | 특정 서비스만 재시작                     |
+| `/repo`에서 레포 선택          | compose 감지 시 자동으로 Compose 모드    |
+| "litellm 로그 보여줘"          | 서비스 선택 UI 표시                      |
+| "litellm의 db 로그 보여줘"     | 특정 서비스 로그 직접 표시               |
+| "litellm 중지해줘"             | `docker compose down` (전체 서비스 중지) |
+| "litellm 재시작해줘"           | `docker compose restart`                 |
+| "litellm의 redis만 재시작해줘" | 특정 서비스만 재시작                     |
 
 ---
 
