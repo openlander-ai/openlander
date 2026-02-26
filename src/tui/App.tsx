@@ -428,6 +428,10 @@ export function App(props: AppProps): JSX.Element {
     // Map focus to Layout's activePanel prop
     const activePanelForLayout = (): 'left' | 'right' => (focus() === 'chat' ? 'left' : 'right');
 
+    // When any overlay is open, unfocus panels so textarea doesn't eat keyboard events
+    const anyOverlayOpen = () =>
+      showHelp() || showModelSelector() || showGit() || showRepo() || showTunnel() || showEnv();
+
     return (
       <>
         <Layout
@@ -435,7 +439,7 @@ export function App(props: AppProps): JSX.Element {
             <ChatPanel
               client={connectedClient}
               height={contentHeight}
-              focus={focus() === 'chat'}
+              focus={focus() === 'chat' && !anyOverlayOpen()}
               externalMessages={deployMessages()}
               onModal={(modal: string) => {
                 if (modal === 'help') setShowHelp(true);
@@ -451,7 +455,7 @@ export function App(props: AppProps): JSX.Element {
             <StatusPanel
               client={connectedClient}
               height={contentHeight}
-              focus={focus() === 'status'}
+              focus={focus() === 'status' && !anyOverlayOpen()}
               mode={tuiMode()}
               deployingState={deployingState()}
               debuggingState={debuggingState()}
