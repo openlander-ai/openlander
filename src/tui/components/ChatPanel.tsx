@@ -2,6 +2,7 @@ import { createSignal, createEffect, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import { overlayActive } from '../state/overlay.js';
+import { enterDebugMode } from '../state/mode.js';
 import { Prompt } from './Prompt.js';
 import { Spinner } from './Spinner.js';
 import type { OpenLanderClient } from '../../ipc/client.js';
@@ -250,6 +251,27 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
               : event.toolName === 'delete_file'
                 ? 'delete'
                 : 'edit';
+        }
+
+        // T-DEBUG-01: Intercept get_logs → enter debug mode
+        if (event.toolName === 'get_logs') {
+          const projectName = args.project_name ?? args.projectName ?? '';
+          const c = client();
+          if (projectName && c) {
+            void c
+              .listProjects()
+              .then((resp) => {
+                const found = resp.projects.find(
+                  (p) => p.name.toLowerCase() === projectName.toLowerCase(),
+                );
+                if (found) {
+                  enterDebugMode(found.id, found.name);
+                }
+              })
+              .catch(() => {
+                /* ignore lookup failure */
+              });
+          }
         }
 
         setMessages((prev) => [

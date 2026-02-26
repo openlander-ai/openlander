@@ -70,6 +70,7 @@ export function StatusPanel(props: StatusPanelProps): JSX.Element {
             projectName={props.debuggingState?.projectName ?? ''}
             client={props.client}
             height={Math.floor(props.height * 0.65)}
+            focus={props.focus}
           />
         </box>
       </Match>
