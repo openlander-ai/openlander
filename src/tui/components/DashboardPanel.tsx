@@ -4,10 +4,10 @@ import { useKeyboard } from '@opentui/solid';
 import { overlayActive } from '../state/overlay.js';
 import { Spinner } from './Spinner.js';
 import { theme } from '../theme.js';
+import { ProgressBar } from './ProgressBar.js';
 import {
   PROJECT_STATUS_ICON,
   PROJECT_STATUS_COLOR,
-  miniBar,
   getColorForPercent,
   formatMemory,
   formatUptime,
@@ -86,27 +86,38 @@ export function SystemSection({
   }
 
   const cpuPercent = stats.cpu.usagePercent;
+  const memPercent = stats.memory.usagePercent;
   const diskPercent = stats.disk.usagePercent;
   const dockerCount = health?.dockerContainers ?? 0;
 
   return (
     <box flexDirection="column">
       <SectionHeader title="System" />
-      <box paddingLeft={2}>
+      <box paddingLeft={2} flexDirection="row" gap={1}>
         <text fg={theme.textMuted}>CPU </text>
         <text fg={getColorForPercent(cpuPercent)}>
-          {String(Math.round(cpuPercent)).padStart(2)}%{' '}
+          {String(Math.round(cpuPercent)).padStart(3)}%
         </text>
-        <text fg={theme.textDim}>{miniBar(cpuPercent)}</text>
-        <text fg={theme.textMuted}>
-          {' '}
-          MEM {formatMemory(stats.memory.usedMB)}/{formatMemory(stats.memory.totalMB)}GB
+        <ProgressBar percent={cpuPercent} width={12} color={getColorForPercent(cpuPercent)} />
+      </box>
+      <box paddingLeft={2} flexDirection="row" gap={1}>
+        <text fg={theme.textMuted}>MEM </text>
+        <text fg={getColorForPercent(memPercent)}>
+          {formatMemory(stats.memory.usedMB)}/{formatMemory(stats.memory.totalMB)}GB
         </text>
+        <ProgressBar percent={memPercent} width={12} color={getColorForPercent(memPercent)} />
+      </box>
+      <box paddingLeft={2} flexDirection="row" gap={1}>
+        <text fg={theme.textMuted}>DSK </text>
+        <text fg={getColorForPercent(diskPercent)}>
+          {String(Math.round(diskPercent)).padStart(3)}%
+        </text>
+        <ProgressBar percent={diskPercent} width={12} color={getColorForPercent(diskPercent)} />
       </box>
       <box paddingLeft={2}>
-        <text fg={theme.textDim}>Disk {String(Math.round(diskPercent)).padStart(2)}%</text>
-        <text fg={theme.textDim}> Docker {dockerCount} containers</text>
-        <text fg={theme.textDim}> Uptime {formatUptime(stats.uptime.seconds)}</text>
+        <text fg={theme.textDim}>
+          Docker {dockerCount} containers │ Uptime {formatUptime(stats.uptime.seconds)}
+        </text>
       </box>
     </box>
   );
@@ -166,10 +177,17 @@ export function ProjectsSection({
                 <text fg={theme.textDim}> {portStr.padEnd(6)}</text>
                 {project.status === 'running' ? (
                   <text fg={theme.success}>●</text>
+                ) : project.status === 'building' ? (
+                  <box flexDirection="row" gap={1}>
+                    <Spinner color={theme.statusBuilding} />
+                    <text fg={theme.statusBuilding}>Building…</text>
+                  </box>
                 ) : (
                   <text fg={theme.textDim}> </text>
                 )}
-                <text fg={theme.textDim}> {memoryStr.padStart(5)}</text>
+                <Show when={project.status !== 'building'}>
+                  <text fg={theme.textDim}> {memoryStr.padStart(5)}</text>
+                </Show>
               </box>
               <Show when={domain}>
                 <box paddingLeft={5}>
@@ -186,7 +204,7 @@ export function ProjectsSection({
 
 // Activity section component
 export function ActivitySection({ events }: { events: ActivityEvent[] }): JSX.Element {
-  const displayEvents = events.slice(0, 10);
+  const displayEvents = events.slice(0, 5);
 
   return (
     <box flexDirection="column" marginTop={1}>
@@ -281,7 +299,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
         c.getSystemStats(),
         c.ping(),
         c.listProjects(),
-        c.getActivity(10),
+        c.getActivity(5),
       ]);
 
       let displayKey = '';
@@ -369,7 +387,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   });
 
   const estimatedLines = () =>
-    2 + 2 + projects().length * 2 + 1 + Math.min(activity().length, 10) + 2;
+    2 + 2 + projects().length * 2 + 1 + Math.min(activity().length, 5) + 2;
   const showScrollUp = () => scrollOffset() > 0;
   const showScrollDown = () => estimatedLines() - scrollOffset() > height();
 

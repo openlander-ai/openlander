@@ -11,6 +11,8 @@ export interface ProgressBarProps {
   width?: number;
   /** Optional label shown before the bar */
   label?: string;
+  /** Optional color override (hex or named color). When provided, overrides the default green/yellow logic */
+  color?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,10 +44,10 @@ export function ProgressBar(props: ProgressBarProps): JSX.Element {
   const filled = () => FILLED_CHAR.repeat(filledCount());
   const empty = () => EMPTY_CHAR.repeat(emptyCount());
 
-  // Color: green when complete, yellow during progress
+  // Color: use override if provided, otherwise green when complete, yellow during progress
   const isComplete = () => percent() >= 100;
-  const barColor = () => (isComplete() ? 'green' : 'yellow');
-  const percentColor = () => (isComplete() ? 'green' : 'yellow');
+  const barColor = () => props.color ?? (isComplete() ? 'green' : 'yellow');
+  const percentColor = () => props.color ?? (isComplete() ? 'green' : 'yellow');
 
   return (
     <box gap={1}>
