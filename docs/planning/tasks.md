@@ -16,12 +16,20 @@
 - [x] 중앙 빈 상태 프롬프트 → 첫 메시지 후 하단 이동
 - [x] 슬래시 커맨드 피커 오버레이 (↑↓, Mouse, Enter, Esc)
 - [x] 슬래시 커맨드 9개: `/help`, `/model`, `/git`, `/repo`, `/tunnel`, `/env`, `/compact`, `/clear`, `/exit`
+- [x] Phase 1 전체 구현: 3-모드 상태 머신 (monitoring/deploying/debugging)
+- [x] 적응형 우측 패널 (StatusPanel) + BuildPanel/ProjectInfo/LogViewer 골격
+- [x] 포커스 관리 시스템 (state/focus.ts, Tab 전환)
+- [x] 컨텍스트 상태바 모드별 표시 (StatusBar 리팩토링)
+- [x] 반응형 2-tier 브레이크포인트 (≥120: 60:40, 80-119: 65:35, <80: single)
+- [x] 대시보드 폴링 30초→5초
+- [x] 테스트 인프라 정비: vitest.config.ts + bun:sqlite shim, 420/420 테스트 pass
+- [x] deploy_logs drizzle 스키마 컬럼명 수정 (trigger → trigger_source)
 - [x] 모델 선택 오버레이 (`/model`)
-- [x] Git 프로바이더 연동 오버레이 (`/connect`) + 토큰 검증
+- [x] Git 프로바이더 연동 오버레이 (`/git`) + 토큰 검증
 - [x] 레포 브라우저 오버레이 (`/repo`) + IPC 배포 트리거
 - [x] KeyEvent.name 기반 키보드 핸들링 전면 수정
 - [x] Tier 3 에이전트 프록시 커맨드 제거 (LLM 바이패스 원칙)
-- [x] 73개 단위 테스트 (52 slash-command + 21 slash-picker)
+- [x] 420개 단위 테스트 (22 suites 전부 pass)
 - [x] 문서 재구조화 (`docs/planning/`, `docs/analysis/`)
 
 ### 최종 슬래시 커맨드 (9개)
@@ -33,10 +41,10 @@
 | ---------- | --------------------------------- | ---------------------------------- |
 | `/help`    | 오버레이 → 명령어 목록            | ✅                                 |
 | `/model`   | 오버레이 → LLM 모델 선택          | ✅                                 |
-| `/git`     | 오버레이 → Git 프로바이더 관리    | ✅ (기존 `/connect` 리네임)        |
+| `/git`     | 오버레이 → Git 프로바이더 관리    | ✅                                 |
 | `/repo`    | 오버레이 → 레포 브라우저 → 배포   | ✅                                 |
-| `/tunnel`  | 오버레이 → Cloudflare Tunnel 설정 | 🆕 Phase 1 골격                    |
-| `/env`     | 오버레이 → 환경변수 관리          | 🆕 Phase 1 골격                    |
+| `/tunnel`  | 오버레이 → Cloudflare Tunnel 설정 | ✅ 골격 (Phase 8 완성 예정)        |
+| `/env`     | 오버레이 → 환경변수 관리          | ✅ 골격 (Phase 8 완성 예정)        |
 | `/compact` | 채팅 컨텍스트 요약                | ⚠️ action만 발행, 요약 로직 미구현 |
 | `/clear`   | 채팅 클리어                       | ✅                                 |
 | `/exit`    | 앱 종료                           | ✅                                 |

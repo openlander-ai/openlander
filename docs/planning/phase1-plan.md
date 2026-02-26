@@ -1,5 +1,8 @@
 # Phase 1: 레이아웃 아키텍처 — 상세 개발 계획
 
+> **상태**: ✅ Phase 1 완료 (2025-02-26)
+> 9개 스텝 전부 구현 완료. 커밋: `04b2a99`, `6cb39e5`
+>
 > **범위**: T-ARCH-01 ~ T-ARCH-05 (3-모드 상태 머신, 적응형 우측 패널, 포커스 관리, 상태바, 반응형)
 > **입력**: ui-ux-layout.md, 현재 App.tsx/Layout.tsx/DashboardPanel.tsx/StatusBar.tsx
 > **결과물**: 모든 후속 Phase가 플러그인할 수 있는 모드 기반 레이아웃
@@ -17,16 +20,25 @@ src/tui/
 │   ├── Layout.tsx       ← 2-panel 레이아웃 (left/right/statusBar/overlay). 반응형 있음.
 │   ├── ChatPanel.tsx    ← 좌측 채팅. 슬래시 피커 포함.
 │   ├── DashboardPanel.tsx ← 우측. SystemSection/ProjectsSection/ActivitySection/McpClientsSection
+│   ├── StatusPanel.tsx  ← 모드별 우측 패널 분기
+│   ├── BuildPanel.tsx   ← 배포 모드 패널 골격
+│   ├── ProjectInfo.tsx  ← 디버깅 모드 상단 패널 골격
+│   ├── LogViewer.tsx    ← 디버깅 모드 하단 패널 골격
 │   ├── StatusBar.tsx    ← 하단. keybind 힌트 + project count + CPU
-│   ├── ConnectOverlay.tsx
+│   ├── GitOverlay.tsx
 │   ├── ModelOverlay.tsx
 │   ├── RepoOverlay.tsx
+│   ├── TunnelOverlay.tsx
+│   ├── EnvOverlay.tsx
 │   ├── HelpOverlay.tsx
 │   ├── SlashCommandPicker.tsx
 │   ├── Prompt.tsx
 │   └── ...
 ├── commands/
-│   └── registry.ts      ← 8개 커맨드 (help, model, compact, connect, repo, projects, clear, exit)
+│   └── registry.ts      ← 9개 커맨드 (help, model, git, repo, tunnel, env, compact, clear, exit)
+├── state/
+│   ├── mode.ts
+│   └── focus.ts
 ├── hooks/
 │   └── useDaemon.ts
 ├── context/
@@ -36,9 +48,10 @@ src/tui/
 
 ### 상태 관리
 
-- **오버레이**: `showHelp`, `showModelSelector`, `showConnect`, `showRepo` — 개별 boolean signal
-- **패널 포커스**: `activePanel: 'left' | 'right'` — Tab으로 토글
-- **대시보드 데이터**: DashboardPanel 내부에서 직접 IPC 폴링 (30초 간격)
+- **오버레이**: `showHelp`, `showModelSelector`, `showGit`, `showRepo`, `showTunnel`, `showEnv` — 개별 boolean signal
+- **모드 관리**: `state/mode.ts` — `monitoring | deploying | debugging`
+- **패널 포커스**: `state/focus.ts` — `chat | status` (Tab 토글)
+- **대시보드 데이터**: DashboardPanel 내부에서 직접 IPC 폴링 (5초 간격, 30초→5초)
 - **상태바 데이터**: DashboardPanel → `onStatsUpdate` 콜백 → App → StatusBar props
 
 ### 핵심 발견

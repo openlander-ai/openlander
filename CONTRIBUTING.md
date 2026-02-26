@@ -104,6 +104,7 @@ src/
 ├── tui/            # Terminal user interface (~5,700 lines)
 │   ├── components/ # UI components (ChatPanel, Prompt, overlays, etc.)
 │   ├── commands/   # Slash command registry
+│   ├── state/      # State management (mode, focus)
 │   ├── hooks/      # SolidJS hooks (useChat, useProjects, etc.)
 │   ├── onboarding/ # Setup wizard screens
 │   ├── theme.ts    # OpenCode-style dark theme
@@ -129,6 +130,19 @@ npm run test:watch
 # Run with coverage
 npm run test:coverage
 ```
+
+### Test Infrastructure
+
+Tests run under Node.js/Vitest with a `bun:sqlite` compatibility shim (`test/__mocks__/bun-sqlite.ts`).
+This allows all 420 tests across 22 suites to pass without requiring Bun runtime.
+
+Key test files:
+
+- `test/slash-commands.test.ts` — 52 tests (slash command registry, parsing, handlers)
+- `test/slash-picker.test.ts` — 21 tests (autocomplete picker)
+- `test/dashboard-utils.test.ts` — 68 tests (pure utility functions)
+- `test/db.test.ts` — 23 tests (database CRUD operations)
+- `test/agent.test.ts` — 12 tests (agent orchestration)
 
 Test files are located in the `test/` directory. Follow existing patterns:
 
