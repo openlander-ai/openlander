@@ -690,6 +690,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                   textareaRef={setTextareaRefCallback}
                   placeholder="Ask anything... (/help for commands)"
                   agentName="Agent"
+                  cursorColor={showCommandPicker() ? theme.backgroundElement : undefined}
                 />
               </box>
             </Show>
@@ -754,6 +755,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                 textareaRef={setTextareaRefCallback}
                 placeholder="Ask anything... (/help for commands)"
                 agentName="Agent"
+                cursorColor={showCommandPicker() ? theme.backgroundElement : undefined}
               />
             </Show>
           </box>

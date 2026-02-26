@@ -130,21 +130,19 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
                 const desc = truncateDesc(repo.description, descWidth);
 
                 return (
-                  <box>
+                  <box flexDirection="row">
                     <text
                       backgroundColor={isSelected() ? theme.primary : undefined}
-                      fg={isSelected() ? theme.background : theme.text}
+                      fg={isSelected() ? theme.text : theme.text}
                       bold={isSelected()}
                     >
                       {' '}
                       {icon} {repo.fullName}
-                      {desc ? (
-                        <text fg={isSelected() ? theme.background : theme.textMuted}> {desc}</text>
-                      ) : (
-                        ''
-                      )}
                       {isSelected() ? ' ' : ''}
                     </text>
+                    {desc ? (
+                      <text fg={isSelected() ? theme.text : theme.textMuted}> {desc}</text>
+                    ) : null}
                   </box>
                 );
               }}

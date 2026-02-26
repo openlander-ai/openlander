@@ -182,7 +182,7 @@ export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
                 <box>
                   <text
                     backgroundColor={isSelected() ? theme.primary : undefined}
-                    fg={isSelected() ? theme.background : theme.text}
+                    fg={isSelected() ? theme.text : theme.text}
                     bold={isSelected()}
                   >
                     {' '}

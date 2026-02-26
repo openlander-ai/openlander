@@ -59,6 +59,8 @@ export interface PromptProps {
   onKeyDown?: (event: unknown) => void;
   /** Callback to receive the textarea renderable ref for external control. */
   textareaRef?: (ref: unknown) => void;
+  /** Override cursor color (e.g. hide cursor by matching background). */
+  cursorColor?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +119,7 @@ export function Prompt(props: PromptProps): JSX.Element {
             }}
             backgroundColor={theme.backgroundElement}
             focusedBackgroundColor={theme.backgroundElement}
-            cursorColor={theme.text}
+            cursorColor={props.cursorColor ?? theme.text}
             wrapMode="word"
           />
 

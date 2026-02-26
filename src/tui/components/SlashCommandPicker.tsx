@@ -78,13 +78,13 @@ export function SlashCommandPicker(props: SlashCommandPickerProps) {
                 gap={1}
               >
                 <text
-                  fg={isSelected() ? theme.background : theme.text}
+                  fg={isSelected() ? theme.text : theme.text}
                   bold={isSelected()}
                   flexShrink={0}
                 >
                   /{cmd.name}
                 </text>
-                <text fg={isSelected() ? theme.background : theme.textMuted} wrapMode="none">
+                <text fg={isSelected() ? theme.text : theme.textMuted} wrapMode="none">
                   {cmd.description}
                 </text>
               </box>
