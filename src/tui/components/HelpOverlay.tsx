@@ -24,23 +24,17 @@ const SHORTCUTS: ShortcutRow[] = [
   { key: 'Esc', description: 'Close overlay' },
 ];
 
-/**
- * Full-screen help overlay showing keyboard shortcuts.
- * Listens for Escape key to close.
- */
 export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
   const dims = useTerminalDimensions();
   const columns = () => dims().width;
   const rows = () => dims().height;
 
-  // Listen for Escape key to close
   useKeyboard((evt) => {
     if (evt.key === 'escape') {
       props.onClose();
     }
   });
 
-  // Content dimensions for overlay sizing
   const contentWidth = 50;
 
   return (
@@ -50,18 +44,20 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
       height={rows()}
       justifyContent="center"
       alignItems="center"
+      backgroundColor={theme.background}
     >
       <box
         flexDirection="column"
         border="round"
-        borderColor={theme.border}
+        borderColor={theme.borderActive}
         paddingX={2}
         paddingY={1}
         width={contentWidth}
+        backgroundColor={theme.backgroundMenu}
       >
         {/* Header */}
         <box marginBottom={1} justifyContent="center">
-          <text bold color={theme.sectionTitle}>
+          <text bold={true} color={theme.text}>
             Keyboard Shortcuts
           </text>
         </box>
@@ -72,9 +68,12 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
             {(shortcut) => (
               <box gap={2}>
                 <box width={12}>
-                  <text color={theme.warning}>{shortcut.key}</text>
+                  <text backgroundColor={theme.backgroundElement} color={theme.warning}>
+                    {' '}
+                    {shortcut.key}{' '}
+                  </text>
                 </box>
-                <text dim>{shortcut.description}</text>
+                <text color={theme.textMuted}>{shortcut.description}</text>
               </box>
             )}
           </For>
@@ -82,7 +81,7 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
 
         {/* Footer hint */}
         <box marginTop={1} justifyContent="center">
-          <text dim>[Esc] Close</text>
+          <text color={theme.textDim}>[Esc] Close</text>
         </box>
       </box>
     </box>

@@ -1,7 +1,7 @@
 import type { JSX } from 'solid-js';
 import { Show, For } from 'solid-js';
 import { Spinner } from './Spinner.js';
-import { theme } from '../theme.js';
+import { theme, SplitBorder } from '../theme.js';
 
 // ── 1. ThinkingDisplay ──────────────────────────────────────────
 
@@ -14,19 +14,17 @@ export function ThinkingDisplay(props: ThinkingDisplayProps): JSX.Element {
 
   return (
     <box
-      border="bold"
-      borderLeft={true}
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      paddingLeft={1}
-      borderColor={theme.primary}
+      {...SplitBorder}
+      borderColor={theme.borderSubtle}
+      paddingLeft={2}
+      marginTop={1}
+      flexDirection="row"
+      gap={1}
     >
-      <text color={theme.primary} bold={true}>
-        <Spinner color={theme.primary} />
+      <text color={theme.textMuted}>
+        <Spinner color={theme.textMuted} />
       </text>
-      <text color={theme.primary} bold={true}>
-        {' '}
+      <text color={theme.textMuted} dim={true}>
         {label()}
       </text>
     </box>
@@ -51,17 +49,14 @@ export function CommandDisplay(props: CommandDisplayProps): JSX.Element {
 
   return (
     <box
-      border="bold"
-      borderLeft={true}
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      paddingLeft={1}
-      borderColor={theme.toolBorder}
+      {...SplitBorder}
+      borderColor={theme.border}
+      paddingLeft={2}
+      marginTop={1}
       flexDirection="column"
     >
       <text>
-        <span color={theme.muted}>{' └ '}</span>
+        <span color={theme.textMuted}>⚙ </span>
         <b>Bash</b>
       </text>
       <text>
@@ -71,14 +66,13 @@ export function CommandDisplay(props: CommandDisplayProps): JSX.Element {
       </text>
       <Show when={props.output || props.status === 'running'}>
         <>
-          <text color={theme.muted}>{'  ────────────────────'}</text>
           <Show
             when={props.status === 'running'}
             fallback={
               <For each={visibleLines()}>
                 {(line) => (
                   <text
-                    color={props.status === 'error' ? theme.error : undefined}
+                    color={props.status === 'error' ? theme.error : theme.textMuted}
                     dim={props.status !== 'error'}
                   >
                     {'  '}
@@ -88,16 +82,15 @@ export function CommandDisplay(props: CommandDisplayProps): JSX.Element {
               </For>
             }
           >
-            <text>
-              {'  '}
-              <text color={theme.primary}>
-                <Spinner color={theme.primary} />
+            <box paddingLeft={2} flexDirection="row" gap={1}>
+              <text color={theme.textMuted}>
+                <Spinner color={theme.textMuted} />
               </text>
-              <text color={theme.muted}> Running...</text>
-            </text>
+              <text color={theme.textMuted}>Running...</text>
+            </box>
           </Show>
           <Show when={truncated()}>
-            <text color={theme.muted}>
+            <text color={theme.textDim}>
               {'  '}... ({String(outputLines().length - MAX_OUTPUT_LINES)} more lines)
             </text>
           </Show>
@@ -127,25 +120,22 @@ export function FileEditDisplay(props: FileEditDisplayProps): JSX.Element {
 
   return (
     <box
-      border="bold"
-      borderLeft={true}
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      paddingLeft={1}
-      borderColor={theme.toolBorder}
+      {...SplitBorder}
+      borderColor={theme.border}
+      paddingLeft={2}
+      marginTop={1}
       flexDirection="column"
     >
       <text>
-        <span color={theme.muted}>{' └ '}</span>
+        <span color={theme.textMuted}>⚙ </span>
         <b>{actionLabel()}</b>
-        <span color={theme.secondary}>: {props.filePath}</span>
+        <span color={theme.secondary}> {props.filePath}</span>
       </text>
       <For each={visibleLines()}>
         {(line) => {
           let color: string | undefined;
-          if (line.startsWith('+')) color = theme.success;
-          else if (line.startsWith('-')) color = theme.error;
+          if (line.startsWith('+')) color = theme.diffAdded;
+          else if (line.startsWith('-')) color = theme.diffRemoved;
           return (
             <text color={color} dim={!color}>
               {'  '}
@@ -155,7 +145,7 @@ export function FileEditDisplay(props: FileEditDisplayProps): JSX.Element {
         }}
       </For>
       <Show when={truncated()}>
-        <text color={theme.muted}>
+        <text color={theme.textDim}>
           {'  '}... ({String(diffLines().length - MAX_DIFF_LINES)} more lines)
         </text>
       </Show>
@@ -177,39 +167,40 @@ interface TodoListDisplayProps {
 export function TodoListDisplay(props: TodoListDisplayProps): JSX.Element {
   return (
     <box
-      border="bold"
-      borderLeft={true}
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      paddingLeft={1}
+      {...SplitBorder}
       borderColor={theme.primary}
+      paddingLeft={2}
+      marginTop={1}
       flexDirection="column"
     >
-      <text bold={true}>Tasks</text>
+      <text bold={true} color={theme.text}>
+        Tasks
+      </text>
       <For each={props.items}>
         {(item) => {
           if (item.status === 'completed') {
             return (
               <text>
                 {'  '}
-                <text color={theme.success}>✓</text> {item.content}
+                <span color={theme.success}>✓</span>
+                <span color={theme.text}> {item.content}</span>
               </text>
             );
           }
           if (item.status === 'in_progress') {
             return (
-              <text>
-                {'  '}
+              <box paddingLeft={2} flexDirection="row" gap={1}>
                 <text color={theme.primary}>
                   <Spinner color={theme.primary} />
-                </text>{' '}
-                <text bold={true}>{item.content}</text>
-              </text>
+                </text>
+                <text bold={true} color={theme.text}>
+                  {item.content}
+                </text>
+              </box>
             );
           }
           return (
-            <text color={theme.muted}>
+            <text color={theme.textMuted}>
               {'  '}○ {item.content}
             </text>
           );
@@ -241,33 +232,31 @@ export function BuildResultDisplay(props: BuildResultDisplayProps): JSX.Element 
 
   return (
     <box
-      border="bold"
-      borderLeft={true}
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      paddingLeft={1}
+      {...SplitBorder}
       borderColor={borderColor()}
+      paddingLeft={2}
+      marginTop={1}
       flexDirection="column"
     >
       <text>
-        <span color={theme.muted}>{' └ '}</span>
+        <span color={theme.textMuted}>⚙ </span>
         <b>{props.label}</b>
         <span color={props.success ? theme.success : theme.error}>
-          : {statusText()}
+          {' '}
+          {statusText()}
           {durationText()}
         </span>
       </text>
       <For each={visibleLines()}>
         {(line) => (
-          <text dim={true}>
+          <text dim={true} color={theme.textMuted}>
             {'  '}
             {line}
           </text>
         )}
       </For>
       <Show when={truncated()}>
-        <text color={theme.muted}>
+        <text color={theme.textDim}>
           {'  '}... ({String(outputLines().length - MAX_BUILD_LINES)} more lines)
         </text>
       </Show>
@@ -285,21 +274,20 @@ interface OrchestrationDisplayProps {
 export function OrchestrationDisplay(props: OrchestrationDisplayProps): JSX.Element {
   return (
     <box
-      border="bold"
-      borderLeft={true}
-      borderRight={false}
-      borderTop={false}
-      borderBottom={false}
-      paddingLeft={1}
+      {...SplitBorder}
       borderColor={theme.primary}
+      paddingLeft={2}
+      marginTop={1}
       flexDirection="column"
     >
-      <text bold={true}>{props.title}</text>
+      <text bold={true} color={theme.text}>
+        {props.title}
+      </text>
       <For each={props.steps}>
         {(step, i) => (
-          <text>
+          <text color={theme.text}>
             {'  '}
-            {String(i() + 1)}. {step}
+            <span color={theme.textMuted}>{String(i() + 1)}.</span> {step}
           </text>
         )}
       </For>

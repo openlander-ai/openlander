@@ -1,5 +1,6 @@
 import type { JSX } from 'solid-js';
 import { Show } from 'solid-js';
+import { theme, SplitBorder } from '../theme.js';
 
 interface LayoutProps {
   left: JSX.Element;
@@ -13,31 +14,36 @@ interface LayoutProps {
 
 /**
  * Split-panel layout with responsive behavior.
- *
- * - columns >= 100: 55/45 split with left and right panels side by side
- * - columns < 100: single panel mode, controlled by activePanel prop
+ * OpenCode-inspired: clean edge-to-edge design, pipe divider, dark background.
  */
 export function Layout(props: LayoutProps): JSX.Element {
   const columns = () => props.columns;
   const rows = () => props.rows;
-
   const isWideMode = () => columns() >= 100;
-
-  // Calculate panel widths in wide mode
   const leftWidth = () => (isWideMode() ? Math.floor(columns() * 0.55) : '100%');
   const rightWidth = () => (isWideMode() ? Math.floor(columns() * 0.45) : '100%');
-
-  // Reserve 1 row for status bar
   const contentHeight = () => rows() - 1;
 
   return (
-    <box flexDirection="column" height={rows()} width={columns()}>
-      {/* Main content area */}
-      <box flexDirection="row" flexGrow={1} height={contentHeight()} overflow="hidden">
+    <box
+      flexDirection="column"
+      height={rows()}
+      width={columns()}
+      backgroundColor={theme.background}
+    >
+      {/* Main content area with padding */}
+      <box
+        flexDirection="row"
+        flexGrow={1}
+        height={contentHeight()}
+        overflow="hidden"
+        paddingLeft={1}
+        paddingRight={1}
+        paddingTop={1}
+      >
         <Show
           when={isWideMode()}
           fallback={
-            // Narrow mode: single panel at a time
             <box width="100%" flexDirection="column" overflow="hidden">
               <Show when={props.activePanel === 'left'} fallback={props.right}>
                 {props.left}
@@ -45,31 +51,30 @@ export function Layout(props: LayoutProps): JSX.Element {
             </box>
           }
         >
-          {/* Wide mode: both panels side by side */}
+          {/* Wide mode: both panels side by side with pipe divider */}
           <>
-            {/* Left panel - has right border as divider */}
-            <box
-              width={leftWidth()}
-              flexDirection="column"
-              border="single"
-              borderRight={true}
-              borderLeft={false}
-              borderTop={false}
-              borderBottom={false}
-              overflow="hidden"
-            >
+            <box width={leftWidth()} flexDirection="column" overflow="hidden" paddingRight={1}>
               {props.left}
             </box>
 
-            {/* Right panel - no borders */}
-            <box width={rightWidth()} flexDirection="column" overflow="hidden">
+            {/* Pipe divider using SplitBorder pattern */}
+            <box
+              width={1}
+              flexDirection="column"
+              border={['left']}
+              customBorderChars={SplitBorder.customBorderChars}
+              borderColor={theme.borderSubtle}
+              flexShrink={0}
+            />
+
+            <box width={rightWidth()} flexDirection="column" overflow="hidden" paddingLeft={1}>
               {props.right}
             </box>
           </>
         </Show>
       </box>
 
-      {/* Status bar at bottom */}
+      {/* Footer bar */}
       {props.statusBar}
 
       {/* Overlay on top of everything */}

@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
+import { createSignal, createEffect, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import TextInput from './IMETextInput.js';
@@ -15,19 +15,12 @@ import { theme } from '../theme.js';
 // ---------------------------------------------------------------------------
 
 export interface ChatPanelProps {
-  /** IPC client for daemon communication */
   client: OpenLanderClient | null;
-  /** Height of the panel in terminal rows */
   height: number;
-  /** Whether the panel has focus for keyboard input */
   focus: boolean;
-  /** Callback when a slash command produces a modal action */
   onModal?: (modal: 'help') => void;
-  /** Callback when clear command is issued */
   onClear?: () => void;
-  /** Callback when exit command is issued */
   onExit?: () => void;
-  /** Callback for slash command result actions */
   onCommandResult?: (result: SlashCommandResult) => void;
 }
 
@@ -41,62 +34,56 @@ interface ChatHistoryEntry {
 // ---------------------------------------------------------------------------
 
 const MAX_HISTORY_ENTRIES = 100;
-const INPUT_HEIGHT = 3; // Height reserved for input area
+const INPUT_HEIGHT = 3;
+
+// ASCII art logo
+const LOGO_LINES = [
+  '  ___                   _                    _           ',
+  ' / _ \\ _ __   ___ _ __ | |    __ _ _ __   __| | ___ _ __ ',
+  "| | | | '_ \\ / _ \\ '_ \\| |   / _` | '_ \\ / _` |/ _ \\ '__|",
+  '| |_| | |_) |  __/ | | | |__| (_| | | | | (_| |  __/ |   ',
+  ' \\___/| .__/ \\___|_| |_|_____\\__,_|_| |_|\\__,_|\\___|_|   ',
+  '      |_|                                                  ',
+];
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-/**
- * Unified chat panel combining message display and input.
- */
-export function ChatPanel({
-  client,
-  height,
-  focus,
-  onModal,
-  onClear,
-  onExit,
-  onCommandResult,
-}: ChatPanelProps): JSX.Element {
+export function ChatPanel(props: ChatPanelProps): JSX.Element {
+  const client = () => props.client;
+  const height = () => props.height;
+  const focus = () => props.focus;
+
   // --- Chat state ---
   const [messages, setMessages] = createSignal<DisplayMessage[]>([]);
   const [isStreaming, setIsStreaming] = createSignal(false);
   const [inputValue, setInputValue] = createSignal('');
   let sessionIdRef = `tui-${Date.now().toString(36)}`;
 
-  // --- Chat history for ↑/↓ navigation ---
+  // --- Chat history for up/down navigation ---
   const [chatHistory, setChatHistory] = createSignal<ChatHistoryEntry[]>([]);
   const [historyIndex, setHistoryIndex] = createSignal(-1);
-  let historyRef = ''; // Temp storage when navigating history
+  let historyRef = '';
 
   // --- Slash command autocomplete ---
   const [showCommandPicker, setShowCommandPicker] = createSignal(false);
   const [commandPickerIndex, setCommandPickerIndex] = createSignal(0);
 
-  // --- Streaming state ---
-  let currentAssistantMessageRef: DisplayMessage | null = null;
-
-  // Calculate heights
-  const messageAreaHeight = Math.max(5, height - INPUT_HEIGHT);
-
-  // --- Auto-scroll offset ---
+  // --- Auto-scroll ---
+  const messageAreaHeight = () => Math.max(0, height() - INPUT_HEIGHT);
   const [, setScrollOffset] = createSignal(0);
-  let messagesEndRef = 0;
 
-  // Update scroll offset when messages change
   createEffect(() => {
     const totalLines = calculateMessageLines(messages());
-    const maxOffset = Math.max(0, totalLines - messageAreaHeight);
+    const maxOffset = Math.max(0, totalLines - messageAreaHeight());
     setScrollOffset(maxOffset);
-    messagesEndRef = totalLines;
   });
 
-  // --- Handle slash command picker visibility ---
   createEffect(() => {
     const val = inputValue();
     const isSlashInput = val.startsWith('/') && !val.includes(' ');
-    setShowCommandPicker(isSlashInput && focus);
+    setShowCommandPicker(isSlashInput && focus());
     if (isSlashInput) {
       setCommandPickerIndex(0);
     }
@@ -108,31 +95,20 @@ export function ChatPanel({
       case 'session':
         sessionIdRef = event.sessionId;
         break;
-
       case 'thinking':
         setIsStreaming(true);
         break;
-
       case 'tool_call': {
         const args = event.arguments as Record<string, string>;
         let messageType: DisplayMessage['type'] = 'tool_start';
-        const baseMsg: Partial<DisplayMessage> = {
-          toolName: event.toolName,
-        };
+        const baseMsg: Partial<DisplayMessage> = { toolName: event.toolName };
 
-        if (
-          event.toolName === 'execute_command' ||
-          event.toolName === 'bash' ||
-          event.toolName === 'run_command'
-        ) {
+        if (['execute_command', 'bash', 'run_command'].includes(event.toolName)) {
           messageType = 'command';
           baseMsg.command = args.command ?? args.cmd ?? '';
           baseMsg.toolStatus = 'running';
         } else if (
-          event.toolName === 'edit_file' ||
-          event.toolName === 'write_file' ||
-          event.toolName === 'create_file' ||
-          event.toolName === 'delete_file'
+          ['edit_file', 'write_file', 'create_file', 'delete_file'].includes(event.toolName)
         ) {
           messageType = 'file_edit';
           baseMsg.filePath = args.path ?? args.file ?? args.filePath ?? '';
@@ -157,7 +133,6 @@ export function ChatPanel({
         ]);
         break;
       }
-
       case 'tool_result':
         setMessages((prev) => {
           const updated = [...prev];
@@ -174,30 +149,22 @@ export function ChatPanel({
                 toolDuration: event.success ? 0 : undefined,
                 content: event.error ?? '',
               };
-
               if (item.type === 'command') {
                 updates.output =
                   typeof event.result === 'string'
                     ? event.result
                     : JSON.stringify(event.result, null, 2);
               } else if (item.type === 'file_edit') {
-                if (typeof event.result === 'string') {
-                  updates.diff = event.result;
-                }
+                if (typeof event.result === 'string') updates.diff = event.result;
               } else {
                 updates.type = 'tool_result';
               }
-
-              updated[lastToolIdx] = {
-                ...item,
-                ...updates,
-              };
+              updated[lastToolIdx] = { ...item, ...updates };
             }
           }
           return updated;
         });
         break;
-
       case 'message':
         setIsStreaming(false);
         setMessages((prev) => [
@@ -210,9 +177,7 @@ export function ChatPanel({
             timestamp: Date.now(),
           },
         ]);
-        currentAssistantMessageRef = null;
         break;
-
       case 'error':
         setIsStreaming(false);
         setMessages((prev) => [
@@ -226,7 +191,6 @@ export function ChatPanel({
           },
         ]);
         break;
-
       case 'done':
         setIsStreaming(false);
         break;
@@ -237,51 +201,52 @@ export function ChatPanel({
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
 
-    const userMessage: DisplayMessage = {
-      id: `user-${String(Date.now())}`,
-      role: 'user',
-      content: text,
-      type: 'text',
-      timestamp: Date.now(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `user-${String(Date.now())}`,
+        role: 'user',
+        content: text,
+        type: 'text',
+        timestamp: Date.now(),
+      },
+    ]);
 
-    setChatHistory((prev) => {
-      const newHistory = [...prev, { text, timestamp: Date.now() }].slice(-MAX_HISTORY_ENTRIES);
-      return newHistory;
-    });
+    setChatHistory((prev) =>
+      [...prev, { text, timestamp: Date.now() }].slice(-MAX_HISTORY_ENTRIES),
+    );
     setHistoryIndex(-1);
 
     if (text.startsWith('/')) {
       const parsed = parseSlashCommand(text);
       if (parsed) {
         const result = parsed.command.handler(parsed.args);
-        onCommandResult?.(result);
-
+        props.onCommandResult?.(result);
         switch (result.action) {
           case 'modal':
-            onModal?.(result.modal);
+            props.onModal?.(result.modal);
             break;
           case 'clear':
             setMessages([]);
-            onClear?.();
+            props.onClear?.();
             break;
           case 'exit':
-            onExit?.();
+            props.onExit?.();
             break;
           case 'agent':
-            if (client) {
+            if (client()) {
+              const c = client();
+              if (!c) return;
               setIsStreaming(true);
               try {
-                await client.chatStream(result.message, sessionIdRef, handleStreamEvent);
+                await c.chatStream(result.message, sessionIdRef, handleStreamEvent);
               } catch (err) {
-                const errorMsg = err instanceof Error ? err.message : String(err);
                 setMessages((prev) => [
                   ...prev,
                   {
                     id: `error-${String(Date.now())}`,
                     role: 'assistant',
-                    content: errorMsg,
+                    content: err instanceof Error ? err.message : String(err),
                     type: 'error',
                     timestamp: Date.now(),
                   },
@@ -297,7 +262,7 @@ export function ChatPanel({
       }
     }
 
-    if (!client) {
+    if (!client()) {
       setMessages((prev) => [
         ...prev,
         {
@@ -312,16 +277,17 @@ export function ChatPanel({
     }
 
     setIsStreaming(true);
+    const c = client();
+    if (!c) return;
     try {
-      await client.chatStream(text, sessionIdRef, handleStreamEvent);
+      await c.chatStream(text, sessionIdRef, handleStreamEvent);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
       setMessages((prev) => [
         ...prev,
         {
           id: `error-${String(Date.now())}`,
           role: 'assistant',
-          content: errorMsg,
+          content: err instanceof Error ? err.message : String(err),
           type: 'error',
           timestamp: Date.now(),
         },
@@ -330,30 +296,25 @@ export function ChatPanel({
     }
   };
 
-  // --- Handle input submit ---
   const handleSubmit = (text: string) => {
     if (!text.trim()) return;
-
     if (showCommandPicker()) {
       const matchCount = getMatchCount(text);
       if (matchCount > 0) {
         const commandName = getMatchAt(text, commandPickerIndex());
         if (commandName) {
-          const completed = `/${commandName}`;
           setInputValue('');
           setShowCommandPicker(false);
-          void sendMessage(completed);
+          void sendMessage(`/${commandName}`);
           return;
         }
       }
     }
-
     setInputValue('');
     setShowCommandPicker(false);
     void sendMessage(text);
   };
 
-  // --- Handle Tab completion for slash commands ---
   const handleTabComplete = () => {
     if (showCommandPicker()) {
       const commandName = getMatchAt(inputValue(), commandPickerIndex());
@@ -364,52 +325,37 @@ export function ChatPanel({
     }
   };
 
-  // --- Keyboard handling ---
   useKeyboard((evt) => {
-    if (!focus) return;
-
-    // Tab for autocomplete
+    if (!focus()) return;
     if (evt.key === 'tab' && showCommandPicker()) {
       handleTabComplete();
       return;
     }
-    // Ctrl+L to clear
     if (evt.ctrl && evt.char === 'l') {
       setMessages([]);
-      onClear?.();
+      props.onClear?.();
       return;
     }
-
-    // Up arrow - history navigation or command picker
     if (evt.key === 'up') {
       if (showCommandPicker()) {
         setCommandPickerIndex((i) => Math.max(0, i - 1));
       } else if (chatHistory().length > 0) {
-        if (historyIndex() === -1) {
-          historyRef = inputValue();
-        }
+        if (historyIndex() === -1) historyRef = inputValue();
         const newIndex = Math.min(chatHistory().length - 1, historyIndex() + 1);
         setHistoryIndex(newIndex);
-        const historyEntry = chatHistory()[chatHistory().length - 1 - newIndex];
-        if (historyEntry) {
-          setInputValue(historyEntry.text);
-        }
+        const entry = chatHistory()[chatHistory().length - 1 - newIndex];
+        if (entry) setInputValue(entry.text);
       }
       return;
     }
-
-    // Down arrow - history navigation or command picker
     if (evt.key === 'down') {
       if (showCommandPicker()) {
-        const matchCount = getMatchCount(inputValue());
-        setCommandPickerIndex((i) => Math.min(matchCount - 1, i + 1));
+        setCommandPickerIndex((i) => Math.min(getMatchCount(inputValue()) - 1, i + 1));
       } else if (historyIndex() > 0) {
         const newIndex = historyIndex() - 1;
         setHistoryIndex(newIndex);
-        const historyEntry = chatHistory()[chatHistory().length - 1 - newIndex];
-        if (historyEntry) {
-          setInputValue(historyEntry.text);
-        }
+        const entry = chatHistory()[chatHistory().length - 1 - newIndex];
+        if (entry) setInputValue(entry.text);
       } else if (historyIndex() === 0) {
         setHistoryIndex(-1);
         setInputValue(historyRef);
@@ -418,64 +364,56 @@ export function ChatPanel({
     }
   });
 
-  // --- Render ---
   return (
-    <box flexDirection="column" height={height}>
+    <box flexDirection="column" height={height()}>
       {/* Message area */}
       <box flexDirection="column" flexGrow={1} overflow="hidden">
         <Show
           when={messages().length > 0 || isStreaming()}
           fallback={
-            // Welcome message
             <box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
-              <text color={theme.primary} bold={true}>
-                {'  ___                   _                    _           '}
-              </text>
-              <text color={theme.primary} bold={true}>
-                {' / _ \\ _ __   ___ _ __ | |    __ _ _ __   __| | ___ _ __ '}
-              </text>
-              <text color={theme.primary} bold={true}>
-                {"| | | | '_ \\ / _ \\ '_ \\| |   / _` | '_ \\ / _` |/ _ \\ '__|"}
-              </text>
-              <text color={theme.primary} bold={true}>
-                {'| |_| | |_) |  __/ | | | |__| (_| | | | | (_| |  __/ |   '}
-              </text>
-              <text color={theme.primary} bold={true}>
-                {' \\___/| .__/ \\___|_| |_|_____\\__,_|_| |_|\\__,_|\\___|_|   '}
-              </text>
-              <text color={theme.primary} bold={true}>
-                {'      |_|                                                  '}
-              </text>
-              <text> </text>
-              <text dim={true}>v0.1.0</text>
-              <text> </text>
-              {client ? (
-                <>
-                  <text dim={true}>Deploy anything with a chat. Type to get started.</text>
-                  <text dim={true}>
-                    Press <span color={theme.secondary}>/</span> for commands,{' '}
-                    <span color={theme.secondary}>?</span> for help
+              {/* Logo */}
+              <For each={LOGO_LINES}>
+                {(line) => (
+                  <text color={theme.primary} bold={true}>
+                    {line}
                   </text>
-                </>
-              ) : (
-                <text color={theme.warning}>
-                  Daemon not connected. Run: <b>openlander daemon</b>
+                )}
+              </For>
+              <text color={theme.textDim}> </text>
+              <text color={theme.textMuted}>v0.1.0</text>
+              <text color={theme.textDim}> </text>
+              <Show
+                when={client()}
+                fallback={
+                  <text color={theme.warning}>
+                    Daemon not connected. Run: <b>openlander daemon</b>
+                  </text>
+                }
+              >
+                <text color={theme.textMuted}>
+                  Deploy anything with a chat. Type to get started.
                 </text>
-              )}
+                <text color={theme.textMuted}>
+                  Press <span color={theme.secondary}>/</span> for commands,{' '}
+                  <span color={theme.secondary}>?</span> for help
+                </text>
+              </Show>
             </box>
           }
         >
-          {/* Message list */}
-          <box flexDirection="column" flexGrow={1}>
-            <For each={messages()}>{(msg) => <ChatMessage message={msg} />}</For>
+          <box flexDirection="column" flexGrow={1} paddingTop={1}>
+            <For each={messages()}>
+              {(msg, i) => <ChatMessage message={msg} isFirst={i() === 0} />}
+            </For>
 
-            {/* Thinking indicator */}
+            {/* Streaming indicator */}
             <Show when={isStreaming()}>
-              <box paddingX={1} gap={1}>
-                <text color={theme.primary}>
-                  <Spinner color={theme.primary} />
+              <box paddingLeft={3} marginTop={1} flexDirection="row" gap={1}>
+                <text color={theme.textMuted}>
+                  <Spinner color={theme.textMuted} />
                 </text>
-                <text color={theme.primary}>Thinking…</text>
+                <text color={theme.textMuted}>Thinking…</text>
               </box>
             </Show>
           </box>
@@ -490,36 +428,34 @@ export function ChatPanel({
       </Show>
 
       {/* Input area */}
-      <box
-        border="single"
-        borderColor={theme.border}
-        borderTop={true}
-        borderBottom={false}
-        borderLeft={false}
-        borderRight={false}
-        paddingX={1}
-      >
-        {!client ? (
-          <text dim={true}>Chat unavailable — daemon not connected</text>
-        ) : isStreaming() ? (
-          <box gap={1}>
-            <text color={theme.primary}>
-              <Spinner color={theme.primary} />
-            </text>
-            <text dim={true}> Waiting for response...</text>
-          </box>
-        ) : (
-          <box>
-            <text color={theme.primary}>❯ </text>
-            <TextInput
-              value={inputValue()}
-              onChange={setInputValue}
-              onSubmit={handleSubmit}
-              placeholder="Ask the agent anything... (/help for commands)"
-              showCursor={focus}
-            />
-          </box>
-        )}
+      <box flexShrink={0} paddingLeft={2} paddingRight={2} paddingTop={1}>
+        <Show
+          when={client()}
+          fallback={<text color={theme.textDim}>Chat unavailable — daemon not connected</text>}
+        >
+          <Show
+            when={!isStreaming()}
+            fallback={
+              <box flexDirection="row" gap={1}>
+                <text color={theme.textMuted}>
+                  <Spinner color={theme.textMuted} />
+                </text>
+                <text color={theme.textMuted}>Waiting for response...</text>
+              </box>
+            }
+          >
+            <box flexDirection="row">
+              <text color={theme.primary}>❯ </text>
+              <TextInput
+                value={inputValue()}
+                onChange={setInputValue}
+                onSubmit={handleSubmit}
+                placeholder="Ask the agent anything... (/help for commands)"
+                showCursor={focus()}
+              />
+            </box>
+          </Show>
+        </Show>
       </box>
     </box>
   );
@@ -529,14 +465,12 @@ export function ChatPanel({
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Estimate total lines needed to render messages */
 function calculateMessageLines(messages: DisplayMessage[]): number {
   let lines = 0;
   for (const msg of messages) {
     lines += 1;
     if (msg.content) {
-      const contentLines = msg.content.split('\n').length;
-      lines += Math.ceil(contentLines * 0.5);
+      lines += Math.ceil(msg.content.split('\n').length * 0.5);
     }
     lines += 1;
   }

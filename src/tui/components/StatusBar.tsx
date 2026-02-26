@@ -11,132 +11,97 @@ interface StatusBarProps {
 }
 
 /**
- * Bottom status bar with keyboard shortcut hints.
+ * Bottom footer bar — OpenCode-inspired with keybind hints and status indicators.
  */
 export function StatusBar(props: StatusBarProps): JSX.Element {
   const isSplitMode = () => props.panelMode === 'split';
-
-  // Format CPU display
   const cpuDisplay = () => (props.cpuPercent !== null ? `${String(props.cpuPercent)}%` : '—');
-
-  // Format building indicator
   const buildingDisplay = () =>
-    props.buildingCount > 0 ? ` | ${String(props.buildingCount)} building` : '';
+    props.buildingCount > 0 ? ` ${String(props.buildingCount)} building` : '';
 
   return (
     <box
-      border="single"
-      borderColor={theme.border}
-      borderTop={true}
-      borderBottom={false}
-      borderLeft={false}
-      borderRight={false}
-      paddingX={1}
+      flexDirection="row"
       justifyContent="space-between"
+      gap={1}
+      flexShrink={0}
+      paddingLeft={2}
+      paddingRight={2}
     >
-      {/* Left side: Keyboard hints */}
-      <box gap={1}>
+      {/* Left side: Keybind hints */}
+      <box gap={2} flexDirection="row">
         <Show
-          when={isSplitMode()}
+          when={!isSplitMode()}
           fallback={
-            // Single mode shortcuts with panel indicator
             <>
-              <box>
-                <text backgroundColor={theme.toolBorder} color={theme.text}>
-                  {' '}
-                  Tab{' '}
-                </text>
-                <text> </text>
-                <Show
-                  when={props.activePanel === 'left'}
-                  fallback={
-                    <>
-                      <text dim>Chat</text>
-                      <text dim> │ </text>
-                      <text backgroundColor={theme.secondary} color="#212121" bold>
-                        {' '}
-                        Dashboard{' '}
-                      </text>
-                    </>
-                  }
-                >
-                  <>
-                    <text backgroundColor={theme.secondary} color="#212121" bold>
-                      {' '}
-                      Chat{' '}
-                    </text>
-                    <text dim> │ </text>
-                    <text dim>Dashboard</text>
-                  </>
-                </Show>
-              </box>
-              <box>
-                <text backgroundColor={theme.toolBorder} color={theme.text}>
-                  {' '}
-                  /{' '}
-                </text>
-                <text dim> Commands</text>
-              </box>
-              <box>
-                <text backgroundColor={theme.toolBorder} color={theme.text}>
-                  {' '}
-                  ?{' '}
-                </text>
-                <text dim> Help</text>
-              </box>
-              <box>
-                <text backgroundColor={theme.toolBorder} color={theme.text}>
-                  {' '}
-                  ^C{' '}
-                </text>
-                <text dim> Exit</text>
-              </box>
+              <KeyHint key="Tab" label="Panel" />
+              <KeyHint key="/" label="Commands" />
+              <KeyHint key="?" label="Help" />
+              <KeyHint key="^C" label="Exit" />
             </>
           }
         >
-          {/* Split mode shortcuts */}
-          <>
-            <box>
-              <text backgroundColor={theme.toolBorder} color={theme.text}>
-                {' '}
-                Tab{' '}
-              </text>
-              <text dim> Panel</text>
-            </box>
-            <box>
-              <text backgroundColor={theme.toolBorder} color={theme.text}>
-                {' '}
-                /{' '}
-              </text>
-              <text dim> Commands</text>
-            </box>
-            <box>
-              <text backgroundColor={theme.toolBorder} color={theme.text}>
-                {' '}
-                ?{' '}
-              </text>
-              <text dim> Help</text>
-            </box>
-            <box>
-              <text backgroundColor={theme.toolBorder} color={theme.text}>
-                {' '}
-                ^C{' '}
-              </text>
-              <text dim> Exit</text>
-            </box>
-          </>
+          {/* Single mode: show active panel indicator */}
+          <box flexDirection="row" gap={1}>
+            <text backgroundColor={theme.backgroundElement} color={theme.text}>
+              {' '}
+              Tab{' '}
+            </text>
+            <Show
+              when={props.activePanel === 'left'}
+              fallback={
+                <box flexDirection="row">
+                  <text color={theme.textDim}>Chat</text>
+                  <text color={theme.textDim}> │ </text>
+                  <text backgroundColor={theme.secondary} color={theme.background} bold={true}>
+                    {' '}
+                    Dashboard{' '}
+                  </text>
+                </box>
+              }
+            >
+              <box flexDirection="row">
+                <text backgroundColor={theme.secondary} color={theme.background} bold={true}>
+                  {' '}
+                  Chat{' '}
+                </text>
+                <text color={theme.textDim}> │ </text>
+                <text color={theme.textDim}>Dashboard</text>
+              </box>
+            </Show>
+          </box>
+          <KeyHint key="/" label="Commands" />
+          <KeyHint key="?" label="Help" />
+          <KeyHint key="^C" label="Exit" />
         </Show>
       </box>
 
-      {/* Right side: Summary (only in single mode) */}
-      <Show when={!isSplitMode()}>
-        <box>
-          <text color={theme.muted}>
-            {props.projectCount} project{props.projectCount !== 1 ? 's' : ''} │ CPU {cpuDisplay()}
+      {/* Right side: Status summary */}
+      <box gap={2} flexDirection="row" flexShrink={0}>
+        <text color={theme.textMuted}>
+          {props.projectCount} project{props.projectCount !== 1 ? 's' : ''}
+        </text>
+        <text color={theme.textMuted}>CPU {cpuDisplay()}</text>
+        <Show when={props.buildingCount > 0}>
+          <text color={theme.warning}>
+            <span color={theme.warning}>●</span>
             {buildingDisplay()}
           </text>
-        </box>
-      </Show>
+        </Show>
+      </box>
+    </box>
+  );
+}
+
+/** Small keybind hint component */
+function KeyHint(props: { key: string; label: string }): JSX.Element {
+  return (
+    <box flexDirection="row" gap={0}>
+      <text backgroundColor={theme.backgroundElement} color={theme.text}>
+        {' '}
+        {props.key}{' '}
+      </text>
+      <text color={theme.textMuted}> {props.label}</text>
     </box>
   );
 }

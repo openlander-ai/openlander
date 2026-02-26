@@ -1,42 +1,76 @@
 /**
  * Centralized color theme constants for the TUI.
- * OpenCode-inspired hex color palette + legacy named colors for backward compat.
+ * OpenCode-inspired color palette for a polished terminal experience.
  */
 export const theme = {
-  // ── Core palette (OpenCode-inspired hex) ─────────────────────
+  // ── Core palette ──────────────────────────────────────────────
   primary: '#fab283', // Orange — assistant accent, active elements
   secondary: '#5c9cf5', // Blue — user accent, interactive elements
-  muted: '#6a6a6a', // Gray — de-emphasized text, separators
+  accent: '#c4a7e7', // Purple — highlights, special elements
   text: '#e0e0e0', // Light gray — primary text
-  toolBorder: '#4b4c5c', // Dark gray — tool call borders
-  background: '#212121', // Dark bg (informational, not enforced by Ink)
+  textMuted: '#808080', // Medium gray — de-emphasized text
+  textDim: '#555555', // Dim gray — very subtle text
 
-  // ── Legacy text colors (backward compat) ────────────────────
-  user: '#5c9cf5', // User messages (maps to secondary)
-  agent: undefined, // Agent messages (default foreground)
-  success: '#a6e3a1', // Success states
-  warning: '#f9e2af', // Warnings
-  error: '#f38ba8', // Errors
-  progress: '#f9e2af', // In-progress states
-  url: '#5c9cf5', // URLs (maps to secondary)
-  info: '#5c9cf5', // Informational text
+  // ── Backgrounds ───────────────────────────────────────────────
+  background: '#0a0a0a', // Near-black root background
+  backgroundPanel: '#151515', // Panel/message backgrounds
+  backgroundElement: '#252525', // Interactive element hover/keybind bg
+  backgroundMenu: '#1a1a1a', // Menu/overlay backgrounds
 
-  // ── UI elements ─────────────────────────────────────────────
-  border: '#4b4c5c', // Borders (maps to toolBorder)
-  inactive: '#6a6a6a', // Dimmed/inactive (maps to muted)
-  sectionTitle: '#e0e0e0', // Section headers (maps to text)
-  projectName: undefined, // Project names (use bold prop)
+  // ── Borders ───────────────────────────────────────────────────
+  border: '#333333', // Default borders
+  borderActive: '#555555', // Active/focused borders
+  borderSubtle: '#222222', // Very subtle separators
 
-  // ── Status colors ───────────────────────────────────────────
+  // ── Status ────────────────────────────────────────────────────
+  success: '#a6e3a1', // Success states, green
+  warning: '#f9e2af', // Warnings, yellow
+  error: '#f38ba8', // Errors, red/pink
+  info: '#5c9cf5', // Informational, blue
+
+  // ── Diff colors ───────────────────────────────────────────────
+  diffAdded: '#a6e3a1', // Added lines
+  diffRemoved: '#f38ba8', // Removed lines
+
+  // ── Legacy compat (mapped to new names) ───────────────────────
+  muted: '#808080', // = textMuted
+  user: '#5c9cf5', // = secondary
+  agent: undefined, // default fg
+  progress: '#f9e2af', // = warning
+  url: '#5c9cf5', // = secondary
+  toolBorder: '#333333', // = border
+  inactive: '#555555', // = textDim
+  sectionTitle: '#e0e0e0', // = text
+  projectName: undefined,
+
+  // ── Status colors ─────────────────────────────────────────────
   statusRunning: '#a6e3a1',
   statusBuilding: '#f9e2af',
-  statusStopped: '#6a6a6a',
+  statusStopped: '#555555',
   statusError: '#f38ba8',
 
-  // ── Resource thresholds ─────────────────────────────────────
-  resourceOk: '#a6e3a1', // < 60%
-  resourceWarn: '#f9e2af', // 60-80%
-  resourceCrit: '#f38ba8', // > 80%
+  // ── Resource thresholds ───────────────────────────────────────
+  resourceOk: '#a6e3a1',
+  resourceWarn: '#f9e2af',
+  resourceCrit: '#f38ba8',
 } as const;
+
+/** Pipe-style left border chars (OpenCode SplitBorder pattern) */
+export const SplitBorder = {
+  border: ['left' as const],
+  customBorderChars: {
+    topLeft: '',
+    bottomLeft: '',
+    vertical: '┃',
+    topRight: '',
+    bottomRight: '',
+    horizontal: ' ',
+    bottomT: '',
+    topT: '',
+    cross: '',
+    leftT: '',
+    rightT: '',
+  },
+};
 
 export type ThemeColor = (typeof theme)[keyof typeof theme];

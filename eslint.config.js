@@ -25,6 +25,17 @@ export default tseslint.config(
       '@typescript-eslint/no-import-type-side-effects': 'error',
     },
   },
+  // OpenTUI JSX intrinsic elements resolve to error type in ESLint's type checker
+  // because @opentui/solid's jsx-runtime.d.ts uses a standalone JSX namespace
+  // that ESLint's projectService doesn't fully resolve. These rules are disabled
+  // only for TUI files where JSX is used.
+  {
+    files: ['src/tui/**/*.tsx'],
+    rules: {
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+    },
+  },
   {
     ignores: ['dist/', 'node_modules/', 'web/', 'test/', 'coverage/', '*.config.*'],
   },
