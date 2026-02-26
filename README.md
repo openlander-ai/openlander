@@ -69,9 +69,14 @@ Mac Mini + OpenLander:   ~$600 once, $0/month
 > **Platform**: Linux (primary) and macOS. Windows is not supported (WSL2 works).
 
 ```bash
+# Install
 npm install -g openlander
+
+# Run (requires Bun runtime)
 openlander
 ```
+
+> **Note**: OpenLander uses [Bun](https://bun.sh) as its runtime. If Bun is not installed, the `openlander` command will guide you through setup.
 
 OpenLander will:
 
@@ -135,30 +140,31 @@ Default is **Internal** (safe). Say "make it public" to switch.
 | Area          | Technology                                                  |
 | ------------- | ----------------------------------------------------------- |
 | Language      | TypeScript (strict mode, ESM)                               |
-| Runtime       | Node.js >= 22                                               |
+| Runtime       | [Bun](https://bun.sh)                                       |
 | Install       | npm global package                                          |
-| TUI           | Ink (React-based terminal UI)                               |
+| TUI           | [OpenTUI](https://github.com/anomalyco/opentui) + Solid.js  |
+| ORM           | [Drizzle ORM](https://orm.drizzle.team) + bun:sqlite        |
 | Docker        | dockerode                                                   |
 | Reverse Proxy | Traefik (Docker label routing)                              |
 | Tunnel        | TryCloudflare / Cloudflare Tunnel                           |
 | AI            | BYOK — Gemini Flash / Claude / OpenAI / OpenRouter / Ollama |
-| Database      | SQLite                                                      |
+| Database      | SQLite (via Drizzle ORM)                                    |
 
 ## Roadmap
 
-| Version  | Focus                    | Status | Highlights                                                         |
-| -------- | ------------------------ | ------ | ------------------------------------------------------------------ |
-| **v0.1** | Repo → URL (MVP)         | Done   | Git clone → Docker → Traefik → URL. TUI chat. REST API.            |
-| **v0.2** | Daily Operations         | Done   | Auto-redeploy, monitoring, production domains, Ollama              |
-| **v0.3** | Coding Agent Integration | Done   | MCP server (23 tools), rollback, blue-green, DB provisioning       |
-| **v0.4** | Multi-Channel + Advanced | Done   | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy |
-| v0.5     | Full Self-Hosting        | TBD    | Fine-tuned model (openlander-agent-8b), zero API cost              |
-| v0.6     | TUI Polish               | TBD    | OpenCode-inspired UI/UX, rich agent interaction display            |
+| Version  | Focus                    | Status   | Highlights                                                             |
+| -------- | ------------------------ | -------- | ---------------------------------------------------------------------- |
+| **v0.1** | Repo → URL (MVP)         | Done     | Git clone → Docker → Traefik → URL. TUI chat. REST API.                |
+| **v0.2** | Daily Operations         | Done     | Auto-redeploy, monitoring, production domains, Ollama                  |
+| **v0.3** | Coding Agent Integration | Done     | MCP server (23 tools), rollback, blue-green, DB provisioning           |
+| **v0.4** | Multi-Channel + Advanced | Done     | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy     |
+| v0.5     | Full Self-Hosting        | TBD      | Fine-tuned model (openlander-agent-8b), zero API cost                  |
+| **v0.6** | **TUI Polish**           | **Done** | **Bun runtime, OpenTUI + Solid.js, Drizzle ORM, OpenCode-inspired UI** |
 
 ## Requirements
 
 - **Platform**: Linux or macOS (Windows is not supported, but WSL2 on Windows works)
-- **Node.js** >= 22
+- **[Bun](https://bun.sh)** >= 1.1 (installed automatically or via `curl -fsSL https://bun.sh/install | bash`)
 - **Docker** installed and running (see below)
 - **LLM API key** (configured during setup) — one of:
   - [Google Gemini](https://ai.google.dev/) (free tier available)
