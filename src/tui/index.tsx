@@ -1,6 +1,9 @@
 import process from 'node:process';
+import { join } from 'node:path';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { render } from '@opentui/solid';
 import type { AppContext } from '../app.js';
+import { getDataDir } from '../config/index.js';
 import { App } from './App.js';
 import { ExitProvider } from './context/exit.js';
 
@@ -14,6 +17,24 @@ import { ExitProvider } from './context/exit.js';
 export function startTUI(ctx: AppContext): void {
   // Signal to other modules that TUI is running (e.g. suppress Hono HTTP logs)
   process.env['OPENLANDER_TUI'] = '1';
+
+  // --- Error logging to file (so user can read after TUI exits) ---
+  const logPath = join(getDataDir(), 'error.log');
+  writeFileSync(logPath, `[${new Date().toISOString()}] OpenLander TUI started\n`);
+
+  const logError = (prefix: string, err: unknown) => {
+    const msg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+    try { appendFileSync(logPath, `[${new Date().toISOString()}] ${prefix}: ${msg}\n`); } catch {}
+  };
+
+  const origConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    logError('console.error', args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+    origConsoleError.apply(console, args);
+  };
+
+  process.on('uncaughtException', (e) => logError('uncaughtException', e));
+  process.on('unhandledRejection', (e) => logError('unhandledRejection', e));
 
   // Enter alternate screen buffer
   process.stdout.write('\x1b[?1049h');

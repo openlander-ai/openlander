@@ -1,6 +1,5 @@
 import type { JSX } from 'solid-js';
 import { Show } from 'solid-js';
-import { useTerminalDimensions } from '@opentui/solid';
 
 interface LayoutProps {
   left: JSX.Element;
@@ -8,6 +7,8 @@ interface LayoutProps {
   statusBar: JSX.Element;
   overlay?: JSX.Element;
   activePanel?: 'left' | 'right';
+  columns: number;
+  rows: number;
 }
 
 /**
@@ -17,9 +18,8 @@ interface LayoutProps {
  * - columns < 100: single panel mode, controlled by activePanel prop
  */
 export function Layout(props: LayoutProps): JSX.Element {
-  const dims = useTerminalDimensions();
-  const columns = () => dims()?.width ?? 80;
-  const rows = () => dims()?.height ?? 24;
+  const columns = () => props.columns;
+  const rows = () => props.rows;
 
   const isWideMode = () => columns() >= 100;
 

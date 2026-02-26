@@ -38,8 +38,15 @@ export function App(props: AppProps): JSX.Element {
   // Daemon connection
   const { client, status } = useDaemon(SOCKET_PATH);
 
-  // Terminal dimensions
-  const dims = useTerminalDimensions();
+  // Terminal dimensions (safe — returns default 80x24 if renderer not ready)
+  let dims: ReturnType<typeof useTerminalDimensions>;
+  try {
+    dims = useTerminalDimensions();
+  } catch {
+    // Renderer not ready yet during initial Solid reactivity pass.
+    // Return a dummy accessor; the real one will be used on re-render.
+    dims = (() => ({ width: 80, height: 24 })) as ReturnType<typeof useTerminalDimensions>;
+  }
   const columns = () => dims()?.width ?? 80;
   const rows = () => dims()?.height ?? 24;
   const isWideMode = () => columns() >= 100;
@@ -79,8 +86,8 @@ export function App(props: AppProps): JSX.Element {
     onCleanup(() => clearTimeout(timer));
   });
 
-  // Global keyboard shortcuts
-  useKeyboard((evt) => {
+  // Global keyboard shortcuts (safe — no-op if renderer not ready)
+  try { useKeyboard((evt) => {
     // Don't handle shortcuts during setup
     if (mode() === 'setup') return;
 
@@ -119,7 +126,7 @@ export function App(props: AppProps): JSX.Element {
       exit();
       return;
     }
-  });
+  }); } catch { /* Renderer not ready during initial reactivity pass */ }
 
   // Reactive render — must wrap in arrow function for Solid.js reactivity
   const renderContent = (): JSX.Element => {
@@ -173,6 +180,8 @@ export function App(props: AppProps): JSX.Element {
             ) : undefined
           }
           activePanel={activePanel()}
+          columns={columns()}
+          rows={rows()}
         />
         {showCtrlCWarning() && (
           <box

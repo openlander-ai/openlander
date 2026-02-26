@@ -52,6 +52,9 @@ program
       }
     }
 
+    // Signal TUI mode BEFORE daemon starts (suppresses Hono HTTP logger)
+    process.env['OPENLANDER_TUI'] = '1';
+
     // Step 4: Start daemon (Unix socket) for TUI client
     const { startDaemon } = await import('../web/server.js');
     const socketPath = join(getDataDir(), 'openlander.sock');
