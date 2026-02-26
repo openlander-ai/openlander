@@ -8,21 +8,21 @@
 
 ## 1. 프로젝트 개요 비교
 
-| 항목               | OpenCode                                 | OpenLander                                  |
-| ------------------ | ---------------------------------------- | ------------------------------------------- |
-| **목적**           | AI 코딩 어시스턴트 (코드 읽기/쓰기/편집) | AI 배포 에이전트 (repo → Docker → URL)      |
-| **GitHub Stars**   | 111k                                     | Early stage                                 |
-| **Contributors**   | 773명                                    | 소규모 팀                                   |
-| **언어**           | TypeScript 51.6%, MDX 44.1%, Rust 0.6%   | TypeScript 100%                             |
-| **런타임**         | Bun                                      | Node.js >= 22                               |
-| **패키지 매니저**  | Bun workspace (monorepo)                 | npm (single package)                        |
-| **라이선스**       | MIT                                      | MIT                                         |
-| **TUI 프레임워크** | @opentui/solid (SolidJS 기반)            | Ink (React 기반) → @opentui/solid 전환 계획 |
-| **데이터베이스**   | SQLite (Drizzle ORM)                     | SQLite (Drizzle ORM) ✅ 동일                |
-| **HTTP 서버**      | Hono                                     | Hono ✅ 동일                                |
-| **AI SDK**         | Vercel AI SDK                            | 직접 구현 (provider별 클래스)               |
-| **설치 방식**      | curl, npm, brew, scoop, nix 등 다채널    | npm global                                  |
-| **릴리즈 수**      | 724 releases                             | Pre-release                                 |
+| 항목               | OpenCode                                 | OpenLander                                 |
+| ------------------ | ---------------------------------------- | ------------------------------------------ |
+| **목적**           | AI 코딩 어시스턴트 (코드 읽기/쓰기/편집) | AI 배포 에이전트 (repo → Docker → URL)     |
+| **GitHub Stars**   | 111k                                     | Early stage                                |
+| **Contributors**   | 773명                                    | 소규모 팀                                  |
+| **언어**           | TypeScript 51.6%, MDX 44.1%, Rust 0.6%   | TypeScript 100%                            |
+| **런타임**         | Bun                                      | Bun (runtime) + Node.js (build)            |
+| **패키지 매니저**  | Bun workspace (monorepo)                 | npm (single package)                       |
+| **라이선스**       | MIT                                      | MIT                                        |
+| **TUI 프레임워크** | @opentui/solid (SolidJS 기반)            | @opentui/solid (SolidJS 기반) ✅ 전환 완료 |
+| **데이터베이스**   | SQLite (Drizzle ORM)                     | SQLite (Drizzle ORM) ✅ 동일               |
+| **HTTP 서버**      | Hono                                     | Hono ✅ 동일                               |
+| **AI SDK**         | Vercel AI SDK                            | 직접 구현 (provider별 클래스)              |
+| **설치 방식**      | curl, npm, brew, scoop, nix 등 다채널    | npm global                                 |
+| **릴리즈 수**      | 724 releases                             | Pre-release                                |
 
 ### 핵심 차이점
 
@@ -555,15 +555,22 @@ src/tui/
 
 > **추천도: ★★★★★ (매우 높음) — 로드맵에 이미 있음 (v0.6)**
 >
-> OpenLander 로드맵에 "OpenCode-inspired UI/UX"가 이미 있으므로:
+> ✅ 구현 완료된 항목:
 >
-> 1. **@opentui/solid 전환**: 이미 package.json에 @opentui/solid 의존성 존재
->    - Ink(React) → @opentui/solid(SolidJS) 마이그레이션
->    - SolidJS의 세밀한 반응성이 터미널 UI에 더 적합
-> 2. **테마 시스템**: OpenCode의 테마 프리셋 참고
-> 3. **키바인드 커스터마이징**: 사용자가 단축키 변경 가능
-> 4. **에이전트 스위칭 UI**: Tab으로 에이전트 전환 (deploy ↔ diagnose ↔ monitor)
-> 5. **자동 스크롤 시스템**: 빌드 로그 출력 시 자동 스크롤
+> 1. **@opentui/solid 전환**: ✅ Ink(React) → @opentui/solid(SolidJS) 마이그레이션 완료
+> 2. **테마 시스템**: ✅ OpenCode 다크 테마 차용 완료 (theme.ts)
+> 3. **멀티라인 입력**: ✅ Prompt.tsx에서 1~6줄 지원
+> 4. **슬래시 커맨드 피커**: ✅ 드롭다운 + ↑↓/Enter/Tab/Esc 키보드
+> 5. **모델 선택 오버레이**: ✅ ModelOverlay (5 프로바이더 13개 모델)
+> 6. **Git 프로바이더 연동**: ✅ ConnectOverlay + 토큰 검증
+> 7. **레포지토리 브라우저**: ✅ RepoOverlay + 디플로이 연동
+> 8. **키보드 핸들링**: ✅ evt.name 기반으로 전체 통일 (KeyEvent API 정합)
+>
+> 🟡 미구현:
+>
+> - **키바인드 커스터마이징**: 사용자가 단축키 변경 가능
+> - **에이전트 스위칭 UI**: Tab으로 에이전트 전환
+> - **자동 스크롤 시스템**: 빌드 로그 출력 시 스마트 스크롤
 
 ---
 
@@ -614,15 +621,15 @@ src/tui/
 
 ### 🟡 중기 적용 (v0.5-v0.6)
 
-| 패턴                       | 설명                     | 구현 난이도 | 임팩트    |
-| -------------------------- | ------------------------ | ----------- | --------- |
-| **마크다운 에이전트 정의** | .openlander/agents/\*.md | 중간        | 매우 높음 |
-| **Permission 시스템**      | 도구별 allow/deny/ask    | 중간        | 높음      |
-| **Plugin Hook**            | before/after 커스텀 액션 | 중간        | 높음      |
-| **Context Compaction**     | 긴 대화 요약             | 높음        | 중간      |
-| **@opentui/solid 전환**    | Ink → SolidJS TUI        | 높음        | 높음      |
-| **{env:VAR} 변수 치환**    | 설정 파일 변수 치환      | 낮음        | 중간      |
-| **JSON Schema**            | 설정 파일 스키마 배포    | 낮음        | 중간      |
+| 패턴                        | 설명                     | 구현 난이도 | 임팩트    |
+| --------------------------- | ------------------------ | ----------- | --------- | ------- |
+| **마크다운 에이전트 정의**  | .openlander/agents/\*.md | 중간        | 매우 높음 |
+| **Permission 시스템**       | 도구별 allow/deny/ask    | 중간        | 높음      |
+| **Plugin Hook**             | before/after 커스텀 액션 | 중간        | 높음      |
+| **Context Compaction**      | 긴 대화 요약             | 높음        | 중간      |
+| ~~**@opentui/solid 전환**~~ | ~~Ink → SolidJS TUI~~    | ~~높음~~    | ~~높음~~  | ✅ 완료 |
+| **{env:VAR} 변수 치환**     | 설정 파일 변수 치환      | 낮음        | 중간      |         |
+| **JSON Schema**             | 설정 파일 스키마 배포    | 낮음        | 중간      |         |
 
 ### 🟢 장기 적용 (v0.7+)
 
@@ -681,7 +688,7 @@ OpenLander의 **고유 강점** (OpenCode가 참고할 만한 것):
 
 ### 즉시 실행 (이번 주)
 
-1. **`Database.effect()` 패턴 도입** — `src/events/index.ts` + `src/db/` 연동
+1. ~~**`Database.effect()` 패턴 도입**~~ — 평가 필요
 2. **도구 실행 상태 머신** — `src/tools/types.ts`에 `ToolState` 타입 추가
 3. **`ctx.metadata()`** — 배포 진행률 실시간 표시 인프라
 
@@ -691,10 +698,10 @@ OpenLander의 **고유 강점** (OpenCode가 참고할 만한 것):
 5. **Part-based 메시지** — 대화 메시지를 파트 단위로 구조화
 6. **설정 변수 치환** — `{env:VAR}`, `{file:path}` 지원
 
-### v0.6 마일스톤
+### v0.6 마일스톤 (✅ TUI 항목 대부분 완료)
 
 7. **마크다운 에이전트 정의** — `.openlander/agents/*.md`
-8. **@opentui/solid TUI 전환** — 이미 의존성 있으므로 마이그레이션만
+8. ~~**@opentui/solid TUI 전환**~~ — ✅ 구현 완료 (19개 컴포넌트, ~5,700줄)
 9. **Plugin Hook 시스템** — `deploy.before` / `deploy.after`
 
 ---
