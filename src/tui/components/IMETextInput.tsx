@@ -15,9 +15,12 @@ export default function IMETextInput(props: IMETextInputProps): JSX.Element {
   return (
     <input
       value={props.value}
-      onChange={(val: string) => props.onChange(val)}
+      onChange={(val: string) => {
+        props.onChange(val);
+      }}
       onSubmit={(val: string) => props.onSubmit?.(val)}
       placeholder={props.placeholder}
+      focused={props.focus}
     />
   );
 }

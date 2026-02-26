@@ -365,7 +365,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   return (
     <box
       flexDirection="column"
-      height={height()}
+      flexGrow={1}
       overflow="hidden"
       paddingLeft={2}
       paddingRight={1}

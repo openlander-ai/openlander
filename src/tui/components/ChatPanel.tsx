@@ -427,7 +427,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   });
 
   return (
-    <box flexDirection="column" height={height()}>
+    <box flexDirection="column" flexGrow={1}>
       {/* Message area */}
       <box flexDirection="column" flexGrow={1} overflow="hidden">
         <Show
