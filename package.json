@@ -23,7 +23,7 @@
   "scripts": {
     "dev": "tsup --watch",
     "build": "tsup",
-    "start": "bun dist/cli/index.js",
+    "start": "$HOME/.bun/bin/bun --conditions=browser dist/cli/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

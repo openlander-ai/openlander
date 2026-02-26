@@ -9,7 +9,14 @@ const solid = solidPlugin({
 });
 
 // Bun-only modules — resolved at runtime, not bundled
-const bunExternals = ['bun:sqlite', 'bun:ffi', 'bun:jsc', '@opentui/solid', '@opentui/core'];
+const bunExternals = [
+  'bun:sqlite',
+  'bun:ffi',
+  'bun:jsc',
+  '@opentui/solid',
+  '@opentui/core',
+  'solid-js',
+];
 
 export default defineConfig([
   // CLI entry — needs shebang for `npx openlander`
@@ -24,15 +31,10 @@ export default defineConfig([
     splitting: true,
     shims: false,
     banner: {
-      js: '#!/usr/bin/env bun',
+      js: '#!/usr/bin/env -S bun --conditions=browser',
     },
     esbuildPlugins: [solid],
     external: bunExternals,
-    noExternal: ['solid-js'],
-    // Resolve solid-js with 'browser' condition so it uses client mode (not server)
-    esbuildOptions(options) {
-      options.conditions = ['browser', 'module', 'import', 'default'];
-    },
   },
   // Library entry — no shebang
   {
@@ -46,9 +48,5 @@ export default defineConfig([
     shims: false,
     esbuildPlugins: [solid],
     external: bunExternals,
-    noExternal: ['solid-js'],
-    esbuildOptions(options) {
-      options.conditions = ['browser', 'module', 'import', 'default'];
-    },
   },
 ]);
