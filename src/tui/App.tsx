@@ -528,9 +528,9 @@ export function App(props: AppProps): JSX.Element {
                 onClose={() => setShowRepo(false)}
               />
             ) : showTunnel() ? (
-              <TunnelOverlay onClose={() => setShowTunnel(false)} />
+              <TunnelOverlay onClose={() => setShowTunnel(false)} client={connectedClient} />
             ) : showEnv() ? (
-              <EnvOverlay onClose={() => setShowEnv(false)} />
+              <EnvOverlay onClose={() => setShowEnv(false)} client={connectedClient} />
             ) : undefined
           }
           activePanel={activePanelForLayout()}

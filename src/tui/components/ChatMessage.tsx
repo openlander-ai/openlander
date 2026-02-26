@@ -1,7 +1,10 @@
+import { For, Show } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { ProgressBar } from './ProgressBar.js';
 import { Spinner } from './Spinner.js';
 import { theme, SplitBorder } from '../theme.js';
+import { parseMarkdown } from '../markdown.js';
+import type { MarkdownToken, InlineSpan } from '../markdown.js';
 import {
   ThinkingDisplay,
   CommandDisplay,
@@ -256,12 +259,122 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
       case 'text':
       default: {
         if (!content()) return <></>;
+        const tokens = parseMarkdown(content());
         return (
-          <box paddingLeft={3} marginTop={1} flexShrink={0}>
-            <text fg={theme.text}>{content()}</text>
+          <box paddingLeft={3} marginTop={1} flexShrink={0} flexDirection="column">
+            <MarkdownContent tokens={tokens} />
           </box>
         );
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Markdown Rendering Components
+// ---------------------------------------------------------------------------
+
+function InlineContent(props: { spans: InlineSpan[] }): JSX.Element {
+  return (
+    <box flexDirection="row" flexWrap="wrap">
+      <For each={props.spans}>
+        {(span) => {
+          switch (span.type) {
+            case 'bold':
+              return (
+                <text bold={true} fg={theme.text}>
+                  {span.text}
+                </text>
+              );
+            case 'code':
+              return (
+                <text fg={theme.accent} backgroundColor={theme.backgroundElement}>
+                  {` ${span.text} `}
+                </text>
+              );
+            case 'link':
+              return (
+                <text fg={theme.secondary} underline={true}>
+                  {span.url}
+                </text>
+              );
+            case 'text':
+            default:
+              return <text fg={theme.text}>{span.text}</text>;
+          }
+        }}
+      </For>
+    </box>
+  );
+}
+
+function MarkdownContent(props: { tokens: MarkdownToken[] }): JSX.Element {
+  return (
+    <For each={props.tokens}>
+      {(token) => {
+        switch (token.type) {
+          case 'heading':
+            return (
+              <box marginTop={1}>
+                <text
+                  bold={true}
+                  fg={
+                    token.level === 1
+                      ? theme.primary
+                      : token.level === 2
+                        ? theme.secondary
+                        : theme.text
+                  }
+                >
+                  {token.text}
+                </text>
+              </box>
+            );
+          case 'paragraph':
+            return (
+              <box marginTop={0}>
+                <InlineContent spans={token.spans} />
+              </box>
+            );
+          case 'code_block':
+            return (
+              <box
+                marginTop={1}
+                marginBottom={1}
+                paddingLeft={2}
+                paddingRight={2}
+                paddingTop={1}
+                paddingBottom={1}
+                backgroundColor={theme.backgroundElement}
+                flexDirection="column"
+              >
+                <Show when={token.language}>
+                  <text fg={theme.textDim} dim={true}>
+                    {token.language}
+                  </text>
+                </Show>
+                <text fg={theme.accent}>{token.code}</text>
+              </box>
+            );
+          case 'list_item':
+            return (
+              <box paddingLeft={2} flexDirection="row">
+                <text fg={theme.textMuted}>
+                  {token.ordered ? `${String(token.index)}. ` : '• '}
+                </text>
+                <InlineContent spans={token.spans} />
+              </box>
+            );
+          case 'hr':
+            return (
+              <box marginTop={1} marginBottom={1}>
+                <text fg={theme.borderSubtle}>{'─'.repeat(40)}</text>
+              </box>
+            );
+          default:
+            return <></>;
+        }
+      }}
+    </For>
+  );
 }
