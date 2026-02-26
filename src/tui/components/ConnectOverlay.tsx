@@ -1,15 +1,18 @@
 import type { JSX } from 'solid-js';
-import { For, createSignal } from 'solid-js';
+import { For, Show, createSignal } from 'solid-js';
 import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
 import { theme } from '../theme.js';
 
 interface ConnectOverlayProps {
   currentProviders: Record<string, { connected: boolean; username: string }>;
-  onConnect: (provider: string, token: string) => void;
+  onConnect: (
+    provider: string,
+    token: string,
+  ) => Promise<{ valid: boolean; username?: string; error?: string }>;
   onClose: () => void;
 }
 
-type ConnectState = 'select-provider' | 'enter-token';
+type ConnectState = 'select-provider' | 'enter-token' | 'validating' | 'result';
 
 interface ProviderInfo {
   id: string;
@@ -32,6 +35,11 @@ export function ConnectOverlay(props: ConnectOverlayProps): JSX.Element {
   const [state, setState] = createSignal<ConnectState>('select-provider');
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [tokenInput, setTokenInput] = createSignal('');
+  const [validationResult, setValidationResult] = createSignal<{
+    valid: boolean;
+    username?: string;
+    error?: string;
+  } | null>(null);
 
   let textareaRef: { plainText: string } | undefined;
 
@@ -54,15 +62,22 @@ export function ConnectOverlay(props: ConnectOverlayProps): JSX.Element {
         setTokenInput('');
       }
       // Enter is handled by textarea's onSubmit
+    } else if (state() === 'result') {
+      if (evt.key === 'escape' || evt.key === 'enter') {
+        props.onClose();
+      }
     }
+    // 'validating' state ignores all keyboard input
   });
-
   const handleTokenSubmit = () => {
     const token = tokenInput().trim();
     const provider = selectedProvider();
-    if (token && provider) {
-      props.onConnect(provider.id, token);
-    }
+    if (!token || !provider) return;
+    setState('validating');
+    void props.onConnect(provider.id, token).then((result) => {
+      setValidationResult(result);
+      setState('result');
+    });
   };
 
   const contentWidth = 60;
@@ -92,84 +107,101 @@ export function ConnectOverlay(props: ConnectOverlayProps): JSX.Element {
           </text>
         </box>
 
-        {state() === 'select-provider' ? (
-          <>
-            {/* Provider list */}
-            <box flexDirection="column" gap={0}>
-              <For each={PROVIDERS}>
-                {(provider, index) => {
-                  const info = () =>
-                    props.currentProviders[provider.id] ?? {
-                      connected: false,
-                      username: '',
-                    };
-                  const isSelected = () => selectedIndex() === index();
+        <Show when={state() === 'select-provider'}>
+          {/* Provider list */}
+          <box flexDirection="column" gap={0}>
+            <For each={PROVIDERS}>
+              {(provider, index) => {
+                const info = () =>
+                  props.currentProviders[provider.id] ?? {
+                    connected: false,
+                    username: '',
+                  };
+                const isSelected = () => selectedIndex() === index();
 
-                  return (
-                    <box>
-                      <text
-                        backgroundColor={isSelected() ? theme.primary : undefined}
-                        fg={isSelected() ? theme.background : theme.text}
-                        bold={isSelected()}
-                      >
-                        {' '}
-                        {info().connected ? '●' : '○'} {provider.icon} {provider.label}
-                        {info().connected ? (
-                          <text fg={theme.success}>
-                            {' '}
-                            Connected ({info().username || 'unknown'})
-                          </text>
-                        ) : (
-                          <text fg={theme.textDim}> Not connected</text>
-                        )}
-                        {isSelected() ? ' ' : ''}
-                      </text>
-                    </box>
-                  );
+                return (
+                  <box>
+                    <text
+                      backgroundColor={isSelected() ? theme.primary : undefined}
+                      fg={isSelected() ? theme.background : theme.text}
+                      bold={isSelected()}
+                    >
+                      {' '}
+                      {info().connected ? '●' : '○'} {provider.icon} {provider.label}
+                      {info().connected ? (
+                        <text fg={theme.success}> Connected ({info().username || 'unknown'})</text>
+                      ) : (
+                        <text fg={theme.textDim}> Not connected</text>
+                      )}
+                      {isSelected() ? ' ' : ''}
+                    </text>
+                  </box>
+                );
+              }}
+            </For>
+          </box>
+          <box marginTop={1} justifyContent="center">
+            <text fg={theme.textDim}>[↑↓ Navigate] [Enter Select] [Esc Close]</text>
+          </box>
+        </Show>
+
+        <Show when={state() === 'enter-token'}>
+          <box flexDirection="column" gap={1}>
+            <text fg={theme.text}>
+              Enter Personal Access Token for {selectedProvider()?.label}:
+            </text>
+            <box>
+              <textarea
+                ref={textareaRef}
+                minHeight={1}
+                maxHeight={1}
+                width={contentWidth - 4}
+                fg={theme.text}
+                backgroundColor={theme.backgroundElement}
+                onContentChange={() => {
+                  const ref = textareaRef as { plainText: string } | undefined;
+                  if (ref) {
+                    setTokenInput(ref.plainText);
+                  }
                 }}
-              </For>
+                onSubmit={handleTokenSubmit}
+              />
             </box>
+            <text fg={theme.textMuted}>
+              Token will be stored securely in ~/.openlander/config.json
+            </text>
+          </box>
+          <box marginTop={1} justifyContent="center">
+            <text fg={theme.textDim}>[Enter Submit] [Esc Back]</text>
+          </box>
+        </Show>
 
-            {/* Footer hint */}
-            <box marginTop={1} justifyContent="center">
-              <text fg={theme.textDim}>[↑↓ Navigate] [Enter Select] [Esc Close]</text>
-            </box>
-          </>
-        ) : (
-          <>
-            {/* Token input */}
-            <box flexDirection="column" gap={1}>
-              <text fg={theme.text}>
-                Enter Personal Access Token for {selectedProvider()?.label}:
-              </text>
-              <box>
-                <textarea
-                  ref={textareaRef}
-                  minHeight={1}
-                  maxHeight={1}
-                  width={contentWidth - 4}
-                  fg={theme.text}
-                  backgroundColor={theme.backgroundElement}
-                  onContentChange={() => {
-                    const ref = textareaRef as { plainText: string } | undefined;
-                    if (ref) {
-                      setTokenInput(ref.plainText);
-                    }
-                  }}
-                  onSubmit={handleTokenSubmit}
-                />
-              </box>
-              <text fg={theme.textMuted}>
-                Token will be stored securely in ~/.openlander/config.json
-              </text>
-            </box>
+        <Show when={state() === 'validating'}>
+          <box flexDirection="column" alignItems="center" gap={1}>
+            <text fg={theme.warning}>⟳ Validating token...</text>
+          </box>
+        </Show>
 
-            {/* Footer hint */}
-            <box marginTop={1} justifyContent="center">
-              <text fg={theme.textDim}>[Enter Submit] [Esc Back]</text>
-            </box>
-          </>
-        )}
+        <Show when={state() === 'result'}>
+          <box flexDirection="column" alignItems="center" gap={1}>
+            {validationResult()?.valid ? (
+              <>
+                <text fg={theme.success}>✓ Token valid</text>
+                <text fg={theme.text}>
+                  Connected as {validationResult()?.username ?? 'unknown'}
+                </text>
+              </>
+            ) : (
+              <>
+                <text fg={theme.error}>✗ Token invalid</text>
+                <text fg={theme.textMuted}>{validationResult()?.error ?? 'Unknown error'}</text>
+              </>
+            )}
+          </box>
+          <box marginTop={1} justifyContent="center">
+            <text fg={theme.textDim}>[Enter/Esc Close]</text>
+          </box>
+        </Show>
       </box>
     </box>
   );

@@ -114,13 +114,28 @@ export function App(props: AppProps): JSX.Element {
     },
   });
 
-  // Handle git provider connection
-  const handleConnect = (provider: string, token: string) => {
-    if (provider === 'github') {
-      props.ctx.config.gitProviders.github.token = token;
+  // Handle git provider connection with token validation
+  const handleConnect = async (
+    provider: string,
+    token: string,
+  ): Promise<{ valid: boolean; username?: string; error?: string }> => {
+    try {
+      const { createGitProvider } = await import('../git-providers/index.js');
+      const gitProvider = createGitProvider(provider as 'github', { token, username: '' });
+      const validation = await gitProvider.validateToken();
+      if (validation.valid) {
+        // Save token and username on success
+        if (provider === 'github') {
+          props.ctx.config.gitProviders.github.token = token;
+          props.ctx.config.gitProviders.github.username = validation.user?.username ?? '';
+        }
+        saveConfig(props.ctx.config);
+        return { valid: true, username: validation.user?.username };
+      }
+      return { valid: false, error: validation.error ?? 'Token validation failed' };
+    } catch (err) {
+      return { valid: false, error: err instanceof Error ? err.message : String(err) };
     }
-    saveConfig(props.ctx.config);
-    setShowConnect(false);
   };
 
   // Load repositories from connected providers
@@ -290,9 +305,7 @@ export function App(props: AppProps): JSX.Element {
             ) : showConnect() ? (
               <ConnectOverlay
                 currentProviders={connectedProviders()}
-                onConnect={(p, t) => {
-                  handleConnect(p, t);
-                }}
+                onConnect={(p, t) => handleConnect(p, t)}
                 onClose={() => setShowConnect(false)}
               />
             ) : showRepo() ? (
