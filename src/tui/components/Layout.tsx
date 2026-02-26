@@ -19,9 +19,19 @@ interface LayoutProps {
 export function Layout(props: LayoutProps): JSX.Element {
   const columns = () => props.columns;
   const rows = () => props.rows;
-  const isWideMode = () => columns() >= 100;
-  const leftWidth = () => (isWideMode() ? Math.floor(columns() * 0.55) : '100%');
-  const rightWidth = () => (isWideMode() ? Math.floor(columns() * 0.45) : '100%');
+  // Two-tier responsive: ≥120 → 60:40, 80-119 → 65:35, <80 → single panel
+  const isWideMode = () => columns() >= 80;
+  const isExtraWide = () => columns() >= 120;
+  const leftWidth = () => {
+    if (isExtraWide()) return Math.floor(columns() * 0.6);
+    if (isWideMode()) return Math.floor(columns() * 0.65);
+    return '100%';
+  };
+  const rightWidth = () => {
+    if (isExtraWide()) return Math.floor(columns() * 0.4);
+    if (isWideMode()) return Math.floor(columns() * 0.35);
+    return '100%';
+  };
   const contentHeight = () => rows() - 1;
 
   return (

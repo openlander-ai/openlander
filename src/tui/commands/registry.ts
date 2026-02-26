@@ -13,11 +13,10 @@ export interface SlashCommand {
 }
 
 export type SlashCommandResult =
-  | { action: 'modal'; modal: 'help' | 'model' | 'connect' | 'repo' }
+  | { action: 'modal'; modal: 'help' | 'model' | 'git' | 'repo' | 'tunnel' | 'env' }
   | { action: 'clear' }
   | { action: 'exit' }
-  | { action: 'compact' }
-  | { action: 'toggle-sidebar' };
+  | { action: 'compact' };
 
 /** Parsed command with separated args, flags, and positional arguments. */
 export interface ParsedCommand {
@@ -39,24 +38,29 @@ const commands: SlashCommand[] = [
     handler: () => ({ action: 'modal', modal: 'model' }),
   },
   {
-    name: 'compact',
-    description: 'Compact chat context (summarize and start fresh)',
-    handler: () => ({ action: 'compact' }),
-  },
-  {
-    name: 'connect',
-    description: 'Connect a Git provider (GitHub, GitLab, etc.)',
-    handler: () => ({ action: 'modal', modal: 'connect' }),
+    name: 'git',
+    description: 'Manage Git connections (GitHub, GitLab, etc.)',
+    handler: () => ({ action: 'modal', modal: 'git' }),
   },
   {
     name: 'repo',
-    description: 'Browse repositories from connected providers',
+    description: 'Browse repositories and deploy',
     handler: () => ({ action: 'modal', modal: 'repo' }),
   },
   {
-    name: 'projects',
-    description: 'List all projects',
-    handler: () => ({ action: 'toggle-sidebar' }),
+    name: 'tunnel',
+    description: 'Configure Cloudflare Tunnel',
+    handler: () => ({ action: 'modal', modal: 'tunnel' }),
+  },
+  {
+    name: 'env',
+    description: 'Manage environment variables',
+    handler: () => ({ action: 'modal', modal: 'env' }),
+  },
+  {
+    name: 'compact',
+    description: 'Compact chat context (summarize and start fresh)',
+    handler: () => ({ action: 'compact' }),
   },
   {
     name: 'clear',

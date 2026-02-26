@@ -3,7 +3,7 @@ import { For, Show, createSignal } from 'solid-js';
 import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
 import { theme } from '../theme.js';
 
-interface ConnectOverlayProps {
+interface GitOverlayProps {
   currentProviders: Record<string, { connected: boolean; username: string }>;
   onConnect: (
     provider: string,
@@ -27,7 +27,7 @@ const PROVIDERS: ProviderInfo[] = [
   { id: 'gitea', label: 'Gitea', icon: '◎' },
 ];
 
-export function ConnectOverlay(props: ConnectOverlayProps): JSX.Element {
+export function GitOverlay(props: GitOverlayProps): JSX.Element {
   const dims = useTerminalDimensions();
   const columns = () => dims().width;
   const rows = () => dims().height;

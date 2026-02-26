@@ -9,7 +9,7 @@ import {
 } from '../src/tui/commands/registry.js';
 
 // Total number of commands in the registry (counted from source)
-const TOTAL_COMMAND_COUNT = 8;
+const TOTAL_COMMAND_COUNT = 9;
 
 describe('getAllCommands', () => {
   it('returns an array of all commands', () => {
@@ -49,14 +49,17 @@ describe('findCommand', () => {
     expect(findCommand('compact')).toBeDefined();
     expect(findCommand('compact')?.name).toBe('compact');
 
-    expect(findCommand('connect')).toBeDefined();
-    expect(findCommand('connect')?.name).toBe('connect');
+    expect(findCommand('git')).toBeDefined();
+    expect(findCommand('git')?.name).toBe('git');
 
     expect(findCommand('repo')).toBeDefined();
     expect(findCommand('repo')?.name).toBe('repo');
 
-    expect(findCommand('projects')).toBeDefined();
-    expect(findCommand('projects')?.name).toBe('projects');
+    expect(findCommand('tunnel')).toBeDefined();
+    expect(findCommand('tunnel')?.name).toBe('tunnel');
+
+    expect(findCommand('env')).toBeDefined();
+    expect(findCommand('env')?.name).toBe('env');
     expect(findCommand('clear')).toBeDefined();
     expect(findCommand('clear')?.name).toBe('clear');
 
@@ -130,7 +133,7 @@ describe('filterCommands', () => {
   it('returns commands in insertion order (not alphabetical)', () => {
     const filtered = filterCommands('c');
     const names = filtered.map((c) => c.name);
-    expect(names).toEqual(['compact', 'connect', 'clear']);
+    expect(names).toEqual(['compact', 'clear']);
   });
 });
 
@@ -163,27 +166,27 @@ describe('parseSlashCommand', () => {
   });
 
   it('parses command with positional args', () => {
-    const result = parseSlashCommand('/connect my-repo');
+    const result = parseSlashCommand('/git my-repo');
     expect(result).not.toBeNull();
-    expect(result!.command.name).toBe('connect');
+    expect(result!.command.name).toBe('git');
     expect(result!.args).toBe('my-repo');
     expect(result!.positional).toEqual(['my-repo']);
     expect(result!.flags).toEqual({});
   });
 
   it('parses command with long flag and value', () => {
-    const result = parseSlashCommand('/connect my-repo --name myapp');
+    const result = parseSlashCommand('/git my-repo --name myapp');
     expect(result).not.toBeNull();
-    expect(result!.command.name).toBe('connect');
+    expect(result!.command.name).toBe('git');
     expect(result!.flags).toEqual({ name: 'myapp' });
     expect(result!.positional).toEqual(['my-repo']);
     expect(result!.args).toBe('my-repo --name myapp');
   });
 
   it('parses command with boolean flag', () => {
-    const result = parseSlashCommand('/connect my-repo --force');
+    const result = parseSlashCommand('/git my-repo --force');
     expect(result).not.toBeNull();
-    expect(result!.command.name).toBe('connect');
+    expect(result!.command.name).toBe('git');
     expect(result!.flags).toEqual({ force: true });
     expect(result!.positional).toEqual(['my-repo']);
   });
@@ -203,14 +206,14 @@ describe('parseSlashCommand', () => {
   });
 
   it('parses command with quoted args', () => {
-    const result = parseSlashCommand('/connect "my repo with spaces"');
+    const result = parseSlashCommand('/git "my repo with spaces"');
     expect(result).not.toBeNull();
     expect(result!.positional).toEqual(['my repo with spaces']);
     expect(result!.args).toBe('my repo with spaces');
   });
 
   it('parses command with single quoted args', () => {
-    const result = parseSlashCommand("/connect 'my repo with spaces'");
+    const result = parseSlashCommand("/git 'my repo with spaces'");
     expect(result).not.toBeNull();
     expect(result!.positional).toEqual(['my repo with spaces']);
   });
@@ -224,29 +227,29 @@ describe('parseSlashCommand', () => {
   });
 
   it('treats -- alone as positional (edge case)', () => {
-    const result = parseSlashCommand('/connect my-repo --');
+    const result = parseSlashCommand('/git my-repo --');
     expect(result).not.toBeNull();
     expect(result!.positional).toContain('my-repo');
     expect(result!.positional).toContain('--');
   });
 
   it('parses multiple positional args', () => {
-    const result = parseSlashCommand('/connect my-project example.com');
+    const result = parseSlashCommand('/git my-project example.com');
     expect(result).not.toBeNull();
-    expect(result!.command.name).toBe('connect');
+    expect(result!.command.name).toBe('git');
     expect(result!.positional).toEqual(['my-project', 'example.com']);
     expect(result!.args).toBe('my-project example.com');
   });
 
   it('handles flags at the beginning', () => {
-    const result = parseSlashCommand('/connect --name myapp repo-url');
+    const result = parseSlashCommand('/git --name myapp repo-url');
     expect(result).not.toBeNull();
     expect(result!.flags).toEqual({ name: 'myapp' });
     expect(result!.positional).toEqual(['repo-url']);
   });
 
   it('handles multiple flags', () => {
-    const result = parseSlashCommand('/connect repo --name app --env prod --force');
+    const result = parseSlashCommand('/git repo --name app --env prod --force');
     expect(result).not.toBeNull();
     expect(result!.flags).toEqual({ name: 'app', env: 'prod', force: true });
   });
@@ -258,7 +261,7 @@ describe('parseSlashCommand', () => {
   });
 
   it('handles value starting with dash after flag', () => {
-    const result = parseSlashCommand('/connect --name -myapp');
+    const result = parseSlashCommand('/git --name -myapp');
     // -myapp starts with -, so it won't be consumed as the flag value
     expect(result).not.toBeNull();
     expect(result!.flags).toEqual({ name: true }); // name is boolean, -myapp is separate
@@ -369,29 +372,30 @@ describe('Command Handlers', () => {
     });
   });
 
-  describe('/connect', () => {
-    it('returns modal action with connect modal', () => {
-      const handler = getHandler('connect');
+  describe('/git', () => {
+    it('returns modal action with git modal', () => {
+      const handler = getHandler('git');
       const result = handler('') as { action: string; modal: string };
       expect(result.action).toBe('modal');
-      expect(result.modal).toBe('connect');
+      expect(result.modal).toBe('git');
     });
   });
 
-  describe('/repo', () => {
-    it('returns modal action with repo modal', () => {
-      const handler = getHandler('repo');
+  describe('/tunnel', () => {
+    it('returns modal action with tunnel modal', () => {
+      const handler = getHandler('tunnel');
       const result = handler('') as { action: string; modal: string };
       expect(result.action).toBe('modal');
-      expect(result.modal).toBe('repo');
+      expect(result.modal).toBe('tunnel');
     });
   });
 
-  describe('/projects', () => {
-    it('returns toggle-sidebar action', () => {
-      const handler = getHandler('projects');
-      const result = handler('') as { action: string };
-      expect(result.action).toBe('toggle-sidebar');
+  describe('/env', () => {
+    it('returns modal action with env modal', () => {
+      const handler = getHandler('env');
+      const result = handler('') as { action: string; modal: string };
+      expect(result.action).toBe('modal');
+      expect(result.modal).toBe('env');
     });
   });
 

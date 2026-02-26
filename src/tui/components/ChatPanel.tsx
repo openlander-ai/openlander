@@ -423,8 +423,6 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             }
             break;
           }
-          case 'toggle-sidebar':
-            break;
         }
         return;
       }

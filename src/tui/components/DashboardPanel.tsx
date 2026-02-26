@@ -28,11 +28,13 @@ interface DashboardPanelProps {
   client: OpenLanderClient | null;
   height: number;
   focus: boolean;
+  compact?: boolean;
   onStatsUpdate?: (data: {
     projectCount: number;
     cpuPercent: number | null;
     buildingCount: number;
   }) => void;
+  onProjectSelect?: (projectId: string, projectName: string) => void;
 }
 
 // Section header component
@@ -250,6 +252,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   const client = () => props.client;
   const height = () => props.height;
   const focus = () => props.focus;
+  const compact = () => props.compact ?? false;
 
   const [systemStats, setSystemStats] = createSignal<SystemStats | null>(null);
   const [health, setHealth] = createSignal<HealthResponse | null>(null);
@@ -341,7 +344,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
     void fetchAll();
     const timer = setInterval(() => {
       void fetchAll();
-    }, 30000);
+    }, 5000);
     onCleanup(() => {
       clearInterval(timer);
     });
@@ -355,6 +358,12 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
     }
     if (evt.name === 'down') {
       setSelectedIndex((prev) => (prev < projects().length - 1 ? prev + 1 : 0));
+    }
+    if (evt.name === 'enter') {
+      const p = projects()[selectedIndex()];
+      if (p && props.onProjectSelect) {
+        props.onProjectSelect(p.id, p.name);
+      }
     }
   });
 
@@ -383,16 +392,18 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
         selectedIndex={selectedIndex()}
         focus={focus()}
       />
-      <ActivitySection events={activity()} />
-      <McpClientsSection enabled={health() !== null} />
+      <Show when={!compact()}>
+        <ActivitySection events={activity()} />
+        <McpClientsSection enabled={health() !== null} />
+      </Show>
 
       <Show when={showScrollDown()}>
         <text fg={theme.textDim}>↓ more</text>
       </Show>
 
-      <Show when={focus()}>
+      <Show when={focus() && !compact()}>
         <box marginTop={1}>
-          <text fg={theme.textDim}>↑↓ Navigate projects</text>
+          <text fg={theme.textDim}>↑↓ Navigate Enter Debug mode</text>
         </box>
       </Show>
     </box>

@@ -12,12 +12,24 @@ import { Layout } from './components/Layout.js';
 import { StatusBar } from './components/StatusBar.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
 import { ModelOverlay } from './components/ModelOverlay.js';
-import { ConnectOverlay } from './components/ConnectOverlay.js';
+import { GitOverlay } from './components/GitOverlay.js';
+import { TunnelOverlay } from './components/TunnelOverlay.js';
+import { EnvOverlay } from './components/EnvOverlay.js';
 import { RepoOverlay } from './components/RepoOverlay.js';
 import { ChatPanel } from './components/ChatPanel.js';
-import { DashboardPanel } from './components/DashboardPanel.js';
+import { StatusPanel } from './components/StatusPanel.js';
 import type { DisplayMessage } from './components/ChatMessage.js';
 import type { DeployResponse, BuildProgressEvent } from '../ipc/client.js';
+import {
+  mode as tuiMode,
+  deployingState,
+  debuggingState,
+  enterDeployMode,
+  enterDebugMode,
+  returnToMonitoring,
+  scheduleDeployReturn,
+} from './state/mode.js';
+import { focus, toggleFocus } from './state/focus.js';
 
 // Socket path for daemon connection
 const SOCKET_PATH = join(getDataDir(), 'openlander.sock');
@@ -42,21 +54,22 @@ interface AppProps {
 }
 
 export function App(props: AppProps): JSX.Element {
-  // App mode: setup or dashboard
-  const [mode, setMode] = createSignal<'setup' | 'dashboard'>(
+  // App mode: setup or dashboard (distinct from TUI mode: monitoring/deploying/debugging)
+  const [appMode, setAppMode] = createSignal<'setup' | 'dashboard'>(
     isOnboarded() ? 'dashboard' : 'setup',
   );
 
-  // Panel state
+  // Panel state — focus is managed by state/focus.ts (chat | status)
   const [showHelp, setShowHelp] = createSignal(false);
   const [showModelSelector, setShowModelSelector] = createSignal(false);
-  const [activePanel, setActivePanel] = createSignal<'left' | 'right'>('left');
   const [currentProvider, setCurrentProvider] = createSignal(props.ctx.config.llm.provider);
   const [currentModel, setCurrentModel] = createSignal(props.ctx.config.llm.model);
 
-  // Connect/Repo overlay state
-  const [showConnect, setShowConnect] = createSignal(false);
+  // Overlay state: git (was connect), repo, tunnel, env
+  const [showGit, setShowGit] = createSignal(false);
   const [showRepo, setShowRepo] = createSignal(false);
+  const [showTunnel, setShowTunnel] = createSignal(false);
+  const [showEnv, setShowEnv] = createSignal(false);
   const [repos, setRepos] = createSignal<
     Array<{
       name: string;
@@ -109,7 +122,7 @@ export function App(props: AppProps): JSX.Element {
   }
   const columns = () => dims().width;
   const rows = () => dims().height;
-  const isWideMode = () => columns() >= 100;
+  const isWideMode = () => columns() >= 80;
 
   // Stats for status bar (received from DashboardPanel via callback)
   const [projectCount, setProjectCount] = createSignal(0);
@@ -118,7 +131,7 @@ export function App(props: AppProps): JSX.Element {
 
   // Setup completion handler
   const handleSetupComplete = () => {
-    setMode('dashboard');
+    setAppMode('dashboard');
   };
 
   // Receive stats from DashboardPanel (no duplicate polling)
@@ -130,6 +143,11 @@ export function App(props: AppProps): JSX.Element {
     setProjectCount(data.projectCount);
     setCpuPercent(data.cpuPercent);
     setBuildingCount(data.buildingCount);
+  };
+
+  // Handle project selection from StatusPanel — enter debug mode
+  const handleProjectSelect = (projectId: string, projectName: string) => {
+    enterDebugMode(projectId, projectName);
   };
 
   // Connected providers computation
@@ -172,7 +190,7 @@ export function App(props: AppProps): JSX.Element {
     try {
       const githubConfig = props.ctx.config.gitProviders.github;
       if (!githubConfig.token) {
-        setReposError('No Git provider connected. Use /connect first.');
+        setReposError('No Git provider connected. Use /git first.');
         setReposLoading(false);
         return;
       }
@@ -264,6 +282,11 @@ export function App(props: AppProps): JSX.Element {
         return;
       }
 
+      // Enter deploy mode — right panel shows build progress
+      const projectName =
+        deployResult.projectName || (repoFullName.split('/').pop() ?? repoFullName);
+      enterDeployMode(deployResult.projectId, projectName);
+
       // Stream build progress
       deployAbortController = new AbortController();
       try {
@@ -296,6 +319,8 @@ export function App(props: AppProps): JSX.Element {
                 timestamp: Date.now(),
               },
             ]);
+            // Auto-return to monitoring after 3 seconds
+            scheduleDeployReturn(3);
           }
         }
       } catch {
@@ -327,15 +352,24 @@ export function App(props: AppProps): JSX.Element {
     useKeyboard((event) => {
       const evt = event as { name?: string; ctrl?: boolean };
       // Don't handle shortcuts during setup
-      if (mode() === 'setup') return;
+      if (appMode() === 'setup') return;
 
       // Help/Model/Connect/Repo overlay shortcuts
-      if (showHelp() || showModelSelector() || showConnect() || showRepo()) {
+      if (
+        showHelp() ||
+        showModelSelector() ||
+        showGit() ||
+        showRepo() ||
+        showTunnel() ||
+        showEnv()
+      ) {
         if (evt.name === 'escape') {
           setShowHelp(false);
           setShowModelSelector(false);
-          setShowConnect(false);
+          setShowGit(false);
           setShowRepo(false);
+          setShowTunnel(false);
+          setShowEnv(false);
         }
         return;
       }
@@ -350,9 +384,17 @@ export function App(props: AppProps): JSX.Element {
         return;
       }
 
-      // Tab: panel switch
+      // Esc: mode-specific behavior
+      if (evt.name === 'escape') {
+        if (tuiMode() === 'debugging' || tuiMode() === 'deploying') {
+          returnToMonitoring();
+        }
+        return;
+      }
+
+      // Tab: panel focus switch
       if (evt.name === 'tab') {
-        setActivePanel((prev) => (prev === 'left' ? 'right' : 'left'));
+        toggleFocus();
         return;
       }
 
@@ -362,8 +404,8 @@ export function App(props: AppProps): JSX.Element {
         return;
       }
 
-      // q to quit (only when dashboard panel is focused, not during chat input)
-      if (evt.name === 'q' && activePanel() === 'right') {
+      // q to quit (only when status panel is focused, not during chat input)
+      if (evt.name === 'q' && focus() === 'status') {
         exit();
         return;
       }
@@ -375,7 +417,7 @@ export function App(props: AppProps): JSX.Element {
   // Reactive render — must wrap in arrow function for Solid.js reactivity
   const renderContent = (): JSX.Element => {
     // Setup mode — onboarding wizard
-    if (mode() === 'setup') {
+    if (appMode() === 'setup') {
       return <Onboarding ctx={props.ctx} onComplete={handleSetupComplete} />;
     }
 
@@ -383,6 +425,8 @@ export function App(props: AppProps): JSX.Element {
     const panelMode = isWideMode() ? 'split' : 'single';
     const contentHeight = rows() - 1; // reserve 1 row for status bar
     const connectedClient = status() === 'connected' ? client : null;
+    // Map focus to Layout's activePanel prop
+    const activePanelForLayout = (): 'left' | 'right' => (focus() === 'chat' ? 'left' : 'right');
 
     return (
       <>
@@ -391,31 +435,40 @@ export function App(props: AppProps): JSX.Element {
             <ChatPanel
               client={connectedClient}
               height={contentHeight}
-              focus={activePanel() === 'left'}
+              focus={focus() === 'chat'}
               externalMessages={deployMessages()}
               onModal={(modal: string) => {
                 if (modal === 'help') setShowHelp(true);
                 if (modal === 'model') setShowModelSelector(true);
-                if (modal === 'connect') setShowConnect(true);
+                if (modal === 'git') setShowGit(true);
                 if (modal === 'repo') void handleShowRepo();
+                if (modal === 'tunnel') setShowTunnel(true);
+                if (modal === 'env') setShowEnv(true);
               }}
             />
           }
           right={
-            <DashboardPanel
+            <StatusPanel
               client={connectedClient}
               height={contentHeight}
-              focus={activePanel() === 'right'}
+              focus={focus() === 'status'}
+              mode={tuiMode()}
+              deployingState={deployingState()}
+              debuggingState={debuggingState()}
               onStatsUpdate={handleStatsUpdate}
+              onProjectSelect={handleProjectSelect}
             />
           }
           statusBar={
             <StatusBar
               panelMode={panelMode}
-              activePanel={activePanel()}
+              activePanel={activePanelForLayout()}
               projectCount={projectCount()}
               cpuPercent={cpuPercent()}
               buildingCount={buildingCount()}
+              mode={tuiMode()}
+              deployProjectName={deployingState()?.projectName}
+              debugProjectName={debuggingState()?.projectName}
             />
           }
           overlay={
@@ -432,11 +485,11 @@ export function App(props: AppProps): JSX.Element {
                 onSelect={handleModelSelect}
                 onClose={() => setShowModelSelector(false)}
               />
-            ) : showConnect() ? (
-              <ConnectOverlay
+            ) : showGit() ? (
+              <GitOverlay
                 currentProviders={connectedProviders()}
                 onConnect={(p, t) => handleConnect(p, t)}
-                onClose={() => setShowConnect(false)}
+                onClose={() => setShowGit(false)}
               />
             ) : showRepo() ? (
               <RepoOverlay
@@ -446,9 +499,13 @@ export function App(props: AppProps): JSX.Element {
                 onSelect={handleRepoSelect}
                 onClose={() => setShowRepo(false)}
               />
+            ) : showTunnel() ? (
+              <TunnelOverlay onClose={() => setShowTunnel(false)} />
+            ) : showEnv() ? (
+              <EnvOverlay onClose={() => setShowEnv(false)} />
             ) : undefined
           }
-          activePanel={activePanel()}
+          activePanel={activePanelForLayout()}
           columns={columns()}
           rows={rows()}
         />
