@@ -97,7 +97,7 @@ export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
   });
 
   useKeyboard((event) => {
-    const evt = event as { name?: string; ctrl?: boolean };
+    const evt = event as { name?: string; ctrl?: boolean; stopPropagation?: () => void };
     if (evt.name === 'escape') {
       props.onClose();
     } else if (evt.name === 'up') {
@@ -110,6 +110,8 @@ export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
         props.onSelect(entry.provider, entry.model);
       }
     }
+    // Prevent background components from receiving this event
+    evt.stopPropagation?.();
   });
 
   const contentWidth = 60;

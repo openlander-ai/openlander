@@ -53,7 +53,7 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
   });
 
   useKeyboard((event) => {
-    const evt = event as { name?: string; ctrl?: boolean };
+    const evt = event as { name?: string; ctrl?: boolean; stopPropagation?: () => void };
     if (evt.name === 'escape') {
       props.onClose();
     } else if (!props.loading && !props.error && props.repos.length > 0) {
@@ -68,6 +68,8 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
         }
       }
     }
+    // Prevent background components from receiving this event
+    evt.stopPropagation?.();
   });
 
   const contentWidth = 70;

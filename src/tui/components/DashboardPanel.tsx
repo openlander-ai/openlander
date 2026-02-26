@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
+import { overlayActive } from '../state/overlay.js';
 import { Spinner } from './Spinner.js';
 import { theme } from '../theme.js';
 import {
@@ -352,7 +353,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
 
   useKeyboard((event) => {
     const evt = event as { name?: string; ctrl?: boolean };
-    if (!focus()) return;
+    if (overlayActive() || !focus()) return;
     if (evt.name === 'up') {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : projects().length - 1));
     }

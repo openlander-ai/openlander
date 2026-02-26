@@ -30,6 +30,7 @@ import {
   scheduleDeployReturn,
 } from './state/mode.js';
 import { focus, toggleFocus } from './state/focus.js';
+import { setOverlayActive } from './state/overlay.js';
 
 // Socket path for daemon connection
 const SOCKET_PATH = join(getDataDir(), 'openlander.sock');
@@ -431,6 +432,11 @@ export function App(props: AppProps): JSX.Element {
     // When any overlay is open, unfocus panels so textarea doesn't eat keyboard events
     const anyOverlayOpen = () =>
       showHelp() || showModelSelector() || showGit() || showRepo() || showTunnel() || showEnv();
+
+    // Sync centralized overlay state so DashboardPanel/ChatPanel can check directly
+    createEffect(() => {
+      setOverlayActive(anyOverlayOpen());
+    });
 
     return (
       <>

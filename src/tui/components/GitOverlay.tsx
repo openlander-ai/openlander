@@ -46,7 +46,7 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
   const selectedProvider = () => PROVIDERS[selectedIndex()];
 
   useKeyboard((event) => {
-    const evt = event as { name?: string; ctrl?: boolean };
+    const evt = event as { name?: string; ctrl?: boolean; stopPropagation?: () => void };
     if (state() === 'select-provider') {
       if (evt.name === 'escape') {
         props.onClose();
@@ -68,7 +68,8 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
         props.onClose();
       }
     }
-    // 'validating' state ignores all keyboard input
+    // Prevent background components from receiving this event
+    evt.stopPropagation?.();
   });
   const handleTokenSubmit = () => {
     const token = tokenInput().trim();

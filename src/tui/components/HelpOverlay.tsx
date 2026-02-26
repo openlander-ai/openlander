@@ -30,10 +30,12 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
   const rows = () => dims().height;
 
   useKeyboard((event) => {
-    const evt = event as { name?: string; ctrl?: boolean };
+    const evt = event as { name?: string; ctrl?: boolean; stopPropagation?: () => void };
     if (evt.name === 'escape') {
       props.onClose();
     }
+    // Prevent background components from receiving this event
+    evt.stopPropagation?.();
   });
 
   const contentWidth = 50;

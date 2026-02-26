@@ -1,6 +1,7 @@
 import { createSignal, createEffect, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
+import { overlayActive } from '../state/overlay.js';
 import { Prompt } from './Prompt.js';
 import { Spinner } from './Spinner.js';
 import type { OpenLanderClient } from '../../ipc/client.js';
@@ -595,7 +596,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   // --- Global keyboard shortcuts (non-input-specific) ---
   useKeyboard((event) => {
     const evt = event as { name?: string; ctrl?: boolean };
-    if (!focus()) return;
+    if (overlayActive() || !focus()) return;
     if (evt.ctrl && evt.name === 'l') {
       setMessages([]);
       props.onClear?.();
