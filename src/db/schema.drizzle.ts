@@ -74,7 +74,7 @@ export const deployLogs = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     status: text('status', { enum: ['success', 'failed', 'cancelled'] }),
-    trigger: text('trigger', { enum: ['chat', 'webhook', 'api'] }),
+    trigger: text('trigger_source', { enum: ['chat', 'webhook', 'api'] }),
     commit_sha: text('commit_sha'),
     build_log: text('build_log'),
     duration_ms: integer('duration_ms'),
