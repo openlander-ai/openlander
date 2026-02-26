@@ -9,13 +9,11 @@ export interface SlashCommand {
   name: string;
   description: string;
   usage?: string;
-  expectsProject?: boolean;
   handler: (args: string) => SlashCommandResult;
 }
 
 export type SlashCommandResult =
   | { action: 'modal'; modal: 'help' | 'model' | 'connect' | 'repo' }
-  | { action: 'agent'; message: string }
   | { action: 'clear' }
   | { action: 'exit' }
   | { action: 'compact' }
@@ -56,185 +54,9 @@ const commands: SlashCommand[] = [
     handler: () => ({ action: 'modal', modal: 'repo' }),
   },
   {
-    name: 'deploy',
-    description: 'Deploy a repository',
-    usage: '/deploy <repo-url> [--name <name>] [--env KEY=VALUE]',
-    handler: (args) => ({ action: 'agent', message: `Deploy ${args}`.trim() }),
-  },
-  {
-    name: 'logs',
-    description: 'View project logs',
-    usage: '/logs <project> [-n <lines>]',
-    expectsProject: true,
-    handler: (args) =>
-      args
-        ? { action: 'agent', message: `Show logs for ${args}` }
-        : { action: 'agent', message: 'Show logs for the most recent project' },
-  },
-  {
-    name: 'stop',
-    description: 'Stop a project',
-    usage: '/stop <project>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Stop ${args}`.trim() }),
-  },
-  {
-    name: 'start',
-    description: 'Start a stopped project',
-    usage: '/start <project>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Start ${args}`.trim() }),
-  },
-  {
-    name: 'restart',
-    description: 'Restart a project',
-    usage: '/restart <project>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Restart ${args}`.trim() }),
-  },
-  {
-    name: 'remove',
-    description: 'Remove a project',
-    usage: '/remove <project>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Remove ${args}`.trim() }),
-  },
-  {
-    name: 'status',
-    description: 'Show system status',
-    usage: '/status [project]',
-    handler: (args) =>
-      args
-        ? { action: 'agent', message: `Show status for ${args}` }
-        : { action: 'agent', message: 'Show system status' },
-  },
-  {
     name: 'projects',
     description: 'List all projects',
     handler: () => ({ action: 'toggle-sidebar' }),
-  },
-  {
-    name: 'redeploy',
-    description: 'Redeploy a project',
-    usage: '/redeploy <project>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Redeploy ${args}`.trim() }),
-  },
-  {
-    name: 'public',
-    description: 'Make a project publicly accessible',
-    usage: '/public <project>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Make ${args} public`.trim() }),
-  },
-  {
-    name: 'expose',
-    description: 'Quick Share (TryCloudflare) for a project',
-    usage: '/expose <project>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Expose ${args} via TryCloudflare`.trim() }),
-  },
-  {
-    name: 'unexpose',
-    description: 'Disable external access for a project',
-    usage: '/unexpose <project>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Unexpose ${args}`.trim() }),
-  },
-  {
-    name: 'domain',
-    description: 'Set custom domain mapping for a project',
-    usage: '/domain <project> <domain>',
-    expectsProject: true,
-    handler: (args) => ({ action: 'agent', message: `Set domain: ${args}`.trim() }),
-  },
-  {
-    name: 'domains',
-    description: 'List all domain mappings',
-    handler: () => ({ action: 'agent', message: 'List all domain mappings' }),
-  },
-  {
-    name: 'env',
-    description: 'Manage environment variables',
-    usage: '/env <project> [--remove KEY] [--redeploy]',
-    expectsProject: true,
-    handler: (args) => ({
-      action: 'agent',
-      message: `Manage environment variables: ${args}`.trim(),
-    }),
-  },
-  {
-    name: 'system',
-    description: 'Show detailed system resource info',
-    handler: () => ({ action: 'agent', message: 'Show detailed system resource info' }),
-  },
-  {
-    name: 'cleanup',
-    description: 'Suggest unused container/image cleanup',
-    handler: () => ({
-      action: 'agent',
-      message: 'Suggest cleanup for unused containers and images',
-    }),
-  },
-  {
-    name: 'config',
-    description: 'Show or modify configuration',
-    handler: (args) =>
-      args
-        ? { action: 'agent', message: `Modify config: ${args}` }
-        : { action: 'agent', message: 'Show current configuration' },
-  },
-  {
-    name: 'git',
-    description: 'Manage Git authentication (SSH keys, providers)',
-    usage: '/git <ssh-keygen|ssh-add|provider> [options]',
-    handler: (args) => {
-      const lower = args.toLowerCase().trim();
-      if (lower.startsWith('ssh-keygen')) {
-        return {
-          action: 'agent',
-          message:
-            `Generate a new SSH key pair for Git authentication. ${args.replace(/^ssh-keygen\s*/i, '')}`.trim(),
-        };
-      }
-      if (lower.startsWith('ssh-add')) {
-        return {
-          action: 'agent',
-          message:
-            `Add SSH key to the agent and display the public key for adding to Git provider. ${args.replace(/^ssh-add\s*/i, '')}`.trim(),
-        };
-      }
-      if (lower.startsWith('provider')) {
-        return {
-          action: 'agent',
-          message: `Configure Git provider settings. ${args.replace(/^provider\s*/i, '')}`.trim(),
-        };
-      }
-      return {
-        action: 'agent',
-        message: args
-          ? `Git operation: ${args}`
-          : 'Show Git authentication status and configured providers',
-      };
-    },
-  },
-  {
-    name: 'ssh',
-    description: 'Manage SSH keys for private repo access',
-    usage: '/ssh [keygen|add|list]',
-    handler: (args) => {
-      const lower = args.toLowerCase().trim();
-      if (lower === 'keygen' || lower === 'generate') {
-        return { action: 'agent', message: 'Generate a new SSH key pair for Git authentication' };
-      }
-      if (lower === 'add') {
-        return { action: 'agent', message: 'Add SSH key to the agent and show public key' };
-      }
-      if (lower === 'list' || lower === 'ls') {
-        return { action: 'agent', message: 'List all SSH keys available for Git' };
-      }
-      return { action: 'agent', message: args ? `SSH operation: ${args}` : 'Show SSH key status' };
-    },
   },
   {
     name: 'clear',

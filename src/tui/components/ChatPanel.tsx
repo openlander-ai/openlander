@@ -354,28 +354,6 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           case 'exit':
             props.onExit?.();
             break;
-          case 'agent':
-            if (client()) {
-              const c = client();
-              if (!c) return;
-              setIsStreaming(true);
-              try {
-                await c.chatStream(result.message, sessionIdRef, handleStreamEvent);
-              } catch (err) {
-                setMessages((prev) => [
-                  ...prev,
-                  {
-                    id: `error-${String(Date.now())}`,
-                    role: 'assistant',
-                    content: err instanceof Error ? err.message : String(err),
-                    type: 'error',
-                    timestamp: Date.now(),
-                  },
-                ]);
-                setIsStreaming(false);
-              }
-            }
-            break;
           case 'compact': {
             if (!client()) break;
             const c = client();
