@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'tsup';
 import { solidPlugin } from 'esbuild-plugin-solid';
 
+// Read version from package.json — single source of truth
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: string };
 const solid = solidPlugin({
   solid: {
     moduleName: '@opentui/solid',
@@ -35,6 +38,7 @@ export default defineConfig([
     },
     esbuildPlugins: [solid],
     external: bunExternals,
+    define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   },
   // Library entry — no shebang
   {
@@ -48,5 +52,6 @@ export default defineConfig([
     shims: false,
     esbuildPlugins: [solid],
     external: bunExternals,
+    define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   },
 ]);

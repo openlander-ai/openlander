@@ -3,6 +3,7 @@ import pc from 'picocolors';
 import { join } from 'node:path';
 import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { createModuleLogger } from '../lib/logger.js';
+import { VERSION } from '../version.js';
 
 const log = createModuleLogger('cli');
 
@@ -13,7 +14,7 @@ const program = new Command();
 program
   .name('openlander')
   .description('AI agent that deploys your app from a chat')
-  .version('0.4.0')
+  .version(VERSION)
   .option('-p, --port <port>', 'Port to listen on', '3000')
   .option('--host <host>', 'Host to bind to', '0.0.0.0')
   .action(async (options: { port: string; host: string }) => {
@@ -59,7 +60,6 @@ program
     const { startDaemon } = await import('../web/server.js');
     const socketPath = join(getDataDir(), 'openlander.sock');
     await startDaemon({ socketPath }, ctx);
-
 
     // Step 6: Launch TUI
     const { startTUI } = await import('../tui/index.js');

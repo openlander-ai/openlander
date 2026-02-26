@@ -3,7 +3,7 @@ import { useKeyboard } from '@opentui/solid';
 import { useExit } from '../context/exit.js';
 
 import { PatchNotes } from './PatchNotes.js';
-import { VERSION } from './version.js';
+import { VERSION } from '../../version.js';
 import { getDataDir } from '../../config/index.js';
 
 export interface ReadyProps {

@@ -2,7 +2,7 @@ import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import { useExit } from '../context/exit.js';
 
-import { VERSION } from './version.js';
+import { VERSION } from '../../version.js';
 
 export interface WelcomeProps {
   onNext: () => void;
