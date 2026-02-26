@@ -37,8 +37,8 @@ describe('getMatchCount', () => {
     expect(getMatchCount('/do')).toBe(2);
   });
 
-  it('returns correct count for "/re" (remove, redeploy, restart)', () => {
-    expect(getMatchCount('/re')).toBe(3);
+  it('returns correct count for "/re" (remove, redeploy, restart, repo)', () => {
+    expect(getMatchCount('/re')).toBe(4);
   });
 
   it('handles input with space by extracting prefix before space', () => {

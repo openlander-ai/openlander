@@ -10,7 +10,7 @@ import {
 } from '../src/tui/commands/registry.js';
 
 // Total number of commands in the registry (counted from source)
-const TOTAL_COMMAND_COUNT = 23;
+const TOTAL_COMMAND_COUNT = 27;
 
 describe('getAllCommands', () => {
   it('returns an array of all commands', () => {
