@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { createSignal, createEffect } from 'solid-js';
+import type { JSX } from 'solid-js';
 import type { AppContext } from '../../app.js';
 
 import { Welcome } from './Welcome.js';
@@ -24,17 +25,18 @@ export interface ScreenProps {
  * Onboarding controller - manages step state and renders current screen.
  * Each screen is full-screen (not a scrolling wizard).
  */
-export function Onboarding({ ctx, onComplete }: OnboardingProps): React.ReactElement {
-  const [step, setStep] = useState<OnboardingStep>('welcome');
+export function Onboarding({ ctx, onComplete }: OnboardingProps): JSX.Element {
+  const [step, setStep] = createSignal<OnboardingStep>('welcome');
 
   // Clear console between screens for full-screen feel
-  useEffect(() => {
+  createEffect(() => {
+    const _s = step(); // track step changes
     console.clear();
-  }, [step]);
+  });
 
   const handleNext = () => {
     const steps: OnboardingStep[] = ['welcome', 'docker', 'git', 'llm', 'traefik', 'ready'];
-    const currentIndex = steps.indexOf(step);
+    const currentIndex = steps.indexOf(step());
     const nextStep = steps[currentIndex + 1];
     if (nextStep) {
       setStep(nextStep);
@@ -46,7 +48,8 @@ export function Onboarding({ ctx, onComplete }: OnboardingProps): React.ReactEle
   };
 
   // Render current screen
-  switch (step) {
+  const s = step();
+  switch (s) {
     case 'welcome':
       return <Welcome onNext={handleNext} />;
     case 'docker':

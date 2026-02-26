@@ -1,6 +1,6 @@
-import React from 'react';
-import { Box, Text } from 'ink';
-import Spinner from 'ink-spinner';
+import type { JSX } from 'solid-js';
+import { Show, For } from 'solid-js';
+import { Spinner } from './Spinner.js';
 import { theme } from '../theme.js';
 
 // ── 1. ThinkingDisplay ──────────────────────────────────────────
@@ -9,27 +9,27 @@ interface ThinkingDisplayProps {
   label?: string;
 }
 
-export function ThinkingDisplay({
-  label = 'Thinking...',
-}: ThinkingDisplayProps): React.ReactElement {
+export function ThinkingDisplay(props: ThinkingDisplayProps): JSX.Element {
+  const label = () => props.label ?? 'Thinking...';
+
   return (
-    <Box
-      borderStyle="bold"
-      borderLeft
+    <box
+      border="bold"
+      borderLeft={true}
       borderRight={false}
       borderTop={false}
       borderBottom={false}
       paddingLeft={1}
       borderColor={theme.primary}
     >
-      <Text color={theme.primary} bold>
-        <Spinner type="dots" />
-      </Text>
-      <Text color={theme.primary} bold>
+      <text color={theme.primary} bold={true}>
+        <Spinner color={theme.primary} />
+      </text>
+      <text color={theme.primary} bold={true}>
         {' '}
-        {label}
-      </Text>
-    </Box>
+        {label()}
+      </text>
+    </box>
   );
 }
 
@@ -43,19 +43,16 @@ interface CommandDisplayProps {
 
 const MAX_OUTPUT_LINES = 10;
 
-export function CommandDisplay({
-  command,
-  output,
-  status,
-}: CommandDisplayProps): React.ReactElement {
-  const outputLines = output?.split('\n') ?? [];
-  const truncated = outputLines.length > MAX_OUTPUT_LINES;
-  const visibleLines = truncated ? outputLines.slice(0, MAX_OUTPUT_LINES) : outputLines;
+export function CommandDisplay(props: CommandDisplayProps): JSX.Element {
+  const outputLines = () => props.output?.split('\n') ?? [];
+  const truncated = () => outputLines().length > MAX_OUTPUT_LINES;
+  const visibleLines = () =>
+    truncated() ? outputLines().slice(0, MAX_OUTPUT_LINES) : outputLines();
 
   return (
-    <Box
-      borderStyle="bold"
-      borderLeft
+    <box
+      border="bold"
+      borderLeft={true}
       borderRight={false}
       borderTop={false}
       borderBottom={false}
@@ -63,46 +60,50 @@ export function CommandDisplay({
       borderColor={theme.toolBorder}
       flexDirection="column"
     >
-      <Text>
-        <Text color={theme.muted}>{' └ '}</Text>
-        <Text bold>Bash</Text>
-      </Text>
-      <Text>
+      <text>
+        <text color={theme.muted}>{' └ '}</text>
+        <text bold={true}>Bash</text>
+      </text>
+      <text>
         {'  '}
-        <Text color={theme.secondary}>$ </Text>
-        <Text color={theme.text}>{command}</Text>
-      </Text>
-      {(output || status === 'running') && (
+        <text color={theme.secondary}>$ </text>
+        <text color={theme.text}>{props.command}</text>
+      </text>
+      <Show when={props.output || props.status === 'running'}>
         <>
-          <Text color={theme.muted}>{'  ────────────────────'}</Text>
-          {status === 'running' ? (
-            <Text>
+          <text color={theme.muted}>{'  ────────────────────'}</text>
+          <Show
+            when={props.status === 'running'}
+            fallback={
+              <For each={visibleLines()}>
+                {(line) => (
+                  <text
+                    color={props.status === 'error' ? theme.error : undefined}
+                    dim={props.status !== 'error'}
+                  >
+                    {'  '}
+                    {line}
+                  </text>
+                )}
+              </For>
+            }
+          >
+            <text>
               {'  '}
-              <Text color={theme.primary}>
-                <Spinner type="dots" />
-              </Text>
-              <Text color={theme.muted}> Running...</Text>
-            </Text>
-          ) : (
-            visibleLines.map((line, i) => (
-              <Text
-                key={`cmd-${String(i)}`}
-                color={status === 'error' ? theme.error : undefined}
-                dimColor={status !== 'error'}
-              >
-                {'  '}
-                {line}
-              </Text>
-            ))
-          )}
-          {truncated && (
-            <Text color={theme.muted}>
-              {'  '}... ({String(outputLines.length - MAX_OUTPUT_LINES)} more lines)
-            </Text>
-          )}
+              <text color={theme.primary}>
+                <Spinner color={theme.primary} />
+              </text>
+              <text color={theme.muted}> Running...</text>
+            </text>
+          </Show>
+          <Show when={truncated()}>
+            <text color={theme.muted}>
+              {'  '}... ({String(outputLines().length - MAX_OUTPUT_LINES)} more lines)
+            </text>
+          </Show>
         </>
-      )}
-    </Box>
+      </Show>
+    </box>
   );
 }
 
@@ -116,20 +117,18 @@ interface FileEditDisplayProps {
 
 const MAX_DIFF_LINES = 15;
 
-export function FileEditDisplay({
-  filePath,
-  diff,
-  action = 'edit',
-}: FileEditDisplayProps): React.ReactElement {
-  const actionLabel = action === 'create' ? 'Create' : action === 'delete' ? 'Delete' : 'Edit';
-  const diffLines = diff?.split('\n') ?? [];
-  const truncated = diffLines.length > MAX_DIFF_LINES;
-  const visibleLines = truncated ? diffLines.slice(0, MAX_DIFF_LINES) : diffLines;
+export function FileEditDisplay(props: FileEditDisplayProps): JSX.Element {
+  const action = () => props.action ?? 'edit';
+  const actionLabel = () =>
+    action() === 'create' ? 'Create' : action() === 'delete' ? 'Delete' : 'Edit';
+  const diffLines = () => props.diff?.split('\n') ?? [];
+  const truncated = () => diffLines().length > MAX_DIFF_LINES;
+  const visibleLines = () => (truncated() ? diffLines().slice(0, MAX_DIFF_LINES) : diffLines());
 
   return (
-    <Box
-      borderStyle="bold"
-      borderLeft
+    <box
+      border="bold"
+      borderLeft={true}
       borderRight={false}
       borderTop={false}
       borderBottom={false}
@@ -137,28 +136,30 @@ export function FileEditDisplay({
       borderColor={theme.toolBorder}
       flexDirection="column"
     >
-      <Text>
-        <Text color={theme.muted}>{' └ '}</Text>
-        <Text bold>{actionLabel}</Text>
-        <Text color={theme.secondary}>: {filePath}</Text>
-      </Text>
-      {visibleLines.map((line, i) => {
-        let color: string | undefined;
-        if (line.startsWith('+')) color = theme.success;
-        else if (line.startsWith('-')) color = theme.error;
-        return (
-          <Text key={`diff-${String(i)}`} color={color} dimColor={!color}>
-            {'  '}
-            {line}
-          </Text>
-        );
-      })}
-      {truncated && (
-        <Text color={theme.muted}>
-          {'  '}... ({String(diffLines.length - MAX_DIFF_LINES)} more lines)
-        </Text>
-      )}
-    </Box>
+      <text>
+        <text color={theme.muted}>{' └ '}</text>
+        <text bold={true}>{actionLabel()}</text>
+        <text color={theme.secondary}>: {props.filePath}</text>
+      </text>
+      <For each={visibleLines()}>
+        {(line) => {
+          let color: string | undefined;
+          if (line.startsWith('+')) color = theme.success;
+          else if (line.startsWith('-')) color = theme.error;
+          return (
+            <text color={color} dim={!color}>
+              {'  '}
+              {line}
+            </text>
+          );
+        }}
+      </For>
+      <Show when={truncated()}>
+        <text color={theme.muted}>
+          {'  '}... ({String(diffLines().length - MAX_DIFF_LINES)} more lines)
+        </text>
+      </Show>
+    </box>
   );
 }
 
@@ -173,11 +174,11 @@ interface TodoListDisplayProps {
   items: TodoItem[];
 }
 
-export function TodoListDisplay({ items }: TodoListDisplayProps): React.ReactElement {
+export function TodoListDisplay(props: TodoListDisplayProps): JSX.Element {
   return (
-    <Box
-      borderStyle="bold"
-      borderLeft
+    <box
+      border="bold"
+      borderLeft={true}
       borderRight={false}
       borderTop={false}
       borderBottom={false}
@@ -185,34 +186,36 @@ export function TodoListDisplay({ items }: TodoListDisplayProps): React.ReactEle
       borderColor={theme.primary}
       flexDirection="column"
     >
-      <Text bold>Tasks</Text>
-      {items.map((item, i) => {
-        if (item.status === 'completed') {
+      <text bold={true}>Tasks</text>
+      <For each={props.items}>
+        {(item) => {
+          if (item.status === 'completed') {
+            return (
+              <text>
+                {'  '}
+                <text color={theme.success}>✓</text> {item.content}
+              </text>
+            );
+          }
+          if (item.status === 'in_progress') {
+            return (
+              <text>
+                {'  '}
+                <text color={theme.primary}>
+                  <Spinner color={theme.primary} />
+                </text>{' '}
+                <text bold={true}>{item.content}</text>
+              </text>
+            );
+          }
           return (
-            <Text key={`todo-${String(i)}`}>
-              {'  '}
-              <Text color={theme.success}>✓</Text> {item.content}
-            </Text>
+            <text color={theme.muted}>
+              {'  '}○ {item.content}
+            </text>
           );
-        }
-        if (item.status === 'in_progress') {
-          return (
-            <Text key={`todo-${String(i)}`}>
-              {'  '}
-              <Text color={theme.primary}>
-                <Spinner type="dots" />
-              </Text>{' '}
-              <Text bold>{item.content}</Text>
-            </Text>
-          );
-        }
-        return (
-          <Text key={`todo-${String(i)}`} color={theme.muted}>
-            {'  '}○ {item.content}
-          </Text>
-        );
-      })}
-    </Box>
+        }}
+      </For>
+    </box>
   );
 }
 
@@ -227,50 +230,48 @@ interface BuildResultDisplayProps {
 
 const MAX_BUILD_LINES = 8;
 
-export function BuildResultDisplay({
-  label,
-  output,
-  success,
-  duration,
-}: BuildResultDisplayProps): React.ReactElement {
-  const borderColor = success ? theme.success : theme.error;
-  const statusText = success ? 'success' : 'failed';
-  const durationText = duration ? ` (${duration})` : '';
-  const outputLines = output.split('\n');
-  const truncated = outputLines.length > MAX_BUILD_LINES;
-  const visibleLines = truncated ? outputLines.slice(0, MAX_BUILD_LINES) : outputLines;
+export function BuildResultDisplay(props: BuildResultDisplayProps): JSX.Element {
+  const borderColor = () => (props.success ? theme.success : theme.error);
+  const statusText = () => (props.success ? 'success' : 'failed');
+  const durationText = () => (props.duration ? ` (${props.duration})` : '');
+  const outputLines = () => props.output.split('\n');
+  const truncated = () => outputLines().length > MAX_BUILD_LINES;
+  const visibleLines = () =>
+    truncated() ? outputLines().slice(0, MAX_BUILD_LINES) : outputLines();
 
   return (
-    <Box
-      borderStyle="bold"
-      borderLeft
+    <box
+      border="bold"
+      borderLeft={true}
       borderRight={false}
       borderTop={false}
       borderBottom={false}
       paddingLeft={1}
-      borderColor={borderColor}
+      borderColor={borderColor()}
       flexDirection="column"
     >
-      <Text>
-        <Text color={theme.muted}>{' └ '}</Text>
-        <Text bold>{label}</Text>
-        <Text color={success ? theme.success : theme.error}>
-          : {statusText}
-          {durationText}
-        </Text>
-      </Text>
-      {visibleLines.map((line, i) => (
-        <Text key={`build-${String(i)}`} dimColor>
-          {'  '}
-          {line}
-        </Text>
-      ))}
-      {truncated && (
-        <Text color={theme.muted}>
-          {'  '}... ({String(outputLines.length - MAX_BUILD_LINES)} more lines)
-        </Text>
-      )}
-    </Box>
+      <text>
+        <text color={theme.muted}>{' └ '}</text>
+        <text bold={true}>{props.label}</text>
+        <text color={props.success ? theme.success : theme.error}>
+          : {statusText()}
+          {durationText()}
+        </text>
+      </text>
+      <For each={visibleLines()}>
+        {(line) => (
+          <text dim={true}>
+            {'  '}
+            {line}
+          </text>
+        )}
+      </For>
+      <Show when={truncated()}>
+        <text color={theme.muted}>
+          {'  '}... ({String(outputLines().length - MAX_BUILD_LINES)} more lines)
+        </text>
+      </Show>
+    </box>
   );
 }
 
@@ -281,14 +282,11 @@ interface OrchestrationDisplayProps {
   steps: string[];
 }
 
-export function OrchestrationDisplay({
-  title,
-  steps,
-}: OrchestrationDisplayProps): React.ReactElement {
+export function OrchestrationDisplay(props: OrchestrationDisplayProps): JSX.Element {
   return (
-    <Box
-      borderStyle="bold"
-      borderLeft
+    <box
+      border="bold"
+      borderLeft={true}
       borderRight={false}
       borderTop={false}
       borderBottom={false}
@@ -296,13 +294,15 @@ export function OrchestrationDisplay({
       borderColor={theme.primary}
       flexDirection="column"
     >
-      <Text bold>{title}</Text>
-      {steps.map((step, i) => (
-        <Text key={`step-${String(i)}`}>
-          {'  '}
-          {String(i + 1)}. {step}
-        </Text>
-      ))}
-    </Box>
+      <text bold={true}>{props.title}</text>
+      <For each={props.steps}>
+        {(step, i) => (
+          <text>
+            {'  '}
+            {String(i() + 1)}. {step}
+          </text>
+        )}
+      </For>
+    </box>
   );
 }

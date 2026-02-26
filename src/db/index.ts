@@ -1,9 +1,19 @@
-import BetterSqlite3 from 'better-sqlite3';
-import type BetterSqlite3Type from 'better-sqlite3';
+import type { Database as BunDatabase } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { and, asc, count, desc, eq, isNotNull, sql } from 'drizzle-orm';
 
+import { createDrizzleDatabase, type DrizzleClient } from './drizzle.js';
 import { SCHEMA } from './schema.js';
+import {
+  chatHistory,
+  deployLogs,
+  domainMappings,
+  envVars,
+  oauthTokens,
+  projects,
+  webhookConfigs,
+} from './schema.drizzle.js';
 
 // --- Row types (match DB schema) ---
 
@@ -87,48 +97,50 @@ export interface WebhookConfigRow {
  * Uses WAL mode for better concurrent read performance.
  */
 export class Database {
-  private db: BetterSqlite3Type.Database;
+  private sqlite: BunDatabase;
+  private db: DrizzleClient;
 
   constructor(dbPath: string) {
     // Ensure directory exists
     mkdirSync(dirname(dbPath), { recursive: true });
 
-    this.db = new BetterSqlite3(dbPath);
-
-    // Performance pragmas
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
-    this.db.pragma('busy_timeout = 5000');
+    const { sqlite, db } = createDrizzleDatabase(dbPath);
+    this.sqlite = sqlite;
+    this.db = db;
 
     this.initialize();
   }
 
   /** Create tables if they don't exist. */
   private initialize(): void {
-    this.db.exec(SCHEMA);
+    this.sqlite.exec(SCHEMA);
     this.migrate();
   }
 
   private migrate(): void {
-    const columns = this.db
-      .prepare("PRAGMA table_info('projects')")
-      .all() as Array<{ name: string }>;
+    const columns = this.sqlite.prepare("PRAGMA table_info('projects')").all() as Array<{
+      name: string;
+    }>;
     const colNames = new Set(columns.map((c) => c.name));
 
     if (!colNames.has('parent_project_id')) {
-      this.db.exec('ALTER TABLE projects ADD COLUMN parent_project_id TEXT REFERENCES projects(id) ON DELETE CASCADE');
+      this.sqlite.exec(
+        'ALTER TABLE projects ADD COLUMN parent_project_id TEXT REFERENCES projects(id) ON DELETE CASCADE',
+      );
     }
     if (!colNames.has('dockerfile_path')) {
-      this.db.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
+      this.sqlite.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
     }
     if (!colNames.has('deploy_lock_session')) {
-      this.db.exec('ALTER TABLE projects ADD COLUMN deploy_lock_session TEXT DEFAULT NULL');
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN deploy_lock_session TEXT DEFAULT NULL');
     }
     if (!colNames.has('deploy_lock_at')) {
-      this.db.exec('ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL');
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL');
     }
 
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
+    this.sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)',
+    );
   }
 
   // ===== Projects =====
@@ -143,18 +155,16 @@ export class Database {
     dockerfilePath?: string;
   }): ProjectRow {
     this.db
-      .prepare(
-        `INSERT INTO projects (id, name, repo_url, branch, parent_project_id, dockerfile_path)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        project.id,
-        project.name,
-        project.repoUrl,
-        project.branch ?? 'main',
-        project.parentProjectId ?? null,
-        project.dockerfilePath ?? 'Dockerfile',
-      );
+      .insert(projects)
+      .values({
+        id: project.id,
+        name: project.name,
+        repo_url: project.repoUrl,
+        branch: project.branch ?? 'main',
+        parent_project_id: project.parentProjectId ?? null,
+        dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+      })
+      .run();
 
     const created = this.getProject(project.id);
     if (!created) throw new Error(`Failed to create project ${project.id}`);
@@ -163,12 +173,14 @@ export class Database {
 
   /** Get a project by ID. */
   getProject(id: string): ProjectRow | undefined {
-    return this.db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined;
+    return this.db.select().from(projects).where(eq(projects.id, id)).get() as
+      | ProjectRow
+      | undefined;
   }
 
   /** Get a project by name. */
   getProjectByName(name: string): ProjectRow | undefined {
-    return this.db.prepare('SELECT * FROM projects WHERE name = ?').get(name) as
+    return this.db.select().from(projects).where(eq(projects.name, name)).get() as
       | ProjectRow
       | undefined;
   }
@@ -177,10 +189,13 @@ export class Database {
   listProjects(status?: ProjectRow['status']): ProjectRow[] {
     if (status) {
       return this.db
-        .prepare('SELECT * FROM projects WHERE status = ? ORDER BY updated_at DESC')
-        .all(status) as ProjectRow[];
+        .select()
+        .from(projects)
+        .where(eq(projects.status, status))
+        .orderBy(desc(projects.updated_at))
+        .all() as ProjectRow[];
     }
-    return this.db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all() as ProjectRow[];
+    return this.db.select().from(projects).orderBy(desc(projects.updated_at)).all() as ProjectRow[];
   }
 
   /** Update project fields. Only provided fields are updated. */
@@ -198,72 +213,68 @@ export class Database {
       dockerfilePath: string;
     }>,
   ): void {
-    const setClauses: string[] = [];
-    const values: unknown[] = [];
+    const setValues: Partial<typeof projects.$inferInsert> = {};
 
     if (updates.status !== undefined) {
-      setClauses.push('status = ?');
-      values.push(updates.status);
+      setValues.status = updates.status;
     }
     if (updates.visibility !== undefined) {
-      setClauses.push('visibility = ?');
-      values.push(updates.visibility);
+      setValues.visibility = updates.visibility;
     }
     if (updates.assignedPort !== undefined) {
-      setClauses.push('assigned_port = ?');
-      values.push(updates.assignedPort);
+      setValues.assigned_port = updates.assignedPort;
     }
     if (updates.containerId !== undefined) {
-      setClauses.push('container_id = ?');
-      values.push(updates.containerId);
+      setValues.container_id = updates.containerId;
     }
     if (updates.imageTag !== undefined) {
-      setClauses.push('image_tag = ?');
-      values.push(updates.imageTag);
+      setValues.image_tag = updates.imageTag;
     }
     if (updates.previousImageTag !== undefined) {
-      setClauses.push('previous_image_tag = ?');
-      values.push(updates.previousImageTag);
+      setValues.previous_image_tag = updates.previousImageTag;
     }
     if (updates.publicUrl !== undefined) {
-      setClauses.push('public_url = ?');
-      values.push(updates.publicUrl);
+      setValues.public_url = updates.publicUrl;
     }
     if (updates.parentProjectId !== undefined) {
-      setClauses.push('parent_project_id = ?');
-      values.push(updates.parentProjectId);
+      setValues.parent_project_id = updates.parentProjectId;
     }
     if (updates.dockerfilePath !== undefined) {
-      setClauses.push('dockerfile_path = ?');
-      values.push(updates.dockerfilePath);
+      setValues.dockerfile_path = updates.dockerfilePath;
     }
 
-    if (setClauses.length === 0) return;
+    if (Object.keys(setValues).length === 0) return;
 
-    setClauses.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(id);
-
-    this.db.prepare(`UPDATE projects SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
+    this.db
+      .update(projects)
+      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(projects.id, id))
+      .run();
   }
 
   /** Delete a project and all associated data (cascading). */
   deleteProject(id: string): void {
-    this.db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+    this.db.delete(projects).where(eq(projects.id, id)).run();
   }
 
   /** Get child projects (services) of a parent project. */
   getChildProjects(parentId: string): ProjectRow[] {
     return this.db
-      .prepare('SELECT * FROM projects WHERE parent_project_id = ? ORDER BY name ASC')
-      .all(parentId) as ProjectRow[];
+      .select()
+      .from(projects)
+      .where(eq(projects.parent_project_id, parentId))
+      .orderBy(asc(projects.name))
+      .all() as ProjectRow[];
   }
 
   /** Check if a project is a parent (has children). */
   isParentProject(id: string): boolean {
     const row = this.db
-      .prepare('SELECT COUNT(*) as cnt FROM projects WHERE parent_project_id = ?')
-      .get(id) as { cnt: number };
-    return row.cnt > 0;
+      .select({ cnt: count() })
+      .from(projects)
+      .where(eq(projects.parent_project_id, id))
+      .get();
+    return (row?.cnt ?? 0) > 0;
   }
 
   // ===== Ports =====
@@ -271,9 +282,11 @@ export class Database {
   /** Get all ports currently assigned to projects. */
   getUsedPorts(): number[] {
     const rows = this.db
-      .prepare('SELECT assigned_port FROM projects WHERE assigned_port IS NOT NULL')
-      .all() as Array<{ assigned_port: number }>;
-    return rows.map((r) => r.assigned_port);
+      .select({ assigned_port: projects.assigned_port })
+      .from(projects)
+      .where(isNotNull(projects.assigned_port))
+      .all();
+    return rows.flatMap((r) => (r.assigned_port === null ? [] : [r.assigned_port]));
   }
 
   // ===== Environment Variables =====
@@ -281,8 +294,10 @@ export class Database {
   /** Get environment variables for a project. */
   getEnvVars(projectId: string): Record<string, string> {
     const rows = this.db
-      .prepare('SELECT key, value FROM env_vars WHERE project_id = ?')
-      .all(projectId) as Array<{ key: string; value: string }>;
+      .select({ key: envVars.key, value: envVars.value })
+      .from(envVars)
+      .where(eq(envVars.project_id, projectId))
+      .all();
 
     const result: Record<string, string> = {};
     for (const row of rows) {
@@ -294,25 +309,37 @@ export class Database {
   /** Set an environment variable for a project (upsert). */
   setEnvVar(projectId: string, key: string, value: string): void {
     this.db
-      .prepare(
-        `INSERT INTO env_vars (id, project_id, key, value)
-         VALUES (lower(hex(randomblob(8))), ?, ?, ?)
-         ON CONFLICT(project_id, key) DO UPDATE SET value = excluded.value`,
-      )
-      .run(projectId, key, value);
+      .insert(envVars)
+      .values({
+        id: sql<string>`lower(hex(randomblob(8)))`,
+        project_id: projectId,
+        key,
+        value,
+      })
+      .onConflictDoUpdate({
+        target: [envVars.project_id, envVars.key],
+        set: { value },
+      })
+      .run();
   }
 
   /** Set multiple env vars at once (transactional). */
   setEnvVarsBulk(projectId: string, vars: Record<string, string>): void {
-    const stmt = this.db.prepare(
-      `INSERT INTO env_vars (id, project_id, key, value)
-       VALUES (lower(hex(randomblob(8))), ?, ?, ?)
-       ON CONFLICT(project_id, key) DO UPDATE SET value = excluded.value`,
-    );
-
-    const transaction = this.db.transaction(() => {
+    const transaction = this.sqlite.transaction(() => {
       for (const [key, value] of Object.entries(vars)) {
-        stmt.run(projectId, key, value);
+        this.db
+          .insert(envVars)
+          .values({
+            id: sql<string>`lower(hex(randomblob(8)))`,
+            project_id: projectId,
+            key,
+            value,
+          })
+          .onConflictDoUpdate({
+            target: [envVars.project_id, envVars.key],
+            set: { value },
+          })
+          .run();
       }
     });
 
@@ -321,15 +348,20 @@ export class Database {
 
   /** Delete an environment variable. */
   deleteEnvVar(projectId: string, key: string): void {
-    this.db.prepare('DELETE FROM env_vars WHERE project_id = ? AND key = ?').run(projectId, key);
+    this.db
+      .delete(envVars)
+      .where(and(eq(envVars.project_id, projectId), eq(envVars.key, key)))
+      .run();
   }
 
   /** Find all projects that have a specific env var key. */
   findProjectsByEnvKey(key: string): string[] {
     const rows = this.db
-      .prepare('SELECT DISTINCT project_id FROM env_vars WHERE key = ?')
-      .all(key) as Array<{ project_id: string }>;
-    return rows.map((r) => r.project_id);
+      .selectDistinct({ project_id: envVars.project_id })
+      .from(envVars)
+      .where(eq(envVars.key, key))
+      .all();
+    return rows.map((r: { project_id: string }) => r.project_id);
   }
 
   // ===== Deploy Logs =====
@@ -345,33 +377,39 @@ export class Database {
     durationMs?: number;
   }): void {
     this.db
-      .prepare(
-        `INSERT INTO deploy_logs (id, project_id, status, trigger, commit_sha, build_log, duration_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        log.id,
-        log.projectId,
-        log.status,
-        log.trigger,
-        log.commitSha ?? null,
-        log.buildLog ?? null,
-        log.durationMs ?? null,
-      );
+      .insert(deployLogs)
+      .values({
+        id: log.id,
+        project_id: log.projectId,
+        status: log.status,
+        trigger: log.trigger,
+        commit_sha: log.commitSha ?? null,
+        build_log: log.buildLog ?? null,
+        duration_ms: log.durationMs ?? null,
+      })
+      .run();
   }
 
   /** Get deploy logs for a project, most recent first. */
   getDeployLogs(projectId: string, limit = 20): DeployLogRow[] {
     return this.db
-      .prepare('SELECT * FROM deploy_logs WHERE project_id = ? ORDER BY rowid DESC LIMIT ?')
-      .all(projectId, limit) as DeployLogRow[];
+      .select()
+      .from(deployLogs)
+      .where(eq(deployLogs.project_id, projectId))
+      .orderBy(desc(sql`rowid`))
+      .limit(limit)
+      .all() as DeployLogRow[];
   }
 
   /** Get the most recent deploy log for a project. */
   getLastDeployLog(projectId: string): DeployLogRow | undefined {
     return this.db
-      .prepare('SELECT * FROM deploy_logs WHERE project_id = ? ORDER BY rowid DESC LIMIT 1')
-      .get(projectId) as DeployLogRow | undefined;
+      .select()
+      .from(deployLogs)
+      .where(eq(deployLogs.project_id, projectId))
+      .orderBy(desc(sql`rowid`))
+      .limit(1)
+      .get() as DeployLogRow | undefined;
   }
 
   // ===== Chat History =====
@@ -385,36 +423,44 @@ export class Database {
     toolCalls?: unknown;
   }): void {
     this.db
-      .prepare(
-        `INSERT INTO chat_history (id, session_id, role, content, tool_calls)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(
-        msg.id,
-        msg.sessionId,
-        msg.role,
-        msg.content,
-        msg.toolCalls ? JSON.stringify(msg.toolCalls) : null,
-      );
+      .insert(chatHistory)
+      .values({
+        id: msg.id,
+        session_id: msg.sessionId,
+        role: msg.role,
+        content: msg.content,
+        tool_calls: msg.toolCalls ? JSON.stringify(msg.toolCalls) : null,
+      })
+      .run();
   }
 
   /** Get chat history for a session. */
   getChatHistory(sessionId: string, limit = 50): ChatHistoryRow[] {
     return this.db
-      .prepare('SELECT * FROM chat_history WHERE session_id = ? ORDER BY created_at ASC LIMIT ?')
-      .all(sessionId, limit) as ChatHistoryRow[];
+      .select()
+      .from(chatHistory)
+      .where(eq(chatHistory.session_id, sessionId))
+      .orderBy(asc(chatHistory.created_at))
+      .limit(limit)
+      .all() as ChatHistoryRow[];
   }
 
   /** List active chat sessions. */
   listChatSessions(): Array<{ session_id: string; message_count: number; last_message: string }> {
     return this.db
-      .prepare(
-        `SELECT session_id, COUNT(*) as message_count, MAX(created_at) as last_message
-         FROM chat_history
-         GROUP BY session_id
-         ORDER BY last_message DESC`,
-      )
-      .all() as Array<{ session_id: string; message_count: number; last_message: string }>;
+      .select({
+        session_id: chatHistory.session_id,
+        message_count: count(),
+        last_message: sql<string>`max(${chatHistory.created_at})`,
+      })
+      .from(chatHistory)
+      .groupBy(chatHistory.session_id)
+      .orderBy(desc(sql`max(${chatHistory.created_at})`))
+      .all() as Array<{
+      session_id: string;
+      message_count: number;
+      last_message: string;
+    }>;
   }
 
   // ===== Domain Mappings (v0.2 forward-compat) =====
@@ -428,45 +474,52 @@ export class Database {
     cloudflareDnsRecordId?: string;
   }): void {
     this.db
-      .prepare(
-        `INSERT INTO domain_mappings (id, project_id, domain, cloudflare_zone_id, cloudflare_dns_record_id)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(
-        mapping.id,
-        mapping.projectId,
-        mapping.domain,
-        mapping.cloudflareZoneId ?? null,
-        mapping.cloudflareDnsRecordId ?? null,
-      );
+      .insert(domainMappings)
+      .values({
+        id: mapping.id,
+        project_id: mapping.projectId,
+        domain: mapping.domain,
+        cloudflare_zone_id: mapping.cloudflareZoneId ?? null,
+        cloudflare_dns_record_id: mapping.cloudflareDnsRecordId ?? null,
+      })
+      .run();
   }
 
   /** Get domain mappings for a project. */
   getDomainMappings(projectId: string): DomainMappingRow[] {
     return this.db
-      .prepare('SELECT * FROM domain_mappings WHERE project_id = ?')
-      .all(projectId) as DomainMappingRow[];
+      .select()
+      .from(domainMappings)
+      .where(eq(domainMappings.project_id, projectId))
+      .all() as DomainMappingRow[];
   }
 
   /** Get all domain mappings. */
   listDomainMappings(): DomainMappingRow[] {
     return this.db
-      .prepare(
-        `SELECT dm.*, p.name as project_name
-         FROM domain_mappings dm
-         JOIN projects p ON dm.project_id = p.id
-         ORDER BY dm.created_at DESC`,
-      )
+      .select({
+        id: domainMappings.id,
+        project_id: domainMappings.project_id,
+        domain: domainMappings.domain,
+        cloudflare_zone_id: domainMappings.cloudflare_zone_id,
+        cloudflare_dns_record_id: domainMappings.cloudflare_dns_record_id,
+        status: domainMappings.status,
+        created_at: domainMappings.created_at,
+        project_name: projects.name,
+      })
+      .from(domainMappings)
+      .innerJoin(projects, eq(domainMappings.project_id, projects.id))
+      .orderBy(desc(domainMappings.created_at))
       .all() as DomainMappingRow[];
   }
 
   /** Delete a domain mapping. */
   deleteDomainMapping(id: string): void {
-    this.db.prepare('DELETE FROM domain_mappings WHERE id = ?').run(id);
+    this.db.delete(domainMappings).where(eq(domainMappings.id, id)).run();
   }
 
   getOAuthTokens(provider: string): OAuthTokenRow | undefined {
-    return this.db.prepare('SELECT * FROM oauth_tokens WHERE provider = ?').get(provider) as
+    return this.db.select().from(oauthTokens).where(eq(oauthTokens.provider, provider)).get() as
       | OAuthTokenRow
       | undefined;
   }
@@ -480,28 +533,30 @@ export class Database {
     tokenType: string;
   }): void {
     this.db
-      .prepare(
-        `INSERT INTO oauth_tokens (id, provider, access_token, refresh_token, expires_at, token_type)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(provider) DO UPDATE SET
-           access_token = excluded.access_token,
-           refresh_token = excluded.refresh_token,
-           expires_at = excluded.expires_at,
-           token_type = excluded.token_type,
-           updated_at = CURRENT_TIMESTAMP`,
-      )
-      .run(
-        token.id,
-        token.provider,
-        token.accessToken,
-        token.refreshToken,
-        token.expiresAt,
-        token.tokenType,
-      );
+      .insert(oauthTokens)
+      .values({
+        id: token.id,
+        provider: token.provider,
+        access_token: token.accessToken,
+        refresh_token: token.refreshToken,
+        expires_at: token.expiresAt,
+        token_type: token.tokenType,
+      })
+      .onConflictDoUpdate({
+        target: oauthTokens.provider,
+        set: {
+          access_token: token.accessToken,
+          refresh_token: token.refreshToken,
+          expires_at: token.expiresAt,
+          token_type: token.tokenType,
+          updated_at: sql`CURRENT_TIMESTAMP`,
+        },
+      })
+      .run();
   }
 
   deleteOAuthTokens(provider: string): void {
-    this.db.prepare('DELETE FROM oauth_tokens WHERE provider = ?').run(provider);
+    this.db.delete(oauthTokens).where(eq(oauthTokens.provider, provider)).run();
   }
 
   getWebhookConfig(
@@ -509,8 +564,11 @@ export class Database {
     source: WebhookConfigRow['source'],
   ): WebhookConfigRow | undefined {
     return this.db
-      .prepare('SELECT * FROM webhook_configs WHERE project_id = ? AND source = ? LIMIT 1')
-      .get(projectId, source) as WebhookConfigRow | undefined;
+      .select()
+      .from(webhookConfigs)
+      .where(and(eq(webhookConfigs.project_id, projectId), eq(webhookConfigs.source, source)))
+      .limit(1)
+      .get() as WebhookConfigRow | undefined;
   }
 
   setWebhookConfig(config: {
@@ -522,26 +580,32 @@ export class Database {
     enabled?: boolean;
   }): void {
     this.db
-      .prepare(
-        `INSERT INTO webhook_configs (id, project_id, source, secret, branch_filter, enabled)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(project_id, source) DO UPDATE SET
-           secret = excluded.secret,
-           branch_filter = excluded.branch_filter,
-           enabled = excluded.enabled`,
-      )
-      .run(
-        config.id,
-        config.projectId,
-        config.source,
-        config.secret,
-        config.branchFilter ?? 'main',
-        config.enabled === false ? 0 : 1,
-      );
+      .insert(webhookConfigs)
+      .values({
+        id: config.id,
+        project_id: config.projectId,
+        source: config.source,
+        secret: config.secret,
+        branch_filter: config.branchFilter ?? 'main',
+        enabled: config.enabled === false ? 0 : 1,
+      })
+      .onConflictDoUpdate({
+        target: [webhookConfigs.project_id, webhookConfigs.source],
+        set: {
+          secret: config.secret,
+          branch_filter: config.branchFilter ?? 'main',
+          enabled: config.enabled === false ? 0 : 1,
+        },
+      })
+      .run();
   }
 
   setWebhookEnabled(id: string, enabled: boolean): void {
-    this.db.prepare('UPDATE webhook_configs SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+    this.db
+      .update(webhookConfigs)
+      .set({ enabled: enabled ? 1 : 0 })
+      .where(eq(webhookConfigs.id, id))
+      .run();
   }
 
   // ===== Deploy Lock =====
@@ -555,20 +619,24 @@ export class Database {
       return false;
     }
     this.db
-      .prepare(
-        `UPDATE projects SET deploy_lock_session = ?, deploy_lock_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      )
-      .run(sessionId, projectId);
+      .update(projects)
+      .set({
+        deploy_lock_session: sessionId,
+        deploy_lock_at: sql`CURRENT_TIMESTAMP`,
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(projects.id, projectId))
+      .run();
     return true;
   }
 
   /** Release a deploy lock for a project. */
   releaseDeployLock(projectId: string): void {
     this.db
-      .prepare(
-        `UPDATE projects SET deploy_lock_session = NULL, deploy_lock_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      )
-      .run(projectId);
+      .update(projects)
+      .set({ deploy_lock_session: null, deploy_lock_at: null, updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(projects.id, projectId))
+      .run();
   }
 
   /** Get deploy lock info for a project. */
@@ -581,23 +649,23 @@ export class Database {
   /** Clean expired deploy locks (default: 10 min timeout). Returns count of cleaned locks. */
   cleanExpiredDeployLocks(timeoutMinutes = 10): number {
     const result = this.db
-      .prepare(
-        `UPDATE projects SET deploy_lock_session = NULL, deploy_lock_at = NULL
-         WHERE deploy_lock_session IS NOT NULL
-         AND deploy_lock_at < datetime('now', '-' || ? || ' minutes')`,
+      .update(projects)
+      .set({ deploy_lock_session: null, deploy_lock_at: null })
+      .where(
+        sql`${projects.deploy_lock_session} IS NOT NULL AND ${projects.deploy_lock_at} < datetime('now', '-' || ${timeoutMinutes} || ' minutes')`,
       )
-      .run(timeoutMinutes);
+      .run() as unknown as { changes: number };
     return result.changes;
   }
   // ===== Utility =====
 
   /** Run a function inside a transaction. */
   transaction<T>(fn: () => T): T {
-    return this.db.transaction(fn)();
+    return this.sqlite.transaction(fn)();
   }
 
   /** Close the database connection. */
   close(): void {
-    this.db.close();
+    this.sqlite.close();
   }
 }

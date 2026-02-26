@@ -1,6 +1,6 @@
-import React, { useState, useCallback } from 'react';
-import { Box, Text, useInput } from 'ink';
-import SelectInput from 'ink-select-input';
+import { createSignal, createEffect, onCleanup } from 'solid-js';
+import type { JSX } from 'solid-js';
+import { useKeyboard } from '@opentui/solid';
 import TextInput from '../components/IMETextInput.js';
 
 import type { ScreenProps } from './index.js';
@@ -30,15 +30,15 @@ const MODEL_DEFAULTS: Record<LlmProvider, string> = {
 /**
  * LlmSetup screen - select AI provider and enter API key.
  */
-export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): React.ReactElement {
-  const [step, setStep] = useState<LlmStep>('provider');
-  const [provider, setProvider] = useState<LlmProvider | null>(null);
-  const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('');
-  const [error, setError] = useState<string | null>(null);
+export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
+  const [step, setStep] = createSignal<LlmStep>('provider');
+  const [provider, setProvider] = createSignal<LlmProvider | null>(null);
+  const [apiKey, setApiKey] = createSignal('');
+  const [model, setModel] = createSignal('');
+  const [error, setError] = createSignal<string | null>(null);
+  const [providerIndex, setProviderIndex] = createSignal(0);
 
-  const handleProviderSelect = useCallback((item: { value: string }) => {
-    const selectedProvider = item.value as LlmProvider;
+  const handleProviderSelect = (selectedProvider: LlmProvider) => {
     setProvider(selectedProvider);
     setModel(MODEL_DEFAULTS[selectedProvider]);
 
@@ -48,138 +48,168 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): React.ReactElement
     } else {
       setStep('api_key');
     }
-  }, []);
+  };
 
-  const handleApiKeySubmit = useCallback(() => {
-    if (!apiKey.trim()) {
+  const handleApiKeySubmit = () => {
+    if (!apiKey().trim()) {
       setError('API key is required');
       return;
     }
     setError(null);
     setStep('model');
-  }, [apiKey]);
+  };
 
-  const handleModelSubmit = useCallback(() => {
+  const handleModelSubmit = () => {
     setStep('saving');
-  }, []);
+  };
 
   // Handle saving when step changes to 'saving'
-  React.useEffect(() => {
-    if (step === 'saving' && provider) {
+  createEffect(() => {
+    if (step() === 'saving' && provider()) {
+      const p = provider()!;
       updateConfig({
         llm: {
-          provider,
-          apiKey: provider === 'ollama' ? '' : apiKey.trim(),
-          model: model.trim() || MODEL_DEFAULTS[provider],
+          provider: p,
+          apiKey: p === 'ollama' ? '' : apiKey().trim(),
+          model: model().trim() || MODEL_DEFAULTS[p],
         },
       });
       // Auto-advance after brief delay
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         onNext();
       }, 500);
+      onCleanup(() => clearTimeout(timer));
     }
-  }, [step, provider, apiKey, model, onNext]);
+  });
 
-  useInput((_input, key) => {
-    if (key.return) {
-      if (step === 'api_key') {
+  useKeyboard((evt) => {
+    const s = step();
+
+    // Provider selection navigation
+    if (s === 'provider') {
+      if (evt.key === 'up') {
+        setProviderIndex((i) => Math.max(0, i - 1));
+      } else if (evt.key === 'down') {
+        setProviderIndex((i) => Math.min(LLM_PROVIDERS.length - 1, i + 1));
+      } else if (evt.key === 'return') {
+        handleProviderSelect(LLM_PROVIDERS[providerIndex()]!.value);
+      }
+      return;
+    }
+
+    if (evt.key === 'return') {
+      if (s === 'api_key') {
         handleApiKeySubmit();
-      } else if (step === 'model') {
+      } else if (s === 'model') {
         handleModelSubmit();
       }
     }
   });
 
-  const renderContent = () => {
-    switch (step) {
+  const renderContent = (): JSX.Element => {
+    switch (step()) {
       case 'provider':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box marginBottom={1}>
-              <Text dimColor>Choose your AI provider:</Text>
-            </Box>
-            <SelectInput items={LLM_PROVIDERS} onSelect={handleProviderSelect} />
-          </Box>
+          <box flexDirection="column" alignItems="center">
+            <box marginBottom={1}>
+              <text dim={true}>Choose your AI provider:</text>
+            </box>
+            <box flexDirection="column">
+              {LLM_PROVIDERS.map((item, i) => (
+                <box>
+                  <text
+                    color={providerIndex() === i ? 'cyan' : undefined}
+                    bold={providerIndex() === i}
+                  >
+                    {providerIndex() === i ? '❯ ' : '  '}
+                    {item.label}
+                  </text>
+                </box>
+              ))}
+            </box>
+          </box>
         );
 
       case 'api_key':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box marginBottom={1}>
-              <Text dimColor>Enter your {provider} API key:</Text>
-            </Box>
-            {error && (
-              <Box marginBottom={1}>
-                <Text color="red">❌ {error}</Text>
-              </Box>
+          <box flexDirection="column" alignItems="center">
+            <box marginBottom={1}>
+              <text dim={true}>Enter your {provider()} API key:</text>
+            </box>
+            {error() && (
+              <box marginBottom={1}>
+                <text color="red">❌ {error()}</text>
+              </box>
             )}
-            <Box>
-              <Text color="cyan">Key: </Text>
+            <box>
+              <text color="cyan">Key: </text>
               <TextInput
-                value={apiKey}
+                value={apiKey()}
                 onChange={setApiKey}
                 onSubmit={handleApiKeySubmit}
                 mask="*"
               />
-            </Box>
-            <Box marginTop={1}>
-              <Text dimColor>Press Enter to continue</Text>
-            </Box>
-          </Box>
+            </box>
+            <box marginTop={1}>
+              <text dim={true}>Press Enter to continue</text>
+            </box>
+          </box>
         );
 
       case 'model':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box marginBottom={1}>
-              <Text dimColor>Model (press Enter for default):</Text>
-            </Box>
-            <Box>
-              <Text color="cyan">Model: </Text>
-              <TextInput value={model} onChange={setModel} onSubmit={handleModelSubmit} />
-            </Box>
-            <Box marginTop={1}>
-              <Text dimColor>Default: {provider ? MODEL_DEFAULTS[provider] : ''}</Text>
-            </Box>
-          </Box>
+          <box flexDirection="column" alignItems="center">
+            <box marginBottom={1}>
+              <text dim={true}>Model (press Enter for default):</text>
+            </box>
+            <box>
+              <text color="cyan">Model: </text>
+              <TextInput value={model()} onChange={setModel} onSubmit={handleModelSubmit} />
+            </box>
+            <box marginTop={1}>
+              <text dim={true}>Default: {provider() ? MODEL_DEFAULTS[provider()!] : ''}</text>
+            </box>
+          </box>
         );
 
       case 'saving':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box>
-              <Text color="green">✅ {provider === 'ollama' ? 'Ollama' : provider} configured</Text>
-            </Box>
-            <Box marginTop={1}>
-              <Text dimColor>Continuing...</Text>
-            </Box>
-          </Box>
+          <box flexDirection="column" alignItems="center">
+            <box>
+              <text color="green">
+                ✅ {provider() === 'ollama' ? 'Ollama' : provider()} configured
+              </text>
+            </box>
+            <box marginTop={1}>
+              <text dim={true}>Continuing...</text>
+            </box>
+          </box>
         );
 
       default:
-        return null;
+        return <box />;
     }
   };
 
   return (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" height={20} padding={2}>
-      <Box
+    <box flexDirection="column" alignItems="center" justifyContent="center" height={20} padding={2}>
+      <box
         flexDirection="column"
         alignItems="center"
-        borderStyle="round"
+        border="round"
         borderColor="cyan"
         paddingX={4}
         paddingY={2}
         width={60}
       >
-        <Box marginBottom={1}>
-          <Text bold color="cyan">
+        <box marginBottom={1}>
+          <text bold={true} color="cyan">
             [3/5] AI Provider
-          </Text>
-        </Box>
+          </text>
+        </box>
 
-        <Box marginTop={2}>{renderContent()}</Box>
-      </Box>
-    </Box>
+        <box marginTop={2}>{renderContent()}</box>
+      </box>
+    </box>
   );
 }

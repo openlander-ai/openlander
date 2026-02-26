@@ -1,6 +1,7 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import type { JSX } from 'solid-js';
+import { For } from 'solid-js';
 import { ProgressBar } from './ProgressBar.js';
+import { Spinner } from './Spinner.js';
 import { theme } from '../theme.js';
 import {
   ThinkingDisplay,
@@ -95,181 +96,179 @@ export interface ChatMessageProps {
 
 /**
  * Individual message rendering with type-specific display.
- *
- * Renders different message types:
- * - user: bold cyan "You: {message}"
- * - assistant text: normal text
- * - tool_start: yellow "🔄 {tool} 중..."
- * - tool_result success: green "✅ {tool} 완료 ({duration}s)"
- * - tool_result error: red "❌ {tool} 실패"
- * - progress: ProgressBar component
- * - url: blue text
- * - warning: yellow "⚠️ {message}"
- * - error: red "❌ {message}"
- * - system: dimmed text
  */
-export function ChatMessage({ message }: ChatMessageProps): React.ReactElement {
-  const { role, content, type, toolName, toolStatus, toolDuration, progress } = message;
+export function ChatMessage(props: ChatMessageProps): JSX.Element {
+  const role = () => props.message.role;
+  const content = () => props.message.content;
+  const type = () => props.message.type;
+  const toolName = () => props.message.toolName;
+  const toolStatus = () => props.message.toolStatus;
+  const toolDuration = () => props.message.toolDuration;
+  const progress = () => props.message.progress;
 
   // Helper to render content based on type
-  const renderContent = () => {
+  const renderContent = (): JSX.Element => {
     // User messages — inline "You: content"
-    if (role === 'user') {
+    if (role() === 'user') {
       return (
-        <Text>
-          <Text bold color={theme.secondary}>
+        <text>
+          <text bold={true} color={theme.secondary}>
             You:{' '}
-          </Text>
-          <Text>{content}</Text>
-        </Text>
+          </text>
+          <text>{content()}</text>
+        </text>
       );
     }
 
     // System messages
-    if (role === 'system') {
-      return <Text dimColor>{content}</Text>;
+    if (role() === 'system') {
+      return <text dim={true}>{content()}</text>;
     }
 
     // Assistant messages
-    switch (type) {
+    switch (type()) {
       case 'tool_start':
         return (
-          <Text color={theme.progress}>
-            🔄 {toolName ? formatToolDescription(toolName) : content} 중...
-          </Text>
+          <text color={theme.progress}>
+            <Spinner color={theme.primary} />{' '}
+            {toolName() ? formatToolDescription(toolName()!) : content()} 중...
+          </text>
         );
 
       case 'tool_result': {
-        if (toolStatus === 'error') {
+        if (toolStatus() === 'error') {
           return (
-            <Text color={theme.error}>
-              ❌ {toolName ? formatToolDescription(toolName) : content} 실패
-            </Text>
+            <text color={theme.error}>
+              ❌ {toolName() ? formatToolDescription(toolName()!) : content()} 실패
+            </text>
           );
         }
-        const durationText = toolDuration !== undefined ? ` (${formatDuration(toolDuration)})` : '';
+        const durationText =
+          toolDuration() !== undefined ? ` (${formatDuration(toolDuration()!)})` : '';
         return (
-          <Text color={theme.success}>
-            ✅ {toolName ? formatToolDescription(toolName) : content} 완료{durationText}
-          </Text>
+          <text color={theme.success}>
+            ✅ {toolName() ? formatToolDescription(toolName()!) : content()} 완료{durationText}
+          </text>
         );
       }
 
       case 'progress':
-        return <ProgressBar percent={progress ?? 0} label={content || undefined} />;
+        return <ProgressBar percent={progress() ?? 0} label={content() || undefined} />;
 
       case 'url':
         return (
-          <Text color={theme.url} underline>
-            {content}
-          </Text>
+          <text color={theme.url}>
+            <u>{content()}</u>
+          </text>
         );
 
       case 'warning':
-        return <Text color={theme.warning}>⚠️ {content}</Text>;
+        return <text color={theme.warning}>⚠️ {content()}</text>;
 
       case 'error':
-        return <Text color={theme.error}>❌ {content}</Text>;
+        return <text color={theme.error}>❌ {content()}</text>;
 
       case 'command':
         return (
           <CommandDisplay
-            command={message.command ?? ''}
-            output={message.output}
-            status={message.toolStatus}
+            command={props.message.command ?? ''}
+            output={props.message.output}
+            status={props.message.toolStatus}
           />
         );
 
       case 'file_edit':
         return (
           <FileEditDisplay
-            filePath={message.filePath ?? ''}
-            diff={message.diff}
-            action={message.fileAction}
+            filePath={props.message.filePath ?? ''}
+            diff={props.message.diff}
+            action={props.message.fileAction}
           />
         );
 
       case 'thinking':
-        return <ThinkingDisplay label={content || 'Thinking...'} />;
+        return <ThinkingDisplay label={content() || 'Thinking...'} />;
 
       case 'todo':
-        return <TodoListDisplay items={message.todoItems ?? []} />;
+        return <TodoListDisplay items={props.message.todoItems ?? []} />;
 
       case 'build_result':
         return (
           <BuildResultDisplay
-            label={message.toolName ?? 'Build'}
-            output={message.output ?? ''}
-            success={message.buildSuccess ?? false}
-            duration={message.buildDuration}
+            label={props.message.toolName ?? 'Build'}
+            output={props.message.output ?? ''}
+            success={props.message.buildSuccess ?? false}
+            duration={props.message.buildDuration}
           />
         );
 
       case 'orchestration':
         return (
           <OrchestrationDisplay
-            title={content || 'Plan'}
-            steps={message.orchestrationSteps ?? []}
+            title={content() || 'Plan'}
+            steps={props.message.orchestrationSteps ?? []}
           />
         );
 
       case 'text':
       default: {
         // Regular assistant text
-        if (!content) {
-          return null;
+        if (!content()) {
+          return <></>;
         }
         // Wrap long lines similar to ChatView
-        const lines = content.split('\n');
+        const lines = content().split('\n');
         return (
-          <Box flexDirection="column">
-            {lines.map((line, i) => (
-              <Text key={`${message.id}-line-${String(i)}`}>
-                {i === 0 ? '' : '  '}
-                {line}
-              </Text>
-            ))}
-          </Box>
+          <box flexDirection="column">
+            <For each={lines}>
+              {(line, i) => (
+                <text>
+                  {i() === 0 ? '' : '  '}
+                  {line}
+                </text>
+              )}
+            </For>
+          </box>
         );
       }
     }
   };
 
   // Check if it's an AgentDisplay type (these have their own borders)
-  const isAgentDisplayType = [
-    'command',
-    'file_edit',
-    'thinking',
-    'todo',
-    'build_result',
-    'orchestration',
-  ].includes(type || '');
+  const isAgentDisplayType = () =>
+    ['command', 'file_edit', 'thinking', 'todo', 'build_result', 'orchestration'].includes(
+      type() || '',
+    );
 
   // If it's an AgentDisplay type, render directly with padding but NO extra border
-  if (isAgentDisplayType) {
-    return <Box paddingX={1}>{renderContent()}</Box>;
+  if (isAgentDisplayType()) {
+    return <box paddingX={1}>{renderContent()}</box>;
   }
 
   // Determine border color based on role and type
-  let borderColor: string = theme.primary; // default: assistant orange
-  if (role === 'user') borderColor = theme.secondary;
-  else if (role === 'system') borderColor = theme.muted;
+  const borderColor = (): string => {
+    let color: string = theme.primary; // default: assistant orange
+    if (role() === 'user') color = theme.secondary;
+    else if (role() === 'system') color = theme.muted;
 
-  if (type === 'error') borderColor = theme.error;
-  else if (type === 'warning') borderColor = theme.warning;
+    if (type() === 'error') color = theme.error;
+    else if (type() === 'warning') color = theme.warning;
+
+    return color;
+  };
 
   return (
-    <Box
-      borderStyle="bold"
-      borderLeft
+    <box
+      border="bold"
+      borderLeft={true}
       borderRight={false}
       borderTop={false}
       borderBottom={false}
-      borderColor={borderColor}
+      borderColor={borderColor()}
       paddingLeft={1}
       flexDirection="column"
     >
       {renderContent()}
-    </Box>
+    </box>
   );
 }

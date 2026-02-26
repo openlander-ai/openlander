@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Text, useInput } from 'ink';
-import Spinner from 'ink-spinner';
+import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
+import type { JSX } from 'solid-js';
+import { useKeyboard } from '@opentui/solid';
+import { Spinner } from './Spinner.js';
 import { theme } from '../theme.js';
 import {
   PROJECT_STATUS_ICON,
@@ -35,11 +36,11 @@ interface DashboardPanelProps {
 }
 
 // Section header component
-export function SectionHeader({ title }: { title: string }): React.ReactElement {
+export function SectionHeader({ title }: { title: string }): JSX.Element {
   return (
-    <Box>
-      <Text bold color={theme.sectionTitle}>{`▸ ${title}`}</Text>
-    </Box>
+    <box>
+      <text bold={true} color={theme.sectionTitle}>{`▸ ${title}`}</text>
+    </box>
   );
 }
 
@@ -52,24 +53,24 @@ export function SystemSection({
   stats: SystemStats | null;
   health: HealthResponse | null;
   loading: boolean;
-}): React.ReactElement {
+}): JSX.Element {
   if (loading && !stats) {
     return (
-      <Box flexDirection="column">
+      <box flexDirection="column">
         <SectionHeader title="System" />
-        <Text dimColor>
-          <Spinner type="dots" /> Loading...
-        </Text>
-      </Box>
+        <text dim={true}>
+          <Spinner /> Loading...
+        </text>
+      </box>
     );
   }
 
   if (!stats) {
     return (
-      <Box flexDirection="column">
+      <box flexDirection="column">
         <SectionHeader title="System" />
-        <Text dimColor>Unavailable</Text>
-      </Box>
+        <text dim={true}>Unavailable</text>
+      </box>
     );
   }
 
@@ -78,25 +79,25 @@ export function SystemSection({
   const dockerCount = health?.dockerContainers ?? 0;
 
   return (
-    <Box flexDirection="column">
+    <box flexDirection="column">
       <SectionHeader title="System" />
-      <Box>
-        <Text>CPU </Text>
-        <Text color={getColorForPercent(cpuPercent)}>
+      <box>
+        <text>CPU </text>
+        <text color={getColorForPercent(cpuPercent)}>
           {String(Math.round(cpuPercent)).padStart(2)}%{' '}
-        </Text>
-        <Text dimColor>{miniBar(cpuPercent)}</Text>
-        <Text dimColor>
+        </text>
+        <text dim={true}>{miniBar(cpuPercent)}</text>
+        <text dim={true}>
           {' '}
           MEM {formatMemory(stats.memory.usedMB)}/{formatMemory(stats.memory.totalMB)}GB
-        </Text>
-      </Box>
-      <Box>
-        <Text dimColor>Disk {String(Math.round(diskPercent)).padStart(2)}%</Text>
-        <Text dimColor> Docker {dockerCount} containers</Text>
-        <Text dimColor> Uptime {formatUptime(stats.uptime.seconds)}</Text>
-      </Box>
-    </Box>
+        </text>
+      </box>
+      <box>
+        <text dim={true}>Disk {String(Math.round(diskPercent)).padStart(2)}%</text>
+        <text dim={true}> Docker {dockerCount} containers</text>
+        <text dim={true}> Uptime {formatUptime(stats.uptime.seconds)}</text>
+      </box>
+    </box>
   );
 }
 
@@ -111,116 +112,122 @@ export function ProjectsSection({
   projectStats: Map<string, ProjectStats>;
   selectedIndex: number;
   focus: boolean;
-}): React.ReactElement {
+}): JSX.Element {
   if (projects.length === 0) {
     return (
-      <Box flexDirection="column" marginTop={1}>
+      <box flexDirection="column" marginTop={1}>
         <SectionHeader title="Projects (0)" />
-        <Text dimColor>No projects yet</Text>
-      </Box>
+        <text dim={true}>No projects yet</text>
+      </box>
     );
   }
 
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <box flexDirection="column" marginTop={1}>
       <SectionHeader title={`Projects (${String(projects.length)})`} />
-      {projects.map((project, index) => {
-        const isSelected = focus && index === selectedIndex;
-        const icon = PROJECT_STATUS_ICON[project.status] ?? '?';
-        const color = PROJECT_STATUS_COLOR[project.status] ?? 'white';
-        const stats = projectStats.get(project.id);
-        const memoryMB = stats?.memoryUsage ? Math.round(stats.memoryUsage / 1024 / 1024) : 0;
-        const memoryStr = memoryMB > 0 ? `${String(memoryMB)}M` : '';
-        const portStr = project.port ? `:${String(project.port)}` : '';
-        const domain = project.publicUrl ?? project.url;
+      <For each={projects}>
+        {(project, index) => {
+          const isSelected = focus && index() === selectedIndex;
+          const icon = PROJECT_STATUS_ICON[project.status] ?? '?';
+          const color = PROJECT_STATUS_COLOR[project.status] ?? 'white';
+          const stats = projectStats.get(project.id);
+          const memoryMB = stats?.memoryUsage ? Math.round(stats.memoryUsage / 1024 / 1024) : 0;
+          const memoryStr = memoryMB > 0 ? `${String(memoryMB)}M` : '';
+          const portStr = project.port ? `:${String(project.port)}` : '';
+          const domain = project.publicUrl ?? project.url;
 
-        return (
-          <Box key={project.id} flexDirection="column">
-            <Box>
-              {isSelected && (
-                <Text inverse color={theme.secondary}>
-                  {' '}
-                </Text>
-              )}
-              {!isSelected && <Text> </Text>}
-              <Text color={color}>{icon} </Text>
-              <Text
-                color={isSelected ? theme.secondary : undefined}
-                bold={isSelected}
-                inverse={isSelected}
-              >
-                {truncate(project.name, 12).padEnd(12)}
-              </Text>
-              <Text dimColor> {portStr.padEnd(6)}</Text>
-              {project.status === 'running' ? (
-                <Text color={theme.statusRunning}>✓</Text>
-              ) : (
-                <Text dimColor> </Text>
-              )}
-              <Text dimColor> {memoryStr.padStart(5)}</Text>
-            </Box>
-            {domain && (
-              <Box>
-                <Text> </Text>
-                <Text dimColor>{truncate(domain, 30)}</Text>
-              </Box>
-            )}
-          </Box>
-        );
-      })}
-    </Box>
+          return (
+            <box flexDirection="column">
+              <box>
+                {isSelected ? (
+                  <text inverse={true} color={theme.secondary}>
+                    {' '}
+                  </text>
+                ) : (
+                  <text> </text>
+                )}
+                <text color={color}>{icon} </text>
+                <text
+                  color={isSelected ? theme.secondary : undefined}
+                  bold={isSelected}
+                  inverse={isSelected}
+                >
+                  {truncate(project.name, 12).padEnd(12)}
+                </text>
+                <text dim={true}> {portStr.padEnd(6)}</text>
+                {project.status === 'running' ? (
+                  <text color={theme.statusRunning}>✓</text>
+                ) : (
+                  <text dim={true}> </text>
+                )}
+                <text dim={true}> {memoryStr.padStart(5)}</text>
+              </box>
+              <Show when={domain}>
+                <box>
+                  <text> </text>
+                  <text dim={true}>{truncate(domain!, 30)}</text>
+                </box>
+              </Show>
+            </box>
+          );
+        }}
+      </For>
+    </box>
   );
 }
 
 // Activity section component
-export function ActivitySection({ events }: { events: ActivityEvent[] }): React.ReactElement {
+export function ActivitySection({ events }: { events: ActivityEvent[] }): JSX.Element {
   const displayEvents = events.slice(0, 10);
 
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <box flexDirection="column" marginTop={1}>
       <SectionHeader title="Activity" />
-      {displayEvents.length === 0 ? (
-        <Text dimColor>No recent activity</Text>
-      ) : (
-        displayEvents.map((event, index) => {
-          const icon = getActivityIcon(event.message);
-          const color = getActivityColor(event.message);
-          const time = formatTime(event.timestamp);
-          const user = truncate(event.user, 8);
+      <Show when={displayEvents.length > 0} fallback={<text dim={true}>No recent activity</text>}>
+        <For each={displayEvents}>
+          {(event, index) => {
+            const icon = getActivityIcon(event.message);
+            const color = getActivityColor(event.message);
+            const time = formatTime(event.timestamp);
+            const user = truncate(event.user, 8);
 
-          return (
-            <Box key={`${event.timestamp}-${String(index)}`}>
-              <Text dimColor>{time} </Text>
-              <Text>{user.padEnd(8)} </Text>
-              <Text color={color}>{icon} </Text>
-              <Text dimColor>{truncate(event.message, 30)}</Text>
-            </Box>
-          );
-        })
-      )}
-    </Box>
+            return (
+              <box>
+                <text dim={true}>{time} </text>
+                <text>{user.padEnd(8)} </text>
+                <text color={color}>{icon} </text>
+                <text dim={true}>{truncate(event.message, 30)}</text>
+              </box>
+            );
+          }}
+        </For>
+      </Show>
+    </box>
   );
 }
 
 // MCP Clients section component
-export function McpClientsSection({ enabled }: { enabled: boolean }): React.ReactElement {
+export function McpClientsSection({ enabled }: { enabled: boolean }): JSX.Element {
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <box flexDirection="column" marginTop={1}>
       <SectionHeader title="MCP Clients" />
-      {enabled ? (
-        <Box flexDirection="column" paddingLeft={2}>
-          <Text dimColor>MCP server active (stdio)</Text>
-          <Text dimColor>No clients connected yet</Text>
-          <Text dimColor>
-            Run: <Text color={theme.secondary}>openlander mcp install --claude-code</Text>
-          </Text>
-        </Box>
-      ) : (
-        <Box paddingLeft={2}>
-          <Text dimColor>MCP disabled</Text>
-        </Box>
-      )}
-    </Box>
+      <Show
+        when={enabled}
+        fallback={
+          <box paddingLeft={2}>
+            <text dim={true}>MCP disabled</text>
+          </box>
+        }
+      >
+        <box flexDirection="column" paddingLeft={2}>
+          <text dim={true}>MCP server active (stdio)</text>
+          <text dim={true}>No clients connected yet</text>
+          <text dim={true}>
+            Run: <text color={theme.secondary}>openlander mcp install --claude-code</text>
+          </text>
+        </box>
+      </Show>
+    </box>
   );
 }
 
@@ -230,30 +237,30 @@ export function DashboardPanel({
   height,
   focus,
   onStatsUpdate,
-}: DashboardPanelProps): React.ReactElement {
+}: DashboardPanelProps): JSX.Element {
   // State for all dashboard data
-  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [systemLoading, setSystemLoading] = useState(true);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectStats, setProjectStats] = useState<Map<string, ProjectStats>>(new Map());
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [systemStats, setSystemStats] = createSignal<SystemStats | null>(null);
+  const [health, setHealth] = createSignal<HealthResponse | null>(null);
+  const [systemLoading, setSystemLoading] = createSignal(true);
+  const [projects, setProjects] = createSignal<Project[]>([]);
+  const [projectStats, setProjectStats] = createSignal<Map<string, ProjectStats>>(new Map());
+  const [selectedIndex, setSelectedIndex] = createSignal(0);
+  const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
 
   // Scroll offset for when content exceeds height
-  const [scrollOffset, _setScrollOffset] = useState(0);
+  const [scrollOffset, _setScrollOffset] = createSignal(0);
 
-  // Display-value dedup keys (only re-render when what user SEES changes)
-  const lastDisplayKeyRef = useRef('');
-  const onStatsUpdateRef = useRef(onStatsUpdate);
-  onStatsUpdateRef.current = onStatsUpdate;
+  // Display-value dedup keys
+  let lastDisplayKey = '';
+  let onStatsUpdateRef = onStatsUpdate;
 
   // --- Single consolidated polling interval (30s) ---
-  useEffect(() => {
+  createEffect(() => {
     if (!client) return;
 
+    let isFirstLoad = true;
+
     const fetchAll = async () => {
-      // Fetch all data in parallel
       const [statsResult, healthResult, projectsResult, activityResult] = await Promise.allSettled([
         client.getSystemStats(),
         client.ping(),
@@ -261,8 +268,6 @@ export function DashboardPanel({
         client.getActivity(10),
       ]);
 
-      // Build a display-key from only the VALUES that appear on screen
-      // CPU rounded to integer, memory to 0.1GB, uptime to minutes, disk to integer
       let displayKey = '';
       let newStats: SystemStats | null = null;
       let newHealth: HealthResponse | null = null;
@@ -282,7 +287,6 @@ export function DashboardPanel({
 
       if (projectsResult.status === 'fulfilled') {
         newProjects = projectsResult.value.projects;
-        // Project display: name+status+port for each
         for (const p of newProjects) {
           displayKey += `${p.name}:${p.status}:${String(p.port ?? '')}|`;
         }
@@ -290,15 +294,14 @@ export function DashboardPanel({
 
       if (activityResult.status === 'fulfilled') {
         newActivity = activityResult.value;
-        // Activity display: timestamp+message for each
         for (const e of newActivity) {
           displayKey += `${e.timestamp}:${e.message}|`;
         }
       }
 
       // Only update state if display would change
-      if (displayKey !== lastDisplayKeyRef.current) {
-        lastDisplayKeyRef.current = displayKey;
+      if (displayKey !== lastDisplayKey) {
+        lastDisplayKey = displayKey;
         if (newStats) setSystemStats(newStats);
         if (newHealth) setHealth(newHealth);
         setProjects(newProjects);
@@ -320,90 +323,89 @@ export function DashboardPanel({
 
         // Notify parent (for status bar)
         const building = newProjects.filter((p) => p.status === 'building').length;
-        onStatsUpdateRef.current?.({
+        onStatsUpdateRef?.({
           projectCount: newProjects.length,
           cpuPercent: newStats ? Math.round(newStats.cpu.usagePercent) : null,
           buildingCount: building,
         });
       }
 
-      if (systemLoading) setSystemLoading(false);
+      if (isFirstLoad) {
+        setSystemLoading(false);
+        isFirstLoad = false;
+      }
     };
 
     void fetchAll();
     const timer = setInterval(() => {
       void fetchAll();
     }, 30000);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [client, systemLoading]);
+
+    onCleanup(() => clearInterval(timer));
+  });
 
   // Handle keyboard navigation when focused
-  useInput(
-    useCallback(
-      (_input, key) => {
-        if (!focus) return;
+  useKeyboard((evt) => {
+    if (!focus) return;
 
-        if (key.upArrow) {
-          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : projects.length - 1));
-        }
-        if (key.downArrow) {
-          setSelectedIndex((prev) => (prev < projects.length - 1 ? prev + 1 : 0));
-        }
-      },
-      [focus, projects.length],
-    ),
-    { isActive: focus },
-  );
+    if (evt.key === 'up') {
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : projects().length - 1));
+    }
+    if (evt.key === 'down') {
+      setSelectedIndex((prev) => (prev < projects().length - 1 ? prev + 1 : 0));
+    }
+  });
 
   // Estimate total content height for scrolling
-  // System: ~2 lines, Projects: ~2 + (projects * 2), Activity: ~1 + events, MCP: ~2
-  const estimatedLines =
+  const estimatedLines = () =>
     2 + // System header + content
     2 + // Projects header
-    projects.length * 2 + // Each project takes ~2 lines
+    projects().length * 2 + // Each project takes ~2 lines
     1 + // Activity header
-    Math.min(activity.length, 10) + // Activity events
+    Math.min(activity().length, 10) + // Activity events
     2; // MCP section
 
   // Calculate scroll indicators
-  const showScrollUp = scrollOffset > 0;
-  const showScrollDown = estimatedLines - scrollOffset > height;
-  const linesAbove = scrollOffset;
-  const linesBelow = Math.max(0, estimatedLines - scrollOffset - height);
+  const showScrollUp = () => scrollOffset() > 0;
+  const showScrollDown = () => estimatedLines() - scrollOffset() > height;
+  const linesAbove = () => scrollOffset();
+  const linesBelow = () => Math.max(0, estimatedLines() - scrollOffset() - height);
 
   return (
-    <Box flexDirection="column" height={height} overflow="hidden">
+    <box flexDirection="column" height={height} overflow="hidden">
       {/* Scroll indicator at top */}
-      {showScrollUp && <Text dimColor>↑ {linesAbove} more</Text>}
+      <Show when={showScrollUp()}>
+        <text dim={true}>↑ {linesAbove()} more</text>
+      </Show>
 
       {/* System Section */}
-      <SystemSection stats={systemStats} health={health} loading={systemLoading} />
+      <SystemSection stats={systemStats()} health={health()} loading={systemLoading()} />
 
       {/* Projects Section */}
       <ProjectsSection
-        projects={projects}
-        projectStats={projectStats}
-        selectedIndex={selectedIndex}
+        projects={projects()}
+        projectStats={projectStats()}
+        selectedIndex={selectedIndex()}
         focus={focus}
       />
 
       {/* Activity Section */}
-      <ActivitySection events={activity} />
+      <ActivitySection events={activity()} />
 
       {/* MCP Clients Section */}
-      <McpClientsSection enabled={health !== null} />
+      <McpClientsSection enabled={health() !== null} />
 
       {/* Scroll indicator at bottom */}
-      {showScrollDown && <Text dimColor>↓ {linesBelow} more</Text>}
+      <Show when={showScrollDown()}>
+        <text dim={true}>↓ {linesBelow()} more</text>
+      </Show>
 
       {/* Focus indicator */}
-      {focus && (
-        <Box marginTop={1}>
-          <Text dimColor>↑↓ Navigate projects</Text>
-        </Box>
-      )}
-    </Box>
+      <Show when={focus}>
+        <box marginTop={1}>
+          <text dim={true}>↑↓ Navigate projects</text>
+        </box>
+      </Show>
+    </box>
   );
 }

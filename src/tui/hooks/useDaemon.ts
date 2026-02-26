@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { OpenLanderClient } from '../../ipc/client.js';
 import type { HealthResponse } from '../../ipc/client.js';
 
@@ -6,9 +6,9 @@ export type DaemonStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 export interface UseDaemonResult {
   client: OpenLanderClient;
-  status: DaemonStatus;
-  health: HealthResponse | null;
-  error: string | null;
+  status: () => DaemonStatus;
+  health: () => HealthResponse | null;
+  error: () => string | null;
   reconnect: () => void;
 }
 
@@ -17,74 +17,75 @@ export interface UseDaemonResult {
  * Pings the daemon periodically to maintain health status.
  */
 export function useDaemon(socketPath: string, pingIntervalMs = 30000): UseDaemonResult {
-  const clientRef = useRef<OpenLanderClient>(new OpenLanderClient(socketPath));
-  const [status, setStatus] = useState<DaemonStatus>('connecting');
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const client = new OpenLanderClient(socketPath);
+  const [status, setStatus] = createSignal<DaemonStatus>('connecting');
+  const [health, setHealth] = createSignal<HealthResponse | null>(null);
+  const [error, setError] = createSignal<string | null>(null);
 
-  const connectedRef = useRef(false);
+  let connectedRef = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
 
-  const checkHealth = useCallback(async (): Promise<boolean> => {
+  const checkHealth = async (): Promise<boolean> => {
     try {
-      const response = await clientRef.current.ping();
+      const response = await client.ping();
       // Only update state if something changed
-      if (!connectedRef.current) {
+      if (!connectedRef) {
         setHealth(response);
         setStatus('connected');
         setError(null);
-        connectedRef.current = true;
+        connectedRef = true;
       }
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      if (connectedRef.current) {
+      if (connectedRef) {
         // Was connected, now failed — update state
         setError(msg);
-        connectedRef.current = false;
+        connectedRef = false;
       }
 
-      if (clientRef.current.isSocketPresent()) {
+      if (client.isSocketPresent()) {
         setStatus('error');
       } else {
         setStatus('disconnected');
       }
       return false;
     }
-  }, []);
+  };
 
-  const reconnect = useCallback(() => {
+  const reconnect = () => {
     setStatus('connecting');
     setError(null);
     void checkHealth();
-  }, [checkHealth]);
+  };
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    let cancelled = false;
+  const FAST_INTERVAL = 1000;
 
-    const FAST_INTERVAL = 1000;
+  const poll = async () => {
+    if (cancelled) return;
+    const ok = await checkHealth();
 
-    const poll = async () => {
-      if (cancelled) return;
-      const ok = await checkHealth();
+    // Fast retry until first successful connection, then slow poll
+    const interval = ok || connectedRef ? pingIntervalMs : FAST_INTERVAL;
+    timer = setTimeout(() => {
+      void poll();
+    }, interval);
+  };
 
-      // Fast retry until first successful connection, then slow poll
-      const interval = ok || connectedRef.current ? pingIntervalMs : FAST_INTERVAL;
-      timer = setTimeout(() => {
-        void poll();
-      }, interval);
-    };
-
+  createEffect(() => {
     void poll();
 
-    return () => {
+    onCleanup(() => {
       cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [checkHealth, pingIntervalMs]);
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
+  });
 
   return {
-    client: clientRef.current,
+    client,
     status,
     health,
     error,

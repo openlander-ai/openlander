@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import type { JSX } from 'solid-js';
+import { Show } from 'solid-js';
 import { theme } from '../theme.js';
 
 interface StatusBarProps {
@@ -12,30 +12,22 @@ interface StatusBarProps {
 
 /**
  * Bottom status bar with keyboard shortcut hints.
- *
- * - Split mode: Shows standard shortcuts
- * - Single mode: Shows panel switch hint + summary stats
  */
-export function StatusBar({
-  panelMode,
-  activePanel,
-  projectCount,
-  cpuPercent,
-  buildingCount,
-}: StatusBarProps): React.ReactElement {
-  const isSplitMode = panelMode === 'split';
+export function StatusBar(props: StatusBarProps): JSX.Element {
+  const isSplitMode = () => props.panelMode === 'split';
 
   // Format CPU display
-  const cpuDisplay = cpuPercent !== null ? `${String(cpuPercent)}%` : '—';
+  const cpuDisplay = () => (props.cpuPercent !== null ? `${String(props.cpuPercent)}%` : '—');
 
   // Format building indicator
-  const buildingDisplay = buildingCount > 0 ? ` | ${String(buildingCount)} building` : '';
+  const buildingDisplay = () =>
+    props.buildingCount > 0 ? ` | ${String(props.buildingCount)} building` : '';
 
   return (
-    <Box
-      borderStyle="single"
+    <box
+      border="single"
       borderColor={theme.border}
-      borderTop
+      borderTop={true}
       borderBottom={false}
       borderLeft={false}
       borderRight={false}
@@ -43,102 +35,108 @@ export function StatusBar({
       justifyContent="space-between"
     >
       {/* Left side: Keyboard hints */}
-      <Box gap={1}>
-        {isSplitMode ? (
-          // Split mode shortcuts
+      <box gap={1}>
+        <Show
+          when={isSplitMode()}
+          fallback={
+            // Single mode shortcuts with panel indicator
+            <>
+              <box>
+                <text backgroundColor={theme.toolBorder} color={theme.text}>
+                  {' '}
+                  Tab{' '}
+                </text>
+                <text> </text>
+                <Show
+                  when={props.activePanel === 'left'}
+                  fallback={
+                    <>
+                      <text dim>Chat</text>
+                      <text dim> │ </text>
+                      <text backgroundColor={theme.secondary} color="#212121" bold>
+                        {' '}
+                        Dashboard{' '}
+                      </text>
+                    </>
+                  }
+                >
+                  <>
+                    <text backgroundColor={theme.secondary} color="#212121" bold>
+                      {' '}
+                      Chat{' '}
+                    </text>
+                    <text dim> │ </text>
+                    <text dim>Dashboard</text>
+                  </>
+                </Show>
+              </box>
+              <box>
+                <text backgroundColor={theme.toolBorder} color={theme.text}>
+                  {' '}
+                  /{' '}
+                </text>
+                <text dim> Commands</text>
+              </box>
+              <box>
+                <text backgroundColor={theme.toolBorder} color={theme.text}>
+                  {' '}
+                  ?{' '}
+                </text>
+                <text dim> Help</text>
+              </box>
+              <box>
+                <text backgroundColor={theme.toolBorder} color={theme.text}>
+                  {' '}
+                  ^C{' '}
+                </text>
+                <text dim> Exit</text>
+              </box>
+            </>
+          }
+        >
+          {/* Split mode shortcuts */}
           <>
-            <Box>
-              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+            <box>
+              <text backgroundColor={theme.toolBorder} color={theme.text}>
                 {' '}
                 Tab{' '}
-              </Text>
-              <Text dimColor> Panel</Text>
-            </Box>
-            <Box>
-              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+              </text>
+              <text dim> Panel</text>
+            </box>
+            <box>
+              <text backgroundColor={theme.toolBorder} color={theme.text}>
                 {' '}
                 /{' '}
-              </Text>
-              <Text dimColor> Commands</Text>
-            </Box>
-            <Box>
-              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+              </text>
+              <text dim> Commands</text>
+            </box>
+            <box>
+              <text backgroundColor={theme.toolBorder} color={theme.text}>
                 {' '}
                 ?{' '}
-              </Text>
-              <Text dimColor> Help</Text>
-            </Box>
-            <Box>
-              <Text backgroundColor={theme.toolBorder} color={theme.text}>
+              </text>
+              <text dim> Help</text>
+            </box>
+            <box>
+              <text backgroundColor={theme.toolBorder} color={theme.text}>
                 {' '}
                 ^C{' '}
-              </Text>
-              <Text dimColor> Exit</Text>
-            </Box>
+              </text>
+              <text dim> Exit</text>
+            </box>
           </>
-        ) : (
-          // Single mode shortcuts with panel indicator
-          <>
-            <Box>
-              <Text backgroundColor={theme.toolBorder} color={theme.text}>
-                {' '}
-                Tab{' '}
-              </Text>
-              <Text> </Text>
-              {activePanel === 'left' ? (
-                <>
-                  <Text backgroundColor={theme.secondary} color="#212121" bold>
-                    {' '}
-                    Chat{' '}
-                  </Text>
-                  <Text dimColor> │ </Text>
-                  <Text dimColor>Dashboard</Text>
-                </>
-              ) : (
-                <>
-                  <Text dimColor>Chat</Text>
-                  <Text dimColor> │ </Text>
-                  <Text backgroundColor={theme.secondary} color="#212121" bold>
-                    {' '}
-                    Dashboard{' '}
-                  </Text>
-                </>
-              )}
-            </Box>
-            <Box>
-              <Text backgroundColor={theme.toolBorder} color={theme.text}>
-                {' '}
-                /{' '}
-              </Text>
-              <Text dimColor> Commands</Text>
-            </Box>
-            <Box>
-              <Text backgroundColor={theme.toolBorder} color={theme.text}>
-                {' '}
-                ?{' '}
-              </Text>
-              <Text dimColor> Help</Text>
-            </Box>
-            <Box>
-              <Text backgroundColor={theme.toolBorder} color={theme.text}>
-                {' '}
-                ^C{' '}
-              </Text>
-              <Text dimColor> Exit</Text>
-            </Box>
-          </>
-        )}
-      </Box>
+        </Show>
+      </box>
 
       {/* Right side: Summary (only in single mode) */}
-      {!isSplitMode && (
-        <Box>
-          <Text color={theme.muted}>
-            {projectCount} project{projectCount !== 1 ? 's' : ''} │ CPU {cpuDisplay}
-            {buildingDisplay}
-          </Text>
-        </Box>
-      )}
-    </Box>
+      <Show when={!isSplitMode()}>
+        <box>
+          <text color={theme.muted}>
+            {props.projectCount} project{props.projectCount !== 1 ? 's' : ''} │ CPU {cpuDisplay()}
+            {buildingDisplay()}
+          </text>
+        </box>
+      </Show>
+    </box>
   );
 }

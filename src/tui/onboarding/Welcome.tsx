@@ -1,5 +1,6 @@
-import React from 'react';
-import { Box, Text, useInput, useApp } from 'ink';
+import type { JSX } from 'solid-js';
+import { useKeyboard } from '@opentui/solid';
+import { useExit } from '../context/exit.js';
 
 import { VERSION } from './version.js';
 
@@ -11,64 +12,62 @@ export interface WelcomeProps {
  * Welcome screen - first screen of the onboarding wizard.
  * Shows version, tagline, and prompts user to press Enter.
  */
-export function Welcome({ onNext }: WelcomeProps): React.ReactElement {
-  const { exit } = useApp();
+export function Welcome({ onNext }: WelcomeProps): JSX.Element {
+  const { exit } = useExit();
 
-  useInput((input, key) => {
-    if (key.return) {
+  useKeyboard((evt) => {
+    if (evt.key === 'return') {
       onNext();
     }
-    if (input.toLowerCase() === 'q') {
+    if (evt.char?.toLowerCase() === 'q') {
       exit();
     }
   });
 
   return (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" height={20} padding={2}>
-      <Box
+    <box flexDirection="column" alignItems="center" justifyContent="center" height={20} padding={2}>
+      <box
         flexDirection="column"
         alignItems="center"
-        borderStyle="round"
+        border="round"
         borderColor="cyan"
         paddingX={4}
         paddingY={2}
       >
-        <Box marginBottom={1}>
-          <Text bold color="cyan">
+        <box marginBottom={1}>
+          <text bold={true} color="cyan">
             🛬 OpenLander
-          </Text>
-        </Box>
+          </text>
+        </box>
 
-        <Box marginBottom={1}>
-          <Text dimColor>v{VERSION}</Text>
-        </Box>
+        <box marginBottom={1}>
+          <text dim={true}>v{VERSION}</text>
+        </box>
 
-        <Box marginBottom={2}>
-          <Text italic color="gray">
-            Give any coding agent the power to deploy
-          </Text>
-        </Box>
+        <box marginBottom={2}>
+          <text color="gray">Give any coding agent the power to deploy</text>
+        </box>
 
-        <Box marginTop={1}>
-          <Text dimColor>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</Text>
-        </Box>
+        <box marginTop={1}>
+          <text dim={true}>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</text>
+        </box>
 
-        <Box marginTop={2} flexDirection="column" alignItems="center">
-          <Text color="gray">OpenLander helps you deploy apps from any AI coding tool.</Text>
-          <Text color="gray">Clone, build, and run — all from a chat.</Text>
-        </Box>
+        <box marginTop={2} flexDirection="column" alignItems="center">
+          <text color="gray">OpenLander helps you deploy apps from any AI coding tool.</text>
+          <text color="gray">Clone, build, and run — all from a chat.</text>
+        </box>
 
-        <Box marginTop={2}>
-          <Text color="green" bold>
+        <box marginTop={2}>
+          <text color="green" bold={true}>
             [Enter]
-          </Text>
-          <Text> Get started</Text>
-        </Box>
+          </text>
+          <text> Get started</text>
+        </box>
 
-        <Box marginTop={1}>
-          <Text dimColor>[q] Quit</Text>
-        </Box>
-      </Box>
-    </Box>
+        <box marginTop={1}>
+          <text dim={true}>[q] Quit</text>
+        </box>
+      </box>
+    </box>
   );
 }

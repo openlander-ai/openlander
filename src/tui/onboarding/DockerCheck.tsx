@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Text, useInput, useApp } from 'ink';
-import Spinner from 'ink-spinner';
+import { createSignal, createEffect } from 'solid-js';
+import type { JSX } from 'solid-js';
+import { useKeyboard } from '@opentui/solid';
+import { useExit } from '../context/exit.js';
+import { Spinner } from '../components/Spinner.js';
 
 import type { ScreenProps } from './index.js';
 import type { DockerStatus } from '../../pipeline/docker.js';
@@ -12,22 +14,19 @@ type CheckState = 'checking' | 'success' | 'not_installed' | 'not_running' | 'pe
 
 /**
  * DockerCheck screen - auto-detects Docker installation and daemon status.
- * Shows spinner during check, then displays result.
  */
-export function DockerCheck({ ctx, onNext }: ScreenProps): React.ReactElement {
-  const { exit } = useApp();
-  const [state, setState] = useState<CheckState>('checking');
-  const [retryCount, setRetryCount] = useState(0);
+export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
+  const { exit } = useExit();
+  const [state, setState] = createSignal<CheckState>('checking');
+  const [retryCount, setRetryCount] = createSignal(0);
 
-  const checkDocker = useCallback(async () => {
+  const checkDocker = async () => {
     setState('checking');
     try {
       const status: DockerStatus = await ctx.docker.status();
 
       if (status.state === 'running') {
         setState('success');
-        setState('success');
-        // Auto-advance after 1s
         setTimeout(() => {
           onNext();
         }, 1000);
@@ -41,158 +40,155 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): React.ReactElement {
     } catch (err) {
       log.debug({ err }, 'Docker status check failed');
       setState('not_installed');
-      setState('not_installed');
     }
-  }, [ctx.docker, onNext]);
+  };
 
-  useEffect(() => {
+  createEffect(() => {
+    // Track retryCount to re-trigger
+    const _count = retryCount();
     void checkDocker();
-  }, [retryCount]);
+  });
 
-  useInput((input, key) => {
-    if (state === 'success') {
-      if (key.return) {
+  useKeyboard((evt) => {
+    if (state() === 'success') {
+      if (evt.key === 'return') {
         onNext();
       }
       return;
     }
 
-    if (key.return) {
+    if (evt.key === 'return') {
       setRetryCount((c) => c + 1);
     }
-    if (input.toLowerCase() === 'q') {
+    if (evt.char?.toLowerCase() === 'q') {
       exit();
     }
   });
 
-  const renderContent = () => {
-    switch (state) {
+  const renderContent = (): JSX.Element => {
+    switch (state()) {
       case 'checking':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box>
-              <Text color="yellow">
-                <Spinner type="dots" />
-              </Text>
-              <Text> Checking Docker...</Text>
-            </Box>
-          </Box>
+          <box flexDirection="column" alignItems="center">
+            <box>
+              <text color="yellow">
+                <Spinner />
+              </text>
+              <text> Checking Docker...</text>
+            </box>
+          </box>
         );
 
       case 'success':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box>
-              <Text color="green">✅ Docker detected</Text>
-            </Box>
-            <Box>
-              <Text color="green">✅ Docker daemon running</Text>
-            </Box>
-            <Box marginTop={1}>
-              <Text dimColor>Continuing automatically...</Text>
-            </Box>
-          </Box>
+          <box flexDirection="column" alignItems="center">
+            <box>
+              <text color="green">✅ Docker detected</text>
+            </box>
+            <box>
+              <text color="green">✅ Docker daemon running</text>
+            </box>
+            <box marginTop={1}>
+              <text dim={true}>Continuing automatically...</text>
+            </box>
+          </box>
         );
 
       case 'not_installed':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box marginBottom={1}>
-              <Text color="red">❌ Docker not found</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text dimColor>Please install Docker to continue:</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text color="cyan">https://docs.docker.com/get-docker/</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text dimColor>Or run: curl -fsSL https://get.docker.com | sh</Text>
-            </Box>
-            <Box marginTop={2}>
-              <Text color="cyan" bold>
+          <box flexDirection="column" alignItems="center">
+            <box marginBottom={1}>
+              <text color="red">❌ Docker not found</text>
+            </box>
+            <box marginBottom={1}>
+              <text dim={true}>Please install Docker to continue:</text>
+            </box>
+            <box marginBottom={1}>
+              <text color="cyan">https://docs.docker.com/get-docker/</text>
+            </box>
+            <box marginBottom={1}>
+              <text dim={true}>Or run: curl -fsSL https://get.docker.com | sh</text>
+            </box>
+            <box marginTop={2}>
+              <text color="cyan" bold={true}>
                 [Enter]
-              </Text>
-              <Text> Retry</Text>
-              <Text dimColor> [q] Quit</Text>
-            </Box>
-          </Box>
+              </text>
+              <text> Retry</text>
+              <text dim={true}> [q] Quit</text>
+            </box>
+          </box>
         );
 
       case 'not_running':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box marginBottom={1}>
-              <Text color="yellow">⚠️ Docker installed but not running</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text dimColor>Please start the Docker daemon:</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text color="cyan">sudo systemctl start docker</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text dimColor>(or open Docker Desktop on macOS)</Text>
-            </Box>
-            <Box marginTop={2}>
-              <Text color="cyan" bold>
+          <box flexDirection="column" alignItems="center">
+            <box marginBottom={1}>
+              <text color="yellow">⚠️ Docker installed but not running</text>
+            </box>
+            <box marginBottom={1}>
+              <text dim={true}>Please start the Docker daemon:</text>
+            </box>
+            <box marginBottom={1}>
+              <text color="cyan">sudo systemctl start docker</text>
+            </box>
+            <box marginBottom={1}>
+              <text dim={true}>(or open Docker Desktop on macOS)</text>
+            </box>
+            <box marginTop={2}>
+              <text color="cyan" bold={true}>
                 [Enter]
-              </Text>
-              <Text> Retry</Text>
-              <Text dimColor> [q] Quit</Text>
-            </Box>
-          </Box>
+              </text>
+              <text> Retry</text>
+              <text dim={true}> [q] Quit</text>
+            </box>
+          </box>
         );
 
       case 'permission_denied':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box marginBottom={1}>
-              <Text color="yellow">⚠️ Docker permission denied</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text dimColor>Add your user to the docker group:</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text color="cyan">sudo usermod -aG docker $USER</Text>
-            </Box>
-            <Box marginBottom={1}>
-              <Text dimColor>Then log out and back in.</Text>
-            </Box>
-            <Box marginTop={2}>
-              <Text color="cyan" bold>
+          <box flexDirection="column" alignItems="center">
+            <box marginBottom={1}>
+              <text color="yellow">⚠️ Docker permission denied</text>
+            </box>
+            <box marginBottom={1}>
+              <text dim={true}>Add your user to the docker group:</text>
+            </box>
+            <box marginBottom={1}>
+              <text color="cyan">sudo usermod -aG docker $USER</text>
+            </box>
+            <box marginBottom={1}>
+              <text dim={true}>Then log out and back in.</text>
+            </box>
+            <box marginTop={2}>
+              <text color="cyan" bold={true}>
                 [Enter]
-              </Text>
-              <Text> Retry</Text>
-              <Text dimColor> [q] Quit</Text>
-            </Box>
-          </Box>
+              </text>
+              <text> Retry</text>
+              <text dim={true}> [q] Quit</text>
+            </box>
+          </box>
         );
-
-      default:
-        return null;
     }
   };
 
   return (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" height={20} padding={2}>
-      <Box
+    <box flexDirection="column" alignItems="center" justifyContent="center" height={20} padding={2}>
+      <box
         flexDirection="column"
         alignItems="center"
-        borderStyle="round"
+        border="round"
         borderColor="cyan"
         paddingX={4}
         paddingY={2}
         width={60}
       >
-        <Box marginBottom={1}>
-          <Text bold color="cyan">
+        <box marginBottom={1}>
+          <text bold={true} color="cyan">
             [1/5] Checking Docker...
-          </Text>
-        </Box>
-
-        <Box marginTop={2}>{renderContent()}</Box>
-      </Box>
-    </Box>
+          </text>
+        </box>
+        <box marginTop={2}>{renderContent()}</box>
+      </box>
+    </box>
   );
 }

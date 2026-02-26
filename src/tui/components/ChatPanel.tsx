@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
+import type { JSX } from 'solid-js';
+import { useKeyboard } from '@opentui/solid';
 import TextInput from './IMETextInput.js';
-import Spinner from 'ink-spinner';
+import { Spinner } from './Spinner.js';
 import type { OpenLanderClient } from '../../ipc/client.js';
 import type { ChatStreamEvent } from '../../agent/index.js';
 import { ChatMessage, type DisplayMessage } from './ChatMessage.js';
@@ -48,13 +49,6 @@ const INPUT_HEIGHT = 3; // Height reserved for input area
 
 /**
  * Unified chat panel combining message display and input.
- *
- * Features:
- * - Message list with auto-scroll
- * - Input area with slash command autocomplete
- * - IPC client streaming for real-time responses
- * - Chat history navigation (↑/↓)
- * - Thinking indicator during response generation
  */
 export function ChatPanel({
   client,
@@ -64,54 +58,55 @@ export function ChatPanel({
   onClear,
   onExit,
   onCommandResult,
-}: ChatPanelProps): React.ReactElement {
-  // --- Chat state (inline until useChat is ready) ---
-  const [messages, setMessages] = useState<DisplayMessage[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const sessionIdRef = useRef<string>(`tui-${Date.now().toString(36)}`);
+}: ChatPanelProps): JSX.Element {
+  // --- Chat state ---
+  const [messages, setMessages] = createSignal<DisplayMessage[]>([]);
+  const [isStreaming, setIsStreaming] = createSignal(false);
+  const [inputValue, setInputValue] = createSignal('');
+  let sessionIdRef = `tui-${Date.now().toString(36)}`;
 
   // --- Chat history for ↑/↓ navigation ---
-  const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const historyRef = useRef<string>(''); // Temp storage when navigating history
+  const [chatHistory, setChatHistory] = createSignal<ChatHistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = createSignal(-1);
+  let historyRef = ''; // Temp storage when navigating history
 
   // --- Slash command autocomplete ---
-  const [showCommandPicker, setShowCommandPicker] = useState(false);
-  const [commandPickerIndex, setCommandPickerIndex] = useState(0);
+  const [showCommandPicker, setShowCommandPicker] = createSignal(false);
+  const [commandPickerIndex, setCommandPickerIndex] = createSignal(0);
 
   // --- Streaming state ---
-  const currentAssistantMessageRef = useRef<DisplayMessage | null>(null);
+  let currentAssistantMessageRef: DisplayMessage | null = null;
 
   // Calculate heights
   const messageAreaHeight = Math.max(5, height - INPUT_HEIGHT);
 
   // --- Auto-scroll offset ---
-  const [, setScrollOffset] = useState(0);
-  const messagesEndRef = useRef<number>(0);
+  const [, setScrollOffset] = createSignal(0);
+  let messagesEndRef = 0;
 
   // Update scroll offset when messages change
-  useEffect(() => {
-    const totalLines = calculateMessageLines(messages);
+  createEffect(() => {
+    const totalLines = calculateMessageLines(messages());
     const maxOffset = Math.max(0, totalLines - messageAreaHeight);
     setScrollOffset(maxOffset);
-    messagesEndRef.current = totalLines;
-  }, [messages, messageAreaHeight]);
+    messagesEndRef = totalLines;
+  });
 
   // --- Handle slash command picker visibility ---
-  useEffect(() => {
-    const isSlashInput = inputValue.startsWith('/') && !inputValue.includes(' ');
+  createEffect(() => {
+    const val = inputValue();
+    const isSlashInput = val.startsWith('/') && !val.includes(' ');
     setShowCommandPicker(isSlashInput && focus);
     if (isSlashInput) {
       setCommandPickerIndex(0);
     }
-  }, [inputValue, focus]);
+  });
 
   // --- Handle chat stream events ---
-  const handleStreamEvent = useCallback((event: ChatStreamEvent) => {
+  const handleStreamEvent = (event: ChatStreamEvent) => {
     switch (event.type) {
       case 'session':
-        sessionIdRef.current = event.sessionId;
+        sessionIdRef = event.sessionId;
         break;
 
       case 'thinking':
@@ -119,7 +114,6 @@ export function ChatPanel({
         break;
 
       case 'tool_call': {
-        // Classify tool calls by name for specialized rendering
         const args = event.arguments as Record<string, string>;
         let messageType: DisplayMessage['type'] = 'tool_start';
         const baseMsg: Partial<DisplayMessage> = {
@@ -150,7 +144,6 @@ export function ChatPanel({
                 : 'edit';
         }
 
-        // Add tool_start message
         setMessages((prev) => [
           ...prev,
           {
@@ -166,7 +159,6 @@ export function ChatPanel({
       }
 
       case 'tool_result':
-        // Update the last tool_start message with result
         setMessages((prev) => {
           const updated = [...prev];
           const lastToolIdx = updated.findIndex(
@@ -179,7 +171,7 @@ export function ChatPanel({
             if (item) {
               const updates: Partial<DisplayMessage> = {
                 toolStatus: event.success ? 'success' : 'error',
-                toolDuration: event.success ? 0 : undefined, // Duration would need to be tracked
+                toolDuration: event.success ? 0 : undefined,
                 content: event.error ?? '',
               };
 
@@ -189,12 +181,10 @@ export function ChatPanel({
                     ? event.result
                     : JSON.stringify(event.result, null, 2);
               } else if (item.type === 'file_edit') {
-                // If result is a diff string, use it. Otherwise just show success/fail
                 if (typeof event.result === 'string') {
                   updates.diff = event.result;
                 }
               } else {
-                // Standard tool result
                 updates.type = 'tool_result';
               }
 
@@ -210,7 +200,6 @@ export function ChatPanel({
 
       case 'message':
         setIsStreaming(false);
-        // Add assistant message
         setMessages((prev) => [
           ...prev,
           {
@@ -221,7 +210,7 @@ export function ChatPanel({
             timestamp: Date.now(),
           },
         ]);
-        currentAssistantMessageRef.current = null;
+        currentAssistantMessageRef = null;
         break;
 
       case 'error':
@@ -242,316 +231,322 @@ export function ChatPanel({
         setIsStreaming(false);
         break;
     }
-  }, []);
+  };
 
   // --- Send message function ---
-  const sendMessage = useCallback(
-    async (text: string) => {
-      if (!text.trim()) return;
+  const sendMessage = async (text: string) => {
+    if (!text.trim()) return;
 
-      // Add user message
-      const userMessage: DisplayMessage = {
-        id: `user-${String(Date.now())}`,
-        role: 'user',
-        content: text,
-        type: 'text',
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, userMessage]);
+    const userMessage: DisplayMessage = {
+      id: `user-${String(Date.now())}`,
+      role: 'user',
+      content: text,
+      type: 'text',
+      timestamp: Date.now(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
 
-      // Add to history
-      setChatHistory((prev) => {
-        const newHistory = [...prev, { text, timestamp: Date.now() }].slice(-MAX_HISTORY_ENTRIES);
-        return newHistory;
-      });
-      setHistoryIndex(-1);
+    setChatHistory((prev) => {
+      const newHistory = [...prev, { text, timestamp: Date.now() }].slice(-MAX_HISTORY_ENTRIES);
+      return newHistory;
+    });
+    setHistoryIndex(-1);
 
-      // Check for slash command
-      if (text.startsWith('/')) {
-        const parsed = parseSlashCommand(text);
-        if (parsed) {
-          const result = parsed.command.handler(parsed.args);
-          onCommandResult?.(result);
+    if (text.startsWith('/')) {
+      const parsed = parseSlashCommand(text);
+      if (parsed) {
+        const result = parsed.command.handler(parsed.args);
+        onCommandResult?.(result);
 
-          switch (result.action) {
-            case 'modal':
-              onModal?.(result.modal);
-              break;
-            case 'clear':
-              setMessages([]);
-              onClear?.();
-              break;
-            case 'exit':
-              onExit?.();
-              break;
-            case 'agent':
-              // Send the agent message through the normal flow
-              if (client) {
-                setIsStreaming(true);
-                try {
-                  await client.chatStream(result.message, sessionIdRef.current, handleStreamEvent);
-                } catch (err) {
-                  const errorMsg = err instanceof Error ? err.message : String(err);
-                  setMessages((prev) => [
-                    ...prev,
-                    {
-                      id: `error-${String(Date.now())}`,
-                      role: 'assistant',
-                      content: errorMsg,
-                      type: 'error',
-                      timestamp: Date.now(),
-                    },
-                  ]);
-                  setIsStreaming(false);
-                }
+        switch (result.action) {
+          case 'modal':
+            onModal?.(result.modal);
+            break;
+          case 'clear':
+            setMessages([]);
+            onClear?.();
+            break;
+          case 'exit':
+            onExit?.();
+            break;
+          case 'agent':
+            if (client) {
+              setIsStreaming(true);
+              try {
+                await client.chatStream(result.message, sessionIdRef, handleStreamEvent);
+              } catch (err) {
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `error-${String(Date.now())}`,
+                    role: 'assistant',
+                    content: errorMsg,
+                    type: 'error',
+                    timestamp: Date.now(),
+                  },
+                ]);
+                setIsStreaming(false);
               }
-              break;
-            case 'toggle-sidebar':
-              // This would be handled by parent
-              break;
-          }
+            }
+            break;
+          case 'toggle-sidebar':
+            break;
+        }
+        return;
+      }
+    }
+
+    if (!client) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `error-${String(Date.now())}`,
+          role: 'assistant',
+          content: 'Daemon not connected. Start with: openlander daemon',
+          type: 'error',
+          timestamp: Date.now(),
+        },
+      ]);
+      return;
+    }
+
+    setIsStreaming(true);
+    try {
+      await client.chatStream(text, sessionIdRef, handleStreamEvent);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `error-${String(Date.now())}`,
+          role: 'assistant',
+          content: errorMsg,
+          type: 'error',
+          timestamp: Date.now(),
+        },
+      ]);
+      setIsStreaming(false);
+    }
+  };
+
+  // --- Handle input submit ---
+  const handleSubmit = (text: string) => {
+    if (!text.trim()) return;
+
+    if (showCommandPicker()) {
+      const matchCount = getMatchCount(text);
+      if (matchCount > 0) {
+        const commandName = getMatchAt(text, commandPickerIndex());
+        if (commandName) {
+          const completed = `/${commandName}`;
+          setInputValue('');
+          setShowCommandPicker(false);
+          void sendMessage(completed);
           return;
         }
       }
+    }
 
-      // Regular chat message
-      if (!client) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `error-${String(Date.now())}`,
-            role: 'assistant',
-            content: 'Daemon not connected. Start with: openlander daemon',
-            type: 'error',
-            timestamp: Date.now(),
-          },
-        ]);
-        return;
-      }
-
-      setIsStreaming(true);
-      try {
-        await client.chatStream(text, sessionIdRef.current, handleStreamEvent);
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `error-${String(Date.now())}`,
-            role: 'assistant',
-            content: errorMsg,
-            type: 'error',
-            timestamp: Date.now(),
-          },
-        ]);
-        setIsStreaming(false);
-      }
-    },
-    [client, handleStreamEvent, onModal, onClear, onExit, onCommandResult],
-  );
-
-  // --- Handle input submit ---
-  const handleSubmit = useCallback(
-    (text: string) => {
-      if (!text.trim()) return;
-
-      // Check if we should autocomplete from picker
-      if (showCommandPicker) {
-        const matchCount = getMatchCount(text);
-        if (matchCount > 0) {
-          const commandName = getMatchAt(text, commandPickerIndex);
-          if (commandName) {
-            // Complete the command
-            const completed = `/${commandName}`;
-            setInputValue('');
-            setShowCommandPicker(false);
-            void sendMessage(completed);
-            return;
-          }
-        }
-      }
-
-      setInputValue('');
-      setShowCommandPicker(false);
-      void sendMessage(text);
-    },
-    [showCommandPicker, commandPickerIndex, sendMessage],
-  );
+    setInputValue('');
+    setShowCommandPicker(false);
+    void sendMessage(text);
+  };
 
   // --- Handle Tab completion for slash commands ---
-  const handleTabComplete = useCallback(() => {
-    if (showCommandPicker) {
-      const commandName = getMatchAt(inputValue, commandPickerIndex);
+  const handleTabComplete = () => {
+    if (showCommandPicker()) {
+      const commandName = getMatchAt(inputValue(), commandPickerIndex());
       if (commandName) {
         setInputValue(`/${commandName} `);
         setShowCommandPicker(false);
       }
     }
-  }, [showCommandPicker, inputValue, commandPickerIndex]);
+  };
 
   // --- Keyboard handling ---
-  useInput(
-    (_input, key) => {
-      // Tab for autocomplete
-      if (key.tab && showCommandPicker) {
-        handleTabComplete();
-        return;
-      }
-      // Ctrl+L to clear
-      if (key.ctrl && _input === 'l') {
-        setMessages([]);
-        onClear?.();
-        return;
-      }
+  useKeyboard((evt) => {
+    if (!focus) return;
 
-      // Up arrow - history navigation or command picker
-      if (key.upArrow) {
-        if (showCommandPicker) {
-          // Navigate command picker
-          setCommandPickerIndex((i) => Math.max(0, i - 1));
-        } else if (chatHistory.length > 0) {
-          if (historyIndex === -1) {
-            // Save current input
-            historyRef.current = inputValue;
-          }
-          const newIndex = Math.min(chatHistory.length - 1, historyIndex + 1);
-          setHistoryIndex(newIndex);
-          const historyEntry = chatHistory[chatHistory.length - 1 - newIndex];
-          if (historyEntry) {
-            setInputValue(historyEntry.text);
-          }
+    // Tab for autocomplete
+    if (evt.key === 'tab' && showCommandPicker()) {
+      handleTabComplete();
+      return;
+    }
+    // Ctrl+L to clear
+    if (evt.ctrl && evt.char === 'l') {
+      setMessages([]);
+      onClear?.();
+      return;
+    }
+
+    // Up arrow - history navigation or command picker
+    if (evt.key === 'up') {
+      if (showCommandPicker()) {
+        setCommandPickerIndex((i) => Math.max(0, i - 1));
+      } else if (chatHistory().length > 0) {
+        if (historyIndex() === -1) {
+          historyRef = inputValue();
         }
-        return;
-      }
-
-      // Down arrow - history navigation or command picker
-      if (key.downArrow) {
-        if (showCommandPicker) {
-          const matchCount = getMatchCount(inputValue);
-          setCommandPickerIndex((i) => Math.min(matchCount - 1, i + 1));
-        } else if (historyIndex > 0) {
-          const newIndex = historyIndex - 1;
-          setHistoryIndex(newIndex);
-          const historyEntry = chatHistory[chatHistory.length - 1 - newIndex];
-          if (historyEntry) {
-            setInputValue(historyEntry.text);
-          }
-        } else if (historyIndex === 0) {
-          setHistoryIndex(-1);
-          setInputValue(historyRef.current);
+        const newIndex = Math.min(chatHistory().length - 1, historyIndex() + 1);
+        setHistoryIndex(newIndex);
+        const historyEntry = chatHistory()[chatHistory().length - 1 - newIndex];
+        if (historyEntry) {
+          setInputValue(historyEntry.text);
         }
-        return;
       }
-    },
-    { isActive: focus },
-  );
+      return;
+    }
 
-  // --- Calculate visible messages (for scrolling) ---
-  const visibleMessages = messages;
+    // Down arrow - history navigation or command picker
+    if (evt.key === 'down') {
+      if (showCommandPicker()) {
+        const matchCount = getMatchCount(inputValue());
+        setCommandPickerIndex((i) => Math.min(matchCount - 1, i + 1));
+      } else if (historyIndex() > 0) {
+        const newIndex = historyIndex() - 1;
+        setHistoryIndex(newIndex);
+        const historyEntry = chatHistory()[chatHistory().length - 1 - newIndex];
+        if (historyEntry) {
+          setInputValue(historyEntry.text);
+        }
+      } else if (historyIndex() === 0) {
+        setHistoryIndex(-1);
+        setInputValue(historyRef);
+      }
+      return;
+    }
+  });
 
   // --- Render ---
   return (
-    <Box flexDirection="column" height={height}>
+    <box flexDirection="column" height={height}>
       {/* Message area */}
-      <Box flexDirection="column" flexGrow={1} overflow="hidden">
-        {messages.length === 0 && !isStreaming ? (
-          // Welcome message
-          <Box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
-            <Text color={theme.primary} bold>
-              {'  ___                   _                    _           '}
-            </Text>
-            <Text color={theme.primary} bold>
-              {' / _ \\ _ __   ___ _ __ | |    __ _ _ __   __| | ___ _ __ '}
-            </Text>
-            <Text color={theme.primary} bold>
-              {"| | | | '_ \\ / _ \\ '_ \\| |   / _` | '_ \\ / _` |/ _ \\ '__|"}
-            </Text>
-            <Text color={theme.primary} bold>
-              {'| |_| | |_) |  __/ | | | |__| (_| | | | | (_| |  __/ |   '}
-            </Text>
-            <Text color={theme.primary} bold>
-              {' \\___/| .__/ \\___|_| |_|_____\\__,_|_| |_|\\__,_|\\___|_|   '}
-            </Text>
-            <Text color={theme.primary} bold>
-              {'      |_|                                                  '}
-            </Text>
-            <Text> </Text>
-            <Text dimColor>v0.1.0</Text>
-            <Text> </Text>
-            {client ? (
-              <>
-                <Text dimColor>Deploy anything with a chat. Type to get started.</Text>
-                <Text dimColor>
-                  Press <Text color={theme.secondary}>/</Text> for commands,{' '}
-                  <Text color={theme.secondary}>?</Text> for help
-                </Text>
-              </>
-            ) : (
-              <Text color={theme.warning}>
-                Daemon not connected. Run: <Text bold>openlander daemon</Text>
-              </Text>
-            )}
-          </Box>
-        ) : (
-          // Message list
-          <Box flexDirection="column" flexGrow={1}>
-            {visibleMessages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
-            ))}
+      <box flexDirection="column" flexGrow={1} overflow="hidden">
+        <Show
+          when={messages().length > 0 || isStreaming()}
+          fallback={
+            // Welcome message
+            <box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
+              <text color={theme.primary} bold={true}>
+                {'  ___                   _                    _           '}
+              </text>
+              <text color={theme.primary} bold={true}>
+                {' / _ \\ _ __   ___ _ __ | |    __ _ _ __   __| | ___ _ __ '}
+              </text>
+              <text color={theme.primary} bold={true}>
+                {"| | | | '_ \\ / _ \\ '_ \\| |   / _` | '_ \\ / _` |/ _ \\ '__|"}
+              </text>
+              <text color={theme.primary} bold={true}>
+                {'| |_| | |_) |  __/ | | | |__| (_| | | | | (_| |  __/ |   '}
+              </text>
+              <text color={theme.primary} bold={true}>
+                {' \\___/| .__/ \\___|_| |_|_____\\__,_|_| |_|\\__,_|\\___|_|   '}
+              </text>
+              <text color={theme.primary} bold={true}>
+                {'      |_|                                                  '}
+              </text>
+              <text> </text>
+              <text dim={true}>v0.1.0</text>
+              <text> </text>
+              <Show
+                when={client}
+                fallback={
+                  <text color={theme.warning}>
+                    Daemon not connected. Run: <text bold={true}>openlander daemon</text>
+                  </text>
+                }
+              >
+                <>
+                  <text dim={true}>Deploy anything with a chat. Type to get started.</text>
+                  <text dim={true}>
+                    Press <text color={theme.secondary}>/</text> for commands,{' '}
+                    <text color={theme.secondary}>?</text> for help
+                  </text>
+                </>
+              </Show>
+            </box>
+          }
+        >
+          {/* Message list */}
+          <box flexDirection="column" flexGrow={1}>
+            <For each={messages()}>{(msg) => <ChatMessage message={msg} />}</For>
 
             {/* Thinking indicator */}
-            {isStreaming && (
-              <Box paddingX={1} gap={1}>
-                <Text color={theme.primary}>
-                  <Spinner type="dots" />
-                </Text>
-                <Text color={theme.primary}>Thinking…</Text>
-              </Box>
-            )}
-          </Box>
-        )}
-      </Box>
+            <Show when={isStreaming()}>
+              <box paddingX={1} gap={1}>
+                <text color={theme.primary}>
+                  <Spinner color={theme.primary} />
+                </text>
+                <text color={theme.primary}>Thinking…</text>
+              </box>
+            </Show>
+          </box>
+        </Show>
+      </box>
 
       {/* Slash command picker */}
-      {showCommandPicker && (
-        <Box>
-          <SlashCommandPicker input={inputValue} selectedIndex={commandPickerIndex} />
-        </Box>
-      )}
+      <Show when={showCommandPicker()}>
+        <box>
+          <SlashCommandPicker input={inputValue()} selectedIndex={commandPickerIndex()} />
+        </box>
+      </Show>
 
       {/* Input area */}
-      <Box
-        borderStyle="single"
+      <box
+        border="single"
         borderColor={theme.border}
-        borderTop
+        borderTop={true}
         borderBottom={false}
         borderLeft={false}
         borderRight={false}
         paddingX={1}
       >
-        {!client ? (
-          <Text dimColor>Chat unavailable — daemon not connected</Text>
-        ) : isStreaming ? (
-          <Box gap={1}>
-            <Text color={theme.primary}>
-              <Spinner type="dots" />
-            </Text>
-            <Text dimColor> Waiting for response...</Text>
-          </Box>
+        <Show when={!client} fallback={
+          <Show when={isStreaming()} fallback={
+            <box>
+              <text color={theme.primary}>❯ </text>
+              <TextInput
+                value={inputValue()}
+                onChange={setInputValue}
+                onSubmit={handleSubmit}
+                placeholder="Ask the agent anything... (/help for commands)"
+                showCursor={focus}
+              />
+            </box>
+          }>
+            <box gap={1}>
+              <text color={theme.primary}>
+                <Spinner color={theme.primary} />
+              </text>
+              <text dim={true}> Waiting for response...</text>
+            </box>
+          </Show>
+        }>
+          <text dim={true}>Chat unavailable — daemon not connected</text>
+        </Show>
+          <text dim={true}>Chat unavailable — daemon not connected</text>
+        ) : isStreaming() ? (
+          <box gap={1}>
+            <text color={theme.primary}>
+              <Spinner color={theme.primary} />
+            </text>
+            <text dim={true}> Waiting for response...</text>
+          </box>
         ) : (
-          <Box>
-            <Text color={theme.primary}>❯ </Text>
+          <box>
+            <text color={theme.primary}>❯ </text>
             <TextInput
-              value={inputValue}
+              value={inputValue()}
               onChange={setInputValue}
               onSubmit={handleSubmit}
               placeholder="Ask the agent anything... (/help for commands)"
               showCursor={focus}
             />
-          </Box>
+          </box>
         )}
-      </Box>
-    </Box>
+      </box>
+    </box>
   );
 }
 
@@ -563,15 +558,11 @@ export function ChatPanel({
 function calculateMessageLines(messages: DisplayMessage[]): number {
   let lines = 0;
   for (const msg of messages) {
-    // Each message takes at least 1 line
     lines += 1;
-    // Content lines (rough estimate)
     if (msg.content) {
       const contentLines = msg.content.split('\n').length;
-      // Add extra lines for long content
       lines += Math.ceil(contentLines * 0.5);
     }
-    // Spacer
     lines += 1;
   }
   return lines;

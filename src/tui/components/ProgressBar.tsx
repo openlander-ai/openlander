@@ -1,5 +1,4 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import type { JSX } from 'solid-js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,28 +31,28 @@ const EMPTY_CHAR = '░';
  * - Green when complete (100%)
  * - Yellow during progress
  */
-export function ProgressBar({ percent, width = 20, label }: ProgressBarProps): React.ReactElement {
-  // Clamp percent to 0-100 range
-  const clampedPercent = Math.max(0, Math.min(100, percent));
+export function ProgressBar(props: ProgressBarProps): JSX.Element {
+  const width = () => props.width ?? 20;
+  const percent = () => Math.max(0, Math.min(100, props.percent));
 
   // Calculate filled/empty portions
-  const filledCount = Math.round((clampedPercent / 100) * width);
-  const emptyCount = width - filledCount;
+  const filledCount = () => Math.round((percent() / 100) * width());
+  const emptyCount = () => width() - filledCount();
 
-  const filled = FILLED_CHAR.repeat(filledCount);
-  const empty = EMPTY_CHAR.repeat(emptyCount);
+  const filled = () => FILLED_CHAR.repeat(filledCount());
+  const empty = () => EMPTY_CHAR.repeat(emptyCount());
 
   // Color: green when complete, yellow during progress
-  const isComplete = clampedPercent >= 100;
-  const barColor = isComplete ? 'green' : 'yellow';
-  const percentColor = isComplete ? 'green' : 'yellow';
+  const isComplete = () => percent() >= 100;
+  const barColor = () => (isComplete() ? 'green' : 'yellow');
+  const percentColor = () => (isComplete() ? 'green' : 'yellow');
 
   return (
-    <Box gap={1}>
-      {label && <Text dimColor>{label}</Text>}
-      <Text color={barColor}>{filled}</Text>
-      <Text dimColor>{empty}</Text>
-      <Text color={percentColor}>{`${String(clampedPercent)}%`}</Text>
-    </Box>
+    <box gap={1}>
+      {props.label && <text dim>{props.label}</text>}
+      <text color={barColor()}>{filled()}</text>
+      <text dim>{empty()}</text>
+      <text color={percentColor()}>{`${String(percent())}%`}</text>
+    </box>
   );
 }

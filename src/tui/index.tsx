@@ -1,13 +1,14 @@
 import process from 'node:process';
-import { render } from 'ink';
+import { render } from '@opentui/solid';
 import type { AppContext } from '../app.js';
 import { App } from './App.js';
+import { ExitProvider } from './context/exit.js';
 
 /**
  * Start the OpenLander Terminal UI.
  *
  * - Enters alternate screen buffer (hides previous terminal content)
- * - Renders fullscreen Ink app
+ * - Renders fullscreen OpenTUI app
  * - On exit, restores original terminal and prints session info
  */
 export function startTUI(ctx: AppContext): void {
@@ -17,14 +18,7 @@ export function startTUI(ctx: AppContext): void {
   // Enter alternate screen buffer
   process.stdout.write('\x1b[?1049h');
 
-  const instance = render(<App ctx={ctx} />, {
-    patchConsole: true,
-    exitOnCtrlC: false,
-  });
-
   const cleanup = () => {
-    instance.unmount();
-
     // Leave alternate screen buffer — restores original terminal
     process.stdout.write('\x1b[?1049l');
 
@@ -38,22 +32,16 @@ export function startTUI(ctx: AppContext): void {
       '',
     ];
     process.stdout.write(logo.join('\n') + '\n');
+    process.exit(0);
   };
 
+  render(() => (
+    <ExitProvider onExit={cleanup}>
+      <App ctx={ctx} />
+    </ExitProvider>
+  ));
+
   // Handle exit signals
-  process.on('SIGINT', () => {
-    cleanup();
-    process.exit(0);
-  });
-
-  process.on('SIGTERM', () => {
-    cleanup();
-    process.exit(0);
-  });
-
-  // Handle normal Ink exit (e.g. from useApp().exit())
-  void instance.waitUntilExit().then(() => {
-    cleanup();
-    process.exit(0);
-  });
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
 }

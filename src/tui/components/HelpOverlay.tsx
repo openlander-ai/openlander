@@ -1,5 +1,6 @@
-import React from 'react';
-import { Box, Text, useInput, useStdout } from 'ink';
+import type { JSX } from 'solid-js';
+import { For } from 'solid-js';
+import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
 import { theme } from '../theme.js';
 
 interface HelpOverlayProps {
@@ -27,15 +28,15 @@ const SHORTCUTS: ShortcutRow[] = [
  * Full-screen help overlay showing keyboard shortcuts.
  * Listens for Escape key to close.
  */
-export function HelpOverlay({ onClose }: HelpOverlayProps): React.ReactElement {
-  const { stdout } = useStdout();
-  const columns = stdout.columns;
-  const rows = stdout.rows;
+export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
+  const dims = useTerminalDimensions();
+  const columns = () => dims().width;
+  const rows = () => dims().height;
 
   // Listen for Escape key to close
-  useInput((_input, key) => {
-    if (key.escape) {
-      onClose();
+  useKeyboard((evt) => {
+    if (evt.name === 'escape') {
+      props.onClose();
     }
   });
 
@@ -43,45 +44,47 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.ReactElement {
   const contentWidth = 50;
 
   return (
-    <Box
+    <box
       flexDirection="column"
-      width={columns}
-      height={rows}
+      width={columns()}
+      height={rows()}
       justifyContent="center"
       alignItems="center"
     >
-      <Box
+      <box
         flexDirection="column"
-        borderStyle="round"
+        border="round"
         borderColor={theme.border}
         paddingX={2}
         paddingY={1}
         width={contentWidth}
       >
         {/* Header */}
-        <Box marginBottom={1} justifyContent="center">
-          <Text bold color={theme.sectionTitle}>
+        <box marginBottom={1} justifyContent="center">
+          <text bold color={theme.sectionTitle}>
             Keyboard Shortcuts
-          </Text>
-        </Box>
+          </text>
+        </box>
 
         {/* Shortcuts table */}
-        <Box flexDirection="column" gap={0}>
-          {SHORTCUTS.map((shortcut, index) => (
-            <Box key={index} gap={2}>
-              <Box width={12}>
-                <Text color={theme.warning}>{shortcut.key}</Text>
-              </Box>
-              <Text dimColor>{shortcut.description}</Text>
-            </Box>
-          ))}
-        </Box>
+        <box flexDirection="column" gap={0}>
+          <For each={SHORTCUTS}>
+            {(shortcut) => (
+              <box gap={2}>
+                <box width={12}>
+                  <text color={theme.warning}>{shortcut.key}</text>
+                </box>
+                <text dim>{shortcut.description}</text>
+              </box>
+            )}
+          </For>
+        </box>
 
         {/* Footer hint */}
-        <Box marginTop={1} justifyContent="center">
-          <Text dimColor>[Esc] Close</Text>
-        </Box>
-      </Box>
-    </Box>
+        <box marginTop={1} justifyContent="center">
+          <text dim>[Esc] Close</text>
+        </box>
+      </box>
+    </box>
   );
 }

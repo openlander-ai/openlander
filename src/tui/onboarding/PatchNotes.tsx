@@ -1,5 +1,6 @@
-import React from 'react';
-import { Box, Text, useInput } from 'ink';
+import type { JSX } from 'solid-js';
+import { Show, For } from 'solid-js';
+import { useKeyboard } from '@opentui/solid';
 
 export interface PatchNotesProps {
   version: string;
@@ -10,9 +11,9 @@ export interface PatchNotesProps {
  * PatchNotes component - shows what's new in a given version.
  * Used in Ready.tsx and for version-update splash screens.
  */
-export function PatchNotes({ version, onDismiss }: PatchNotesProps): React.ReactElement {
-  useInput((_input, key) => {
-    if (key.return && onDismiss) {
+export function PatchNotes({ version, onDismiss }: PatchNotesProps): JSX.Element {
+  useKeyboard((evt) => {
+    if (evt.key === 'return' && onDismiss) {
       onDismiss();
     }
   });
@@ -26,27 +27,29 @@ export function PatchNotes({ version, onDismiss }: PatchNotesProps): React.React
   ];
 
   return (
-    <Box flexDirection="column" alignItems="center">
-      <Box marginBottom={1}>
-        <Text bold color="cyan">
+    <box flexDirection="column" alignItems="center">
+      <box marginBottom={1}>
+        <text bold={true} color="cyan">
           📋 What&apos;s new in v{version}
-        </Text>
-      </Box>
+        </text>
+      </box>
 
-      <Box flexDirection="column" marginLeft={2}>
-        {notes.map((note, index) => (
-          <Box key={index}>
-            <Text dimColor>• </Text>
-            <Text>{note}</Text>
-          </Box>
-        ))}
-      </Box>
+      <box flexDirection="column" marginLeft={2}>
+        <For each={notes}>
+          {(note) => (
+            <box>
+              <text dim={true}>• </text>
+              <text>{note}</text>
+            </box>
+          )}
+        </For>
+      </box>
 
-      {onDismiss && (
-        <Box marginTop={1}>
-          <Text dimColor>[Enter] Continue</Text>
-        </Box>
-      )}
-    </Box>
+      <Show when={onDismiss}>
+        <box marginTop={1}>
+          <text dim={true}>[Enter] Continue</text>
+        </box>
+      </Show>
+    </box>
   );
 }

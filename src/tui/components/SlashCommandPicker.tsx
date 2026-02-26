@@ -1,6 +1,7 @@
-import React from 'react';
-import { Box, Text } from 'ink';
+import type { JSX } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { filterCommands, type SlashCommand } from '../commands/registry.js';
+import { theme } from '../theme.js';
 
 interface SlashCommandPickerProps {
   /** Current input text (e.g. "/dep" — must start with /). */
@@ -13,39 +14,39 @@ interface SlashCommandPickerProps {
  * Autocomplete dropdown for slash commands.
  * Shows matching commands as the user types after "/".
  */
-export function SlashCommandPicker({
-  input,
-  selectedIndex,
-}: SlashCommandPickerProps): React.ReactElement | null {
+export function SlashCommandPicker(props: SlashCommandPickerProps): JSX.Element | null {
   // Extract the partial command name after "/"
-  const prefix = input.slice(1).split(' ')[0] ?? '';
-  const matches = filterCommands(prefix);
-
-  if (matches.length === 0) {
-    return (
-      <Box borderStyle="single" borderColor="gray" paddingX={1} flexDirection="column">
-        <Text dimColor>No matching commands</Text>
-      </Box>
-    );
-  }
+  const prefix = () => props.input.slice(1).split(' ')[0] ?? '';
+  const matches = () => filterCommands(prefix());
 
   return (
-    <Box borderStyle="single" borderColor="cyan" paddingX={1} flexDirection="column">
-      {matches.map((cmd: SlashCommand, i: number) => {
-        const isSelected = i === selectedIndex;
-        return (
-          <Box key={cmd.name} gap={1}>
-            <Text color={isSelected ? 'cyan' : 'white'} bold={isSelected}>
-              {isSelected ? '▸' : ' '} /{cmd.name}
-            </Text>
-            <Text dimColor>— {cmd.description}</Text>
-          </Box>
-        );
-      })}
-      <Box marginTop={1}>
-        <Text dimColor>[↑↓] Select [Tab] Complete [Enter] Run [Esc] Cancel</Text>
-      </Box>
-    </Box>
+    <Show
+      when={matches().length > 0}
+      fallback={
+        <box border="single" borderColor="gray" paddingX={1} flexDirection="column">
+          <text dim>No matching commands</text>
+        </box>
+      }
+    >
+      <box border="single" borderColor="cyan" paddingX={1} flexDirection="column">
+        <For each={matches()}>
+          {(cmd: SlashCommand, i) => {
+            const isSelected = () => i() === props.selectedIndex;
+            return (
+              <box gap={1}>
+                <text color={isSelected() ? 'cyan' : 'white'} bold={isSelected()}>
+                  {isSelected() ? '▸' : ' '} /{cmd.name}
+                </text>
+                <text dim>— {cmd.description}</text>
+              </box>
+            );
+          }}
+        </For>
+        <box marginTop={1}>
+          <text dim>[↑↓] Select [Tab] Complete [Enter] Run [Esc] Cancel</text>
+        </box>
+      </box>
+    </Show>
   );
 }
 

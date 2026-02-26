@@ -1,8 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Text, useInput, useStdout, useApp } from 'ink';
+import { createSignal, createEffect, onCleanup } from 'solid-js';
+import type { JSX } from 'solid-js';
+import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
 import { join } from 'node:path';
 import type { AppContext } from '../app.js';
 import { isOnboarded, getDataDir } from '../config/index.js';
+import { useExit } from './context/exit.js';
 import { useDaemon } from './hooks/useDaemon.js';
 import { Onboarding } from './onboarding/index.js';
 import { Layout } from './components/Layout.js';
@@ -18,53 +20,54 @@ interface AppProps {
   ctx: AppContext;
 }
 
-export function App({ ctx }: AppProps): React.ReactElement {
+export function App(props: AppProps): JSX.Element {
   // App mode: setup or dashboard
-  const [mode, setMode] = useState<'setup' | 'dashboard'>(() =>
+  const [mode, setMode] = createSignal<'setup' | 'dashboard'>(
     isOnboarded() ? 'dashboard' : 'setup',
   );
 
   // Panel state
-  const [showHelp, setShowHelp] = useState(false);
-  const [activePanel, setActivePanel] = useState<'left' | 'right'>('left');
+  const [showHelp, setShowHelp] = createSignal(false);
+  const [activePanel, setActivePanel] = createSignal<'left' | 'right'>('left');
 
   // Ctrl+C tracking for double-press quit
-  const [ctrlCCount, setCtrlCCount] = useState(0);
-  const [showCtrlCWarning, setShowCtrlCWarning] = useState(false);
-  const { exit } = useApp();
+  const [ctrlCCount, setCtrlCCount] = createSignal(0);
+  const [showCtrlCWarning, setShowCtrlCWarning] = createSignal(false);
+  const { exit } = useExit();
 
   // Daemon connection
   const { client, status } = useDaemon(SOCKET_PATH);
 
   // Terminal dimensions
-  const { stdout } = useStdout();
-  const columns = stdout.columns;
-  const rows = stdout.rows;
-  const isWideMode = columns >= 100;
+  const dimensions = useTerminalDimensions();
+  const columns = () => (dimensions as any)()?.columns ?? 80;
+  const rows = () => (dimensions as any)()?.rows ?? 24;
+  const isWideMode = () => columns() >= 100;
 
   // Stats for status bar (received from DashboardPanel via callback)
-  const [projectCount, setProjectCount] = useState(0);
-  const [cpuPercent, setCpuPercent] = useState<number | null>(null);
-  const [buildingCount, setBuildingCount] = useState(0);
+  const [projectCount, setProjectCount] = createSignal(0);
+  const [cpuPercent, setCpuPercent] = createSignal<number | null>(null);
+  const [buildingCount, setBuildingCount] = createSignal(0);
 
   // Setup completion handler
-  const handleSetupComplete = useCallback(() => {
+  const handleSetupComplete = () => {
     setMode('dashboard');
-  }, []);
+  };
 
   // Receive stats from DashboardPanel (no duplicate polling)
-  const handleStatsUpdate = useCallback(
-    (data: { projectCount: number; cpuPercent: number | null; buildingCount: number }) => {
-      setProjectCount(data.projectCount);
-      setCpuPercent(data.cpuPercent);
-      setBuildingCount(data.buildingCount);
-    },
-    [],
-  );
+  const handleStatsUpdate = (data: {
+    projectCount: number;
+    cpuPercent: number | null;
+    buildingCount: number;
+  }) => {
+    setProjectCount(data.projectCount);
+    setCpuPercent(data.cpuPercent);
+    setBuildingCount(data.buildingCount);
+  };
 
   // Reset Ctrl+C count after 2 seconds
-  useEffect(() => {
-    if (ctrlCCount === 0) {
+  createEffect(() => {
+    if (ctrlCCount() === 0) {
       setShowCtrlCWarning(false);
       return;
     }
@@ -73,72 +76,67 @@ export function App({ ctx }: AppProps): React.ReactElement {
       setCtrlCCount(0);
       setShowCtrlCWarning(false);
     }, 2000);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [ctrlCCount]);
+    onCleanup(() => clearTimeout(timer));
+  });
 
   // Global keyboard shortcuts
-  useInput(
-    (input, key) => {
-      // Don't handle shortcuts during setup
-      if (mode === 'setup') return;
+  useKeyboard((evt) => {
+    // Don't handle shortcuts during setup
+    if (mode() === 'setup') return;
 
-      // Help overlay shortcuts
-      if (showHelp) {
-        if (key.escape) {
-          setShowHelp(false);
-        }
-        return;
+    // Help overlay shortcuts
+    if (showHelp()) {
+      if (evt.key === 'escape') {
+        setShowHelp(false);
       }
+      return;
+    }
 
-      // Ctrl+C: first press shows warning, second press quits
-      if (key.ctrl && input === 'c') {
-        if (ctrlCCount >= 1) {
-          exit();
-        } else {
-          setCtrlCCount((prev) => prev + 1);
-        }
-        return;
-      }
-
-      // Tab: panel switch
-      if (key.tab) {
-        setActivePanel((prev) => (prev === 'left' ? 'right' : 'left'));
-        return;
-      }
-
-      // ? for help
-      if (input === '?') {
-        setShowHelp(true);
-        return;
-      }
-
-      // q to quit (only when dashboard panel is focused, not during chat input)
-      if (input === 'q' && activePanel === 'right') {
+    // Ctrl+C: first press shows warning, second press quits
+    if (evt.ctrl && evt.char === 'c') {
+      if (ctrlCCount() >= 1) {
         exit();
-        return;
+      } else {
+        setCtrlCCount((prev) => prev + 1);
       }
-    },
-    { isActive: mode === 'dashboard' },
-  );
+      return;
+    }
+
+    // Tab: panel switch
+    if (evt.key === 'tab') {
+      setActivePanel((prev) => (prev === 'left' ? 'right' : 'left'));
+      return;
+    }
+
+    // ? for help
+    if (evt.char === '?') {
+      setShowHelp(true);
+      return;
+    }
+
+    // q to quit (only when dashboard panel is focused, not during chat input)
+    if (evt.char === 'q' && activePanel() === 'right') {
+      exit();
+      return;
+    }
+  });
 
   // Setup mode — onboarding wizard
-  if (mode === 'setup') {
-    return <Onboarding ctx={ctx} onComplete={handleSetupComplete} />;
+  if (mode() === 'setup') {
+    return <Onboarding ctx={props.ctx} onComplete={handleSetupComplete} />;
   }
 
   // Dashboard mode — split-panel layout
-  const panelMode = isWideMode ? 'split' : 'single';
-  const contentHeight = rows - 1; // reserve 1 row for status bar
+  const panelMode = () => (isWideMode() ? 'split' : 'single');
+  const contentHeight = () => rows() - 1; // reserve 1 row for status bar
 
   // Left panel: Chat
   const chatPanel = (
     <ChatPanel
-      client={status === 'connected' ? client : null}
-      height={contentHeight}
-      focus={activePanel === 'left'}
-      onModal={(_modal) => {
+      client={status() === 'connected' ? client() : null}
+      height={contentHeight()}
+      focus={activePanel() === 'left'}
+      onModal={(_modal: string) => {
         setShowHelp(true);
       }}
     />
@@ -147,9 +145,9 @@ export function App({ ctx }: AppProps): React.ReactElement {
   // Right panel: Dashboard
   const dashboardPanel = (
     <DashboardPanel
-      client={status === 'connected' ? client : null}
-      height={contentHeight}
-      focus={activePanel === 'right'}
+      client={status() === 'connected' ? client() : null}
+      height={contentHeight()}
+      focus={activePanel() === 'right'}
       onStatsUpdate={handleStatsUpdate}
     />
   );
@@ -157,16 +155,16 @@ export function App({ ctx }: AppProps): React.ReactElement {
   // Status bar
   const statusBar = (
     <StatusBar
-      panelMode={panelMode}
-      activePanel={activePanel}
-      projectCount={projectCount}
-      cpuPercent={cpuPercent}
-      buildingCount={buildingCount}
+      panelMode={panelMode()}
+      activePanel={activePanel()}
+      projectCount={projectCount()}
+      cpuPercent={cpuPercent()}
+      buildingCount={buildingCount()}
     />
   );
 
   // Help overlay
-  const overlay = showHelp ? (
+  const overlay = showHelp() ? (
     <HelpOverlay
       onClose={() => {
         setShowHelp(false);
@@ -181,23 +179,23 @@ export function App({ ctx }: AppProps): React.ReactElement {
         right={dashboardPanel}
         statusBar={statusBar}
         overlay={overlay}
-        activePanel={activePanel}
+        activePanel={activePanel()}
       />
-      {showCtrlCWarning && (
-        <Box
+      {showCtrlCWarning() && (
+        <box
           position="absolute"
-          width={columns}
-          height={rows}
+          width={columns()}
+          height={rows()}
           flexDirection="column"
           justifyContent="flex-end"
           alignItems="center"
           paddingBottom={2}
         >
-          <Text backgroundColor="red" color="white" bold>
+          <text backgroundColor="red" color="white" bold={true}>
             {' '}
             Press Ctrl+C again to quit{' '}
-          </Text>
-        </Box>
+          </text>
+        </box>
       )}
     </>
   );

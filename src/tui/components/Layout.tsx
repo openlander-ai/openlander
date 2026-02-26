@@ -1,11 +1,12 @@
-import React from 'react';
-import { Box, useStdout } from 'ink';
+import type { JSX } from 'solid-js';
+import { Show } from 'solid-js';
+import { useTerminalDimensions } from '@opentui/solid';
 
 interface LayoutProps {
-  left: React.ReactNode;
-  right: React.ReactNode;
-  statusBar: React.ReactNode;
-  overlay?: React.ReactNode;
+  left: JSX.Element;
+  right: JSX.Element;
+  statusBar: JSX.Element;
+  overlay?: JSX.Element;
   activePanel?: 'left' | 'right';
 }
 
@@ -15,74 +16,68 @@ interface LayoutProps {
  * - columns >= 100: 55/45 split with left and right panels side by side
  * - columns < 100: single panel mode, controlled by activePanel prop
  */
-export function Layout({
-  left,
-  right,
-  statusBar,
-  overlay,
-  activePanel = 'left',
-}: LayoutProps): React.ReactElement {
-  const { stdout } = useStdout();
-  const columns = stdout.columns;
-  const rows = stdout.rows;
+export function Layout(props: LayoutProps): JSX.Element {
+  const dims = useTerminalDimensions();
+  const columns = () => dims.columns;
+  const rows = () => dims.rows;
 
-  const isWideMode = columns >= 100;
+  const isWideMode = () => columns() >= 100;
 
   // Calculate panel widths in wide mode
-  const leftWidth = isWideMode ? Math.floor(columns * 0.55) : '100%';
-  const rightWidth = isWideMode ? Math.floor(columns * 0.45) : '100%';
+  const leftWidth = () => (isWideMode() ? Math.floor(columns() * 0.55) : '100%');
+  const rightWidth = () => (isWideMode() ? Math.floor(columns() * 0.45) : '100%');
 
   // Reserve 1 row for status bar
-  const contentHeight = rows - 1;
+  const contentHeight = () => rows() - 1;
 
   return (
-    <Box flexDirection="column" height={rows} width={columns}>
+    <box flexDirection="column" height={rows()} width={columns()}>
       {/* Main content area */}
-      <Box flexDirection="row" flexGrow={1} height={contentHeight} overflow="hidden">
-        {isWideMode ? (
-          // Wide mode: both panels side by side
+      <box flexDirection="row" flexGrow={1} height={contentHeight()} overflow="hidden">
+        <Show
+          when={isWideMode()}
+          fallback={
+            // Narrow mode: single panel at a time
+            <box width="100%" flexDirection="column" overflow="hidden">
+              <Show when={props.activePanel === 'left'} fallback={props.right}>
+                {props.left}
+              </Show>
+            </box>
+          }
+        >
+          {/* Wide mode: both panels side by side */}
           <>
             {/* Left panel - has right border as divider */}
-            <Box
-              width={leftWidth}
+            <box
+              width={leftWidth()}
               flexDirection="column"
-              borderStyle="single"
-              borderRight
+              border="single"
+              borderRight={true}
               borderLeft={false}
               borderTop={false}
               borderBottom={false}
               overflow="hidden"
             >
-              {left}
-            </Box>
+              {props.left}
+            </box>
 
             {/* Right panel - no borders */}
-            <Box width={rightWidth} flexDirection="column" overflow="hidden">
-              {right}
-            </Box>
+            <box width={rightWidth()} flexDirection="column" overflow="hidden">
+              {props.right}
+            </box>
           </>
-        ) : (
-          // Narrow mode: single panel at a time
-          <Box width="100%" flexDirection="column" overflow="hidden">
-            {activePanel === 'left' ? left : right}
-          </Box>
-        )}
-      </Box>
+        </Show>
+      </box>
 
       {/* Status bar at bottom */}
-      {statusBar}
+      {props.statusBar}
 
       {/* Overlay on top of everything */}
-      {overlay && (
-        <Box
-          position="absolute"
-          width={columns}
-          height={rows}
-          flexDirection="column"
-        >
-          {overlay}
-        </Box>
-      )}
-    </Box>
+      <Show when={props.overlay}>
+        <box position="absolute" width={columns()} height={rows()} flexDirection="column">
+          {props.overlay}
+        </box>
+      </Show>
+    </box>
   );
 }

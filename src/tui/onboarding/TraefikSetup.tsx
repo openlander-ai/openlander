@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Text } from 'ink';
-import Spinner from 'ink-spinner';
+import { createSignal, createEffect, onCleanup } from 'solid-js';
+import type { JSX } from 'solid-js';
+import { Spinner } from '../components/Spinner.js';
 
 import type { ScreenProps } from './index.js';
 
@@ -10,11 +10,11 @@ type TraefikState = 'checking' | 'already_running' | 'starting' | 'started' | 'f
  * TraefikSetup screen - auto-starts Traefik reverse proxy.
  * Non-fatal if it fails.
  */
-export function TraefikSetup({ ctx, onNext }: ScreenProps): React.ReactElement {
-  const [state, setState] = useState<TraefikState>('checking');
-  const [error, setError] = useState<string | null>(null);
+export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
+  const [state, setState] = createSignal<TraefikState>('checking');
+  const [error, setError] = createSignal<string | null>(null);
 
-  useEffect(() => {
+  createEffect(() => {
     const setupTraefik = async () => {
       try {
         // Check if already running
@@ -22,9 +22,10 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): React.ReactElement {
         if (isRunning) {
           setState('already_running');
           // Auto-advance after 1.5s
-          setTimeout(() => {
+          const timer = setTimeout(() => {
             onNext();
           }, 1500);
+          onCleanup(() => clearTimeout(timer));
           return;
         }
 
@@ -33,109 +34,111 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): React.ReactElement {
         await ctx.traefik.start();
         setState('started');
         // Auto-advance after 1.5s
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           onNext();
         }, 1500);
+        onCleanup(() => clearTimeout(timer));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to start Traefik');
         setState('failed');
         // Non-fatal - proceed anyway after 2s
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           onNext();
         }, 2000);
+        onCleanup(() => clearTimeout(timer));
       }
     };
 
     void setupTraefik();
-  }, [ctx, onNext]);
+  });
 
-  const renderContent = () => {
-    switch (state) {
+  const renderContent = (): JSX.Element => {
+    switch (state()) {
       case 'checking':
         return (
-          <Box>
-            <Text color="yellow">
-              <Spinner type="dots" />
-            </Text>
-            <Text> Checking Traefik...</Text>
-          </Box>
+          <box>
+            <text color="yellow">
+              <Spinner />
+            </text>
+            <text> Checking Traefik...</text>
+          </box>
         );
 
       case 'already_running':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box>
-              <Text color="green">✅ Traefik already running</Text>
-            </Box>
-            <Box marginTop={1}>
-              <Text dimColor>Continuing...</Text>
-            </Box>
-          </Box>
+          <box flexDirection="column" alignItems="center">
+            <box>
+              <text color="green">✅ Traefik already running</text>
+            </box>
+            <box marginTop={1}>
+              <text dim={true}>Continuing...</text>
+            </box>
+          </box>
         );
 
       case 'starting':
         return (
-          <Box>
-            <Text color="yellow">
-              <Spinner type="dots" />
-            </Text>
-            <Text> Starting Traefik...</Text>
-          </Box>
+          <box>
+            <text color="yellow">
+              <Spinner />
+            </text>
+            <text> Starting Traefik...</text>
+          </box>
         );
 
       case 'started':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box>
-              <Text color="green">✅ Traefik started</Text>
-            </Box>
-            <Box marginTop={1}>
-              <Text dimColor>Continuing...</Text>
-            </Box>
-          </Box>
+          <box flexDirection="column" alignItems="center">
+            <box>
+              <text color="green">✅ Traefik started</text>
+            </box>
+            <box marginTop={1}>
+              <text dim={true}>Continuing...</text>
+            </box>
+          </box>
         );
 
       case 'failed':
         return (
-          <Box flexDirection="column" alignItems="center">
-            <Box marginBottom={1}>
-              <Text color="yellow">⚠️ Traefik could not start</Text>
-            </Box>
-            {error && (
-              <Box marginBottom={1}>
-                <Text dimColor>{error}</Text>
-              </Box>
+          <box flexDirection="column" alignItems="center">
+            <box marginBottom={1}>
+              <text color="yellow">⚠️ Traefik could not start</text>
+            </box>
+            {error() && (
+              <box marginBottom={1}>
+                <text dim={true}>{error()}</text>
+              </box>
             )}
-            <Box>
-              <Text dimColor>Continuing anyway (port 80 features may not work)...</Text>
-            </Box>
-          </Box>
+            <box>
+              <text dim={true}>Continuing anyway (port 80 features may not work)...</text>
+            </box>
+          </box>
         );
 
       default:
-        return null;
+        return <box />;
     }
   };
 
   return (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" height={20} padding={2}>
-      <Box
+    <box flexDirection="column" alignItems="center" justifyContent="center" height={20} padding={2}>
+      <box
         flexDirection="column"
         alignItems="center"
-        borderStyle="round"
+        border="round"
         borderColor="cyan"
         paddingX={4}
         paddingY={2}
         width={60}
       >
-        <Box marginBottom={1}>
-          <Text bold color="cyan">
+        <box marginBottom={1}>
+          <text bold={true} color="cyan">
             [4/5] Setting up Traefik...
-          </Text>
-        </Box>
+          </text>
+        </box>
 
-        <Box marginTop={2}>{renderContent()}</Box>
-      </Box>
-    </Box>
+        <box marginTop={2}>{renderContent()}</box>
+      </box>
+    </box>
   );
 }
