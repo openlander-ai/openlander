@@ -125,21 +125,26 @@ export default function IMETextInput({
         return;
       }
 
-      // --- Enter → flush buffer first, then submit ---
+      // --- Enter → flush buffer synchronously, then submit with computed value ---
       if (key.return) {
-        // Flush any pending IME chars before submit.
+        let submitValue = originalValue;
         if (imeBufferRef.current) {
           if (imeTimerRef.current) {
             clearTimeout(imeTimerRef.current);
             imeTimerRef.current = null;
           }
-          flushIMEBuffer();
+          const buffered = imeBufferRef.current;
+          imeBufferRef.current = '';
+          const offset = cursorOffsetRef.current;
+          submitValue = originalValue.slice(0, offset) + buffered + originalValue.slice(offset);
+          setState({
+            cursorOffset: offset + buffered.length,
+            cursorWidth: 0,
+          });
+          onChange(submitValue);
         }
         if (onSubmit) {
-          // Use a microtask so the flushed onChange settles first.
-          queueMicrotask(() => {
-            onSubmit(valueRef.current);
-          });
+          onSubmit(submitValue);
         }
         return;
       }

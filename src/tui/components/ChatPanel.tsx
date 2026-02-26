@@ -397,13 +397,6 @@ export function ChatPanel({
         handleTabComplete();
         return;
       }
-
-      // Enter to submit
-      if (key.return) {
-        handleSubmit(inputValue);
-        return;
-      }
-
       // Ctrl+L to clear
       if (key.ctrl && _input === 'l') {
         setMessages([]);
