@@ -50,9 +50,9 @@ export function ProgressBar(props: ProgressBarProps): JSX.Element {
   return (
     <box gap={1}>
       {props.label && <text dim>{props.label}</text>}
-      <text color={barColor()}>{filled()}</text>
+      <text fg={barColor()}>{filled()}</text>
       <text dim>{empty()}</text>
-      <text color={percentColor()}>{`${String(percent())}%`}</text>
+      <text fg={percentColor()}>{`${String(percent())}%`}</text>
     </box>
   );
 }

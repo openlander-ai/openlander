@@ -57,7 +57,7 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
       >
         {/* Header */}
         <box marginBottom={1} justifyContent="center">
-          <text bold={true} color={theme.text}>
+          <text bold={true} fg={theme.text}>
             Keyboard Shortcuts
           </text>
         </box>
@@ -68,12 +68,12 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
             {(shortcut) => (
               <box gap={2}>
                 <box width={12}>
-                  <text backgroundColor={theme.backgroundElement} color={theme.warning}>
+                  <text backgroundColor={theme.backgroundElement} fg={theme.warning}>
                     {' '}
                     {shortcut.key}{' '}
                   </text>
                 </box>
-                <text color={theme.textMuted}>{shortcut.description}</text>
+                <text fg={theme.textMuted}>{shortcut.description}</text>
               </box>
             )}
           </For>
@@ -81,7 +81,7 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
 
         {/* Footer hint */}
         <box marginTop={1} justifyContent="center">
-          <text color={theme.textDim}>[Esc] Close</text>
+          <text fg={theme.textDim}>[Esc] Close</text>
         </box>
       </box>
     </box>

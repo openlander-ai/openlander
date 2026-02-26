@@ -35,6 +35,8 @@ interface ChatHistoryEntry {
 
 const MAX_HISTORY_ENTRIES = 100;
 const INPUT_HEIGHT = 3;
+/** Lines from the bottom to consider "at bottom" for smart scroll */
+const SCROLL_BOTTOM_THRESHOLD = 3;
 
 // ASCII art logo
 const LOGO_LINES = [
@@ -70,15 +72,44 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [showCommandPicker, setShowCommandPicker] = createSignal(false);
   const [commandPickerIndex, setCommandPickerIndex] = createSignal(0);
 
-  // --- Auto-scroll ---
+  // --- Smart auto-scroll ---
   const messageAreaHeight = () => Math.max(0, height() - INPUT_HEIGHT);
-  const [, setScrollOffset] = createSignal(0);
+  const [scrollOffset, setScrollOffset] = createSignal(0);
+  const [isAtBottom, setIsAtBottom] = createSignal(true);
+  const [hasNewMessages, setHasNewMessages] = createSignal(false);
+  let prevMessageCount = 0;
 
+  // Smart scroll: only auto-scroll when user is at the bottom
   createEffect(() => {
+    const msgs = messages();
+    const totalLines = calculateMessageLines(msgs);
+    const maxOffset = Math.max(0, totalLines - messageAreaHeight());
+
+    if (msgs.length > prevMessageCount) {
+      // New messages arrived
+      if (isAtBottom()) {
+        // User was at bottom → keep scrolling down
+        setScrollOffset(maxOffset);
+      } else {
+        // User scrolled up → show "new messages" indicator
+        setHasNewMessages(true);
+      }
+    } else if (isAtBottom()) {
+      // Content changed (e.g., streaming update) and user is at bottom
+      setScrollOffset(maxOffset);
+    }
+
+    prevMessageCount = msgs.length;
+  });
+
+  // Jump to bottom helper
+  const scrollToBottom = () => {
     const totalLines = calculateMessageLines(messages());
     const maxOffset = Math.max(0, totalLines - messageAreaHeight());
     setScrollOffset(maxOffset);
-  });
+    setIsAtBottom(true);
+    setHasNewMessages(false);
+  };
 
   createEffect(() => {
     const val = inputValue();
@@ -201,6 +232,9 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
 
+    // Auto-scroll to bottom when user sends a message
+    scrollToBottom();
+
     setMessages((prev) => [
       ...prev,
       {
@@ -297,7 +331,13 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   };
 
   const handleSubmit = (text: string) => {
-    if (!text.trim()) return;
+    // If input is empty and there are new messages, scroll to bottom
+    if (!text.trim()) {
+      if (hasNewMessages()) {
+        scrollToBottom();
+      }
+      return;
+    }
     if (showCommandPicker()) {
       const matchCount = getMatchCount(text);
       if (matchCount > 0) {
@@ -334,6 +374,28 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     if (evt.ctrl && evt.char === 'l') {
       setMessages([]);
       props.onClear?.();
+      return;
+    }
+    // Ctrl+J or Ctrl+Down: jump to bottom (dismiss new messages indicator)
+    if (evt.ctrl && evt.char === 'j') {
+      scrollToBottom();
+      return;
+    }
+    // Page Up / Page Down for manual scrolling
+    if (evt.key === 'pageup') {
+      setScrollOffset((prev) => Math.max(0, prev - messageAreaHeight()));
+      setIsAtBottom(false);
+      return;
+    }
+    if (evt.key === 'pagedown') {
+      const totalLines = calculateMessageLines(messages());
+      const maxOffset = Math.max(0, totalLines - messageAreaHeight());
+      const newOffset = Math.min(maxOffset, scrollOffset() + messageAreaHeight());
+      setScrollOffset(newOffset);
+      if (newOffset >= maxOffset - SCROLL_BOTTOM_THRESHOLD) {
+        setIsAtBottom(true);
+        setHasNewMessages(false);
+      }
       return;
     }
     if (evt.key === 'up') {
@@ -375,28 +437,26 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
               {/* Logo */}
               <For each={LOGO_LINES}>
                 {(line) => (
-                  <text color={theme.primary} bold={true}>
+                  <text fg={theme.primary} bold={true}>
                     {line}
                   </text>
                 )}
               </For>
-              <text color={theme.textDim}> </text>
-              <text color={theme.textMuted}>v0.1.0</text>
-              <text color={theme.textDim}> </text>
+              <text fg={theme.textDim}> </text>
+              <text fg={theme.textMuted}>v0.1.0</text>
+              <text fg={theme.textDim}> </text>
               <Show
                 when={client()}
                 fallback={
-                  <text color={theme.warning}>
+                  <text fg={theme.warning}>
                     Daemon not connected. Run: <b>openlander daemon</b>
                   </text>
                 }
               >
-                <text color={theme.textMuted}>
-                  Deploy anything with a chat. Type to get started.
-                </text>
-                <text color={theme.textMuted}>
-                  Press <span color={theme.secondary}>/</span> for commands,{' '}
-                  <span color={theme.secondary}>?</span> for help
+                <text fg={theme.textMuted}>Deploy anything with a chat. Type to get started.</text>
+                <text fg={theme.textMuted}>
+                  Press <span style={{ fg: theme.secondary }}>/</span> for commands,{' '}
+                  <span style={{ fg: theme.secondary }}>?</span> for help
                 </text>
               </Show>
             </box>
@@ -410,15 +470,25 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             {/* Streaming indicator */}
             <Show when={isStreaming()}>
               <box paddingLeft={3} marginTop={1} flexDirection="row" gap={1}>
-                <text color={theme.textMuted}>
+                <text fg={theme.textMuted}>
                   <Spinner color={theme.textMuted} />
                 </text>
-                <text color={theme.textMuted}>Thinking…</text>
+                <text fg={theme.textMuted}>Thinking…</text>
               </box>
             </Show>
           </box>
         </Show>
       </box>
+
+      {/* New messages indicator */}
+      <Show when={hasNewMessages()}>
+        <box justifyContent="center" flexShrink={0}>
+          <text backgroundColor={theme.primary} fg={theme.background} bold={true}>
+            {' '}
+            ↓ New messages — press Enter or Ctrl+J to scroll down{' '}
+          </text>
+        </box>
+      </Show>
 
       {/* Slash command picker */}
       <Show when={showCommandPicker()}>
@@ -431,21 +501,21 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
       <box flexShrink={0} paddingLeft={2} paddingRight={2} paddingTop={1}>
         <Show
           when={client()}
-          fallback={<text color={theme.textDim}>Chat unavailable — daemon not connected</text>}
+          fallback={<text fg={theme.textDim}>Chat unavailable — daemon not connected</text>}
         >
           <Show
             when={!isStreaming()}
             fallback={
               <box flexDirection="row" gap={1}>
-                <text color={theme.textMuted}>
+                <text fg={theme.textMuted}>
                   <Spinner color={theme.textMuted} />
                 </text>
-                <text color={theme.textMuted}>Waiting for response...</text>
+                <text fg={theme.textMuted}>Waiting for response…</text>
               </box>
             }
           >
             <box flexDirection="row">
-              <text color={theme.primary}>❯ </text>
+              <text fg={theme.primary}>❯ </text>
               <TextInput
                 value={inputValue()}
                 onChange={setInputValue}

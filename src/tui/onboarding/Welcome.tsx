@@ -19,7 +19,7 @@ export function Welcome({ onNext }: WelcomeProps): JSX.Element {
     if (evt.key === 'return') {
       onNext();
     }
-    if (evt.char?.toLowerCase() === 'q') {
+    if (evt.char && evt.char.toLowerCase() === 'q') {
       exit();
     }
   });
@@ -35,7 +35,7 @@ export function Welcome({ onNext }: WelcomeProps): JSX.Element {
         paddingY={2}
       >
         <box marginBottom={1}>
-          <text bold={true} color="cyan">
+          <text bold={true} fg="cyan">
             🛬 OpenLander
           </text>
         </box>
@@ -45,7 +45,7 @@ export function Welcome({ onNext }: WelcomeProps): JSX.Element {
         </box>
 
         <box marginBottom={2}>
-          <text color="gray">Give any coding agent the power to deploy</text>
+          <text fg="gray">Give any coding agent the power to deploy</text>
         </box>
 
         <box marginTop={1}>
@@ -53,12 +53,12 @@ export function Welcome({ onNext }: WelcomeProps): JSX.Element {
         </box>
 
         <box marginTop={2} flexDirection="column" alignItems="center">
-          <text color="gray">OpenLander helps you deploy apps from any AI coding tool.</text>
-          <text color="gray">Clone, build, and run — all from a chat.</text>
+          <text fg="gray">OpenLander helps you deploy apps from any AI coding tool.</text>
+          <text fg="gray">Clone, build, and run — all from a chat.</text>
         </box>
 
         <box marginTop={2}>
-          <text color="green" bold={true}>
+          <text fg="green" bold={true}>
             [Enter]
           </text>
           <text> Get started</text>

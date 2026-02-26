@@ -60,7 +60,7 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
     if (evt.key === 'return') {
       setRetryCount((c) => c + 1);
     }
-    if (evt.char?.toLowerCase() === 'q') {
+    if (evt.char && evt.char.toLowerCase() === 'q') {
       exit();
     }
   });
@@ -71,7 +71,7 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box>
-              <text color="yellow">
+              <text fg="yellow">
                 <Spinner />
               </text>
               <text> Checking Docker...</text>
@@ -83,10 +83,10 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box>
-              <text color="green">✅ Docker detected</text>
+              <text fg="green">✅ Docker detected</text>
             </box>
             <box>
-              <text color="green">✅ Docker daemon running</text>
+              <text fg="green">✅ Docker daemon running</text>
             </box>
             <box marginTop={1}>
               <text dim={true}>Continuing automatically...</text>
@@ -98,19 +98,19 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box marginBottom={1}>
-              <text color="red">❌ Docker not found</text>
+              <text fg="red">❌ Docker not found</text>
             </box>
             <box marginBottom={1}>
               <text dim={true}>Please install Docker to continue:</text>
             </box>
             <box marginBottom={1}>
-              <text color="cyan">https://docs.docker.com/get-docker/</text>
+              <text fg="cyan">https://docs.docker.com/get-docker/</text>
             </box>
             <box marginBottom={1}>
               <text dim={true}>Or run: curl -fsSL https://get.docker.com | sh</text>
             </box>
             <box marginTop={2}>
-              <text color="cyan" bold={true}>
+              <text fg="cyan" bold={true}>
                 [Enter]
               </text>
               <text> Retry</text>
@@ -123,19 +123,19 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box marginBottom={1}>
-              <text color="yellow">⚠️ Docker installed but not running</text>
+              <text fg="yellow">⚠️ Docker installed but not running</text>
             </box>
             <box marginBottom={1}>
               <text dim={true}>Please start the Docker daemon:</text>
             </box>
             <box marginBottom={1}>
-              <text color="cyan">sudo systemctl start docker</text>
+              <text fg="cyan">sudo systemctl start docker</text>
             </box>
             <box marginBottom={1}>
               <text dim={true}>(or open Docker Desktop on macOS)</text>
             </box>
             <box marginTop={2}>
-              <text color="cyan" bold={true}>
+              <text fg="cyan" bold={true}>
                 [Enter]
               </text>
               <text> Retry</text>
@@ -148,19 +148,19 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box marginBottom={1}>
-              <text color="yellow">⚠️ Docker permission denied</text>
+              <text fg="yellow">⚠️ Docker permission denied</text>
             </box>
             <box marginBottom={1}>
               <text dim={true}>Add your user to the docker group:</text>
             </box>
             <box marginBottom={1}>
-              <text color="cyan">sudo usermod -aG docker $USER</text>
+              <text fg="cyan">sudo usermod -aG docker $USER</text>
             </box>
             <box marginBottom={1}>
               <text dim={true}>Then log out and back in.</text>
             </box>
             <box marginTop={2}>
-              <text color="cyan" bold={true}>
+              <text fg="cyan" bold={true}>
                 [Enter]
               </text>
               <text> Retry</text>
@@ -183,7 +183,7 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
         width={60}
       >
         <box marginBottom={1}>
-          <text bold={true} color="cyan">
+          <text bold={true} fg="cyan">
             [1/5] Checking Docker...
           </text>
         </box>

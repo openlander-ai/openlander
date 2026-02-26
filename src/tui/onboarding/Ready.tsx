@@ -22,7 +22,7 @@ export function Ready({ onNext }: ReadyProps): JSX.Element {
     if (evt.key === 'return') {
       onNext();
     }
-    if (evt.char?.toLowerCase() === 'q') {
+    if (evt.char && evt.char.toLowerCase() === 'q') {
       exit();
     }
   });
@@ -39,7 +39,7 @@ export function Ready({ onNext }: ReadyProps): JSX.Element {
         width={60}
       >
         <box marginBottom={1}>
-          <text bold={true} color="green">
+          <text bold={true} fg="green">
             [5/5] Ready!
           </text>
         </box>
@@ -47,7 +47,7 @@ export function Ready({ onNext }: ReadyProps): JSX.Element {
         {/* Security notice */}
         <box flexDirection="column" alignItems="center" marginTop={1}>
           <box marginBottom={1}>
-            <text color="yellow">⚠️ OpenLander will:</text>
+            <text fg="yellow">⚠️ OpenLander will:</text>
           </box>
           <box marginLeft={2}>
             <text dim={true}>• Manage Docker containers on this machine</text>
@@ -66,7 +66,7 @@ export function Ready({ onNext }: ReadyProps): JSX.Element {
             <text dim={true}>Data directory:</text>
           </box>
           <box>
-            <text color="cyan">{dataDir}/</text>
+            <text fg="cyan">{dataDir}/</text>
           </box>
         </box>
 
@@ -77,7 +77,7 @@ export function Ready({ onNext }: ReadyProps): JSX.Element {
 
         {/* Action prompt */}
         <box marginTop={2}>
-          <text color="green" bold={true}>
+          <text fg="green" bold={true}>
             [Enter]
           </text>
           <text> Start OpenLander</text>

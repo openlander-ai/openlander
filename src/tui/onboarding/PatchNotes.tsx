@@ -29,7 +29,7 @@ export function PatchNotes({ version, onDismiss }: PatchNotesProps): JSX.Element
   return (
     <box flexDirection="column" alignItems="center">
       <box marginBottom={1}>
-        <text bold={true} color="cyan">
+        <text bold={true} fg="cyan">
           📋 What&apos;s new in v{version}
         </text>
       </box>

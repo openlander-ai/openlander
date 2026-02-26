@@ -39,7 +39,6 @@ export function Layout(props: LayoutProps): JSX.Element {
         overflow="hidden"
         paddingLeft={1}
         paddingRight={1}
-        paddingTop={1}
       >
         <Show
           when={isWideMode()}

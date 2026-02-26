@@ -158,7 +158,8 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
   // Handle key testing
   createEffect(() => {
     if (state() === 'testing' && selectedKey()) {
-      const key = selectedKey()!;
+      const key = selectedKey();
+      if (!key) return;
       const result = testSshKey(key.path);
       if (result.success) {
         // Save to config
@@ -172,7 +173,9 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
         const timer = setTimeout(() => {
           onNext();
         }, 1500);
-        onCleanup(() => clearTimeout(timer));
+        onCleanup(() => {
+          clearTimeout(timer);
+        });
       } else {
         setError(result.message);
         setState('error');
@@ -197,7 +200,8 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
       } else if (evt.key === 'down') {
         setMenuIndex((i) => Math.min(menuItems.length - 1, i + 1));
       } else if (evt.key === 'return') {
-        handleMenuSelect(menuItems[menuIndex()]!.value);
+        const item = menuItems[menuIndex()];
+        if (item) handleMenuSelect(item.value);
       }
       return;
     }
@@ -239,7 +243,7 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
             <box flexDirection="column">
               {menuItems.map((item, i) => (
                 <box>
-                  <text color={menuIndex() === i ? 'cyan' : undefined} bold={menuIndex() === i}>
+                  <text fg={menuIndex() === i ? 'cyan' : undefined} bold={menuIndex() === i}>
                     {menuIndex() === i ? '❯ ' : '  '}
                     {item.label}
                   </text>
@@ -252,7 +256,7 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
       case 'checking_keys':
         return (
           <box>
-            <text color="yellow">
+            <text fg="yellow">
               <Spinner />
             </text>
             <text> Checking for SSH keys...</text>
@@ -268,7 +272,7 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
             <box flexDirection="column">
               {existingKeys().map((k, i) => (
                 <box>
-                  <text color={keyIndex() === i ? 'cyan' : undefined} bold={keyIndex() === i}>
+                  <text fg={keyIndex() === i ? 'cyan' : undefined} bold={keyIndex() === i}>
                     {keyIndex() === i ? '❯ ' : '  '}
                     {k.name}
                   </text>
@@ -281,7 +285,7 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
       case 'generating':
         return (
           <box>
-            <text color="yellow">
+            <text fg="yellow">
               <Spinner />
             </text>
             <text> Generating new SSH key (ed25519)...</text>
@@ -291,7 +295,7 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
       case 'testing':
         return (
           <box>
-            <text color="yellow">
+            <text fg="yellow">
               <Spinner />
             </text>
             <text> Testing SSH key...</text>
@@ -302,11 +306,11 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box>
-              <text color="green">✅ SSH key configured</text>
+              <text fg="green">✅ SSH key configured</text>
             </box>
             {selectedKey() && (
               <box>
-                <text dim={true}>Key: {selectedKey()!.name}</text>
+                <text dim={true}>Key: {selectedKey()?.name}</text>
               </box>
             )}
             <box marginTop={1}>
@@ -319,10 +323,10 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box marginBottom={1}>
-              <text color="red">❌ {error() || 'An error occurred'}</text>
+              <text fg="red">❌ {error() || 'An error occurred'}</text>
             </box>
             <box>
-              <text color="cyan" bold={true}>
+              <text fg="cyan" bold={true}>
                 [Enter]
               </text>
               <text> Try again</text>
@@ -347,7 +351,7 @@ export function GitSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
         width={60}
       >
         <box marginBottom={1}>
-          <text bold={true} color="cyan">
+          <text bold={true} fg="cyan">
             [2/5] Git Repository Access
           </text>
         </box>

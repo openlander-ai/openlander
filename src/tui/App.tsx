@@ -47,8 +47,8 @@ export function App(props: AppProps): JSX.Element {
     // Return a dummy accessor; the real one will be used on re-render.
     dims = (() => ({ width: 80, height: 24 })) as ReturnType<typeof useTerminalDimensions>;
   }
-  const columns = () => dims()?.width ?? 80;
-  const rows = () => dims()?.height ?? 24;
+  const columns = () => dims().width;
+  const rows = () => dims().height;
   const isWideMode = () => columns() >= 100;
 
   // Stats for status bar (received from DashboardPanel via callback)
@@ -83,50 +83,56 @@ export function App(props: AppProps): JSX.Element {
       setCtrlCCount(0);
       setShowCtrlCWarning(false);
     }, 2000);
-    onCleanup(() => clearTimeout(timer));
+    onCleanup(() => {
+      clearTimeout(timer);
+    });
   });
 
   // Global keyboard shortcuts (safe — no-op if renderer not ready)
-  try { useKeyboard((evt) => {
-    // Don't handle shortcuts during setup
-    if (mode() === 'setup') return;
+  try {
+    useKeyboard((evt) => {
+      // Don't handle shortcuts during setup
+      if (mode() === 'setup') return;
 
-    // Help overlay shortcuts
-    if (showHelp()) {
-      if (evt.key === 'escape') {
-        setShowHelp(false);
+      // Help overlay shortcuts
+      if (showHelp()) {
+        if (evt.key === 'escape') {
+          setShowHelp(false);
+        }
+        return;
       }
-      return;
-    }
 
-    // Ctrl+C: first press shows warning, second press quits
-    if (evt.ctrl && evt.char === 'c') {
-      if (ctrlCCount() >= 1) {
+      // Ctrl+C: first press shows warning, second press quits
+      if (evt.ctrl && evt.char === 'c') {
+        if (ctrlCCount() >= 1) {
+          exit();
+        } else {
+          setCtrlCCount((prev) => prev + 1);
+        }
+        return;
+      }
+
+      // Tab: panel switch
+      if (evt.key === 'tab') {
+        setActivePanel((prev) => (prev === 'left' ? 'right' : 'left'));
+        return;
+      }
+
+      // ? for help
+      if (evt.char === '?') {
+        setShowHelp(true);
+        return;
+      }
+
+      // q to quit (only when dashboard panel is focused, not during chat input)
+      if (evt.char === 'q' && activePanel() === 'right') {
         exit();
-      } else {
-        setCtrlCCount((prev) => prev + 1);
+        return;
       }
-      return;
-    }
-
-    // Tab: panel switch
-    if (evt.key === 'tab') {
-      setActivePanel((prev) => (prev === 'left' ? 'right' : 'left'));
-      return;
-    }
-
-    // ? for help
-    if (evt.char === '?') {
-      setShowHelp(true);
-      return;
-    }
-
-    // q to quit (only when dashboard panel is focused, not during chat input)
-    if (evt.char === 'q' && activePanel() === 'right') {
-      exit();
-      return;
-    }
-  }); } catch { /* Renderer not ready during initial reactivity pass */ }
+    });
+  } catch {
+    /* Renderer not ready during initial reactivity pass */
+  }
 
   // Reactive render — must wrap in arrow function for Solid.js reactivity
   const renderContent = (): JSX.Element => {
@@ -193,7 +199,7 @@ export function App(props: AppProps): JSX.Element {
             alignItems="center"
             paddingBottom={2}
           >
-            <text backgroundColor="red" color="white" bold={true}>
+            <text backgroundColor="red" fg="white" bold={true}>
               {' '}
               Press Ctrl+C again to quit{' '}
             </text>

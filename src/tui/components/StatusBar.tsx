@@ -43,7 +43,7 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         >
           {/* Single mode: show active panel indicator */}
           <box flexDirection="row" gap={1}>
-            <text backgroundColor={theme.backgroundElement} color={theme.text}>
+            <text backgroundColor={theme.backgroundElement} fg={theme.text}>
               {' '}
               Tab{' '}
             </text>
@@ -51,9 +51,9 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
               when={props.activePanel === 'left'}
               fallback={
                 <box flexDirection="row">
-                  <text color={theme.textDim}>Chat</text>
-                  <text color={theme.textDim}> │ </text>
-                  <text backgroundColor={theme.secondary} color={theme.background} bold={true}>
+                  <text fg={theme.textDim}>Chat</text>
+                  <text fg={theme.textDim}> │ </text>
+                  <text backgroundColor={theme.secondary} fg={theme.background} bold={true}>
                     {' '}
                     Dashboard{' '}
                   </text>
@@ -61,12 +61,12 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
               }
             >
               <box flexDirection="row">
-                <text backgroundColor={theme.secondary} color={theme.background} bold={true}>
+                <text backgroundColor={theme.secondary} fg={theme.background} bold={true}>
                   {' '}
                   Chat{' '}
                 </text>
-                <text color={theme.textDim}> │ </text>
-                <text color={theme.textDim}>Dashboard</text>
+                <text fg={theme.textDim}> │ </text>
+                <text fg={theme.textDim}>Dashboard</text>
               </box>
             </Show>
           </box>
@@ -78,13 +78,13 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
 
       {/* Right side: Status summary */}
       <box gap={2} flexDirection="row" flexShrink={0}>
-        <text color={theme.textMuted}>
+        <text fg={theme.textMuted}>
           {props.projectCount} project{props.projectCount !== 1 ? 's' : ''}
         </text>
-        <text color={theme.textMuted}>CPU {cpuDisplay()}</text>
+        <text fg={theme.textMuted}>CPU {cpuDisplay()}</text>
         <Show when={props.buildingCount > 0}>
-          <text color={theme.warning}>
-            <span color={theme.warning}>●</span>
+          <text fg={theme.warning}>
+            <span style={{ fg: theme.warning }}>●</span>
             {buildingDisplay()}
           </text>
         </Show>
@@ -97,11 +97,11 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
 function KeyHint(props: { key: string; label: string }): JSX.Element {
   return (
     <box flexDirection="row" gap={0}>
-      <text backgroundColor={theme.backgroundElement} color={theme.text}>
+      <text backgroundColor={theme.backgroundElement} fg={theme.text}>
         {' '}
         {props.key}{' '}
       </text>
-      <text color={theme.textMuted}> {props.label}</text>
+      <text fg={theme.textMuted}> {props.label}</text>
     </box>
   );
 }

@@ -25,7 +25,9 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
           const timer = setTimeout(() => {
             onNext();
           }, 1500);
-          onCleanup(() => clearTimeout(timer));
+          onCleanup(() => {
+            clearTimeout(timer);
+          });
           return;
         }
 
@@ -37,7 +39,9 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
         const timer = setTimeout(() => {
           onNext();
         }, 1500);
-        onCleanup(() => clearTimeout(timer));
+        onCleanup(() => {
+          clearTimeout(timer);
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to start Traefik');
         setState('failed');
@@ -45,7 +49,9 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
         const timer = setTimeout(() => {
           onNext();
         }, 2000);
-        onCleanup(() => clearTimeout(timer));
+        onCleanup(() => {
+          clearTimeout(timer);
+        });
       }
     };
 
@@ -57,7 +63,7 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
       case 'checking':
         return (
           <box>
-            <text color="yellow">
+            <text fg="yellow">
               <Spinner />
             </text>
             <text> Checking Traefik...</text>
@@ -68,7 +74,7 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box>
-              <text color="green">✅ Traefik already running</text>
+              <text fg="green">✅ Traefik already running</text>
             </box>
             <box marginTop={1}>
               <text dim={true}>Continuing...</text>
@@ -79,7 +85,7 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
       case 'starting':
         return (
           <box>
-            <text color="yellow">
+            <text fg="yellow">
               <Spinner />
             </text>
             <text> Starting Traefik...</text>
@@ -90,7 +96,7 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box>
-              <text color="green">✅ Traefik started</text>
+              <text fg="green">✅ Traefik started</text>
             </box>
             <box marginTop={1}>
               <text dim={true}>Continuing...</text>
@@ -102,7 +108,7 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box marginBottom={1}>
-              <text color="yellow">⚠️ Traefik could not start</text>
+              <text fg="yellow">⚠️ Traefik could not start</text>
             </box>
             {error() && (
               <box marginBottom={1}>
@@ -132,7 +138,7 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
         width={60}
       >
         <box marginBottom={1}>
-          <text bold={true} color="cyan">
+          <text bold={true} fg="cyan">
             [4/5] Setting up Traefik...
           </text>
         </box>

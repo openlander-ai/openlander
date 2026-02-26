@@ -109,7 +109,7 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
           backgroundColor={theme.backgroundPanel}
           flexShrink={0}
         >
-          <text color={theme.text}>{content()}</text>
+          <text fg={theme.text}>{content()}</text>
         </box>
       </box>
     );
@@ -119,7 +119,7 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
   if (role() === 'system') {
     return (
       <box paddingLeft={3} marginTop={1}>
-        <text color={theme.textMuted} dim={true}>
+        <text fg={theme.textMuted} dim={true}>
           {content()}
         </text>
       </box>
@@ -177,10 +177,10 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
       case 'tool_start':
         return (
           <box paddingLeft={3} marginTop={1} flexDirection="row" gap={1}>
-            <text color={theme.textMuted}>
+            <text fg={theme.textMuted}>
               <Spinner color={theme.textMuted} />
             </text>
-            <text color={theme.textMuted}>
+            <text fg={theme.textMuted}>
               {toolName() ? formatToolDescription(toolName() ?? '') : content()}
             </text>
           </box>
@@ -190,8 +190,8 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
         if (toolStatus() === 'error') {
           return (
             <box paddingLeft={3} marginTop={1}>
-              <text color={theme.error}>
-                <span color={theme.error}>✗ </span>
+              <text fg={theme.error}>
+                <span style={{ fg: theme.error }}>✗ </span>
                 <span>{toolName() ? formatToolDescription(toolName() ?? '') : content()}</span>
               </text>
             </box>
@@ -201,8 +201,8 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
           toolDuration() !== undefined ? ` (${formatDuration(toolDuration() ?? 0)})` : '';
         return (
           <box paddingLeft={3} marginTop={1}>
-            <text color={theme.success}>
-              <span color={theme.success}>✓ </span>
+            <text fg={theme.success}>
+              <span style={{ fg: theme.success }}>▣ </span>
               <span>
                 {toolName() ? formatToolDescription(toolName() ?? '') : content()}
                 {durationText}
@@ -222,7 +222,7 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
       case 'url':
         return (
           <box paddingLeft={3} marginTop={1}>
-            <text color={theme.info}>
+            <text fg={theme.info}>
               <u>{content()}</u>
             </text>
           </box>
@@ -231,8 +231,8 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
       case 'warning':
         return (
           <box paddingLeft={3} marginTop={1}>
-            <text color={theme.warning}>
-              <span color={theme.warning}>△ </span>
+            <text fg={theme.warning}>
+              <span style={{ fg: theme.warning }}>△ </span>
               <span>{content()}</span>
             </text>
           </box>
@@ -249,7 +249,7 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
             paddingBottom={1}
             backgroundColor={theme.backgroundPanel}
           >
-            <text color={theme.textMuted}>{content()}</text>
+            <text fg={theme.textMuted}>{content()}</text>
           </box>
         );
 
@@ -258,7 +258,7 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
         if (!content()) return <></>;
         return (
           <box paddingLeft={3} marginTop={1} flexShrink={0}>
-            <text color={theme.text}>{content()}</text>
+            <text fg={theme.text}>{content()}</text>
           </box>
         );
       }

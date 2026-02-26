@@ -1,7 +1,5 @@
-import type { JSX } from 'solid-js';
 import { For, Show } from 'solid-js';
 import { filterCommands, type SlashCommand } from '../commands/registry.js';
-import { theme } from '../theme.js';
 
 interface SlashCommandPickerProps {
   /** Current input text (e.g. "/dep" — must start with /). */
@@ -14,9 +12,9 @@ interface SlashCommandPickerProps {
  * Autocomplete dropdown for slash commands.
  * Shows matching commands as the user types after "/".
  */
-export function SlashCommandPicker(props: SlashCommandPickerProps): JSX.Element | null {
+export function SlashCommandPicker(props: SlashCommandPickerProps) {
   // Extract the partial command name after "/"
-  const prefix = () => props.input.slice(1).split(' ')[0] ?? '';
+  const prefix = () => props.input.slice(1).split(' ')[0];
   const matches = () => filterCommands(prefix());
 
   return (
@@ -34,7 +32,7 @@ export function SlashCommandPicker(props: SlashCommandPickerProps): JSX.Element 
             const isSelected = () => i() === props.selectedIndex;
             return (
               <box gap={1}>
-                <text color={isSelected() ? 'cyan' : 'white'} bold={isSelected()}>
+                <text fg={isSelected() ? 'cyan' : 'white'} bold={isSelected()}>
                   {isSelected() ? '▸' : ' '} /{cmd.name}
                 </text>
                 <text dim>— {cmd.description}</text>

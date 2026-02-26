@@ -39,8 +39,8 @@ interface DashboardPanelProps {
 export function SectionHeader({ title }: { title: string }): JSX.Element {
   return (
     <box>
-      <text bold={true} color={theme.text}>
-        <span color={theme.textMuted}>▸ </span>
+      <text bold={true} fg={theme.text}>
+        <span style={{ fg: theme.textMuted }}>▸ </span>
         {title}
       </text>
     </box>
@@ -62,10 +62,10 @@ export function SystemSection({
       <box flexDirection="column">
         <SectionHeader title="System" />
         <box paddingLeft={2} flexDirection="row" gap={1}>
-          <text color={theme.textMuted}>
+          <text fg={theme.textMuted}>
             <Spinner color={theme.textMuted} />
           </text>
-          <text color={theme.textMuted}>Loading...</text>
+          <text fg={theme.textMuted}>Loading...</text>
         </box>
       </box>
     );
@@ -75,7 +75,7 @@ export function SystemSection({
     return (
       <box flexDirection="column">
         <SectionHeader title="System" />
-        <text color={theme.textDim} paddingLeft={2}>
+        <text fg={theme.textDim} paddingLeft={2}>
           Unavailable
         </text>
       </box>
@@ -90,20 +90,20 @@ export function SystemSection({
     <box flexDirection="column">
       <SectionHeader title="System" />
       <box paddingLeft={2}>
-        <text color={theme.textMuted}>CPU </text>
-        <text color={getColorForPercent(cpuPercent)}>
+        <text fg={theme.textMuted}>CPU </text>
+        <text fg={getColorForPercent(cpuPercent)}>
           {String(Math.round(cpuPercent)).padStart(2)}%{' '}
         </text>
-        <text color={theme.textDim}>{miniBar(cpuPercent)}</text>
-        <text color={theme.textMuted}>
+        <text fg={theme.textDim}>{miniBar(cpuPercent)}</text>
+        <text fg={theme.textMuted}>
           {' '}
           MEM {formatMemory(stats.memory.usedMB)}/{formatMemory(stats.memory.totalMB)}GB
         </text>
       </box>
       <box paddingLeft={2}>
-        <text color={theme.textDim}>Disk {String(Math.round(diskPercent)).padStart(2)}%</text>
-        <text color={theme.textDim}> Docker {dockerCount} containers</text>
-        <text color={theme.textDim}> Uptime {formatUptime(stats.uptime.seconds)}</text>
+        <text fg={theme.textDim}>Disk {String(Math.round(diskPercent)).padStart(2)}%</text>
+        <text fg={theme.textDim}> Docker {dockerCount} containers</text>
+        <text fg={theme.textDim}> Uptime {formatUptime(stats.uptime.seconds)}</text>
       </box>
     </box>
   );
@@ -125,7 +125,7 @@ export function ProjectsSection({
     return (
       <box flexDirection="column" marginTop={1}>
         <SectionHeader title="Projects (0)" />
-        <text color={theme.textDim} paddingLeft={2}>
+        <text fg={theme.textDim} paddingLeft={2}>
           No projects yet
         </text>
       </box>
@@ -150,31 +150,27 @@ export function ProjectsSection({
             <box flexDirection="column">
               <box paddingLeft={1}>
                 {isSelected ? (
-                  <text
-                    backgroundColor={theme.backgroundElement}
-                    color={theme.secondary}
-                    bold={true}
-                  >
+                  <text backgroundColor={theme.backgroundElement} fg={theme.secondary} bold={true}>
                     {' ▶ '}
                   </text>
                 ) : (
-                  <text color={theme.textDim}>{'   '}</text>
+                  <text fg={theme.textDim}>{'   '}</text>
                 )}
-                <text color={color}>{icon} </text>
-                <text color={isSelected ? theme.text : theme.textMuted} bold={isSelected}>
+                <text fg={color}>{icon} </text>
+                <text fg={isSelected ? theme.text : theme.textMuted} bold={isSelected}>
                   {truncate(project.name, 12).padEnd(12)}
                 </text>
-                <text color={theme.textDim}> {portStr.padEnd(6)}</text>
+                <text fg={theme.textDim}> {portStr.padEnd(6)}</text>
                 {project.status === 'running' ? (
-                  <text color={theme.success}>●</text>
+                  <text fg={theme.success}>●</text>
                 ) : (
-                  <text color={theme.textDim}> </text>
+                  <text fg={theme.textDim}> </text>
                 )}
-                <text color={theme.textDim}> {memoryStr.padStart(5)}</text>
+                <text fg={theme.textDim}> {memoryStr.padStart(5)}</text>
               </box>
               <Show when={domain}>
                 <box paddingLeft={5}>
-                  <text color={theme.textDim}>{truncate(domain ?? '', 30)}</text>
+                  <text fg={theme.textDim}>{truncate(domain ?? '', 30)}</text>
                 </box>
               </Show>
             </box>
@@ -195,7 +191,7 @@ export function ActivitySection({ events }: { events: ActivityEvent[] }): JSX.El
       <Show
         when={displayEvents.length > 0}
         fallback={
-          <text color={theme.textDim} paddingLeft={2}>
+          <text fg={theme.textDim} paddingLeft={2}>
             No recent activity
           </text>
         }
@@ -209,10 +205,10 @@ export function ActivitySection({ events }: { events: ActivityEvent[] }): JSX.El
 
             return (
               <box paddingLeft={2}>
-                <text color={theme.textDim}>{time} </text>
-                <text color={theme.textMuted}>{user.padEnd(8)} </text>
-                <text color={color}>{icon} </text>
-                <text color={theme.textDim}>{truncate(event.message, 30)}</text>
+                <text fg={theme.textDim}>{time} </text>
+                <text fg={theme.textMuted}>{user.padEnd(8)} </text>
+                <text fg={color}>{icon} </text>
+                <text fg={theme.textDim}>{truncate(event.message, 30)}</text>
               </box>
             );
           }}
@@ -231,17 +227,17 @@ export function McpClientsSection({ enabled }: { enabled: boolean }): JSX.Elemen
         when={enabled}
         fallback={
           <box paddingLeft={2}>
-            <text color={theme.textDim}>MCP disabled</text>
+            <text fg={theme.textDim}>MCP disabled</text>
           </box>
         }
       >
         <box flexDirection="column" paddingLeft={2}>
-          <text color={theme.textMuted}>
-            <span color={theme.success}>●</span> MCP server active (stdio)
+          <text fg={theme.textMuted}>
+            <span style={{ fg: theme.success }}>●</span> MCP server active (stdio)
           </text>
-          <text color={theme.textDim}>No clients connected yet</text>
-          <text color={theme.textDim}>
-            Run: <span color={theme.secondary}>openlander mcp install --claude-code</span>
+          <text fg={theme.textDim}>No clients connected yet</text>
+          <text fg={theme.textDim}>
+            Run: <span style={{ fg: theme.secondary }}>openlander mcp install --claude-code</span>
           </text>
         </box>
       </Show>
@@ -376,7 +372,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
       paddingTop={1}
     >
       <Show when={showScrollUp()}>
-        <text color={theme.textDim}>↑ more</text>
+        <text fg={theme.textDim}>↑ more</text>
       </Show>
 
       <SystemSection stats={systemStats()} health={health()} loading={systemLoading()} />
@@ -390,12 +386,12 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
       <McpClientsSection enabled={health() !== null} />
 
       <Show when={showScrollDown()}>
-        <text color={theme.textDim}>↓ more</text>
+        <text fg={theme.textDim}>↓ more</text>
       </Show>
 
       <Show when={focus()}>
         <box marginTop={1}>
-          <text color={theme.textDim}>↑↓ Navigate projects</text>
+          <text fg={theme.textDim}>↑↓ Navigate projects</text>
         </box>
       </Show>
     </box>

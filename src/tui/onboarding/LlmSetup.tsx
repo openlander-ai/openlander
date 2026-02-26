@@ -66,7 +66,8 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
   // Handle saving when step changes to 'saving'
   createEffect(() => {
     if (step() === 'saving' && provider()) {
-      const p = provider()!;
+      const p = provider();
+      if (!p) return;
       updateConfig({
         llm: {
           provider: p,
@@ -78,7 +79,9 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
       const timer = setTimeout(() => {
         onNext();
       }, 500);
-      onCleanup(() => clearTimeout(timer));
+      onCleanup(() => {
+        clearTimeout(timer);
+      });
     }
   });
 
@@ -92,7 +95,8 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
       } else if (evt.key === 'down') {
         setProviderIndex((i) => Math.min(LLM_PROVIDERS.length - 1, i + 1));
       } else if (evt.key === 'return') {
-        handleProviderSelect(LLM_PROVIDERS[providerIndex()]!.value);
+        const item = LLM_PROVIDERS[providerIndex()];
+        if (item) handleProviderSelect(item.value);
       }
       return;
     }
@@ -118,7 +122,7 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
               {LLM_PROVIDERS.map((item, i) => (
                 <box>
                   <text
-                    color={providerIndex() === i ? 'cyan' : undefined}
+                    fg={providerIndex() === i ? 'cyan' : undefined}
                     bold={providerIndex() === i}
                   >
                     {providerIndex() === i ? '❯ ' : '  '}
@@ -138,11 +142,11 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
             </box>
             {error() && (
               <box marginBottom={1}>
-                <text color="red">❌ {error()}</text>
+                <text fg="red">❌ {error()}</text>
               </box>
             )}
             <box>
-              <text color="cyan">Key: </text>
+              <text fg="cyan">Key: </text>
               <TextInput
                 value={apiKey()}
                 onChange={setApiKey}
@@ -163,11 +167,14 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
               <text dim={true}>Model (press Enter for default):</text>
             </box>
             <box>
-              <text color="cyan">Model: </text>
+              <text fg="cyan">Model: </text>
               <TextInput value={model()} onChange={setModel} onSubmit={handleModelSubmit} />
             </box>
             <box marginTop={1}>
-              <text dim={true}>Default: {provider() ? MODEL_DEFAULTS[provider()!] : ''}</text>
+              <text dim={true}>
+                Default:{' '}
+                {provider() ? MODEL_DEFAULTS[provider() as keyof typeof MODEL_DEFAULTS] : ''}
+              </text>
             </box>
           </box>
         );
@@ -176,7 +183,7 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
         return (
           <box flexDirection="column" alignItems="center">
             <box>
-              <text color="green">
+              <text fg="green">
                 ✅ {provider() === 'ollama' ? 'Ollama' : provider()} configured
               </text>
             </box>
@@ -203,7 +210,7 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
         width={60}
       >
         <box marginBottom={1}>
-          <text bold={true} color="cyan">
+          <text bold={true} fg="cyan">
             [3/5] AI Provider
           </text>
         </box>
