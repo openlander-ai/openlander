@@ -47,24 +47,27 @@ export function Onboarding({ ctx, onComplete }: OnboardingProps): JSX.Element {
     onComplete();
   };
 
-  // Render current screen
-  const s = step();
-  switch (s) {
-    case 'welcome':
-      return <Welcome onNext={handleNext} />;
-    case 'docker':
-      return <DockerCheck ctx={ctx} onNext={handleNext} />;
-    case 'git':
-      return <GitSetup ctx={ctx} onNext={handleNext} />;
-    case 'llm':
-      return <LlmSetup ctx={ctx} onNext={handleNext} />;
-    case 'traefik':
-      return <TraefikSetup ctx={ctx} onNext={handleNext} />;
-    case 'ready':
-      return <Ready onNext={handleComplete} />;
-    default:
-      return <Welcome onNext={handleNext} />;
-  }
+  // Render current screen — must use arrow function to stay reactive
+  const renderScreen = (): JSX.Element => {
+    switch (step()) {
+      case 'welcome':
+        return <Welcome onNext={handleNext} />;
+      case 'docker':
+        return <DockerCheck ctx={ctx} onNext={handleNext} />;
+      case 'git':
+        return <GitSetup ctx={ctx} onNext={handleNext} />;
+      case 'llm':
+        return <LlmSetup ctx={ctx} onNext={handleNext} />;
+      case 'traefik':
+        return <TraefikSetup ctx={ctx} onNext={handleNext} />;
+      case 'ready':
+        return <Ready onNext={handleComplete} />;
+      default:
+        return <Welcome onNext={handleNext} />;
+    }
+  };
+
+  return <>{renderScreen()}</>;
 }
 
 export { Welcome } from './Welcome.js';

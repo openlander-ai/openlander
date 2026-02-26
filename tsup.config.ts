@@ -28,6 +28,11 @@ export default defineConfig([
     },
     esbuildPlugins: [solid],
     external: bunExternals,
+    noExternal: ['solid-js'],
+    // Resolve solid-js with 'browser' condition so it uses client mode (not server)
+    esbuildOptions(options) {
+      options.conditions = ['browser', 'module', 'import', 'default'];
+    },
   },
   // Library entry — no shebang
   {
@@ -41,5 +46,9 @@ export default defineConfig([
     shims: false,
     esbuildPlugins: [solid],
     external: bunExternals,
+    noExternal: ['solid-js'],
+    esbuildOptions(options) {
+      options.conditions = ['browser', 'module', 'import', 'default'];
+    },
   },
 ]);

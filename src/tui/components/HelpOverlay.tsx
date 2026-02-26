@@ -35,7 +35,7 @@ export function HelpOverlay(props: HelpOverlayProps): JSX.Element {
 
   // Listen for Escape key to close
   useKeyboard((evt) => {
-    if (evt.name === 'escape') {
+    if (evt.key === 'escape') {
       props.onClose();
     }
   });

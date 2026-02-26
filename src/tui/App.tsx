@@ -39,9 +39,9 @@ export function App(props: AppProps): JSX.Element {
   const { client, status } = useDaemon(SOCKET_PATH);
 
   // Terminal dimensions
-  const dimensions = useTerminalDimensions();
-  const columns = () => (dimensions as any)()?.columns ?? 80;
-  const rows = () => (dimensions as any)()?.rows ?? 24;
+  const dims = useTerminalDimensions();
+  const columns = () => dims()?.width ?? 80;
+  const rows = () => dims()?.height ?? 24;
   const isWideMode = () => columns() >= 100;
 
   // Stats for status bar (received from DashboardPanel via callback)
@@ -121,82 +121,78 @@ export function App(props: AppProps): JSX.Element {
     }
   });
 
-  // Setup mode — onboarding wizard
-  if (mode() === 'setup') {
-    return <Onboarding ctx={props.ctx} onComplete={handleSetupComplete} />;
-  }
+  // Reactive render — must wrap in arrow function for Solid.js reactivity
+  const renderContent = (): JSX.Element => {
+    // Setup mode — onboarding wizard
+    if (mode() === 'setup') {
+      return <Onboarding ctx={props.ctx} onComplete={handleSetupComplete} />;
+    }
 
-  // Dashboard mode — split-panel layout
-  const panelMode = () => (isWideMode() ? 'split' : 'single');
-  const contentHeight = () => rows() - 1; // reserve 1 row for status bar
+    // Dashboard mode — split-panel layout
+    const panelMode = isWideMode() ? 'split' : 'single';
+    const contentHeight = rows() - 1; // reserve 1 row for status bar
+    const connectedClient = status() === 'connected' ? client : null;
 
-  // Left panel: Chat
-  const chatPanel = (
-    <ChatPanel
-      client={status() === 'connected' ? client() : null}
-      height={contentHeight()}
-      focus={activePanel() === 'left'}
-      onModal={(_modal: string) => {
-        setShowHelp(true);
-      }}
-    />
-  );
+    return (
+      <>
+        <Layout
+          left={
+            <ChatPanel
+              client={connectedClient}
+              height={contentHeight}
+              focus={activePanel() === 'left'}
+              onModal={(_modal: string) => {
+                setShowHelp(true);
+              }}
+            />
+          }
+          right={
+            <DashboardPanel
+              client={connectedClient}
+              height={contentHeight}
+              focus={activePanel() === 'right'}
+              onStatsUpdate={handleStatsUpdate}
+            />
+          }
+          statusBar={
+            <StatusBar
+              panelMode={panelMode}
+              activePanel={activePanel()}
+              projectCount={projectCount()}
+              cpuPercent={cpuPercent()}
+              buildingCount={buildingCount()}
+            />
+          }
+          overlay={
+            showHelp() ? (
+              <HelpOverlay
+                onClose={() => {
+                  setShowHelp(false);
+                }}
+              />
+            ) : undefined
+          }
+          activePanel={activePanel()}
+        />
+        {showCtrlCWarning() && (
+          <box
+            position="absolute"
+            width={columns()}
+            height={rows()}
+            flexDirection="column"
+            justifyContent="flex-end"
+            alignItems="center"
+            paddingBottom={2}
+          >
+            <text backgroundColor="red" color="white" bold={true}>
+              {' '}
+              Press Ctrl+C again to quit{' '}
+            </text>
+          </box>
+        )}
+      </>
+    );
+  };
 
-  // Right panel: Dashboard
-  const dashboardPanel = (
-    <DashboardPanel
-      client={status() === 'connected' ? client() : null}
-      height={contentHeight()}
-      focus={activePanel() === 'right'}
-      onStatsUpdate={handleStatsUpdate}
-    />
-  );
-
-  // Status bar
-  const statusBar = (
-    <StatusBar
-      panelMode={panelMode()}
-      activePanel={activePanel()}
-      projectCount={projectCount()}
-      cpuPercent={cpuPercent()}
-      buildingCount={buildingCount()}
-    />
-  );
-
-  // Help overlay
-  const overlay = showHelp() ? (
-    <HelpOverlay
-      onClose={() => {
-        setShowHelp(false);
-      }}
-    />
-  ) : undefined;
-
-  return (
-    <>
-      <Layout
-        left={chatPanel}
-        right={dashboardPanel}
-        statusBar={statusBar}
-        overlay={overlay}
-        activePanel={activePanel()}
-      />
-      {showCtrlCWarning() && (
-        <box
-          position="absolute"
-          width={columns()}
-          height={rows()}
-          flexDirection="column"
-          justifyContent="flex-end"
-          alignItems="center"
-          paddingBottom={2}
-        >
-          <text backgroundColor="red" color="white" bold={true}>
-            {' '}
-            Press Ctrl+C again to quit{' '}
-          </text>
-        </box>
-      )}
-    </>
-  );
+  return <>{renderContent()}</>;
 }

@@ -18,8 +18,8 @@ interface LayoutProps {
  */
 export function Layout(props: LayoutProps): JSX.Element {
   const dims = useTerminalDimensions();
-  const columns = () => dims.columns;
-  const rows = () => dims.rows;
+  const columns = () => dims()?.width ?? 80;
+  const rows = () => dims()?.height ?? 24;
 
   const isWideMode = () => columns() >= 100;
 
