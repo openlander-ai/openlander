@@ -1,7 +1,7 @@
 import { createSignal, createEffect, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
-import TextInput from './IMETextInput.js';
+import { Prompt } from './Prompt.js';
 import { Spinner } from './Spinner.js';
 import type { OpenLanderClient } from '../../ipc/client.js';
 import type { ChatStreamEvent } from '../../agent/index.js';
@@ -29,12 +29,21 @@ interface ChatHistoryEntry {
   timestamp: number;
 }
 
+/** Minimal interface for textarea renderable ref. */
+interface TextareaRef {
+  readonly plainText: string;
+  clear(): void;
+  setText(text: string): void;
+  replaceText(text: string): void;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const MAX_HISTORY_ENTRIES = 100;
-const INPUT_HEIGHT = 3;
+/** Estimated prompt height for scroll area calculation */
+const PROMPT_ESTIMATED_HEIGHT = 7;
 /** Lines from the bottom to consider "at bottom" for smart scroll */
 const SCROLL_BOTTOM_THRESHOLD = 3;
 
@@ -73,11 +82,30 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [commandPickerIndex, setCommandPickerIndex] = createSignal(0);
 
   // --- Smart auto-scroll ---
-  const messageAreaHeight = () => Math.max(0, height() - INPUT_HEIGHT);
+  const messageAreaHeight = () => Math.max(0, height() - PROMPT_ESTIMATED_HEIGHT);
   const [scrollOffset, setScrollOffset] = createSignal(0);
   const [isAtBottom, setIsAtBottom] = createSignal(true);
   const [hasNewMessages, setHasNewMessages] = createSignal(false);
   let prevMessageCount = 0;
+
+  // --- Textarea ref for external control (history, clear) ---
+  let textareaRef: TextareaRef | null = null;
+
+  const setTextareaRefCallback = (r: unknown) => {
+    textareaRef = r as TextareaRef;
+  };
+
+  /** Clear textarea and reset input signal. */
+  const clearTextarea = () => {
+    textareaRef?.clear();
+    setInputValue('');
+  };
+
+  /** Set textarea text (for history navigation) and sync signal. */
+  const setTextareaText = (text: string) => {
+    textareaRef?.replaceText(text);
+    setInputValue(text);
+  };
 
   // Smart scroll: only auto-scroll when user is at the bottom
   createEffect(() => {
@@ -330,8 +358,10 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     }
   };
 
-  const handleSubmit = (text: string) => {
-    // If input is empty and there are new messages, scroll to bottom
+  // --- Submit handler (reads text from signal, clears textarea) ---
+  const handleSubmit = () => {
+    if (isStreaming()) return; // Prevent double-submit during streaming
+    const text = inputValue();
     if (!text.trim()) {
       if (hasNewMessages()) {
         scrollToBottom();
@@ -343,40 +373,129 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
       if (matchCount > 0) {
         const commandName = getMatchAt(text, commandPickerIndex());
         if (commandName) {
-          setInputValue('');
+          clearTextarea();
           setShowCommandPicker(false);
           void sendMessage(`/${commandName}`);
           return;
         }
       }
     }
-    setInputValue('');
+    clearTextarea();
     setShowCommandPicker(false);
     void sendMessage(text);
   };
 
+  // --- Content change handler (syncs textarea → signal) ---
+  const handleContentChange = (text: string) => {
+    setInputValue(text);
+  };
+
+  // --- Tab complete ---
   const handleTabComplete = () => {
     if (showCommandPicker()) {
       const commandName = getMatchAt(inputValue(), commandPickerIndex());
       if (commandName) {
-        setInputValue(`/${commandName} `);
+        setTextareaText(`/${commandName} `);
         setShowCommandPicker(false);
       }
     }
   };
 
-  useKeyboard((evt) => {
-    if (!focus()) return;
-    if (evt.key === 'tab' && showCommandPicker()) {
-      handleTabComplete();
+  // --- Textarea key down (history, tab complete, picker interaction) ---
+  const handlePromptKeyDown = (event: unknown) => {
+    const evt = event as {
+      key?: string;
+      name?: string;
+      ctrl?: boolean;
+      char?: string;
+      preventDefault?: () => void;
+    };
+    const key = evt.key ?? evt.name ?? '';
+
+    // ── When command picker is visible, intercept navigation keys ──
+    if (showCommandPicker()) {
+      // Enter/Return: select the highlighted command (prevent textarea submit!)
+      if (key === 'enter' || key === 'return') {
+        evt.preventDefault?.();
+        const text = inputValue();
+        const matchCount = getMatchCount(text);
+        if (matchCount > 0) {
+          const commandName = getMatchAt(text, commandPickerIndex());
+          if (commandName) {
+            clearTextarea();
+            setShowCommandPicker(false);
+            void sendMessage(`/${commandName}`);
+          }
+        }
+        return;
+      }
+
+      // Escape: close picker without sending
+      if (key === 'escape') {
+        evt.preventDefault?.();
+        clearTextarea();
+        setShowCommandPicker(false);
+        return;
+      }
+
+      // Tab: autocomplete selected command
+      if (key === 'tab') {
+        evt.preventDefault?.();
+        handleTabComplete();
+        return;
+      }
+
+      // Up: navigate picker
+      if (key === 'up') {
+        evt.preventDefault?.();
+        setCommandPickerIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+
+      // Down: navigate picker
+      if (key === 'down') {
+        evt.preventDefault?.();
+        setCommandPickerIndex((i) => Math.min(getMatchCount(inputValue()) - 1, i + 1));
+        return;
+      }
+    }
+
+    // ── Normal mode (no picker) ──
+
+    // Up: history navigation (single-line only)
+    if (key === 'up' && !inputValue().includes('\n') && chatHistory().length > 0) {
+      if (historyIndex() === -1) historyRef = inputValue();
+      const newIndex = Math.min(chatHistory().length - 1, historyIndex() + 1);
+      setHistoryIndex(newIndex);
+      const entry = chatHistory()[chatHistory().length - 1 - newIndex];
+      if (entry) setTextareaText(entry.text);
       return;
     }
+
+    // Down: history navigation (single-line only)
+    if (key === 'down' && !inputValue().includes('\n')) {
+      if (historyIndex() > 0) {
+        const newIndex = historyIndex() - 1;
+        setHistoryIndex(newIndex);
+        const entry = chatHistory()[chatHistory().length - 1 - newIndex];
+        if (entry) setTextareaText(entry.text);
+      } else if (historyIndex() === 0) {
+        setHistoryIndex(-1);
+        setTextareaText(historyRef);
+      }
+      return;
+    }
+  };
+
+  // --- Global keyboard shortcuts (non-input-specific) ---
+  useKeyboard((evt) => {
+    if (!focus()) return;
     if (evt.ctrl && evt.char === 'l') {
       setMessages([]);
       props.onClear?.();
       return;
     }
-    // Ctrl+J or Ctrl+Down: jump to bottom (dismiss new messages indicator)
+    // Ctrl+J: jump to bottom (dismiss new messages indicator)
     if (evt.ctrl && evt.char === 'j') {
       scrollToBottom();
       return;
@@ -398,43 +517,26 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
       }
       return;
     }
-    if (evt.key === 'up') {
-      if (showCommandPicker()) {
-        setCommandPickerIndex((i) => Math.max(0, i - 1));
-      } else if (chatHistory().length > 0) {
-        if (historyIndex() === -1) historyRef = inputValue();
-        const newIndex = Math.min(chatHistory().length - 1, historyIndex() + 1);
-        setHistoryIndex(newIndex);
-        const entry = chatHistory()[chatHistory().length - 1 - newIndex];
-        if (entry) setInputValue(entry.text);
-      }
-      return;
-    }
-    if (evt.key === 'down') {
-      if (showCommandPicker()) {
-        setCommandPickerIndex((i) => Math.min(getMatchCount(inputValue()) - 1, i + 1));
-      } else if (historyIndex() > 0) {
-        const newIndex = historyIndex() - 1;
-        setHistoryIndex(newIndex);
-        const entry = chatHistory()[chatHistory().length - 1 - newIndex];
-        if (entry) setInputValue(entry.text);
-      } else if (historyIndex() === 0) {
-        setHistoryIndex(-1);
-        setInputValue(historyRef);
-      }
-      return;
-    }
   });
 
   return (
     <box flexDirection="column" flexGrow={1}>
-      {/* Message area */}
-      <box flexDirection="column" flexGrow={1} overflow="hidden">
-        <Show
-          when={messages().length > 0 || isStreaming()}
-          fallback={
-            <box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
-              {/* Logo */}
+      <Show
+        when={messages().length > 0 || isStreaming()}
+        fallback={
+          // ── EMPTY STATE: Centered logo + prompt ──────────────────
+          <box
+            flexGrow={1}
+            flexDirection="column"
+            alignItems="center"
+            paddingLeft={2}
+            paddingRight={2}
+          >
+            {/* Top spacer pushes content to center */}
+            <box flexGrow={1} minHeight={0} />
+
+            {/* Logo */}
+            <box flexShrink={0} flexDirection="column">
               <For each={LOGO_LINES}>
                 {(line) => (
                   <text fg={theme.primary} bold={true}>
@@ -442,9 +544,13 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                   </text>
                 )}
               </For>
-              <text fg={theme.textDim}> </text>
+            </box>
+
+            <box height={1} minHeight={0} flexShrink={1} />
+
+            {/* Version + hint */}
+            <box flexShrink={0} flexDirection="column" alignItems="center">
               <text fg={theme.textMuted}>v0.1.0</text>
-              <text fg={theme.textDim}> </text>
               <Show
                 when={client()}
                 fallback={
@@ -454,15 +560,43 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                 }
               >
                 <text fg={theme.textMuted}>Deploy anything with a chat. Type to get started.</text>
-                <text fg={theme.textMuted}>
-                  Press <span style={{ fg: theme.secondary }}>/</span> for commands,{' '}
-                  <span style={{ fg: theme.secondary }}>?</span> for help
-                </text>
               </Show>
             </box>
-          }
-        >
-          <box flexDirection="column" flexGrow={1} paddingTop={1}>
+
+            <box height={1} minHeight={0} flexShrink={1} />
+
+            {/* Slash command picker (above prompt) */}
+            <Show when={showCommandPicker()}>
+              <box width="100%" maxWidth={75}>
+                <SlashCommandPicker input={inputValue()} selectedIndex={commandPickerIndex()} />
+              </box>
+            </Show>
+
+            {/* Centered Prompt */}
+            <Show when={client()}>
+              <box width="100%" maxWidth={75} flexShrink={0}>
+                <Prompt
+                  focused={focus()}
+                  isStreaming={isStreaming()}
+                  onSubmit={handleSubmit}
+                  onContentChange={handleContentChange}
+                  onKeyDown={handlePromptKeyDown}
+                  textareaRef={setTextareaRefCallback}
+                  placeholder="Ask anything... (/help for commands)"
+                  agentName="Agent"
+                />
+              </box>
+            </Show>
+
+            {/* Bottom spacer mirrors top spacer for centering */}
+            <box flexGrow={1} minHeight={0} />
+          </box>
+        }
+      >
+        {/* ── ACTIVE STATE: Messages + bottom prompt ─────────────── */}
+        <box flexDirection="column" flexGrow={1}>
+          {/* Messages area */}
+          <box flexDirection="column" flexGrow={1} overflow="hidden" paddingTop={1}>
             <For each={messages()}>
               {(msg, i) => <ChatMessage message={msg} isFirst={i() === 0} />}
             </For>
@@ -477,56 +611,48 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
               </box>
             </Show>
           </box>
-        </Show>
-      </box>
 
-      {/* New messages indicator */}
-      <Show when={hasNewMessages()}>
-        <box justifyContent="center" flexShrink={0}>
-          <text backgroundColor={theme.primary} fg={theme.background} bold={true}>
-            {' '}
-            ↓ New messages — press Enter or Ctrl+J to scroll down{' '}
-          </text>
-        </box>
-      </Show>
-
-      {/* Slash command picker */}
-      <Show when={showCommandPicker()}>
-        <box>
-          <SlashCommandPicker input={inputValue()} selectedIndex={commandPickerIndex()} />
-        </box>
-      </Show>
-
-      {/* Input area */}
-      <box flexShrink={0} paddingLeft={2} paddingRight={2} paddingTop={1}>
-        <Show
-          when={client()}
-          fallback={<text fg={theme.textDim}>Chat unavailable — daemon not connected</text>}
-        >
-          <Show
-            when={!isStreaming()}
-            fallback={
-              <box flexDirection="row" gap={1}>
-                <text fg={theme.textMuted}>
-                  <Spinner color={theme.textMuted} />
-                </text>
-                <text fg={theme.textMuted}>Waiting for response…</text>
-              </box>
-            }
-          >
-            <box flexDirection="row">
-              <text fg={theme.primary}>❯ </text>
-              <TextInput
-                value={inputValue()}
-                onChange={setInputValue}
-                onSubmit={handleSubmit}
-                placeholder="Ask the agent anything... (/help for commands)"
-                showCursor={focus()}
-              />
+          {/* New messages indicator */}
+          <Show when={hasNewMessages()}>
+            <box justifyContent="center" flexShrink={0}>
+              <text backgroundColor={theme.primary} fg={theme.background} bold={true}>
+                {' '}
+                ↓ New messages — press Enter or Ctrl+J to scroll down{' '}
+              </text>
             </box>
           </Show>
-        </Show>
-      </box>
+
+          {/* Slash command picker */}
+          <Show when={showCommandPicker()}>
+            <box>
+              <SlashCommandPicker input={inputValue()} selectedIndex={commandPickerIndex()} />
+            </box>
+          </Show>
+
+          {/* Bottom Prompt */}
+          <box flexShrink={0}>
+            <Show
+              when={client()}
+              fallback={
+                <box paddingLeft={2}>
+                  <text fg={theme.textDim}>Chat unavailable — daemon not connected</text>
+                </box>
+              }
+            >
+              <Prompt
+                focused={focus()}
+                isStreaming={isStreaming()}
+                onSubmit={handleSubmit}
+                onContentChange={handleContentChange}
+                onKeyDown={handlePromptKeyDown}
+                textareaRef={setTextareaRefCallback}
+                placeholder="Ask anything... (/help for commands)"
+                agentName="Agent"
+              />
+            </Show>
+          </box>
+        </box>
+      </Show>
     </box>
   );
 }
