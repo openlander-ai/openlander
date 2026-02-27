@@ -1,30 +1,33 @@
-/**
- * OpenLander block character logo with shadow effects.
- * Renders "OPEN" (muted gray) and "LANDER" (primary orange) using
- * Unicode block characters with shadow markers for depth.
- */
-import { For, Show, type JSX } from 'solid-js';
+import { Show, type JSX } from 'solid-js';
 import { useTerminalDimensions } from '@opentui/solid';
 import { theme } from '../theme.js';
 
 // ── Logo Data ───────────────────────────────────────────────────────────────
 
-const logoData = {
-  left: [
-    '                   ',
-    '█▀▀█ █▀▀█ █▀▀█ █▀▀▄',
-    '█__█ █__█ █^^^ █__█',
-    '▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀',
-  ],
-  right: [
-    '                  ▄          ',
-    '█    █▀▀█ █▀▀▄ █▀▀█ █▀▀█ █▀▀▄',
-    '█___ █^^█ █__█ █__█ █^^^ █▄▄▀',
-    '▀▀▀▀ ▀  ▀ ▀~~▀ ▀▀▀▀ ▀▀▀▀ ▀ ▀▀',
-  ],
-};
+// "OPEN" - ~36 chars wide
+const LOGO_OPEN = [
+  ' ██████╗ ██████╗ ███████╗███╗   ██╗',
+  '██╔═══██╗██╔══██╗██╔════╝████╗  ██║',
+  '██║   ██║██████╔╝█████╗  ██╔██╗ ██║',
+  '██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║',
+  '╚██████╔╝██║     ███████╗██║ ╚████║',
+  ' ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝',
+];
 
-const SHADOW_MARKERS = /[_^~]/;
+// "LANDER" - ~51 chars wide
+const LOGO_LANDER = [
+  '██╗      █████╗ ███╗   ██╗██████╗ ███████╗██████╗ ',
+  '██║     ██╔══██╗████╗  ██║██╔══██╗██╔════╝██╔══██╗',
+  '██║     ███████║██╔██╗ ██║██║  ██║█████╗  ██████╔╝',
+  '██║     ██╔══██║██║╚██╗██║██║  ██║██╔══╝  ██╔══██╗',
+  '███████╗██║  ██║██║ ╚████║██████╔╝███████╗██║  ██║',
+  '╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝╚═╝  ╚═╝',
+];
+
+const WIDTH_OPEN = 36;
+const WIDTH_LANDER = 51;
+const GAP = 2;
+const WIDTH_FULL = WIDTH_OPEN + GAP + WIDTH_LANDER; // ~89 chars
 
 // ── Color Tinting ───────────────────────────────────────────────────────────
 
@@ -49,65 +52,26 @@ function tint(bg: string, fg: string, factor: number): string {
   return `#${blend(br, fr).toString(16).padStart(2, '0')}${blend(bg2, fg2).toString(16).padStart(2, '0')}${blend(bb, fb).toString(16).padStart(2, '0')}`;
 }
 
-// ── Line Rendering ──────────────────────────────────────────────────────────
+// Pre-calculate gradients
+const GRAY_GRADIENT = [
+  tint(theme.background, theme.textMuted, 1.0),
+  tint(theme.background, theme.textMuted, 0.85),
+  tint(theme.background, theme.textMuted, 0.7),
+  tint(theme.background, theme.textMuted, 0.55),
+  tint(theme.background, theme.textMuted, 0.45),
+  tint(theme.background, theme.textMuted, 0.35),
+];
 
-/**
- * Parse a logo line and return an array of <text> elements.
- * Shadow markers: _ (space with shadow bg), ^ (▀ with shadow bg), ~ (▀ in shadow color).
- * Batches consecutive normal characters into single <text> elements.
- */
-function renderLine(line: string, fg: string, bold: boolean): JSX.Element[] {
-  const elements: JSX.Element[] = [];
-  const shadow = tint(theme.background, fg, 0.25);
-  let normalChars = '';
-  let i = 0;
-
-  const flushNormal = () => {
-    if (normalChars.length > 0) {
-      elements.push(
-        <text fg={fg} bold={bold}>
-          {normalChars}
-        </text>,
-      );
-      normalChars = '';
-    }
-  };
-
-  while (i < line.length) {
-    const char = line[i];
-    if (!char) break;
-
-    if (SHADOW_MARKERS.test(char)) {
-      flushNormal();
-      if (char === '_') {
-        elements.push(
-          <text fg={fg} bg={shadow}>
-            {' '}
-          </text>,
-        );
-      } else if (char === '^') {
-        elements.push(
-          <text fg={fg} bg={shadow}>
-            {'▀'}
-          </text>,
-        );
-      } else if (char === '~') {
-        elements.push(<text fg={shadow}>{'▀'}</text>);
-      }
-    } else {
-      normalChars += char;
-    }
-    i++;
-  }
-
-  flushNormal();
-  return elements;
-}
+const ORANGE_GRADIENT = [
+  tint(theme.background, theme.primary, 1.0),
+  tint(theme.background, theme.primary, 0.88),
+  tint(theme.background, theme.primary, 0.76),
+  tint(theme.background, theme.primary, 0.64),
+  tint(theme.background, theme.primary, 0.52),
+  tint(theme.background, theme.primary, 0.4),
+];
 
 // ── Component ───────────────────────────────────────────────────────────────
-
-/** Logo content needs ~50 chars width (left 19 + gap 1 + right 29) */
-const LOGO_CONTENT_WIDTH = 50;
 
 export function Logo(): JSX.Element {
   const dims = useTerminalDimensions();
@@ -115,7 +79,7 @@ export function Logo(): JSX.Element {
 
   // Estimate actual available content width, accounting for split-panel layout.
   // Layout.tsx: >=120 → 60:40, >=80 → 65:35, <80 → single panel.
-  // Deductions: layout padding(2) + panel paddingRight(1) + ChatPanel padding(4).
+  // Deductions: layout padding(2) + panel paddingRight(1) + ChatPanel padding(4) = 7.
   const availableWidth = () => {
     const w = width();
     if (w >= 120) return Math.floor(w * 0.6) - 7;
@@ -124,26 +88,32 @@ export function Logo(): JSX.Element {
   };
 
   return (
-    <Show
-      when={availableWidth() >= LOGO_CONTENT_WIDTH}
-      fallback={
-        <text fg={theme.primary} bold={true}>
-          OpenLander
-        </text>
-      }
-    >
-      <box flexDirection="column">
-        <For each={logoData.left}>
-          {(line, index) => (
-            <box flexDirection="row" gap={1}>
-              <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
-              <box flexDirection="row">
-                {renderLine(logoData.right[index()] ?? '', theme.primary, true)}
-              </box>
+    <box flexDirection="column">
+      <Show
+        when={availableWidth() >= WIDTH_LANDER}
+        fallback={
+          <text fg={theme.primary} bold={true}>
+            OpenLander
+          </text>
+        }
+      >
+        {/* Row-by-row rendering for gradient effect */}
+        <box flexDirection="column">
+          {LOGO_LANDER.map((_, i) => (
+            <box flexDirection="row" gap={GAP}>
+              {/* Left "OPEN" section - only if space permits */}
+              <Show when={availableWidth() >= WIDTH_FULL}>
+                <text fg={GRAY_GRADIENT[i]}>{LOGO_OPEN[i]}</text>
+              </Show>
+
+              {/* Right "LANDER" section */}
+              <text fg={ORANGE_GRADIENT[i]} bold>
+                {LOGO_LANDER[i]}
+              </text>
             </box>
-          )}
-        </For>
-      </box>
-    </Show>
+          ))}
+        </box>
+      </Show>
+    </box>
   );
 }
