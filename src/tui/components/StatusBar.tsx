@@ -1,6 +1,6 @@
 import type { JSX } from 'solid-js';
 import { Show, Switch, Match } from 'solid-js';
-import type { TuiMode } from '../state/mode.js';
+import { type TuiMode, buildSessionCount } from '../state/mode.js';
 import { theme } from '../theme.js';
 
 interface StatusBarProps {
@@ -43,6 +43,9 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
           <Match when={props.mode === 'deploying'}>
             <KeyHint key="^C" label="Cancel" />
             <KeyHint key="Enter" label="Close" />
+            <Show when={buildSessionCount() > 1}>
+              <KeyHint key="←→" label="Switch Build" />
+            </Show>
           </Match>
           <Match when={props.mode === 'debugging'}>
             <KeyHint key="Esc" label="Back" />

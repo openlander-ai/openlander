@@ -12,6 +12,7 @@ import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { theme } from '../theme.js';
 import type { OpenLanderClient, BuildProgressEvent } from '../../ipc/client.js';
+import { buildSessionCount, selectedBuildIndex } from '../state/mode.js';
 import { ScrollableLog } from './ScrollableLog.js';
 import type { LogLine } from './ScrollableLog.js';
 import { Spinner } from './Spinner.js';
@@ -254,6 +255,11 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
         <text bold={true} fg={theme.warning}>
           ▸ Build
         </text>
+        <Show when={buildSessionCount() > 1}>
+          <text fg={theme.textMuted}>
+            {` ${String(selectedBuildIndex() + 1)}/${String(buildSessionCount())} ←→`}
+          </text>
+        </Show>
         <Show when={streaming() && !buildComplete()}>
           <Spinner color={theme.warning} />
         </Show>

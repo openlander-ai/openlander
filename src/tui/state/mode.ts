@@ -25,12 +25,56 @@ const [mode, setMode] = createSignal<TuiMode>('monitoring');
 const [deployingState, setDeployingState] = createSignal<DeployingState | null>(null);
 const [debuggingState, setDebuggingState] = createSignal<DebuggingState | null>(null);
 
+// --- Multi-build session tracking (T-DEPLOY-05) ---
+const [buildSessions, setBuildSessions] = createSignal<DeployingState[]>([]);
+const [selectedBuildIndex, setSelectedBuildIndex] = createSignal(0);
+
+/** The currently active/viewed build session. */
+export const activeBuildSession = () => {
+  const sessions = buildSessions();
+  const idx = selectedBuildIndex();
+  return sessions[idx] ?? null;
+};
+
+/** Total number of concurrent build sessions. */
+export const buildSessionCount = () => buildSessions().length;
+
 // --- Transition Functions ---
 
-/** Enter deploy mode — called when a build starts. */
+/** Enter deploy mode — called when a build starts. Adds to build session list. */
 export function enterDeployMode(projectId: string, projectName: string): void {
-  setDeployingState({ projectId, projectName });
+  const session: DeployingState = { projectId, projectName };
+  setBuildSessions((prev) => {
+    // Don't add duplicate sessions for same project
+    const exists = prev.some((s) => s.projectId === projectId);
+    if (exists) return prev;
+    return [...prev, session];
+  });
+  // Select the newly added (or existing) session
+  const sessions = buildSessions();
+  const idx = sessions.findIndex((s) => s.projectId === projectId);
+  if (idx >= 0) setSelectedBuildIndex(idx);
+  // Set legacy single-project state for backward compat
+  setDeployingState(session);
   setMode('deploying');
+}
+
+/** Switch to next build session (→ key). */
+export function nextBuildSession(): void {
+  const count = buildSessions().length;
+  if (count <= 1) return;
+  setSelectedBuildIndex((prev) => (prev + 1) % count);
+  const active = activeBuildSession();
+  if (active) setDeployingState(active);
+}
+
+/** Switch to previous build session (← key). */
+export function prevBuildSession(): void {
+  const count = buildSessions().length;
+  if (count <= 1) return;
+  setSelectedBuildIndex((prev) => (prev - 1 + count) % count);
+  const active = activeBuildSession();
+  if (active) setDeployingState(active);
 }
 
 /** Enter debug mode — called when user selects a project in Status panel. */
@@ -44,6 +88,9 @@ export function returnToMonitoring(): void {
   setMode('monitoring');
   setDeployingState(null);
   setDebuggingState(null);
+  // Clear build sessions when leaving deploy mode
+  setBuildSessions([]);
+  setSelectedBuildIndex(0);
 }
 
 // --- Auto-return timer for deploy mode ---
@@ -66,4 +113,4 @@ export function cancelDeployReturn(): void {
   }
 }
 
-export { mode, deployingState, debuggingState };
+export { mode, deployingState, debuggingState, buildSessions, selectedBuildIndex };

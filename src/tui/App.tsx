@@ -28,6 +28,9 @@ import {
   enterDebugMode,
   returnToMonitoring,
   scheduleDeployReturn,
+  nextBuildSession,
+  prevBuildSession,
+  buildSessionCount,
 } from './state/mode.js';
 import { focus, toggleFocus } from './state/focus.js';
 import { setOverlayActive } from './state/overlay.js';
@@ -409,6 +412,18 @@ export function App(props: AppProps): JSX.Element {
           returnToMonitoring();
         }
         return;
+      }
+
+      // Deploy mode: ←→ to switch between concurrent builds (T-DEPLOY-05)
+      if (tuiMode() === 'deploying' && buildSessionCount() > 1) {
+        if (evt.name === 'left' || evt.name === 'h') {
+          prevBuildSession();
+          return;
+        }
+        if (evt.name === 'right' || evt.name === 'l') {
+          nextBuildSession();
+          return;
+        }
       }
 
       // Tab: panel focus switch
