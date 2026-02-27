@@ -446,8 +446,8 @@ export function App(props: AppProps): JSX.Element {
         return;
       }
 
-      // ? for help
-      if (evt.name === '?') {
+      // ? for help (only when NOT in chat input)
+      if (evt.name === '?' && focus() !== 'chat') {
         setShowHelp(true);
         return;
       }
