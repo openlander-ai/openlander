@@ -72,14 +72,14 @@ export function ScrollableLog(props: ScrollableLogProps): JSX.Element {
     const totalLines = props.lines.length;
     const maxOffset = Math.max(0, totalLines - contentHeight());
 
-    if (evt.name === 'up') {
+    if (evt.name === 'up' || evt.name === 'k') {
       // Scroll up — pause auto-scroll
       setAutoScroll(false);
       setScrollOffset((prev) => Math.max(0, prev - 1));
       return;
     }
 
-    if (evt.name === 'down') {
+    if (evt.name === 'down' || evt.name === 'j') {
       // Scroll down — pause auto-scroll
       setAutoScroll(false);
       setScrollOffset((prev) => Math.min(maxOffset, prev + 1));

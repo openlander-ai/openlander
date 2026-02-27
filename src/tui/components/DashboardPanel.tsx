@@ -372,10 +372,10 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   useKeyboard((event) => {
     const evt = event as { name?: string; ctrl?: boolean };
     if (overlayActive() || !focus()) return;
-    if (evt.name === 'up') {
+    if (evt.name === 'up' || evt.name === 'k') {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : projects().length - 1));
     }
-    if (evt.name === 'down') {
+    if (evt.name === 'down' || evt.name === 'j') {
       setSelectedIndex((prev) => (prev < projects().length - 1 ? prev + 1 : 0));
     }
     if (evt.name === 'enter') {

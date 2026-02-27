@@ -100,9 +100,9 @@ export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
     const evt = event as { name?: string; ctrl?: boolean; stopPropagation?: () => void };
     if (evt.name === 'escape') {
       props.onClose();
-    } else if (evt.name === 'up') {
+    } else if (evt.name === 'up' || evt.name === 'k') {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
-    } else if (evt.name === 'down') {
+    } else if (evt.name === 'down' || evt.name === 'j') {
       setSelectedIndex((prev) => Math.min(MODELS.length - 1, prev + 1));
     } else if (evt.name === 'enter') {
       const entry = MODELS[selectedIndex()];

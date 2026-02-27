@@ -50,9 +50,9 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
     if (state() === 'select-provider') {
       if (evt.name === 'escape') {
         props.onClose();
-      } else if (evt.name === 'up') {
+      } else if (evt.name === 'up' || evt.name === 'k') {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
-      } else if (evt.name === 'down') {
+      } else if (evt.name === 'down' || evt.name === 'j') {
         setSelectedIndex((prev) => Math.min(PROVIDERS.length - 1, prev + 1));
       } else if (evt.name === 'enter') {
         setState('enter-token');

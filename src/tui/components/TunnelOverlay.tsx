@@ -86,9 +86,9 @@ export function TunnelOverlay(props: TunnelOverlayProps): JSX.Element {
     }
 
     const list = projects();
-    if (evt.name === 'up') {
+    if (evt.name === 'up' || evt.name === 'k') {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : list.length - 1));
-    } else if (evt.name === 'down') {
+    } else if (evt.name === 'down' || evt.name === 'j') {
       setSelectedIndex((prev) => (prev < list.length - 1 ? prev + 1 : 0));
     } else if (evt.name === 'enter' && list.length > 0 && !actionLoading()) {
       void toggleExposure();

@@ -57,9 +57,9 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
     if (evt.name === 'escape') {
       props.onClose();
     } else if (!props.loading && !props.error && props.repos.length > 0) {
-      if (evt.name === 'up') {
+      if (evt.name === 'up' || evt.name === 'k') {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
-      } else if (evt.name === 'down') {
+      } else if (evt.name === 'down' || evt.name === 'j') {
         setSelectedIndex((prev) => Math.min(props.repos.length - 1, prev + 1));
       } else if (evt.name === 'enter') {
         const repo = props.repos[selectedIndex()];
