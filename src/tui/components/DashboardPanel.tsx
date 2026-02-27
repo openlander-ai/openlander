@@ -413,7 +413,10 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   const onStatsUpdateRef = props.onStatsUpdate;
 
   createEffect(() => {
-    if (!client()) return;
+    if (!client()) {
+      setSystemLoading(false);
+      return;
+    }
     const c = client();
 
     if (!c) return;

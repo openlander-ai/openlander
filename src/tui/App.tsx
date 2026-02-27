@@ -279,6 +279,7 @@ export function App(props: AppProps): JSX.Element {
       try {
         deployResult = await c.deploy(repoUrl);
       } catch (err) {
+        console.error('[deploy]', err instanceof Error ? err.message : String(err));
         setDeployMessages((prev) => [
           ...prev,
           {
