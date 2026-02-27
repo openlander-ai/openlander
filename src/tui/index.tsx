@@ -1,6 +1,7 @@
 import process from 'node:process';
 import { join } from 'node:path';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync, writeSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { render } from '@opentui/solid';
 import type { AppContext } from '../app.js';
 import { getDataDir } from '../config/index.js';
@@ -57,11 +58,43 @@ export function startTUI(ctx: AppContext): void {
   // Enter alternate screen buffer
   process.stdout.write('\x1b[?1049h');
 
+  let cleaned = false;
   const cleanup = () => {
-    // Leave alternate screen buffer — restores original terminal
-    process.stdout.write('\x1b[?1049l');
+    if (cleaned) return;
+    cleaned = true;
 
-    // Print clean exit message
+    // ── Nuclear terminal restore ────────────────────────────────────────────
+    // OpenTUI's zig renderer enables mouse tracking, bracketed paste, raw mode,
+    // and alt screen via native code. Our process.exit() kills the process before
+    // the zig cleanup can run. So we bypass all Node/Bun buffering:
+    //   1. writeSync(fd=1) → direct syscall, cannot be intercepted or buffered
+    //   2. stty sane → external subprocess that resets terminal discipline
+
+    // Direct fd write — guaranteed delivery to terminal
+    try {
+      writeSync(
+        1,
+        '\x1b[?1000l' + // Disable normal mouse tracking
+          '\x1b[?1002l' + // Disable button-event mouse tracking
+          '\x1b[?1003l' + // Disable any-event mouse tracking
+          '\x1b[?1006l' + // Disable SGR extended mouse mode
+          '\x1b[?2004l' + // Disable bracketed paste mode
+          '\x1b[?25h' + // Show cursor
+          '\x1b[?1049l' + // Exit alternate screen buffer
+          '\x1b[0m', // Reset character attributes
+      );
+    } catch {
+      /* fd may already be closed */
+    }
+
+    // Reset terminal discipline via external command (raw mode, echo, signals)
+    try {
+      spawnSync('stty', ['sane'], { stdio: 'inherit' });
+    } catch {
+      /* ignore */
+    }
+
+    // Print clean exit message (also via direct fd write)
     const logo = [
       '',
       '  \x1b[38;2;250;178;131m╔═══════════════════════════════╗\x1b[0m',
@@ -70,7 +103,12 @@ export function startTUI(ctx: AppContext): void {
       '  \x1b[38;2;250;178;131m╚═══════════════════════════════╝\x1b[0m',
       '',
     ];
-    process.stdout.write(logo.join('\n') + '\n');
+    try {
+      writeSync(1, logo.join('\n') + '\n');
+    } catch {
+      /* ignore */
+    }
+
     process.exit(0);
   };
 

@@ -28,6 +28,10 @@ export interface ContainerInfo {
   imageTag?: string;
 }
 
+export interface BuildImageOptions {
+  noCache?: boolean;
+}
+
 /**
  * Docker control layer using dockerode.
  *
@@ -49,7 +53,6 @@ export class Docker {
     } catch (err) {
       log.debug({ err }, 'Docker ping failed');
       return false;
-      return false;
     }
   }
 
@@ -60,7 +63,6 @@ export class Docker {
       execSync('docker --version', { stdio: 'pipe' });
     } catch (err) {
       log.debug({ err }, 'Docker binary check failed');
-      return { state: 'not_installed' };
       return { state: 'not_installed' };
     }
 
@@ -91,7 +93,11 @@ export class Docker {
       const msg = err instanceof Error ? err.message : String(err);
       const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? '';
       const combined = msg + stderr;
-      if (combined.includes('permission denied') || combined.includes('Permission denied') || combined.includes('EACCES')) {
+      if (
+        combined.includes('permission denied') ||
+        combined.includes('Permission denied') ||
+        combined.includes('EACCES')
+      ) {
         const groupFixed = isUserInDockerGroup();
         return { state: 'permission_denied', groupFixed };
       }
@@ -109,10 +115,13 @@ export class Docker {
   }
 
   /** Build a Docker image from a directory containing a Dockerfile. */
-  async buildImage(contextPath: string, tag: string): Promise<void> {
+  async buildImage(contextPath: string, tag: string, options?: BuildImageOptions): Promise<void> {
     let stream: NodeJS.ReadableStream;
     try {
-      stream = await this.client.buildImage({ context: contextPath, src: ['.'] }, { t: tag });
+      stream = await this.client.buildImage(
+        { context: contextPath, src: ['.'] },
+        { t: tag, nocache: options?.noCache === true },
+      );
     } catch (error) {
       throw new DockerBuildError(tag, error instanceof Error ? error.message : String(error));
     }
@@ -244,8 +253,7 @@ function isUserInDockerGroup(): boolean {
     const groups = execSync(`groups ${user}`, { encoding: 'utf8', stdio: 'pipe' });
     return groups.includes('docker');
   } catch (err) {
-      log.debug({ err }, 'Failed to check docker group membership');
-      return false;
+    log.debug({ err }, 'Failed to check docker group membership');
     return false;
   }
 }

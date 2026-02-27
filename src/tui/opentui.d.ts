@@ -20,6 +20,21 @@ declare module '@opentui/solid' {
     stopPropagation?: () => void;
   }
 
+  export interface MouseEvent {
+    /** Event type: 'down', 'up', 'move', 'scroll', 'over', 'out', 'drag', 'drag-end', 'drop' */
+    type: string;
+    /** Mouse button: 0 = left, 1 = middle, 2 = right */
+    button: number;
+    /** Terminal column */
+    x: number;
+    /** Terminal row */
+    y: number;
+    /** Modifier keys */
+    modifiers: { shift: boolean; alt: boolean; ctrl: boolean };
+    /** Stop propagation to parent elements */
+    stopPropagation(): void;
+  }
+
   export function useKeyboard(handler: (evt: KeyboardEvent) => void): void;
 
   export function useTerminalDimensions(): Accessor<{

@@ -4,6 +4,7 @@ import { useKeyboard } from '@opentui/solid';
 import { overlayActive } from '../state/overlay.js';
 import { enterDebugMode } from '../state/mode.js';
 import { Prompt } from './Prompt.js';
+import { Logo } from './Logo.js';
 import { Spinner } from './Spinner.js';
 import type { OpenLanderClient } from '../../ipc/client.js';
 import type { ChatStreamEvent } from '../../agent/index.js';
@@ -112,16 +113,6 @@ const PROMPT_ESTIMATED_HEIGHT = 7;
 /** Lines from the bottom to consider "at bottom" for smart scroll */
 const SCROLL_BOTTOM_THRESHOLD = 3;
 
-// ASCII art logo
-const LOGO_LINES = [
-  '  ___                   _                    _           ',
-  ' / _ \\ _ __   ___ _ __ | |    __ _ _ __   __| | ___ _ __ ',
-  "| | | | '_ \\ / _ \\ '_ \\| |   / _` | '_ \\ / _` |/ _ \\ '__|",
-  '| |_| | |_) |  __/ | | | |__| (_| | | | | (_| |  __/ |   ',
-  ' \\___/| .__/ \\___|_| |_|_____\\__,_|_| |_|\\__,_|\\___|_|   ',
-  '      |_|                                                  ',
-];
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -136,6 +127,8 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [isStreaming, setIsStreaming] = createSignal(false);
   const [inputValue, setInputValue] = createSignal('');
   let sessionIdRef = `tui-${Date.now().toString(36)}`;
+  // Captures text before textarea's submit action clears it (OpenTUI timing issue)
+  let pendingSubmitText: string | null = null;
 
   // --- External message injection (deploy progress, etc.) ---
   let lastExternalCount = 0;
@@ -511,7 +504,9 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   // --- Submit handler (reads text from signal, clears textarea) ---
   const handleSubmit = () => {
     if (isStreaming()) return; // Prevent double-submit during streaming
-    const text = inputValue();
+    // Use pre-captured text if available (textarea submit clears content before onSubmit fires)
+    const text = pendingSubmitText ?? inputValue();
+    pendingSubmitText = null;
     if (!text.trim()) {
       if (hasNewMessages()) {
         scrollToBottom();
@@ -560,16 +555,22 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     };
     const key = evt.name ?? '';
 
+    // Capture text on Enter before textarea's submit action can clear it
+    if (key === 'enter' || key === 'return') {
+      pendingSubmitText = inputValue();
+    }
+
     // ── When command picker is visible, intercept navigation keys ──
     if (showCommandPicker()) {
       // Enter/Return: select the highlighted command (prevent textarea submit!)
       if (key === 'enter' || key === 'return') {
         evt.preventDefault?.();
-        const text = inputValue();
+        const text = pendingSubmitText ?? inputValue();
         const matchCount = getMatchCount(text);
         if (matchCount > 0) {
           const commandName = getMatchAt(text, commandPickerIndex());
           if (commandName) {
+            pendingSubmitText = null;
             clearTextarea();
             setShowCommandPicker(false);
             void sendMessage(`/${commandName}`);
@@ -695,14 +696,8 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             <box flexGrow={1} minHeight={0} />
 
             {/* Logo */}
-            <box flexShrink={0} flexDirection="column">
-              <For each={LOGO_LINES}>
-                {(line) => (
-                  <text fg={theme.primary} bold={true}>
-                    {line}
-                  </text>
-                )}
-              </For>
+            <box flexShrink={0}>
+              <Logo />
             </box>
 
             <box height={1} minHeight={0} flexShrink={1} />
@@ -727,7 +722,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             {/* Slash command picker (above prompt) */}
             <Show when={showCommandPicker()}>
               <box width="100%" maxWidth={75}>
-                <SlashCommandPicker input={inputValue()} selectedIndex={commandPickerIndex()} />
+                <SlashCommandPicker
+                  input={inputValue()}
+                  selectedIndex={commandPickerIndex()}
+                  onSelect={(name) => {
+                    clearTextarea();
+                    setShowCommandPicker(false);
+                    void sendMessage(`/${name}`);
+                  }}
+                  onHover={(index) => setCommandPickerIndex(index)}
+                />
               </box>
             </Show>
 
@@ -785,7 +789,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           {/* Slash command picker */}
           <Show when={showCommandPicker()}>
             <box>
-              <SlashCommandPicker input={inputValue()} selectedIndex={commandPickerIndex()} />
+              <SlashCommandPicker
+                input={inputValue()}
+                selectedIndex={commandPickerIndex()}
+                onSelect={(name) => {
+                  clearTextarea();
+                  setShowCommandPicker(false);
+                  void sendMessage(`/${name}`);
+                }}
+                onHover={(index) => setCommandPickerIndex(index)}
+              />
             </box>
           </Show>
 

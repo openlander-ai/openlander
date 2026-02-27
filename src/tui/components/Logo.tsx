@@ -18,9 +18,9 @@ const logoData = {
   ],
   right: [
     '                  ▄          ',
-    '█    █▀▀█ █▀▀▄ █▀▀█ █▀▀█ █▀▀█',
-    '█___ █^^█ █__█ █__█ █^^^ █^^▄',
-    '▀▀▀▀ ▀  ▀ ▀~~▀ ▀▀▀▀ ▀▀▀▀ ▀  ▀',
+    '█    █▀▀█ █▀▀▄ █▀▀█ █▀▀█ █▀▀▄',
+    '█___ █^^█ █__█ █__█ █^^^ █▄▄▀',
+    '▀▀▀▀ ▀  ▀ ▀~~▀ ▀▀▀▀ ▀▀▀▀ ▀ ▀▀',
   ],
 };
 
@@ -53,13 +53,12 @@ function tint(bg: string, fg: string, factor: number): string {
 
 /**
  * Parse a logo line and return an array of <text> elements.
- * Handles shadow markers: _ (space with shadow bg), ^ (▀ with shadow bg), ~ (▀ in shadow color).
- * Batches consecutive normal characters into single <text> elements for efficiency.
+ * Shadow markers: _ (space with shadow bg), ^ (▀ with shadow bg), ~ (▀ in shadow color).
+ * Batches consecutive normal characters into single <text> elements.
  */
 function renderLine(line: string, fg: string, bold: boolean): JSX.Element[] {
   const elements: JSX.Element[] = [];
   const shadow = tint(theme.background, fg, 0.25);
-
   let normalChars = '';
   let i = 0;
 
@@ -79,10 +78,7 @@ function renderLine(line: string, fg: string, bold: boolean): JSX.Element[] {
     if (!char) break;
 
     if (SHADOW_MARKERS.test(char)) {
-      // Flush any accumulated normal characters first
       flushNormal();
-
-      // Handle shadow markers
       if (char === '_') {
         elements.push(
           <text fg={fg} bg={shadow}>
@@ -99,30 +95,37 @@ function renderLine(line: string, fg: string, bold: boolean): JSX.Element[] {
         elements.push(<text fg={shadow}>{'▀'}</text>);
       }
     } else {
-      // Accumulate normal characters
       normalChars += char;
     }
     i++;
   }
 
-  // Flush any remaining normal characters
   flushNormal();
-
   return elements;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
 
+/** Logo content needs ~50 chars width (left 19 + gap 1 + right 29) */
+const LOGO_CONTENT_WIDTH = 50;
+
 export function Logo(): JSX.Element {
   const dims = useTerminalDimensions();
   const width = () => dims().width;
 
-  // Minimum width for block logo: 49 chars (left 19 + gap 1 + right 29) + some padding
-  const MIN_WIDTH = 55;
+  // Estimate actual available content width, accounting for split-panel layout.
+  // Layout.tsx: >=120 → 60:40, >=80 → 65:35, <80 → single panel.
+  // Deductions: layout padding(2) + panel paddingRight(1) + ChatPanel padding(4).
+  const availableWidth = () => {
+    const w = width();
+    if (w >= 120) return Math.floor(w * 0.6) - 7;
+    if (w >= 80) return Math.floor(w * 0.65) - 7;
+    return w - 6;
+  };
 
   return (
     <Show
-      when={width() >= MIN_WIDTH}
+      when={availableWidth() >= LOGO_CONTENT_WIDTH}
       fallback={
         <text fg={theme.primary} bold={true}>
           OpenLander
