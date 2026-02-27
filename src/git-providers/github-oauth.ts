@@ -21,7 +21,7 @@ const DEFAULT_SCOPE = 'repo read:user';
  * Register at: https://github.com/settings/applications/new
  * Required: Enable "Device Flow" in the OAuth App settings.
  */
-const GITHUB_CLIENT_ID = 'Ov23liYourClientIdHere';
+const GITHUB_CLIENT_ID = 'Ov23li02IG5j6nSWFxUe';
 
 /**
  * Get the GitHub OAuth Client ID.
