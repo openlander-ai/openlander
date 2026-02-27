@@ -374,7 +374,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return c.json(result, result.success ? 200 : 500);
   });
 
-  api.post('/projects/deploy/start', async (c) => {
+  api.post('/deploy/start', async (c) => {
     const body = await c.req.json<{
       repo_url: string;
       branch?: string;
@@ -406,6 +406,12 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return stream(c, async (s) => {
       c.header('Content-Type', 'application/x-ndjson');
 
+      const cleanup = () => {
+        for (const unsub of unsubscribers) {
+          unsub();
+        }
+      };
+
       const write = (data: { type: string; message: string; projectId: string }) => {
         void s.write(JSON.stringify({ ...data, timestamp: new Date().toISOString() }) + '\n');
       };
@@ -422,7 +428,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
           if (payload.projectId !== project.id) return;
           write({
             type: 'status',
-            message: `Cloning repository... (${payload.commitSha.slice(0, 7)})`,
+            message: `Cloning repository (${payload.commitSha.slice(0, 7)})`,
             projectId: project.id,
           });
         }),
@@ -433,7 +439,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
           if (payload.projectId !== project.id) return;
           write({
             type: 'status',
-            message: `Building Docker image (${String(Math.round(payload.durationMs / 1000))}s)`,
+            message: `Docker image built (${String(Math.round(payload.durationMs / 1000))}s)`,
             projectId: project.id,
           });
         }),
@@ -458,6 +464,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
             message: `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
             projectId: project.id,
           });
+          cleanup();
           void s.close();
         }),
       );
@@ -470,17 +477,39 @@ export function createApiRoutes(ctx: AppContext): Hono {
             message: `Deploy failed at ${payload.step}: ${payload.error}`,
             projectId: project.id,
           });
+          cleanup();
           void s.close();
         }),
       );
 
-      s.onAbort(() => {
-        for (const unsub of unsubscribers) {
-          unsub();
-        }
-      });
+      s.onAbort(cleanup);
 
-      await Promise.resolve();
+      // Emit initial status based on current project state (handles race with deploy:start)
+      const fresh = ctx.db.getProject(project.id);
+      if (fresh) {
+        if (fresh.status === 'running') {
+          write({ type: 'complete', message: `Already running`, projectId: project.id });
+          cleanup();
+          void s.close();
+          return;
+        }
+        if (fresh.status === 'error') {
+          write({ type: 'error', message: `Build failed`, projectId: project.id });
+          cleanup();
+          void s.close();
+          return;
+        }
+        write({
+          type: 'status',
+          message: `Build in progress (${fresh.status})...`,
+          projectId: project.id,
+        });
+      }
+
+      // Keep stream alive — event handlers call s.close() on completion
+      await new Promise(() => {
+        /* never resolves — closed by event handlers or abort */
+      });
     });
   });
 
@@ -907,6 +936,36 @@ export function createApiRoutes(ctx: AppContext): Hono {
         sessionStore.addMessage(sessionId, 'assistant', assistantContent);
       }
     });
+  });
+
+  // --- Question Reply (for ask_user_question tool) ---
+
+  api.post('/question/reply', async (c) => {
+    const body = await c.req.json<{
+      request_id: string;
+      answers: Array<{
+        questionIndex: number;
+        selectedLabels: string[];
+        customText?: string;
+      }>;
+    }>();
+
+    ctx.questionBridge.reply(
+      body.answers.map((a) => ({
+        questionIndex: a.questionIndex,
+        selectedLabels: a.selectedLabels,
+        customText: a.customText,
+      })),
+    );
+
+    return c.json({ status: 'ok' });
+  });
+
+  // --- Question Dismiss (cancel without answering) ---
+
+  api.post('/question/dismiss', (c) => {
+    ctx.questionBridge.reject();
+    return c.json({ status: 'dismissed' });
   });
 
   return api;

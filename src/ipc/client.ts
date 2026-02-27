@@ -215,6 +215,23 @@ export class OpenLanderClient {
   }
 
   // ---------------------------------------------------------------------------
+  // Question Bridge (ask_user_question tool support)
+  // ---------------------------------------------------------------------------
+
+  /** Reply to a pending question from the agent. */
+  async replyQuestion(
+    requestId: string,
+    answers: Array<{ questionIndex: number; selectedLabels: string[]; customText?: string }>,
+  ): Promise<{ status: string }> {
+    return this.post('/api/question/reply', { request_id: requestId, answers });
+  }
+
+  /** Dismiss a pending question without answering. */
+  async dismissQuestion(): Promise<{ status: string }> {
+    return this.post('/api/question/dismiss', {});
+  }
+
+  // ---------------------------------------------------------------------------
   // Projects
   // ---------------------------------------------------------------------------
 
@@ -243,7 +260,7 @@ export class OpenLanderClient {
     repoUrl: string,
     options?: { branch?: string; name?: string },
   ): Promise<StartDeployResponse> {
-    return this.post('/api/projects/deploy/start', {
+    return this.post('/api/deploy/start', {
       repo_url: repoUrl,
       branch: options?.branch,
       name: options?.name,
