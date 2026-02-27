@@ -1,6 +1,6 @@
 # OpenLander v0.6 — 상세 개발 Task 목록
 
-> **기준일**: 2025-02-27 (Last updated)
+> **기준일**: 2025-02-27 (Last updated: 2026-02-27)
 > **범위**: v0.6 TUI UI/UX 고도화
 > **입력 문서**: requirements.md, tui-spec.md, ui-ux-layout.md, ui-ux-build-compose.md
 > **레퍼런스**: OpenCode TUI, Claude Code TUI
@@ -9,7 +9,7 @@
 
 ## 현황 요약
 
-> **진행률**: 30/39 태스크 완료 (77%) | **남은 작업**: Daemon 필요 7개, 인프라 3개 | **TUI-only 전체 완료**
+> **진행률**: 38/39 태스크 완료 (97%) | **남은 작업**: T-INFRA-01 (i18n) 1개 | **TUI-only 전체 완료, Daemon-side 전체 완료, 인프라 2/3 완료**
 
 ### v0.5 기반 작업 (Phase 이전)
 
@@ -21,16 +21,16 @@
 - [x] deploy_logs drizzle 스키마 컬럼명 수정 (trigger → trigger_source)
 - [x] 문서 재구조화 (`docs/planning/`, `docs/analysis/`)
 
-### v0.6 TUI 태스크 완료 현황 (30/39)
+### v0.6 TUI 태스크 완료 현황 (38/39)
 
 - [x] **Phase 1** (5/5): 3-모드 상태 머신, 적응형 패널, 포커스 관리, 상태바, 반응형 레이아웃
-- [x] **Phase 2** (3/4): System ProgressBar+색상, Projects building Spinner, Activity 5건
-- [x] **Phase 3** (3/4): Build 패널, ScrollableLog, 복수 빌드 전환
+- [x] **Phase 2** (4/4): ✅ 전체 완료 — System ProgressBar+색상, Projects building Spinner, Activity 5건, AlertMonitor
+- [x] **Phase 3** (4/4): ✅ 전체 완료 — Build 패널, ScrollableLog, Build Recovery 3-Tier, 복수 빌드 전환
 - [x] **Phase 4** (3/3): ✅ 전체 완료 — 디버깅 진입, ProjectInfo+LogViewer, 디버깅 단축키
 - [x] **Phase 5** (4/4): 자연어 컨테이너 제어 — 시스템 프롬프트 엔지니어링으로 구현
-- [ ] **Phase 6** (0/5): Compose 모드 — daemon-side 구현 필요, DEFERRED
+- [x] **Phase 6** (5/5): ✅ 전체 완료 — Compose 감지+실행, 포트 충돌 override, env 주입, 서비스 그룹 표시, Auto-Detect
 - [x] **Phase 7** (9/9): ✅ 전체 완료 — Ctrl+C/L, 마크다운, /compact, j/k, 신택스, 멀티라인, 보더통일, 선택지UI
-- [x] **Phase 8** (2/5): /env 오버레이, /tunnel 오버레이
+- [x] **Phase 8** (4/5): /env 오버레이, /tunnel 오버레이, GitLab 프로바이더, Vercel AI SDK 조사 | 남은: i18n
 
 ### 최종 슬래시 커맨드 (9개)
 
@@ -185,7 +185,7 @@
   5. IPC `getActivityFeed()` 스트리밍 또는 `eventBus` 구독
 - **의존성**: T-ARCH-02
 
-### T-MON-04: Alerts 섹션
+### T-MON-04: Alerts 섹션 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: L
 - **설명**: 능동적 문제 감지 + 해결 제안. 이슈 없으면 섹션 자체 숨김.
@@ -239,7 +239,7 @@
   5. 상태 표시: `[AUTO-SCROLL]` 또는 `[PAUSED — press f to follow]`
 - **의존성**: 없음 (공용 컴포넌트)
 
-### T-DEPLOY-04: Build Failure 3-Tier 처리
+### T-DEPLOY-04: Build Failure 3-Tier 처리 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: XL
 - **설명**: 빌드 실패 시 원인 분류 → Tier별 대응.
@@ -357,12 +357,12 @@
 
 ---
 
-## Phase 6: Compose 모드 — ⏳ 0/5 (daemon-side 구현 필요)
+## Phase 6: Compose 모드 — ✅ 5/5 완료
 
 > docker-compose.yml 감지 시 멀티 서비스 처리.
 > 참고: `ui-ux-build-compose.md` §Part 2
 
-### T-COMPOSE-01: Compose 파일 감지 + 실행
+### T-COMPOSE-01: Compose 파일 감지 + 실행 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: L
 - **설명**: 레포에 docker-compose.yml 있으면 자동으로 Compose 모드.
@@ -372,7 +372,7 @@
   3. 감지 분기: compose 있음 → Compose 모드 / Dockerfile만 → Single 모드 / 둘 다 없음 → Auto-Detect (T-COMPOSE-05)
 - **의존성**: 없음
 
-### T-COMPOSE-02: 포트 충돌 → override 자동 생성
+### T-COMPOSE-02: 포트 충돌 → override 자동 생성 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: 원본 compose 파일은 절대 수정 안 함. override로 호스트 포트만 리맵.
@@ -384,7 +384,7 @@
 - **원칙**: Tier 1 자동 수정. 내부 포트(컨테이너 간)는 건드리지 않음.
 - **의존성**: T-COMPOSE-01
 
-### T-COMPOSE-03: 환경변수 주입 (.env.example 파싱)
+### T-COMPOSE-03: 환경변수 주입 (.env.example 파싱) ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: `.env.example` 파싱 → 기본값 있는 건 자동, 없는 건 유저에게 입력 요청
@@ -396,7 +396,7 @@
   5. 생성된 `.env`는 프로젝트 디렉토리에 저장, `.gitignore`에 추가
 - **의존성**: T-COMPOSE-01
 
-### T-COMPOSE-04: 대시보드 서비스 그룹 표시
+### T-COMPOSE-04: 대시보드 서비스 그룹 표시 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: Compose 프로젝트는 접이식 그룹으로 표시
@@ -408,7 +408,7 @@
   5. 내부 전용 서비스(db, redis): 포트 대신 `—`
 - **의존성**: T-MON-02, T-COMPOSE-01
 
-### T-COMPOSE-05: Auto-Detect (Dockerfile/Compose 없는 레포)
+### T-COMPOSE-05: Auto-Detect (Dockerfile/Compose 없는 레포) ✅
 
 - **우선순위**: 🟢 P2 | **난이도**: XL
 - **설명**: 프로젝트 구조를 LLM이 분석하여 Dockerfile 또는 compose 파일 생성
@@ -485,7 +485,7 @@
 
 ---
 
-## Phase 8: 인프라 & 장기 — 2/5 완료
+## Phase 8: 인프라 & 장기 — 4/5 완료
 
 ### T-INFRA-01: i18n 기반 구축
 
@@ -497,7 +497,7 @@
   4. 시스템 로케일 감지 또는 config 설정
 - **참고**: 모든 컴포넌트 터치 필요. 다른 Phase와 충돌 최소화를 위해 Phase 1~6 이후 권장.
 
-### T-INFRA-02: 다중 Git 프로바이더
+### T-INFRA-02: 다중 Git 프로바이더 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: L
 - **구현**:
@@ -506,7 +506,7 @@
   3. GitLab 구현
   4. `/git` 오버레이에서 프로바이더 선택 UI
 
-### T-INFRA-03: Vercel AI SDK 마이그레이션 조사
+### T-INFRA-03: Vercel AI SDK 마이그레이션 조사 ✅
 
 - **우선순위**: 🟢 P2 | **난이도**: L (조사만)
 - **구현**: 현재 에이전트 코드 분석 → Vercel AI SDK 매핑 → 마이그레이션 계획 문서
@@ -535,31 +535,19 @@
 
 ---
 
-## 남은 태스크 (9개)
+## 남은 태스크 (1개)
 
-### 🔧 TUI-only — 모두 완료 ✅
+### 🏗️ Daemon-side 구현 — ✅ 전체 완료
 
-> 이전 TUI-only 7개 태스크 모두 구현 완료 (T-DEBUG-03, T-DEPLOY-05, T-KEY-03, T-STYLE-01, T-CHAT-02, T-CHAT-03, T-AGENT-01)
+> T-MON-04, T-DEPLOY-04, T-COMPOSE-01~05 모두 구현 완료.
 
-### 🏗️ Daemon-side 구현 필요 — DEFERRED (7개)
+### 📋 인프라 & 장기 — 4/5 완료
 
-| 태스크       | 우선순위 | 난이도 | 설명                               | 필요한 것                    |
-| ------------ | -------- | ------ | ---------------------------------- | ---------------------------- |
-| T-MON-04     | 🟡 P1    | L      | Alerts 섹션                        | daemon-side 주기적 체크 로직 |
-| T-DEPLOY-04  | 🟡 P1    | XL     | Build Failure 3-Tier               | 빌드 로그 분석 + tier 분류   |
-| T-COMPOSE-01 | 🟡 P1    | L      | Compose 파일 감지 + 실행           | 파이프라인 compose 분기      |
-| T-COMPOSE-02 | 🟡 P1    | M      | 포트 충돌 override 생성            | compose override 로직        |
-| T-COMPOSE-03 | 🟡 P1    | M      | 환경변수 주입 (.env.example)       | 파싱 + 자동 추론             |
-| T-COMPOSE-04 | 🟡 P1    | M      | 서비스 그룹 표시                   | compose 서비스 목록 API      |
-| T-COMPOSE-05 | 🟢 P2    | XL     | Auto-Detect (Dockerfile 없는 레포) | LLM 기반 Dockerfile 생성     |
-
-### 📋 인프라 & 장기 — 별도 계획 필요 (3개)
-
-| 태스크     | 우선순위 | 난이도 | 설명                                |
-| ---------- | -------- | ------ | ----------------------------------- |
-| T-INFRA-01 | 🟡 P1    | L      | i18n 기반 구축 (모든 컴포넌트 터치) |
-| T-INFRA-02 | 🟡 P1    | L      | 다중 Git 프로바이더 (GitLab 추가)   |
-| T-INFRA-03 | 🟢 P2    | L      | Vercel AI SDK 마이그레이션 조사     |
+| 태스크     | 우선순위 | 난이도 | 설명                                | 상태        |
+| ---------- | -------- | ------ | ----------------------------------- | ----------- |
+| T-INFRA-01 | 🟡 P1    | L      | i18n 기반 구축 (모든 컴포넌트 터치) | ⏳ DEFERRED |
+| T-INFRA-02 | 🟡 P1    | L      | 다중 Git 프로바이더 (GitLab 추가)   | ✅ 완료     |
+| T-INFRA-03 | 🟢 P2    | L      | Vercel AI SDK 마이그레이션 조사     | ✅ 완료     |
 
 ---
 
@@ -570,7 +558,7 @@
 - **Compose 원칙**: 원본 docker-compose.yml 절대 수정 안 함. override 파일만 사용.
 - **테마**: OpenCode 다크 테마 유지. 추후 브랜딩 커스터마이징 예정.
 - **키보드**: 모든 핸들러는 `KeyEvent.name` 사용 (OpenTUI 표준).
-- **테스트**: 각 커맨드/오버레이 추가 시 단위 테스트 필수. 현재 기준선: 353 pass / 39 fail (pre-existing `vi.mocked` 불호환).
+- **테스트**: 각 커맨드/오버레이 추가 시 단위 테스트 필수. 현재 기준선: 455 pass / 0 fail.
 - **기존 IPC 함수**: `deploy()`, `streamBuildProgress()`, `listProjects()`, `eventBus` 등 — 구현 전 실제 API 시그니처 확인 필요.
 
 ---
@@ -580,11 +568,11 @@
 | Phase                     | Task 수 | 완료   | 남은  | 비고                   |
 | ------------------------- | ------- | ------ | ----- | ---------------------- |
 | 1. 레이아웃 아키텍처      | 5       | 5 ✅   | 0     |                        |
-| 2. 모니터링 모드          | 4       | 3      | 1     | MON-04: daemon 필요    |
-| 3. 배포 모드              | 4       | 3      | 1     | DEPLOY-04: daemon 필요 |
+| 2. 모니터링 모드          | 4       | 4 ✅   | 0     |                        |
+| 3. 배포 모드              | 4       | 4 ✅   | 0     |                        |
 | 4. 디버깅 모드            | 3       | 3 ✅   | 0     |                        |
 | 5. 컨테이너 제어 (자연어) | 4       | 4 ✅   | 0     |                        |
-| 6. Compose 모드           | 5       | 0      | 5     | 전체 daemon-side 필요  |
+| 6. Compose 모드           | 5       | 5 ✅   | 0     |                        |
 | 7. 채팅 & 키보드 & 폴리시 | 9       | 9 ✅   | 0     |                        |
-| 8. 인프라 & 장기          | 5       | 2      | 3     | 별도 계획 필요         |
-| **합계**                  | **39**  | **30** | **9** |                        |
+| 8. 인프라 & 장기          | 5       | 4      | 1     | T-INFRA-01 (i18n) only |
+| **합계**                  | **39**  | **38** | **1** |                        |
