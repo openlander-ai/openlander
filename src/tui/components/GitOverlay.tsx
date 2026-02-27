@@ -431,7 +431,9 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
           </Show>
           <Show when={!deviceFlowError()}>
             <text fg={theme.text}>Open this URL in your browser:</text>
-            <text fg={theme.secondary}>{verificationUri()}</text>
+            <a href={verificationUri()} fg={theme.secondary}>
+              {verificationUri()}
+            </a>
             <text fg={theme.text}> </text>
             <text fg={theme.text}>And enter this code:</text>
             <text fg={theme.accent} bold>
