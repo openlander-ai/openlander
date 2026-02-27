@@ -29,6 +29,9 @@ export interface Project {
   publicUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  parentProjectId: string | null;
+  isCompose: boolean;
+  serviceCount: number;
 }
 
 export interface ActivityEvent {

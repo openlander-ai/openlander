@@ -117,7 +117,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       const activityEvent: ActivityEvent = {
         type: eventType,
         project: projectName,
-      user: 'system',
+        user: 'system',
         status,
         time: new Date().toISOString(),
       };
@@ -166,7 +166,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
               const activityEvent: ActivityEvent = {
                 type: eventType,
                 project: projectName,
-      user: 'system',
+                user: 'system',
                 status,
                 time: new Date().toISOString(),
               };
@@ -280,7 +280,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
         const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
         const cpuPercent =
           systemDelta > 0
-            ? (cpuDelta / systemDelta) * (stats.cpu_stats.cpu_usage.percpu_usage.length) * 100
+            ? (cpuDelta / systemDelta) * stats.cpu_stats.cpu_usage.percpu_usage.length * 100
             : 0;
 
         return c.json({
@@ -397,6 +397,9 @@ export function createApiRoutes(ctx: AppContext): Hono {
         publicUrl: p.public_url,
         createdAt: p.created_at,
         updatedAt: p.updated_at,
+        parentProjectId: p.parent_project_id,
+        isCompose: ctx.db.isParentProject(p.id),
+        serviceCount: ctx.db.getChildProjects(p.id).length,
       })),
     });
   });
@@ -565,7 +568,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
     if (follow && project.container_id) {
       const containerId = project.container_id;
       return stream(c, async (s) => {
-
         c.header('Content-Type', 'application/x-ndjson');
 
         try {

@@ -123,19 +123,51 @@ export function SystemSection({
   );
 }
 
+// Internal service names that don't have external URLs
+const INTERNAL_SERVICES = new Set([
+  'db',
+  'redis',
+  'postgres',
+  'mongo',
+  'cache',
+  'rabbitmq',
+  'kafka',
+  'zookeeper',
+  'memcached',
+  'elasticsearch',
+]);
+
+function isInternalService(name: string, port: number | null): boolean {
+  return INTERNAL_SERVICES.has(name.toLowerCase()) || port === null;
+}
+
+// Type for visible item in navigation
+interface VisibleItem {
+  type: 'header' | 'project';
+  project: Project;
+  childOf?: string; // Parent compose group ID if this is a child
+}
+
 // Projects section component
 export function ProjectsSection({
   projects,
   projectStats,
   selectedIndex,
   focus,
+  collapsedGroups,
+  visibleItems: _visibleItems,
 }: {
   projects: Project[];
   projectStats: Map<string, ProjectStats>;
   selectedIndex: number;
   focus: boolean;
+  collapsedGroups: Set<string>;
+  visibleItems: VisibleItem[];
 }): JSX.Element {
-  if (projects.length === 0) {
+  // Filter to only top-level projects
+  const topLevelProjects = projects.filter((p) => p.parentProjectId === null);
+
+  if (topLevelProjects.length === 0) {
     return (
       <box flexDirection="column" marginTop={1}>
         <SectionHeader title="Projects (0)" />
@@ -146,58 +178,123 @@ export function ProjectsSection({
     );
   }
 
+  let visibleIndex = 0;
+
+  const renderProjectRow = (
+    project: Project,
+    isSelected: boolean,
+    indent = 0,
+    isChild = false,
+  ): JSX.Element => {
+    const icon = PROJECT_STATUS_ICON[project.status] ?? '?';
+    const color = PROJECT_STATUS_COLOR[project.status] ?? 'white';
+    const stats = projectStats.get(project.id);
+    const memoryMB = stats?.memoryUsage ? Math.round(stats.memoryUsage / 1024 / 1024) : 0;
+    const memoryStr = memoryMB > 0 ? `${String(memoryMB)}M` : '';
+    const internal = isChild && isInternalService(project.name, project.port);
+    const portStr = internal ? '—' : project.port ? `:${String(project.port)}` : '';
+    const domain = internal ? null : (project.publicUrl ?? project.url);
+
+    return (
+      <box flexDirection="column">
+        <box paddingLeft={1 + indent}>
+          {isSelected ? (
+            <text backgroundColor={theme.backgroundElement} fg={theme.secondary} bold={true}>
+              {' ▶ '}
+            </text>
+          ) : (
+            <text fg={theme.textDim}>{'   '}</text>
+          )}
+          <text fg={color}>{icon} </text>
+          <text fg={isSelected ? theme.text : theme.textMuted} bold={isSelected}>
+            {truncate(project.name, 12).padEnd(12)}
+          </text>
+          <text fg={theme.textDim}> {portStr.padEnd(6)}</text>
+          {project.status === 'running' ? (
+            <text fg={theme.success}>●</text>
+          ) : project.status === 'building' ? (
+            <box flexDirection="row" gap={1}>
+              <Spinner color={theme.statusBuilding} />
+              <text fg={theme.statusBuilding}>Building…</text>
+            </box>
+          ) : (
+            <text fg={theme.textDim}> </text>
+          )}
+          <Show when={project.status !== 'building'}>
+            <text fg={theme.textDim}> {memoryStr.padStart(5)}</text>
+          </Show>
+        </box>
+        <Show when={domain}>
+          <box paddingLeft={5 + indent}>
+            <text fg={theme.textDim}>{truncate(domain ?? '', 30)}</text>
+          </box>
+        </Show>
+      </box>
+    );
+  };
+
+  const renderComposeGroup = (project: Project): JSX.Element[] => {
+    const isCollapsed = collapsedGroups.has(project.id);
+    const expandIcon = isCollapsed ? '▶' : '▼';
+    const childProjects = projects.filter((p) => p.parentProjectId === project.id);
+    const currentVisibleIndex = visibleIndex++;
+    const isSelected = focus && currentVisibleIndex === selectedIndex;
+
+    const rows: JSX.Element[] = [];
+
+    // Header row
+    rows.push(
+      <box flexDirection="column">
+        <box paddingLeft={1}>
+          {isSelected ? (
+            <text backgroundColor={theme.backgroundElement} fg={theme.secondary} bold={true}>
+              {' ▶ '}
+            </text>
+          ) : (
+            <text fg={theme.textDim}>{'   '}</text>
+          )}
+          <text fg={isSelected ? theme.text : theme.textMuted} bold={isSelected}>
+            {expandIcon} {truncate(project.name, 10)} (compose, {String(project.serviceCount)}{' '}
+            services)
+          </text>
+        </box>
+      </box>,
+    );
+
+    // Child rows (only if expanded)
+    if (!isCollapsed) {
+      for (const child of childProjects) {
+        const childIndex = visibleIndex++;
+        const childSelected = focus && childIndex === selectedIndex;
+        rows.push(renderProjectRow(child, childSelected, 2, true));
+      }
+    }
+
+    return rows;
+  };
+
+  const renderContent = (): JSX.Element[] => {
+    const elements: JSX.Element[] = [];
+    visibleIndex = 0;
+
+    for (const project of topLevelProjects) {
+      if (project.isCompose) {
+        for (const row of renderComposeGroup(project)) {
+          elements.push(row);
+        }
+        const currentIndex = visibleIndex++;
+        const isSelected = focus && currentIndex === selectedIndex;
+        elements.push(renderProjectRow(project, isSelected));
+      }
+    }
+
+    return elements;
+  };
+
   return (
     <box flexDirection="column" marginTop={1}>
-      <SectionHeader title={`Projects (${String(projects.length)})`} />
-      <For each={projects}>
-        {(project, index) => {
-          const isSelected = focus && index() === selectedIndex;
-          const icon = PROJECT_STATUS_ICON[project.status] ?? '?';
-          const color = PROJECT_STATUS_COLOR[project.status] ?? 'white';
-          const stats = projectStats.get(project.id);
-          const memoryMB = stats?.memoryUsage ? Math.round(stats.memoryUsage / 1024 / 1024) : 0;
-          const memoryStr = memoryMB > 0 ? `${String(memoryMB)}M` : '';
-          const portStr = project.port ? `:${String(project.port)}` : '';
-          const domain = project.publicUrl ?? project.url;
-
-          return (
-            <box flexDirection="column">
-              <box paddingLeft={1}>
-                {isSelected ? (
-                  <text backgroundColor={theme.backgroundElement} fg={theme.secondary} bold={true}>
-                    {' ▶ '}
-                  </text>
-                ) : (
-                  <text fg={theme.textDim}>{'   '}</text>
-                )}
-                <text fg={color}>{icon} </text>
-                <text fg={isSelected ? theme.text : theme.textMuted} bold={isSelected}>
-                  {truncate(project.name, 12).padEnd(12)}
-                </text>
-                <text fg={theme.textDim}> {portStr.padEnd(6)}</text>
-                {project.status === 'running' ? (
-                  <text fg={theme.success}>●</text>
-                ) : project.status === 'building' ? (
-                  <box flexDirection="row" gap={1}>
-                    <Spinner color={theme.statusBuilding} />
-                    <text fg={theme.statusBuilding}>Building…</text>
-                  </box>
-                ) : (
-                  <text fg={theme.textDim}> </text>
-                )}
-                <Show when={project.status !== 'building'}>
-                  <text fg={theme.textDim}> {memoryStr.padStart(5)}</text>
-                </Show>
-              </box>
-              <Show when={domain}>
-                <box paddingLeft={5}>
-                  <text fg={theme.textDim}>{truncate(domain ?? '', 30)}</text>
-                </box>
-              </Show>
-            </box>
-          );
-        }}
-      </For>
+      <SectionHeader title={`Projects (${String(topLevelProjects.length)})`} />
+      {renderContent()}
     </box>
   );
 }
@@ -282,6 +379,35 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
 
   const [scrollOffset, _setScrollOffset] = createSignal(0);
+  const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set());
+
+  // Build visible items for keyboard navigation
+  const buildVisibleItems = (): VisibleItem[] => {
+    const items: VisibleItem[] = [];
+    const collapsed = collapsedGroups();
+    const allProjects = projects();
+    const topLevelProjects = allProjects.filter((p) => p.parentProjectId === null);
+
+    for (const project of topLevelProjects) {
+      if (project.isCompose) {
+        // Add compose header
+        items.push({ type: 'header', project });
+        // Add children if expanded
+        if (!collapsed.has(project.id)) {
+          const children = allProjects.filter((p) => p.parentProjectId === project.id);
+          for (const child of children) {
+            items.push({ type: 'project', project: child, childOf: project.id });
+          }
+        }
+      } else {
+        items.push({ type: 'project', project });
+      }
+    }
+
+    return items;
+  };
+
+  const visibleItems = () => buildVisibleItems();
 
   let lastDisplayKey = '';
   const onStatsUpdateRef = props.onStatsUpdate;
@@ -372,16 +498,31 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   useKeyboard((event) => {
     const evt = event as { name?: string; ctrl?: boolean };
     if (overlayActive() || !focus()) return;
+    const items = visibleItems();
+    const itemCount = items.length;
     if (evt.name === 'up' || evt.name === 'k') {
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : projects().length - 1));
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : itemCount - 1));
     }
     if (evt.name === 'down' || evt.name === 'j') {
-      setSelectedIndex((prev) => (prev < projects().length - 1 ? prev + 1 : 0));
+      setSelectedIndex((prev) => (prev < itemCount - 1 ? prev + 1 : 0));
     }
     if (evt.name === 'enter') {
-      const p = projects()[selectedIndex()];
-      if (p && props.onProjectSelect) {
-        props.onProjectSelect(p.id, p.name);
+      const item = items[selectedIndex()];
+      if (!item) return;
+      if (item.type === 'header') {
+        // Toggle collapse/expand for compose group
+        setCollapsedGroups((prev) => {
+          const next = new Set(prev);
+          if (next.has(item.project.id)) {
+            next.delete(item.project.id);
+          } else {
+            next.add(item.project.id);
+          }
+          return next;
+        });
+      } else if (props.onProjectSelect) {
+        // Select the project
+        props.onProjectSelect(item.project.id, item.project.name);
       }
     }
   });
@@ -410,6 +551,8 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
         projectStats={projectStats()}
         selectedIndex={selectedIndex()}
         focus={focus()}
+        collapsedGroups={collapsedGroups()}
+        visibleItems={visibleItems()}
       />
       <Show when={!compact()}>
         <ActivitySection events={activity()} />
