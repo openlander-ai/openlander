@@ -1,6 +1,6 @@
 # OpenLander v0.6 — 상세 개발 Task 목록
 
-> **기준일**: 2025-02-27 (Last updated: 2026-02-27)
+> **기준일**: 2025-02-27 (Last updated: 2026-02-27 post-OAuth)
 > **범위**: v0.6 TUI UI/UX 고도화
 > **입력 문서**: requirements.md, tui-spec.md, ui-ux-layout.md, ui-ux-build-compose.md
 > **레퍼런스**: OpenCode TUI, Claude Code TUI
@@ -9,7 +9,7 @@
 
 ## 현황 요약
 
-> **진행률**: 38/39 태스크 완료 (97%) | **남은 작업**: T-INFRA-01 (i18n) 1개 | **TUI-only 전체 완료, Daemon-side 전체 완료, 인프라 2/3 완료**
+> **진행률**: 38/39 태스크 완료 (97%) + OAuth 추가 기능 | **남은 작업**: T-INFRA-01 (i18n) 1개 | **TUI-only 전체 완료, Daemon-side 전체 완료, 인프라 4/5 완료**
 
 ### v0.5 기반 작업 (Phase 이전)
 
@@ -31,6 +31,13 @@
 - [x] **Phase 6** (5/5): ✅ 전체 완료 — Compose 감지+실행, 포트 충돌 override, env 주입, 서비스 그룹 표시, Auto-Detect
 - [x] **Phase 7** (9/9): ✅ 전체 완료 — Ctrl+C/L, 마크다운, /compact, j/k, 신택스, 멀티라인, 보더통일, 선택지UI
 - [x] **Phase 8** (4/5): /env 오버레이, /tunnel 오버레이, GitLab 프로바이더, Vercel AI SDK 조사 | 남은: i18n
+
+### v0.6 이후 추가 작업 (태스크 범위 외)
+
+- [x] **GitHub OAuth Device Flow**: `/git` 오버레이 2단계 메뉴 (Provider → Auth/Token), Device Flow 클라이언트, 브라우저 인증
+- [x] **Enter 키 버그 수정**: `@opentui/core`가 `'return'` 이벤트를 emit하는데 모든 핸들러가 `'enter'`를 체크하던 버그 — 전체 오버레이+패널 수정
+- [x] **GitLab 지원 강화**: `connectedProviders()`, `handleConnect()`, `handleDisconnect()` GitLab + authMethod 추가
+- [x] **OAuth client_id 하드코딩**: 환경변수 불필요, gh CLI 패턴 적용 (⚠ placeholder — 실제 OAuth App 등록 필요)
 
 ### 최종 슬래시 커맨드 (9개)
 
@@ -549,6 +556,12 @@
 | T-INFRA-02 | 🟡 P1    | L      | 다중 Git 프로바이더 (GitLab 추가)   | ✅ 완료     |
 | T-INFRA-03 | 🟢 P2    | L      | Vercel AI SDK 마이그레이션 조사     | ✅ 완료     |
 
+### ⚠ 필요 액션
+
+| 항목                  | 설명                                                                                                               | 상태    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ | ------- |
+| GitHub OAuth App 등록 | github.com/settings/applications/new → Device Flow 활성화 → client_id를 `src/git-providers/github-oauth.ts`에 반영 | ⏳ 대기 |
+
 ---
 
 ## 참고사항
@@ -557,8 +570,8 @@
 - **빌드 실패 원칙**: '누가 만든 파일이냐'로 대응 범위 결정. 유저 코드는 절대 수정 안 함.
 - **Compose 원칙**: 원본 docker-compose.yml 절대 수정 안 함. override 파일만 사용.
 - **테마**: OpenCode 다크 테마 유지. 추후 브랜딩 커스터마이징 예정.
-- **키보드**: 모든 핸들러는 `KeyEvent.name` 사용 (OpenTUI 표준).
-- **테스트**: 각 커맨드/오버레이 추가 시 단위 테스트 필수. 현재 기준선: 455 pass / 0 fail.
+- **키보드**: 모든 핸들러는 `KeyEvent.name` 사용 (OpenTUI 표준). **주의**: `@opentui/core`는 Enter 키를 `'return'`으로 emit함 (`'enter'` 아님).
+- **테스트**: 각 커맨드/오버레이 추가 시 단위 테스트 필수. 현재 기준선: 470 pass / 0 fail.
 - **기존 IPC 함수**: `deploy()`, `streamBuildProgress()`, `listProjects()`, `eventBus` 등 — 구현 전 실제 API 시그니처 확인 필요.
 
 ---
@@ -576,3 +589,10 @@
 | 7. 채팅 & 키보드 & 폴리시 | 9       | 9 ✅   | 0     |                        |
 | 8. 인프라 & 장기          | 5       | 4      | 1     | T-INFRA-01 (i18n) only |
 | **합계**                  | **39**  | **38** | **1** |                        |
+
+### 추가 기능 (태스크 범위 외)
+
+| 기능                        | 커밋      | 상태                                 |
+| --------------------------- | --------- | ------------------------------------ |
+| GitHub OAuth Device Flow    | `ad9042f` | ✅ 구현 완료 (client_id placeholder) |
+| Enter 키 수정 + GitLab 강화 | `30626b0` | ✅ 전체 오버레이 수정 완료           |
