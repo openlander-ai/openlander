@@ -10,11 +10,13 @@ import { cloneRepo } from './git.js';
 import { allocatePort } from './port.js';
 import { buildTraefikLabels } from './traefik.js';
 import { CloudflareTunnel } from './tunnel.js';
+import { BuildRecovery, type BuildContext } from './build-recovery.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { DockerfileNotFoundError } from '../errors.js';
 import { ensureDockerfile } from './dockerfile-gen.js';
 import type { JobManager } from './job-manager.js';
+import type { ComposePipeline } from './compose.js';
 
 /**
  * Project configuration for a deployment.
@@ -36,6 +38,8 @@ export interface ProjectConfig {
   trigger?: 'chat' | 'webhook' | 'api';
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
+  _retryCount?: number;
+  _noCacheBuild?: boolean;
 }
 
 /**
@@ -108,6 +112,7 @@ export class DeployPipeline {
     private readonly docker: Docker,
     private readonly db: Database,
     private readonly jobManager?: JobManager,
+    private readonly composePipeline?: ComposePipeline,
   ) {}
 
   /**
@@ -188,6 +193,8 @@ export class DeployPipeline {
     await eventBus.emit('deploy:start', { projectId, repoUrl: config.repoUrl });
 
     let buildLog = '';
+    let clonePath = '';
+    const imageTag = `openlander/${projectName}:latest`;
 
     try {
       // Step 1: git clone
@@ -197,6 +204,7 @@ export class DeployPipeline {
         branch: config.branch,
         sshKeyPath: config.sshKeyPath,
       });
+      clonePath = cloneResult.path;
 
       await eventBus.emit('deploy:clone', {
         projectId,
@@ -205,6 +213,28 @@ export class DeployPipeline {
       });
 
       buildLog += `[clone] ${config.repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
+
+      const composePath = this.composePipeline?.detectComposeFile(cloneResult.path);
+      if (composePath && this.composePipeline) {
+        log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
+        const result = await this.composePipeline.deployCompose({
+          repoUrl: config.repoUrl,
+          branch: config.branch,
+          clonePath: cloneResult.path,
+          composePath,
+          name: projectName,
+          trigger: config.trigger,
+          _parentId: config._projectId,
+        });
+
+        return {
+          success: result.success,
+          projectId: result.parentProjectId,
+          projectName: result.parentName,
+          buildDurationMs: result.buildDurationMs,
+          error: result.error,
+        };
+      }
 
       // Step 2: Auto-generate Dockerfile if missing (v0.4)
       const dockerfileResult = ensureDockerfile(cloneResult.path);
@@ -220,10 +250,11 @@ export class DeployPipeline {
       }
 
       // Step 3: docker build
-      const imageTag = `openlander/${projectName}:latest`;
       const buildStart = Date.now();
       this.jobManager?.updatePhase(projectId, 'building');
-      await this.docker.buildImage(cloneResult.path, imageTag);
+      await this.docker.buildImage(cloneResult.path, imageTag, {
+        noCache: config._noCacheBuild === true,
+      });
       const buildDuration = Date.now() - buildStart;
 
       await eventBus.emit('deploy:build', {
@@ -314,7 +345,73 @@ export class DeployPipeline {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       const failStep = this.detectFailStep(buildLog);
+      const buildLogWithError = buildLog + `[error] ${errorMsg}\n`;
+      const retryCount = config._retryCount ?? 0;
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
+
+      try {
+        const recovery = new BuildRecovery(this.docker, this.db, eventBus);
+        const failedStep: BuildContext['failedStep'] =
+          failStep === 'clone' ||
+          failStep === 'dockerfile' ||
+          failStep === 'build' ||
+          failStep === 'run'
+            ? failStep
+            : 'build';
+
+        const recoveryContext: BuildContext = {
+          projectId,
+          projectName,
+          imageTag,
+          clonePath,
+          buildLog: buildLogWithError,
+          failedStep,
+        };
+
+        const classification = recovery.classify(buildLogWithError, recoveryContext);
+
+        if (classification.tier === 1 && classification.autoFixable && retryCount < 2) {
+          const fixResult = await recovery.attemptTier1Fix(classification, recoveryContext);
+
+          if (fixResult.fixed && fixResult.retryNeeded) {
+            const nextRetryCount = retryCount + 1;
+            const retryConfig: ProjectConfig = {
+              ...config,
+              name: projectName,
+              _projectId: projectId,
+              _retryCount: nextRetryCount,
+            };
+
+            if (classification.category === 'cache-corrupt') {
+              retryConfig._noCacheBuild = true;
+            }
+
+            buildLog += `[recovery] Tier 1 auto-fix: ${fixResult.action}\n`;
+            return await this.deploy(retryConfig);
+          }
+        }
+
+        if (
+          classification.tier === 2 &&
+          classification.suggestible &&
+          classification.suggestedAction
+        ) {
+          await eventBus.emit('build:suggest', {
+            projectId,
+            suggestion: classification.suggestedAction,
+          });
+        }
+
+        if (classification.tier === 3) {
+          const summary = recovery.extractErrorSummary(buildLogWithError);
+          await eventBus.emit('build:inform', { projectId, summary, tier: 3 });
+        }
+      } catch (recoveryError) {
+        log.warn(
+          { err: recoveryError, projectId },
+          'Build recovery failed; falling back to default error flow',
+        );
+      }
 
       this.db.updateProject(projectId, { status: 'error' });
 
@@ -323,7 +420,7 @@ export class DeployPipeline {
         projectId,
         status: 'failed',
         trigger,
-        buildLog: buildLog + `[error] ${errorMsg}\n`,
+        buildLog: buildLogWithError,
         durationMs: Date.now() - startTime,
       });
 
@@ -539,7 +636,7 @@ export class DeployPipeline {
           await this.docker.stopContainer(project.container_id);
           await this.docker.removeContainer(project.container_id);
         } catch (err) {
-        log.warn({ err }, 'Container cleanup during rollback failed');
+          log.warn({ err }, 'Container cleanup during rollback failed');
           // Container might already be stopped
         }
       }
