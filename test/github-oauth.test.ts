@@ -33,9 +33,10 @@ function mockFetch() {
 // ---------------------------------------------------------------------------
 
 describe('getGitHubClientId', () => {
-  it('returns empty string when env var is not set', () => {
+  it('returns hardcoded client_id when env var is not set', () => {
     delete process.env.OPENLANDER_GITHUB_CLIENT_ID;
-    expect(getGitHubClientId()).toBe('');
+    expect(getGitHubClientId()).toBeTruthy();
+    expect(getGitHubClientId().length).toBeGreaterThan(0);
   });
 
   it('returns env var value when set', () => {

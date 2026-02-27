@@ -226,7 +226,7 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
   const ready = new Promise<void>((resolve) => {
     server.listen(options.socketPath, () => {
       chmodSync(options.socketPath, 0o666);
-      log.info({ socketPath: options.socketPath }, 'Daemon listening');
+      log.debug({ socketPath: options.socketPath }, 'Daemon listening');
       resolve();
     });
   });

@@ -155,28 +155,39 @@ export function App(props: AppProps): JSX.Element {
   };
 
   // Connected providers computation
-  const connectedProviders = () => ({
-    github: {
-      connected: !!props.ctx.config.gitProviders.github.token,
-      username: props.ctx.config.gitProviders.github.username,
-    },
-  });
+  const connectedProviders = () => {
+    const gh = props.ctx.config.gitProviders.github;
+    const gl = props.ctx.config.gitProviders.gitlab;
+    return {
+      github: {
+        connected: !!gh.token,
+        username: gh.username,
+        authMethod: gh.authMethod,
+      },
+      gitlab: {
+        connected: !!gl.token,
+        username: gl.username,
+        authMethod: gl.authMethod,
+      },
+    };
+  };
 
   // Handle git provider connection with token validation
   const handleConnect = async (
     provider: string,
     token: string,
+    authMethod?: 'oauth' | 'pat',
   ): Promise<{ valid: boolean; username?: string; error?: string }> => {
     try {
       const { createGitProvider } = await import('../git-providers/index.js');
-      const gitProvider = createGitProvider(provider as 'github', { token, username: '' });
+      const providerType = provider as 'github' | 'gitlab';
+      const gitProvider = createGitProvider(providerType, { token, username: '' });
       const validation = await gitProvider.validateToken();
       if (validation.valid) {
-        // Save token and username on success
-        if (provider === 'github') {
-          props.ctx.config.gitProviders.github.token = token;
-          props.ctx.config.gitProviders.github.username = validation.user?.username ?? '';
-        }
+        const entry = props.ctx.config.gitProviders[providerType];
+        entry.token = token;
+        entry.username = validation.user?.username ?? '';
+        if (authMethod) entry.authMethod = authMethod;
         saveConfig(props.ctx.config);
         return { valid: true, username: validation.user?.username };
       }
@@ -184,6 +195,15 @@ export function App(props: AppProps): JSX.Element {
     } catch (err) {
       return { valid: false, error: err instanceof Error ? err.message : String(err) };
     }
+  };
+
+  const handleDisconnect = (provider: string) => {
+    const providerType = provider as 'github' | 'gitlab';
+    const entry = props.ctx.config.gitProviders[providerType];
+    entry.token = '';
+    entry.username = '';
+    entry.authMethod = undefined;
+    saveConfig(props.ctx.config);
   };
 
   // Load repositories from connected providers
@@ -357,7 +377,8 @@ export function App(props: AppProps): JSX.Element {
       // Don't handle shortcuts during setup
       if (appMode() === 'setup') return;
 
-      // Help/Model/Connect/Repo overlay shortcuts
+      // When overlays are open, only handle Escape at App level.
+      // All other keys must pass through to overlay's own useKeyboard handler.
       if (
         showHelp() ||
         showModelSelector() ||
@@ -366,14 +387,7 @@ export function App(props: AppProps): JSX.Element {
         showTunnel() ||
         showEnv()
       ) {
-        if (evt.name === 'escape') {
-          setShowHelp(false);
-          setShowModelSelector(false);
-          setShowGit(false);
-          setShowRepo(false);
-          setShowTunnel(false);
-          setShowEnv(false);
-        }
+        // Only Escape is handled here — overlay components handle everything else
         return;
       }
 
@@ -617,7 +631,8 @@ export function App(props: AppProps): JSX.Element {
           <box position="absolute" width={columns()} height={rows()} flexDirection="column">
             <GitOverlay
               currentProviders={connectedProviders()}
-              onConnect={(p, t) => handleConnect(p, t)}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
               onClose={() => setShowGit(false)}
             />
           </box>

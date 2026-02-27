@@ -11,6 +11,7 @@ import { theme } from '../theme.js';
 import type { OpenLanderClient, Project } from '../../ipc/client.js';
 import { Spinner } from './Spinner.js';
 import { truncate } from '../dashboard-utils.js';
+import { OverlayContainer } from './OverlayContainer.js';
 
 interface TunnelOverlayProps {
   onClose: () => void;
@@ -19,7 +20,6 @@ interface TunnelOverlayProps {
 
 export function TunnelOverlay(props: TunnelOverlayProps): JSX.Element {
   const dims = useTerminalDimensions();
-  const columns = () => dims().width;
   const rows = () => dims().height;
 
   const [projects, setProjects] = createSignal<Project[]>([]);
@@ -90,97 +90,78 @@ export function TunnelOverlay(props: TunnelOverlayProps): JSX.Element {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : list.length - 1));
     } else if (evt.name === 'down' || evt.name === 'j') {
       setSelectedIndex((prev) => (prev < list.length - 1 ? prev + 1 : 0));
-    } else if (evt.name === 'enter' && list.length > 0 && !actionLoading()) {
+    } else if (evt.name === 'return' && list.length > 0 && !actionLoading()) {
       void toggleExposure();
     }
   });
 
-  const contentWidth = Math.min(70, columns() - 4);
   const contentHeight = Math.min(16, rows() - 8);
 
   return (
-    <box
-      flexDirection="column"
-      width={columns()}
-      height={rows()}
-      justifyContent="center"
-      alignItems="center"
-      backgroundColor={theme.background}
+    <OverlayContainer
+      title="Cloudflare Tunnel — Public Exposure"
+      width={70}
+      responsive={true}
+      footer="[↑↓ Navigate] [Enter Toggle] [Esc Close]"
     >
-      <box
-        flexDirection="column"
-        border="round"
-        borderColor={theme.borderActive}
-        paddingX={2}
-        paddingY={1}
-        width={contentWidth}
-        backgroundColor={theme.backgroundMenu}
-      >
-        <box marginBottom={1} justifyContent="center">
-          <text bold={true} fg={theme.text}>
-            Cloudflare Tunnel — Public Exposure
-          </text>
+      <Show when={loading()}>
+        <box justifyContent="center">
+          <Spinner color={theme.textMuted} />
+          <text fg={theme.textMuted}> Loading projects...</text>
+        </box>
+      </Show>
+
+      <Show when={!loading() && projects().length === 0}>
+        <text fg={theme.textDim} paddingLeft={2}>
+          No projects deployed yet. Deploy a project first.
+        </text>
+      </Show>
+
+      <Show when={!loading() && projects().length > 0}>
+        <box flexDirection="column" height={contentHeight} overflow="hidden">
+          <For each={projects()}>
+            {(project, index) => {
+              const isSelected = () => index() === selectedIndex();
+              const isPublic = () => !!project.publicUrl;
+              return (
+                <box flexDirection="row">
+                  <text
+                    fg={isSelected() ? theme.secondary : theme.textMuted}
+                    bold={isSelected()}
+                    backgroundColor={isSelected() ? theme.backgroundElement : undefined}
+                  >
+                    {isSelected() ? ' ▶ ' : '   '}
+                    {isPublic() ? '●' : '○'} {truncate(project.name, 16).padEnd(16)}
+                  </text>
+                  <text
+                    fg={project.status === 'running' ? theme.success : theme.textDim}
+                    bold={isSelected()}
+                    backgroundColor={isSelected() ? theme.backgroundElement : undefined}
+                  >
+                    {' '}
+                    {project.status === 'running' ? '●' : '○'}
+                  </text>
+                  <text
+                    fg={isPublic() ? theme.secondary : theme.textDim}
+                    bold={isSelected()}
+                    backgroundColor={isSelected() ? theme.backgroundElement : undefined}
+                  >
+                    {' '}
+                    {isPublic() ? truncate(project.publicUrl ?? '', 30) : 'internal only'}
+                  </text>
+                </box>
+              );
+            }}
+          </For>
         </box>
 
-        <Show when={loading()}>
-          <box justifyContent="center">
-            <Spinner color={theme.textMuted} />
-            <text fg={theme.textMuted}> Loading projects...</text>
+        <Show when={actionLoading()}>
+          <box justifyContent="center" marginTop={1}>
+            <Spinner color={theme.warning} />
+            <text fg={theme.warning}> Updating tunnel...</text>
           </box>
         </Show>
-
-        <Show when={!loading() && projects().length === 0}>
-          <text fg={theme.textDim} paddingLeft={2}>
-            No projects deployed yet. Deploy a project first.
-          </text>
-        </Show>
-
-        <Show when={!loading() && projects().length > 0}>
-          <box flexDirection="column" height={contentHeight} overflow="hidden">
-            <For each={projects()}>
-              {(project, index) => {
-                const isSelected = () => index() === selectedIndex();
-                const isPublic = () => !!project.publicUrl;
-                return (
-                  <box>
-                    <text
-                      fg={isSelected() ? theme.secondary : theme.textMuted}
-                      bold={isSelected()}
-                      backgroundColor={isSelected() ? theme.backgroundElement : undefined}
-                    >
-                      {isSelected() ? ' ▶ ' : '   '}
-                      {isPublic() ? '🌐' : '🔒'} {truncate(project.name, 16).padEnd(16)}
-                      {project.status === 'running' ? (
-                        <span style={{ fg: theme.success }}>● </span>
-                      ) : (
-                        <span style={{ fg: theme.textDim }}>○ </span>
-                      )}
-                      {isPublic() ? (
-                        <span style={{ fg: theme.secondary }}>
-                          {truncate(project.publicUrl ?? '', 30)}
-                        </span>
-                      ) : (
-                        <span style={{ fg: theme.textDim }}>internal only</span>
-                      )}
-                    </text>
-                  </box>
-                );
-              }}
-            </For>
-          </box>
-
-          <Show when={actionLoading()}>
-            <box justifyContent="center" marginTop={1}>
-              <Spinner color={theme.warning} />
-              <text fg={theme.warning}> Updating tunnel...</text>
-            </box>
-          </Show>
-        </Show>
-
-        <box marginTop={1} justifyContent="center">
-          <text fg={theme.textDim}>[↑↓ Select] [Enter Toggle Public/Internal] [Esc Close]</text>
-        </box>
-      </box>
-    </box>
+      </Show>
+    </OverlayContainer>
   );
 }

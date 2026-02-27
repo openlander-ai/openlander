@@ -506,7 +506,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
     if (evt.name === 'down' || evt.name === 'j') {
       setSelectedIndex((prev) => (prev < itemCount - 1 ? prev + 1 : 0));
     }
-    if (evt.name === 'enter') {
+    if (evt.name === 'return') {
       const item = items[selectedIndex()];
       if (!item) return;
       if (item.type === 'header') {

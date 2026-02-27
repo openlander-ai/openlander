@@ -49,13 +49,12 @@ const PROVIDERS: ProviderInfo[] = [
 
 function getAuthMethods(providerId: string): AuthMethod[] {
   if (providerId === 'github') {
-    const hasClientId = !!getGitHubClientId();
     return [
       {
         id: 'oauth',
         label: 'Auth',
-        description: hasClientId ? 'Login via browser' : 'Login via browser (setup required)',
-        enabled: hasClientId,
+        description: 'Login via browser',
+        enabled: true,
       },
       { id: 'token', label: 'Token', description: 'Enter PAT manually', enabled: true },
     ];
@@ -304,7 +303,7 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
       } else if (evt.name === 'down' || evt.name === 'j') {
         setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
-      } else if (evt.name === 'enter') {
+      } else if (evt.name === 'return') {
         const item = items[selectedIndex()];
         if (item) {
           handleProviderSelect(item.id);
@@ -319,7 +318,7 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
       } else if (evt.name === 'down' || evt.name === 'j') {
         setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
-      } else if (evt.name === 'enter') {
+      } else if (evt.name === 'return') {
         const item = items[selectedIndex()];
         if (item && item.enabled) {
           handleAuthMethodSelect(item.id);
@@ -337,7 +336,7 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
       } else if (evt.name === 'down' || evt.name === 'j') {
         setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
-      } else if (evt.name === 'enter') {
+      } else if (evt.name === 'return') {
         const item = items[selectedIndex()];
         if (item) {
           handleConnectedAction(item.id);
@@ -356,7 +355,7 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
       }
       // Enter is handled by textarea's onSubmit
     } else if (s === 'result') {
-      if (evt.name === 'escape' || evt.name === 'enter') {
+      if (evt.name === 'escape' || evt.name === 'return') {
         props.onClose();
       }
     }

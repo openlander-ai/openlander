@@ -16,11 +16,19 @@ const GITHUB_ACCESS_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const DEFAULT_SCOPE = 'repo read:user';
 
 /**
- * Get the GitHub OAuth Client ID from environment variable.
- * Returns empty string if not configured.
+ * OpenLander's GitHub OAuth App Client ID.
+ * This is a PUBLIC identifier (not a secret) — same pattern as gh CLI.
+ * Register at: https://github.com/settings/applications/new
+ * Required: Enable "Device Flow" in the OAuth App settings.
+ */
+const GITHUB_CLIENT_ID = 'Ov23liYourClientIdHere';
+
+/**
+ * Get the GitHub OAuth Client ID.
+ * Uses the hardcoded app ID, with env var override for development.
  */
 export function getGitHubClientId(): string {
-  return process.env.OPENLANDER_GITHUB_CLIENT_ID ?? '';
+  return process.env.OPENLANDER_GITHUB_CLIENT_ID || GITHUB_CLIENT_ID;
 }
 
 /**

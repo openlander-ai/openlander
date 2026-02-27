@@ -1,7 +1,8 @@
 import type { JSX } from 'solid-js';
 import { For, createMemo, createSignal } from 'solid-js';
-import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
+import { useKeyboard } from '@opentui/solid';
 import { theme } from '../theme.js';
+import { OverlayContainer } from './OverlayContainer.js';
 
 interface RepoItem {
   name: string;
@@ -20,13 +21,9 @@ interface RepoOverlayProps {
 }
 
 export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
-  const dims = useTerminalDimensions();
-  const columns = () => dims().width;
-  const rows = () => dims().height;
-
-  // Selection state — reactive signal for SolidJS
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const maxVisible = 15;
+  const contentWidth = 70;
 
   // Calculate visible window for scrolling
   const visibleRange = createMemo(() => {
@@ -61,7 +58,7 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
       } else if (evt.name === 'down' || evt.name === 'j') {
         setSelectedIndex((prev) => Math.min(props.repos.length - 1, prev + 1));
-      } else if (evt.name === 'enter') {
+      } else if (evt.name === 'return') {
         const repo = props.repos[selectedIndex()];
         if (repo) {
           props.onSelect(repo.fullName);
@@ -72,8 +69,6 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
     evt.stopPropagation?.();
   });
 
-  const contentWidth = 70;
-
   // Truncate description to fit
   const truncateDesc = (desc: string | null, maxLen: number): string => {
     if (!desc) return '';
@@ -82,84 +77,55 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
   };
 
   return (
-    <box
-      flexDirection="column"
-      width={columns()}
-      height={rows()}
-      justifyContent="center"
-      alignItems="center"
-      backgroundColor={theme.background}
+    <OverlayContainer
+      title="Repositories"
+      width={contentWidth}
+      footer={props.repos.length > 0 ? '[↑↓ Navigate] [Enter Deploy] [Esc Close]' : '[Esc Close]'}
     >
-      <box
-        flexDirection="column"
-        border="round"
-        borderColor={theme.borderActive}
-        paddingX={2}
-        paddingY={1}
-        width={contentWidth}
-        backgroundColor={theme.backgroundMenu}
-      >
-        {/* Header */}
-        <box marginBottom={1} justifyContent="center">
-          <text bold={true} fg={theme.text}>
-            Repositories
-          </text>
+      {/* Content */}
+      {props.loading ? (
+        <box justifyContent="center">
+          <text fg={theme.textMuted}>Loading repositories...</text>
         </box>
-
-        {/* Content */}
-        {props.loading ? (
-          <box justifyContent="center">
-            <text fg={theme.textMuted}>Loading repositories...</text>
-          </box>
-        ) : props.error ? (
-          <box justifyContent="center">
-            <text fg={theme.error}>{props.error}</text>
-          </box>
-        ) : props.repos.length === 0 ? (
-          <box flexDirection="column" alignItems="center" gap={1}>
-            <text fg={theme.textMuted}>No repositories found.</text>
-            <text fg={theme.textDim}>Use /connect to add a provider.</text>
-          </box>
-        ) : (
-          <box flexDirection="column" gap={0}>
-            <For each={visibleRepos()}>
-              {(repo, index) => {
-                const { start } = visibleRange();
-                const actualIndex = start + index();
-                const isSelected = () => selectedIndex() === actualIndex;
-                const icon = repo.isPrivate ? '◆' : '○';
-                const descWidth = contentWidth - repo.fullName.length - 8;
-                const desc = truncateDesc(repo.description, descWidth);
-
-                return (
-                  <box flexDirection="row">
-                    <text
-                      backgroundColor={isSelected() ? theme.primary : undefined}
-                      fg={isSelected() ? theme.secondary : theme.text}
-                      bold={isSelected()}
-                    >
-                      {isSelected() ? ' ▶ ' : '   '}
-                      {icon} {repo.fullName}
-                    </text>
-                    {desc ? (
-                      <text fg={isSelected() ? theme.text : theme.textMuted}> {desc}</text>
-                    ) : null}
-                  </box>
-                );
-              }}
-            </For>
-          </box>
-        )}
-
-        {/* Footer hint */}
-        <box marginTop={1} justifyContent="center">
-          {props.repos.length > 0 ? (
-            <text fg={theme.textDim}>[↑↓ Navigate] [Enter Deploy] [Esc Close]</text>
-          ) : (
-            <text fg={theme.textDim}>[Esc Close]</text>
-          )}
+      ) : props.error ? (
+        <box justifyContent="center">
+          <text fg={theme.error}>{props.error}</text>
         </box>
-      </box>
-    </box>
+      ) : props.repos.length === 0 ? (
+        <box flexDirection="column" alignItems="center" gap={1}>
+          <text fg={theme.textMuted}>No repositories found.</text>
+          <text fg={theme.textDim}>Use /connect to add a provider.</text>
+        </box>
+      ) : (
+        <box flexDirection="column" gap={0}>
+          <For each={visibleRepos()}>
+            {(repo, index) => {
+              const { start } = visibleRange();
+              const actualIndex = start + index();
+              const isSelected = () => selectedIndex() === actualIndex;
+              const icon = repo.isPrivate ? '●' : '○';
+              const descWidth = contentWidth - repo.fullName.length - 8;
+              const desc = truncateDesc(repo.description, descWidth);
+
+              return (
+                <box flexDirection="row">
+                  <text
+                    backgroundColor={isSelected() ? theme.backgroundElement : undefined}
+                    fg={isSelected() ? theme.secondary : theme.text}
+                    bold={isSelected()}
+                  >
+                    {isSelected() ? ' ▶ ' : '   '}
+                    {icon} {repo.fullName}
+                  </text>
+                  {desc ? (
+                    <text fg={isSelected() ? theme.text : theme.textMuted}> {desc}</text>
+                  ) : null}
+                </box>
+              );
+            }}
+          </For>
+        </box>
+      )}
+    </OverlayContainer>
   );
 }

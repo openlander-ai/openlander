@@ -1,7 +1,8 @@
 import type { JSX } from 'solid-js';
 import { For, createSignal, createMemo } from 'solid-js';
-import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
+import { useKeyboard } from '@opentui/solid';
 import { theme } from '../theme.js';
+import { OverlayContainer } from './OverlayContainer.js';
 
 interface ModelOverlayProps {
   currentProvider: string;
@@ -44,19 +45,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   ollama: 'Ollama',
 };
 
-const PROVIDER_ICONS: Record<string, string> = {
-  gemini: '✦',
-  anthropic: '◈',
-  openai: '◆',
-  openrouter: '◇',
-  ollama: '◎',
-};
-
 export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
-  const dims = useTerminalDimensions();
-  const columns = () => dims().width;
-  const rows = () => dims().height;
-
   const [selectedIndex, setSelectedIndex] = createSignal(0);
 
   // Group models by provider for display
@@ -104,7 +93,7 @@ export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
     } else if (evt.name === 'down' || evt.name === 'j') {
       setSelectedIndex((prev) => Math.min(MODELS.length - 1, prev + 1));
-    } else if (evt.name === 'enter') {
+    } else if (evt.name === 'return') {
       const entry = MODELS[selectedIndex()];
       if (entry) {
         props.onSelect(entry.provider, entry.model);
@@ -113,8 +102,6 @@ export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
     // Prevent background components from receiving this event
     evt.stopPropagation?.();
   });
-
-  const contentWidth = 60;
 
   // Build flat list with provider headers for rendering
   const renderItems = createMemo(() => {
@@ -136,73 +123,42 @@ export function ModelOverlay(props: ModelOverlayProps): JSX.Element {
   });
 
   return (
-    <box
-      flexDirection="column"
-      width={columns()}
-      height={rows()}
-      justifyContent="center"
-      alignItems="center"
-      backgroundColor={theme.background}
-    >
-      <box
-        flexDirection="column"
-        border="round"
-        borderColor={theme.borderActive}
-        paddingX={2}
-        paddingY={1}
-        width={contentWidth}
-        backgroundColor={theme.backgroundMenu}
-      >
-        {/* Header */}
-        <box marginBottom={1} justifyContent="center">
-          <text bold={true} fg={theme.text}>
-            Select Model
-          </text>
-        </box>
-
-        {/* Model list */}
-        <box flexDirection="column" gap={0}>
-          <For each={renderItems()}>
-            {(item) => {
-              if (item.type === 'header') {
-                return (
-                  <box marginTop={item.provider === 'gemini' ? 0 : 1}>
-                    <text bold={true} fg={theme.secondary}>
-                      {item.label}
-                    </text>
-                  </box>
-                );
-              }
-
-              const isSelected = () => selectedIndex() === item.modelIndex;
-              const isCurrent = () =>
-                item.entry.provider === props.currentProvider &&
-                item.entry.model === props.currentModel;
-              const icon = PROVIDER_ICONS[item.entry.provider] ?? '•';
-
+    <OverlayContainer title="Select Model" footer="[↑↓ Navigate] [Enter Select] [Esc Close]">
+      {/* Model list */}
+      <box flexDirection="column" gap={0}>
+        <For each={renderItems()}>
+          {(item) => {
+            if (item.type === 'header') {
               return (
-                <box>
-                  <text
-                    backgroundColor={isSelected() ? theme.primary : undefined}
-                    fg={isSelected() ? theme.text : theme.text}
-                    bold={isSelected()}
-                  >
-                    {' '}
-                    {isCurrent() ? '●' : ' '}
-                    {icon} {item.entry.model}
-                    {isSelected() ? ' ' : ''}
+                <box marginTop={item.provider === 'gemini' ? 0 : 1}>
+                  <text bold={true} fg={theme.secondary}>
+                    {item.label}
                   </text>
                 </box>
               );
-            }}
-          </For>
-        </box>
+            }
 
-        {/* Footer hint */}
-        <box marginTop={1} justifyContent="center">
-          <text fg={theme.textDim}>[↑↓ Navigate] [Enter Select] [Esc Close]</text>
-        </box>
+            const isSelected = () => selectedIndex() === item.modelIndex;
+            const isCurrent = () =>
+              item.entry.provider === props.currentProvider &&
+              item.entry.model === props.currentModel;
+
+            return (
+              <box>
+                <text
+                  backgroundColor={isSelected() ? theme.backgroundElement : undefined}
+                  fg={isSelected() ? theme.secondary : theme.text}
+                  bold={isSelected()}
+                >
+                  {isSelected() ? ' ▶ ' : '   '}
+                  {isCurrent() ? '● ' : '  '}
+                  {item.entry.model}
+                </text>
+              </box>
+            );
+          }}
+        </For>
       </box>
-    </box>
+    </OverlayContainer>
   );
 }
