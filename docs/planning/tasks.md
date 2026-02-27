@@ -1,6 +1,6 @@
 # OpenLander v0.6 — 상세 개발 Task 목록
 
-> **기준일**: 2025-02-26
+> **기준일**: 2025-02-27 (Last updated)
 > **범위**: v0.6 TUI UI/UX 고도화
 > **입력 문서**: requirements.md, tui-spec.md, ui-ux-layout.md, ui-ux-build-compose.md
 > **레퍼런스**: OpenCode TUI, Claude Code TUI
@@ -9,28 +9,28 @@
 
 ## 현황 요약
 
-### 완료된 작업
+> **진행률**: 22/39 태스크 완료 (56%) | **남은 작업**: TUI-only 7개, Daemon 필요 7개, 인프라 3개
+
+### v0.5 기반 작업 (Phase 이전)
 
 - [x] OpenCode 다크 테마 적용 (`#0a0a0a` 배경, warm accent)
 - [x] Flex 레이아웃 전환 (explicit height → flex)
-- [x] 중앙 빈 상태 프롬프트 → 첫 메시지 후 하단 이동
-- [x] 슬래시 커맨드 피커 오버레이 (↑↓, Mouse, Enter, Esc)
-- [x] 슬래시 커맨드 9개: `/repo`, `/git`, `/model`, `/tunnel`, `/env`, `/compact`, `/clear`, `/exit`, `/help`
-- [x] Phase 1 전체 구현: 3-모드 상태 머신 (monitoring/deploying/debugging)
-- [x] 적응형 우측 패널 (StatusPanel) + BuildPanel/ProjectInfo/LogViewer 골격
-- [x] 포커스 관리 시스템 (state/focus.ts, Tab 전환)
-- [x] 컨텍스트 상태바 모드별 표시 (StatusBar 리팩토링)
-- [x] 반응형 2-tier 브레이크포인트 (≥120: 60:40, 80-119: 65:35, <80: single)
-- [x] 대시보드 폴링 30초→5초
-- [x] 테스트 인프라 정비: vitest.config.ts + bun:sqlite shim, 420/420 테스트 pass
-- [x] deploy_logs drizzle 스키마 컬럼명 수정 (trigger → trigger_source)
-- [x] 모델 선택 오버레이 (`/model`)
-- [x] Git 프로바이더 연동 오버레이 (`/git`) + 토큰 검증
-- [x] 레포 브라우저 오버레이 (`/repo`) + IPC 배포 트리거
+- [x] 슬래시 커맨드 피커 + 9개 커맨드 확정
 - [x] KeyEvent.name 기반 키보드 핸들링 전면 수정
-- [x] Tier 3 에이전트 프록시 커맨드 제거 (LLM 바이패스 원칙)
-- [x] 420개 단위 테스트 (22 suites 전부 pass)
+- [x] 테스트 인프라 정비: vitest.config.ts + bun:sqlite shim
+- [x] deploy_logs drizzle 스키마 컬럼명 수정 (trigger → trigger_source)
 - [x] 문서 재구조화 (`docs/planning/`, `docs/analysis/`)
+
+### v0.6 TUI 태스크 완료 현황 (22/39)
+
+- [x] **Phase 1** (5/5): 3-모드 상태 머신, 적응형 패널, 포커스 관리, 상태바, 반응형 레이아웃
+- [x] **Phase 2** (3/4): System ProgressBar+색상, Projects building Spinner, Activity 5건
+- [x] **Phase 3** (2/4): Build 패널 파이프라인 시각화, ScrollableLog 공용 컴포넌트
+- [x] **Phase 4** (2/3): 디버깅 모드 진입 (get_logs 인터셉트), ProjectInfo + LogViewer
+- [x] **Phase 5** (4/4): 자연어 컨테이너 제어 — 시스템 프롬프트 엔지니어링으로 구현
+- [ ] **Phase 6** (0/5): Compose 모드 — daemon-side 구현 필요, DEFERRED
+- [x] **Phase 7** (4/9): Ctrl+C 취소, Ctrl+L 클리어, 마크다운 렌더링, /compact
+- [x] **Phase 8** (2/5): /env 오버레이 (프로젝트 선택+마스킹), /tunnel 오버레이 (expose/unexpose)
 
 ### 최종 슬래시 커맨드 (9개)
 
@@ -68,12 +68,12 @@
 
 ---
 
-## Phase 1: 레이아웃 아키텍처 (기반)
+## Phase 1: 레이아웃 아키텍처 (기반) — ✅ 5/5 완료
 
 > 모든 기능의 토대. 이것 없이는 나머지 Phase가 성립하지 않음.
 > 참고: `ui-ux-layout.md` §레이아웃 구조, §3가지 모드, §패널 포커스 관리
 
-### T-ARCH-01: 3-모드 상태 머신
+### T-ARCH-01: 3-모드 상태 머신 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: L
 - **설명**: TUI 전체를 3가지 모드로 운영. 우측 패널이 모드에 따라 자동 전환.
@@ -92,7 +92,7 @@
   6. 모드 전환 시 채팅에 시스템 메시지 (`[📋 Build panel opened]` 등)
 - **의존성**: 없음 (기반 작업)
 
-### T-ARCH-02: 적응형 우측 패널 (Status Panel)
+### T-ARCH-02: 적응형 우측 패널 (Status Panel) ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: L
 - **설명**: 기존 `DashboardPanel.tsx`를 모드별로 다른 내용을 표시하는 적응형 패널로 교체
@@ -104,7 +104,7 @@
   5. 기존 `DashboardPanel.tsx` → `StatusPanel.tsx`로 점진적 교체
 - **의존성**: T-ARCH-01
 
-### T-ARCH-03: 포커스 관리 시스템
+### T-ARCH-03: 포커스 관리 시스템 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: M
 - **설명**: Tab으로 Chat ↔ Status 패널 간 포커스 전환. 포커스에 따라 키보드 동작 변경.
@@ -117,7 +117,7 @@
   6. 포커스 시각적 표시: 활성 패널 borderActive, 비활성 borderDim
 - **의존성**: T-ARCH-01
 
-### T-ARCH-04: 컨텍스트 상태바
+### T-ARCH-04: 컨텍스트 상태바 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: M
 - **설명**: 하단 1줄 상태바. 모드에 따라 내용이 동적으로 변경.
@@ -128,7 +128,7 @@
   4. 디버깅: `frontend ● :3000 │ CPU 2% MEM 128M │ Esc:돌아가기 r:재배포 s:중지`
 - **의존성**: T-ARCH-01
 
-### T-ARCH-05: 반응형 레이아웃
+### T-ARCH-05: 반응형 레이아웃 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: 터미널 너비에 따라 패널 배치 변경.
@@ -141,12 +141,12 @@
 
 ---
 
-## Phase 2: 모니터링 모드 (기본 뷰)
+## Phase 2: 모니터링 모드 (기본 뷰) — 3/4 완료
 
 > 유저가 대부분의 시간을 보내는 화면. Status 패널의 4개 섹션.
 > 참고: `ui-ux-layout.md` §모드 1: 모니터링
 
-### T-MON-01: System 섹션
+### T-MON-01: System 섹션 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: M
 - **설명**: CPU, MEM, DSK 사용률 + 프로그레스 바
@@ -159,7 +159,7 @@
   6. IPC `getSystemStats()` 폴링 (5초)
 - **의존성**: T-ARCH-02
 
-### T-MON-02: Projects 섹션
+### T-MON-02: Projects 섹션 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: M
 - **설명**: 프로젝트 목록. 상태 아이콘, 포트, 메모리, URL.
@@ -173,7 +173,7 @@
   7. IPC `listProjects()` 폴링 (3초)
 - **의존성**: T-ARCH-02, T-ARCH-03
 
-### T-MON-03: Activity 섹션
+### T-MON-03: Activity 섹션 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: 최근 배포/변경 이력 실시간 표시
@@ -207,12 +207,12 @@
 
 ---
 
-## Phase 3: 배포 모드
+## Phase 3: 배포 모드 — 2/4 완료
 
 > 빌드 시작 시 자동 전환. 파이프라인 시각화 + 빌드 로그.
 > 참고: `ui-ux-layout.md` §모드 2: 배포, `ui-ux-build-compose.md` §Part 1
 
-### T-DEPLOY-02: Build 패널
+### T-DEPLOY-02: Build 패널 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: L
 - **설명**: 배포 시작 시 Status 패널 하단에 자동 등장. 파이프라인 + 빌드 로그.
@@ -227,7 +227,7 @@
   8. 완료 3초 후 자동 모니터링 복귀 (또는 Enter 즉시 닫기)
 - **의존성**: T-ARCH-01, T-ARCH-02
 
-### T-DEPLOY-03: 스마트 자동 스크롤
+### T-DEPLOY-03: 스마트 자동 스크롤 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: M
 - **설명**: 빌드 로그 및 런타임 로그에서 자동 스크롤. 수동 스크롤 시 일시 정지.
@@ -270,12 +270,12 @@
 
 ---
 
-## Phase 4: 디버깅 모드
+## Phase 4: 디버깅 모드 — 2/3 완료
 
 > 특정 프로젝트 상세 + 실시간 로그.
 > 참고: `ui-ux-layout.md` §모드 3: 디버깅
 
-### T-DEBUG-01: 디버깅 모드 진입
+### T-DEBUG-01: 디버깅 모드 진입 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: M
 - **설명**: Status 패널에서 프로젝트 Enter → 디버깅 모드 진입. 채팅에서 "로그 보여줘" → LLM이 디버깅 모드 진입 트리거.
@@ -287,7 +287,7 @@
 - **의존성**: T-ARCH-01, T-ARCH-03
 - **테스트**: 프로젝트 Enter → 디버깅 모드 진입 확인
 
-### T-DEBUG-02: 프로젝트 Info + 실시간 로그 뷰
+### T-DEBUG-02: 프로젝트 Info + 실시간 로그 뷰 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: L
 - **설명**: 디버깅 모드의 우측 패널. 상단 Info, 하단 Live Logs.
@@ -311,12 +311,12 @@
 
 ---
 
-## Phase 5: 컨테이너 제어 (자연어 채팅)
+## Phase 5: 컨테이너 제어 (자연어 채팅) — ✅ 4/4 완료
 
 > 기본 운영 명령어. **모두 채팅 자연어로 실행** (슬래시 명령 아님).
 > LLM이 의도를 파악하여 IPC 함수 호출. 결과는 채팅에 시스템 메시지로 표시.
 
-### T-CMD-01: 자연어 컨테이너 제어 (stop, start, restart)
+### T-CMD-01: 자연어 컨테이너 제어 (stop, start, restart) ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: M
 - **설명**: "frontend 중지해줘", "backend 재시작해줘" 등 자연어로 컨테이너 제어.
@@ -327,7 +327,7 @@
   4. Compose 프로젝트: "litellm 중지해줘" → `docker compose down`, "litellm의 db만 재시작" → 서비스 단위
 - **테스트**: LLM 에이전트 tool call 검증
 
-### T-CMD-02: 자연어 상태 확인
+### T-CMD-02: 자연어 상태 확인 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: S
 - **설명**: "프로젝트 상태 보여줘", "frontend 상세 보여줘" 등 자연어.
@@ -336,7 +336,7 @@
   2. 상세: 프로젝트 Info (디버깅 모드와 동일 데이터, 채팅에 텍스트로)
 - **의존성**: IPC `listProjects()` / `getProjectStats()`
 
-### T-CMD-04: 자연어 프로젝트 삭제
+### T-CMD-04: 자연어 프로젝트 삭제 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: "frontend 삭제해줘" → LLM이 확인 후 삭제.
@@ -345,7 +345,7 @@
   2. 확인 시 IPC `removeProject()` → 컨테이너 + 이미지 삭제
   3. 결과 피드백
 
-### T-CMD-05: 자연어 재배포
+### T-CMD-05: 자연어 재배포 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: "frontend 재배포해줘" → git pull → 재빌드 → 재배포.
@@ -357,7 +357,7 @@
 
 ---
 
-## Phase 6: Compose 모드
+## Phase 6: Compose 모드 — ⏳ 0/5 (daemon-side 구현 필요)
 
 > docker-compose.yml 감지 시 멀티 서비스 처리.
 > 참고: `ui-ux-build-compose.md` §Part 2
@@ -421,11 +421,11 @@
 
 ---
 
-## Phase 7: 채팅 & 키보드 & 폴리시
+## Phase 7: 채팅 & 키보드 & 폴리시 — 4/9 완료
 
 > 핵심 기능 완료 후 UX 품질 향상.
 
-### T-KEY-01: Ctrl+C 실행 취소 / 더블 탭 종료
+### T-KEY-01: Ctrl+C 실행 취소 / 더블 탭 종료 ✅
 
 - **우선순위**: 🔴 P0 | **난이도**: M
 - **구현**:
@@ -433,7 +433,7 @@
   2. 활성 작업 없으면 → "Ctrl+C를 한번 더 누르면 종료" 상태바 표시
   3. 2초 내 재입력 → process.exit()
 
-### T-KEY-02: Ctrl+L 화면 클리어
+### T-KEY-02: Ctrl+L 화면 클리어 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: S
 - **구현**: 채팅 표시 상태만 초기화 (히스토리는 보존)
@@ -443,7 +443,7 @@
 - **우선순위**: 🟢 P2 | **난이도**: S
 - **구현**: textarea 아닌 곳에서 j=down, k=up
 
-### T-CHAT-01: 마크다운 렌더링
+### T-CHAT-01: 마크다운 렌더링 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: L
 - **구현**:
@@ -463,7 +463,7 @@
 - **우선순위**: 🟢 P2 | **난이도**: M
 - **구현**: Shift+Enter 줄바꿈, textarea 높이 자동 조절 (최대 5줄)
 
-### T-COMPACT-01: `/compact` 실제 구현
+### T-COMPACT-01: `/compact` 실제 구현 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: L
 - **구현**:
@@ -485,7 +485,7 @@
 
 ---
 
-## Phase 8: 인프라 & 장기
+## Phase 8: 인프라 & 장기 — 2/5 완료
 
 ### T-INFRA-01: i18n 기반 구축
 
@@ -511,7 +511,7 @@
 - **우선순위**: 🟢 P2 | **난이도**: L (조사만)
 - **구현**: 현재 에이전트 코드 분석 → Vercel AI SDK 매핑 → 마이그레이션 계획 문서
 
-### T-INFRA-04: `/env` 오버레이 완성
+### T-INFRA-04: `/env` 오버레이 완성 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: `/env` 슬래시 명령 → 환경변수 관리 오버레이 완성. 골격은 구현 완료.
@@ -522,7 +522,7 @@
   4. 변경 후 재배포 제안
 - **의존성**: env-spec.md Part 2
 
-### T-INFRA-05: `/tunnel` 오버레이 완성
+### T-INFRA-05: `/tunnel` 오버레이 완성 ✅
 
 - **우선순위**: 🟡 P1 | **난이도**: M
 - **설명**: `/tunnel` 슬래시 명령 → Cloudflare Tunnel 설정 오버레이 완성. 골격은 구현 완료.
@@ -535,87 +535,64 @@
 
 ---
 
-## 실행 순서 (권장)
+## 남은 태스크 (17개)
 
-### Phase 1 → 2: 기반 + 모니터링 ✅ 완료
+### 🔧 TUI-only — 바로 구현 가능 (7개)
 
-```
-T-ARCH-01  3-모드 상태 머신              ✅
-T-ARCH-02  적응형 우측 패널             ✅
-T-ARCH-03  포커스 관리                 ✅
-T-ARCH-04  컨텍스트 상태바              ✅
-T-MON-01   System 섹션 (프로그레스바+색상)   ✅
-T-MON-02   Projects 섹션 (빌딩 인디케이터)  ✅
-T-MON-03   Activity 섹션 (최대 5건)       ✅
-```
+| 태스크      | 우선순위 | 난이도 | 설명                                              |
+| ----------- | -------- | ------ | ------------------------------------------------- |
+| T-DEBUG-03  | 🟡 P1    | S      | 디버깅 모드 단축키 (r=redeploy, s=stop, d=domain) |
+| T-DEPLOY-05 | 🟢 P2    | M      | 복수 빌드 ←→ 전환                                 |
+| T-KEY-03    | 🟢 P2    | S      | Vim-style j/k 네비게이션                          |
+| T-STYLE-01  | 🟢 P2    | S      | 보더/구분선 통일                                  |
+| T-CHAT-02   | 🟢 P2    | L      | 코드블록 신택스 하이라이팅                        |
+| T-CHAT-03   | 🟢 P2    | M      | 멀티라인 입력 (Shift+Enter)                       |
+| T-AGENT-01  | 🟢 P2    | M      | 명확화 질문 선택지 UI                             |
 
-### Phase 3: 배포 (핵심 가치) ✅ 완료
+### 🏗️ Daemon-side 구현 필요 — DEFERRED (7개)
 
-```
-T-DEPLOY-02  Build 패널 (파이프라인+로그)     ✅
-T-DEPLOY-03  ScrollableLog 공용 컴포넌트    ✅
-T-KEY-01     Ctrl+C 취소                  ✅
-```
+| 태스크       | 우선순위 | 난이도 | 설명                               | 필요한 것                    |
+| ------------ | -------- | ------ | ---------------------------------- | ---------------------------- |
+| T-MON-04     | 🟡 P1    | L      | Alerts 섹션                        | daemon-side 주기적 체크 로직 |
+| T-DEPLOY-04  | 🟡 P1    | XL     | Build Failure 3-Tier               | 빌드 로그 분석 + tier 분류   |
+| T-COMPOSE-01 | 🟡 P1    | L      | Compose 파일 감지 + 실행           | 파이프라인 compose 분기      |
+| T-COMPOSE-02 | 🟡 P1    | M      | 포트 충돌 override 생성            | compose override 로직        |
+| T-COMPOSE-03 | 🟡 P1    | M      | 환경변수 주입 (.env.example)       | 파싱 + 자동 추론             |
+| T-COMPOSE-04 | 🟡 P1    | M      | 서비스 그룹 표시                   | compose 서비스 목록 API      |
+| T-COMPOSE-05 | 🟢 P2    | XL     | Auto-Detect (Dockerfile 없는 레포) | LLM 기반 Dockerfile 생성     |
 
-### Phase 4 + 5: 디버깅 + 컨테이너 제어 (자연어) ✅ 완료
+### 📋 인프라 & 장기 — 별도 계획 필요 (3개)
 
-```
-T-DEBUG-01   디버깅 모드 진입 (get_logs 인터셉트) ✅
-T-DEBUG-02   ProjectInfo + LogViewer           ✅
-T-CMD-01     자연어 stop/start/restart       ✅ (프롬프트 엔지니어링)
-T-CMD-02     자연어 상태 확인                 ✅
-T-CMD-04     자연어 프로젝트 삭제              ✅
-T-CMD-05     자연어 재배포                   ✅
-```
-
-### Phase 6: Compose — 데몬 측 구현 필요, DEFERRED
-
-```
-T-COMPOSE-01  감지 + 실행                    ⏳ daemon-side 필요
-T-COMPOSE-02  포트 충돌 override              ⏳ daemon-side 필요
-T-COMPOSE-03  환경변수 주입                  ⏳ daemon-side 필요
-T-COMPOSE-04  서비스 그룹 표시               ⏳ daemon-side 필요
-```
-
-### Phase 7 + 8: 품질 + 장기
-
-```
-T-MON-04     Alerts 섹션                    ⏳ daemon-side alert 감지 필요
-T-DEPLOY-04  Build Failure 3-Tier              ⏳ daemon-side tier 분류 필요
-T-KEY-02     Ctrl+L 화면 클리어               ✅ (이전 구현)
-T-CHAT-01    마크다운 렌더링                ✅
-T-COMPACT-01 /compact 실제 구현              ✅ (이전 구현)
-T-INFRA-01   i18n                            ⏳ Phase 1~6 이후 권장
-T-INFRA-02   다중 Git 프로바이더             ⏳
-T-INFRA-04   /env 오버레이 완성              ✅
-T-INFRA-05   /tunnel 오버레이 완성           ✅
-... (나머지 P2 항목)
-```
+| 태스크     | 우선순위 | 난이도 | 설명                                |
+| ---------- | -------- | ------ | ----------------------------------- |
+| T-INFRA-01 | 🟡 P1    | L      | i18n 기반 구축 (모든 컴포넌트 터치) |
+| T-INFRA-02 | 🟡 P1    | L      | 다중 Git 프로바이더 (GitLab 추가)   |
+| T-INFRA-03 | 🟢 P2    | L      | Vercel AI SDK 마이그레이션 조사     |
 
 ---
 
 ## 참고사항
 
 - **슬래시 명령 원칙**: LLM을 거치지 않고 직접 실행. 9개 유지 (repo, git, model, tunnel, env, compact, clear, exit, help). 컨테이너 제어(/stop, /restart)와 디버깅(/logs)은 채팅 자연어로 대체.
-- **빌드 실패 원칙**: "누가 만든 파일이냐"로 대응 범위 결정. 유저 코드는 절대 수정 안 함.
+- **빌드 실패 원칙**: '누가 만든 파일이냐'로 대응 범위 결정. 유저 코드는 절대 수정 안 함.
 - **Compose 원칙**: 원본 docker-compose.yml 절대 수정 안 함. override 파일만 사용.
 - **테마**: OpenCode 다크 테마 유지. 추후 브랜딩 커스터마이징 예정.
 - **키보드**: 모든 핸들러는 `KeyEvent.name` 사용 (OpenTUI 표준).
-- **테스트**: 각 커맨드/오버레이 추가 시 단위 테스트 필수.
+- **테스트**: 각 커맨드/오버레이 추가 시 단위 테스트 필수. 현재 기준선: 353 pass / 39 fail (pre-existing `vi.mocked` 불호환).
 - **기존 IPC 함수**: `deploy()`, `streamBuildProgress()`, `listProjects()`, `eventBus` 등 — 구현 전 실제 API 시그니처 확인 필요.
 
 ---
 
 ## 총 Task 수
 
-| Phase                     | Task 수 | P0     | P1     | P2    |
-| ------------------------- | ------- | ------ | ------ | ----- |
-| 1. 레이아웃 아키텍처      | 5       | 4      | 1      | 0     |
-| 2. 모니터링 모드          | 4       | 2      | 2      | 0     |
-| 3. 배포 모드              | 4       | 2      | 1      | 1     |
-| 4. 디버깅 모드            | 3       | 2      | 1      | 0     |
-| 5. 컨테이너 제어 (자연어) | 4       | 1      | 3      | 0     |
-| 6. Compose 모드           | 5       | 0      | 4      | 1     |
-| 7. 채팅 & 폴리시          | 9       | 1      | 3      | 5     |
-| 8. 인프라 & 장기          | 5       | 0      | 4      | 1     |
-| **합계**                  | **39**  | **12** | **19** | **8** |
+| Phase                     | Task 수 | 완료   | 남은   | 비고                      |
+| ------------------------- | ------- | ------ | ------ | ------------------------- |
+| 1. 레이아웃 아키텍처      | 5       | 5 ✅   | 0      |                           |
+| 2. 모니터링 모드          | 4       | 3      | 1      | MON-04: daemon 필요       |
+| 3. 배포 모드              | 4       | 2      | 2      | DEPLOY-04: daemon, 05: P2 |
+| 4. 디버깅 모드            | 3       | 2      | 1      | DEBUG-03: TUI-only P1     |
+| 5. 컨테이너 제어 (자연어) | 4       | 4 ✅   | 0      |                           |
+| 6. Compose 모드           | 5       | 0      | 5      | 전체 daemon-side 필요     |
+| 7. 채팅 & 키보드 & 폴리시 | 9       | 4      | 5      | 5개 TUI-only P2           |
+| 8. 인프라 & 장기          | 5       | 2      | 3      | 별도 계획 필요            |
+| **합계**                  | **39**  | **22** | **17** |                           |
