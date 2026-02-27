@@ -56,8 +56,8 @@ export function EnvOverlay(props: EnvOverlayProps): JSX.Element {
   let pendingSubmitText: string | null = null;
 
   const envEntries = () => Object.entries(envVars());
-  const contentWidth = Math.min(70, columns() - 4);
-  const contentHeight = Math.min(20, rows() - 6);
+  const contentWidth = () => Math.min(70, columns() - 4);
+  const contentHeight = () => Math.min(20, rows() - 6);
 
   const overlayTitle = () =>
     view() === 'projects'
@@ -316,7 +316,7 @@ export function EnvOverlay(props: EnvOverlayProps): JSX.Element {
         </Show>
 
         <Show when={!loading() && projects().length > 0}>
-          <box flexDirection="column" height={contentHeight} overflow="hidden">
+          <box flexDirection="column" height={contentHeight()} overflow="hidden">
             <For each={projects()}>
               {(project, index) => {
                 const isSelected = () => index() === selectedIndex();
@@ -358,7 +358,7 @@ export function EnvOverlay(props: EnvOverlayProps): JSX.Element {
               );
             }
             return (
-              <box flexDirection="column" height={contentHeight} overflow="hidden">
+              <box flexDirection="column" height={contentHeight()} overflow="hidden">
                 <Show when={editorState() === 'viewing'}>
                   <For each={entries}>
                     {([key, value], index) => {
@@ -413,7 +413,7 @@ export function EnvOverlay(props: EnvOverlayProps): JSX.Element {
                       focused={true}
                       minHeight={1}
                       maxHeight={1}
-                      width={contentWidth - 6}
+                      width={contentWidth() - 6}
                       fg={theme.text}
                       backgroundColor={theme.backgroundElement}
                       keyBindings={[{ name: 'enter', action: 'submit' }]}

@@ -95,7 +95,7 @@ export function TunnelOverlay(props: TunnelOverlayProps): JSX.Element {
     }
   });
 
-  const contentHeight = Math.min(16, rows() - 8);
+  const contentHeight = () => Math.min(16, rows() - 8);
 
   return (
     <OverlayContainer
@@ -118,7 +118,7 @@ export function TunnelOverlay(props: TunnelOverlayProps): JSX.Element {
       </Show>
 
       <Show when={!loading() && projects().length > 0}>
-        <box flexDirection="column" height={contentHeight} overflow="hidden">
+        <box flexDirection="column" height={contentHeight()} overflow="hidden">
           <For each={projects()}>
             {(project, index) => {
               const isSelected = () => index() === selectedIndex();
