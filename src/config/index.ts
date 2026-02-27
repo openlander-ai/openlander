@@ -123,11 +123,13 @@ export interface GitProviderEntry {
   username: string;
   /** Base API URL (for self-hosted instances) */
   baseUrl?: string;
+  /** Authentication method used */
+  authMethod?: 'oauth' | 'pat';
 }
 
 export interface GitProvidersConfig {
   github: GitProviderEntry;
-  // gitlab: GitProviderEntry;  // future
+  gitlab: GitProviderEntry;
   // bitbucket: GitProviderEntry;  // future
   // gitea: GitProviderEntry;  // future
 }
@@ -178,6 +180,7 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
   },
   gitProviders: {
     github: { token: '', username: '' },
+    gitlab: { token: '', username: '' },
   },
   localModel: {
     preferLocal: false,

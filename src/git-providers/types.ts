@@ -152,4 +152,6 @@ export interface GitProviderConfig {
   username: string;
   /** Base API URL (for self-hosted instances like GitLab CE) */
   baseUrl?: string;
+  /** Authentication method used */
+  authMethod?: 'oauth' | 'pat';
 }
