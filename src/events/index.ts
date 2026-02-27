@@ -10,6 +10,8 @@
  */
 
 import { createModuleLogger } from '../lib/logger.js';
+import type { BuildTier } from '../pipeline/build-recovery.js';
+import type { Alert } from '../monitor/alerts.js';
 
 const log = createModuleLogger('events');
 
@@ -23,6 +25,13 @@ export type EventType =
   | 'deploy:success'
   | 'deploy:failed'
   | 'deploy:rollback'
+  | 'build:autofix'
+  | 'build:suggest'
+  | 'build:inform'
+  | 'compose:start'
+  | 'compose:up'
+  | 'compose:down'
+  | 'compose:failed'
   // Container lifecycle
   | 'container:start'
   | 'container:stop'
@@ -43,7 +52,11 @@ export type EventType =
   | 'mcp:disconnect'
   // v0.4: Channels
   | 'channel:message'
-  | 'channel:connect';
+  | 'channel:connect'
+  // v0.5: Alerts
+  | 'alert:new'
+  | 'alert:resolved'
+  | 'alert:dismissed';
 
 export interface EventPayload {
   'deploy:start': { projectId: string; repoUrl: string };
@@ -53,6 +66,13 @@ export interface EventPayload {
   'deploy:success': { projectId: string; url: string; totalDurationMs: number };
   'deploy:failed': { projectId: string; step: string; error: string };
   'deploy:rollback': { projectId: string; fromImage: string; toImage: string };
+  'build:autofix': { projectId: string; action: string; category: string };
+  'build:suggest': { projectId: string; suggestion: string; diff?: string };
+  'build:inform': { projectId: string; summary: string; tier: BuildTier };
+  'compose:start': { projectId: string; composePath: string; serviceCount: number };
+  'compose:up': { projectId: string; services: string[] };
+  'compose:down': { projectId: string };
+  'compose:failed': { projectId: string; error: string };
   'container:start': { projectId: string; containerId: string };
   'container:stop': { projectId: string; containerId: string };
   'container:remove': { projectId: string; containerId: string };
@@ -68,6 +88,9 @@ export interface EventPayload {
   'mcp:disconnect': { clientId: string };
   'channel:message': { channelType: string; content: string; sender: string };
   'channel:connect': { channelType: string };
+  'alert:new': { alert: Alert };
+  'alert:resolved': { alertId: string; type: Alert['type'] };
+  'alert:dismissed': { alertId: string };
 }
 
 // --- Event handler type ---
@@ -87,7 +110,9 @@ export class EventBus {
 
     const handlerSet = this.handlers.get(event);
     if (!handlerSet) {
-      return () => { /* noop */ };
+      return () => {
+        /* noop */
+      };
     }
     handlerSet.add(handler as EventHandler<EventType>);
 

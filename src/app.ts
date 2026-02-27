@@ -14,6 +14,8 @@ import { BuildDebugger } from './agent/debugger.js';
 import { ChannelManager } from './channels/base.js';
 import { PreviewDeployer } from './pipeline/preview.js';
 import { JobManager } from './pipeline/job-manager.js';
+import { ComposePipeline } from './pipeline/compose.js';
+import { AlertMonitor } from './monitor/alerts.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import { buildContextSnapshot } from './agent/prompts.js';
@@ -32,6 +34,7 @@ export interface AppContext {
   db: Database;
   docker: Docker;
   pipeline: DeployPipeline;
+  composePipeline: ComposePipeline;
   traefik: TraefikManager;
   env: EnvManager;
   agent: Agent | null;
@@ -47,6 +50,8 @@ export interface AppContext {
   channelManager: ChannelManager;
   previewDeployer: PreviewDeployer;
   jobManager: JobManager;
+  // v0.5 modules
+  alertMonitor: AlertMonitor;
 }
 
 /** Create the application context from config. */
@@ -54,7 +59,8 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   const db = new Database(dbPath);
   const docker = new Docker(config.docker.socketPath);
   const jobManager = new JobManager();
-  const pipeline = new DeployPipeline(docker, db, jobManager);
+  const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager);
+  const pipeline = new DeployPipeline(docker, db, jobManager, composePipeline);
   const traefik = new TraefikManager(docker);
   const env = new EnvManager(db);
 
@@ -113,14 +119,50 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   }
 
   // v0.4: Channel manager
-  const channelManager = new ChannelManager(
-    { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger, jobManager } as AppContext,
-  );
+  const channelManager = new ChannelManager({
+    config,
+    db,
+    docker,
+    pipeline,
+    composePipeline,
+    traefik,
+    env,
+    agent,
+    healthMonitor,
+    webhookManager,
+    cloudflare,
+    blueGreen,
+    dbProvisioner,
+    buildDebugger,
+    jobManager,
+  } as AppContext);
 
   // v0.4: Preview deployer
   const previewDeployer = new PreviewDeployer(docker, db);
 
-  const ctx: AppContext = { config, db, docker, pipeline, traefik, env, agent, healthMonitor, webhookManager, cloudflare, blueGreen, dbProvisioner, buildDebugger, channelManager, previewDeployer, jobManager };
+  // v0.5: Alert monitor
+  const alertMonitor = new AlertMonitor(docker, db, eventBus);
+
+  const ctx: AppContext = {
+    config,
+    db,
+    docker,
+    pipeline,
+    composePipeline,
+    traefik,
+    env,
+    agent,
+    healthMonitor,
+    webhookManager,
+    cloudflare,
+    blueGreen,
+    dbProvisioner,
+    buildDebugger,
+    channelManager,
+    previewDeployer,
+    jobManager,
+    alertMonitor,
+  };
 
   // Re-assign the channelManager's context reference (it was created with partial context)
   // ChannelManager already holds the reference, no update needed
@@ -131,6 +173,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 /** Shutdown the application context. */
 export function shutdownAppContext(ctx: AppContext): void {
   ctx.healthMonitor.stop();
+  ctx.alertMonitor.stop();
   void ctx.channelManager.stop();
   void ctx.previewDeployer.cleanupAll();
   ctx.db.close();

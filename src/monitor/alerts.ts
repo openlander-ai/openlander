@@ -1,0 +1,338 @@
+import { nanoid } from 'nanoid';
+import type { Docker } from '../pipeline/docker.js';
+import type { Database } from '../db/index.js';
+import type { EventBus } from '../events/index.js';
+import { getSystemStats } from './stats.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('alerts');
+
+export interface Alert {
+  id: string;
+  type: 'disk' | 'inactive-project' | 'restart-loop' | 'dangling-images';
+  severity: 'warning' | 'critical';
+  message: string;
+  details: Record<string, unknown>;
+  suggestion: string;
+  createdAt: Date;
+  dismissed: boolean;
+}
+
+export interface AlertMonitorOptions {
+  intervalMs?: number;
+}
+
+const DEFAULT_OPTIONS: Required<AlertMonitorOptions> = {
+  intervalMs: 30000,
+};
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const INACTIVE_DAYS_THRESHOLD = 14;
+const RESTART_COUNT_THRESHOLD = 3;
+const DANGLING_IMAGES_THRESHOLD = 3;
+
+export class AlertMonitor {
+  private readonly docker: Docker;
+  private readonly db: Database;
+  private readonly events: EventBus;
+  private readonly options: Required<AlertMonitorOptions>;
+  private readonly alerts = new Map<string, Alert>();
+  private readonly alertKeys = new Map<string, string>(); // type:targetId -> alertId
+  private intervalId: ReturnType<typeof setInterval> | undefined;
+  private checking = false;
+
+  constructor(docker: Docker, db: Database, events: EventBus, options?: AlertMonitorOptions) {
+    this.docker = docker;
+    this.db = db;
+    this.events = events;
+    this.options = { ...DEFAULT_OPTIONS, ...options };
+  }
+
+  start(intervalMs?: number): void {
+    if (this.intervalId) {
+      return;
+    }
+
+    const interval = intervalMs ?? this.options.intervalMs;
+    this.intervalId = setInterval(() => {
+      void this.runChecks();
+    }, interval);
+
+    void this.runChecks();
+  }
+
+  stop(): void {
+    if (!this.intervalId) {
+      return;
+    }
+
+    clearInterval(this.intervalId);
+    this.intervalId = undefined;
+  }
+
+  getActiveAlerts(): Alert[] {
+    return Array.from(this.alerts.values()).filter((a) => !a.dismissed);
+  }
+
+  dismissAlert(alertId: string): void {
+    const alert = this.alerts.get(alertId);
+    if (!alert) {
+      log.debug({ alertId }, 'Attempted to dismiss non-existent alert');
+      return;
+    }
+
+    alert.dismissed = true;
+    const key = `${alert.type}:${this.getTargetId(alert)}`;
+    this.alertKeys.delete(key);
+
+    void this.events.emit('alert:dismissed', { alertId });
+    log.info({ alertId, type: alert.type }, 'Alert dismissed');
+  }
+
+  private getTargetId(alert: Alert): string {
+    switch (alert.type) {
+      case 'disk':
+        return 'root';
+      case 'inactive-project': {
+        const pid = alert.details['projectId'];
+        return typeof pid === 'string' ? pid : 'unknown';
+      }
+      case 'restart-loop': {
+        const cid = alert.details['containerId'];
+        return typeof cid === 'string' ? cid : 'unknown';
+      }
+      case 'dangling-images':
+        return 'system';
+      default:
+        return 'unknown';
+    }
+  }
+
+  private async runChecks(): Promise<void> {
+    if (this.checking) {
+      return;
+    }
+
+    this.checking = true;
+    try {
+      await Promise.all([
+        this.checkDiskUsage(),
+        this.checkInactiveProjects(),
+        this.checkContainerRestartLoops(),
+        this.checkDanglingImages(),
+      ]);
+    } catch (err) {
+      log.error({ err }, 'Error during alert checks');
+    } finally {
+      this.checking = false;
+    }
+  }
+
+  private async checkDiskUsage(): Promise<void> {
+    const stats = getSystemStats();
+    const usagePercent = stats.disk.usagePercent;
+    const key = 'disk:root';
+
+    // Remove alert if usage is now normal
+    if (usagePercent < 80) {
+      this.resolveAlert(key, 'disk');
+      return;
+    }
+
+    const severity: 'warning' | 'critical' = usagePercent >= 90 ? 'critical' : 'warning';
+    const message = `Disk usage is ${usagePercent.toFixed(1)}% (${String(stats.disk.usedGB)}GB / ${String(stats.disk.totalGB)}GB)`;
+    const suggestion =
+      usagePercent >= 90
+        ? 'Critical: Free up disk space immediately. Remove unused Docker images with "docker image prune -a" or clean up old project data.'
+        : 'Consider cleaning up unused Docker images with "docker image prune" or removing old unused projects.';
+
+    await this.upsertAlert(key, {
+      type: 'disk',
+      severity,
+      message,
+      details: {
+        usagePercent,
+        usedGB: stats.disk.usedGB,
+        freeGB: stats.disk.freeGB,
+        totalGB: stats.disk.totalGB,
+      },
+      suggestion,
+    });
+  }
+
+  private async checkInactiveProjects(): Promise<void> {
+    const projects = this.db.listProjects('running');
+    const now = Date.now();
+
+    for (const project of projects) {
+      const key = `inactive-project:${project.id}`;
+      const updatedAt = new Date(project.updated_at).getTime();
+      const daysSinceUpdate = (now - updatedAt) / MS_PER_DAY;
+
+      if (daysSinceUpdate <= INACTIVE_DAYS_THRESHOLD) {
+        // Project is active, resolve any existing alert
+        this.resolveAlert(key, 'inactive-project');
+        continue;
+      }
+
+      const message = `Project "${project.name}" has been inactive for ${String(Math.floor(daysSinceUpdate))} days`;
+      const suggestion = `Consider stopping this project to free up resources. Use "stop_project ${project.name}" or ask the user if it's still needed.`;
+
+      await this.upsertAlert(key, {
+        type: 'inactive-project',
+        severity: 'warning',
+        message,
+        details: {
+          projectId: project.id,
+          projectName: project.name,
+          daysSinceUpdate: Math.floor(daysSinceUpdate),
+          lastUpdated: project.updated_at,
+          potentialMemorySavings: '~128-512MB depending on container size',
+        },
+        suggestion,
+      });
+    }
+  }
+
+  private async checkContainerRestartLoops(): Promise<void> {
+    const dockerClient = this.docker.getClient();
+    const projects = this.db.listProjects('running');
+
+    for (const project of projects) {
+      if (!project.container_id) continue;
+
+      const key = `restart-loop:${project.container_id}`;
+
+      try {
+        const container = dockerClient.getContainer(project.container_id);
+        const info = await container.inspect();
+        const restartCount: number = (info.RestartCount as number | undefined) ?? 0;
+
+        // Check if container was restarted recently (within 24h)
+        const startedAt = new Date(info.State.StartedAt);
+        const hoursSinceStart = (Date.now() - startedAt.getTime()) / (60 * 60 * 1000);
+        const isRecent = hoursSinceStart < 24;
+
+        if (restartCount < RESTART_COUNT_THRESHOLD || !isRecent) {
+          // No restart loop, resolve any existing alert
+          this.resolveAlert(key, 'restart-loop');
+          continue;
+        }
+
+        const message = `Container for "${project.name}" has restarted ${String(restartCount)} times in the last 24 hours`;
+        const suggestion = `Check the container logs for errors using "get_logs ${project.name}" and investigate the root cause. The application may be crashing on startup.`;
+
+        await this.upsertAlert(key, {
+          type: 'restart-loop',
+          severity: 'critical',
+          message,
+          details: {
+            projectId: project.id,
+            projectName: project.name,
+            containerId: project.container_id,
+            restartCount,
+            lastStarted: info.State.StartedAt,
+          },
+          suggestion,
+        });
+      } catch (err) {
+        log.debug(
+          { err, containerId: project.container_id },
+          'Failed to inspect container for restart check',
+        );
+      }
+    }
+  }
+
+  private async checkDanglingImages(): Promise<void> {
+    const key = 'dangling-images:system';
+
+    try {
+      const dockerClient = this.docker.getClient();
+      const images = await dockerClient.listImages({
+        filters: { dangling: ['true'] },
+      });
+
+      if (images.length < DANGLING_IMAGES_THRESHOLD) {
+        this.resolveAlert(key, 'dangling-images');
+        return;
+      }
+
+      // Calculate potential disk savings (approximate)
+      const totalSize = images.reduce(
+        (sum, img) => sum + ((img.Size as number | undefined) ?? 0),
+        0,
+      );
+      const sizeGB = (totalSize / 1e9).toFixed(2);
+
+      const message = `${String(images.length)} dangling Docker images detected, using approximately ${sizeGB}GB of disk space`;
+      const suggestion =
+        'Clean up dangling images to free disk space with "docker image prune". This is safe and will only remove unused images.';
+
+      await this.upsertAlert(key, {
+        type: 'dangling-images',
+        severity: 'warning',
+        message,
+        details: {
+          count: images.length,
+          totalSizeBytes: totalSize,
+          totalSizeGB: parseFloat(sizeGB),
+        },
+        suggestion,
+      });
+    } catch (err) {
+      log.debug({ err }, 'Failed to check dangling images');
+    }
+  }
+
+  private async upsertAlert(
+    key: string,
+    alertData: Omit<Alert, 'id' | 'createdAt' | 'dismissed'>,
+  ): Promise<void> {
+    const existingId = this.alertKeys.get(key);
+
+    if (existingId) {
+      // Alert already exists, update it but preserve createdAt
+      const existing = this.alerts.get(existingId);
+      if (existing) {
+        // Update details and severity if changed
+        existing.severity = alertData.severity;
+        existing.message = alertData.message;
+        existing.details = alertData.details;
+        existing.suggestion = alertData.suggestion;
+        return;
+      }
+    }
+
+    // Create new alert
+    const alert: Alert = {
+      id: nanoid(12),
+      ...alertData,
+      createdAt: new Date(),
+      dismissed: false,
+    };
+
+    this.alerts.set(alert.id, alert);
+    this.alertKeys.set(key, alert.id);
+
+    await this.events.emit('alert:new', { alert });
+    log.info(
+      { alertId: alert.id, type: alert.type, severity: alert.severity },
+      'New alert created',
+    );
+  }
+
+  private resolveAlert(key: string, type: Alert['type']): void {
+    const alertId = this.alertKeys.get(key);
+    if (!alertId) return;
+
+    const alert = this.alerts.get(alertId);
+    if (!alert || alert.dismissed) return;
+
+    this.alerts.delete(alertId);
+    this.alertKeys.delete(key);
+
+    void this.events.emit('alert:resolved', { alertId, type });
+    log.info({ alertId, type }, 'Alert resolved');
+  }
+}
