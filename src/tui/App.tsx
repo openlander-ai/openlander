@@ -353,8 +353,7 @@ export function App(props: AppProps): JSX.Element {
 
   // Global keyboard shortcuts (safe — no-op if renderer not ready)
   try {
-    useKeyboard((event) => {
-      const evt = event as { name?: string; ctrl?: boolean };
+    useKeyboard((evt) => {
       // Don't handle shortcuts during setup
       if (appMode() === 'setup') return;
 

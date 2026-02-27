@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, For } from 'solid-js';
+import { createSignal, createEffect, createMemo, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import { overlayActive } from '../state/overlay.js';
@@ -11,6 +11,7 @@ import { ChatMessage, type DisplayMessage } from './ChatMessage.js';
 import { SlashCommandPicker, getMatchCount, getMatchAt } from './SlashCommandPicker.js';
 import { parseSlashCommand, type SlashCommandResult } from '../commands/registry.js';
 import { theme } from '../theme.js';
+import { detectChoices, type DetectedChoice } from './ChoicePicker.js';
 import { VERSION } from '../../version.js';
 
 // ---------------------------------------------------------------------------
@@ -160,6 +161,25 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [scrollOffset, setScrollOffset] = createSignal(0);
   const [isAtBottom, setIsAtBottom] = createSignal(true);
   const [hasNewMessages, setHasNewMessages] = createSignal(false);
+  // --- Choice detection for agent clarification questions (T-AGENT-01) ---
+  const detectedChoices = createMemo((): DetectedChoice[] => {
+    const msgs = messages();
+    if (isStreaming()) return [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i];
+      if (!msg) continue;
+      if (msg.role === 'user') return [];
+      if (msg.role === 'assistant' && msg.type !== 'tool_start' && msg.type !== 'tool_result') {
+        const choices = detectChoices(msg.content);
+        if (choices.length >= 2) return choices;
+      }
+    }
+    return [];
+  });
+
+  const submitChoice = (choice: DetectedChoice) => {
+    void sendMessage(String(choice.number));
+  };
   let prevMessageCount = 0;
 
   // --- Textarea ref for external control (history, clear) ---
@@ -646,6 +666,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
       }
       return;
     }
+    // Number keys (1-9) for quick choice selection (T-AGENT-01)
+    const choices = detectedChoices();
+    if (choices.length > 0 && evt.name && /^[1-9]$/.test(evt.name)) {
+      const num = parseInt(evt.name, 10);
+      const choice = choices.find((c) => c.number === num);
+      if (choice) {
+        submitChoice(choice);
+        return;
+      }
+    }
   });
 
   return (
@@ -756,6 +786,26 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           <Show when={showCommandPicker()}>
             <box>
               <SlashCommandPicker input={inputValue()} selectedIndex={commandPickerIndex()} />
+            </box>
+          </Show>
+
+          {/* Choice picker for agent clarification questions */}
+          <Show when={detectedChoices().length > 0}>
+            <box flexShrink={0} paddingLeft={3} flexDirection="row" gap={2}>
+              <text fg={theme.textDim}>Pick:</text>
+              <For each={detectedChoices()}>
+                {(choice) => (
+                  <box flexDirection="row" gap={0}>
+                    <text backgroundColor={theme.backgroundElement} fg={theme.warning}>
+                      {` ${String(choice.number)} `}
+                    </text>
+                    <text fg={theme.textMuted}>
+                      {' '}
+                      {choice.label.length > 30 ? choice.label.slice(0, 29) + '…' : choice.label}
+                    </text>
+                  </box>
+                )}
+              </For>
             </box>
           </Show>
 
