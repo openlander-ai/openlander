@@ -142,6 +142,15 @@ describe('getColorForPercent', () => {
     expect(getColorForPercent(60)).toBe(theme.resourceOk);
   });
 
+  // Boundary tests: 60% threshold
+  it('returns green for 59% (just below 60%)', () => {
+    expect(getColorForPercent(59)).toBe(theme.resourceOk);
+  });
+
+  it('returns yellow for 61% (just above 60%)', () => {
+    expect(getColorForPercent(61)).toBe(theme.resourceWarn);
+  });
+
   it('returns yellow for 70%', () => {
     expect(getColorForPercent(70)).toBe(theme.resourceWarn);
   });
@@ -150,12 +159,25 @@ describe('getColorForPercent', () => {
     expect(getColorForPercent(80)).toBe(theme.resourceWarn);
   });
 
+  // Boundary tests: 80% threshold
+  it('returns yellow for 79% (just below 80%)', () => {
+    expect(getColorForPercent(79)).toBe(theme.resourceWarn);
+  });
+
+  it('returns red for 81% (just above 80%)', () => {
+    expect(getColorForPercent(81)).toBe(theme.resourceCrit);
+  });
+
   it('returns red for 90%', () => {
     expect(getColorForPercent(90)).toBe(theme.resourceCrit);
   });
 
   it('returns red for 100%', () => {
     expect(getColorForPercent(100)).toBe(theme.resourceCrit);
+  });
+
+  it('returns green for 0%', () => {
+    expect(getColorForPercent(0)).toBe(theme.resourceOk);
   });
 });
 
