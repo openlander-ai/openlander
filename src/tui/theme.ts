@@ -1,16 +1,15 @@
 /**
- * Centralized color theme constants for the TUI.
- * Matches OpenCode's default dark theme (opencode.json) for visual consistency.
- * Reference: https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/cli/cmd/tui/context/theme/opencode.json
+ * Centralized color theme constants for the OpenLander TUI.
+ * Signal Green brand identity — cyber-terminal aesthetic.
  */
 export const theme = {
-  // ── Core palette (OpenCode dark mode) ──────────────────────────
-  primary: '#fab283', // Orange — assistant accent, active elements
-  secondary: '#5c9cf5', // Blue — user accent, interactive elements
-  accent: '#9d7cd8', // Purple — highlights, special elements
+  // ── Core palette ──────────────────────────────────────────────
+  primary: '#36f0a0', // Signal green — brand accent, active elements
+  secondary: '#4d96ff', // Electric blue — user accent, interactive elements
+  accent: '#bd93f9', // Neon purple — highlights, special elements
   text: '#eeeeee', // Near-white — primary text
   textMuted: '#808080', // Medium gray — de-emphasized text
-  textDim: '#555555', // Dim gray — very subtle text (OpenLander-specific)
+  textDim: '#555555', // Dim gray — very subtle text
 
   // ── Backgrounds ───────────────────────────────────────────────
   background: '#0a0a0a', // Near-black root background
@@ -23,37 +22,37 @@ export const theme = {
   borderActive: '#606060', // Active/focused borders
   borderSubtle: '#3c3c3c', // Very subtle separators
 
-  // ── Status (OpenCode uses more vivid, saturated colors) ───────
-  success: '#7fd88f', // Success states, green
-  warning: '#f5a742', // Warnings, orange
-  error: '#e06c75', // Errors, muted red
-  info: '#56b6c2', // Informational, cyan
+  // ── Status ─────────────────────────────────────────────────────
+  success: '#36f0a0', // Success = brand green (unified)
+  warning: '#ffb86c', // Vibrant orange
+  error: '#ff5555', // Terminal red
+  info: '#89ddff', // Sky blue (distinct from green)
 
   // ── Diff colors ───────────────────────────────────────────────
-  diffAdded: '#4fd6be', // Added lines (teal)
-  diffRemoved: '#c53b53', // Removed lines (red)
+  diffAdded: '#36f0a0', // Added lines = brand green
+  diffRemoved: '#ff5555', // Removed lines = error red
 
   // ── Legacy compat (mapped to new names) ───────────────────────
   muted: '#808080', // = textMuted
-  user: '#5c9cf5', // = secondary
+  user: '#4d96ff', // = secondary
   agent: undefined, // default fg
-  progress: '#f5a742', // = warning
-  url: '#5c9cf5', // = secondary
+  progress: '#ffb86c', // = warning
+  url: '#4d96ff', // = secondary
   toolBorder: '#484848', // = border
   inactive: '#555555', // = textDim
   sectionTitle: '#eeeeee', // = text
   projectName: undefined,
 
   // ── Status colors ─────────────────────────────────────────────
-  statusRunning: '#7fd88f',
-  statusBuilding: '#f5a742',
+  statusRunning: '#36f0a0',
+  statusBuilding: '#ffb86c',
   statusStopped: '#555555',
-  statusError: '#e06c75',
+  statusError: '#ff5555',
 
   // ── Resource thresholds ───────────────────────────────────────
-  resourceOk: '#7fd88f',
-  resourceWarn: '#f5a742',
-  resourceCrit: '#e06c75',
+  resourceOk: '#36f0a0',
+  resourceWarn: '#ffb86c',
+  resourceCrit: '#ff5555',
 } as const;
 
 /** Pipe-style left border chars (OpenCode SplitBorder pattern) */
