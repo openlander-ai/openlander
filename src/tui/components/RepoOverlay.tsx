@@ -1,5 +1,5 @@
 import type { JSX } from 'solid-js';
-import { For, createMemo } from 'solid-js';
+import { For, createMemo, createSignal } from 'solid-js';
 import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
 import { theme } from '../theme.js';
 
@@ -24,8 +24,8 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
   const columns = () => dims().width;
   const rows = () => dims().height;
 
-  // Selection state - must be at top level for reactivity
-  let selectedIndex = 0;
+  // Selection state — reactive signal for SolidJS
+  const [selectedIndex, setSelectedIndex] = createSignal(0);
   const maxVisible = 15;
 
   // Calculate visible window for scrolling
@@ -36,7 +36,7 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
     }
 
     // Center selection in window
-    let start = Math.max(0, selectedIndex - Math.floor(maxVisible / 2));
+    let start = Math.max(0, selectedIndex() - Math.floor(maxVisible / 2));
     const end = Math.min(total, start + maxVisible);
 
     // Adjust if we're near the end
@@ -58,11 +58,11 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
       props.onClose();
     } else if (!props.loading && !props.error && props.repos.length > 0) {
       if (evt.name === 'up') {
-        selectedIndex = Math.max(0, selectedIndex - 1);
+        setSelectedIndex((prev) => Math.max(0, prev - 1));
       } else if (evt.name === 'down') {
-        selectedIndex = Math.min(props.repos.length - 1, selectedIndex + 1);
+        setSelectedIndex((prev) => Math.min(props.repos.length - 1, prev + 1));
       } else if (evt.name === 'enter') {
-        const repo = props.repos[selectedIndex];
+        const repo = props.repos[selectedIndex()];
         if (repo) {
           props.onSelect(repo.fullName);
         }
@@ -126,7 +126,7 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
               {(repo, index) => {
                 const { start } = visibleRange();
                 const actualIndex = start + index();
-                const isSelected = () => selectedIndex === actualIndex;
+                const isSelected = () => selectedIndex() === actualIndex;
                 const icon = repo.isPrivate ? '◆' : '○';
                 const descWidth = contentWidth - repo.fullName.length - 8;
                 const desc = truncateDesc(repo.description, descWidth);
@@ -135,12 +135,11 @@ export function RepoOverlay(props: RepoOverlayProps): JSX.Element {
                   <box flexDirection="row">
                     <text
                       backgroundColor={isSelected() ? theme.primary : undefined}
-                      fg={isSelected() ? theme.text : theme.text}
+                      fg={isSelected() ? theme.secondary : theme.text}
                       bold={isSelected()}
                     >
-                      {' '}
+                      {isSelected() ? ' ▶ ' : '   '}
                       {icon} {repo.fullName}
-                      {isSelected() ? ' ' : ''}
                     </text>
                     {desc ? (
                       <text fg={isSelected() ? theme.text : theme.textMuted}> {desc}</text>

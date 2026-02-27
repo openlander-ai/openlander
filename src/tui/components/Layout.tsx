@@ -6,7 +6,7 @@ interface LayoutProps {
   left: JSX.Element;
   right: JSX.Element;
   statusBar: JSX.Element;
-  overlay?: JSX.Element;
+  // overlay prop removed — overlays now rendered at App level for proper useKeyboard lifecycle
   activePanel?: 'left' | 'right';
   columns: number;
   rows: number;
@@ -85,13 +85,6 @@ export function Layout(props: LayoutProps): JSX.Element {
 
       {/* Footer bar */}
       {props.statusBar}
-
-      {/* Overlay on top of everything */}
-      <Show when={props.overlay}>
-        <box position="absolute" width={columns()} height={rows()} flexDirection="column">
-          {props.overlay}
-        </box>
-      </Show>
     </box>
   );
 }

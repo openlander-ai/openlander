@@ -124,13 +124,12 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
                 return (
                   <box>
                     <text
-                      backgroundColor={isSelected() ? theme.primary : undefined}
-                      fg={isSelected() ? theme.text : theme.text}
+                      backgroundColor={isSelected() ? theme.backgroundElement : undefined}
+                      fg={isSelected() ? theme.secondary : theme.text}
                       bold={isSelected()}
                     >
-                      {' '}
+                      {isSelected() ? ' ▶ ' : '   '}
                       {info().connected ? '●' : '○'} {provider.icon} {provider.label}
-                      {isSelected() ? ' ' : ''}
                     </text>
                     {info().connected ? (
                       <text fg={theme.success}> Connected ({info().username || 'unknown'})</text>

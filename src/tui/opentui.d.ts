@@ -8,12 +8,16 @@ declare module '@opentui/solid' {
   import type { Accessor } from 'solid-js';
 
   export interface KeyboardEvent {
-    key: string;
+    /** Key name (e.g. 'enter', 'escape', 'up', 'down', 'a', 'b') */
+    name: string;
+    /** Raw character if printable */
     char: string;
     ctrl: boolean;
     shift: boolean;
     meta: boolean;
     alt: boolean;
+    /** Stop propagation to subsequent key handlers */
+    stopPropagation?: () => void;
   }
 
   export function useKeyboard(handler: (evt: KeyboardEvent) => void): void;

@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup } from 'solid-js';
+import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
 import { join } from 'node:path';
@@ -499,44 +499,60 @@ export function App(props: AppProps): JSX.Element {
               debugProjectName={debuggingState()?.projectName}
             />
           }
-          overlay={
-            showHelp() ? (
-              <HelpOverlay
-                onClose={() => {
-                  setShowHelp(false);
-                }}
-              />
-            ) : showModelSelector() ? (
-              <ModelOverlay
-                currentProvider={currentProvider()}
-                currentModel={currentModel()}
-                onSelect={handleModelSelect}
-                onClose={() => setShowModelSelector(false)}
-              />
-            ) : showGit() ? (
-              <GitOverlay
-                currentProviders={connectedProviders()}
-                onConnect={(p, t) => handleConnect(p, t)}
-                onClose={() => setShowGit(false)}
-              />
-            ) : showRepo() ? (
-              <RepoOverlay
-                repos={repos()}
-                loading={reposLoading()}
-                error={reposError()}
-                onSelect={handleRepoSelect}
-                onClose={() => setShowRepo(false)}
-              />
-            ) : showTunnel() ? (
-              <TunnelOverlay onClose={() => setShowTunnel(false)} client={connectedClient} />
-            ) : showEnv() ? (
-              <EnvOverlay onClose={() => setShowEnv(false)} client={connectedClient} />
-            ) : undefined
-          }
           activePanel={activePanelForLayout()}
           columns={columns()}
           rows={rows()}
         />
+        {/* Overlays rendered at App level for proper SolidJS lifecycle */}
+        <Show when={showHelp()}>
+          <box position="absolute" width={columns()} height={rows()} flexDirection="column">
+            <HelpOverlay
+              onClose={() => {
+                setShowHelp(false);
+              }}
+            />
+          </box>
+        </Show>
+        <Show when={showModelSelector()}>
+          <box position="absolute" width={columns()} height={rows()} flexDirection="column">
+            <ModelOverlay
+              currentProvider={currentProvider()}
+              currentModel={currentModel()}
+              onSelect={handleModelSelect}
+              onClose={() => setShowModelSelector(false)}
+            />
+          </box>
+        </Show>
+        <Show when={showGit()}>
+          <box position="absolute" width={columns()} height={rows()} flexDirection="column">
+            <GitOverlay
+              currentProviders={connectedProviders()}
+              onConnect={(p, t) => handleConnect(p, t)}
+              onClose={() => setShowGit(false)}
+            />
+          </box>
+        </Show>
+        <Show when={showRepo()}>
+          <box position="absolute" width={columns()} height={rows()} flexDirection="column">
+            <RepoOverlay
+              repos={repos()}
+              loading={reposLoading()}
+              error={reposError()}
+              onSelect={handleRepoSelect}
+              onClose={() => setShowRepo(false)}
+            />
+          </box>
+        </Show>
+        <Show when={showTunnel()}>
+          <box position="absolute" width={columns()} height={rows()} flexDirection="column">
+            <TunnelOverlay onClose={() => setShowTunnel(false)} client={connectedClient} />
+          </box>
+        </Show>
+        <Show when={showEnv()}>
+          <box position="absolute" width={columns()} height={rows()} flexDirection="column">
+            <EnvOverlay onClose={() => setShowEnv(false)} client={connectedClient} />
+          </box>
+        </Show>
         {showCtrlCWarning() && (
           <box
             position="absolute"
