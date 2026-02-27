@@ -12,9 +12,10 @@ import { VERSION } from '../version.js';
 /**
  * Start the OpenLander Terminal UI.
  *
- * - Enters alternate screen buffer (hides previous terminal content)
- * - Renders fullscreen OpenTUI app
- * - On exit, restores original terminal and prints session info
+ * Following OpenCode's pattern: let OpenTUI handle terminal lifecycle.
+ * - OpenTUI's zig renderer manages alt screen, mouse, paste, raw mode
+ * - OpenTUI's SIGINT handler calls destroy() for clean exit
+ * - We do NOT manually enter alt screen or register conflicting signal handlers
  */
 export function startTUI(ctx: AppContext): void {
   // Signal to other modules that TUI is running (e.g. suppress Hono HTTP logs)
@@ -55,70 +56,65 @@ export function startTUI(ctx: AppContext): void {
     logError('unhandledRejection', e);
   });
 
-  // Enter alternate screen buffer
-  process.stdout.write('\x1b[?1049h');
-
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-
-    // ── Nuclear terminal restore ────────────────────────────────────────────
-    // OpenTUI's zig renderer enables mouse tracking, bracketed paste, raw mode,
-    // and alt screen via native code. Our process.exit() kills the process before
-    // the zig cleanup can run. So we bypass all Node/Bun buffering:
-    //   1. writeSync(fd=1) → direct syscall, cannot be intercepted or buffered
-    //   2. stty sane → external subprocess that resets terminal discipline
-
-    // Direct fd write — guaranteed delivery to terminal
+  // ── Exit cleanup (safety net) ─────────────────────────────────────────────
+  // OpenTUI's destroy() handles terminal restoration via zig native code.
+  // This 'exit' handler is a safety net in case destroy() didn't fully run.
+  let exitHandled = false;
+  process.on('exit', () => {
+    if (exitHandled) return;
+    exitHandled = true;
     try {
       writeSync(
         1,
-        '\x1b[?1000l' + // Disable normal mouse tracking
-          '\x1b[?1002l' + // Disable button-event mouse tracking
-          '\x1b[?1003l' + // Disable any-event mouse tracking
-          '\x1b[?1006l' + // Disable SGR extended mouse mode
-          '\x1b[?2004l' + // Disable bracketed paste mode
-          '\x1b[?25h' + // Show cursor
-          '\x1b[?1049l' + // Exit alternate screen buffer
-          '\x1b[0m', // Reset character attributes
+        '\x1b[?1000l' +
+          '\x1b[?1002l' +
+          '\x1b[?1003l' +
+          '\x1b[?1006l' +
+          '\x1b[?2004l' +
+          '\x1b[?25h' +
+          '\x1b[?1049l' +
+          '\x1b[0m',
       );
     } catch {
       /* fd may already be closed */
     }
-
-    // Reset terminal discipline via external command (raw mode, echo, signals)
     try {
       spawnSync('stty', ['sane'], { stdio: 'inherit' });
     } catch {
-      /* ignore */
+      /* stty may not be available */
     }
-
-    // Print clean exit message (also via direct fd write)
-    const logo = [
-      '',
-      '  \x1b[38;2;250;178;131m╔═══════════════════════════════╗\x1b[0m',
-      `  \x1b[38;2;250;178;131m║\x1b[0m   OpenLander v${VERSION}${' '.repeat(Math.max(0, 13 - VERSION.length))}\x1b[38;2;250;178;131m║\x1b[0m`,
-      '  \x1b[38;2;250;178;131m║\x1b[0m   \x1b[2mSession ended\x1b[0m               \x1b[38;2;250;178;131m║\x1b[0m',
-      '  \x1b[38;2;250;178;131m╚═══════════════════════════════╝\x1b[0m',
-      '',
-    ];
     try {
+      const logo = [
+        '',
+        '  \x1b[38;2;250;178;131m╔═══════════════════════════════╗\x1b[0m',
+        `  \x1b[38;2;250;178;131m║\x1b[0m   OpenLander v${VERSION}${' '.repeat(Math.max(0, 13 - VERSION.length))}\x1b[38;2;250;178;131m║\x1b[0m`,
+        '  \x1b[38;2;250;178;131m║\x1b[0m   \x1b[2mSession ended\x1b[0m               \x1b[38;2;250;178;131m║\x1b[0m',
+        '  \x1b[38;2;250;178;131m╚═══════════════════════════════╝\x1b[0m',
+        '',
+      ];
       writeSync(1, logo.join('\n') + '\n');
     } catch {
-      /* ignore */
+      /* fd may already be closed */
     }
+  });
 
-    process.exit(0);
-  };
+  // ── NO manual alt screen entry ─────────────────────────────────────────────
+  // OpenTUI's zig renderer enters alt screen during render().
+  // We do NOT write \x1b[?1049h ourselves (was causing double-entry).
 
-  render(() => (
-    <ExitProvider onExit={cleanup}>
-      <App ctx={ctx} />
-    </ExitProvider>
-  ));
+  // ── NO SIGINT/SIGTERM handlers ─────────────────────────────────────────────
+  // OpenTUI registers its own SIGINT/SIGTERM handlers that call destroy().
+  // Our previous handlers conflicted — process.exit(0) killed the process
+  // before zig cleanup could run. Now we let OpenTUI handle it exclusively.
 
-  // Handle exit signals
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
+  render(
+    () => (
+      <ExitProvider onExit={() => process.exit(0)}>
+        <App ctx={ctx} />
+      </ExitProvider>
+    ),
+    {
+      exitOnCtrlC: false, // Let OpenTUI's SIGNAL handler handle Ctrl+C (same as OpenCode)
+    },
+  );
 }

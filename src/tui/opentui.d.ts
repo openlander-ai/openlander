@@ -42,5 +42,5 @@ declare module '@opentui/solid' {
     height: number;
   }>;
 
-  export function render(element: () => unknown): void;
+  export function render(element: () => unknown, config?: Record<string, unknown>): void;
 }
