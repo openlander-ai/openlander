@@ -788,7 +788,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
 
           {/* Slash command picker */}
           <Show when={showCommandPicker()}>
-            <box>
+            <box flexShrink={0}>
               <SlashCommandPicker
                 input={inputValue()}
                 selectedIndex={commandPickerIndex()}
