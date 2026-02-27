@@ -19,7 +19,7 @@ import { RepoOverlay } from './components/RepoOverlay.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { StatusPanel } from './components/StatusPanel.js';
 import type { DisplayMessage } from './components/ChatMessage.js';
-import type { DeployResponse, BuildProgressEvent } from '../ipc/client.js';
+import type { StartDeployResponse, BuildProgressEvent } from '../ipc/client.js';
 import {
   mode as tuiMode,
   deployingState,
@@ -273,11 +273,11 @@ export function App(props: AppProps): JSX.Element {
       },
     ]);
 
-    // Fire deploy and stream progress
+    // Start non-blocking deploy and enter deploy mode immediately
     void (async () => {
-      let deployResult: DeployResponse | null = null;
+      let startResult: StartDeployResponse;
       try {
-        deployResult = await c.deploy(repoUrl);
+        startResult = await c.startDeploy(repoUrl);
       } catch (err) {
         console.error('[deploy]', err instanceof Error ? err.message : String(err));
         setDeployMessages((prev) => [
@@ -293,30 +293,28 @@ export function App(props: AppProps): JSX.Element {
         return;
       }
 
-      if (!deployResult.success) {
-        setDeployMessages((prev) => [
-          ...prev,
-          {
-            id: `deploy-fail-${String(Date.now())}`,
-            role: 'system' as const,
-            content: `✗ Deploy failed: ${deployResult.error ?? 'Unknown error'}`,
-            type: 'error' as const,
-            timestamp: Date.now(),
-          },
-        ]);
-        return;
-      }
-
-      // Enter deploy mode — right panel shows build progress
+      // Enter deploy mode IMMEDIATELY — right panel shows BuildPanel with streaming progress
       const projectName =
-        deployResult.projectName || (repoFullName.split('/').pop() ?? repoFullName);
-      enterDeployMode(deployResult.projectId, projectName);
+        startResult.projectName || (repoFullName.split('/').pop() ?? repoFullName);
+      enterDeployMode(startResult.projectId, projectName);
 
-      // Stream build progress
+      // System message in chat
+      setDeployMessages((prev) => [
+        ...prev,
+        {
+          id: `deploy-mode-${String(Date.now())}`,
+          role: 'system' as const,
+          content: '[📋 Build panel opened]',
+          type: 'text' as const,
+          timestamp: Date.now(),
+        },
+      ]);
+
+      // Stream build progress into chat messages (BuildPanel has its own stream)
       deployAbortController = new AbortController();
       try {
         for await (const event of c.streamBuildProgress(
-          deployResult.projectId,
+          startResult.projectId,
           deployAbortController.signal,
         )) {
           const symbol = getBuildEventSymbol(event);
@@ -332,14 +330,12 @@ export function App(props: AppProps): JSX.Element {
           ]);
 
           if (event.type === 'complete') {
-            const url = deployResult.url ?? `http://${deployResult.projectName}.localhost`;
-            const port = deployResult.port ? `:${String(deployResult.port)}` : '';
             setDeployMessages((prev) => [
               ...prev,
               {
                 id: `deploy-done-${String(Date.now())}`,
                 role: 'system' as const,
-                content: `✓ Deployed — ${url}${port}`,
+                content: `✓ ${event.message}`,
                 type: 'text' as const,
                 timestamp: Date.now(),
               },

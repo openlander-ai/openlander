@@ -374,6 +374,116 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return c.json(result, result.success ? 200 : 500);
   });
 
+  api.post('/projects/deploy/start', async (c) => {
+    const body = await c.req.json<{
+      repo_url: string;
+      branch?: string;
+      name?: string;
+    }>();
+
+    if (!body.repo_url) {
+      return c.json({ error: 'MISSING_FIELD', message: 'repo_url is required' }, 400);
+    }
+
+    const result = ctx.pipeline.startDeploy({
+      repoUrl: body.repo_url,
+      branch: body.branch,
+      name: body.name,
+      sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+      trigger: 'api',
+    });
+
+    return c.json(result, 200);
+  });
+
+  api.get('/projects/:id/build/stream', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const unsubscribers: Array<() => void> = [];
+
+    return stream(c, async (s) => {
+      c.header('Content-Type', 'application/x-ndjson');
+
+      const write = (data: { type: string; message: string; projectId: string }) => {
+        void s.write(JSON.stringify({ ...data, timestamp: new Date().toISOString() }) + '\n');
+      };
+
+      unsubscribers.push(
+        eventBus.on('deploy:start', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({ type: 'status', message: 'Starting deployment...', projectId: project.id });
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('deploy:clone', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'status',
+            message: `Cloning repository... (${payload.commitSha.slice(0, 7)})`,
+            projectId: project.id,
+          });
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('deploy:build', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'status',
+            message: `Building Docker image (${String(Math.round(payload.durationMs / 1000))}s)`,
+            projectId: project.id,
+          });
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('deploy:run', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'status',
+            message: `Starting container on port ${String(payload.port)}`,
+            projectId: project.id,
+          });
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('deploy:success', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'complete',
+            message: `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
+            projectId: project.id,
+          });
+          void s.close();
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('deploy:failed', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'error',
+            message: `Deploy failed at ${payload.step}: ${payload.error}`,
+            projectId: project.id,
+          });
+          void s.close();
+        }),
+      );
+
+      s.onAbort(() => {
+        for (const unsub of unsubscribers) {
+          unsub();
+        }
+      });
+
+      await Promise.resolve();
+    });
+  });
+
   api.get('/projects', (c) => {
     const status = c.req.query('status') as
       | 'running'

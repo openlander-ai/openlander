@@ -92,6 +92,12 @@ export interface DeployResponse {
   error?: string;
 }
 
+export interface StartDeployResponse {
+  projectId: string;
+  projectName: string;
+  status: string;
+}
+
 export type { SystemStats } from '../monitor/stats.js';
 
 export interface HealthResponse {
@@ -230,6 +236,17 @@ export class OpenLanderClient {
       branch: options?.branch,
       name: options?.name,
       env_vars: options?.envVars,
+    });
+  }
+
+  async startDeploy(
+    repoUrl: string,
+    options?: { branch?: string; name?: string },
+  ): Promise<StartDeployResponse> {
+    return this.post('/api/projects/deploy/start', {
+      repo_url: repoUrl,
+      branch: options?.branch,
+      name: options?.name,
     });
   }
 

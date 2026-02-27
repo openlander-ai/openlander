@@ -2,7 +2,7 @@ import { createSignal, createEffect, createMemo, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import { overlayActive } from '../state/overlay.js';
-import { enterDebugMode } from '../state/mode.js';
+import { enterDebugMode, enterDeployMode } from '../state/mode.js';
 import { Prompt } from './Prompt.js';
 import { Logo } from './Logo.js';
 import { Spinner } from './Spinner.js';
@@ -354,6 +354,26 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           }
           return updated;
         });
+
+        // T-DEPLOY: Detect deploy_project tool_result → enter deploy mode
+        if (event.toolName === 'deploy_project' && event.success && event.result) {
+          const res = event.result as Record<string, unknown>;
+          const projectId = res.projectId as string | undefined;
+          const projectName = res.projectName as string | undefined;
+          if (projectId && projectName) {
+            enterDeployMode(projectId, projectName);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `deploy-mode-${String(Date.now())}`,
+                role: 'system' as const,
+                content: '[\u{1F4CB} Build panel opened]',
+                type: 'text' as const,
+                timestamp: Date.now(),
+              },
+            ]);
+          }
+        }
         break;
       case 'message':
         setIsStreaming(false);
