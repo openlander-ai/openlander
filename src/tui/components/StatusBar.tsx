@@ -48,6 +48,7 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
             <KeyHint key="Esc" label="Back" />
             <KeyHint key="r" label="Redeploy" />
             <KeyHint key="s" label="Stop" />
+            <KeyHint key="d" label="Domain" />
           </Match>
           <Match when={props.mode === 'monitoring'}>
             <Show

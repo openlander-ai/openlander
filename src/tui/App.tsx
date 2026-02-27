@@ -428,6 +428,82 @@ export function App(props: AppProps): JSX.Element {
         exit();
         return;
       }
+
+      // Debugging mode shortcuts (r=redeploy, s=stop, d=domain/tunnel)
+      if (tuiMode() === 'debugging' && focus() === 'status') {
+        const dbgState = debuggingState();
+        const c = status() === 'connected' ? client : null;
+        if (dbgState && c) {
+          if (evt.name === 'r') {
+            // Redeploy the current debugging project
+            void (async () => {
+              try {
+                await c.redeployProject(dbgState.projectId);
+                setDeployMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `redeploy-${String(Date.now())}`,
+                    role: 'system' as const,
+                    content: `⟳ Redeploying ${dbgState.projectName}...`,
+                    type: 'text' as const,
+                    timestamp: Date.now(),
+                  },
+                ]);
+                // Enter deploy mode for this project
+                enterDeployMode(dbgState.projectId, dbgState.projectName);
+              } catch (err) {
+                setDeployMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `redeploy-err-${String(Date.now())}`,
+                    role: 'system' as const,
+                    content: `✗ Redeploy failed: ${err instanceof Error ? err.message : String(err)}`,
+                    type: 'error' as const,
+                    timestamp: Date.now(),
+                  },
+                ]);
+              }
+            })();
+            return;
+          }
+          if (evt.name === 's') {
+            // Stop the current debugging project
+            void (async () => {
+              try {
+                await c.stopProject(dbgState.projectId);
+                setDeployMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `stop-${String(Date.now())}`,
+                    role: 'system' as const,
+                    content: `■ ${dbgState.projectName} stopped.`,
+                    type: 'text' as const,
+                    timestamp: Date.now(),
+                  },
+                ]);
+                returnToMonitoring();
+              } catch (err) {
+                setDeployMessages((prev) => [
+                  ...prev,
+                  {
+                    id: `stop-err-${String(Date.now())}`,
+                    role: 'system' as const,
+                    content: `✗ Stop failed: ${err instanceof Error ? err.message : String(err)}`,
+                    type: 'error' as const,
+                    timestamp: Date.now(),
+                  },
+                ]);
+              }
+            })();
+            return;
+          }
+          if (evt.name === 'd') {
+            // Open tunnel overlay for domain configuration
+            setShowTunnel(true);
+            return;
+          }
+        }
+      }
     });
   } catch {
     /* Renderer not ready during initial reactivity pass */
