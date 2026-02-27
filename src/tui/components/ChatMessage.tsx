@@ -5,6 +5,7 @@ import { Spinner } from './Spinner.js';
 import { theme, SplitBorder } from '../theme.js';
 import { parseMarkdown } from '../markdown.js';
 import type { MarkdownToken, InlineSpan } from '../markdown.js';
+import { highlightCode } from '../syntax-highlight.js';
 import {
   ThinkingDisplay,
   CommandDisplay,
@@ -353,7 +354,11 @@ function MarkdownContent(props: { tokens: MarkdownToken[] }): JSX.Element {
                     {token.language}
                   </text>
                 </Show>
-                <text fg={theme.accent}>{token.code}</text>
+                <box flexDirection="row" flexWrap="wrap">
+                  <For each={highlightCode(token.code, token.language)}>
+                    {(span) => <text fg={span.color}>{span.text}</text>}
+                  </For>
+                </box>
               </box>
             );
           case 'list_item':
