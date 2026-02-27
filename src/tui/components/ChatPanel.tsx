@@ -125,6 +125,9 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   // --- Chat state ---
   const [messages, setMessages] = createSignal<DisplayMessage[]>([]);
   const [isStreaming, setIsStreaming] = createSignal(false);
+  const [streamingStatus, setStreamingStatus] = createSignal('Thinking');
+  const [streamingStep, setStreamingStep] = createSignal(0);
+  const [toolCallCount, setToolCallCount] = createSignal(0);
   const [inputValue, setInputValue] = createSignal('');
   let sessionIdRef = `tui-${Date.now().toString(36)}`;
   // Captures text before textarea's submit action clears it (OpenTUI timing issue)
@@ -240,11 +243,23 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     switch (event.type) {
       case 'session':
         sessionIdRef = event.sessionId;
+        // Reset step tracking for new conversation turn
+        setStreamingStep(0);
+        setToolCallCount(0);
+        setStreamingStatus('Thinking');
         break;
-      case 'thinking':
+      case 'thinking': {
         setIsStreaming(true);
+        const prevStep = streamingStep();
+        setStreamingStep(prevStep + 1);
+        setStreamingStatus(
+          prevStep > 0 ? `Analyzing results (step ${String(prevStep + 1)})` : 'Thinking',
+        );
         break;
+      }
       case 'tool_call': {
+        setToolCallCount((c) => c + 1);
+        setStreamingStatus(`Running ${event.toolName}`);
         const args = event.arguments as Record<string, string>;
         let messageType: DisplayMessage['type'] = 'tool_start';
         const baseMsg: Partial<DisplayMessage> = { toolName: event.toolName };
@@ -303,11 +318,19 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
       case 'tool_result':
         setMessages((prev) => {
           const updated = [...prev];
-          const lastToolIdx = updated.findIndex(
-            (m) =>
+          // Find the LAST tool_start with this name (not first) to handle repeated tool calls
+          let lastToolIdx = -1;
+          for (let i = updated.length - 1; i >= 0; i--) {
+            const m = updated[i];
+            if (
+              m &&
               (m.type === 'tool_start' || m.type === 'command' || m.type === 'file_edit') &&
-              m.toolName === event.toolName,
-          );
+              m.toolName === event.toolName
+            ) {
+              lastToolIdx = i;
+              break;
+            }
+          }
           if (lastToolIdx !== -1) {
             const item = updated[lastToolIdx];
             if (item) {
@@ -334,6 +357,8 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
         break;
       case 'message':
         setIsStreaming(false);
+        setStreamingStep(0);
+        setToolCallCount(0);
         setMessages((prev) => [
           ...prev,
           {
@@ -347,6 +372,8 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
         break;
       case 'error':
         setIsStreaming(false);
+        setStreamingStep(0);
+        setToolCallCount(0);
         setMessages((prev) => [
           ...prev,
           {
@@ -360,6 +387,8 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
         break;
       case 'done':
         setIsStreaming(false);
+        setStreamingStep(0);
+        setToolCallCount(0);
         break;
     }
   };
@@ -771,7 +800,10 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                 <text fg={theme.textMuted}>
                   <Spinner color={theme.textMuted} />
                 </text>
-                <text fg={theme.textMuted}>Thinking…</text>
+                <text fg={theme.textMuted}>
+                  {streamingStatus()}
+                  {toolCallCount() > 0 ? ` (${String(toolCallCount())} tools used)` : ''}…
+                </text>
               </box>
             </Show>
           </box>
