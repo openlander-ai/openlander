@@ -37,17 +37,17 @@
 > 설정 5개 (GUI 피커 오버레이) + TUI 시스템 4개. `/` 입력 시 9개 바로 표시.
 > `/stop`, `/restart`, `/logs` → 채팅 자연어로 대체 (슬래시에서 제거).
 
-| 명령어     | 동작                   | 상태                               |
-| ---------- | ---------------------- | ---------------------------------- |
-| `/repo`    | 레포 선택 → 배포       | ✅                                 |
-| `/git`     | Git 연결 관리          | ✅                                 |
-| `/model`   | LLM 모델 변경          | ✅                                 |
-| `/tunnel`  | Cloudflare Tunnel 설정 | ✅ 골격 (Phase 8 완성 예정)        |
-| `/env`     | 환경변수 관리          | ✅ 골격 (Phase 8 완성 예정)        |
-| `/compact` | 컨텍스트 압축          | ⚠️ action만 발행, 압축 로직 미구현 |
-| `/clear`   | 화면 클리어            | ✅                                 |
-| `/exit`    | 종료                   | ✅                                 |
-| `/help`    | 도움말                 | ✅                                 |
+| 명령어     | 동작                   | 상태                           |
+| ---------- | ---------------------- | ------------------------------ |
+| `/repo`    | 레포 선택 → 배포       | ✅                             |
+| `/git`     | Git 연결 관리          | ✅                             |
+| `/model`   | LLM 모델 변경          | ✅                             |
+| `/tunnel`  | Cloudflare Tunnel 설정 | ✅ 완성 (expose/unexpose 토글) |
+| `/env`     | 환경변수 관리          | ✅ 완성 (프로젝트 선택+마스킹) |
+| `/compact` | 컨텍스트 압축          | ✅ 완성 (LLM 요약+세션 초기화) |
+| `/clear`   | 화면 클리어            | ✅                             |
+| `/exit`    | 종료                   | ✅                             |
+| `/help`    | 도움말                 | ✅                             |
 
 ---
 
@@ -540,55 +540,55 @@
 ### Phase 1 → 2: 기반 + 모니터링 ✅ 완료
 
 ```
-T-ARCH-01  3-모드 상태 머신
-T-ARCH-02  적응형 우측 패널
-T-ARCH-03  포커스 관리
-T-ARCH-04  컨텍스트 상태바
-T-MON-01   System 섹션
-T-MON-02   Projects 섹션
+T-ARCH-01  3-모드 상태 머신              ✅
+T-ARCH-02  적응형 우측 패널             ✅
+T-ARCH-03  포커스 관리                 ✅
+T-ARCH-04  컨텍스트 상태바              ✅
+T-MON-01   System 섹션 (프로그레스바+색상)   ✅
+T-MON-02   Projects 섹션 (빌딩 인디케이터)  ✅
+T-MON-03   Activity 섹션 (최대 5건)       ✅
 ```
 
-### Phase 3: 배포 (핵심 가치)
+### Phase 3: 배포 (핵심 가치) ✅ 완료
 
 ```
-T-DEPLOY-02  Build 패널 + 파이프라인
-T-DEPLOY-03  스마트 자동 스크롤
-T-KEY-01     Ctrl+C 취소
+T-DEPLOY-02  Build 패널 (파이프라인+로그)     ✅
+T-DEPLOY-03  ScrollableLog 공용 컴포넌트    ✅
+T-KEY-01     Ctrl+C 취소                  ✅
 ```
 
-### Phase 4 + 5: 디버깅 + 컨테이너 제어 (자연어)
+### Phase 4 + 5: 디버깅 + 컨테이너 제어 (자연어) ✅ 완료
 
 ```
-T-DEBUG-01   디버깅 모드 진입 (Status 패널 Enter + 자연어)
-T-DEBUG-02   Info + 로그 뷰
-T-CMD-01     자연어 컨테이너 제어 (stop, start, restart)
-T-CMD-02     자연어 상태 확인
-T-CMD-04     자연어 프로젝트 삭제
-T-CMD-05     자연어 재배포
+T-DEBUG-01   디버깅 모드 진입 (get_logs 인터셉트) ✅
+T-DEBUG-02   ProjectInfo + LogViewer           ✅
+T-CMD-01     자연어 stop/start/restart       ✅ (프롬프트 엔지니어링)
+T-CMD-02     자연어 상태 확인                 ✅
+T-CMD-04     자연어 프로젝트 삭제              ✅
+T-CMD-05     자연어 재배포                   ✅
 ```
 
-### Phase 6: Compose
+### Phase 6: Compose — 데몬 측 구현 필요, DEFERRED
 
 ```
-T-COMPOSE-01  감지 + 실행
-T-COMPOSE-02  포트 충돌 override
-T-COMPOSE-03  환경변수 주입
-T-COMPOSE-04  서비스 그룹 표시
+T-COMPOSE-01  감지 + 실행                    ⏳ daemon-side 필요
+T-COMPOSE-02  포트 충돌 override              ⏳ daemon-side 필요
+T-COMPOSE-03  환경변수 주입                  ⏳ daemon-side 필요
+T-COMPOSE-04  서비스 그룹 표시               ⏳ daemon-side 필요
 ```
 
 ### Phase 7 + 8: 품질 + 장기
 
 ```
-T-MON-03     Activity 섹션
-T-MON-04     Alerts 섹션
-T-DEPLOY-04  Build Failure 3-Tier
-T-KEY-02     Ctrl+L 화면 클리어
-T-CHAT-01    마크다운 렌더링
-T-COMPACT-01 /compact 실제 구현
-T-INFRA-01   i18n
-T-INFRA-02   다중 Git 프로바이더
-T-INFRA-04   /env 오버레이 완성
-T-INFRA-05   /tunnel 오버레이 완성
+T-MON-04     Alerts 섹션                    ⏳ daemon-side alert 감지 필요
+T-DEPLOY-04  Build Failure 3-Tier              ⏳ daemon-side tier 분류 필요
+T-KEY-02     Ctrl+L 화면 클리어               ✅ (이전 구현)
+T-CHAT-01    마크다운 렌더링                ✅
+T-COMPACT-01 /compact 실제 구현              ✅ (이전 구현)
+T-INFRA-01   i18n                            ⏳ Phase 1~6 이후 권장
+T-INFRA-02   다중 Git 프로바이더             ⏳
+T-INFRA-04   /env 오버레이 완성              ✅
+T-INFRA-05   /tunnel 오버레이 완성           ✅
 ... (나머지 P2 항목)
 ```
 
