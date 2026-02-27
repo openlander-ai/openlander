@@ -95,6 +95,90 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
       },
     },
     {
+      name: 'deploy_compose',
+      description:
+        'Deploy a project that uses Docker Compose (multi-service). Auto-detected when compose file exists. Returns parent project with service statuses. Errors: COMPOSE_FILE_NOT_FOUND, BUILD_FAILED.',
+      parameters: {
+        repo_url: {
+          type: 'string',
+          description: 'Git repository URL',
+          required: true,
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch (default: main)',
+          required: false,
+        },
+        name: {
+          type: 'string',
+          description: 'Project name (auto-generated from repo if omitted)',
+          required: false,
+        },
+      },
+      execute: async (args) => {
+        const repoUrl = args['repo_url'] as string;
+        const branch = (args['branch'] as string | undefined) ?? undefined;
+        const name = (args['name'] as string | undefined) ?? undefined;
+
+        const cloneResult = await cloneRepo({
+          repoUrl,
+          branch,
+          sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+        });
+
+        const composePath = ctx.composePipeline.detectComposeFile(cloneResult.path);
+        if (!composePath) {
+          return {
+            error: 'COMPOSE_FILE_NOT_FOUND',
+            message: 'No compose file found in repository.',
+          };
+        }
+
+        const result = await ctx.composePipeline.deployCompose({
+          repoUrl,
+          branch,
+          clonePath: cloneResult.path,
+          composePath,
+          name,
+          trigger: 'chat',
+        });
+
+        if (!result.success) {
+          return {
+            error: 'BUILD_FAILED',
+            message: result.error ?? 'Compose deploy failed.',
+            ...result,
+          };
+        }
+
+        return result;
+      },
+    },
+    {
+      name: 'list_compose_services',
+      description:
+        'List services in a Docker Compose project with per-service status, ports, and container IDs.',
+      parameters: {
+        project_name: {
+          type: 'string',
+          description: 'Compose project name',
+          required: true,
+        },
+      },
+      execute: async (args) => {
+        const projectName = args['project_name'] as string;
+        const project = ctx.db.getProjectByName(projectName);
+        if (!project) throw new ProjectNotFoundError(projectName);
+
+        const services = await ctx.composePipeline.getServiceStatuses(project.id);
+        return {
+          project: projectName,
+          count: services.length,
+          services,
+        };
+      },
+    },
+    {
       name: 'stop_project',
       description:
         'Stop a running project container gracefully. Use when user wants to pause or shut down a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT remove the project; use remove_project for full cleanup.',
@@ -603,7 +687,8 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         },
         dockerfiles: {
           type: 'string',
-          description: 'JSON array of Dockerfile paths (from scan_dockerfiles), e.g. ["frontend/Dockerfile", "backend/Dockerfile"]',
+          description:
+            'JSON array of Dockerfile paths (from scan_dockerfiles), e.g. ["frontend/Dockerfile", "backend/Dockerfile"]',
           required: true,
         },
         branch: {
@@ -645,11 +730,15 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         const config = loadConfig();
         const ghConfig = config.gitProviders.github;
         if (!ghConfig.token) {
-          return { error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token configured. Add one in settings to browse repos.' };
+          return {
+            error: 'GITHUB_NOT_CONFIGURED',
+            message: 'No GitHub token configured. Add one in settings to browse repos.',
+          };
         }
         const provider = createGitProvider('github', ghConfig);
         const page = (args['page'] as number | undefined) ?? 1;
-        const visibility = (args['visibility'] as 'all' | 'public' | 'private' | undefined) ?? 'all';
+        const visibility =
+          (args['visibility'] as 'all' | 'public' | 'private' | undefined) ?? 'all';
         const result = await provider.listRepos({ page, perPage: 30, visibility });
         return {
           count: result.repos.length,
@@ -684,7 +773,10 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         const config = loadConfig();
         const ghConfig = config.gitProviders.github;
         if (!ghConfig.token) {
-          return { error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token configured. Add one in settings to search repos.' };
+          return {
+            error: 'GITHUB_NOT_CONFIGURED',
+            message: 'No GitHub token configured. Add one in settings to search repos.',
+          };
         }
         const provider = createGitProvider('github', ghConfig);
         const query = args['query'] as string;
@@ -702,6 +794,40 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
             htmlUrl: r.htmlUrl,
           })),
         };
+      },
+    },
+    // --- v0.5 Tools: Alerts ---
+    {
+      name: 'get_alerts',
+      description:
+        'Get current system alerts for resource issues, inactive projects, and container problems. Returns active alerts with severity, message, and suggested actions. Use when user asks about system health, problems, or "show alerts". Always available.',
+      parameters: {},
+      execute: () => {
+        const alerts = ctx.alertMonitor.getActiveAlerts();
+        return Promise.resolve({
+          count: alerts.length,
+          alerts: alerts.map((a) => ({
+            id: a.id,
+            type: a.type,
+            severity: a.severity,
+            message: a.message,
+            suggestion: a.suggestion,
+            createdAt: a.createdAt.toISOString(),
+          })),
+        });
+      },
+    },
+    {
+      name: 'dismiss_alert',
+      description:
+        'Dismiss a specific alert by ID so it no longer appears in active alerts. Use when user acknowledges an alert. Returns { status, alertId }.',
+      parameters: {
+        alert_id: { type: 'string', description: 'Alert ID to dismiss', required: true },
+      },
+      execute: (args) => {
+        const alertId = args['alert_id'] as string;
+        ctx.alertMonitor.dismissAlert(alertId);
+        return Promise.resolve({ status: 'dismissed', alertId });
       },
     },
   ];
@@ -723,7 +849,6 @@ function findDockerfiles(dir: string, maxDepth = 3): string[] {
     } catch (err) {
       log.debug({ err, current }, 'Failed to read directory during Dockerfile scan');
       return;
-      return;
     }
     for (const entry of entries) {
       if (entry.startsWith('.') || entry === 'node_modules' || entry === 'vendor') continue;
@@ -737,7 +862,6 @@ function findDockerfiles(dir: string, maxDepth = 3): string[] {
         }
       } catch (err) {
         log.debug({ err, fullPath }, 'Failed to stat file during Dockerfile scan');
-        continue;
         continue;
       }
     }
