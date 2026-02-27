@@ -3,6 +3,7 @@ import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import { useExit } from '../context/exit.js';
 import { Spinner } from '../components/Spinner.js';
+import { theme } from '../theme.js';
 
 import type { ScreenProps } from './index.js';
 import type { DockerStatus } from '../../pipeline/docker.js';
@@ -178,7 +179,7 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
         flexDirection="column"
         alignItems="center"
         border="round"
-        borderColor="cyan"
+        borderColor={theme.borderActive}
         paddingX={4}
         paddingY={2}
         width={60}

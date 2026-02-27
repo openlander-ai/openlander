@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onCleanup } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { Spinner } from '../components/Spinner.js';
+import { theme } from '../theme.js';
 
 import type { ScreenProps } from './index.js';
 
@@ -132,7 +133,7 @@ export function TraefikSetup({ ctx, onNext }: ScreenProps): JSX.Element {
         flexDirection="column"
         alignItems="center"
         border="round"
-        borderColor="cyan"
+        borderColor={theme.borderActive}
         paddingX={4}
         paddingY={2}
         width={60}

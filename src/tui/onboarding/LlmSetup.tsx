@@ -2,6 +2,7 @@ import { createSignal, createEffect, onCleanup } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import TextInput from '../components/IMETextInput.js';
+import { theme } from '../theme.js';
 
 import type { ScreenProps } from './index.js';
 import { updateConfig } from '../../config/index.js';
@@ -205,7 +206,7 @@ export function LlmSetup({ ctx: _ctx, onNext }: ScreenProps): JSX.Element {
         flexDirection="column"
         alignItems="center"
         border="round"
-        borderColor="cyan"
+        borderColor={theme.borderActive}
         paddingX={4}
         paddingY={2}
         width={60}

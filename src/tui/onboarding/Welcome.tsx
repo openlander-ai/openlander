@@ -1,6 +1,7 @@
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import { useExit } from '../context/exit.js';
+import { theme } from '../theme.js';
 
 import { VERSION } from '../../version.js';
 
@@ -31,7 +32,7 @@ export function Welcome({ onNext }: WelcomeProps): JSX.Element {
         flexDirection="column"
         alignItems="center"
         border="round"
-        borderColor="cyan"
+        borderColor={theme.borderActive}
         paddingX={4}
         paddingY={2}
       >
