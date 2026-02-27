@@ -53,7 +53,13 @@ export function Layout(props: LayoutProps): JSX.Element {
         <Show
           when={isWideMode()}
           fallback={
-            <box width="100%" flexDirection="column" overflow="hidden">
+            <box
+              width="100%"
+              flexDirection="column"
+              overflow="hidden"
+              border={['top']}
+              borderColor={theme.borderActive}
+            >
               <Show when={props.activePanel === 'left'} fallback={props.right}>
                 {props.left}
               </Show>
@@ -62,7 +68,14 @@ export function Layout(props: LayoutProps): JSX.Element {
         >
           {/* Wide mode: both panels side by side with pipe divider */}
           <>
-            <box width={leftWidth()} flexDirection="column" overflow="hidden" paddingRight={1}>
+            <box
+              width={leftWidth()}
+              flexDirection="column"
+              overflow="hidden"
+              paddingRight={1}
+              border={['top']}
+              borderColor={props.activePanel === 'left' ? theme.borderActive : theme.borderSubtle}
+            >
               {props.left}
             </box>
 
@@ -76,7 +89,14 @@ export function Layout(props: LayoutProps): JSX.Element {
               flexShrink={0}
             />
 
-            <box width={rightWidth()} flexDirection="column" overflow="hidden" paddingLeft={1}>
+            <box
+              width={rightWidth()}
+              flexDirection="column"
+              overflow="hidden"
+              paddingLeft={1}
+              border={['top']}
+              borderColor={props.activePanel === 'right' ? theme.borderActive : theme.borderSubtle}
+            >
               {props.right}
             </box>
           </>

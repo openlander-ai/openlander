@@ -58,7 +58,19 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
               when={!isSplitMode()}
               fallback={
                 <>
-                  <KeyHint key="Tab" label="Panel" />
+                  <box flexDirection="row" gap={1}>
+                    <text backgroundColor={theme.backgroundElement} fg={theme.text}>
+                      {' '}
+                      Tab{' '}
+                    </text>
+                    <text fg={props.activePanel === 'left' ? theme.secondary : theme.textDim}>
+                      Chat
+                    </text>
+                    <text fg={theme.textDim}> │ </text>
+                    <text fg={props.activePanel === 'right' ? theme.secondary : theme.textDim}>
+                      Status
+                    </text>
+                  </box>
                   <KeyHint key="/" label="Commands" />
                   <KeyHint key="?" label="Help" />
                   <KeyHint key="^C" label="Exit" />
