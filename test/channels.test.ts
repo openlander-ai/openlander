@@ -224,7 +224,7 @@ describe('SlackChannel', () => {
   });
 
   it('sendMessage() sends POST to Slack API', async () => {
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ok: true }),
@@ -247,7 +247,7 @@ describe('SlackChannel', () => {
   });
 
   it('sendMessage() throws on Slack API error', async () => {
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ok: false, error: 'channel_not_found' }),
@@ -257,7 +257,7 @@ describe('SlackChannel', () => {
   });
 
   it('sendMessage() throws on HTTP error', async () => {
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
@@ -327,7 +327,7 @@ describe('DiscordChannel', () => {
   });
 
   it('sendMessage() sends POST to Discord API', async () => {
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
     } as Response);
@@ -346,7 +346,7 @@ describe('DiscordChannel', () => {
   });
 
   it('sendMessage() throws on Discord API error', async () => {
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 403,
@@ -410,7 +410,7 @@ describe('TelegramChannel', () => {
   });
 
   it('sendMessage() sends POST to Telegram API', async () => {
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ok: true }),
@@ -428,7 +428,7 @@ describe('TelegramChannel', () => {
   });
 
   it('sendMessage() throws on Telegram API error', async () => {
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ ok: false, description: 'Bad Request: chat not found' }),
@@ -438,7 +438,7 @@ describe('TelegramChannel', () => {
   });
 
   it('sendMessage() throws on HTTP error', async () => {
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,

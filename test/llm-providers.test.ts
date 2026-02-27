@@ -100,7 +100,7 @@ describe('createLLMClient', () => {
 describe('GeminiProvider', () => {
   it('constructs correct API URL', async () => {
     const provider = new GeminiProvider('test-api-key', 'gemini-2.0-flash');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -121,7 +121,7 @@ describe('GeminiProvider', () => {
 
   it('formats messages correctly (system -> system_instruction)', async () => {
     const provider = new GeminiProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -145,7 +145,7 @@ describe('GeminiProvider', () => {
 
   it('handles HTTP error responses', async () => {
     const provider = new GeminiProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
@@ -159,7 +159,7 @@ describe('GeminiProvider', () => {
 
   it('handles API error in response body', async () => {
     const provider = new GeminiProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -174,7 +174,7 @@ describe('GeminiProvider', () => {
 
   it('parses tool calls from response', async () => {
     const provider = new GeminiProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -212,7 +212,7 @@ describe('GeminiProvider', () => {
 describe('AnthropicProvider', () => {
   it('sends correct headers (x-api-key, anthropic-version)', async () => {
     const provider = new AnthropicProvider('test-key', 'claude-sonnet-4-20250514');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ content: [{ type: 'text', text: 'Hello!' }] }),
@@ -227,7 +227,7 @@ describe('AnthropicProvider', () => {
 
   it('formats messages with system as top-level field', async () => {
     const provider = new AnthropicProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ content: [{ type: 'text', text: 'Response' }] }),
@@ -247,7 +247,7 @@ describe('AnthropicProvider', () => {
 
   it('handles network error', async () => {
     const provider = new AnthropicProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockRejectedValueOnce(new Error('Network failure'));
 
     await expect(provider.chat([{ role: 'user', content: 'Hi' }])).rejects.toThrow(
@@ -263,7 +263,7 @@ describe('AnthropicProvider', () => {
 describe('OpenAIProvider', () => {
   it('sends Authorization: Bearer header', async () => {
     const provider = new OpenAIProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -279,7 +279,7 @@ describe('OpenAIProvider', () => {
 
   it('parses tool calls with JSON arguments', async () => {
     const provider = new OpenAIProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -311,7 +311,7 @@ describe('OpenAIProvider', () => {
 
   it('throws on invalid JSON in tool arguments', async () => {
     const provider = new OpenAIProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -347,7 +347,7 @@ describe('OpenAIProvider', () => {
 describe('OllamaProvider', () => {
   it('sends request to localhost:11434 by default', async () => {
     const provider = new OllamaProvider('llama3.2');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -363,7 +363,7 @@ describe('OllamaProvider', () => {
 
   it('uses custom base URL', async () => {
     const provider = new OllamaProvider('llama3.2', 'http://custom-host:8080');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -379,7 +379,7 @@ describe('OllamaProvider', () => {
 
   it('handles Ollama error response', async () => {
     const provider = new OllamaProvider('llama3.2');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ error: 'model not found' }),
@@ -398,7 +398,7 @@ describe('OllamaProvider', () => {
 describe('OpenRouterProvider', () => {
   it('sends OpenRouter-specific headers (HTTP-Referer, X-Title)', async () => {
     const provider = new OpenRouterProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -415,7 +415,7 @@ describe('OpenRouterProvider', () => {
 
   it('handles OpenRouter error response', async () => {
     const provider = new OpenRouterProvider('test-key');
-    const mockFetch = vi.mocked(global.fetch);
+    const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({

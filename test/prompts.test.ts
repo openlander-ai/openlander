@@ -134,7 +134,7 @@ describe('buildContextSnapshot', () => {
   });
 
   it('warns when memory is high', () => {
-    vi.mocked(getSystemStats).mockReturnValueOnce({
+    (getSystemStats as ReturnType<typeof vi.fn>).mockReturnValueOnce({
       hostname: 'test-host',
       uptime: { seconds: 3600, formatted: '1h 0m' },
       cpu: {
@@ -154,7 +154,7 @@ describe('buildContextSnapshot', () => {
   });
 
   it('warns when disk is critical', () => {
-    vi.mocked(getSystemStats).mockReturnValueOnce({
+    (getSystemStats as ReturnType<typeof vi.fn>).mockReturnValueOnce({
       hostname: 'test-host',
       uptime: { seconds: 3600, formatted: '1h 0m' },
       cpu: {

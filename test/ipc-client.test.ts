@@ -16,7 +16,7 @@ vi.mock('node:http', () => ({
 
 import { request } from 'node:http';
 
-const mockRequest = vi.mocked(request);
+const mockRequest = request as unknown as ReturnType<typeof vi.fn>;
 
 // Helper to create a mock IncomingMessage
 function createMockResponse(

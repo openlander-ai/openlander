@@ -25,7 +25,7 @@ afterEach(() => {
 
 // Helper to get mocked fetch
 function mockFetch() {
-  return vi.mocked(global.fetch);
+  return global.fetch as ReturnType<typeof vi.fn>;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ describe('createGitProvider', () => {
 
   it('throws for unsupported provider type', () => {
     const config: GitProviderConfig = { token: 'test', username: '' };
-    expect(() => createGitProvider('gitlab' as GitProviderType, config)).toThrow(
+    expect(() => createGitProvider('bitbucket' as unknown as GitProviderType, config)).toThrow(
       'Unsupported git provider',
     );
   });

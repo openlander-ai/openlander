@@ -29,6 +29,10 @@ interface SlashCommandPickerProps {
   input: string;
   /** Index of the highlighted command in the filtered list. */
   selectedIndex: number;
+  /** Called when a command is clicked with the mouse. */
+  onSelect?: (commandName: string) => void;
+  /** Called when a command is hovered with the mouse. */
+  onHover?: (index: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +80,16 @@ export function SlashCommandPicker(props: SlashCommandPickerProps) {
                 backgroundColor={isSelected() ? theme.primary : undefined}
                 flexDirection="row"
                 gap={1}
+                onMouseDown={(e: unknown) => {
+                  const me = e as { button?: number; stopPropagation?: () => void };
+                  if (me.button === 0) {
+                    me.stopPropagation?.();
+                    props.onSelect?.(cmd.name);
+                  }
+                }}
+                onMouseOver={() => {
+                  props.onHover?.(i());
+                }}
               >
                 <text
                   fg={isSelected() ? theme.text : theme.text}
@@ -97,23 +111,7 @@ export function SlashCommandPicker(props: SlashCommandPickerProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers (exported for parent component)
+// Helpers (re-exported for parent component)
 // ---------------------------------------------------------------------------
 
-/**
- * Get the list of matching commands for the current input.
- * Useful for the parent component to track selectedIndex bounds.
- */
-export function getMatchCount(input: string): number {
-  const prefix = input.slice(1).split(' ')[0] ?? '';
-  return filterCommands(prefix).length;
-}
-
-/**
- * Get the command name at a given index in the filtered list.
- */
-export function getMatchAt(input: string, index: number): string | null {
-  const prefix = input.slice(1).split(' ')[0] ?? '';
-  const matches = filterCommands(prefix);
-  return matches[index]?.name ?? null;
-}
+export { getMatchCount, getMatchAt } from '../commands/match-utils.js';

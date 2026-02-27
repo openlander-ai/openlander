@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getMatchCount, getMatchAt } from '../src/tui/components/SlashCommandPicker.js';
+import { getMatchCount, getMatchAt } from '../src/tui/commands/match-utils.js';
 import { getAllCommands } from '../src/tui/commands/registry.js';
 
 // Total number of commands in the registry
