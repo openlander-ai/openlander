@@ -8,6 +8,7 @@
 
 import type { GitProvider, GitProviderType, GitProviderConfig } from './types.js';
 import { GitHubProvider } from './github.js';
+import { GitLabProvider } from './gitlab.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('git');
@@ -34,14 +35,10 @@ export function createGitProvider(type: GitProviderType, config: GitProviderConf
   switch (type) {
     case 'github':
       return new GitHubProvider(config.token, config.baseUrl);
-    // case 'gitlab':
-    //   return new GitLabProvider(config.token, config.baseUrl ?? 'https://gitlab.com/api/v4');
-    // case 'bitbucket':
-    //   return new BitbucketProvider(config.token, config.baseUrl);
-    // case 'gitea':
-    //   return new GiteaProvider(config.token, config.baseUrl);
+    case 'gitlab':
+      return new GitLabProvider(config.token, config.baseUrl);
     default:
-      throw new Error(`Unsupported git provider: ${type}. Supported: github`);
+      throw new Error(`Unsupported git provider: ${type}. Supported: github, gitlab`);
   }
 }
 
