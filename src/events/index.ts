@@ -22,6 +22,7 @@ export type EventType =
   | 'deploy:clone'
   | 'deploy:build'
   | 'deploy:run'
+  | 'deploy:auto-detect'
   | 'deploy:success'
   | 'deploy:failed'
   | 'deploy:rollback'
@@ -63,6 +64,7 @@ export interface EventPayload {
   'deploy:clone': { projectId: string; path: string; commitSha: string };
   'deploy:build': { projectId: string; imageTag: string; durationMs: number };
   'deploy:run': { projectId: string; containerId: string; port: number; url: string };
+  'deploy:auto-detect': { projectId: string; framework: string; type: 'dockerfile' | 'compose' };
   'deploy:success': { projectId: string; url: string; totalDurationMs: number };
   'deploy:failed': { projectId: string; step: string; error: string };
   'deploy:rollback': { projectId: string; fromImage: string; toImage: string };
