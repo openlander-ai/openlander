@@ -40,7 +40,23 @@ declare module '@opentui/solid' {
   export function useTerminalDimensions(): Accessor<{
     width: number;
     height: number;
-  }>;
+  }>
+
+  export interface Selection {
+    readonly isActive: boolean;
+    readonly isDragging: boolean;
+    readonly anchor: { x: number; y: number };
+    readonly focus: { x: number; y: number };
+    getSelectedText(): string;
+  }
+
+  export interface CliRenderer {
+    copyToClipboardOSC52(text: string, target?: number): boolean;
+  }
+
+  export function useSelectionHandler(callback: (selection: Selection) => void): void;
+
+  export function useRenderer(): CliRenderer;
 
   export function render(element: () => unknown, config?: Record<string, unknown>): void;
 }

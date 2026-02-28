@@ -87,7 +87,7 @@ export function startTUI(ctx: AppContext): void {
       const logo = [
         '',
         '  \x1b[38;2;250;178;131m╔═══════════════════════════════╗\x1b[0m',
-        `  \x1b[38;2;250;178;131m║\x1b[0m   OpenLander v${VERSION}${' '.repeat(Math.max(0, 13 - VERSION.length))}\x1b[38;2;250;178;131m║\x1b[0m`,
+        `  \x1b[38;2;250;178;131m║\x1b[0m   OpenLander v${VERSION}${' '.repeat(Math.max(0, 16 - VERSION.length))}\x1b[38;2;250;178;131m║\x1b[0m`,
         '  \x1b[38;2;250;178;131m║\x1b[0m   \x1b[2mSession ended\x1b[0m               \x1b[38;2;250;178;131m║\x1b[0m',
         '  \x1b[38;2;250;178;131m╚═══════════════════════════════╝\x1b[0m',
         '',

@@ -18,12 +18,17 @@ export interface DeployingState {
 export interface DebuggingState {
   projectId: string;
   projectName: string;
+  port: number | null;
 }
 
 // --- Signals ---
 const [mode, setMode] = createSignal<TuiMode>('monitoring');
 const [deployingState, setDeployingState] = createSignal<DeployingState | null>(null);
 const [debuggingState, setDebuggingState] = createSignal<DebuggingState | null>(null);
+
+// --- Build progress tracking ---
+export type BuildStage = 'pending' | 'clone' | 'build' | 'run' | 'expose' | 'complete' | 'error';
+const [buildStage, setBuildStage] = createSignal<BuildStage>('pending');
 
 // --- Multi-build session tracking (T-DEPLOY-05) ---
 const [buildSessions, setBuildSessions] = createSignal<DeployingState[]>([]);
@@ -78,8 +83,8 @@ export function prevBuildSession(): void {
 }
 
 /** Enter debug mode — called when user selects a project in Status panel. */
-export function enterDebugMode(projectId: string, projectName: string): void {
-  setDebuggingState({ projectId, projectName });
+export function enterDebugMode(projectId: string, projectName: string, port: number | null = null): void {
+  setDebuggingState({ projectId, projectName, port });
   setMode('debugging');
 }
 
@@ -113,4 +118,4 @@ export function cancelDeployReturn(): void {
   }
 }
 
-export { mode, deployingState, debuggingState, buildSessions, selectedBuildIndex };
+export { mode, deployingState, debuggingState, buildSessions, selectedBuildIndex, buildStage, setBuildStage };

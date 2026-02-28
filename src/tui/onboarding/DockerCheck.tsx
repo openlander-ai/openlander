@@ -106,7 +106,9 @@ export function DockerCheck({ ctx, onNext }: ScreenProps): JSX.Element {
               <text dim={true}>Please install Docker to continue:</text>
             </box>
             <box marginBottom={1}>
-              <text fg="cyan">https://docs.docker.com/get-docker/</text>
+              <text underline={true}>
+                <a href="https://docs.docker.com/get-docker/" style={{ fg: 'cyan' }}>https://docs.docker.com/get-docker/</a>
+              </text>
             </box>
             <box marginBottom={1}>
               <text dim={true}>Or run: curl -fsSL https://get.docker.com | sh</text>
