@@ -177,9 +177,9 @@ Default is **Internal** (safe). Say "make it public" to switch.
 | **v0.0.4** | Multi-Channel + Advanced | Done    | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy     |
 | **v0.0.6** | TUI Rewrite              | Done    | Bun runtime, OpenTUI + Solid.js, Drizzle ORM, OpenCode-inspired UI     |
 | **v0.0.7** | TUI Polish               | Done    | 3-mode layout, 9 slash commands, adaptive panels, build failure tiers  |
-| v0.0.8     | Vercel AI SDK Migration  | Planned | Multi-provider streaming, unified tool API, structured output          |
-| v0.0.9     | Migration & Discovery    | Planned | Zero-downtime stack migration, runtime discovery, health-aware routing |
-| v0.0.10    | Env & Secrets Management | Planned | .env parsing, encrypted secrets, per-env configs, audit logging        |
+| v0.0.9     | Server Awareness         | Planned | Full container scan, OS port scan, proxy detection, preflight check    |
+| v0.0.10    | Env & Secrets Management | Planned | Global secrets (encrypted), .env.example detection, env tools          |
+| v0.0.8     | Vercel AI SDK Migration  | Planned | Multi-provider streaming, unified tool API (deferred)                  |
 
 ## Requirements
 

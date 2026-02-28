@@ -97,5 +97,7 @@ docs/planning/
 ├── v0.0.7-implementation-tasks.md
 ├── v0.0.7-phase1-plan.md
 ├── v0.0.8-vercel-ai-sdk-migration.md
-└── v0.0.9-10-unified-spec.md
+├── v0.0.9-10-unified-spec.md  # ⚠ 아카이브 — 아래 2개로 대체
+├── v0.0.9-server-awareness.md  # v0.0.9 Server Awareness 스펙 (최신)
+└── v0.0.10-env-secrets.md      # v0.0.10 Env & Secrets 스펙 (최신)
 ```

@@ -8,8 +8,8 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.8 📋 ── v0.0.9 📋 ── v0.0.10 📋 ── 정식릴리즈(TBD) ── 로컬LLM(TBD)
- MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     AI SDK    마이그레이션  Env관리
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD) ── 로컬LLM(TBD)
+ MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    Env관리     AI SDK
 ```
 
 > ✅ = 완료 | 🔧 = 진행 중 | 📋 = 기획/계획 | ❌ = 미착수
@@ -30,10 +30,12 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 | 6   | v0.0.7 구현 태스크             | `v0.0.7-implementation-tasks.md`             | v0.0.7         | 100%   | 16/16 전부 완료                           |
 | 7   | Phase 1 개발계획               | `v0.0.7-phase1-plan.md`                      | v0.0.7         | 100%   | 9개 스텝 전부 완료                        |
 | 8   | AI SDK 마이그레이션            | `v0.0.8-vercel-ai-sdk-migration.md`          | v0.0.8         | 조사만 | 조사 완료, 구현 미착수                    |
-| 9   | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9-10-unified-spec.md`로 통합        |
-| 10  | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.9-10-unified-spec.md`로 통합        |
-| 11  | **v0.0.9–v0.0.10 통합 기획서** | `v0.0.9-10-unified-spec.md`                  | v0.0.9–v0.0.10 | 0%     | 기획 스펙, 미착수                         |
-| 12  | **버그 트래커**                | `bugs.md`                                    | 전체           | —      | 활성 버그 + 해결 내역, GitHub Issues 동기 |
+| 9   | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9-server-awareness.md`로 재정의     |
+| 10  | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10-env-secrets.md`로 재정의         |
+| 11  | ~~v0.0.9–v0.0.10 통합 기획서~~ | `v0.0.9-10-unified-spec.md`                  | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체        |
+| 12  | **v0.0.9 Server Awareness**    | `v0.0.9-server-awareness.md`                 | v0.0.9         | 0%     | ✅ 기획 완료, 미착수                      |
+| 13  | **v0.0.10 Env & Secrets**      | `v0.0.10-env-secrets.md`                     | v0.0.10        | 0%     | ✅ 기획 완료, 미착수                      |
+| 14  | **버그 트래커**                | `bugs.md`                                    | 전체           | —      | 활성 버그 + 해결 내역, GitHub Issues 동기 |
 
 ---
 
@@ -195,28 +197,51 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.0.9 — 기존 인프라 마이그레이션 & 디스커버리 📋
+### v0.0.9 — Server Awareness (서버 상태 인식) 📋
 
-**상태**: 기획서 작성 완료, 구현 미착수 | **관련 문서**: ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) → [`v0.0.9-10-unified-spec.md`](v0.0.9-10-unified-spec.md)
+**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.0.9-server-awareness.md`](v0.0.9-server-awareness.md)
 
-| 파트                      | 내용                                                     | 상태         |
-| ------------------------- | -------------------------------------------------------- | ------------ |
-| Part 1: Docker 디스커버리 | 기존 컨테이너 자동 감지, Import, 관찰 모드, Compose 인식 | 📋 기획 완료 |
-| Part 2: Traefik 공존      | managed / external / coexist 3가지 모드                  | 📋 기획 완료 |
-| Part 3: 온보딩 개선       | 기존 인프라 감지 → Import 플로우                         | 📋 기획 완료 |
+> 기존 `v0.0.9-10-unified-spec.md`의 v0.0.9 파트를 대폭 축소하여 재정의.
+> Import 프로세스, Import 컨테이너 관리, coexist Traefik 모드, 온보딩 대규모 개편은 제거됨.
 
-**핵심 원칙**: 기존 인프라를 절대 건드리지 않는다 — 감지와 관찰만.
+**핵심 가치**: OpenLander가 서버의 전체 상태(컨테이너, 포트, 프록시)를 인식하여 배포 시 충돌을 원천 방지.
+
+| 파트                        | 내용                                                             | 상태 |
+| --------------------------- | ---------------------------------------------------------------- | ---- |
+| 9-1: 전체 컨테이너 스캔     | `listAllContainers()` — 라벨 필터 없이 전체 Docker 컨테이너 반환 | 📋   |
+| 9-2: OS 레벨 포트 스캔      | `scanUsedPorts()` — DB + Docker + OS(ss/lsof) 합산               | 📋   |
+| 9-3: 리버스 프록시 감지     | `detectReverseProxy()` — managed/external 2모드                  | 📋   |
+| 9-4: 시스템 프롬프트 확장   | `buildContextSnapshot()`에 서버 전체 컨텍스트 주입               | 📋   |
+| 9-5: 에이전트 도구 3개 추가 | `list_all_containers`, `scan_ports`, `get_container_stats`       | 📋   |
+| 9-6: Dashboard Server 섹션  | 외부 컨테이너/포트/프록시 상태 표시                              | 📋   |
+| 9-7: Preflight Check        | 배포 전 포트/이름/리소스/프록시 사전 검증 (**킬러 피처**)        | 📋   |
+
+**제거된 항목** (기존 통합 기획서 대비):
+
+- Import 프로세스 (DB 등록 + 관리 전환) — 감지만으로 충분
+- coexist Traefik 모드 — 복잡도 대비 실용성 낮음
+- 온보딩 대규모 개편 — 프록시 감지 정보만 추가
 
 ---
 
-### v0.0.10 — Local Dev Mode & 환경변수 관리 📋
+### v0.0.10 — Env & Secrets Management 📋
 
-**상태**: 기획 스펙, 미착수 | **관련 문서**: ~~`env-spec.md`~~ (삭제됨) → [`v0.0.9-10-unified-spec.md`](v0.0.9-10-unified-spec.md)
+**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.0.10-env-secrets.md`](v0.0.10-env-secrets.md)
 
-| 항목               | 내용                                          | 상태 |
-| ------------------ | --------------------------------------------- | ---- |
-| Local Dev Mode     | 로컬 개발환경 자동 세팅 (docker-compose 대체) | 📋   |
-| 환경변수 고급 관리 | 시크릿 매니저, 프로젝트 간 공유               | 📋   |
+> 기존 `v0.0.9-10-unified-spec.md`의 v0.0.10 파트에서 Local Dev Mode를 완전히 제거하고 환경변수/시크릿 관리만 남김.
+
+| 파트                     | 내용                                                            | 상태 |
+| ------------------------ | --------------------------------------------------------------- | ---- |
+| 10-1: Global Secrets     | `global_secrets` 테이블 + AES-256-GCM 암호화                    | 📋   |
+| 10-2: .env.example 감지  | 배포 시 누락 변수 감지 → 입력 요청                              | 📋   |
+| 10-3: 도구 추가          | `set_global_secret`, `list_global_secrets`, `get_env_vars` 수정 | 📋   |
+| 10-4: /env 오버레이 확장 | Global Secrets 탭 추가                                          | 📋   |
+
+**제거된 항목** (기존 통합 기획서 대비):
+
+- Local Dev Mode 전체 — 핵심 가치와 무관, 사용자 피드백 대기
+- User Overrides (3단계 스코프) — 2단계(Global + Project)로 충분
+- 멀티유저 포트 분리 — Local Dev Mode 제거에 따라 불필요
 
 ---
 
@@ -270,17 +295,23 @@ v0.0.10까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ## 미해결 항목 총정리
 
-| #   | 항목                       | 버전                 | 문서                                 | 우선순위 |
-| --- | -------------------------- | -------------------- | ------------------------------------ | -------- |
-| 1   | i18n (다국어 지원)         | v0.0.6               | `v0.0.6-tasks.md` T-INFRA-01         | 낮음     |
-| 2   | 프로젝트 검색/필터         | v0.0.6               | `requirements.md` L468               | 낮음     |
-| 3   | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8-vercel-ai-sdk-migration.md`  | 중간     |
-| 4   | Docker 디스커버리 + Import | v0.0.9               | `v0.0.9-10-unified-spec.md` Part 1   | 높음     |
-| 5   | Traefik 공존 모드          | v0.0.9               | `v0.0.9-10-unified-spec.md` Part 2   | 높음     |
-| 6   | 온보딩 플로우 개선         | v0.0.9               | `v0.0.9-10-unified-spec.md` Part 5.3 | 중간     |
-| 7   | Local Dev Mode             | v0.0.10              | `v0.0.9-10-unified-spec.md` Part 3   | 중간     |
-| 8   | 환경변수 고급 관리         | v0.0.10              | `v0.0.9-10-unified-spec.md` Part 4   | 중간     |
-| 9   | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429           | 미래     |
+| #   | 항목                       | 버전                 | 문서                                | 우선순위   |
+| --- | -------------------------- | -------------------- | ----------------------------------- | ---------- |
+| 1   | i18n (다국어 지원)         | v0.0.6               | `v0.0.6-tasks.md` T-INFRA-01        | 낮음       |
+| 2   | 프로젝트 검색/필터         | v0.0.6               | `requirements.md` L468              | 낮음       |
+| 3   | 전체 컨테이너 스캔         | v0.0.9               | `v0.0.9-server-awareness.md` 9-1    | 높음       |
+| 4   | OS 레벨 포트 스캔          | v0.0.9               | `v0.0.9-server-awareness.md` 9-2    | 높음       |
+| 5   | 리버스 프록시 감지         | v0.0.9               | `v0.0.9-server-awareness.md` 9-3    | 높음       |
+| 6   | 시스템 프롬프트 확장       | v0.0.9               | `v0.0.9-server-awareness.md` 9-4    | 높음       |
+| 7   | 에이전트 도구 3개 추가     | v0.0.9               | `v0.0.9-server-awareness.md` 9-5    | 높음       |
+| 8   | Dashboard Server 섹션      | v0.0.9               | `v0.0.9-server-awareness.md` 9-6    | 중간       |
+| 9   | Preflight Check            | v0.0.9               | `v0.0.9-server-awareness.md` 9-7    | 높음       |
+| 10  | Global Secrets + 암호화    | v0.0.10              | `v0.0.10-env-secrets.md` 10-1       | 중간       |
+| 11  | .env.example 감지          | v0.0.10              | `v0.0.10-env-secrets.md` 10-2       | 중간       |
+| 12  | 환경변수 도구 추가         | v0.0.10              | `v0.0.10-env-secrets.md` 10-3       | 중간       |
+| 13  | /env 오버레이 확장         | v0.0.10              | `v0.0.10-env-secrets.md` 10-4       | 중간       |
+| 14  | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8-vercel-ai-sdk-migration.md` | 낮음(연기) |
+| 15  | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래       |
 
 ---
 
