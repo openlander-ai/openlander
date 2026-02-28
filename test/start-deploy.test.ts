@@ -17,6 +17,7 @@ function createMockDocker(): Docker {
     removeContainer: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue('mock logs'),
     listContainers: vi.fn().mockResolvedValue([]),
+    listAllContainers: vi.fn().mockResolvedValue([]),
     inspectContainer: vi.fn().mockResolvedValue(null),
   } as unknown as Docker;
 }
@@ -40,8 +41,8 @@ describe('DeployPipeline — non-blocking deploy', () => {
   });
 
   describe('startDeploy', () => {
-    it('returns immediately with projectId and status building', () => {
-      const result = pipeline.startDeploy({
+    it('returns immediately with projectId and status building', async () => {
+      const result = await pipeline.startDeploy({
         repoUrl: 'https://github.com/user/my-app',
         branch: 'main',
       });
@@ -54,8 +55,8 @@ describe('DeployPipeline — non-blocking deploy', () => {
       expect(result.projectId).toHaveLength(12);
     });
 
-    it('creates a project record in DB immediately', () => {
-      const result = pipeline.startDeploy({
+    it('creates a project record in DB immediately', async () => {
+      const result = await pipeline.startDeploy({
         repoUrl: 'https://github.com/user/my-app',
       });
 
@@ -65,8 +66,8 @@ describe('DeployPipeline — non-blocking deploy', () => {
       expect(project!.status).toBe('building');
     });
 
-    it('tracks job in JobManager immediately', () => {
-      const result = pipeline.startDeploy({
+    it('tracks job in JobManager immediately', async () => {
+      const result = await pipeline.startDeploy({
         repoUrl: 'https://github.com/user/my-app',
       });
 
@@ -76,8 +77,8 @@ describe('DeployPipeline — non-blocking deploy', () => {
       expect(job!.projectName).toBe('my-app');
     });
 
-    it('uses provided project name', () => {
-      const result = pipeline.startDeploy({
+    it('uses provided project name', async () => {
+      const result = await pipeline.startDeploy({
         repoUrl: 'https://github.com/user/my-app',
         name: 'custom-name',
       });
@@ -87,21 +88,20 @@ describe('DeployPipeline — non-blocking deploy', () => {
       expect(project!.name).toBe('custom-name');
     });
 
-    it('extracts project name from repo URL when not provided', () => {
-      const result = pipeline.startDeploy({
+    it('extracts project name from repo URL when not provided', async () => {
+      const result = await pipeline.startDeploy({
         repoUrl: 'https://github.com/org/super-project.git',
       });
 
       expect(result.projectName).toBe('super-project');
     });
 
-    it('is synchronous (does not return a promise)', () => {
-      const result = pipeline.startDeploy({
+    it('returns a promise (async preflight check)', async () => {
+      const result = await pipeline.startDeploy({
         repoUrl: 'https://github.com/user/app',
       });
 
-      // Result is a plain object, not a Promise
-      expect(result).not.toBeInstanceOf(Promise);
+      // Result has status building after preflight passes
       expect(result.status).toBe('building');
     });
   });

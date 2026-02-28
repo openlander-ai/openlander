@@ -30,6 +30,10 @@ const EXPECTED_TOOL_NAMES = [
   'deploy_monorepo',
   'list_github_repos',
   'search_github_repos',
+  // v0.0.9-5: Server awareness tools
+  'list_all_containers',
+  'scan_ports',
+  'get_container_stats',
 ];
 
 function createMockContext(opts?: {
@@ -76,13 +80,13 @@ function getTool(ctx: AppContext, name: string) {
 }
 
 describe('Tool Registry', () => {
-  it('returns all expected tool names (25 tools)', () => {
+  it('returns all expected tool names (28 tools)', () => {
     const { ctx } = createMockContext();
 
     const tools = createToolRegistry(ctx);
     const names = tools.map((tool) => tool.name);
 
-    expect(names).toHaveLength(25);
+    expect(names).toHaveLength(28);
     expect(new Set(names)).toEqual(new Set(EXPECTED_TOOL_NAMES));
   });
 
