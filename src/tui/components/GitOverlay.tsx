@@ -167,7 +167,7 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
       case 'select-auth-method':
         return '[↑↓ Navigate] [Enter Select] [Esc Back]';
       case 'device-flow':
-        return '[Esc Cancel]';
+        return '[Click URL] [o Open URL] [Esc Cancel]';
       case 'connected-status':
         return '[↑↓ Navigate] [Enter Select] [Esc Close]';
       case 'enter-token':
@@ -327,6 +327,8 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
     } else if (s === 'device-flow') {
       if (evt.name === 'escape') {
         cancelDeviceFlow();
+      } else if (evt.name === 'o') {
+        openInBrowser(verificationUri());
       }
     } else if (s === 'connected-status') {
       const items = currentList();
@@ -431,9 +433,9 @@ export function GitOverlay(props: GitOverlayProps): JSX.Element {
           </Show>
           <Show when={!deviceFlowError()}>
             <text fg={theme.text}>Open this URL in your browser:</text>
-            <a href={verificationUri()} fg={theme.secondary}>
-              {verificationUri()}
-            </a>
+            <text underline={true}>
+              <a href={verificationUri()} style={{ fg: theme.secondary }}>{verificationUri()}</a>
+            </text>
             <text fg={theme.text}> </text>
             <text fg={theme.text}>And enter this code:</text>
             <text fg={theme.accent} bold>

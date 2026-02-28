@@ -304,7 +304,9 @@ export function EnvOverlay(props: EnvOverlayProps): JSX.Element {
       <Show when={view() === 'projects'}>
         <Show when={loading()}>
           <box justifyContent="center">
-            <Spinner color={theme.textMuted} />
+            <text fg={theme.textMuted}>
+              <Spinner color={theme.textMuted} />
+            </text>
             <text fg={theme.textMuted}> Loading projects...</text>
           </box>
         </Show>
@@ -342,7 +344,9 @@ export function EnvOverlay(props: EnvOverlayProps): JSX.Element {
       <Show when={view() === 'envvars'}>
         <Show when={envLoading()}>
           <box justifyContent="center">
-            <Spinner color={theme.textMuted} />
+            <text fg={theme.textMuted}>
+              <Spinner color={theme.textMuted} />
+            </text>
             <text fg={theme.textMuted}> Loading environment variables...</text>
           </box>
         </Show>

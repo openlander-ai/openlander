@@ -1,6 +1,12 @@
 import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
 import type { JSX } from 'solid-js';
-import { useKeyboard, useTerminalDimensions } from '@opentui/solid';
+import {
+  useKeyboard,
+  useTerminalDimensions,
+  useSelectionHandler,
+  useRenderer,
+} from '@opentui/solid';
+import { theme } from './theme.js';
 import { join } from 'node:path';
 import type { AppContext } from '../app.js';
 import { isOnboarded, getDataDir, saveConfig } from '../config/index.js';
@@ -31,8 +37,9 @@ import {
   nextBuildSession,
   prevBuildSession,
   buildSessionCount,
+  buildStage,
 } from './state/mode.js';
-import { focus, toggleFocus } from './state/focus.js';
+import { focus, toggleFocus, focusChat } from './state/focus.js';
 import { setOverlayActive } from './state/overlay.js';
 
 // Socket path for daemon connection
@@ -74,6 +81,10 @@ export function App(props: AppProps): JSX.Element {
   const [showRepo, setShowRepo] = createSignal(false);
   const [showTunnel, setShowTunnel] = createSignal(false);
   const [showEnv, setShowEnv] = createSignal(false);
+
+  // Clipboard copy toast notification
+  const [showCopyToast, setShowCopyToast] = createSignal(false);
+  let copyToastTimer: ReturnType<typeof setTimeout> | null = null;
   const [repos, setRepos] = createSignal<
     Array<{
       name: string;
@@ -88,7 +99,21 @@ export function App(props: AppProps): JSX.Element {
 
   // Deploy progress messages injected into ChatPanel
   const [deployMessages, setDeployMessages] = createSignal<DisplayMessage[]>([]);
+  const [showBuildClosedOnDeployExit, setShowBuildClosedOnDeployExit] = createSignal(false);
   let deployAbortController: AbortController | null = null;
+
+  const addBuildPanelClosedMessage = () => {
+    setDeployMessages((prev) => [
+      ...prev,
+      {
+        id: `build-closed-${String(Date.now())}`,
+        role: 'system' as const,
+        content: '📋 Build panel closed',
+        type: 'text' as const,
+        timestamp: Date.now(),
+      },
+    ]);
+  };
 
   // Abort deploy stream on unmount
   onCleanup(() => {
@@ -132,6 +157,7 @@ export function App(props: AppProps): JSX.Element {
   const [projectCount, setProjectCount] = createSignal(0);
   const [cpuPercent, setCpuPercent] = createSignal<number | null>(null);
   const [buildingCount, setBuildingCount] = createSignal(0);
+  const [memDisplay, setMemDisplay] = createSignal('—');
 
   // Setup completion handler
   const handleSetupComplete = () => {
@@ -143,17 +169,47 @@ export function App(props: AppProps): JSX.Element {
     projectCount: number;
     cpuPercent: number | null;
     buildingCount: number;
+    memoryUsedMB: number | null;
   }) => {
     setProjectCount(data.projectCount);
     setCpuPercent(data.cpuPercent);
     setBuildingCount(data.buildingCount);
+    // Format memory: >= 1024 → "X.YG", < 1024 → "XM"
+    if (data.memoryUsedMB !== null) {
+      setMemDisplay(
+        data.memoryUsedMB >= 1024
+          ? `${(data.memoryUsedMB / 1024).toFixed(1)}G`
+          : `${String(Math.round(data.memoryUsedMB))}M`,
+      );
+    } else {
+      setMemDisplay('—');
+    }
   };
 
   // Handle project selection from StatusPanel — enter debug mode
-  const handleProjectSelect = (projectId: string, projectName: string) => {
-    enterDebugMode(projectId, projectName);
+  const handleProjectSelect = (projectId: string, projectName: string, port: number | null = null) => {
+    enterDebugMode(projectId, projectName, port);
   };
 
+  // Compute build progress from build stage
+  const buildProgress = (): number | null => {
+    const stage = buildStage();
+    switch (stage) {
+      case 'clone':
+        return 25;
+      case 'build':
+        return 50;
+      case 'run':
+        return 75;
+      case 'expose':
+      case 'complete':
+        return 100;
+      default:
+        return null;
+    }
+  };
+
+  // Connected providers computation
   // Connected providers computation
   const connectedProviders = () => {
     const gh = props.ctx.config.gitProviders.github;
@@ -340,6 +396,7 @@ export function App(props: AppProps): JSX.Element {
                 timestamp: Date.now(),
               },
             ]);
+            setShowBuildClosedOnDeployExit(true);
             // Auto-return to monitoring after 3 seconds
             scheduleDeployReturn(3);
           }
@@ -368,6 +425,20 @@ export function App(props: AppProps): JSX.Element {
     });
   });
 
+  let previousMode = tuiMode();
+  createEffect(() => {
+    const currentMode = tuiMode();
+    if (
+      previousMode === 'deploying' &&
+      currentMode === 'monitoring' &&
+      showBuildClosedOnDeployExit()
+    ) {
+      addBuildPanelClosedMessage();
+      setShowBuildClosedOnDeployExit(false);
+    }
+    previousMode = currentMode;
+  });
+
   // Global keyboard shortcuts (safe — no-op if renderer not ready)
   try {
     useKeyboard((evt) => {
@@ -394,6 +465,7 @@ export function App(props: AppProps): JSX.Element {
         if (deployAbortController) {
           deployAbortController.abort();
           deployAbortController = null;
+          setShowBuildClosedOnDeployExit(false);
           returnToMonitoring();
           setDeployMessages((prev) => [
             ...prev,
@@ -418,9 +490,23 @@ export function App(props: AppProps): JSX.Element {
 
       // Esc: mode-specific behavior
       if (evt.name === 'escape') {
-        if (tuiMode() === 'debugging' || tuiMode() === 'deploying') {
+        if (tuiMode() === 'deploying') {
+          addBuildPanelClosedMessage();
+          setShowBuildClosedOnDeployExit(false);
           returnToMonitoring();
+          focusChat();
+        } else if (tuiMode() === 'debugging') {
+          returnToMonitoring();
+          focusChat();
         }
+        return;
+      }
+
+      if (tuiMode() === 'deploying' && evt.name === 'return' && focus() !== 'chat') {
+        addBuildPanelClosedMessage();
+        setShowBuildClosedOnDeployExit(false);
+        returnToMonitoring();
+        focusChat();
         return;
       }
 
@@ -529,6 +615,28 @@ export function App(props: AppProps): JSX.Element {
           }
         }
       }
+
+      if (focus() === 'status' && !evt.ctrl && !evt.meta && evt.name && evt.name.length === 1) {
+        focusChat();
+      }
+    });
+  } catch {
+    /* Renderer not ready during initial reactivity pass */
+  }
+
+  // Drag-to-copy: auto-copy selected text to clipboard via OSC 52
+  try {
+    const renderer = useRenderer();
+    useSelectionHandler((selection) => {
+      if (!selection.isActive) return;
+      const text = selection.getSelectedText();
+      if (text) {
+        renderer.copyToClipboardOSC52(text);
+        // Show toast notification
+        if (copyToastTimer) clearTimeout(copyToastTimer);
+        setShowCopyToast(true);
+        copyToastTimer = setTimeout(() => setShowCopyToast(false), 2000);
+      }
     });
   } catch {
     /* Renderer not ready during initial reactivity pass */
@@ -598,6 +706,9 @@ export function App(props: AppProps): JSX.Element {
               mode={tuiMode()}
               deployProjectName={deployingState()?.projectName}
               debugProjectName={debuggingState()?.projectName}
+              memDisplay={memDisplay()}
+              debugPort={debuggingState()?.port ?? null}
+              buildProgress={buildProgress()}
             />
           }
           activePanel={activePanelForLayout()}
@@ -625,7 +736,13 @@ export function App(props: AppProps): JSX.Element {
           </box>
         </Show>
         <Show when={showGit()}>
-          <box position="absolute" width={columns()} height={rows()} flexDirection="column">
+          <box
+            position="absolute"
+            width={columns()}
+            height={rows()}
+            flexDirection="column"
+            zIndex={100}
+          >
             <GitOverlay
               currentProviders={connectedProviders()}
               onConnect={handleConnect}
@@ -655,6 +772,21 @@ export function App(props: AppProps): JSX.Element {
             <EnvOverlay onClose={() => setShowEnv(false)} client={connectedClient} />
           </box>
         </Show>
+        {showCopyToast() && (
+          <box
+            position="absolute"
+            width={columns()}
+            height={rows()}
+            flexDirection="column"
+            alignItems="flex-end"
+            paddingRight={2}
+            paddingTop={1}
+          >
+            <text backgroundColor={theme.primary} fg={theme.background} bold={true}>
+              {' Copied to clipboard '}
+            </text>
+          </box>
+        )}
         {showCtrlCWarning() && (
           <box
             position="absolute"

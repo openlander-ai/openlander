@@ -106,7 +106,9 @@ export function TunnelOverlay(props: TunnelOverlayProps): JSX.Element {
     >
       <Show when={loading()}>
         <box justifyContent="center">
-          <Spinner color={theme.textMuted} />
+          <text fg={theme.textMuted}>
+            <Spinner color={theme.textMuted} />
+          </text>
           <text fg={theme.textMuted}> Loading projects...</text>
         </box>
       </Show>
@@ -157,7 +159,9 @@ export function TunnelOverlay(props: TunnelOverlayProps): JSX.Element {
 
         <Show when={actionLoading()}>
           <box justifyContent="center" marginTop={1}>
-            <Spinner color={theme.warning} />
+            <text fg={theme.warning}>
+              <Spinner color={theme.warning} />
+            </text>
             <text fg={theme.warning}> Updating tunnel...</text>
           </box>
         </Show>
