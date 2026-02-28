@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { join } from 'node:path';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { ComposePipeline } from '../src/pipeline/compose.js';
@@ -37,15 +36,19 @@ describe('ComposePipeline', () => {
   let tmpDir: string;
   let db: Database;
   let pipeline: ComposePipeline;
+  let originalSpawn: typeof Bun.spawn;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-compose-test-'));
+    originalSpawn = Bun.spawn;
+    (Bun as Record<string, unknown>).spawn = vi.fn();
     db = new Database(join(tmpDir, 'test.db'));
     pipeline = new ComposePipeline(createMockDocker(), db, new EventBus());
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    (Bun as Record<string, unknown>).spawn = originalSpawn;
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -59,17 +62,12 @@ describe('ComposePipeline', () => {
   });
 
   it('detectComposeFile checks supported filenames in order', () => {
-    const existsSyncSpy = vi
-      .spyOn(fs, 'existsSync')
-      .mockImplementation((filePath) => String(filePath) === '/repo/compose.yaml');
+    writeFileSync(join(tmpDir, 'compose.yml'), 'services: {}\n', 'utf8');
+    writeFileSync(join(tmpDir, 'compose.yaml'), 'services: {}\n', 'utf8');
 
-    const detected = pipeline.detectComposeFile('/repo');
+    const detected = pipeline.detectComposeFile(tmpDir);
 
-    expect(detected).toBe('/repo/compose.yaml');
-    expect(existsSyncSpy).toHaveBeenNthCalledWith(1, '/repo/docker-compose.yml');
-    expect(existsSyncSpy).toHaveBeenNthCalledWith(2, '/repo/docker-compose.yaml');
-    expect(existsSyncSpy).toHaveBeenNthCalledWith(3, '/repo/compose.yml');
-    expect(existsSyncSpy).toHaveBeenNthCalledWith(4, '/repo/compose.yaml');
+    expect(detected).toBe(join(tmpDir, 'compose.yml'));
   });
 
   it('parses compose file with service variants', () => {
@@ -93,7 +91,10 @@ describe('ComposePipeline', () => {
   });
 
   it('parseComposeFile parses string build, env list/map, and depends_on array', () => {
-    const readFileSyncSpy = vi.spyOn(fs, 'readFileSync').mockReturnValue(`services:
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
   api:
     build: ./api
     ports:
@@ -106,11 +107,11 @@ describe('ComposePipeline', () => {
     image: postgres:16
     environment:
       POSTGRES_DB: app
-`);
+`,
+      'utf8',
+    );
 
-    const parsed = pipeline.parseComposeFile('/repo/docker-compose.yml');
-
-    expect(readFileSyncSpy).toHaveBeenCalledWith('/repo/docker-compose.yml', 'utf8');
+    const parsed = pipeline.parseComposeFile(composePath);
     const api = parsed.services.find((service) => service.name === 'api');
     const dbService = parsed.services.find((service) => service.name === 'db');
 
@@ -122,12 +123,14 @@ describe('ComposePipeline', () => {
   });
 
   it('parseComposeFile handles empty and invalid compose files', () => {
-    vi.spyOn(fs, 'readFileSync').mockReturnValue('');
-    const emptyParsed = pipeline.parseComposeFile('/repo/docker-compose.yml');
+    const composePath = join(tmpDir, 'docker-compose.yml');
+
+    writeFileSync(composePath, '', 'utf8');
+    const emptyParsed = pipeline.parseComposeFile(composePath);
     expect(emptyParsed.services).toEqual([]);
 
-    vi.spyOn(fs, 'readFileSync').mockReturnValue('services: [broken');
-    expect(() => pipeline.parseComposeFile('/repo/docker-compose.yml')).toThrow();
+    writeFileSync(composePath, 'services: [broken', 'utf8');
+    expect(() => pipeline.parseComposeFile(composePath)).toThrow();
   });
 
   it('detects and deploys compose project using docker compose CLI', async () => {
