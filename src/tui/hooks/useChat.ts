@@ -1,4 +1,4 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal } from 'solid-js';
 import type { OpenLanderClient } from '../../ipc/client.js';
 import type { ChatStreamEvent } from '../../agent/index.js';
 

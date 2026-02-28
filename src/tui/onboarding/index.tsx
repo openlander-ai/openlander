@@ -30,7 +30,7 @@ export function Onboarding({ ctx, onComplete }: OnboardingProps): JSX.Element {
 
   // Clear console between screens for full-screen feel
   createEffect(() => {
-    const _s = step(); // track step changes
+    step(); // track step changes
     console.clear();
   });
 

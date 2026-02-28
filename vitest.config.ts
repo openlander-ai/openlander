@@ -12,5 +12,6 @@ export default defineConfig({
   },
   test: {
     include: ['test/**/*.test.{ts,tsx}'],
+    setupFiles: ['test/__mocks__/bun-globals.ts'],
   },
 });

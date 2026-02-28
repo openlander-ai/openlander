@@ -36,19 +36,19 @@ describe('ComposePipeline', () => {
   let tmpDir: string;
   let db: Database;
   let pipeline: ComposePipeline;
-  let originalSpawn: typeof Bun.spawn;
+  let originalSpawn: (...args: unknown[]) => unknown;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-compose-test-'));
-    originalSpawn = Bun.spawn;
-    (Bun as Record<string, unknown>).spawn = vi.fn();
+    originalSpawn = getBunLike().spawn;
+    getBunLike().spawn = vi.fn();
     db = new Database(join(tmpDir, 'test.db'));
     pipeline = new ComposePipeline(createMockDocker(), db, new EventBus());
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    (Bun as Record<string, unknown>).spawn = originalSpawn;
+    getBunLike().spawn = originalSpawn;
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
   });
