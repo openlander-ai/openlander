@@ -1,4 +1,5 @@
 import type { LLMClient, ChatMessage, LLMResponse } from '../llm/index.js';
+import type { QuestionRequest, QuestionBridge } from './question-bridge.js';
 import type { Database } from '../db/index.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
 import type { ToolDefinition } from './tools.js';
@@ -35,6 +36,7 @@ const KEEP_RECENT = 30;
 export class Agent {
   private history: ChatMessage[] = [];
   private tools: ToolDefinition[] = [];
+  private questionBridge: QuestionBridge | null = null;
 
   constructor(
     private readonly llm: LLMClient,
@@ -42,6 +44,11 @@ export class Agent {
     private readonly contextProvider?: ContextProvider,
     private readonly provider: LLMProvider = 'gemini',
   ) {}
+
+  /** Set the question bridge for ask_user_question tool support. */
+  setQuestionBridge(bridge: QuestionBridge): void {
+    this.questionBridge = bridge;
+  }
 
   /** Register tools for the agent to use. */
   setTools(tools: ToolDefinition[]): void {
@@ -153,6 +160,8 @@ export class Agent {
    * Yields ChatStreamEvent objects for real-time UI updates.
    *
    * Supports multi-step tool execution — yields events for each step.
+   * When ask_user_question is called, emits a 'question' event and pauses
+   * until the TUI responds via the QuestionBridge.
    */
   async chatStream(
     userMessage: string,
@@ -178,6 +187,15 @@ export class Agent {
     });
 
     await onEvent({ type: 'thinking' });
+
+    // Wire question bridge to emit through this stream's onEvent callback.
+    // This allows ask_user_question tool to pause the agentic loop and
+    // emit a question event to the TUI via SSE.
+    if (this.questionBridge) {
+      this.questionBridge.setQuestionHandler((request: QuestionRequest) => {
+        void onEvent({ type: 'question', request });
+      });
+    }
 
     const allToolResults: ToolResult[] = [];
 
@@ -390,5 +408,6 @@ export type ChatStreamEvent =
   | { type: 'tool_call'; toolName: string; arguments: Record<string, unknown> }
   | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
   | { type: 'message'; content: string }
+  | { type: 'question'; request: QuestionRequest }
   | { type: 'done'; toolResults?: ToolResult[] }
   | { type: 'error'; error: string };

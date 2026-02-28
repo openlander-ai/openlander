@@ -1,4 +1,5 @@
 import type { AppContext } from '../app.js';
+import type { QuestionBridge } from './question-bridge.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { ProjectNotFoundError } from '../errors.js';
 import { cloneRepo } from '../pipeline/git.js';
@@ -60,7 +61,7 @@ export interface ToolParameter {
  * - cleanup_preview: Remove preview
  * - list_previews: List active previews
  */
-export function createTools(ctx: AppContext): ToolDefinition[] {
+export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): ToolDefinition[] {
   return [
     {
       name: 'deploy_project',
@@ -830,6 +831,60 @@ export function createTools(ctx: AppContext): ToolDefinition[] {
         return Promise.resolve({ status: 'dismissed', alertId });
       },
     },
+    // --- v0.7 Tools: User Interaction ---
+    ...(questionBridge
+      ? [
+          {
+            name: 'ask_user_question',
+            description:
+              "Ask the user a question with structured choices during a conversation. Use when you need to gather preferences, clarify ambiguous instructions, get decisions on implementation choices, or offer options. Each question has a header (max 30 chars), a question string, and an array of options with label (1-5 words) and description. A 'Type your own answer' option is automatically added. If you recommend a specific option, list it first and add '(Recommended)' to its label. Set multiple=true to allow multi-select. Returns an array of answers, each with selectedLabels (array of chosen label strings) and optional customText.",
+            parameters: {
+              questions: {
+                type: 'string' as const,
+                description:
+                  'JSON array of question objects. Each: { question: string, header?: string (max 30 chars), options: [{ label: string (1-5 words), description?: string }], multiple?: boolean }',
+                required: true,
+              },
+            },
+            execute: async (args: Record<string, unknown>) => {
+              const questionsRaw = args['questions'] as string;
+              const questions = JSON.parse(questionsRaw) as Array<{
+                question: string;
+                header?: string;
+                options: Array<{ label: string; description?: string }>;
+                multiple?: boolean;
+              }>;
+              const { nanoid } = await import('nanoid');
+              const request = {
+                id: nanoid(12),
+                questions: questions.map((q) => ({
+                  question: q.question,
+                  header: q.header?.slice(0, 30),
+                  options: q.options.map((o) => ({
+                    label: o.label.slice(0, 30),
+                    description: o.description,
+                  })),
+                  multiple: q.multiple ?? false,
+                })),
+              };
+              const answers = await questionBridge.ask(request);
+              if (answers.length === 0) {
+                return {
+                  dismissed: true,
+                  message: 'User dismissed the question without answering.',
+                };
+              }
+              return {
+                answers: answers.map((a) => ({
+                  questionIndex: a.questionIndex,
+                  selectedLabels: a.selectedLabels,
+                  customText: a.customText,
+                })),
+              };
+            },
+          } satisfies ToolDefinition,
+        ]
+      : []),
   ];
 }
 
