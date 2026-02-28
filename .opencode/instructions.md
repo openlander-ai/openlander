@@ -5,9 +5,9 @@
 ## 1. 작업 시작 전 (MANDATORY)
 
 - `docs/planning/version-map.md`를 읽고 현재 버전/진행 상태 파악
-- `docs/planning/bugs.md`의 "활성 버그" 테이블 확인 — 미해결 버그 있으면 우선 처리
+- `docs/planning/v0.0.9/bugs.md`의 "활성 버그" 테이블 확인 — 미해결 버그 있으면 우선 처리
 - 작업할 TASK-XX의 **수락기준 전부** 읽고 시작
-- 스펙 문서(버전별 `docs/planning/v0.0.x-*.md`)의 해당 라인 참조
+- 스펙 문서(버전별 `docs/planning/v0.0.X/*.md`)의 해당 라인 참조
 
 ## 2. 구현 중
 
@@ -87,17 +87,31 @@
 
 ```
 docs/planning/
-├── version-map.md          # SSOT — 전체 버전/스펙/상태 매핑
-├── bugs.md                  # 버그 트래커 (활성 + 해결됨)
-├── requirements.md          # 전체 요구사항 (v0.0.1~v0.0.8)
-├── v0.0.6-tasks.md          # v0.0.6 상세 태스크
-├── v0.0.6-tui-spec.md       # v0.0.6 TUI 스펙
-├── v0.0.6-ui-ux-build-compose.md
-├── v0.0.7-ui-ux-layout.md   # v0.0.7 UI 레이아웃 스펙
-├── v0.0.7-implementation-tasks.md
-├── v0.0.7-phase1-plan.md
-├── v0.0.8-vercel-ai-sdk-migration.md
-├── v0.0.9-10-unified-spec.md  # ⚠ 아카이브 — 아래 2개로 대체
-├── v0.0.9-server-awareness.md  # v0.0.9 Server Awareness 스펙 (최신)
-└── v0.0.10-env-secrets.md      # v0.0.10 Env & Secrets 스펙 (최신)
+├── version-map.md              # SSOT — 전체 버전/스펙/상태 매핑
+├── dev-lifecycle.md             # 11단계 개발 라이프사이클
+├── requirements.md              # 전체 요구사항 (v0.0.1~v0.0.8)
+│
+├── v0.0.6/                      # ✅ 완료
+│   ├── tasks.md
+│   ├── tui-spec.md
+│   └── ui-ux-build-compose.md
+│
+├── v0.0.7/                      # ✅ 완료
+│   ├── implementation-tasks.md
+│   ├── phase1-plan.md
+│   └── ui-ux-layout.md
+│
+├── v0.0.8/                      # 📋 미착수
+│   └── vercel-ai-sdk-migration.md
+│
+├── v0.0.9/                      # 🧪 도그푸딩 중
+│   ├── server-awareness.md      # 스펙
+│   ├── dogfooding.md            # 테스트 체크리스트
+│   └── bugs.md                  # 버그 트래커
+│
+├── v0.0.10/                     # 📋 기획 완료
+│   └── env-secrets.md
+│
+└── archive/                     # ⚠ 아카이브
+    └── v0.0.9-10-unified-spec.md
 ```
