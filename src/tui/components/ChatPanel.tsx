@@ -1,6 +1,17 @@
 import { createSignal, createEffect, createMemo, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
+
+/** Minimal interface for ScrollBox ref - methods we need for scroll handling */
+interface ScrollBoxRef {
+  readonly scrollTop: number;
+  readonly scrollHeight: number;
+  stickyScroll: boolean;
+  scrollTo(position: number | { x: number; y: number }): void;
+  scrollBy(delta: number | { x: number; y: number }): void;
+}
+
+
 import { overlayActive } from '../state/overlay.js';
 import { enterDebugMode, enterDeployMode } from '../state/mode.js';
 import { Prompt } from './Prompt.js';
@@ -14,6 +25,8 @@ import { parseSlashCommand, type SlashCommandResult } from '../commands/registry
 import { theme } from '../theme.js';
 import { detectChoices, type DetectedChoice } from './ChoicePicker.js';
 import { VERSION } from '../../version.js';
+import { QuestionDock } from './QuestionDock.js';
+import type { QuestionRequest, QuestionAnswer } from '../../agent/question-bridge.js';
 
 // ---------------------------------------------------------------------------
 // Compaction Helpers
@@ -108,10 +121,6 @@ interface TextareaRef {
 // ---------------------------------------------------------------------------
 
 const MAX_HISTORY_ENTRIES = 100;
-/** Estimated prompt height for scroll area calculation */
-const PROMPT_ESTIMATED_HEIGHT = 7;
-/** Lines from the bottom to consider "at bottom" for smart scroll */
-const SCROLL_BOTTOM_THRESHOLD = 3;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -152,11 +161,18 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const [showCommandPicker, setShowCommandPicker] = createSignal(false);
   const [commandPickerIndex, setCommandPickerIndex] = createSignal(0);
 
+  // --- QuestionDock state (ask_user_question tool) ---
+  const [activeQuestion, setActiveQuestion] = createSignal<QuestionRequest | null>(null);
+
   // --- Smart auto-scroll ---
-  const messageAreaHeight = () => Math.max(0, height() - PROMPT_ESTIMATED_HEIGHT);
-  const [scrollOffset, setScrollOffset] = createSignal(0);
   const [isAtBottom, setIsAtBottom] = createSignal(true);
   const [hasNewMessages, setHasNewMessages] = createSignal(false);
+  // --- ScrollBox ref for native scroll handling ---
+  let scrollBoxRef: ScrollBoxRef | null = null;
+  const setScrollBoxRef = (r: unknown) => {
+    scrollBoxRef = r as ScrollBoxRef;
+  };
+
   // --- Choice detection for agent clarification questions (T-AGENT-01) ---
   const detectedChoices = createMemo((): DetectedChoice[] => {
     const msgs = messages();
@@ -197,34 +213,22 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     setInputValue(text);
   };
 
-  // Smart scroll: only auto-scroll when user is at the bottom
+  // Smart scroll: track when new messages arrive while user is scrolled up
   createEffect(() => {
     const msgs = messages();
-    const totalLines = calculateMessageLines(msgs);
-    const maxOffset = Math.max(0, totalLines - messageAreaHeight());
-
-    if (msgs.length > prevMessageCount) {
-      // New messages arrived
-      if (isAtBottom()) {
-        // User was at bottom → keep scrolling down
-        setScrollOffset(maxOffset);
-      } else {
-        // User scrolled up → show "new messages" indicator
-        setHasNewMessages(true);
-      }
-    } else if (isAtBottom()) {
-      // Content changed (e.g., streaming update) and user is at bottom
-      setScrollOffset(maxOffset);
+    if (msgs.length > prevMessageCount && !isAtBottom()) {
+      // User scrolled up and new messages arrived → show indicator
+      setHasNewMessages(true);
     }
-
     prevMessageCount = msgs.length;
   });
 
   // Jump to bottom helper
   const scrollToBottom = () => {
-    const totalLines = calculateMessageLines(messages());
-    const maxOffset = Math.max(0, totalLines - messageAreaHeight());
-    setScrollOffset(maxOffset);
+    if (scrollBoxRef) {
+      scrollBoxRef.stickyScroll = true;
+      scrollBoxRef.scrollTo(scrollBoxRef.scrollHeight);
+    }
     setIsAtBottom(true);
     setHasNewMessages(false);
   };
@@ -405,12 +409,33 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           },
         ]);
         break;
+      case 'question':
+        // Show the QuestionDock for the user to answer
+        setActiveQuestion(event.request);
+        break;
       case 'done':
         setIsStreaming(false);
         setStreamingStep(0);
         setToolCallCount(0);
         break;
     }
+  };
+
+  // --- QuestionDock handlers ---
+  const handleQuestionSubmit = (answers: QuestionAnswer[]) => {
+    const question = activeQuestion();
+    if (!question) return;
+    const c = client();
+    if (!c) return;
+    setActiveQuestion(null);
+    void c.replyQuestion(question.id, answers);
+  };
+
+  const handleQuestionDismiss = () => {
+    setActiveQuestion(null);
+    const c = client();
+    if (!c) return;
+    void c.dismissQuestion();
   };
 
   // --- Send message function ---
@@ -701,16 +726,18 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     }
     // Page Up / Page Down for manual scrolling
     if (evt.name === 'pageup') {
-      setScrollOffset((prev) => Math.max(0, prev - messageAreaHeight()));
+      scrollBoxRef?.scrollBy({ x: 0, y: -height() });
+      if (scrollBoxRef) {
+        scrollBoxRef.stickyScroll = false;
+      }
       setIsAtBottom(false);
       return;
     }
     if (evt.name === 'pagedown') {
-      const totalLines = calculateMessageLines(messages());
-      const maxOffset = Math.max(0, totalLines - messageAreaHeight());
-      const newOffset = Math.min(maxOffset, scrollOffset() + messageAreaHeight());
-      setScrollOffset(newOffset);
-      if (newOffset >= maxOffset - SCROLL_BOTTOM_THRESHOLD) {
+      scrollBoxRef?.scrollBy({ x: 0, y: height() });
+      // Check if we're at bottom after scrolling
+      if (scrollBoxRef && scrollBoxRef.scrollTop >= scrollBoxRef.scrollHeight - 3) {
+        scrollBoxRef.stickyScroll = true;
         setIsAtBottom(true);
         setHasNewMessages(false);
       }
@@ -809,7 +836,14 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
         {/* ── ACTIVE STATE: Messages + bottom prompt ─────────────── */}
         <box flexDirection="column" flexGrow={1}>
           {/* Messages area */}
-          <box flexDirection="column" flexGrow={1} overflow="hidden" paddingTop={1}>
+          <scrollbox
+            scrollY={true}
+            stickyScroll={isAtBottom()}
+            stickyStart="bottom"
+            flexGrow={1}
+            paddingTop={1}
+            ref={setScrollBoxRef}
+          >
             <For each={messages()}>
               {(msg, i) => <ChatMessage message={msg} isFirst={i() === 0} />}
             </For>
@@ -826,7 +860,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
                 </text>
               </box>
             </Show>
-          </box>
+          </scrollbox>
 
           {/* New messages indicator */}
           <Show when={hasNewMessages()}>
@@ -874,6 +908,20 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             </box>
           </Show>
 
+          {/* QuestionDock for structured agent questions */}
+          <Show when={activeQuestion()}>
+            {(question: () => QuestionRequest) => (
+              <box flexShrink={0} paddingX={2}>
+                <QuestionDock
+                  request={question()}
+                  focused={focus() && !showCommandPicker()}
+                  onSubmit={handleQuestionSubmit}
+                  onDismiss={handleQuestionDismiss}
+                />
+              </box>
+            )}
+          </Show>
+
           {/* Bottom Prompt */}
           <box flexShrink={0}>
             <Show
@@ -885,7 +933,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
               }
             >
               <Prompt
-                focused={focus()}
+                focused={focus() && !activeQuestion()}
                 isStreaming={isStreaming()}
                 onSubmit={handleSubmit}
                 onContentChange={handleContentChange}
@@ -901,20 +949,4 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
       </Show>
     </box>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function calculateMessageLines(messages: DisplayMessage[]): number {
-  let lines = 0;
-  for (const msg of messages) {
-    lines += 1;
-    if (msg.content) {
-      lines += Math.ceil(msg.content.split('\n').length * 0.5);
-    }
-    lines += 1;
-  }
-  return lines;
 }
