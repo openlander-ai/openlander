@@ -15,6 +15,12 @@ interface StatusBarProps {
   deployProjectName?: string;
   /** Name of project being debugged (debugging mode). */
   debugProjectName?: string;
+  /** Memory display string (e.g., "4.2G", "128M"). */
+  memDisplay: string;
+  /** Debug port for the project (debugging mode). */
+  debugPort: number | null;
+  /** Build progress percentage 0-100 (deploying mode). */
+  buildProgress: number | null;
 }
 
 /**
@@ -120,18 +126,22 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
           <Match when={props.mode === 'deploying'}>
             <text fg={theme.warning} bold={true}>
               BUILD {props.deployProjectName ?? '...'}
+              {props.buildProgress != null ? ` ${String(props.buildProgress)}%` : ''}
             </text>
-            <text fg={theme.textMuted}>CPU {cpuDisplay()}</text>
+            <text fg={theme.textMuted}>CPU {cpuDisplay()} MEM {props.memDisplay}</text>
           </Match>
           <Match when={props.mode === 'debugging'}>
-            <text fg={theme.success}>{props.debugProjectName ?? '...'} ●</text>
-            <text fg={theme.textMuted}>CPU {cpuDisplay()}</text>
+            <text fg={theme.success}>
+              {props.debugProjectName ?? '...'} ●
+              {props.debugPort != null ? ` :${String(props.debugPort)}` : ''}
+            </text>
+            <text fg={theme.textMuted}>CPU {cpuDisplay()} MEM {props.memDisplay}</text>
           </Match>
           <Match when={props.mode === 'monitoring'}>
             <text fg={theme.textMuted}>
               {props.projectCount} project{props.projectCount !== 1 ? 's' : ''}
             </text>
-            <text fg={theme.textMuted}>CPU {cpuDisplay()}</text>
+            <text fg={theme.textMuted}>CPU {cpuDisplay()} MEM {props.memDisplay}</text>
             <Show when={props.buildingCount > 0}>
               <text fg={theme.warning}>
                 <span style={{ fg: theme.warning }}>●</span>

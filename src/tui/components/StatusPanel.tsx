@@ -25,8 +25,9 @@ interface StatusPanelProps {
     projectCount: number;
     cpuPercent: number | null;
     buildingCount: number;
+    memoryUsedMB: number | null;
   }) => void;
-  onProjectSelect?: (projectId: string, projectName: string) => void;
+  onProjectSelect?: (projectId: string, projectName: string, port: number | null) => void;
 }
 
 export function StatusPanel(props: StatusPanelProps): JSX.Element {

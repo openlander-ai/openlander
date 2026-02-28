@@ -23,6 +23,8 @@ import type {
   HealthResponse,
   ProjectStats,
 } from '../../ipc/client.js';
+import type { Alert } from '../../monitor/alerts.js';
+import { useAlerts } from '../hooks/useAlerts.js';
 import type { SystemStats } from '../../monitor/stats.js';
 
 interface DashboardPanelProps {
@@ -34,8 +36,9 @@ interface DashboardPanelProps {
     projectCount: number;
     cpuPercent: number | null;
     buildingCount: number;
+    memoryUsedMB: number | null;
   }) => void;
-  onProjectSelect?: (projectId: string, projectName: string) => void;
+  onProjectSelect?: (projectId: string, projectName: string, port: number | null) => void;
 }
 
 // Section header component
@@ -214,7 +217,9 @@ export function ProjectsSection({
             <text fg={theme.success}>●</text>
           ) : project.status === 'building' ? (
             <box flexDirection="row" gap={1}>
-              <Spinner color={theme.statusBuilding} />
+              <text fg={theme.statusBuilding}>
+                <Spinner color={theme.statusBuilding} />
+              </text>
               <text fg={theme.statusBuilding}>Building…</text>
             </box>
           ) : (
@@ -282,6 +287,7 @@ export function ProjectsSection({
         for (const row of renderComposeGroup(project)) {
           elements.push(row);
         }
+      } else {
         const currentIndex = visibleIndex++;
         const isSelected = focus && currentIndex === selectedIndex;
         elements.push(renderProjectRow(project, isSelected));
@@ -336,28 +342,34 @@ export function ActivitySection({ events }: { events: ActivityEvent[] }): JSX.El
   );
 }
 
-// MCP Clients section component
-export function McpClientsSection({ enabled }: { enabled: boolean }): JSX.Element {
+// Alerts section component
+function AlertsSection(props: { alerts: Alert[] }): JSX.Element {
+  const sorted = (): Alert[] => {
+    const items = [...props.alerts];
+    items.sort((a, b) => {
+      const sevOrder: Record<string, number> = { critical: 0, warning: 1 };
+      return (sevOrder[a.severity] ?? 2) - (sevOrder[b.severity] ?? 2);
+    });
+    return items;
+  };
+
+  const visible = (): Alert[] => sorted().slice(0, 3);
+  const remaining = (): number => Math.max(0, props.alerts.length - 3);
+
   return (
     <box flexDirection="column" marginTop={1}>
-      <SectionHeader title="MCP Clients" />
-      <Show
-        when={enabled}
-        fallback={
-          <box paddingLeft={2}>
-            <text fg={theme.textDim}>MCP disabled</text>
-          </box>
-        }
-      >
-        <box flexDirection="column" paddingLeft={2}>
-          <text fg={theme.textMuted}>
-            <span style={{ fg: theme.success }}>●</span> MCP server active (stdio)
+      <text bold={true} fg={theme.warning}>
+        {'⚠ Alerts'}
+      </text>
+      <For each={visible()}>
+        {(alert) => (
+          <text fg={alert.severity === 'critical' ? theme.error : theme.warning}>
+            {'  ⚠ '}{truncate(alert.message, 30)}
           </text>
-          <text fg={theme.textDim}>No clients connected yet</text>
-          <text fg={theme.textDim}>
-            Run: <span style={{ fg: theme.secondary }}>openlander mcp install --claude-code</span>
-          </text>
-        </box>
+        )}
+      </For>
+      <Show when={remaining() > 0}>
+        <text fg={theme.textDim}>{'  +' + String(remaining()) + ' more'}</text>
       </Show>
     </box>
   );
@@ -378,6 +390,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
 
+  const { alerts } = useAlerts(() => props.client);
   const [scrollOffset, _setScrollOffset] = createSignal(0);
   const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set());
 
@@ -409,7 +422,8 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
 
   const visibleItems = () => buildVisibleItems();
 
-  let lastDisplayKey = '';
+  let lastSystemActivityKey = '';
+  let lastProjectsKey = '';
   const onStatsUpdateRef = props.onStatsUpdate;
 
   createEffect(() => {
@@ -423,44 +437,21 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
 
     let isFirstLoad = true;
 
-    const fetchAll = async () => {
-      const [statsResult, healthResult, projectsResult, activityResult] = await Promise.allSettled([
-        c.getSystemStats(),
-        c.ping(),
-        c.listProjects(),
-        c.getActivity(5),
-      ]);
+    const fetchProjects = async () => {
+      const [projectsResult] = await Promise.allSettled([c.listProjects()]);
 
-      let displayKey = '';
-      let newStats: SystemStats | null = null;
-      let newHealth: HealthResponse | null = null;
+      let projectsKey = '';
       let newProjects: Project[] = [];
-      let newActivity: ActivityEvent[] = [];
 
-      if (statsResult.status === 'fulfilled') {
-        newStats = statsResult.value;
-        const s = newStats;
-        displayKey += `cpu:${String(Math.round(s.cpu.usagePercent))}|mem:${(s.memory.usedMB / 1024).toFixed(1)}/${(s.memory.totalMB / 1024).toFixed(1)}|disk:${String(Math.round(s.disk.usagePercent))}|up:${String(Math.floor(s.uptime.seconds / 60))}|`;
-      }
-      if (healthResult.status === 'fulfilled') {
-        newHealth = healthResult.value;
-        displayKey += `docker:${String(newHealth.dockerContainers)}|`;
-      }
       if (projectsResult.status === 'fulfilled') {
         newProjects = projectsResult.value.projects;
-        for (const p of newProjects) displayKey += `${p.name}:${p.status}:${String(p.port ?? '')}|`;
-      }
-      if (activityResult.status === 'fulfilled') {
-        newActivity = activityResult.value;
-        for (const e of newActivity) displayKey += `${e.timestamp}:${e.message}|`;
+        for (const p of newProjects)
+          projectsKey += `${p.name}:${p.status}:${String(p.port ?? '')}|`;
       }
 
-      if (displayKey !== lastDisplayKey) {
-        lastDisplayKey = displayKey;
-        if (newStats) setSystemStats(newStats);
-        if (newHealth) setHealth(newHealth);
+      if (projectsKey !== lastProjectsKey) {
+        lastProjectsKey = projectsKey;
         setProjects(newProjects);
-        setActivity(newActivity);
 
         const statsMap = new Map<string, ProjectStats>();
         for (const project of newProjects) {
@@ -476,10 +467,55 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
         setProjectStats(statsMap);
 
         const building = newProjects.filter((p) => p.status === 'building').length;
+        const currentStats = systemStats();
         onStatsUpdateRef?.({
           projectCount: newProjects.length,
+          cpuPercent: currentStats ? Math.round(currentStats.cpu.usagePercent) : null,
+          buildingCount: building,
+          memoryUsedMB: currentStats ? currentStats.memory.usedMB : null,
+        });
+      }
+    };
+
+    const fetchAll = async () => {
+      const [statsResult, healthResult, activityResult] = await Promise.allSettled([
+        c.getSystemStats(),
+        c.ping(),
+        c.getActivity(5),
+      ]);
+
+      let displayKey = '';
+      let newStats: SystemStats | null = null;
+      let newHealth: HealthResponse | null = null;
+      let newActivity: ActivityEvent[] = [];
+
+      if (statsResult.status === 'fulfilled') {
+        newStats = statsResult.value;
+        const s = newStats;
+        displayKey += `cpu:${String(Math.round(s.cpu.usagePercent))}|mem:${(s.memory.usedMB / 1024).toFixed(1)}/${(s.memory.totalMB / 1024).toFixed(1)}|disk:${String(Math.round(s.disk.usagePercent))}|up:${String(Math.floor(s.uptime.seconds / 60))}|`;
+      }
+      if (healthResult.status === 'fulfilled') {
+        newHealth = healthResult.value;
+        displayKey += `docker:${String(newHealth.dockerContainers)}|`;
+      }
+      if (activityResult.status === 'fulfilled') {
+        newActivity = activityResult.value;
+        for (const e of newActivity) displayKey += `${e.timestamp}:${e.message}|`;
+      }
+
+      if (displayKey !== lastSystemActivityKey) {
+        lastSystemActivityKey = displayKey;
+        if (newStats) setSystemStats(newStats);
+        if (newHealth) setHealth(newHealth);
+        setActivity(newActivity);
+
+        const currentProjects = projects();
+        const building = currentProjects.filter((p) => p.status === 'building').length;
+        onStatsUpdateRef?.({
+          projectCount: currentProjects.length,
           cpuPercent: newStats ? Math.round(newStats.cpu.usagePercent) : null,
           buildingCount: building,
+          memoryUsedMB: newStats ? newStats.memory.usedMB : null,
         });
       }
 
@@ -489,12 +525,21 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
       }
     };
 
-    void fetchAll();
-    const timer = setInterval(() => {
+    void fetchAll().catch(() => {
+      if (isFirstLoad) { setSystemLoading(false); isFirstLoad = false; }
+    });
+    void fetchProjects().catch(() => { /* ignore */ });
+
+    const systemActivityTimer = setInterval(() => {
       void fetchAll();
     }, 5000);
+    const projectsTimer = setInterval(() => {
+      void fetchProjects();
+    }, 3000);
+
     onCleanup(() => {
-      clearInterval(timer);
+      clearInterval(systemActivityTimer);
+      clearInterval(projectsTimer);
     });
   });
 
@@ -525,7 +570,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
         });
       } else if (props.onProjectSelect) {
         // Select the project
-        props.onProjectSelect(item.project.id, item.project.name);
+        props.onProjectSelect(item.project.id, item.project.name, item.project.port ?? null);
       }
     }
   });
@@ -559,7 +604,9 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
       />
       <Show when={!compact()}>
         <ActivitySection events={activity()} />
-        <McpClientsSection enabled={health() !== null} />
+        <Show when={alerts().length > 0}>
+          <AlertsSection alerts={alerts()} />
+        </Show>
       </Show>
 
       <Show when={showScrollDown()}>
