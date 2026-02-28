@@ -46,9 +46,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     } else if (dockerStatus.state === 'not_running') {
       dockerMessage = 'Docker is installed but the daemon is not running. Start it to continue.';
     } else if (dockerStatus.groupFixed) {
-      dockerMessage = 'Permission fixed! Restart OpenLander for the change to take effect. (Ctrl+C, then `openlander start`)';
+      dockerMessage =
+        'Permission fixed! Restart OpenLander for the change to take effect. (Ctrl+C, then `openlander start`)';
     } else {
-      dockerMessage = 'Docker is installed but your user lacks permission. Add yourself to the docker group.';
+      dockerMessage =
+        'Docker is installed but your user lacks permission. Add yourself to the docker group.';
     }
 
     return c.json({
@@ -56,7 +58,8 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       docker: {
         ok: dockerOk,
         state: dockerStatus.state,
-        groupFixed: dockerStatus.state === 'permission_denied' ? dockerStatus.groupFixed : undefined,
+        groupFixed:
+          dockerStatus.state === 'permission_denied' ? dockerStatus.groupFixed : undefined,
         message: dockerMessage,
       },
       traefik: {
@@ -148,7 +151,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       const agent = new Agent(
         llm,
         ctx.db,
-        () => buildContextSnapshot(ctx.db),
+        async () => buildContextSnapshot(ctx.db, ctx.docker),
         body.provider as OpenLanderConfig['llm']['provider'],
       );
 
@@ -223,11 +226,15 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const validation = await provider.validateToken();
 
     if (!validation.valid) {
-      return c.json({
-        status: 'invalid',
-        error: validation.error ?? 'Token validation failed',
-        message: 'GitHub token is invalid or expired. Generate a new one at github.com/settings/tokens.',
-      }, 400);
+      return c.json(
+        {
+          status: 'invalid',
+          error: validation.error ?? 'Token validation failed',
+          message:
+            'GitHub token is invalid or expired. Generate a new one at github.com/settings/tokens.',
+        },
+        400,
+      );
     }
 
     // Save validated token + username

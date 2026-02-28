@@ -22,6 +22,7 @@ import type {
   ActivityEvent,
   HealthResponse,
   ProjectStats,
+  ServerStatusResponse,
 } from '../../ipc/client.js';
 import type { Alert } from '../../monitor/alerts.js';
 import { useAlerts } from '../hooks/useAlerts.js';
@@ -126,7 +127,87 @@ export function SystemSection({
   );
 }
 
-// Internal service names that don't have external URLs
+// Server section component (v0.0.9)
+export function ServerSection({
+  serverStatus,
+  loading,
+}: {
+  serverStatus: ServerStatusResponse | null;
+  loading: boolean;
+}): JSX.Element {
+  if (loading && !serverStatus) {
+    return (
+      <box flexDirection="column">
+        <SectionHeader title="Server" />
+        <box paddingLeft={2} flexDirection="row" gap={1}>
+          <text fg={theme.textMuted}>
+            <Spinner color={theme.textMuted} />
+          </text>
+          <text fg={theme.textMuted}>Loading...</text>
+        </box>
+      </box>
+    );
+  }
+
+  if (!serverStatus) {
+    return <box />;
+  }
+
+  const { containers, portsInUse, proxy, externalContainers } = serverStatus;
+
+  // Don't show section if no external containers
+  if (externalContainers.length === 0) {
+    return <box />;
+  }
+
+  // Truncate if more than 10
+  const displayContainers =
+    externalContainers.length > 10 ? [...externalContainers.slice(0, 5)] : externalContainers;
+  const remainingCount = externalContainers.length > 10 ? externalContainers.length - 5 : 0;
+
+  return (
+    <box flexDirection="column">
+      <SectionHeader title="Server" />
+      <box paddingLeft={2} flexDirection="row" gap={1}>
+        <text fg={theme.textMuted}>Containers: </text>
+        <text fg={theme.text}>{String(containers.total)}</text>
+        <text fg={theme.textDim}> (</text>
+        <text fg={theme.success}>{String(containers.managed)} managed</text>
+        <text fg={theme.textDim}>, </text>
+        <text fg={theme.warning}>{String(containers.external)} external</text>
+        <text fg={theme.textDim}>)</text>
+      </box>
+      <box paddingLeft={2} flexDirection="row" gap={1}>
+        <text fg={theme.textMuted}>Ports in use: </text>
+        <text fg={theme.text}>{String(portsInUse)}</text>
+      </box>
+      <box paddingLeft={2} flexDirection="row" gap={1}>
+        <text fg={theme.textMuted}>Proxy: </text>
+        <text fg={proxy.type === 'none' ? theme.textDim : theme.info}>
+          {truncate(proxy.status, 40)}
+        </text>
+      </box>
+      <For each={displayContainers}>
+        {(container) => {
+          const portStr = container.ports.length > 0 ? `:${String(container.ports[0])}` : '';
+          return (
+            <box paddingLeft={2} flexDirection="row" gap={1}>
+              <text fg={theme.textDim}>●</text>
+              <text fg={theme.textMuted}>{truncate(container.name, 14)}</text>
+              <text fg={theme.textDim}>{portStr.padEnd(6)}</text>
+            </box>
+          );
+        }}
+      </For>
+      <Show when={remainingCount > 0}>
+        <box paddingLeft={2}>
+          <text fg={theme.textDim}>{`...and ${String(remainingCount)} more`}</text>
+        </box>
+      </Show>
+    </box>
+  );
+}
+
 const INTERNAL_SERVICES = new Set([
   'db',
   'redis',
@@ -364,7 +445,8 @@ function AlertsSection(props: { alerts: Alert[] }): JSX.Element {
       <For each={visible()}>
         {(alert) => (
           <text fg={alert.severity === 'critical' ? theme.error : theme.warning}>
-            {'  ⚠ '}{truncate(alert.message, 30)}
+            {'  ⚠ '}
+            {truncate(alert.message, 30)}
           </text>
         )}
       </For>
@@ -389,6 +471,8 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
   const [projectStats, setProjectStats] = createSignal<Map<string, ProjectStats>>(new Map());
   const [selectedIndex, setSelectedIndex] = createSignal(0);
   const [activity, setActivity] = createSignal<ActivityEvent[]>([]);
+  const [serverStatus, setServerStatus] = createSignal<ServerStatusResponse | null>(null);
+  const [serverLoading, setServerLoading] = createSignal(true);
 
   const { alerts } = useAlerts(() => props.client);
   const [scrollOffset, _setScrollOffset] = createSignal(0);
@@ -526,9 +610,28 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
     };
 
     void fetchAll().catch(() => {
-      if (isFirstLoad) { setSystemLoading(false); isFirstLoad = false; }
+      if (isFirstLoad) {
+        setSystemLoading(false);
+        isFirstLoad = false;
+      }
     });
-    void fetchProjects().catch(() => { /* ignore */ });
+    void fetchProjects().catch(() => {
+      /* ignore */
+    });
+
+    // Fetch server status (v0.0.9)
+    const fetchServerStatus = async () => {
+      try {
+        const status = await c.getServerStatus();
+        setServerStatus(status);
+      } catch {
+        /* ignore */
+      } finally {
+        setServerLoading(false);
+      }
+    };
+
+    void fetchServerStatus();
 
     const systemActivityTimer = setInterval(() => {
       void fetchAll();
@@ -536,10 +639,14 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
     const projectsTimer = setInterval(() => {
       void fetchProjects();
     }, 3000);
+    const serverStatusTimer = setInterval(() => {
+      void fetchServerStatus();
+    }, 3000);
 
     onCleanup(() => {
       clearInterval(systemActivityTimer);
       clearInterval(projectsTimer);
+      clearInterval(serverStatusTimer);
     });
   });
 
@@ -594,6 +701,7 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
       </Show>
 
       <SystemSection stats={systemStats()} health={health()} loading={systemLoading()} />
+      <ServerSection serverStatus={serverStatus()} loading={serverLoading()} />
       <ProjectsSection
         projects={projects()}
         projectStats={projectStats()}

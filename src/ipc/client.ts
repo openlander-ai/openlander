@@ -110,6 +110,25 @@ export interface HealthResponse {
   dockerContainers: number;
 }
 
+export interface ServerStatusResponse {
+  containers: {
+    total: number;
+    managed: number;
+    external: number;
+  };
+  portsInUse: number;
+  proxy: {
+    type: string;
+    status: string;
+    version?: string;
+  };
+  externalContainers: Array<{
+    name: string;
+    image: string;
+    ports: number[];
+  }>;
+}
+
 export class OpenLanderClient {
   constructor(private readonly socketPath: string) {}
 
@@ -367,6 +386,13 @@ export class OpenLanderClient {
   }
 
   // ---------------------------------------------------------------------------
+  // Server Status (v0.0.9)
+  // ---------------------------------------------------------------------------
+
+  async getServerStatus(): Promise<ServerStatusResponse> {
+    return this.get<ServerStatusResponse>('/api/server/status');
+  }
+
   // Alerts
   // ---------------------------------------------------------------------------
 

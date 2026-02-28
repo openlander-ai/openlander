@@ -91,7 +91,12 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   if (llmClient) {
     try {
       // contextProvider: lazily captures `ctx` — resolved when chat() is called, not here
-      agent = new Agent(llmClient, db, () => buildContextSnapshot(db), config.llm.provider);
+      agent = new Agent(
+        llmClient,
+        db,
+        async () => buildContextSnapshot(db, docker),
+        config.llm.provider,
+      );
     } catch (err) {
       log.debug({ err }, 'LLM client creation failed — agent will be null');
       // LLM provider not available — agent will be null

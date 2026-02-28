@@ -10,6 +10,7 @@ import { loadConfig } from '../../config/index.js';
 import { eventBus, type EventType, type EventPayload } from '../../events/index.js';
 import { SessionStore } from '../session.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { detectReverseProxy, getProxyStatus } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('api');
 // --- Activity Event Buffer ---
@@ -858,6 +859,60 @@ export function createApiRoutes(ctx: AppContext): Hono {
       summary: formatStatsSummary(stats),
       ...stats,
     });
+  });
+
+  // --- Server Status (v0.0.9) ---
+
+  api.get('/server/status', async (c) => {
+    try {
+      // Get all containers
+      const allContainers = await ctx.docker.listAllContainers();
+      const managedContainers = allContainers.filter((c) => c.managedByOpenLander);
+      const externalContainers = allContainers.filter((c) => !c.managedByOpenLander);
+
+      // Get unique ports
+      const portsSet = new Set<number>();
+      for (const container of allContainers) {
+        for (const port of container.ports) {
+          if (port.PublicPort !== undefined) {
+            portsSet.add(port.PublicPort);
+          }
+        }
+      }
+
+      // Detect reverse proxy
+      const proxyDetection = await detectReverseProxy(ctx.docker);
+      const proxyStatus = getProxyStatus(proxyDetection, 'managed');
+
+      return c.json({
+        containers: {
+          total: allContainers.length,
+          managed: managedContainers.length,
+          external: externalContainers.length,
+        },
+        portsInUse: portsSet.size,
+        proxy: {
+          type: proxyDetection.type,
+          status: proxyStatus,
+          version: proxyDetection.version,
+        },
+        externalContainers: externalContainers.map((c) => ({
+          name: c.name,
+          image: c.image,
+          ports: c.ports
+            .filter((p): p is typeof p & { PublicPort: number } => p.PublicPort !== undefined)
+            .map((p) => p.PublicPort),
+        })),
+      });
+    } catch (err) {
+      log.debug({ err }, 'Server status fetch failed');
+      return c.json({
+        containers: { total: 0, managed: 0, external: 0 },
+        portsInUse: 0,
+        proxy: { type: 'none', status: 'Unknown', version: undefined },
+        externalContainers: [],
+      });
+    }
   });
 
   // --- Alerts ---
