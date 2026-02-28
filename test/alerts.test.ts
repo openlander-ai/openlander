@@ -156,3 +156,122 @@ describe('AlertMonitor', () => {
     expect(emit).toHaveBeenCalledWith('alert:resolved', expect.objectContaining({ type: 'disk' }));
   });
 });
+
+describe('AlertMonitor - checkPortConflicts', () => {
+  let emit: ReturnType<typeof vi.fn>;
+  let listProjects: ReturnType<typeof vi.fn>;
+  let listImages: ReturnType<typeof vi.fn>;
+  let docker: Docker;
+  let db: Database;
+  let events: EventBus;
+  let monitor: AlertMonitor;
+
+  async function runChecks(): Promise<void> {
+    await (monitor as unknown as { runChecks: () => Promise<void> }).runChecks();
+  }
+
+  beforeEach(() => {
+    emit = vi.fn().mockResolvedValue(undefined);
+    listProjects = vi.fn().mockReturnValue([]);
+    listImages = vi.fn().mockResolvedValue([]);
+
+    docker = {
+      getClient: vi.fn().mockReturnValue({
+        getContainer: vi.fn(),
+        listImages,
+      }),
+    } as unknown as Docker;
+
+    db = {
+      listProjects,
+    } as unknown as Database;
+
+    events = {
+      emit,
+    } as unknown as EventBus;
+
+    monitor = new AlertMonitor(docker, db, events);
+    getSystemStatsMock.mockReset();
+    getSystemStatsMock.mockReturnValue(makeStats(10));
+  });
+
+  it('should not create alert when no port conflicts exist', async () => {
+    listProjects.mockReturnValue([
+      createProject({ id: 'p1', name: 'project-a', assigned_port: 3000 }),
+      createProject({ id: 'p2', name: 'project-b', assigned_port: 3001 }),
+    ]);
+
+    await runChecks();
+
+    const alerts = monitor.getActiveAlerts();
+    const portConflictAlerts = alerts.filter((a) => a.type === 'port-conflict');
+    expect(portConflictAlerts).toHaveLength(0);
+  });
+
+  it('should create alert when two projects share the same port', async () => {
+    listProjects.mockReturnValue([
+      createProject({ id: 'p1', name: 'project-a', assigned_port: 3000 }),
+      createProject({ id: 'p2', name: 'project-b', assigned_port: 3000 }),
+    ]);
+
+    await runChecks();
+
+    const alerts = monitor.getActiveAlerts();
+    const portConflictAlerts = alerts.filter((a) => a.type === 'port-conflict');
+    expect(portConflictAlerts).toHaveLength(1);
+  });
+
+  it('should include suggested port in alert details', async () => {
+    listProjects.mockReturnValue([
+      createProject({ id: 'p1', name: 'project-a', assigned_port: 3000 }),
+      createProject({ id: 'p2', name: 'project-b', assigned_port: 3000 }),
+    ]);
+
+    await runChecks();
+
+    const alerts = monitor.getActiveAlerts();
+    const portConflictAlert = alerts.find((a) => a.type === 'port-conflict');
+    expect(portConflictAlert).toBeDefined();
+    expect(portConflictAlert?.details['port']).toBe(3000);
+    expect(portConflictAlert?.details['suggestedPort']).toBe(4000);
+  });
+
+  it('should have correct alert type port-conflict', async () => {
+    listProjects.mockReturnValue([
+      createProject({ id: 'p1', name: 'project-a', assigned_port: 3000 }),
+      createProject({ id: 'p2', name: 'project-b', assigned_port: 3000 }),
+    ]);
+
+    await runChecks();
+
+    const alerts = monitor.getActiveAlerts();
+    const portConflictAlert = alerts.find((a) => a.type === 'port-conflict');
+    expect(portConflictAlert?.type).toBe('port-conflict');
+  });
+
+  it('should include suggestion message with alternative port', async () => {
+    listProjects.mockReturnValue([
+      createProject({ id: 'p1', name: 'project-a', assigned_port: 3000 }),
+      createProject({ id: 'p2', name: 'project-b', assigned_port: 3000 }),
+    ]);
+
+    await runChecks();
+
+    const alerts = monitor.getActiveAlerts();
+    const portConflictAlert = alerts.find((a) => a.type === 'port-conflict');
+    expect(portConflictAlert?.suggestion).toContain('4000');
+  });
+
+  it('should handle projects with null ports gracefully', async () => {
+    listProjects.mockReturnValue([
+      createProject({ id: 'p1', name: 'project-a', assigned_port: null }),
+      createProject({ id: 'p2', name: 'project-b', assigned_port: null }),
+    ]);
+
+    await runChecks();
+
+    const alerts = monitor.getActiveAlerts();
+    const portConflictAlerts = alerts.filter((a) => a.type === 'port-conflict');
+    expect(portConflictAlerts).toHaveLength(0);
+  });
+});

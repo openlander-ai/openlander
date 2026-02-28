@@ -9,7 +9,7 @@ const log = createModuleLogger('alerts');
 
 export interface Alert {
   id: string;
-  type: 'disk' | 'inactive-project' | 'restart-loop' | 'dangling-images';
+  type: 'disk' | 'inactive-project' | 'restart-loop' | 'dangling-images' | 'port-conflict';
   severity: 'warning' | 'critical';
   message: string;
   details: Record<string, unknown>;
@@ -103,6 +103,10 @@ export class AlertMonitor {
       }
       case 'dangling-images':
         return 'system';
+      case 'port-conflict': {
+        const port = alert.details['port'];
+        return typeof port === 'number' ? String(port) : 'unknown';
+      }
       default:
         return 'unknown';
     }
@@ -120,6 +124,7 @@ export class AlertMonitor {
         this.checkInactiveProjects(),
         this.checkContainerRestartLoops(),
         this.checkDanglingImages(),
+        this.checkPortConflicts(),
       ]);
     } catch (err) {
       log.error({ err }, 'Error during alert checks');
@@ -282,6 +287,45 @@ export class AlertMonitor {
       });
     } catch (err) {
       log.debug({ err }, 'Failed to check dangling images');
+    }
+  }
+
+  private async checkPortConflicts(): Promise<void> {
+    const projects = this.db.listProjects('running');
+    const portMap = new Map<number, string[]>();
+
+    for (const project of projects) {
+      if (project.assigned_port != null) {
+        const names = portMap.get(project.assigned_port) ?? [];
+        names.push(project.name);
+        portMap.set(project.assigned_port, names);
+      }
+    }
+
+    // Track which port-conflict keys are active this cycle
+    const activeKeys = new Set<string>();
+
+    for (const [port, names] of portMap) {
+      if (names.length < 2) continue;
+
+      const key = `port-conflict:${String(port)}`;
+      activeKeys.add(key);
+
+      const altPort = port + 1000;
+      await this.upsertAlert(key, {
+        type: 'port-conflict',
+        severity: 'warning',
+        message: `Port ${String(port)} used by ${names.join(', ')}`,
+        details: { port, projects: names, suggestedPort: altPort },
+        suggestion: `Port ${String(port)} is shared by multiple projects. Consider reassigning one to port ${String(altPort)}.`,
+      });
+    }
+
+    // Resolve any previous port-conflict alerts that no longer apply
+    for (const key of this.alertKeys.keys()) {
+      if (key.startsWith('port-conflict:') && !activeKeys.has(key)) {
+        this.resolveAlert(key, 'port-conflict');
+      }
     }
   }
 
