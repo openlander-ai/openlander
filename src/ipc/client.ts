@@ -2,6 +2,7 @@ import { request } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { existsSync } from 'node:fs';
 import type { ChatStreamEvent, AgentResponse } from '../agent/index.js';
+import type { Alert } from '../monitor/alerts.js';
 import type { SystemStats } from '../monitor/stats.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -363,6 +364,19 @@ export class OpenLanderClient {
 
   async getSystemStats(): Promise<SystemStats> {
     return this.get('/api/system/stats');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Alerts
+  // ---------------------------------------------------------------------------
+
+  async getAlerts(): Promise<Alert[]> {
+    const res = await this.get<{ alerts: Alert[] }>('/api/alerts');
+    return res.alerts;
+  }
+
+  async dismissAlert(alertId: string): Promise<void> {
+    await this.post<{ success: boolean }>(`/api/alerts/${alertId}/dismiss`, {});
   }
 
   // ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import { DeployPipeline } from './pipeline/deploy.js';
 import { TraefikManager } from './pipeline/traefik.js';
 import { EnvManager } from './pipeline/env.js';
 import { Agent } from './agent/index.js';
+import { QuestionBridge } from './agent/question-bridge.js';
 import { createLLMClient } from './llm/index.js';
 import { HealthMonitor } from './monitor/health.js';
 import { WebhookManager } from './webhook/index.js';
@@ -55,6 +56,7 @@ export interface AppContext {
   autoDetector: AutoDetector;
   // v0.5 modules
   alertMonitor: AlertMonitor;
+  questionBridge: QuestionBridge;
 }
 
 /** Create the application context from config. */
@@ -94,6 +96,12 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
       log.debug({ err }, 'LLM client creation failed — agent will be null');
       // LLM provider not available — agent will be null
     }
+  }
+
+  // v0.7: Question bridge (agent ↔ TUI)
+  const questionBridge = new QuestionBridge();
+  if (agent) {
+    agent.setQuestionBridge(questionBridge);
   }
 
   // v0.2: Health monitoring
@@ -169,6 +177,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     jobManager,
     autoDetector,
     alertMonitor,
+    questionBridge,
   };
 
   // Re-assign the channelManager's context reference (it was created with partial context)

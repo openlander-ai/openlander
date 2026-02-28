@@ -860,6 +860,19 @@ export function createApiRoutes(ctx: AppContext): Hono {
     });
   });
 
+  // --- Alerts ---
+
+  api.get('/alerts', (c) => {
+    const alerts = ctx.alertMonitor.getActiveAlerts();
+    return c.json({ alerts });
+  });
+
+  api.post('/alerts/:id/dismiss', (c) => {
+    const alertId = c.req.param('id');
+    ctx.alertMonitor.dismissAlert(alertId);
+    return c.json({ success: true });
+  });
+
   // --- Chat ---
 
   api.post('/chat', async (c) => {

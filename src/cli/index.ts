@@ -37,7 +37,7 @@ program
     // Register tools with agent
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
-      const tools = createTools(ctx);
+      const tools = createTools(ctx, ctx.questionBridge);
       ctx.agent.setTools(tools);
     }
 
@@ -91,7 +91,7 @@ program
     // Register tools with agent
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
-      const tools = createTools(ctx);
+      const tools = createTools(ctx, ctx.questionBridge);
       ctx.agent.setTools(tools);
     }
 
@@ -213,7 +213,7 @@ program
 
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
-      const tools = createTools(ctx);
+      const tools = createTools(ctx, ctx.questionBridge);
       ctx.agent.setTools(tools);
     }
 
@@ -374,7 +374,7 @@ program
 
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
-      const tools = createTools(ctx);
+      const tools = createTools(ctx, ctx.questionBridge);
       ctx.agent.setTools(tools);
     }
 
