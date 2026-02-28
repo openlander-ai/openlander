@@ -99,7 +99,8 @@ const tools = [
   // --- v0.1 ---
   {
     name: 'deploy_project',
-    description: 'Start deploying a project from a git repository URL. Returns immediately while build runs in background.',
+    description:
+      'Start deploying a project from a git repository URL. Returns immediately while build runs in background.',
     inputSchema: toInputSchema(deployProjectSchema),
   },
   {
@@ -213,18 +214,21 @@ const tools = [
   },
   {
     name: 'deploy_monorepo',
-    description: 'Start deploying a monorepo with multiple services in parallel. Returns immediately while builds run in background.',
+    description:
+      'Start deploying a monorepo with multiple services in parallel. Returns immediately while builds run in background.',
     inputSchema: toInputSchema(deployMonorepoSchema),
   },
   // --- Git Provider ---
   {
     name: 'list_github_repos',
-    description: 'List repositories from the connected GitHub account, sorted by most recently pushed.',
+    description:
+      'List repositories from the connected GitHub account, sorted by most recently pushed.',
     inputSchema: toInputSchema(listGithubReposSchema),
   },
   {
     name: 'search_github_repos',
-    description: 'Search GitHub repositories by name or keyword. Resolves project names to deployable repo URLs.',
+    description:
+      'Search GitHub repositories by name or keyword. Resolves project names to deployable repo URLs.',
     inputSchema: toInputSchema(searchGithubReposSchema),
   },
 ] as const;
@@ -296,13 +300,20 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
         // --- v0.1 ---
         case 'deploy_project': {
           const args = parseInput(deployProjectSchema, rawArgs);
-          const result = ctx.pipeline.startDeploy({
+          const result = await ctx.pipeline.startDeploy({
             repoUrl: args.repo_url,
             branch: args.branch,
             name: args.name,
             sshKeyPath: ctx.config.git.sshKeyPath || undefined,
             trigger: 'api',
           });
+          if (result.status === 'preflight_failed') {
+            return successResponse({
+              ...result,
+              error: result.preflightError,
+              hint: 'Fix the preflight issues and try again.',
+            });
+          }
           return successResponse({ ...result, hint: 'Use get_deploy_status to check progress.' });
         }
 
@@ -532,7 +543,8 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
           const args = parseInput(scanDockerfilesSchema, rawArgs);
           const agentTools = (await import('../agent/tools.js')).createTools(ctx);
           const tool = agentTools.find((t) => t.name === 'scan_dockerfiles');
-          if (!tool) throw new McpError(ErrorCode.InternalError, 'scan_dockerfiles tool not available');
+          if (!tool)
+            throw new McpError(ErrorCode.InternalError, 'scan_dockerfiles tool not available');
           const result = await tool.execute({ repo_url: args.repo_url, branch: args.branch });
           return successResponse(result);
         }
@@ -556,7 +568,10 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
           const config = loadConfig();
           const ghConfig = config.gitProviders.github;
           if (!ghConfig.token) {
-            return successResponse({ error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token configured.' });
+            return successResponse({
+              error: 'GITHUB_NOT_CONFIGURED',
+              message: 'No GitHub token configured.',
+            });
           }
           const ghProvider = createGitProvider('github', ghConfig);
           const listResult = await ghProvider.listRepos({
@@ -584,7 +599,10 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
           const searchConfig = loadConfig();
           const searchGhConfig = searchConfig.gitProviders.github;
           if (!searchGhConfig.token) {
-            return successResponse({ error: 'GITHUB_NOT_CONFIGURED', message: 'No GitHub token configured.' });
+            return successResponse({
+              error: 'GITHUB_NOT_CONFIGURED',
+              message: 'No GitHub token configured.',
+            });
           }
           const searchProvider = createGitProvider('github', searchGhConfig);
           const searchResult = await searchProvider.searchRepos(args.query);

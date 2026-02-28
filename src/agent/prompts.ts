@@ -13,13 +13,19 @@
 
 import { getSystemStats } from '../monitor/stats.js';
 import type { ProjectRow, Database } from '../db/index.js';
+import type { Docker } from '../pipeline/docker.js';
+import { scanUsedPorts } from '../pipeline/port.js';
+import { detectReverseProxy } from '../pipeline/traefik.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('prompts');
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /** Callback that returns a context snapshot string at call-time. */
-export type ContextProvider = () => string;
+export type ContextProvider = () => string | Promise<string>;
 
 /** LLM provider identifier (matches LLMConfig.provider). */
 export type LLMProvider = 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
@@ -46,8 +52,11 @@ export function buildSystemPrompt(contextSnapshot: string, provider: LLMProvider
 /**
  * Build a context snapshot from live application state.
  * Lightweight — only queries DB + OS stats. No LLM calls.
+ *
+ * @param db - Database instance for project data
+ * @param docker - Optional Docker instance for server context (containers, ports, proxy)
  */
-export function buildContextSnapshot(db: Database): string {
+export async function buildContextSnapshot(db: Database, docker?: Docker): Promise<string> {
   const projects = db.listProjects();
   const stats = getSystemStats();
 
@@ -73,11 +82,30 @@ export function buildContextSnapshot(db: Database): string {
     ].join('\n');
   }
 
-  return `## Current Server State (auto-injected)
-Projects deployed: ${String(projects.length)}
-${projectLines}
+  // Build server context if Docker is available
+  const serverContext = await buildServerContext(db, docker);
 
-Resources: CPU ${String(stats.cpu.usagePercent)}% · Memory ${String(stats.memory.usedMB)}/${String(stats.memory.totalMB)}MB (${String(stats.memory.usagePercent)}%) · Disk ${String(stats.disk.usagePercent)}%${stats.memory.usagePercent > 85 ? '\n⚠️ Memory usage is high — suggest cleaning up unused projects.' : ''}${stats.disk.usagePercent > 90 ? '\n⚠️ Disk usage is critical.' : ''}`;
+  // Build deployment rules from server context
+  const deploymentRules = buildDeploymentRules(serverContext);
+
+  const parts: string[] = [
+    `## Current Server State (auto-injected)
+Projects deployed: ${String(projects.length)}
+${projectLines}`,
+    `Resources: CPU ${String(stats.cpu.usagePercent)}% · Memory ${String(stats.memory.usedMB)}/${String(stats.memory.totalMB)}MB (${String(stats.memory.usagePercent)}%) · Disk ${String(stats.disk.usagePercent)}%${stats.memory.usagePercent > 85 ? '\n⚠️ Memory usage is high — suggest cleaning up unused projects.' : ''}${stats.disk.usagePercent > 90 ? '\n⚠️ Disk usage is critical.' : ''}`,
+  ];
+
+  // Add server context if available
+  if (serverContext) {
+    parts.push(formatServerContext(serverContext));
+  }
+
+  // Add deployment rules if we have conflict info
+  if (deploymentRules) {
+    parts.push(deploymentRules);
+  }
+
+  return parts.join('\n\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -269,4 +297,199 @@ function formatProjectLine(p: ProjectRow): string {
       : '';
 
   return `  ${statusIcon} ${p.name} (${p.status})${url ? ` — ${url}` : ''}`;
+}
+
+// ---------------------------------------------------------------------------
+// Server Context Helpers (v0.0.9)
+// ---------------------------------------------------------------------------
+
+/** Maximum number of external containers to list before summarizing. */
+const MAX_LISTED_EXTERNAL_CONTAINERS = 20;
+
+interface ServerContext {
+  /** Total containers on server (managed + external). */
+  totalContainers: number;
+  /** OpenLander-managed container count. */
+  managedCount: number;
+  /** External container summaries. */
+  externalContainers: ExternalContainerSummary[];
+  /** All ports in use across all sources. */
+  usedPorts: number[];
+  /** Detected reverse proxy info. */
+  proxy: ProxyInfo | null;
+  /** Container names that could conflict with new deployments. */
+  usedNames: string[];
+}
+
+interface ExternalContainerSummary {
+  name: string;
+  image: string;
+  ports: number[];
+}
+
+interface ProxyInfo {
+  type: string;
+  version?: string;
+  container?: string;
+  mode?: string;
+}
+
+/**
+ * Build server context by querying Docker for containers, ports, and proxy.
+ * Returns null if Docker is not available or query fails.
+ */
+async function buildServerContext(db: Database, docker?: Docker): Promise<ServerContext | null> {
+  if (!docker) return null;
+
+  try {
+    // Run scans in parallel for efficiency
+    const [containers, portScan, proxyDetection] = await Promise.all([
+      docker.listAllContainers(),
+      scanUsedPorts(db, docker),
+      detectReverseProxy(docker),
+    ]);
+
+    const managedContainers = containers.filter((c) => c.managedByOpenLander);
+    const externalContainers = containers.filter(
+      (c) => !c.managedByOpenLander && (c.state === 'running' || c.state === 'restarting'),
+    );
+
+    // Collect all used names (lowercase for case-insensitive comparison)
+    const usedNames = containers.map((c) => c.name.toLowerCase());
+
+    // Build context object
+    const ctx: ServerContext = {
+      totalContainers: containers.length,
+      managedCount: managedContainers.length,
+      externalContainers: summarizeExternalContainers(externalContainers),
+      usedPorts: portScan.all,
+      proxy:
+        proxyDetection.type !== 'none'
+          ? {
+              type: proxyDetection.type,
+              version: proxyDetection.version,
+              container: proxyDetection.container,
+              mode: proxyDetection.type === 'traefik' ? 'external' : undefined,
+            }
+          : null,
+      usedNames,
+    };
+
+    return ctx;
+  } catch (error) {
+    // Log warning but don't fail the entire snapshot
+    log.warn({ error }, 'Failed to build server context, continuing without it');
+    return null;
+  }
+}
+
+/**
+ * Summarize external containers, limiting to MAX_LISTED_EXTERNAL_CONTAINERS.
+ * When exceeding the limit, show counts by image type.
+ */
+function summarizeExternalContainers(
+  containers: Array<{ name: string; image: string; ports: Array<{ PublicPort?: number }> }>,
+): ExternalContainerSummary[] {
+  if (containers.length <= MAX_LISTED_EXTERNAL_CONTAINERS) {
+    return containers.map((c) => ({
+      name: c.name,
+      image: c.image,
+      ports: c.ports
+        .filter((p): p is typeof p & { PublicPort: number } => p.PublicPort !== undefined)
+        .map((p) => p.PublicPort),
+    }));
+  }
+
+  // Summarize by image type when over limit
+  const imageCounts = new Map<string, number>();
+  for (const c of containers) {
+    // Extract base image name (e.g., "nginx" from "nginx:1.25-alpine")
+    const baseImage = c.image.split(':')[0] ?? c.image;
+    imageCounts.set(baseImage, (imageCounts.get(baseImage) ?? 0) + 1);
+  }
+
+  // Format as "nginx: 3, node: 5" etc.
+  const summaryParts = Array.from(imageCounts.entries())
+    .sort((a, b) => b[1] - a[1]) // Sort by count descending
+    .slice(0, 10) // Limit to top 10 types
+    .map(([name, count]) => `${name}: ${String(count)}`);
+
+  // Return a synthetic container with the summary
+  return [
+    {
+      name: `(${summaryParts.join(', ')} — total ${String(containers.length)})`,
+      image: 'summary',
+      ports: [],
+    },
+  ];
+}
+
+/** Format server context as a prompt section. */
+function formatServerContext(ctx: ServerContext): string {
+  const lines: string[] = ['## Server Context'];
+
+  // Container summary
+  lines.push(
+    `- Total containers: ${String(ctx.totalContainers)} (${String(ctx.managedCount)} managed by OpenLander, ${String(ctx.totalContainers - ctx.managedCount)} external)`,
+  );
+
+  // External containers list
+  if (ctx.externalContainers.length > 0) {
+    lines.push('- External containers:');
+    for (const c of ctx.externalContainers) {
+      const portsStr = c.ports.length > 0 ? ` :${c.ports.join(', :')}` : '';
+      lines.push(`  - ${c.name}${portsStr}`);
+    }
+  }
+
+  // Ports summary
+  lines.push(`- Ports in use: ${String(ctx.usedPorts.length)} ports`);
+  if (ctx.usedPorts.length > 0 && ctx.usedPorts.length <= 15) {
+    lines.push(`  (${ctx.usedPorts.sort((a, b) => a - b).join(', ')})`);
+  }
+
+  // Reverse proxy
+  if (ctx.proxy) {
+    const versionStr = ctx.proxy.version ? ` v${ctx.proxy.version}` : '';
+    const modeStr = ctx.proxy.mode ? ` (${ctx.proxy.mode} mode)` : '';
+    lines.push(`- Reverse proxy: ${ctx.proxy.type}${versionStr}${modeStr}`);
+  }
+
+  return lines.join('\n');
+}
+
+/** Build deployment rules section from server context. */
+function buildDeploymentRules(ctx: ServerContext | null): string | null {
+  if (!ctx) return null;
+
+  const rules: string[] = ['## Deployment Rules'];
+  let hasRules = false;
+
+  // Forbidden ports (common conflict points)
+  const forbiddenPorts = ctx.usedPorts
+    .filter(
+      (p) => p < 10000 || p > 10999, // Outside OpenLander's range
+    )
+    .slice(0, 20);
+
+  if (forbiddenPorts.length > 0) {
+    rules.push(`- Do NOT use ports: ${forbiddenPorts.sort((a, b) => a - b).join(', ')}`);
+    hasRules = true;
+  }
+
+  rules.push('- Use allocated ports from range 10001-10999');
+
+  // Container name conflicts
+  const conflictNames = ctx.usedNames
+    .filter((n) => !n.startsWith('ol-') && !n.startsWith('openlander-'))
+    .slice(0, 20);
+
+  if (conflictNames.length > 0) {
+    rules.push(
+      `- Container names must not conflict with: ${conflictNames.slice(0, 10).join(', ')}${conflictNames.length > 10 ? ', ...' : ''}`,
+    );
+    hasRules = true;
+  }
+
+  return hasRules ? rules.join('\n') : null;
 }

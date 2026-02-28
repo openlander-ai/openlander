@@ -73,7 +73,7 @@ export class Agent {
    */
   async chat(userMessage: string, sessionId?: string): Promise<AgentResponse> {
     // Rebuild system prompt with fresh context on each turn
-    this.refreshSystemPrompt();
+    await this.refreshSystemPrompt();
 
     this.history.push({ role: 'user', content: userMessage });
 
@@ -172,7 +172,7 @@ export class Agent {
     const resolvedSessionId = sessionId ?? nanoid(12);
 
     // Rebuild system prompt with fresh context
-    this.refreshSystemPrompt();
+    await this.refreshSystemPrompt();
 
     await onEvent({ type: 'session', sessionId: resolvedSessionId });
 
@@ -328,8 +328,8 @@ export class Agent {
    * Rebuild the system prompt with fresh context and replace it in history.
    * Called at the start of every chat() / chatStream() turn.
    */
-  private refreshSystemPrompt(): void {
-    const contextSnapshot = this.contextProvider ? this.contextProvider() : '';
+  private async refreshSystemPrompt(): Promise<void> {
+    const contextSnapshot = this.contextProvider ? await this.contextProvider() : '';
     const systemContent = buildSystemPrompt(contextSnapshot, this.provider);
 
     // Replace or insert system message at position 0

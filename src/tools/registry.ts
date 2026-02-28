@@ -7,6 +7,7 @@ import { ProjectNotFoundError } from '../errors.js';
 import { createGitProvider } from '../git-providers/index.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { cloneRepo } from '../pipeline/git.js';
+import { scanUsedPorts } from '../pipeline/port.js';
 import type { ToolSpec, ToolTarget } from './types.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -79,6 +80,14 @@ const searchGithubReposSchema = z.object({
 
 const emptySchema = z.object({}).strict();
 
+const listAllContainersSchema = z.object({
+  state: z.enum(['all', 'running', 'stopped']).optional(),
+});
+
+const getContainerStatsSchema = z.object({
+  container: z.string().min(1),
+});
+
 export interface CreateToolRegistryOptions {
   target?: ToolTarget;
 }
@@ -111,15 +120,15 @@ export function createToolRegistry(
         },
       },
       inputSchema: deployProjectSchema,
-      execute: (args, { target }) => {
-        const result = ctx.pipeline.startDeploy({
+      execute: async (args, { target }) => {
+        const result = await ctx.pipeline.startDeploy({
           repoUrl: args['repo_url'] as string,
           branch: (args['branch'] as string | undefined) ?? undefined,
           name: (args['name'] as string | undefined) ?? undefined,
           sshKeyPath: ctx.config.git.sshKeyPath || undefined,
           trigger: target === 'agent' ? 'chat' : 'api',
         });
-        return Promise.resolve({ ...result, hint: 'Use get_deploy_status to check progress.' });
+        return { ...result, hint: 'Use get_deploy_status to check progress.' };
       },
     },
     {
@@ -843,6 +852,134 @@ export function createToolRegistry(
             htmlUrl: repo.htmlUrl,
           })),
         };
+      },
+    },
+    {
+      name: 'list_all_containers',
+      description:
+        'List all Docker containers on the server, including those not managed by OpenLander. Use to see the full server state, detect external services, or find containers by state. Returns { count, containers[] } with id, name, image, state, status, ports, and managedByOpenLander flag.',
+      parameters: {
+        state: {
+          type: 'string',
+          description: 'Filter by state: "all" (default), "running", or "stopped"',
+          required: false,
+        },
+      },
+      inputSchema: listAllContainersSchema,
+      execute: async (args) => {
+        const state = (args['state'] as 'all' | 'running' | 'stopped' | undefined) ?? 'all';
+        const containers = await ctx.docker.listAllContainers();
+
+        const filtered =
+          state === 'all'
+            ? containers
+            : containers.filter((c) =>
+                state === 'running' ? c.state === 'running' : c.state !== 'running',
+              );
+
+        return {
+          count: filtered.length,
+          containers: filtered.map((c) => ({
+            id: c.id,
+            name: c.name,
+            image: c.image,
+            state: c.state,
+            status: c.status,
+            ports: c.ports,
+            managedByOpenLander: c.managedByOpenLander,
+            composeProject: c.composeProject,
+          })),
+        };
+      },
+    },
+    {
+      name: 'scan_ports',
+      description:
+        'Scan all ports in use on the server from 3 sources: OpenLander database, Docker containers, and OS-level processes. Use to check port availability before deploying or to debug port conflicts. Returns { db, docker, os, all, conflicts } where conflicts are ports 80, 443, 8080.',
+      parameters: {},
+      inputSchema: emptySchema,
+      execute: async () => {
+        const result = await scanUsedPorts(ctx.db, ctx.docker);
+        return {
+          db: result.db,
+          docker: result.docker,
+          os: result.os,
+          all: result.all,
+          conflicts: result.conflicts,
+        };
+      },
+    },
+    {
+      name: 'get_container_stats',
+      description:
+        'Get real-time resource usage (CPU, memory, network) for a specific container by name or ID. Use when user asks about container performance or resource consumption. Returns { container, cpuPercent, memoryUsage, memoryPercent, networkRx, networkTx } or { error } if container not found.',
+      parameters: {
+        container: {
+          type: 'string',
+          description: 'Container name or ID',
+          required: true,
+        },
+      },
+      inputSchema: getContainerStatsSchema,
+      execute: async (args) => {
+        const containerId = args['container'] as string;
+        try {
+          const dockerClient = ctx.docker.getClient();
+          const container = dockerClient.getContainer(containerId);
+          const rawStats = await container.stats({ stream: false });
+          // Cast to partial types for runtime safety (Docker API may omit fields)
+          const stats = rawStats as {
+            cpu_stats: {
+              cpu_usage: { total_usage: number; percpu_usage?: number[] };
+              system_cpu_usage: number;
+            };
+            precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+            memory_stats: { usage?: number; limit?: number };
+            networks?: Record<string, { rx_bytes?: number; tx_bytes?: number }>;
+          };
+
+          // Calculate CPU percentage
+          const cpuDelta =
+            stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
+          const systemDelta =
+            stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
+          const cpuPercent =
+            systemDelta > 0 && cpuDelta > 0
+              ? (cpuDelta / systemDelta) *
+                (stats.cpu_stats.cpu_usage.percpu_usage?.length ?? 1) *
+                100
+              : 0;
+
+          // Memory usage
+          const memoryUsage = stats.memory_stats.usage ?? 0;
+          const memoryLimit = stats.memory_stats.limit ?? 1;
+          const memoryPercent = memoryLimit > 0 ? (memoryUsage / memoryLimit) * 100 : 0;
+
+          // Network I/O
+          const networks = stats.networks ?? {};
+          let networkRx = 0;
+          let networkTx = 0;
+          for (const iface of Object.values(networks)) {
+            const net = iface as { rx_bytes?: number; tx_bytes?: number };
+            networkRx += net.rx_bytes ?? 0;
+            networkTx += net.tx_bytes ?? 0;
+          }
+
+          return {
+            container: containerId,
+            cpuPercent: Math.round(cpuPercent * 100) / 100,
+            memoryMB: Math.round(memoryUsage / (1024 * 1024)),
+            memoryPercent: Math.round(memoryPercent * 100) / 100,
+            networkRxMB: Math.round(networkRx / (1024 * 1024)),
+            networkTxMB: Math.round(networkTx / (1024 * 1024)),
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          if (msg.includes('not found') || msg.includes('No such container')) {
+            return { error: `Container "${containerId}" not found.` };
+          }
+          return { error: `Failed to get stats: ${msg}` };
+        }
       },
     },
   ];
