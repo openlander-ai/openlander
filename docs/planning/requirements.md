@@ -1,5 +1,7 @@
 # OpenLander — 요구사항 정의서 v4.0
 
+> **버전**: v0.0.1~v0.0.8 전체 | **구현율**: 90% (v0.0.4까지 완료) | **버전 맵**: [`version-map.md`](version-map.md)
+
 > **v3 → v4 주요 변경**: 웹 UI → TUI (@opentui/solid) 전환, 버전별 구현 체크리스트 추가, TUI UI/UX 고도화 로드맵 추가
 
 ## 한 줄 정의
@@ -90,8 +92,8 @@ Mac Mini + OpenLander:   ~$600 once, $0/month
 │  접근 채널                                       │
 │  ├─ TUI (메인 — @opentui/solid 기반 터미널 UI)   │
 │  ├─ REST API                                    │
-│  ├─ MCP 서버 (v0.3 — 코딩 에이전트 연동)          │
-│  └─ Slack/Discord/Telegram 봇 (v0.4)            │
+│  ├─ MCP 서버 (v0.0.3 — 코딩 에이전트 연동)          │
+│  └─ Slack/Discord/Telegram 봇 (v0.0.4)            │
 └──────────────────┬──────────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────────────┐
@@ -329,11 +331,11 @@ openlander onboard --install-daemon
 
 ## LLM 전략
 
-| Phase    | LLM                                        | 설명                               |
-| -------- | ------------------------------------------ | ---------------------------------- |
-| v0.1~0.2 | BYOK (Gemini Flash 무료 / Claude / OpenAI) | 유저가 API 키 입력                 |
-| v0.3~0.4 | + Ollama (로컬 모델)                       | 완전한 셀프호스팅 가능             |
-| v0.5+    | + 파인튜닝 모델 공개                       | dockmate-agent-8b HuggingFace 공개 |
+| Phase        | LLM                                        | 설명                               |
+| ------------ | ------------------------------------------ | ---------------------------------- |
+| v0.0.1~0.0.2 | BYOK (Gemini Flash 무료 / Claude / OpenAI) | 유저가 API 키 입력                 |
+| v0.0.3~0.0.4 | + Ollama (로컬 모델)                       | 완전한 셀프호스팅 가능             |
+| v0.0.5+      | + 파인튜닝 모델 공개                       | dockmate-agent-8b HuggingFace 공개 |
 
 **무료 사용 참고:**
 
@@ -351,12 +353,12 @@ openlander onboard --install-daemon
 
 ## 접근 채널
 
-| 채널                     | Phase | 사용 상황                              |
-| ------------------------ | ----- | -------------------------------------- |
-| **TUI (@opentui/solid)** | v0.1  | 메인 인터페이스 (터미널 채팅+대시보드) |
-| REST API                 | v0.1  | TUI가 호출 + 외부 연동 기반            |
-| MCP 서버                 | v0.3  | Claude Code/Cursor에서 배포 명령       |
-| Slack/Discord/Telegram   | v0.4  | 이동 중 배포/관리                      |
+| 채널                     | Phase  | 사용 상황                              |
+| ------------------------ | ------ | -------------------------------------- |
+| **TUI (@opentui/solid)** | v0.0.1 | 메인 인터페이스 (터미널 채팅+대시보드) |
+| REST API                 | v0.0.1 | TUI가 호출 + 외부 연동 기반            |
+| MCP 서버                 | v0.0.3 | Claude Code/Cursor에서 배포 명령       |
+| Slack/Discord/Telegram   | v0.0.4 | 이동 중 배포/관리                      |
 
 **MCP 시나리오 (킬러 기능):**
 
@@ -383,7 +385,7 @@ openlander onboard --install-daemon
 
 ## 버전 로드맵 + 구현 체크리스트
 
-### v0.1 — 레포 → URL (MVP) ✅ Complete
+### v0.0.1 — 레포 → URL (MVP) ✅ Complete
 
 - [x] git clone → docker build → docker run → Traefik → URL
 - [x] Dockerfile 있는 레포만 지원
@@ -395,7 +397,7 @@ openlander onboard --install-daemon
 - [x] 환경변수 기본 관리
 - [x] `npm i -g openlander` + `openlander onboard`
 
-### v0.2 — 일상 관리 ✅ Complete
+### v0.0.2 — 일상 관리 ✅ Complete
 
 - [x] 환경변수 변경 → 자동 재배포
 - [x] git push → 자동 재배포 (webhook)
@@ -405,7 +407,7 @@ openlander onboard --install-daemon
 - [x] 멀티 도메인 매핑 (프로젝트별 커스텀 도메인 연결)
 - [x] Ollama 지원 (로컬 LLM)
 
-### v0.3 — 코딩 에이전트 연동 ✅ Complete
+### v0.0.3 — 코딩 에이전트 연동 ✅ Complete
 
 - [x] MCP 서버 (Claude Code, Cursor, OpenCode 연동) — 23/23 tools synced
 - [x] 롤백 (직전 이미지)
@@ -413,7 +415,7 @@ openlander onboard --install-daemon
 - [x] DB 자동 프로비저닝 (PostgreSQL sidecar)
 - [x] 빌드 에러 자동 디버깅 강화 (레시피 10개 + LLM 분석)
 
-### v0.4 — 멀티 채널 + 고급 배포 ✅ Complete
+### v0.0.4 — 멀티 채널 + 고급 배포 ✅ Complete
 
 - [x] Slack/Discord/Telegram 봇
 - [x] Preview 배포 (브랜치별)
@@ -422,15 +424,15 @@ openlander onboard --install-daemon
 - [x] 병렬 배포 (Promise.all 기반 멀티 도구 실행)
 - [x] JobManager (배포 단계 실시간 트래킹)
 
-### v0.5 — 완전한 셀프호스팅
+### v0.0.5 — 완전한 셀프호스팅
 
 - [ ] 파인튜닝 모델 공개 (openlander-agent-8b)
 - [ ] Ollama 원클릭: `ollama pull openlander-agent`
 - [ ] LLM API 비용 완전 제거 가능
 
-### v0.6 — TUI UI/UX 고도화 🎯 In Progress
+### v0.0.6 — TUI UI/UX 고도화 ✅ Complete (97%)
 
-> 백엔드 기능(v0.1~v0.4)이 모두 완료된 상태. 이제 **인터페이스 품질**에 집중.
+> 백엔드 기능(v0.0.1~v0.0.4)이 모두 완료된 상태. 이제 **인터페이스 품질**에 집중.
 > 레퍼런스: Claude Code / OpenCode의 깔끔한 터미널 UI (동일한 TS + @opentui/solid 스택).
 
 **구현 완료:**
@@ -452,32 +454,32 @@ openlander onboard --install-daemon
 
 #### 1. 채팅 영역 추가 개선
 
-- [ ] 멀티라인 입력 지원
-- [ ] 코드 블록 / 로그 블록 신택스 하이라이팅
-- [ ] 마크다운 렌더링 (marked-terminal)
+- [x] 멀티라인 입력 지원
+- [x] 코드 블록 / 로그 블록 신택스 하이라이팅
+- [x] 마크다운 렌더링 (커스텀 파서)
 
 #### 2. 에이전트 상호작용 추가
 
-- [ ] 배포 파이프라인 진행률 시각화 (단계별 프로그레스 바)
-- [ ] 명확화 질문 시 선택지 UI (인라인 프롬프트)
+- [x] 배포 파이프라인 진행률 시각화 (StatusBar 퍼센트 표시)
+- [x] 명확화 질문 시 선택지 UI (QuestionDock)
 
 #### 3. 대시보드 추가 고도화
 
-- [ ] 프로젝트 카드 UI (상태 뱃지, 포트, URL, 마지막 배포 시간)
-- [ ] 시스템 리소스 미니 그래프 (CPU/RAM 바 차트)
+- [x] 프로젝트 카드 UI (상태/포트 표시 — 카드 스타일은 부분 구현)
+- [x] 시스템 리소스 미니 그래프 (CPU/MEM/DSK ProgressBar)
 - [ ] 프로젝트 검색/필터
-- [ ] 로그 뷰어 (스크롤 가능한 컨테이너 로그)
+- [x] 로그 뷰어 (디버깅 모드 LogViewer)
 
 #### 4. 레이아웃 & 테마
 
-- [ ] 반응형 레이아웃 (터미널 크기에 따라 패널 재배치)
-- [ ] 깔끔한 보더/구분선 스타일 (OpenCode 참고)
-- [ ] 컨러 팔레트 통일 (브랜딩 일관성)
+- [x] 반응형 레이아웃 (80/120 분기, 60:40 / 65:35 / 단일)
+- [x] 깔끔한 보더/구분선 스타일 (theme.ts)
+- [x] 커러 팔레트 통일 (Signal Green #36f0a0)
 
 #### 5. 키보드 UX 추가
 
-- [ ] Vim-style 네비게이션 옵션 (j/k 이동)
-- [ ] Ctrl+L 화면 클리어
+- [x] Vim-style 네비게이션 (j/k 이동, 8개+ 컨포넌트)
+- [x] Ctrl+L 화면 클리어
 
 ---
 
@@ -639,11 +641,11 @@ openlander/
 
 - 멀티 에이전트 구조 만들지 말 것 — 에이전트 1개 + 도구(함수) 10개 내외 구조 유지
 - AST 파싱이나 정적 분석기 직접 만들지 말 것
-- 프레임워크 자동 감지 기능 v0.1에 넣지 말 것 (Dockerfile 있는 레포만 지원)
+- 프레임워크 자동 감지 기능 v0.0.1에 넣지 말 것 (Dockerfile 있는 레포만 지원)
 - Docker Compose로 패키징하지 말 것 (npm 패키지로 배포)
-- 보안/인증/RBAC v0.1에 넣지 말 것
-- 블루-그린 배포 v0.1에 넣지 말 것 (v0.3)
-- 멀티 도메인 매핑 v0.1에 넣지 말 것 (v0.2)
+- 보안/인증/RBAC v0.0.1에 넣지 말 것
+- 블루-그린 배포 v0.0.1에 넣지 말 것 (v0.0.3)
+- 멀티 도메인 매핑 v0.0.1에 넣지 말 것 (v0.0.2)
 
 ---
 
@@ -653,7 +655,7 @@ openlander/
 | ------------------------------ | ------------------------------------------------------------------ |
 | 에이전트 판단 실패 → 신뢰 붕괴 | 실행은 deterministic, LLM은 대화만. 모든 실패에 명확한 에러 + 롤백 |
 | 배포 중간 실패 → 좀비 상태     | 파이프라인에 트랜잭션 패턴. 실패 시 역순 롤백                      |
-| 스코프 팽창 → 완성 지연        | v0.1은 "레포 → URL" 한 가지만 완벽하게                             |
+| 스코프 팽창 → 완성 지연        | v0.0.1은 "레포 → URL" 한 가지만 완벽하게                           |
 | 1인 메인테이너 번아웃          | 이슈 주 1회 정리. README에 🚧 Early Stage 명시                     |
 | 파인튜닝 데이터 부족           | 합성 데이터 생성 병행                                              |
 
