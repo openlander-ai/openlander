@@ -42,8 +42,12 @@ export interface OpenLanderConfig {
 
   /** v0.5: Git hosting providers (GitHub, GitLab, etc.) */
   gitProviders: GitProvidersConfig;
+
   /** v0.5: Local model settings */
   localModel: LocalModelConfig;
+
+  /** v0.9: Traefik reverse proxy settings */
+  traefik: TraefikConfig;
 }
 
 export interface LLMProviderConfig {
@@ -116,6 +120,14 @@ export interface LocalModelConfig {
   modelName: string;
 }
 
+/** Traefik reverse proxy mode configuration. */
+export interface TraefikConfig {
+  /** Proxy mode: 'managed' (OpenLander runs Traefik) or 'external' (use existing Traefik). */
+  mode: 'managed' | 'external';
+  /** External mode: Name of the Docker network to connect containers to. */
+  externalNetwork?: string;
+}
+
 export interface GitProviderEntry {
   /** Personal Access Token or API token */
   token: string;
@@ -186,6 +198,10 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
     preferLocal: false,
     modelName: 'openlander-agent',
   },
+  traefik: {
+    mode: 'managed',
+    externalNetwork: undefined,
+  },
 };
 
 // --- Config Manager ---
@@ -224,8 +240,6 @@ export function loadConfig(): OpenLanderConfig {
     return deepMerge(DEFAULT_CONFIG, saved);
   } catch (err) {
     log.debug({ err }, 'Config file corrupted — returning defaults');
-    return { ...DEFAULT_CONFIG };
-    // Corrupted config — return defaults
     return { ...DEFAULT_CONFIG };
   }
 }

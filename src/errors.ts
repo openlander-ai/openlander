@@ -190,3 +190,34 @@ export class ConfigNotFoundError extends OpenLanderError {
     this.name = 'ConfigNotFoundError';
   }
 }
+
+// --- Preflight errors ---
+
+export class PreflightCheckError extends OpenLanderError {
+  constructor(
+    public readonly result: {
+      pass: boolean;
+      checks: {
+        portAvailable: { pass: boolean; detail: string };
+        nameAvailable: { pass: boolean; detail: string };
+        resourceOk: { pass: boolean; detail: string };
+        proxyReady: { pass: boolean; detail: string };
+      };
+      warnings: string[];
+    },
+  ) {
+    const failedChecks = Object.entries(result.checks)
+      .filter(([, check]) => !check.pass)
+      .map(([name, check]) => {
+        const friendlyName = name.replace(/([A-Z])/g, ' $1').toLowerCase();
+        return `${friendlyName}: ${check.detail}`;
+      })
+      .join('; ');
+
+    super(`Preflight check failed: ${failedChecks}`, 'PREFLIGHT_CHECK_FAILED', 400, {
+      checks: result.checks,
+      warnings: result.warnings,
+    });
+    this.name = 'PreflightCheckError';
+  }
+}

@@ -253,7 +253,7 @@ export class ComposePipeline {
 
       const conflicts = this.detectPortConflicts(composeProject);
       if (conflicts.length > 0) {
-        const override = this.generateOverride(composeProject, conflicts);
+        const override = await this.generateOverride(composeProject, conflicts);
         this.writeOverride(config.composePath, override);
         log.info({ conflicts: conflicts.length }, 'Generated port conflict override');
       }
@@ -439,7 +439,10 @@ export class ComposePipeline {
     return conflicts;
   }
 
-  generateOverride(composeProject: ComposeProject, conflicts: PortConflict[]): string {
+  async generateOverride(
+    composeProject: ComposeProject,
+    conflicts: PortConflict[],
+  ): Promise<string> {
     const requestedByService = new Map<string, Set<number>>();
     for (const conflict of conflicts) {
       const current = requestedByService.get(conflict.service) ?? new Set<number>();
@@ -448,10 +451,10 @@ export class ComposePipeline {
     }
 
     const reservedPorts = new Set<number>();
-    const allocateUniquePort = (): number => {
+    const allocateUniquePort = async (): Promise<number> => {
       let min = 10001;
       for (;;) {
-        const candidate = allocatePort(this.db, min);
+        const candidate = await allocatePort(this.db, this.docker, min);
         if (!reservedPorts.has(candidate)) {
           reservedPorts.add(candidate);
           return candidate;
@@ -475,7 +478,7 @@ export class ComposePipeline {
           continue;
         }
 
-        const newHostPort = allocateUniquePort();
+        const newHostPort = await allocateUniquePort();
         remappedPorts.push(`${String(newHostPort)}:${String(parsed.containerPort)}`);
       }
 

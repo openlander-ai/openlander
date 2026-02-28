@@ -28,7 +28,6 @@ export class TraefikManager {
     } catch (err) {
       log.warn({ err }, 'Failed to check Traefik running status');
       return false;
-      return false;
     }
   }
 
@@ -66,7 +65,13 @@ export class TraefikManager {
     try {
       const stream = await client.pull(TRAEFIK_IMAGE);
       await new Promise<void>((resolve, reject) => {
-        client.modem.followProgress(stream, (err: Error | null) => { if (err) { reject(err); } else { resolve(); } });
+        client.modem.followProgress(stream, (err: Error | null) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
       });
     } catch (err) {
       log.debug({ err }, 'Traefik image pull failed — may already exist locally');
@@ -138,4 +143,274 @@ export function buildTraefikLabels(
     [`traefik.http.routers.${routerName}.service`]: routerName,
     [`traefik.http.services.${routerName}.loadbalancer.server.port`]: String(containerPort),
   };
+}
+
+// --- Reverse Proxy Detection ---
+
+/** Result of detecting reverse proxies on the server. */
+export interface ProxyDetection {
+  /** Type of reverse proxy detected. */
+  type: 'traefik' | 'nginx' | 'caddy' | 'haproxy' | 'none';
+  /** Container name if found. */
+  container?: string;
+  /** Ports the proxy is using. */
+  ports: number[];
+  /** Version extracted from image tag (e.g., 'v3.3' from 'traefik:v3.3'). */
+  version?: string;
+  /** Whether Traefik Docker provider is enabled (only for type: 'traefik'). */
+  traefikDockerProvider?: boolean;
+}
+
+/** Priority order for proxy detection (higher = preferred). */
+const PROXY_PRIORITY: Record<string, number> = {
+  traefik: 4,
+  nginx: 3,
+  caddy: 2,
+  haproxy: 1,
+};
+
+/** Known proxy image patterns. */
+const PROXY_PATTERNS: Array<{
+  type: ProxyDetection['type'];
+  pattern: RegExp;
+}> = [
+  { type: 'traefik', pattern: /traefik/i },
+  { type: 'nginx', pattern: /nginx/i },
+  { type: 'caddy', pattern: /caddy/i },
+  { type: 'haproxy', pattern: /haproxy/i },
+];
+
+/**
+ * Detect reverse proxies running on the server.
+ *
+ * Scans all Docker containers and identifies known reverse proxy images.
+ * When multiple proxies exist, returns the one with highest priority.
+ *
+ * @param docker - Docker instance to query containers
+ * @returns Proxy detection result with type, container name, ports, and version
+ */
+export async function detectReverseProxy(docker: Docker): Promise<ProxyDetection> {
+  try {
+    const containers = await docker.listAllContainers();
+
+    // Find all proxy containers
+    const detectedProxies: Array<ProxyDetection & { priority: number }> = [];
+
+    for (const container of containers) {
+      // Only check running or restarting containers
+      if (container.state !== 'running' && container.state !== 'restarting') {
+        continue;
+      }
+
+      for (const { type, pattern } of PROXY_PATTERNS) {
+        if (pattern.test(container.image)) {
+          const ports = container.ports
+            .filter((p): p is typeof p & { PublicPort: number } => p.PublicPort !== undefined)
+            .map((p) => p.PublicPort);
+
+          const version = extractVersion(container.image);
+          const priority = PROXY_PRIORITY[type] ?? 0;
+
+          // For Traefik, check if Docker provider is enabled
+          let traefikDockerProvider: boolean | undefined;
+          if (type === 'traefik') {
+            traefikDockerProvider = checkTraefikDockerProvider(container.labels);
+          }
+
+          detectedProxies.push({
+            type,
+            container: container.name,
+            ports,
+            version,
+            priority,
+            traefikDockerProvider,
+          });
+          break; // Only match first pattern per container
+        }
+      }
+    }
+
+    // Return highest priority proxy, or 'none' if nothing found
+    if (detectedProxies.length === 0) {
+      return { type: 'none', ports: [] };
+    }
+
+    // Sort by priority descending and return the highest
+    const best = detectedProxies.sort((a, b) => b.priority - a.priority)[0];
+    if (best === undefined) {
+      return { type: 'none', ports: [] };
+    }
+
+    return {
+      type: best.type,
+      container: best.container,
+      ports: best.ports,
+      version: best.version,
+      traefikDockerProvider: best.traefikDockerProvider,
+    };
+  } catch (error) {
+    // Docker daemon not running or connection error
+    log.warn({ error }, 'Failed to detect reverse proxy, returning none');
+    return { type: 'none', ports: [] };
+  }
+}
+
+/**
+ * Extract version from image tag.
+ * Example: 'traefik:v3.3' -> 'v3.3', 'nginx:1.25-alpine' -> '1.25-alpine'
+ */
+function extractVersion(image: string): string | undefined {
+  const parts = image.split(':');
+  if (parts.length >= 2) {
+    return parts.slice(1).join(':');
+  }
+  return undefined;
+}
+
+/**
+ * Check if Traefik Docker provider is enabled by inspecting labels.
+ * Traefik v2+ uses command line args, but we can check for provider-related labels.
+ */
+function checkTraefikDockerProvider(labels: Record<string, string>): boolean {
+  // OpenLander-managed Traefik always has this label
+  if (labels['openlander.role'] === 'traefik') {
+    return true;
+  }
+
+  // Check for common Traefik provider indicators
+  // External Traefik may have these labels set
+  const hasProviderLabels = Object.keys(labels).some(
+    (key) =>
+      key.startsWith('traefik.') && (key.includes('.docker.') || key.includes('providers.docker')),
+  );
+
+  if (hasProviderLabels) {
+    return true;
+  }
+
+  // Default to true for external Traefik (most common config)
+  // This will be verified more accurately in future versions
+  return true;
+}
+
+// --- Mode Switching ---
+
+/**
+ * Switch from managed to external Traefik mode.
+ *
+ * Safely stops the OpenLander-managed Traefik container.
+ * Does NOT modify config — caller should update traefik.mode and traefik.externalNetwork.
+ *
+ * @param docker - Docker instance
+ * @param externalNetwork - Name of the external Traefik's Docker network
+ */
+export async function switchToExternalMode(docker: Docker, externalNetwork: string): Promise<void> {
+  log.info({ externalNetwork }, 'Switching to external Traefik mode');
+
+  // Stop managed Traefik if running
+  const manager = new TraefikManager(docker);
+  await manager.stop();
+
+  log.info('Managed Traefik stopped (if it was running)');
+}
+
+/**
+ * Connect a container to the Traefik network.
+ * In external mode, connects to the external network.
+ * In managed mode, connects to the 'web' network.
+ *
+ * @param docker - Docker instance
+ * @param containerId - Container ID to connect
+ * @param networkName - Network name (from traefik.externalNetwork or 'web')
+ */
+export async function connectToTraefikNetwork(
+  docker: Docker,
+  containerId: string,
+  networkName: string,
+): Promise<void> {
+  try {
+    const client = docker.getClient();
+    const network = client.getNetwork(networkName);
+    await network.connect({ Container: containerId });
+    log.debug({ containerId, networkName }, 'Container connected to Traefik network');
+  } catch (error) {
+    log.warn({ error, containerId, networkName }, 'Failed to connect container to Traefik network');
+    throw error;
+  }
+}
+
+// --- Warning Messages ---
+
+/**
+ * Generate a warning message for non-Traefik proxy detection.
+ *
+ * @param detection - Proxy detection result
+ * @returns Warning message string, or undefined if no warning needed
+ */
+export function getProxyWarning(detection: ProxyDetection): string | undefined {
+  if (detection.type === 'none') {
+    return undefined;
+  }
+
+  if (detection.type === 'traefik') {
+    // Traefik-specific: check Docker provider
+    if (detection.traefikDockerProvider === false) {
+      return (
+        `Traefik detected (${detection.container ?? 'unknown'}) but Docker provider is not enabled. ` +
+        `Add '--providers.docker=true' to Traefik's command line arguments for automatic routing.`
+      );
+    }
+    return undefined;
+  }
+
+  // Non-Traefik proxies
+  const proxyNames: Record<string, string> = {
+    nginx: 'Nginx',
+    caddy: 'Caddy',
+    haproxy: 'HAProxy',
+  };
+
+  const name = proxyNames[detection.type] ?? detection.type;
+  const versionInfo = detection.version ? ` (${detection.version})` : '';
+  const containerInfo = detection.container ? ` in container '${detection.container}'` : '';
+
+  return (
+    `${name}${versionInfo} detected${containerInfo}. ` +
+    `OpenLander will not automatically configure this proxy. ` +
+    `For automatic routing, consider switching to Traefik or manually configure ${name}.`
+  );
+}
+
+/**
+ * Get a user-friendly description of the current proxy status.
+ *
+ * @param detection - Proxy detection result
+ * @param mode - Current Traefik mode ('managed' or 'external')
+ * @returns Human-readable status string
+ */
+export function getProxyStatus(detection: ProxyDetection, mode: 'managed' | 'external'): string {
+  if (detection.type === 'none') {
+    return mode === 'managed'
+      ? 'No reverse proxy detected (OpenLander will start Traefik)'
+      : 'No reverse proxy detected (external mode may not work)';
+  }
+
+  const versionInfo = detection.version ? ` v${detection.version}` : '';
+  const containerInfo = detection.container ? ` (${detection.container})` : '';
+
+  if (detection.type === 'traefik') {
+    const modeInfo = mode === 'external' ? 'external mode' : 'managed mode';
+    const providerInfo =
+      detection.traefikDockerProvider === false ? ' (Docker provider disabled!)' : '';
+    return `Traefik${versionInfo}${containerInfo} [${modeInfo}]${providerInfo}`;
+  }
+
+  const proxyNames: Record<string, string> = {
+    nginx: 'Nginx',
+    caddy: 'Caddy',
+    haproxy: 'HAProxy',
+  };
+
+  const name = proxyNames[detection.type] ?? detection.type;
+  return `${name}${versionInfo}${containerInfo} (not integrated)`;
 }

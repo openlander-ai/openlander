@@ -19,7 +19,7 @@ export interface RunStepResult {
 }
 
 export async function executeRunStep(config: RunStepConfig): Promise<RunStepResult> {
-  const port = allocatePort(config.db);
+  const port = await allocatePort(config.db, config.docker);
   const envVars = { ...config.envVars, ...config.db.getEnvVars(config.projectId) };
   const traefikLabels = buildTraefikLabels(config.projectName, port);
 

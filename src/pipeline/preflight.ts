@@ -1,0 +1,265 @@
+import { createModuleLogger } from '../lib/logger.js';
+import type { Database } from '../db/index.js';
+import type { Docker } from './docker.js';
+import { scanUsedPorts, clearPortScanCache } from './port.js';
+import { detectReverseProxy, getProxyStatus } from './traefik.js';
+import { getSystemStats } from '../monitor/stats.js';
+import { PreflightCheckError } from '../errors.js';
+
+const log = createModuleLogger('preflight');
+
+export interface PreflightCheck {
+  pass: boolean;
+  detail: string;
+}
+
+export interface PreflightResult {
+  pass: boolean;
+  checks: {
+    portAvailable: PreflightCheck;
+    nameAvailable: PreflightCheck;
+    resourceOk: PreflightCheck;
+    proxyReady: PreflightCheck;
+  };
+  warnings: string[];
+}
+
+const DISK_WARNING_THRESHOLD_GB = 1;
+const MEMORY_WARNING_THRESHOLD_PERCENT = 90;
+
+export async function preflightCheck(
+  db: Database,
+  docker: Docker,
+  projectName: string,
+  targetPort?: number,
+): Promise<PreflightResult> {
+  log.info({ projectName, targetPort }, 'Running preflight check');
+
+  const warnings: string[] = [];
+  const containerName = `ol-${projectName}`;
+
+  try {
+    clearPortScanCache();
+
+    const [portScanResult, allContainers, proxyDetection, systemStats] = await Promise.all([
+      scanUsedPorts(db, docker),
+      docker.listAllContainers(),
+      detectReverseProxy(docker),
+      Promise.resolve(getSystemStats()).catch(() => null),
+    ]);
+
+    const portScan = portScanResult;
+    // Port availability check
+    let portCheck: PreflightCheck;
+    if (targetPort !== undefined) {
+      const portInUse = portScan.all.includes(targetPort);
+      if (portInUse) {
+        const conflictContainer = allContainers.find((c) =>
+          c.ports.some((p) => p.PublicPort === targetPort),
+        );
+        const conflictSource =
+          conflictContainer?.name ??
+          (portScan.db.includes(targetPort) ? 'OpenLander project' : 'OS process');
+        const managedInfo = conflictContainer?.managedByOpenLander ? '' : ' (external)';
+
+        portCheck = {
+          pass: false,
+          detail: `Port ${String(targetPort)} is already in use by "${conflictSource}"${managedInfo}`,
+        };
+      } else {
+        portCheck = {
+          pass: true,
+          detail: `Port ${String(targetPort)} is available`,
+        };
+      }
+    } else {
+      const hasAvailablePort = portScan.all.length < 999;
+      portCheck = {
+        pass: hasAvailablePort,
+        detail: hasAvailablePort
+          ? 'Ports available in range 10001-10999'
+          : 'No ports available in allocation range',
+      };
+    }
+
+    // Name availability check
+    const existingContainer = allContainers.find((c) => c.name === containerName);
+    const nameCheck: PreflightCheck = existingContainer
+      ? {
+          pass: false,
+          detail: `Container "${containerName}" already exists (${existingContainer.managedByOpenLander ? 'managed' : 'external'}, ${existingContainer.state})`,
+        }
+      : {
+          pass: true,
+          detail: `Name "${containerName}" is available`,
+        };
+
+    // Resource status check (warning only)
+    const resourceWarnings: string[] = [];
+    const diskFreeGB = systemStats?.disk.freeGB ?? 999;
+    const memoryUsagePercent = systemStats?.memory.usagePercent ?? 0;
+
+    if (diskFreeGB < DISK_WARNING_THRESHOLD_GB) {
+      resourceWarnings.push(`Disk space low: ${diskFreeGB.toFixed(1)}GB free (builds may fail)`);
+    }
+    if (memoryUsagePercent >= MEMORY_WARNING_THRESHOLD_PERCENT) {
+      resourceWarnings.push(
+        `Memory high: ${memoryUsagePercent.toFixed(0)}% used - builds may be slow`,
+      );
+    }
+
+    const resourceCheck: PreflightCheck = {
+      pass: true,
+      detail:
+        resourceWarnings.length > 0
+          ? resourceWarnings.join('; ')
+          : `Disk: ${diskFreeGB.toFixed(1)}GB free, Memory: ${memoryUsagePercent.toFixed(0)}% used`,
+    };
+
+    warnings.push(...resourceWarnings);
+
+    // Proxy ready check
+    let proxyCheck: PreflightCheck;
+    const traefikMode = 'managed';
+    const proxyStatus = getProxyStatus(proxyDetection, traefikMode);
+
+    if (proxyDetection.type === 'none') {
+      proxyCheck = {
+        pass: true,
+        detail: 'No reverse proxy detected (OpenLander will start Traefik)',
+      };
+    } else if (proxyDetection.type === 'traefik') {
+      if (proxyDetection.traefikDockerProvider === false) {
+        proxyCheck = {
+          pass: true,
+          detail: proxyStatus,
+        };
+        warnings.push(
+          `Traefik detected (${proxyDetection.container ?? 'unknown'}) but Docker provider may not be enabled. ` +
+            `Ensure '--providers.docker=true' is set for automatic routing.`,
+        );
+      } else {
+        proxyCheck = {
+          pass: true,
+          detail: proxyStatus,
+        };
+      }
+    } else {
+      proxyCheck = {
+        pass: true,
+        detail: proxyStatus,
+      };
+      warnings.push(
+        `${proxyDetection.type.charAt(0).toUpperCase() + proxyDetection.type.slice(1)} detected (${proxyDetection.container ?? 'unknown'}). ` +
+          `OpenLander will not automatically configure this proxy.`,
+      );
+    }
+
+    const allPassed = portCheck.pass && nameCheck.pass;
+    const result: PreflightResult = {
+      pass: allPassed,
+      checks: {
+        portAvailable: portCheck,
+        nameAvailable: nameCheck,
+        resourceOk: resourceCheck,
+        proxyReady: proxyCheck,
+      },
+      warnings,
+    };
+
+    log.info(
+      {
+        projectName,
+        pass: result.pass,
+        portPass: portCheck.pass,
+        namePass: nameCheck.pass,
+        warningCount: warnings.length,
+      },
+      'Preflight check completed',
+    );
+
+    return result;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    log.error({ error, projectName }, 'Preflight check failed');
+
+    return {
+      pass: false,
+      checks: {
+        portAvailable: { pass: false, detail: `Preflight error: ${errorMsg}` },
+        nameAvailable: { pass: false, detail: `Preflight error: ${errorMsg}` },
+        resourceOk: { pass: false, detail: `Preflight error: ${errorMsg}` },
+        proxyReady: { pass: false, detail: `Preflight error: ${errorMsg}` },
+      },
+      warnings: [`Preflight check failed: ${errorMsg}`],
+    };
+  }
+}
+
+export async function preflightCheckOrThrow(
+  db: Database,
+  docker: Docker,
+  projectName: string,
+  targetPort?: number,
+): Promise<PreflightResult> {
+  const result = await preflightCheck(db, docker, projectName, targetPort);
+
+  if (!result.pass) {
+    throw new PreflightCheckError(result);
+  }
+
+  return result;
+}
+
+export function formatPreflightResult(result: PreflightResult): string {
+  const lines: string[] = ['Preflight check:'];
+
+  const checkIcons = (pass: boolean) => (pass ? '✅' : '❌');
+  const warnIcon = '⚠️';
+
+  lines.push(
+    `  ${checkIcons(result.checks.portAvailable.pass)} ${result.checks.portAvailable.detail}`,
+  );
+  lines.push(
+    `  ${checkIcons(result.checks.nameAvailable.pass)} ${result.checks.nameAvailable.detail}`,
+  );
+  lines.push(`  ${checkIcons(result.checks.resourceOk.pass)} ${result.checks.resourceOk.detail}`);
+  lines.push(`  ${checkIcons(result.checks.proxyReady.pass)} ${result.checks.proxyReady.detail}`);
+
+  if (result.warnings.length > 0) {
+    lines.push('');
+    for (const warning of result.warnings) {
+      lines.push(`  ${warnIcon} ${warning}`);
+    }
+  }
+
+  if (result.pass) {
+    lines.push('');
+    lines.push('All clear. Proceeding with deployment...');
+  }
+
+  return lines.join('\n');
+}
+
+export function formatPreflightFailure(result: PreflightResult): string {
+  const lines: string[] = ['❌ Deployment blocked:'];
+
+  const failedChecks = Object.entries(result.checks)
+    .filter(([, check]) => !check.pass)
+    .map(([name, check]) => {
+      const friendlyName = name.replace(/([A-Z])/g, ' $1').toLowerCase();
+      return `  ❌ ${friendlyName}: ${check.detail}`;
+    });
+
+  lines.push(...failedChecks);
+
+  if (result.warnings.length > 0) {
+    lines.push('');
+    lines.push('Additional warnings:');
+    for (const warning of result.warnings) {
+      lines.push(`  - ${warning}`);
+    }
+  }
+
+  return lines.join('\n');
+}

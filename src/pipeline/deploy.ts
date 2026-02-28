@@ -13,8 +13,9 @@ import { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery, type BuildContext } from './build-recovery.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
-import { DockerfileNotFoundError } from '../errors.js';
+import { DockerfileNotFoundError, PreflightCheckError } from '../errors.js';
 import { detectFramework, ensureDockerfile } from './dockerfile-gen.js';
+import { preflightCheckOrThrow } from './preflight.js';
 import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
@@ -57,6 +58,7 @@ export interface DeployResult {
   commitSha?: string;
   buildDurationMs?: number;
   error?: string;
+  preflightWarnings?: string[];
 }
 
 export interface MonorepoConfig {
@@ -83,7 +85,9 @@ export interface MonorepoResult {
 export interface StartDeployResult {
   projectId: string;
   projectName: string;
-  status: 'building';
+  status: 'building' | 'preflight_failed';
+  preflightWarnings?: string[];
+  preflightError?: string;
 }
 
 export interface StartMonorepoResult {
@@ -119,14 +123,29 @@ export class DeployPipeline {
 
   /**
    * Start a deployment in the background (non-blocking).
-   * Returns immediately with the project ID. Build runs asynchronously.
-   * Use JobManager.getStatus() or the get_deploy_status tool to check progress.
+   * Runs preflight check first and returns immediately if it fails.
    */
-  startDeploy(config: ProjectConfig): StartDeployResult {
+  async startDeploy(config: ProjectConfig): Promise<StartDeployResult> {
     const projectName = config.name ?? extractProjectName(config.repoUrl);
     const projectId = nanoid(12);
 
-    // Create project record NOW so get_deploy_status works immediately
+    // Run preflight check first (before creating project record)
+    try {
+      await preflightCheckOrThrow(this.db, this.docker, projectName);
+    } catch (error) {
+      if (error instanceof PreflightCheckError) {
+        return {
+          projectId,
+          projectName,
+          status: 'preflight_failed',
+          preflightError: error.message,
+          preflightWarnings: error.result.warnings,
+        };
+      }
+      throw error;
+    }
+
+    // Preflight passed - create project and start background deploy
     this.db.createProject({
       id: projectId,
       name: projectName,
@@ -137,7 +156,6 @@ export class DeployPipeline {
     this.jobManager?.trackJob(projectId, projectName);
 
     // Fire-and-forget: run the deploy pipeline in background
-    // Pass _projectId so deploy() reuses the pre-created record instead of creating a new one
     void this.deploy({ ...config, name: projectName, _projectId: projectId }).catch(() => {
       // Error handling is done inside deploy()
     });
@@ -199,8 +217,31 @@ export class DeployPipeline {
     const imageTag = `openlander/${projectName}:latest`;
 
     try {
+      // Preflight check - skip if already called from startDeploy()
+      let preflightWarnings: string[] | undefined;
+      if (!config._projectId) {
+        try {
+          const preflightResult = await preflightCheckOrThrow(this.db, this.docker, projectName);
+          preflightWarnings =
+            preflightResult.warnings.length > 0 ? preflightResult.warnings : undefined;
+        } catch (error) {
+          if (error instanceof PreflightCheckError) {
+            this.db.updateProject(projectId, { status: 'error' });
+            this.jobManager?.updatePhase(projectId, 'failed', error.message);
+            return {
+              success: false,
+              projectId,
+              projectName,
+              error: error.message,
+              preflightWarnings: error.result.warnings,
+              buildDurationMs: Date.now() - startTime,
+            };
+          }
+          throw error;
+        }
+      }
+
       // Step 1: git clone
-      this.jobManager?.updatePhase(projectId, 'cloning');
       const cloneResult = await cloneRepo({
         repoUrl: config.repoUrl,
         branch: config.branch,
@@ -289,7 +330,7 @@ export class DeployPipeline {
       buildLog += `[build] ${imageTag} (${String(buildDuration)}ms)\n`;
 
       // Step 4: docker run
-      const port = allocatePort(this.db);
+      const port = await allocatePort(this.db, this.docker);
       const envVars = { ...config.envVars, ...this.db.getEnvVars(projectId) };
       const traefikLabels = buildTraefikLabels(projectName, port);
 
@@ -364,6 +405,7 @@ export class DeployPipeline {
         port,
         commitSha: cloneResult.commitSha,
         buildDurationMs: totalDuration,
+        preflightWarnings,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -506,7 +548,7 @@ export class DeployPipeline {
           await this.docker.buildImage(contextPath, imageTag);
 
           this.jobManager?.updatePhase(childId, 'starting');
-          const port = allocatePort(this.db);
+          const port = await allocatePort(this.db, this.docker);
           const envVars = { ...config.envVars, ...this.db.getEnvVars(childId) };
           const traefikLabels = buildTraefikLabels(childName.replace('/', '-'), port);
 
@@ -665,7 +707,7 @@ export class DeployPipeline {
       }
 
       // Allocate a new port and start container with previous image
-      const port = allocatePort(this.db);
+      const port = await allocatePort(this.db, this.docker);
       const envVars = this.db.getEnvVars(projectId);
       const traefikLabels = buildTraefikLabels(project.name, port);
 

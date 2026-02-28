@@ -174,7 +174,7 @@ export class BuildRecovery {
 
     try {
       if (result.category === 'port-conflict') {
-        const fallbackPort = allocatePort(this.db, 11000, 11999);
+        const fallbackPort = await allocatePort(this.db, this.docker, 11000, 11999);
         this.db.updateProject(context.projectId, { assignedPort: fallbackPort });
 
         const action = `Allocated fallback port ${String(fallbackPort)} for retry.`;

@@ -28,6 +28,27 @@ export interface ContainerInfo {
   imageTag?: string;
 }
 
+export interface PortInfo {
+  IP?: string;
+  PrivatePort?: number;
+  PublicPort?: number;
+  Type?: string;
+}
+
+/** Extended container info for all containers (including non-OpenLander managed). */
+export interface AllContainerInfo {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  ports: PortInfo[];
+  labels: Record<string, string>;
+  managedByOpenLander: boolean;
+  composeProject: string | null;
+  created: number;
+}
+
 export interface BuildImageOptions {
   noCache?: boolean;
 }
@@ -240,6 +261,38 @@ export class Docker {
     }));
   }
 
+  /** List all containers on the server (including non-OpenLander managed). */
+  async listAllContainers(): Promise<AllContainerInfo[]> {
+    try {
+      const containers = await this.client.listContainers({ all: true });
+
+      return containers.map((c) => {
+        // Labels may be undefined at runtime despite dockerode types
+        const labels = (c.Labels as Record<string, string> | undefined) ?? {};
+        return {
+          id: c.Id,
+          name: c.Names[0]?.replace(/^\//, '') ?? 'unknown',
+          image: c.Image,
+          state: c.State,
+          status: c.Status,
+          ports: c.Ports.map((p) => ({
+            IP: p.IP,
+            PrivatePort: p.PrivatePort,
+            PublicPort: p.PublicPort,
+            Type: p.Type,
+          })),
+          labels,
+          managedByOpenLander: labels['openlander.managed'] === 'true',
+          composeProject: labels['com.docker.compose.project'] ?? null,
+          created: c.Created,
+        };
+      });
+    } catch (error) {
+      // Docker daemon not running or connection error
+      log.warn({ error }, 'Failed to list all containers, returning empty array');
+      return [];
+    }
+  }
   /** Get the underlying dockerode client (for Traefik manager). */
   getClient(): Dockerode {
     return this.client;

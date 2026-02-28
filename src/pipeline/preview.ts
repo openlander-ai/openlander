@@ -95,7 +95,7 @@ export class PreviewDeployer {
       const imageTag = `openlander/preview-${options.branch}:latest`;
       await this.docker.buildImage(cloneResult.path, imageTag);
 
-      const port = this.allocatePreviewPort();
+      const port = await this.allocatePreviewPort();
       const traefikLabels = buildTraefikLabels(previewName, port);
 
       const containerId = await this.docker.runContainer({
@@ -168,7 +168,9 @@ export class PreviewDeployer {
 
     try {
       await this.docker.stopContainer(preview.containerId);
-    } catch (err) { log.debug({ err }, 'Best-effort stop during preview cleanup'); }
+    } catch (err) {
+      log.debug({ err }, 'Best-effort stop during preview cleanup');
+    }
 
     try {
       await this.docker.removeContainer(preview.containerId);
@@ -235,8 +237,8 @@ export class PreviewDeployer {
     return undefined;
   }
 
-  private allocatePreviewPort(): number {
-    let port = allocatePort(this.db);
+  private async allocatePreviewPort(): Promise<number> {
+    let port = await allocatePort(this.db, this.docker);
     const dbPorts = new Set(this.db.getUsedPorts());
     const previewPorts = new Set(this.list().map((preview) => preview.port));
 

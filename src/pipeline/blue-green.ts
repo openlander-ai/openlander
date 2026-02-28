@@ -116,7 +116,7 @@ export class BlueGreenDeployer {
         durationMs: buildDuration,
       });
 
-      newPort = allocatePort(this.db);
+      newPort = await allocatePort(this.db, this.docker);
       const envVars = this.db.getEnvVars(projectId);
       const traefikLabels = buildTraefikLabels(projectName, newPort);
 
@@ -245,5 +245,5 @@ export class BlueGreenDeployer {
       log.warn({ err }, 'Failed to remove green container during cleanup');
       // Container may already be removed
     }
-}
+  }
 }
