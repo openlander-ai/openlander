@@ -12,10 +12,11 @@ import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { theme } from '../theme.js';
 import type { OpenLanderClient, BuildProgressEvent } from '../../ipc/client.js';
-import { buildSessionCount, selectedBuildIndex, scheduleDeployReturn } from '../state/mode.js';
+import { buildSessionCount, selectedBuildIndex, scheduleDeployReturn, setBuildStage, type BuildStage } from '../state/mode.js';
 import { ScrollableLog } from './ScrollableLog.js';
 import type { LogLine } from './ScrollableLog.js';
 import { Spinner } from './Spinner.js';
+import { parseDockerStep } from './build-panel-utils.js';
 
 // Pipeline stages in order
 const PIPELINE_STAGES = ['Clone', 'Build', 'Run', 'Expose'] as const;
@@ -98,6 +99,7 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
   });
   const [buildComplete, setBuildComplete] = createSignal(false);
   const [buildError, setBuildError] = createSignal<string | null>(null);
+  const [currentStep, setCurrentStep] = createSignal<string | null>(null);
   const [elapsedMs, setElapsedMs] = createSignal(0);
   const [streaming, setStreaming] = createSignal(false);
 
@@ -119,10 +121,45 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
     ]);
   };
 
+  /** Derive BuildStage from local stages and update global state */
+  const updateGlobalBuildStage = (localStages: Record<PipelineStage, StageStatus>) => {
+    // Map local pipeline stage to BuildStage
+    const toBuildStage = (s: PipelineStage): BuildStage => {
+      switch (s) {
+        case 'Clone':
+          return 'clone';
+        case 'Build':
+          return 'build';
+        case 'Run':
+          return 'run';
+        case 'Expose':
+          return 'expose';
+      }
+    };
+    // Find the first active or error stage
+    for (const stage of PIPELINE_STAGES) {
+      if (localStages[stage] === 'active') {
+        setBuildStage(toBuildStage(stage));
+        return;
+      }
+      if (localStages[stage] === 'error') {
+        setBuildStage('error');
+        return;
+      }
+    }
+    // If all done, mark complete
+    if (localStages.Expose === 'done') {
+      setBuildStage('complete');
+    } else {
+      setBuildStage('pending');
+    }
+  };
+
   const advanceStage = (stage: PipelineStage, status: StageStatus) => {
     setStages((prev) => {
       const next = { ...prev };
       next[stage] = status;
+      updateGlobalBuildStage(next);
       return next;
     });
   };
@@ -145,6 +182,7 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
               }
             }
             next[inferredStage] = 'active';
+            updateGlobalBuildStage(next);
             return next;
           });
         }
@@ -156,6 +194,12 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
         if (inferredStage) {
           advanceStage(inferredStage, 'active');
         }
+        const parsedStep = parseDockerStep(event.message);
+        if (parsedStep) {
+          setCurrentStep(
+            `Step ${String(parsedStep.current)}/${String(parsedStep.total)}: ${parsedStep.description}`,
+          );
+        }
         addLogLine(event.message);
         break;
       }
@@ -164,6 +208,7 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
           advanceStage(inferredStage, 'error');
         }
         setBuildError(event.message);
+        setCurrentStep(null);
         addLogLine(`✗ ${event.message}`, theme.error, 'stderr');
         break;
       }
@@ -175,7 +220,10 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
           Run: 'done',
           Expose: 'done',
         });
+        // Update global buildStage
+        setBuildStage('complete');
         setBuildComplete(true);
+        setCurrentStep(null);
         addLogLine(`✓ ${event.message}`, theme.success);
         // Auto-return to monitoring after 3 seconds
         scheduleDeployReturn(3);
@@ -198,8 +246,11 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
       Run: 'pending',
       Expose: 'pending',
     });
+    // Reset global buildStage
+    setBuildStage('pending');
     setBuildComplete(false);
     setBuildError(null);
+    setCurrentStep(null);
     setElapsedMs(0);
     lineCounter = 0;
 
@@ -246,8 +297,7 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
     return `${String(remainSecs)}s`;
   };
 
-  // Pipeline height: 1 line for header, 1 for pipeline, 1 for separator = 3
-  const pipelineHeight = 3;
+  const pipelineHeight = 4;
   const logHeight = () => Math.max(3, props.height - pipelineHeight);
 
   return (
@@ -263,7 +313,9 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
           </text>
         </Show>
         <Show when={streaming() && !buildComplete()}>
-          <Spinner color={theme.warning} />
+          <text fg={theme.warning}>
+            <Spinner color={theme.warning} />
+          </text>
         </Show>
         <box flexGrow={1} />
         <text fg={theme.textDim}>{formatElapsed()}</text>
@@ -280,6 +332,10 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
           </>
         ))}
       </box>
+
+      <Show when={currentStep()}>
+        <text fg={theme.textMuted}>{currentStep()}</text>
+      </Show>
 
       {/* Build logs */}
       <ScrollableLog

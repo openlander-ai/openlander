@@ -15,6 +15,7 @@ import {
 } from '../dashboard-utils.js';
 import type { OpenLanderClient, Project, ProjectStats } from '../../ipc/client.js';
 import { Spinner } from './Spinner.js';
+import { formatImageId, formatRelativeTime, formatUptime } from './project-info-utils.js';
 
 interface ProjectInfoProps {
   projectId: string;
@@ -97,6 +98,10 @@ export function ProjectInfo(props: ProjectInfoProps): JSX.Element {
 
   const cpuPercent = () => stats()?.cpu ?? 0;
   const memPercent = () => stats()?.memoryPercent ?? 0;
+  const imageDisplay = () => formatImageId(stats()?.containerId);
+  const uptimeDisplay = () =>
+    project()?.status === 'running' ? formatUptime(project()?.createdAt ?? '') : '—';
+  const lastDeployDisplay = () => formatRelativeTime(project()?.updatedAt ?? '');
 
   return (
     <box flexDirection="column" height={props.height} paddingLeft={2} paddingTop={1}>
@@ -106,7 +111,9 @@ export function ProjectInfo(props: ProjectInfoProps): JSX.Element {
           ▸ {props.projectName || 'Project'}
         </text>
         <Show when={loading()}>
-          <Spinner color={theme.textMuted} />
+          <text fg={theme.textMuted}>
+            <Spinner color={theme.textMuted} />
+          </text>
         </Show>
       </box>
 
@@ -151,6 +158,21 @@ export function ProjectInfo(props: ProjectInfoProps): JSX.Element {
                 <text fg={theme.textDim}>{truncate(p().repoUrl ?? '', 40)}</text>
               </box>
             </Show>
+
+            <box flexDirection="row" gap={1}>
+              <text fg={theme.textMuted}>Image </text>
+              <text fg={theme.text}>{imageDisplay()}</text>
+            </box>
+
+            <box flexDirection="row" gap={1}>
+              <text fg={theme.textMuted}>Uptime </text>
+              <text fg={theme.text}>{uptimeDisplay()}</text>
+            </box>
+
+            <box flexDirection="row" gap={1}>
+              <text fg={theme.textMuted}>Last deploy </text>
+              <text fg={theme.text}>{lastDeployDisplay()}</text>
+            </box>
 
             {/* CPU & Memory (only when running) */}
             <Show when={stats()}>
