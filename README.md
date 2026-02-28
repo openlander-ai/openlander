@@ -169,15 +169,17 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 ## Roadmap
 
-| Version  | Focus                    | Status          | Highlights                                                             |
-| -------- | ------------------------ | --------------- | ---------------------------------------------------------------------- |
-| **v0.1** | Repo \u2192 URL (MVP)    | Done            | Git clone \u2192 Docker \u2192 Traefik \u2192 URL. TUI chat. REST API. |
-| **v0.2** | Daily Operations         | Done            | Auto-redeploy, monitoring, production domains, Ollama                  |
-| **v0.3** | Coding Agent Integration | Done            | MCP server (23 tools), rollback, blue-green, DB provisioning           |
-| **v0.4** | Multi-Channel + Advanced | Done            | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy     |
-| **v0.6** | TUI Rewrite              | Done            | Bun runtime, OpenTUI + Solid.js, Drizzle ORM, OpenCode-inspired UI     |
-| **v0.7** | TUI Polish               | **In Progress** | 3-mode layout, 9 slash commands, adaptive panels, build failure tiers  |
-| v0.8     | Full Self-Hosting        | Planned         | Fine-tuned model, zero API cost                                        |
+| Version    | Focus                    | Status  | Highlights                                                             |
+| ---------- | ------------------------ | ------- | ---------------------------------------------------------------------- |
+| **v0.0.1** | Repo \u2192 URL (MVP)    | Done    | Git clone \u2192 Docker \u2192 Traefik \u2192 URL. TUI chat. REST API. |
+| **v0.0.2** | Daily Operations         | Done    | Auto-redeploy, monitoring, production domains, Ollama                  |
+| **v0.0.3** | Coding Agent Integration | Done    | MCP server (23 tools), rollback, blue-green, DB provisioning           |
+| **v0.0.4** | Multi-Channel + Advanced | Done    | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy     |
+| **v0.0.6** | TUI Rewrite              | Done    | Bun runtime, OpenTUI + Solid.js, Drizzle ORM, OpenCode-inspired UI     |
+| **v0.0.7** | TUI Polish               | Done    | 3-mode layout, 9 slash commands, adaptive panels, build failure tiers  |
+| v0.0.8     | Vercel AI SDK Migration  | Planned | Multi-provider streaming, unified tool API, structured output          |
+| v0.0.9     | Migration & Discovery    | Planned | Zero-downtime stack migration, runtime discovery, health-aware routing |
+| v0.0.10    | Env & Secrets Management | Planned | .env parsing, encrypted secrets, per-env configs, audit logging        |
 
 ## Requirements
 
