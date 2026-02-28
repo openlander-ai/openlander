@@ -8,11 +8,11 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD) ── 로컬LLM(TBD)
- MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    Env관리     AI SDK
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
+ MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    에이전트능동  Env관리     AI SDK
 ```
 
-> ✅ = 완료 | 🔧 = 진행 중 | 📋 = 기획/계획 | ❌ = 미착수
+> ✅ = 완료 | 🧪 = 도그푸딩 중 | 🔧 = 진행 중 | 📋 = 기획/계획 | ❌ = 미착수
 >
 > **참고**: v0.0.5(파인튜닝)는 requirements.md에 정의되어 있으나, 로컬 LLM은 정식 릴리즈 이후로 연기됨. 정식 릴리즈 버전은 미정.
 
@@ -23,19 +23,20 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 | #   | 문서                           | 경로                                         | 버전           | 구현율 | 상태                                      |
 | --- | ------------------------------ | -------------------------------------------- | -------------- | ------ | ----------------------------------------- |
 | 1   | 요구사항 정의서                | `requirements.md`                            | v0.0.1~v0.0.8  | 90%    | v0.0.4까지 완료, v0.0.6 체크 완료         |
-| 2   | TUI 리팩토링 스펙              | `v0.0.6-tui-spec.md`                         | v0.0.6         | 97%    | 38/39 태스크 완료                         |
-| 3   | UI/UX 레이아웃                 | `v0.0.7-ui-ux-layout.md`                     | v0.0.7         | 95%    | 16/16 TASK 완료 + 버그 수정               |
-| 4   | 빌드실패 + Compose             | `v0.0.6-ui-ux-build-compose.md`              | v0.0.6         | 100%   | 전체 구현 완료                            |
-| 5   | v0.0.6 상세 태스크             | `v0.0.6-tasks.md`                            | v0.0.6         | 97%    | 38/39 완료 (i18n 1개 남음)                |
-| 6   | v0.0.7 구현 태스크             | `v0.0.7-implementation-tasks.md`             | v0.0.7         | 100%   | 16/16 전부 완료                           |
-| 7   | Phase 1 개발계획               | `v0.0.7-phase1-plan.md`                      | v0.0.7         | 100%   | 9개 스텝 전부 완료                        |
-| 8   | AI SDK 마이그레이션            | `v0.0.8-vercel-ai-sdk-migration.md`          | v0.0.8         | 조사만 | 조사 완료, 구현 미착수                    |
-| 9   | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9-server-awareness.md`로 재정의     |
-| 10  | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10-env-secrets.md`로 재정의         |
-| 11  | ~~v0.0.9–v0.0.10 통합 기획서~~ | `v0.0.9-10-unified-spec.md`                  | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체        |
-| 12  | **v0.0.9 Server Awareness**    | `v0.0.9-server-awareness.md`                 | v0.0.9         | 0%     | ✅ 기획 완료, 미착수                      |
-| 13  | **v0.0.10 Env & Secrets**      | `v0.0.10-env-secrets.md`                     | v0.0.10        | 0%     | ✅ 기획 완료, 미착수                      |
-| 14  | **버그 트래커**                | `bugs.md`                                    | 전체           | —      | 활성 버그 + 해결 내역, GitHub Issues 동기 |
+| 2   | TUI 리팩토링 스펙              | `v0.0.6/tui-spec.md`                         | v0.0.6         | 97%    | 38/39 태스크 완료                         |
+| 3   | UI/UX 레이아웃                 | `v0.0.7/ui-ux-layout.md`                     | v0.0.7         | 95%    | 16/16 TASK 완료 + 버그 수정               |
+| 4   | 빌드실패 + Compose             | `v0.0.6/ui-ux-build-compose.md`              | v0.0.6         | 100%   | 전체 구현 완료                            |
+| 5   | v0.0.6 상세 태스크             | `v0.0.6/tasks.md`                            | v0.0.6         | 97%    | 38/39 완료 (i18n 1개 남음)                |
+| 6   | v0.0.7 구현 태스크             | `v0.0.7/implementation-tasks.md`             | v0.0.7         | 100%   | 16/16 전부 완료                           |
+| 7   | Phase 1 개발계획               | `v0.0.7/phase1-plan.md`                      | v0.0.7         | 100%   | 9개 스텝 전부 완료                        |
+| 8   | AI SDK 마이그레이션            | `v0.0.8/vercel-ai-sdk-migration.md`          | v0.0.8         | 조사만 | 조사 완료, 구현 미착수                    |
+| 9   | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9/server-awareness.md`로 재정의     |
+| 10  | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의         |
+| 11  | ~~v0.0.9–v0.0.10 통합 기획서~~ | `archive/v0.0.9-10-unified-spec.md`          | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체        |
+| 12  | **v0.0.9 Server Awareness**    | `v0.0.9/server-awareness.md`                 | v0.0.9         | 100%   | 🧪 구현 완료, 도그푸딩 중                 |
+| 13  | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 0%     | ✅ 기획 완료, 미착수                      |
+| 14  | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 활성 버그 + 해결 내역, GitHub Issues 동기 |
+| 15  | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료         |
 
 ---
 
@@ -104,13 +105,13 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 
 ### v0.0.6 — TUI UI/UX 고도화 ✅ (97%)
 
-**상태**: 거의 완료 | **관련 문서**: `v0.0.6-tui-spec.md`, `v0.0.6-tasks.md`, `v0.0.6-ui-ux-build-compose.md`
+**상태**: 거의 완료 | **관련 문서**: `v0.0.6/tui-spec.md`, `v0.0.6/tasks.md`, `v0.0.6/ui-ux-build-compose.md`
 
 | 관련 문서                               | 역할                                | 상태         |
 | --------------------------------------- | ----------------------------------- | ------------ |
-| `v0.0.6-tui-spec.md` (1387줄)           | TUI 전체 아키텍처 + UI 스펙         | ✅ 구현 완료 |
-| `v0.0.6-tasks.md` (598줄)               | 상세 태스크 38/39 완료              | ✅ (97%)     |
-| `v0.0.6-ui-ux-build-compose.md` (407줄) | Build Failure 3-Tier + Compose 처리 | ✅ 100%      |
+| `v0.0.6/tui-spec.md` (1387줄)           | TUI 전체 아키텍처 + UI 스펙         | ✅ 구현 완료 |
+| `v0.0.6/tasks.md` (598줄)               | 상세 태스크 38/39 완료              | ✅ (97%)     |
+| `v0.0.6/ui-ux-build-compose.md` (407줄) | Build Failure 3-Tier + Compose 처리 | ✅ 100%      |
 
 **Phase별 진행**:
 
@@ -121,7 +122,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 
 | 항목                           | 위치              | 비고          |
 | ------------------------------ | ----------------- | ------------- |
-| T-INFRA-01: i18n (다국어 지원) | `v0.0.6-tasks.md` | 우선순위 낮음 |
+| T-INFRA-01: i18n (다국어 지원) | `v0.0.6/tasks.md` | 우선순위 낮음 |
 
 **v0.0.6 이후 추가 완료** (태스크 범위 외):
 
@@ -134,13 +135,13 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 
 ### v0.0.7 — TUI 마감 + UI 디테일 ✅
 
-**상태**: 완료 | **관련 문서**: `v0.0.7-ui-ux-layout.md`, `v0.0.7-implementation-tasks.md`, `v0.0.7-phase1-plan.md`
+**상태**: 완료 | **관련 문서**: `v0.0.7/ui-ux-layout.md`, `v0.0.7/implementation-tasks.md`, `v0.0.7/phase1-plan.md`
 
 | 관련 문서                                | 역할                                        | 상태          |
 | ---------------------------------------- | ------------------------------------------- | ------------- |
-| `v0.0.7-ui-ux-layout.md` (374줄)         | 3-모드 레이아웃 + 데이터 갱신 + Alerts 스펙 | ✅ 기준 스펙  |
-| `v0.0.7-implementation-tasks.md` (323줄) | 갭 분석 → 16개 TASK                         | ✅ 16/16 완료 |
-| `v0.0.7-phase1-plan.md` (472줄)          | Phase 1 레이아웃 아키텍처 상세              | ✅ 9스텝 완료 |
+| `v0.0.7/ui-ux-layout.md` (374줄)         | 3-모드 레이아웃 + 데이터 갱신 + Alerts 스펙 | ✅ 기준 스펙  |
+| `v0.0.7/implementation-tasks.md` (323줄) | 갭 분석 → 16개 TASK                         | ✅ 16/16 완료 |
+| `v0.0.7/phase1-plan.md` (472줄)          | Phase 1 레이아웃 아키텍처 상세              | ✅ 9스텝 완료 |
 
 **TASK 완료 현황** (16/16):
 
@@ -170,17 +171,17 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 - DashboardPanel MCP Clients 섹션 제거 (스펙 외) ✅
 - DashboardPanel ProjectsSection 렌더링 버그 → else 분기 추가 ✅
 
-**`v0.0.7-ui-ux-layout.md` 하단 "구현 우선순위" 체크박스 미체크 상태에 대해**:
+**`v0.0.7/ui-ux-layout.md` 하단 "구현 우선순위" 체크박스 미체크 상태에 대해**:
 
 > 문서 L325~354의 Phase 1~4 체크박스 `[ ]`는 **원본 기획 시점의 계획 체크리스트**이며,
-> 실제 구현은 `v0.0.7-implementation-tasks.md`의 16개 TASK + `v0.0.7-phase1-plan.md`의 9스텝으로 실행되었다.
+> 실제 구현은 `v0.0.7/implementation-tasks.md`의 16개 TASK + `v0.0.7/phase1-plan.md`의 9스텝으로 실행되었다.
 > 해당 항목들은 이미 구현 완료되었으나 원본 문서의 체크박스가 업데이트되지 않은 상태.
 
 ---
 
 ### v0.0.8 — AI SDK 마이그레이션 📋
 
-**상태**: 조사 완료, 구현 미착수 | **관련 문서**: `v0.0.8-vercel-ai-sdk-migration.md`
+**상태**: 조사 완료, 구현 미착수 | **관련 문서**: `v0.0.8/vercel-ai-sdk-migration.md`
 
 | 항목                      | 상태 | 비고                             |
 | ------------------------- | ---- | -------------------------------- |
@@ -197,24 +198,24 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.0.9 — Server Awareness (서버 상태 인식) 📋
+### v0.0.9 — Server Awareness (서버 상태 인식) 🧪
 
-**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.0.9-server-awareness.md`](v0.0.9-server-awareness.md)
+**상태**: 구현 완료, 도그푸딩 중 | **관련 문서**: [`v0.0.9/server-awareness.md`](v0.0.9/server-awareness.md), [`v0.0.9/dogfooding.md`](v0.0.9/dogfooding.md)
 
-> 기존 `v0.0.9-10-unified-spec.md`의 v0.0.9 파트를 대폭 축소하여 재정의.
+> 기존 `archive/v0.0.9-10-unified-spec.md`의 v0.0.9 파트를 대폭 축소하여 재정의.
 > Import 프로세스, Import 컨테이너 관리, coexist Traefik 모드, 온보딩 대규모 개편은 제거됨.
 
 **핵심 가치**: OpenLander가 서버의 전체 상태(컨테이너, 포트, 프록시)를 인식하여 배포 시 충돌을 원천 방지.
 
 | 파트                        | 내용                                                             | 상태 |
 | --------------------------- | ---------------------------------------------------------------- | ---- |
-| 9-1: 전체 컨테이너 스캔     | `listAllContainers()` — 라벨 필터 없이 전체 Docker 컨테이너 반환 | 📋   |
-| 9-2: OS 레벨 포트 스캔      | `scanUsedPorts()` — DB + Docker + OS(ss/lsof) 합산               | 📋   |
-| 9-3: 리버스 프록시 감지     | `detectReverseProxy()` — managed/external 2모드                  | 📋   |
-| 9-4: 시스템 프롬프트 확장   | `buildContextSnapshot()`에 서버 전체 컨텍스트 주입               | 📋   |
-| 9-5: 에이전트 도구 3개 추가 | `list_all_containers`, `scan_ports`, `get_container_stats`       | 📋   |
-| 9-6: Dashboard Server 섹션  | 외부 컨테이너/포트/프록시 상태 표시                              | 📋   |
-| 9-7: Preflight Check        | 배포 전 포트/이름/리소스/프록시 사전 검증 (**킬러 피처**)        | 📋   |
+| 9-1: 전체 컨테이너 스캔     | `listAllContainers()` — 라벨 필터 없이 전체 Docker 컨테이너 반환 | ✅   |
+| 9-2: OS 레벨 포트 스캔      | `scanUsedPorts()` — DB + Docker + OS(ss/lsof) 합산               | ✅   |
+| 9-3: 리버스 프록시 감지     | `detectReverseProxy()` — managed/external 2모드                  | ✅   |
+| 9-4: 시스템 프롬프트 확장   | `buildContextSnapshot()`에 서버 전체 컨텍스트 주입               | ✅   |
+| 9-5: 에이전트 도구 3개 추가 | `list_all_containers`, `scan_ports`, `get_container_stats`       | ✅   |
+| 9-6: Dashboard Server 섹션  | 외부 컨테이너/포트/프록시 상태 표시                              | ✅   |
+| 9-7: Preflight Check        | 배포 전 포트/이름/리소스/프록시 사전 검증 (**킬러 피처**)        | ✅   |
 
 **제거된 항목** (기존 통합 기획서 대비):
 
@@ -226,9 +227,9 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 
 ### v0.0.10 — Env & Secrets Management 📋
 
-**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.0.10-env-secrets.md`](v0.0.10-env-secrets.md)
+**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.0.10/env-secrets.md`](v0.0.10/env-secrets.md)
 
-> 기존 `v0.0.9-10-unified-spec.md`의 v0.0.10 파트에서 Local Dev Mode를 완전히 제거하고 환경변수/시크릿 관리만 남김.
+> 기존 `archive/v0.0.9-10-unified-spec.md`의 v0.0.10 파트에서 Local Dev Mode를 완전히 제거하고 환경변수/시크릿 관리만 남김.
 
 | 파트                     | 내용                                                            | 상태 |
 | ------------------------ | --------------------------------------------------------------- | ---- |
@@ -245,11 +246,28 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
+### v0.0.11 — Agent Proactivity (에이전트 능동성) 📋
+
+**상태**: 기획 초안 | **관련 문서**: [`v0.0.11/agent-proactivity.md`](v0.0.11/agent-proactivity.md)
+
+> 에이전트가 정보를 수동적으로 제공하는 것에서, **적절한 타이밍에 능동적으로 인사이트를 전달**하는 것으로 전환.
+
+**핵심 가치**: "서버 상태를 알고, 먼저 말해주는 배포 에이전트"
+
+| 파트                      | 내용                                                 | 상태 |
+| ------------------------- | ---------------------------------------------------- | ---- |
+| 11-1: Post-Deploy Insight | 배포 후 헬스체크/이전버전 정리/리소스 상태 자동 보고 | 📋   |
+| 11-2: Anomaly Nudge       | 크래시/재시작 루프/리소스 포화 감지 → 채팅 알림      | 📋   |
+| 11-3: Smart Defaults      | 이전 배포 히스토리 기반 스마트 기본값 제안           | 📋   |
+| 11-4: Idle Scan           | 유휴 시 미사용 컨테이너/이미지 정리 제안             | 📋   |
+
+**우선순위 제안**: v0.0.10(환경변수)보다 먼저 진행 권장 — 제품 정체성 강화 + 경쟁 차별화. 최종 결정은 User.
+
 ### 정식 릴리즈 (TBD)
 
 **상태**: 버전 미정, 미착수
 
-v0.0.10까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테스트 커버리지 강화, 온보딩 UX 최종 점검. 버전 번호는 개발 진행 상황에 따라 결정.
+v0.0.11까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테스트 커버리지 강화, 온보딩 UX 최종 점검. 버전 번호는 개발 진행 상황에 따라 결정.
 
 ---
 
@@ -297,21 +315,25 @@ v0.0.10까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 | #   | 항목                       | 버전                 | 문서                                | 우선순위   |
 | --- | -------------------------- | -------------------- | ----------------------------------- | ---------- |
-| 1   | i18n (다국어 지원)         | v0.0.6               | `v0.0.6-tasks.md` T-INFRA-01        | 낮음       |
+| 1   | i18n (다국어 지원)         | v0.0.6               | `v0.0.6/tasks.md` T-INFRA-01        | 낮음       |
 | 2   | 프로젝트 검색/필터         | v0.0.6               | `requirements.md` L468              | 낮음       |
-| 3   | 전체 컨테이너 스캔         | v0.0.9               | `v0.0.9-server-awareness.md` 9-1    | 높음       |
-| 4   | OS 레벨 포트 스캔          | v0.0.9               | `v0.0.9-server-awareness.md` 9-2    | 높음       |
-| 5   | 리버스 프록시 감지         | v0.0.9               | `v0.0.9-server-awareness.md` 9-3    | 높음       |
-| 6   | 시스템 프롬프트 확장       | v0.0.9               | `v0.0.9-server-awareness.md` 9-4    | 높음       |
-| 7   | 에이전트 도구 3개 추가     | v0.0.9               | `v0.0.9-server-awareness.md` 9-5    | 높음       |
-| 8   | Dashboard Server 섹션      | v0.0.9               | `v0.0.9-server-awareness.md` 9-6    | 중간       |
-| 9   | Preflight Check            | v0.0.9               | `v0.0.9-server-awareness.md` 9-7    | 높음       |
-| 10  | Global Secrets + 암호화    | v0.0.10              | `v0.0.10-env-secrets.md` 10-1       | 중간       |
-| 11  | .env.example 감지          | v0.0.10              | `v0.0.10-env-secrets.md` 10-2       | 중간       |
-| 12  | 환경변수 도구 추가         | v0.0.10              | `v0.0.10-env-secrets.md` 10-3       | 중간       |
-| 13  | /env 오버레이 확장         | v0.0.10              | `v0.0.10-env-secrets.md` 10-4       | 중간       |
-| 14  | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8-vercel-ai-sdk-migration.md` | 낮음(연기) |
+| 3   | ~~전체 컨테이너 스캔~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료    |
+| 4   | ~~OS 레벨 포트 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료    |
+| 5   | ~~리버스 프록시 감지~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료    |
+| 6   | ~~시스템 프롬프트 확장~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료    |
+| 7   | ~~에이전트 도구 3개 추가~~ | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료    |
+| 8   | ~~Dashboard Server 섹션~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료    |
+| 9   | ~~Preflight Check~~        | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료    |
+| 10  | Global Secrets + 암호화    | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | 중간       |
+| 11  | .env.example 감지          | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | 중간       |
+| 12  | 환경변수 도구 추가         | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | 중간       |
+| 13  | /env 오버레이 확장         | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | 중간       |
+| 14  | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기) |
 | 15  | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래       |
+| 16  | Post-Deploy Insight        | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | 높음       |
+| 17  | Anomaly Nudge              | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | 높음       |
+| 18  | Smart Defaults             | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-3 | 높음       |
+| 19  | Idle Scan                  | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-4 | 중간       |
 
 ---
 
@@ -334,7 +356,7 @@ v0.0.10까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ```
 ✅ bun run build — 성공
-✅ bun test — 564 tests, 0 failures, 34 files
+✅ bun test — 648 tests, 0 failures
 ✅ lsp_diagnostics — 0 errors
 ```
 
@@ -356,6 +378,6 @@ AI: 버그 수정 + bun test 통과
 AI: bugs.md → 해결됨 + gh issue close
 ```
 
-**참조**: `bugs.md` 워크플로우 섹션, `.opencode/instructions.md` §9
+**참조**: `v0.0.9/bugs.md` 워크플로우 섹션, `.opencode/instructions.md` §9
 
 **GitHub Issues Labels**: `bug`, `v0.0.6`~`v0.0.10`, `priority:high`, `priority:low`

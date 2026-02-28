@@ -1,6 +1,6 @@
-# v0.0.9 — Server Awareness
+# v0.0.9 — Server Awareness (Tech Lead 리뷰 반영)
 
-> **상태**: 📋 기획 스펙 (미착수) | **이전 문서**: `v0.0.9-10-unified-spec.md` (통합 기획서, 아카이브)
+> **상태**: 📋 기획 스펙 (리뷰 완료, 구현 미착수) | **이전 문서**: `v0.0.9-10-unified-spec.md` (통합 기획서, 아카이브)
 >
 > 이 문서는 `v0.0.9-10-unified-spec.md`의 v0.0.9 파트를 **대폭 축소하고 재정의**한 것이다.
 > 기존 문서의 Import 프로세스, Import 컨테이너 관리, coexist Traefik 모드, 온보딩 대규모 개편은 제거됨.
@@ -96,7 +96,7 @@ async function listAllContainers(): Promise<ContainerInfo[]> {
 ### 9-2: OS 레벨 포트 스캔
 
 **현재 상태 (AS-IS)**:
-`port.ts`의 `findAvailablePort()`가 DB만 조회. Docker 외부 프로세스(직접 실행한 Node 서버 등)가 쓰는 포트는 모름.
+`port.ts`의 `allocatePort()`가 DB만 조회. Docker 외부 프로세스(직접 실행한 Node 서버 등)가 쓰는 포트는 모름.
 
 **목표 상태 (TO-BE)**:
 OS의 실제 포트 사용 현황을 스캔하여, DB + Docker + 호스트 프로세스의 포트를 모두 파악.
@@ -115,7 +115,7 @@ async function scanUsedPorts(): Promise<PortScanResult> {
     c.ports.filter((p) => p.PublicPort).map((p) => p.PublicPort),
   );
 
-  // 3. OS 레벨 (Linux: ss -tlnp, macOS: lsof -iTCP -sTCP:LISTEN)
+  // 3. OS 레벨 (Linux: ss -tln, macOS: lsof -iTCP -sTCP:LISTEN) — sudo 불필요
   const osPorts = await scanOSPorts();
 
   return {
@@ -134,7 +134,16 @@ async function scanUsedPorts(): Promise<PortScanResult> {
 - [ ] Linux에서 `ss -tlnp` 또는 macOS에서 `lsof -iTCP -sTCP:LISTEN` 을 사용한다
 - [ ] `findAvailablePort()`가 `scanUsedPorts()`의 결과를 참조하도록 수정한다 (DB만 보지 않음)
 - [ ] `conflicts` 필드: OpenLander 기본 포트(80, 443, 8080)와의 충돌 목록
-- [ ] 테스트: 포트 충돌 시나리오 검증
+- [ ] `scanUsedPorts()`가 DB, Docker, OS 3개 소스를 합산하여 사용 중인 포트 목록을 반환한다
+- [ ] Linux에서 `ss -tln` 또는 macOS에서 `lsof -iTCP -sTCP:LISTEN`을 사용한다 (sudo 불필요, 포트 번호만 수집)
+- [ ] `allocatePort()`가 `scanUsedPorts()`의 결과를 참조하도록 수정한다 (DB만 보지 않음)
+- [ ] `allocatePort()`를 `async`로 변경한다 (OS 스캔이 비동기). 호출 지점 7개 모두 `await` 추가:
+  - `deploy.ts` (3곳), `preview.ts`, `compose.ts`, `blue-green.ts`, `build-recovery.ts`, `steps/run.ts`
+- [ ] `conflicts` 필드: `number[]` 타입. OpenLander 기본 포트(80, 443, 8080)와의 충돌 포트 번호 배열
+- [ ] `scanUsedPorts()` 결과를 1초 TTL로 캐싱 (같은 턴에서 중복 스캔 방지)
+- [ ] Docker daemon 중지 상태에서 Docker 포트 스캔 시 빈 배열 반환 + 로그 경고
+- [ ] `restarting` 상태 컨테이너의 포트도 "사용 중"으로 간주
+- [ ] 테스트: 포트 충돌 시나리오, Docker 중지 상태, restarting 컨테이너 시나리오
 
 ---
 
@@ -183,7 +192,7 @@ async function detectReverseProxy(): Promise<ProxyDetection> {
 1. 배포 시 컨테이너에 Traefik 라벨 추가 (기존과 동일)
 2. 기존 Traefik의 Docker 네트워크에 컨테이너 연결
 3. Traefik 컨테이너 자체는 띄우지 않음
-4. OpenLander 설정에서 외부 Traefik 정보 저장
+4. OpenLander 설정에서 외부 Traefik 정보 저장 (`src/config/index.ts`에 `traefik.mode` + `traefik.externalNetwork` 필드 추가)
 
 **수락기준**:
 
@@ -192,7 +201,14 @@ async function detectReverseProxy(): Promise<ProxyDetection> {
 - [ ] `external` 모드에서 OpenLander는 Traefik 컨테이너를 띄우지 않고, 기존 네트워크에 연결한다
 - [ ] `managed` → `external` 전환 시 기존 OpenLander Traefik을 안전하게 중지한다
 - [ ] Nginx/Caddy/HAProxy 감지 시 경고 메시지를 표시한다 (자동 연동은 안 함)
-- [ ] 테스트: 프록시 감지 + 모드 전환 시나리오
+- [ ] `detectReverseProxy()`가 서버의 리버스 프록시를 감지하여 type/container/ports를 반환한다
+- [ ] Traefik 감지 시 `external` 모드 전환이 가능하다 (config에 `traefik.mode` 저장, `src/config/index.ts` 스키마 확장)
+- [ ] `external` 모드에서 OpenLander는 Traefik 컨테이너를 띄우지 않고, 기존 네트워크에 연결한다
+- [ ] `managed` → `external` 전환 시 기존 OpenLander Traefik을 안전하게 중지한다
+- [ ] Nginx/Caddy/HAProxy 감지 시 경고 메시지를 표시한다 (자동 연동은 안 함)
+- [ ] Traefik Docker provider가 비활성화된 경우 사용자에게 활성화 안내 메시지 표시
+- [ ] Docker daemon 중지 상태에서 빈 결과(`type: 'none'`) 반환 + 로그 경고
+- [ ] 테스트: 프록시 감지 + 모드 전환 + Docker 중지 상태 시나리오
 
 ---
 
@@ -244,14 +260,16 @@ const proxy = await detectReverseProxy();
 - [ ] `buildContextSnapshot()`이 외부 컨테이너 목록, 사용 중인 포트, 프록시 상태를 포함한다
 - [ ] 시스템 프롬프트에 "사용 금지 포트" 목록이 명시된다
 - [ ] 시스템 프롬프트에 "충돌 방지용 컨테이너 이름" 목록이 명시된다
-- [ ] 프롬프트 길이가 과도하지 않다 (외부 컨테이너 20개 이상이면 요약)
+- [ ] 프롬프트 길이 제어: 외부 컨테이너 20개 초과 시 타입별 개수만 표시 (예: `"nginx: 3, node: 5, postgres: 2 (총 45개)"`)
 - [ ] 테스트: 컨텍스트 스냅샷에 서버 상태가 포함되는지 검증
+- [ ] `buildContextSnapshot()` 시그니처를 `(db, docker)` 또는 별도 함수로 확장 (현재 DB만 받음). 호출 지점 수정:
+  - `app.ts`, `setup-routes.ts`, 테스트 3곳
 
 ---
 
 ### 9-5: 에이전트 도구 3개 추가
 
-현재 23개 도구 → 26개로 확장.
+현재 25개 도구 → 28개로 확장.
 
 #### `list_all_containers`
 
@@ -415,7 +433,13 @@ You: api 배포해줘
 - [ ] 하나라도 `pass: false`이면 빌드를 시작하지 않고 에러를 반환한다
 - [ ] warnings는 빌드를 차단하지 않지만 사용자에게 표시한다
 - [ ] 테스트: 포트 충돌 / 이름 충돌 / 리소스 부족 / 정상 통과 4가지 시나리오
+- [ ] warnings는 빌드를 차단하지 않지만 **채팅 응답에 포함**하여 사용자에게 표시한다 (별도 패널 불필요)
+- [ ] 테스트: 포트 충돌 / 이름 충돌 / 리소스 부족 / 정상 통과 4가지 시나리오
 - [ ] MCP 도구(`deploy_project`)에서도 preflight 결과가 반환된다
+- [ ] `resourceOk` 임계값: 디스크 1GB 미만 = warning, 메모리 90% 이상 = warning (pass/fail 아닌 warning 처리)
+- [ ] 이름 충돌 시 배포 차단. 대안 이름 자동 제안 없음 (사용자가 직접 변경)
+- [ ] preflight check 자체가 실패(Docker API 타임아웃 등)하면 배포 중단 (안전 우선)
+- [ ] `PreflightCheckError` 커스텀 에러 타입 추가 (`src/errors.ts` 또는 해당 모듈)
 
 ---
 
@@ -477,3 +501,52 @@ Phase 4는 Phase 1+2 결과 필요.
 - **Runtime Crash Analysis**: 배포 후 컨테이너 크래시 감지 + AI 분석 → v0.0.9 이후 별도 기능
 - **MCP `get_server_context` 통합 도구**: 단일 호출로 서버 전체 스냅샷 반환 → IDE 에이전트용. 9-5의 3개 도구로 기능은 커버되지만, 단일 호출 편의성은 추후 추가 가능.
 - **컨테이너 그룹핑**: Compose 그룹을 접을 수 있는 UI → Dashboard 고도화 시
+
+---
+
+## Tech Lead 리뷰 반영 사항 (2026-02-28)
+
+> Tech Lead가 코드베이스를 분석하고 돌려준 실현가능성 리뷰를 PM이 검토하여 스펙에 반영한 결과.
+
+### 공수 추정: 총 8-10일
+
+| Phase                  | 공수  | 사유                                                     |
+| ---------------------- | ----- | -------------------------------------------------------- |
+| Phase 1 (9-1→9-2→9-3)  | 3일   | 9-2 플랫폼별 분기 + allocatePort() 호출지점 7곳 수정     |
+| Phase 2 (9-4+9-5 병렬) | 2일   | 9-4 시그니처 변경 영향 + 9-5 도구 등록 단순              |
+| Phase 3 (9-6)          | 1일   | 기존 DashboardPanel 패턴 적용                            |
+| Phase 4 (9-7)          | 2-3일 | deploy 파이프라인 진입점 수정 + preflight 로직 + 에러 UX |
+
+### 함수명 불일치 (정정 반영)
+
+| 스펙 원문             | 실제 코드                                     | 조치                           |
+| --------------------- | --------------------------------------------- | ------------------------------ |
+| `findAvailablePort()` | `allocatePort()` (`src/pipeline/port.ts` L14) | 스펙을 `allocatePort()`로 정정 |
+| 도구 23개             | 실제 25개                                     | 스펙을 25개→28개로 정정        |
+
+### PM 결정 사항
+
+| 질문             | PM 결정                                                                      |
+| ---------------- | ---------------------------------------------------------------------------- |
+| sudo 필요성      | 불필요. `ss -tln` / `lsof` (sudo 없이). 포트 번호만 수집, 프로세스명 불필요  |
+| conflicts 형태   | `number[]`. 누가 쓰는지는 `listAllContainers()`에서 확인                     |
+| config 저장 위치 | `src/config/index.ts`에 `traefik.mode` + `traefik.externalNetwork` 필드 추가 |
+| 요약 기준        | 20개 초과 시 타입별 개수만 표시                                              |
+| 리소스 임계값    | 디스크 1GB 미만, 메모리 90% 이상 = warning (차단 아님)                       |
+| warning 표시     | 채팅 응답에 포함. 별도 패널 불필요                                           |
+
+### 추가된 엣지케이스 (수락기준에 반영됨)
+
+- Docker daemon 중지 → 빈 배열/`none` 반환 + 로그 경고
+- 컨테이너 100개+ → 스캔 전체, 프롬프트만 요약
+- `restarting` 상태 → 포트 "사용 중"으로 간주
+- Traefik Docker provider 비활성화 → 활성화 안내 메시지
+- preflight 자체 실패 → 배포 중단 (안전 우선)
+- 이름 충돌 → 차단, 대안 제안 없음
+
+### 구현 지침 (신규)
+
+- `allocatePort()` → `async`로 변경 (OS 스캔 반영). 호출지점 7곳 `await` 추가 필수
+- `buildContextSnapshot()` 시그니처 확장 `(db, docker)`. 호출지점 4곳 수정
+- `PreflightCheckError` 커스텀 에러 타입 추가
+- `scanUsedPorts()` 1초 TTL 캐싱 (중복 스캔 방지)

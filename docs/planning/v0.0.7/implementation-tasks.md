@@ -1,8 +1,8 @@
 # OpenLander TUI — Implementation Tasks
 
-> **버전**: v0.0.7 | **상태**: ✅ 16/16 전부 완료 | **버전 맵**: [`version-map.md`](version-map.md)
+> **버전**: v0.0.7 | **상태**: ✅ 16/16 전부 완료 | **버전 맵**: [`version-map.md`](../version-map.md)
 
-> **스펙 문서**: `docs/planning/v0.0.7-ui-ux-layout.md` (374줄)
+> **스펙 문서**: `docs/planning/v0.0.7/ui-ux-layout.md` (374줄)
 > **갭 분석 기준일**: 2026-02-28
 > **전수검사 방법**: 모든 소스 파일 직접 라인 단위 대조
 
