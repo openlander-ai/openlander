@@ -45,9 +45,35 @@ export async function setupLlm(): Promise<void> {
   });
 
   let apiKey = '';
+  let usedOAuth = false;
 
-  // Step 2: Enter API key (skip for Ollama)
-  if (provider !== 'ollama') {
+  // Step 2: Authenticate (OAuth or API key)
+  if (provider === 'openrouter') {
+    const authMethod = await select({
+      message: 'How would you like to authenticate?',
+      choices: [
+        { name: 'Login via browser (OAuth)', value: 'oauth' },
+        { name: 'Enter API key manually', value: 'manual' },
+      ],
+      default: 'oauth',
+    });
+
+    if (authMethod === 'oauth') {
+      try {
+        const { openRouterOAuth } = await import('./openrouter-oauth.js');
+        apiKey = await openRouterOAuth();
+        usedOAuth = true;
+        console.log(pc.green('  ✓ Connected to OpenRouter via OAuth'));
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.log(pc.yellow('  ⚠ OAuth failed. Falling back to manual API key entry.'));
+        console.log(pc.dim(`    Reason: ${errorMessage}`));
+      }
+    }
+  }
+
+  // Step 3: Enter API key manually (if OAuth wasn't used or failed)
+  if (!usedOAuth && provider !== 'ollama') {
     apiKey = await password({
       message: `Enter your ${provider} API key`,
       mask: '*',
@@ -62,18 +88,19 @@ export async function setupLlm(): Promise<void> {
     }
   }
 
-  // Step 3: Select model (with default)
+  // Step 4: Select model (with default)
   const defaultModel = MODEL_DEFAULTS[provider];
   const model = await input({
     message: 'Model (press Enter for default)',
     default: defaultModel,
   });
 
-  // Step 4: Save to config
+  // Step 5: Save to config
   updateConfig({
     llm: {
       provider,
       apiKey: provider === 'ollama' ? '' : apiKey.trim(),
+      authToken: usedOAuth ? apiKey.trim() : '',
       model: model.trim() || defaultModel,
     },
   });
