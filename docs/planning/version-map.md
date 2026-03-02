@@ -8,8 +8,8 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
- MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    에이전트능동  Env관리     AI SDK
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
+ MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    ProviderOAuth 에이전트능동  Env관리     AI SDK
 ```
 
 > ✅ = 완료 | 🧪 = 도그푸딩 중 | 🔧 = 진행 중 | 📋 = 기획/계획 | ❌ = 미착수
@@ -37,6 +37,8 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 | 13  | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 0%     | ✅ 기획 완료, 미착수                      |
 | 14  | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 활성 버그 + 해결 내역, GitHub Issues 동기 |
 | 15  | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료         |
+| 16  | **v0.0.9 온보딩 리팩토링**     | `v0.0.9/onboarding-refactor.md`              | v0.0.9         | 0%     | 📋 기획 완료, 구현 미착수                 |
+| 17  | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 0%     | 📋 기획 완료, 미착수                      |
 
 ---
 
@@ -223,6 +225,14 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 - coexist Traefik 모드 — 복잡도 대비 실용성 낮음
 - 온보딩 대규모 개편 — 프록시 감지 정보만 추가
 
+**추가 스코프** (도그푸딩 중 발견):
+
+| 항목                | 내용                                                                          | 상태 |
+| ------------------- | ----------------------------------------------------------------------------- | ---- |
+| 온보딩 CLI 리팩토링 | TUI 팝업 온보딩 → CLI 스타일로 전환. Docker → LLM(BYOK) → Git(OAuth/SSH/Skip) | 📋   |
+
+> 관련 문서: [`v0.0.9/onboarding-refactor.md`](v0.0.9/onboarding-refactor.md)
+
 ---
 
 ### v0.0.10 — Env & Secrets Management 📋
@@ -263,11 +273,29 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 
 **우선순위 제안**: v0.0.10(환경변수)보다 먼저 진행 권장 — 제품 정체성 강화 + 경쟁 차별화. 최종 결정은 User.
 
+### v0.0.12 — Provider OAuth (인증 통합) 📋
+
+**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.0.12/provider-oauth.md`](v0.0.12/provider-oauth.md)
+
+> LLM 프로바이더 구독 계정(ChatGPT Plus, Claude Max 등)으로 직접 인증하여 BYOK 설정 없이 사용 가능하게.
+
+**핵심 가치**: API 키 수동 입력 번거로움 제거 + 기존 구독 활용으로 진입장벽 최소화.
+
+| 항목                        | 내용                                                    | 상태 |
+| --------------------------- | ------------------------------------------------------- | ---- |
+| 12-1: OpenAI OAuth PKCE     | Codex CLI OAuth 플로우 (`app_EMoamEEZ73f0CkXaXp7hrann`) | 📋   |
+| 12-2: Anthropic Token Setup | `claude setup-token` 스타일 토큰 설정                   | 📋   |
+| 12-3: OpenRouter OAuth PKCE | PKCE 인증 + 콜백                                        | 📋   |
+| 12-4: Google ADC            | Application Default Credentials / AI Studio 키          | 📋   |
+| 12-5: 토큰 저장 & 리프레시  | AES-256-GCM 암호화 저장 + 자동 갱신                     | 📋   |
+
+**선행 조건**: v0.0.9 온보딩 CLI 리팩토링 완료 (BYOK 플로우가 베이스라인)
+
 ### 정식 릴리즈 (TBD)
 
 **상태**: 버전 미정, 미착수
 
-v0.0.11까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테스트 커버리지 강화, 온보딩 UX 최종 점검. 버전 번호는 개발 진행 상황에 따라 결정.
+v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테스트 커버리지 강화, 온보딩 UX 최종 점검. 버전 번호는 개발 진행 상황에 따라 결정.
 
 ---
 
@@ -334,6 +362,12 @@ v0.0.11까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 | 17  | Anomaly Nudge              | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | 높음       |
 | 18  | Smart Defaults             | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-3 | 높음       |
 | 19  | Idle Scan                  | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-4 | 중간       |
+| 20  | 온보딩 CLI 리팩토링        | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | 높음       |
+| 21  | OpenAI OAuth PKCE          | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간       |
+| 22  | Anthropic Token Setup      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간       |
+| 23  | OpenRouter OAuth PKCE      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간       |
+| 24  | Google ADC                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간       |
+| 25  | 토큰 저장 & 리프레시       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간       |
 
 ---
 

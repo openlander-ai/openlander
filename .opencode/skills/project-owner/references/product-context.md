@@ -7,9 +7,9 @@
 
 ## 제품 한 줄 정의
 
-**"채팅으로 배포하는 AI 에이전트"** — repo URL 하나 주면 clone → build → run → URL 완성.
+**"서버 상태를 알고, 먼저 말해주는 배포 에이전트"** — repo URL 하나 주면 clone → build → run → URL 완성.
 
-핵심 차별점: 서버의 전체 상태를 인식하고, MCP를 통해 코딩 에이전트(Cursor/Claude Code)와 직접 통합.
+핵심 차별점: 서버의 전체 상태를 인식하고, MCP를 통해 코딩 에이전트(Cursor/Claude Code)와 직접 통합. 1차 타겟: 배포 볼륨에 압도당하는 DevOps/백엔드 엔지니어 (DEC-008).
 
 ---
 
@@ -135,6 +135,25 @@ Monitoring (기본)  ←→  Deploying (배포 중)  ←→  Debugging (로그 �
 
 모든 명령은 오버레이(모달)로 표시. 중첩 메뉴 없이 플랫.
 
+## 온보딩 플로우
+
+**현재 상태**: TUI 팝업 형식 → CLI 스타일로 전환 예정 (DEC-012)
+
+```
+openlander
+  │
+  ├─ Step 1: Docker 체크 (src/cli/onboard.ts — 기존)
+  ├─ Step 2: LLM 프로바이더 설정 (src/cli/onboard-llm.ts — 신규)
+  │     └─ BYOK: 프로바이더 선택 → API 키 입력 → 검증
+  ├─ Step 3: Git 인증 (src/cli/onboard-git.ts — 신규)
+  │     └─ GitHub OAuth / SSH / Skip
+  └─ TUI 진입 (온보딩 완료 후)
+```
+
+**핵심 원칙**: 온보딩은 1회성 설정. 최대한 가볍게, 빠르게. TUI는 일상 사용에만 집중.
+
+> 관련 문서: `docs/planning/v0.0.9/onboarding-refactor.md`
+
 ---
 
 ## LLM 통합
@@ -158,6 +177,17 @@ BASE_PROMPT (고정 ~120줄)
 ```
 
 **기획 시 고려**: Context Snapshot에 뭘 넣느냐가 에이전트 품질을 결정한다. v0.0.9에서 서버 전체 상태(컨테이너, 포트, 프록시)를 주입 완료.
+
+**v0.0.12 Provider OAuth 계획**:
+
+BYOK(API 키 수동 입력) 외에, LLM 프로바이더 구독 계정으로 직접 인증하는 방식 추가 예정:
+
+- OpenAI: Codex CLI OAuth PKCE (`app_EMoamEEZ73f0CkXaXp7hrann`)
+- Anthropic: `claude setup-token` 스타일 토큰 설정
+- OpenRouter: OAuth PKCE + 콜백
+- Google: Application Default Credentials / AI Studio 키
+
+> 관련 문서: `docs/planning/v0.0.12/provider-oauth.md` | 의사결정: DEC-013
 
 ---
 
