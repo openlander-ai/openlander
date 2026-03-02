@@ -21,7 +21,7 @@ const LLM_PROVIDERS: Array<{ label: string; value: LlmProvider }> = [
 ];
 
 const MODEL_DEFAULTS: Record<LlmProvider, string> = {
-  openrouter: 'google/gemini-2.0-flash-exp:free',
+  openrouter: 'openrouter/free',
   gemini: 'gemini-2.0-flash',
   anthropic: 'claude-sonnet-4-20250514',
   openai: 'gpt-4o-mini',

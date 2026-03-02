@@ -119,7 +119,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     // Default model per provider
     const modelDefaults: Record<string, string> = {
       gemini: 'gemini-2.0-flash',
-      openrouter: 'google/gemini-2.0-flash-exp:free',
+      openrouter: 'openrouter/free',
       anthropic: 'claude-sonnet-4-20250514',
       openai: 'gpt-4o-mini',
       ollama: 'llama3.2',

@@ -56,7 +56,7 @@ export class OpenRouterProvider implements LLMClient {
   private readonly model: string;
   private tools: ToolDefinition[] = [];
 
-  constructor(apiKey: string, model = 'google/gemini-2.0-flash-exp:free') {
+  constructor(apiKey: string, model = 'openrouter/free') {
     this.apiKey = apiKey;
     this.model = model;
   }

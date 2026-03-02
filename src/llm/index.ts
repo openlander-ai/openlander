@@ -71,7 +71,7 @@ export function createLLMClient(config: LLMConfig): LLMClient {
     case 'openai':
       return new OpenAIProvider(apiKey, config.model ?? 'gpt-4o');
     case 'openrouter':
-      return new OpenRouterProvider(apiKey, config.model ?? 'google/gemini-2.0-flash-exp:free');
+      return new OpenRouterProvider(apiKey, config.model ?? 'openrouter/free');
     case 'ollama':
       return new OllamaProvider(config.model ?? 'llama3.2', config.ollamaBaseUrl);
     default:
