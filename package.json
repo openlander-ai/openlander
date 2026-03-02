@@ -42,7 +42,6 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@opentui/core": "^0.1.81",
     "@opentui/solid": "^0.1.81",
-    "better-sqlite3": "^11.10.0",
     "commander": "^14.0.3",
     "dockerode": "^4.0.4",
     "drizzle-orm": "^0.44.7",
@@ -58,7 +57,6 @@
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/dockerode": "^3.3.34",
     "@types/node": "^25.3.0",
     "@vitest/coverage-v8": "^4.0.18",
