@@ -9,11 +9,11 @@ import {
 import { theme } from './theme.js';
 import { join } from 'node:path';
 import type { AppContext } from '../app.js';
-import { isOnboarded, getDataDir, saveConfig } from '../config/index.js';
+import { getDataDir, saveConfig } from '../config/index.js';
 import type { LLMProviderConfig } from '../config/index.js';
 import { useExit } from './context/exit.js';
 import { useDaemon } from './hooks/useDaemon.js';
-import { Onboarding } from './onboarding/index.js';
+
 import { Layout } from './components/Layout.js';
 import { StatusBar } from './components/StatusBar.js';
 import { HelpOverlay } from './components/HelpOverlay.js';
@@ -65,11 +65,6 @@ interface AppProps {
 }
 
 export function App(props: AppProps): JSX.Element {
-  // App mode: setup or dashboard (distinct from TUI mode: monitoring/deploying/debugging)
-  const [appMode, setAppMode] = createSignal<'setup' | 'dashboard'>(
-    isOnboarded() ? 'dashboard' : 'setup',
-  );
-
   // Panel state — focus is managed by state/focus.ts (chat | status)
   const [showHelp, setShowHelp] = createSignal(false);
   const [showModelSelector, setShowModelSelector] = createSignal(false);
@@ -159,11 +154,6 @@ export function App(props: AppProps): JSX.Element {
   const [buildingCount, setBuildingCount] = createSignal(0);
   const [memDisplay, setMemDisplay] = createSignal('—');
 
-  // Setup completion handler
-  const handleSetupComplete = () => {
-    setAppMode('dashboard');
-  };
-
   // Receive stats from DashboardPanel (no duplicate polling)
   const handleStatsUpdate = (data: {
     projectCount: number;
@@ -187,7 +177,11 @@ export function App(props: AppProps): JSX.Element {
   };
 
   // Handle project selection from StatusPanel — enter debug mode
-  const handleProjectSelect = (projectId: string, projectName: string, port: number | null = null) => {
+  const handleProjectSelect = (
+    projectId: string,
+    projectName: string,
+    port: number | null = null,
+  ) => {
     enterDebugMode(projectId, projectName, port);
   };
 
@@ -442,9 +436,6 @@ export function App(props: AppProps): JSX.Element {
   // Global keyboard shortcuts (safe — no-op if renderer not ready)
   try {
     useKeyboard((evt) => {
-      // Don't handle shortcuts during setup
-      if (appMode() === 'setup') return;
-
       // When overlays are open, only handle Escape at App level.
       // All other keys must pass through to overlay's own useKeyboard handler.
       if (
@@ -644,11 +635,6 @@ export function App(props: AppProps): JSX.Element {
 
   // Reactive render — must wrap in arrow function for Solid.js reactivity
   const renderContent = (): JSX.Element => {
-    // Setup mode — onboarding wizard
-    if (appMode() === 'setup') {
-      return <Onboarding ctx={props.ctx} onComplete={handleSetupComplete} />;
-    }
-
     // Dashboard mode — split-panel layout
     const panelMode = isWideMode() ? 'split' : 'single';
     const contentHeight = rows() - 1; // reserve 1 row for status bar

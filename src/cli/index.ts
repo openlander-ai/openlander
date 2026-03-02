@@ -24,7 +24,20 @@ program
     const { ensureDocker } = await import('./onboard.js');
     await ensureDocker();
 
-    // Step 2: Load config & create app context
+    // Step 2: Check if onboarding needed (LLM + Git setup)
+    const { isOnboarded: checkOnboarded } = await import('../config/index.js');
+    if (!checkOnboarded()) {
+      const { setupLlm } = await import('./onboard-llm.js');
+      const { setupGit } = await import('./onboard-git.js');
+      await setupLlm();
+      await setupGit();
+      console.log();
+      console.log(pc.dim('  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
+      console.log(pc.green('  Launching OpenLander...'));
+      console.log();
+    }
+
+    // Step 3: Load config & create app context
     const { loadConfig, getDbPath, getDataDir } = await import('../config/index.js');
 
     const config = loadConfig();
