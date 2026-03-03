@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, Show, For } from 'solid-js';
+import { createSignal, createEffect, onCleanup, Show, For, batch } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 import { overlayActive } from '../state/overlay.js';
@@ -521,91 +521,119 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
 
     let isFirstLoad = true;
 
+    // ── Guards to prevent overlapping fetches ──────────────────────────────
+    let fetchingProjects = false;
+    let fetchingSystem = false;
+    let fetchingServer = false;
+
     const fetchProjects = async () => {
-      const [projectsResult] = await Promise.allSettled([c.listProjects()]);
+      if (fetchingProjects) return; // Skip if previous fetch still running
+      fetchingProjects = true;
+      try {
+        const [projectsResult] = await Promise.allSettled([c.listProjects()]);
 
-      let projectsKey = '';
-      let newProjects: Project[] = [];
+        let projectsKey = '';
+        let newProjects: Project[] = [];
 
-      if (projectsResult.status === 'fulfilled') {
-        newProjects = projectsResult.value.projects;
-        for (const p of newProjects)
-          projectsKey += `${p.name}:${p.status}:${String(p.port ?? '')}|`;
-      }
+        if (projectsResult.status === 'fulfilled') {
+          newProjects = projectsResult.value.projects;
+          for (const p of newProjects)
+            projectsKey += `${p.name}:${p.status}:${String(p.port ?? '')}|`;
+        }
 
-      if (projectsKey !== lastProjectsKey) {
-        lastProjectsKey = projectsKey;
-        setProjects(newProjects);
+        if (projectsKey !== lastProjectsKey) {
+          lastProjectsKey = projectsKey;
 
-        const statsMap = new Map<string, ProjectStats>();
-        for (const project of newProjects) {
-          if (project.status === 'running') {
-            try {
+          // Fetch stats for running projects IN PARALLEL (was sequential for-await)
+          const runningProjects = newProjects.filter((p) => p.status === 'running');
+          const statsEntries = await Promise.allSettled(
+            runningProjects.map(async (project) => {
               const ps = await c.getProjectStats(project.id);
-              statsMap.set(project.id, ps);
-            } catch {
-              /* Project may not have a container */
+              return [project.id, ps] as const;
+            }),
+          );
+
+          const statsMap = new Map<string, ProjectStats>();
+          for (const entry of statsEntries) {
+            if (entry.status === 'fulfilled') {
+              statsMap.set(entry.value[0], entry.value[1]);
             }
           }
-        }
-        setProjectStats(statsMap);
 
-        const building = newProjects.filter((p) => p.status === 'building').length;
-        const currentStats = systemStats();
-        onStatsUpdateRef?.({
-          projectCount: newProjects.length,
-          cpuPercent: currentStats ? Math.round(currentStats.cpu.usagePercent) : null,
-          buildingCount: building,
-          memoryUsedMB: currentStats ? currentStats.memory.usedMB : null,
-        });
+          // Batch all signal updates → single render pass
+          batch(() => {
+            setProjects(newProjects);
+            setProjectStats(statsMap);
+
+            const building = newProjects.filter((p) => p.status === 'building').length;
+            const currentStats = systemStats();
+            onStatsUpdateRef?.({
+              projectCount: newProjects.length,
+              cpuPercent: currentStats ? Math.round(currentStats.cpu.usagePercent) : null,
+              buildingCount: building,
+              memoryUsedMB: currentStats ? currentStats.memory.usedMB : null,
+            });
+          });
+        }
+      } finally {
+        fetchingProjects = false;
       }
     };
 
     const fetchAll = async () => {
-      const [statsResult, healthResult, activityResult] = await Promise.allSettled([
-        c.getSystemStats(),
-        c.ping(),
-        c.getActivity(5),
-      ]);
+      if (fetchingSystem) return; // Skip if previous fetch still running
+      fetchingSystem = true;
+      try {
+        const [statsResult, healthResult, activityResult] = await Promise.allSettled([
+          c.getSystemStats(),
+          c.ping(),
+          c.getActivity(5),
+        ]);
 
-      let displayKey = '';
-      let newStats: SystemStats | null = null;
-      let newHealth: HealthResponse | null = null;
-      let newActivity: ActivityEvent[] = [];
+        let displayKey = '';
+        let newStats: SystemStats | null = null;
+        let newHealth: HealthResponse | null = null;
+        let newActivity: ActivityEvent[] = [];
 
-      if (statsResult.status === 'fulfilled') {
-        newStats = statsResult.value;
-        const s = newStats;
-        displayKey += `cpu:${String(Math.round(s.cpu.usagePercent))}|mem:${(s.memory.usedMB / 1024).toFixed(1)}/${(s.memory.totalMB / 1024).toFixed(1)}|disk:${String(Math.round(s.disk.usagePercent))}|up:${String(Math.floor(s.uptime.seconds / 60))}|`;
-      }
-      if (healthResult.status === 'fulfilled') {
-        newHealth = healthResult.value;
-        displayKey += `docker:${String(newHealth.dockerContainers)}|`;
-      }
-      if (activityResult.status === 'fulfilled') {
-        newActivity = activityResult.value;
-        for (const e of newActivity) displayKey += `${e.timestamp}:${e.message}|`;
-      }
+        if (statsResult.status === 'fulfilled') {
+          newStats = statsResult.value;
+          const s = newStats;
+          displayKey += `cpu:${String(Math.round(s.cpu.usagePercent))}|mem:${(s.memory.usedMB / 1024).toFixed(1)}/${(s.memory.totalMB / 1024).toFixed(1)}|disk:${String(Math.round(s.disk.usagePercent))}|up:${String(Math.floor(s.uptime.seconds / 60))}|`;
+        }
+        if (healthResult.status === 'fulfilled') {
+          newHealth = healthResult.value;
+          displayKey += `docker:${String(newHealth.dockerContainers)}|`;
+        }
+        if (activityResult.status === 'fulfilled') {
+          newActivity = activityResult.value;
+          for (const e of newActivity) displayKey += `${e.timestamp}:${e.message}|`;
+        }
 
-      if (displayKey !== lastSystemActivityKey) {
-        lastSystemActivityKey = displayKey;
-        if (newStats) setSystemStats(newStats);
-        if (newHealth) setHealth(newHealth);
-        setActivity(newActivity);
+        if (displayKey !== lastSystemActivityKey) {
+          lastSystemActivityKey = displayKey;
+          // Batch all signal updates → single render pass
+          batch(() => {
+            if (newStats) setSystemStats(newStats);
+            if (newHealth) setHealth(newHealth);
+            setActivity(newActivity);
 
-        const currentProjects = projects();
-        const building = currentProjects.filter((p) => p.status === 'building').length;
-        onStatsUpdateRef?.({
-          projectCount: currentProjects.length,
-          cpuPercent: newStats ? Math.round(newStats.cpu.usagePercent) : null,
-          buildingCount: building,
-          memoryUsedMB: newStats ? newStats.memory.usedMB : null,
-        });
-      }
+            const currentProjects = projects();
+            const building = currentProjects.filter((p) => p.status === 'building').length;
+            onStatsUpdateRef?.({
+              projectCount: currentProjects.length,
+              cpuPercent: newStats ? Math.round(newStats.cpu.usagePercent) : null,
+              buildingCount: building,
+              memoryUsedMB: newStats ? newStats.memory.usedMB : null,
+            });
+          });
+        }
 
-      if (isFirstLoad) {
-        setSystemLoading(false);
-        isFirstLoad = false;
+        if (isFirstLoad) {
+          setSystemLoading(false);
+          isFirstLoad = false;
+        }
+      } finally {
+        fetchingSystem = false;
       }
     };
 
@@ -621,6 +649,8 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
 
     // Fetch server status (v0.0.9)
     const fetchServerStatus = async () => {
+      if (fetchingServer) return; // Skip if previous fetch still running
+      fetchingServer = true;
       try {
         const status = await c.getServerStatus();
         setServerStatus(status);
@@ -628,20 +658,24 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
         /* ignore */
       } finally {
         setServerLoading(false);
+        fetchingServer = false;
       }
     };
 
     void fetchServerStatus();
 
+    // ── Relaxed polling intervals ──────────────────────────────────────────
+    // Previous: 5s/3s/3s → caused render storm with overlapping fetches.
+    // New: 10s unified cycle. Dashboard data doesn't need sub-second freshness.
     const systemActivityTimer = setInterval(() => {
       void fetchAll();
-    }, 5000);
+    }, 10_000);
     const projectsTimer = setInterval(() => {
       void fetchProjects();
-    }, 3000);
+    }, 10_000);
     const serverStatusTimer = setInterval(() => {
       void fetchServerStatus();
-    }, 3000);
+    }, 15_000);
 
     onCleanup(() => {
       clearInterval(systemActivityTimer);

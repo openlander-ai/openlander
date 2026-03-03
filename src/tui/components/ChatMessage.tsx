@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js';
+import { createMemo, For, Show } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { ProgressBar } from './ProgressBar.js';
 import { Spinner } from './Spinner.js';
@@ -86,6 +86,13 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
   const toolStatus = () => props.message.toolStatus;
   const toolDuration = () => props.message.toolDuration;
   const progress = () => props.message.progress;
+
+  // Memoize markdown parsing — only re-runs when content string actually changes
+  const parsedTokens = createMemo(() => {
+    const c = content();
+    if (!c) return [];
+    return parseMarkdown(c);
+  });
 
   // AgentDisplay types render their own borders
   const isAgentDisplayType = () =>
@@ -260,10 +267,9 @@ export function ChatMessage(props: ChatMessageProps): JSX.Element {
       case 'text':
       default: {
         if (!content()) return <></>;
-        const tokens = parseMarkdown(content());
         return (
           <box paddingLeft={3} marginTop={1} flexShrink={0} flexDirection="column">
-            <MarkdownContent tokens={tokens} />
+            <MarkdownContent tokens={parsedTokens()} />
           </box>
         );
       }
@@ -309,6 +315,31 @@ function InlineContent(props: { spans: InlineSpan[] }): JSX.Element {
   );
 }
 
+function CodeBlock(props: { code: string; language: string }): JSX.Element {
+  const highlighted = createMemo(() => highlightCode(props.code, props.language));
+  return (
+    <box
+      marginTop={1}
+      marginBottom={1}
+      paddingLeft={2}
+      paddingRight={2}
+      paddingTop={1}
+      paddingBottom={1}
+      backgroundColor={theme.backgroundElement}
+      flexDirection="column"
+    >
+      <Show when={props.language}>
+        <text fg={theme.textDim} dim={true}>
+          {props.language}
+        </text>
+      </Show>
+      <box flexDirection="row" flexWrap="wrap">
+        <For each={highlighted()}>{(span) => <text fg={span.color}>{span.text}</text>}</For>
+      </box>
+    </box>
+  );
+}
+
 function MarkdownContent(props: { tokens: MarkdownToken[] }): JSX.Element {
   return (
     <For each={props.tokens}>
@@ -338,29 +369,7 @@ function MarkdownContent(props: { tokens: MarkdownToken[] }): JSX.Element {
               </box>
             );
           case 'code_block':
-            return (
-              <box
-                marginTop={1}
-                marginBottom={1}
-                paddingLeft={2}
-                paddingRight={2}
-                paddingTop={1}
-                paddingBottom={1}
-                backgroundColor={theme.backgroundElement}
-                flexDirection="column"
-              >
-                <Show when={token.language}>
-                  <text fg={theme.textDim} dim={true}>
-                    {token.language}
-                  </text>
-                </Show>
-                <box flexDirection="row" flexWrap="wrap">
-                  <For each={highlightCode(token.code, token.language)}>
-                    {(span) => <text fg={span.color}>{span.text}</text>}
-                  </For>
-                </box>
-              </box>
-            );
+            return <CodeBlock code={token.code} language={token.language} />;
           case 'list_item':
             return (
               <box paddingLeft={2} flexDirection="row">

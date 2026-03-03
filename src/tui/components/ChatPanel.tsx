@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createMemo, Show, For } from 'solid-js';
+import { batch, createSignal, createEffect, createMemo, Show, For } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { useKeyboard } from '@opentui/solid';
 
@@ -10,7 +10,6 @@ interface ScrollBoxRef {
   scrollTo(position: number | { x: number; y: number }): void;
   scrollBy(delta: number | { x: number; y: number }): void;
 }
-
 
 import { overlayActive } from '../state/overlay.js';
 import { enterDebugMode, enterDeployMode } from '../state/mode.js';
@@ -152,6 +151,15 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     setMessages((prev) => [...prev, ...newMsgs]);
   });
 
+  // --- Auto-trim: prevent unbounded memory growth ---
+  // TUI messages are display-only; LLM conversation lives on daemon side.
+  const MAX_DISPLAY_MESSAGES = 500;
+  createEffect(() => {
+    if (messages().length > MAX_DISPLAY_MESSAGES) {
+      setMessages((prev) => prev.slice(-MAX_DISPLAY_MESSAGES));
+    }
+  });
+
   // --- Chat history for up/down navigation ---
   const [chatHistory, setChatHistory] = createSignal<ChatHistoryEntry[]>([]);
   const [historyIndex, setHistoryIndex] = createSignal(-1);
@@ -167,6 +175,17 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   // --- Smart auto-scroll ---
   const [isAtBottom, setIsAtBottom] = createSignal(true);
   const [hasNewMessages, setHasNewMessages] = createSignal(false);
+
+  // --- Message virtualization (render cap) ---
+  const RENDER_BUDGET = 50;
+  const [renderCount, setRenderCount] = createSignal(RENDER_BUDGET);
+  const visibleMessages = createMemo(() => {
+    const msgs = messages();
+    const count = renderCount();
+    if (msgs.length <= count) return msgs;
+    return msgs.slice(-count);
+  });
+  const hiddenCount = createMemo(() => Math.max(0, messages().length - renderCount()));
   // --- ScrollBox ref for native scroll handling ---
   let scrollBoxRef: ScrollBoxRef | null = null;
   const setScrollBoxRef = (r: unknown) => {
@@ -229,6 +248,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
       scrollBoxRef.stickyScroll = true;
       scrollBoxRef.scrollTo(scrollBoxRef.scrollHeight);
     }
+    setRenderCount(RENDER_BUDGET);
     setIsAtBottom(true);
     setHasNewMessages(false);
   };
@@ -246,177 +266,190 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const handleStreamEvent = (event: ChatStreamEvent) => {
     switch (event.type) {
       case 'session':
-        sessionIdRef = event.sessionId;
-        // Reset step tracking for new conversation turn
-        setStreamingStep(0);
-        setToolCallCount(0);
-        setStreamingStatus('Thinking');
+        batch(() => {
+          sessionIdRef = event.sessionId;
+          // Reset step tracking for new conversation turn
+          setStreamingStep(0);
+          setToolCallCount(0);
+          setStreamingStatus('Thinking');
+        });
         break;
       case 'thinking': {
-        setIsStreaming(true);
-        const prevStep = streamingStep();
-        setStreamingStep(prevStep + 1);
-        setStreamingStatus(
-          prevStep > 0 ? `Analyzing results (step ${String(prevStep + 1)})` : 'Thinking',
-        );
+        batch(() => {
+          setIsStreaming(true);
+          const prevStep = streamingStep();
+          setStreamingStep(prevStep + 1);
+          setStreamingStatus(
+            prevStep > 0 ? `Analyzing results (step ${String(prevStep + 1)})` : 'Thinking',
+          );
+        });
         break;
       }
       case 'tool_call': {
-        setToolCallCount((c) => c + 1);
-        setStreamingStatus(`Running ${event.toolName}`);
-        const args = event.arguments as Record<string, string>;
-        let messageType: DisplayMessage['type'] = 'tool_start';
-        const baseMsg: Partial<DisplayMessage> = { toolName: event.toolName };
+        batch(() => {
+          setToolCallCount((c) => c + 1);
+          setStreamingStatus(`Running ${event.toolName}`);
+          const args = event.arguments as Record<string, string>;
+          let messageType: DisplayMessage['type'] = 'tool_start';
+          const baseMsg: Partial<DisplayMessage> = { toolName: event.toolName };
 
-        if (['execute_command', 'bash', 'run_command'].includes(event.toolName)) {
-          messageType = 'command';
-          baseMsg.command = args.command ?? args.cmd ?? '';
-          baseMsg.toolStatus = 'running';
-        } else if (
-          ['edit_file', 'write_file', 'create_file', 'delete_file'].includes(event.toolName)
-        ) {
-          messageType = 'file_edit';
-          baseMsg.filePath = args.path ?? args.file ?? args.filePath ?? '';
-          baseMsg.fileAction =
-            event.toolName === 'create_file'
-              ? 'create'
-              : event.toolName === 'delete_file'
-                ? 'delete'
-                : 'edit';
-        }
-
-        // T-DEBUG-01: Intercept get_logs → enter debug mode
-        if (event.toolName === 'get_logs') {
-          const projectName = args.project_name ?? args.projectName ?? '';
-          const c = client();
-          if (projectName && c) {
-            void c
-              .listProjects()
-              .then((resp) => {
-                const found = resp.projects.find(
-                  (p) => p.name.toLowerCase() === projectName.toLowerCase(),
-                );
-                if (found) {
-                  enterDebugMode(found.id, found.name);
-                }
-              })
-              .catch(() => {
-                /* ignore lookup failure */
-              });
+          if (['execute_command', 'bash', 'run_command'].includes(event.toolName)) {
+            messageType = 'command';
+            baseMsg.command = args.command ?? args.cmd ?? '';
+            baseMsg.toolStatus = 'running';
+          } else if (
+            ['edit_file', 'write_file', 'create_file', 'delete_file'].includes(event.toolName)
+          ) {
+            messageType = 'file_edit';
+            baseMsg.filePath = args.path ?? args.file ?? args.filePath ?? '';
+            baseMsg.fileAction =
+              event.toolName === 'create_file'
+                ? 'create'
+                : event.toolName === 'delete_file'
+                  ? 'delete'
+                  : 'edit';
           }
-        }
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `tool-${String(Date.now())}`,
-            role: 'assistant',
-            content: '',
-            type: messageType,
-            timestamp: Date.now(),
-            ...baseMsg,
-          },
-        ]);
+          // T-DEBUG-01: Intercept get_logs → enter debug mode
+          if (event.toolName === 'get_logs') {
+            const projectName = args.project_name ?? args.projectName ?? '';
+            const c = client();
+            if (projectName && c) {
+              void c
+                .listProjects()
+                .then((resp) => {
+                  const found = resp.projects.find(
+                    (p) => p.name.toLowerCase() === projectName.toLowerCase(),
+                  );
+                  if (found) {
+                    enterDebugMode(found.id, found.name);
+                  }
+                })
+                .catch(() => {
+                  /* ignore lookup failure */
+                });
+            }
+          }
+
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `tool-${String(Date.now())}`,
+              role: 'assistant',
+              content: '',
+              type: messageType,
+              timestamp: Date.now(),
+              ...baseMsg,
+            },
+          ]);
+        });
         break;
       }
       case 'tool_result':
-        setMessages((prev) => {
-          const updated = [...prev];
-          // Find the LAST tool_start with this name (not first) to handle repeated tool calls
-          let lastToolIdx = -1;
-          for (let i = updated.length - 1; i >= 0; i--) {
-            const m = updated[i];
-            if (
-              m &&
-              (m.type === 'tool_start' || m.type === 'command' || m.type === 'file_edit') &&
-              m.toolName === event.toolName
-            ) {
-              lastToolIdx = i;
-              break;
-            }
-          }
-          if (lastToolIdx !== -1) {
-            const item = updated[lastToolIdx];
-            if (item) {
-              const updates: Partial<DisplayMessage> = {
-                toolStatus: event.success ? 'success' : 'error',
-                toolDuration: event.success ? 0 : undefined,
-                content: event.error ?? '',
-              };
-              if (item.type === 'command') {
-                updates.output =
-                  typeof event.result === 'string'
-                    ? event.result
-                    : JSON.stringify(event.result, null, 2);
-              } else if (item.type === 'file_edit') {
-                if (typeof event.result === 'string') updates.diff = event.result;
-              } else {
-                updates.type = 'tool_result';
+        batch(() => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            let lastToolIdx = -1;
+            for (let i = updated.length - 1; i >= 0; i--) {
+              const m = updated[i];
+              if (
+                m &&
+                (m.type === 'tool_start' || m.type === 'command' || m.type === 'file_edit') &&
+                m.toolName === event.toolName
+              ) {
+                lastToolIdx = i;
+                break;
               }
-              updated[lastToolIdx] = { ...item, ...updates };
+            }
+            if (lastToolIdx !== -1) {
+              const item = updated[lastToolIdx];
+              if (item) {
+                const updates: Partial<DisplayMessage> = {
+                  toolStatus: event.success ? 'success' : 'error',
+                  toolDuration: event.success ? 0 : undefined,
+                  content: event.error ?? '',
+                };
+                if (item.type === 'command') {
+                  updates.output =
+                    typeof event.result === 'string'
+                      ? event.result
+                      : JSON.stringify(event.result, null, 2);
+                } else if (item.type === 'file_edit') {
+                  if (typeof event.result === 'string') updates.diff = event.result;
+                } else {
+                  updates.type = 'tool_result';
+                }
+                updated[lastToolIdx] = { ...item, ...updates };
+              }
+            }
+            return updated;
+          });
+
+          // T-DEPLOY: Detect deploy_project tool_result → enter deploy mode
+          if (event.toolName === 'deploy_project' && event.success && event.result) {
+            const res = event.result as Record<string, unknown>;
+            const projectId = res.projectId as string | undefined;
+            const projectName = res.projectName as string | undefined;
+            if (projectId && projectName) {
+              enterDeployMode(projectId, projectName);
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `deploy-mode-${String(Date.now())}`,
+                  role: 'system' as const,
+                  content: '[\u{1F4CB} Build panel opened]',
+                  type: 'text' as const,
+                  timestamp: Date.now(),
+                },
+              ]);
             }
           }
-          return updated;
         });
-
-        // T-DEPLOY: Detect deploy_project tool_result → enter deploy mode
-        if (event.toolName === 'deploy_project' && event.success && event.result) {
-          const res = event.result as Record<string, unknown>;
-          const projectId = res.projectId as string | undefined;
-          const projectName = res.projectName as string | undefined;
-          if (projectId && projectName) {
-            enterDeployMode(projectId, projectName);
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `deploy-mode-${String(Date.now())}`,
-                role: 'system' as const,
-                content: '[\u{1F4CB} Build panel opened]',
-                type: 'text' as const,
-                timestamp: Date.now(),
-              },
-            ]);
-          }
-        }
         break;
       case 'message':
-        setIsStreaming(false);
-        setStreamingStep(0);
-        setToolCallCount(0);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `msg-${String(Date.now())}`,
-            role: 'assistant',
-            content: event.content,
-            type: 'text',
-            timestamp: Date.now(),
-          },
-        ]);
+        batch(() => {
+          setIsStreaming(false);
+          setStreamingStep(0);
+          setToolCallCount(0);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-${String(Date.now())}`,
+              role: 'assistant',
+              content: event.content,
+              type: 'text',
+              timestamp: Date.now(),
+            },
+          ]);
+        });
         break;
       case 'error':
-        setIsStreaming(false);
-        setStreamingStep(0);
-        setToolCallCount(0);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `error-${String(Date.now())}`,
-            role: 'assistant',
-            content: event.error,
-            type: 'error',
-            timestamp: Date.now(),
-          },
-        ]);
+        batch(() => {
+          setIsStreaming(false);
+          setStreamingStep(0);
+          setToolCallCount(0);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `error-${String(Date.now())}`,
+              role: 'assistant',
+              content: event.error,
+              type: 'error',
+              timestamp: Date.now(),
+            },
+          ]);
+        });
         break;
       case 'question':
         // Show the QuestionDock for the user to answer
         setActiveQuestion(event.request);
         break;
       case 'done':
-        setIsStreaming(false);
-        setStreamingStep(0);
-        setToolCallCount(0);
+        batch(() => {
+          setIsStreaming(false);
+          setStreamingStep(0);
+          setToolCallCount(0);
+        });
         break;
     }
   };
@@ -457,6 +490,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             break;
           case 'clear':
             setMessages([]);
+            setRenderCount(RENDER_BUDGET);
             props.onClear?.();
             break;
           case 'exit':
@@ -716,6 +750,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     if (overlayActive() || !focus()) return;
     if (evt.ctrl && evt.name === 'l') {
       setMessages([]);
+      setRenderCount(RENDER_BUDGET);
       props.onClear?.();
       return;
     }
@@ -729,6 +764,10 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
       scrollBoxRef?.scrollBy({ x: 0, y: -height() });
       if (scrollBoxRef) {
         scrollBoxRef.stickyScroll = false;
+        // Load more messages when scrolled to top of rendered content
+        if (scrollBoxRef.scrollTop <= 0) {
+          setRenderCount((prev) => Math.min(messages().length, prev + 30));
+        }
       }
       setIsAtBottom(false);
       return;
@@ -844,8 +883,15 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             paddingTop={1}
             ref={setScrollBoxRef}
           >
-            <For each={messages()}>
-              {(msg, i) => <ChatMessage message={msg} isFirst={i() === 0} />}
+            <Show when={hiddenCount() > 0}>
+              <box justifyContent="center" flexShrink={0} paddingBottom={1}>
+                <text fg={theme.textMuted} dim={true}>
+                  ↑ {String(hiddenCount())} earlier messages — Page Up to load more
+                </text>
+              </box>
+            </Show>
+            <For each={visibleMessages()}>
+              {(msg, i) => <ChatMessage message={msg} isFirst={i() === 0 && hiddenCount() === 0} />}
             </For>
 
             {/* Streaming indicator */}

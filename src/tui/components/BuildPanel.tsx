@@ -12,7 +12,13 @@ import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { theme } from '../theme.js';
 import type { OpenLanderClient, BuildProgressEvent } from '../../ipc/client.js';
-import { buildSessionCount, selectedBuildIndex, scheduleDeployReturn, setBuildStage, type BuildStage } from '../state/mode.js';
+import {
+  buildSessionCount,
+  selectedBuildIndex,
+  scheduleDeployReturn,
+  setBuildStage,
+  type BuildStage,
+} from '../state/mode.js';
 import { ScrollableLog } from './ScrollableLog.js';
 import type { LogLine } from './ScrollableLog.js';
 import { Spinner } from './Spinner.js';
@@ -209,7 +215,12 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
         }
         setBuildError(event.message);
         setCurrentStep(null);
-        addLogLine(`✗ ${event.message}`, theme.error, 'stderr');
+        addLogLine(`\u2717 ${event.message}`, theme.error, 'stderr');
+        // Stop elapsed timer on error too
+        if (elapsedTimer) {
+          clearInterval(elapsedTimer);
+          elapsedTimer = null;
+        }
         break;
       }
       case 'complete': {
@@ -224,7 +235,12 @@ export function BuildPanel(props: BuildPanelProps): JSX.Element {
         setBuildStage('complete');
         setBuildComplete(true);
         setCurrentStep(null);
-        addLogLine(`✓ ${event.message}`, theme.success);
+        addLogLine(`\u2713 ${event.message}`, theme.success);
+        // Stop elapsed timer — build is done, no need to keep updating
+        if (elapsedTimer) {
+          clearInterval(elapsedTimer);
+          elapsedTimer = null;
+        }
         // Auto-return to monitoring after 3 seconds
         scheduleDeployReturn(3);
         break;
