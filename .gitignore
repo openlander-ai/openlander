@@ -51,3 +51,7 @@ temp/
 skills_index.json
 readme.html
 runtime_err.txt
+
+# Stale artifacts
+references/
+web/@/
