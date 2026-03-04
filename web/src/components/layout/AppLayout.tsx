@@ -7,7 +7,7 @@ import { useProjects } from '@/hooks/use-projects';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import { useChat } from '@/hooks/use-chat';
 import { useNotifications } from '@/hooks/use-notifications';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { MessageSquare } from 'lucide-react';
 import { CommandPalette } from '@/components/command/CommandPalette';
 
@@ -93,7 +93,9 @@ export function AppLayout() {
           <SheetContent
             side="left"
             className="p-0 w-[240px] bg-bg-panel border-r border-[hsl(var(--border))]"
+            aria-describedby={undefined}
           >
+            <SheetTitle className="sr-only">Navigation</SheetTitle>
             <Sidebar projects={projects} loading={loading} stats={stats} />
           </SheetContent>
         </Sheet>
@@ -108,7 +110,9 @@ export function AppLayout() {
           <SheetContent
             side="right"
             className="p-0 w-[400px] sm:max-w-[400px] bg-bg-panel border-l border-[hsl(var(--border))]"
+            aria-describedby={undefined}
           >
+            <SheetTitle className="sr-only">Chat with AI Agent</SheetTitle>
             <div className="h-full pt-8">
               <ChatPanel
                 messages={chat.messages}

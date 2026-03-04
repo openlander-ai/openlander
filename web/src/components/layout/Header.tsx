@@ -27,7 +27,7 @@ export function Header({
   onChatToggle,
   isChatOpen,
 }: HeaderProps) {
-  const [llmConnected, setLlmConnected] = useState<boolean>(false);
+  const [llmConnected, setLlmConnected] = useState<boolean | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -50,17 +50,24 @@ export function Header({
     return () => clearInterval(interval);
   }, []);
 
-  // Close notification dropdown on outside click
+  // Close notification dropdown on outside click or Escape key
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setShowNotifications(false);
       }
     };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowNotifications(false);
+    };
     if (showNotifications) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [showNotifications]);
 
   const formatMemory = (
@@ -167,18 +174,26 @@ export function Header({
         {/* LLM Status */}
         <div
           className="flex items-center gap-1.5"
-          title={llmConnected ? 'LLM Connected' : 'LLM Not Configured'}
+          title={
+            llmConnected === null
+              ? 'Checking LLM...'
+              : llmConnected
+                ? 'LLM Connected'
+                : 'LLM Not Configured'
+          }
         >
           <div
             className={cn(
-              'h-2 w-2 rounded-full',
-              llmConnected
-                ? 'bg-success shadow-[0_0_4px_var(--color-success)]'
-                : 'bg-error shadow-[0_0_4px_var(--color-error)]',
+              'h-2 w-2 rounded-full transition-colors duration-300',
+              llmConnected === null
+                ? 'bg-muted-foreground/40'
+                : llmConnected
+                  ? 'bg-success shadow-[0_0_4px_var(--color-success)]'
+                  : 'bg-error shadow-[0_0_4px_var(--color-error)]',
             )}
           />
           <span className="hidden sm:inline text-[11px] font-body text-secondary-ol">
-            {llmConnected ? 'AI Online' : 'AI Offline'}
+            {llmConnected === null ? '...' : llmConnected ? 'AI Online' : 'AI Offline'}
           </span>
         </div>
       </div>
