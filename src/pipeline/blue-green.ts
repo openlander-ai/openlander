@@ -117,13 +117,15 @@ export class BlueGreenDeployer {
       });
 
       newPort = await allocatePort(this.db, this.docker);
+      const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? newPort;
       const envVars = this.db.getEnvVars(projectId);
-      const traefikLabels = buildTraefikLabels(projectName, newPort);
+      const traefikLabels = buildTraefikLabels(projectName, containerPort);
 
       greenContainerId = await this.docker.runContainer({
         imageTag,
         name: `ol-${projectName}-green`,
         port: newPort,
+        containerPort,
         envVars,
         traefikLabels,
       });

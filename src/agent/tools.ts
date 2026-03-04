@@ -76,7 +76,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
         },
         branch: {
           type: 'string',
-          description: 'Branch to deploy (default: main)',
+          description: 'Branch to deploy (default: repo default branch)',
           required: false,
         },
         name: {
@@ -139,7 +139,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
         },
         branch: {
           type: 'string',
-          description: 'Branch (default: main)',
+          description: 'Branch (default: repo default branch)',
           required: false,
         },
         name: {
@@ -675,7 +675,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
         },
         branch: {
           type: 'string',
-          description: 'Branch to scan (default: main)',
+          description: 'Branch to scan (default: repo default branch)',
           required: false,
         },
       },
@@ -726,7 +726,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
         },
         branch: {
           type: 'string',
-          description: 'Branch (default: main)',
+          description: 'Branch (default: repo default branch)',
           required: false,
         },
       },

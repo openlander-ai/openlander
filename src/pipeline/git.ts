@@ -4,7 +4,12 @@ import { mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { GitCloneError, GitAuthError, GitRepoNotFoundError } from '../errors.js';
+import {
+  GitCloneError,
+  GitAuthError,
+  GitRepoNotFoundError,
+  GitBranchNotFoundError,
+} from '../errors.js';
 
 const exec = promisify(execFile);
 
@@ -29,14 +34,18 @@ export interface CloneResult {
  * Shallow clone by default for speed.
  */
 export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
-  const { repoUrl, branch = 'main', sshKeyPath, depth = 1 } = options;
+  const { repoUrl, branch, sshKeyPath, depth = 1 } = options;
 
   // Normalize URL: prepend https:// if no protocol specified
   const normalizedUrl = normalizeRepoUrl(repoUrl);
 
   const cloneDir = await mkdtemp(join(tmpdir(), 'openlander-'));
 
-  const args = ['clone', '--depth', String(depth), '--branch', branch, normalizedUrl, cloneDir];
+  const args = ['clone', '--depth', String(depth)];
+  if (branch) {
+    args.push('--branch', branch);
+  }
+  args.push(normalizedUrl, cloneDir);
 
   const env: Record<string, string> = { ...process.env } as Record<string, string>;
   if (sshKeyPath) {
@@ -51,6 +60,9 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
     // Classify the error
     if (msg.includes('Authentication failed') || msg.includes('Permission denied')) {
       throw new GitAuthError(repoUrl);
+    }
+    if (msg.includes('Remote branch') && msg.includes('not found')) {
+      throw new GitBranchNotFoundError(repoUrl, branch ?? 'unknown');
     }
     if (msg.includes('not found') || msg.includes('does not exist') || msg.includes('404')) {
       throw new GitRepoNotFoundError(repoUrl);

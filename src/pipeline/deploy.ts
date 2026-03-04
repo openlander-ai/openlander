@@ -14,7 +14,7 @@ import { BuildRecovery, type BuildContext } from './build-recovery.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { DockerfileNotFoundError, PreflightCheckError } from '../errors.js';
-import { detectFramework, ensureDockerfile } from './dockerfile-gen.js';
+import { detectFramework, ensureDockerfile, parseDockerfileExposePort } from './dockerfile-gen.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
@@ -26,7 +26,7 @@ import type { AutoDetector } from './auto-detect.js';
 export interface ProjectConfig {
   /** Repo URL (e.g., github.com/user/repo) */
   repoUrl: string;
-  /** Branch to deploy (default: main) */
+  /** Branch to deploy (default: repo default branch) */
   branch?: string;
   /** Project name (auto-generated from repo if not provided) */
   name?: string;
@@ -331,14 +331,16 @@ export class DeployPipeline {
 
       // Step 4: docker run
       const port = await allocatePort(this.db, this.docker);
+      const containerPort = parseDockerfileExposePort(dockerfilePath) ?? port;
       const envVars = { ...config.envVars, ...this.db.getEnvVars(projectId) };
-      const traefikLabels = buildTraefikLabels(projectName, port);
+      const traefikLabels = buildTraefikLabels(projectName, containerPort);
 
       this.jobManager?.updatePhase(projectId, 'starting');
       const containerId = await this.docker.runContainer({
         imageTag,
         name: `ol-${projectName}`,
         port,
+        containerPort,
         envVars,
         traefikLabels,
       });
@@ -549,13 +551,16 @@ export class DeployPipeline {
 
           this.jobManager?.updatePhase(childId, 'starting');
           const port = await allocatePort(this.db, this.docker);
+          const childDockerfilePath = join(config.clonePath, dockerfilePath);
+          const childContainerPort = parseDockerfileExposePort(childDockerfilePath) ?? port;
           const envVars = { ...config.envVars, ...this.db.getEnvVars(childId) };
-          const traefikLabels = buildTraefikLabels(childName.replace('/', '-'), port);
+          const traefikLabels = buildTraefikLabels(childName.replace('/', '-'), childContainerPort);
 
           const containerId = await this.docker.runContainer({
             imageTag,
             name: `ol-${childName.replace('/', '-')}`,
             port,
+            containerPort: childContainerPort,
             envVars,
             traefikLabels,
           });
@@ -708,13 +713,15 @@ export class DeployPipeline {
 
       // Allocate a new port and start container with previous image
       const port = await allocatePort(this.db, this.docker);
+      const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
       const envVars = this.db.getEnvVars(projectId);
-      const traefikLabels = buildTraefikLabels(project.name, port);
+      const traefikLabels = buildTraefikLabels(project.name, containerPort);
 
       const containerId = await this.docker.runContainer({
         imageTag: rollbackImageTag,
         name: `ol-${project.name}`,
         port,
+        containerPort,
         envVars,
         traefikLabels,
       });

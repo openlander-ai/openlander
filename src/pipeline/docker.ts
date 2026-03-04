@@ -15,7 +15,10 @@ export type DockerStatus =
 export interface RunContainerOptions {
   imageTag: string;
   name: string;
+  /** Host port for external access. */
   port: number;
+  /** Container-internal port the app listens on (default: same as port). */
+  containerPort?: number;
   envVars: Record<string, string>;
   traefikLabels: Record<string, string>;
 }
@@ -167,6 +170,7 @@ export class Docker {
   /** Create and start a container. */
   async runContainer(options: RunContainerOptions): Promise<string> {
     const envArray = Object.entries(options.envVars).map(([k, v]) => `${k}=${v}`);
+    const cPort = options.containerPort ?? options.port;
 
     const container = await this.client.createContainer({
       Image: options.imageTag,
@@ -178,11 +182,11 @@ export class Docker {
         ...options.traefikLabels,
       },
       ExposedPorts: {
-        [`${String(options.port)}/tcp`]: {},
+        [`${String(cPort)}/tcp`]: {},
       },
       HostConfig: {
         PortBindings: {
-          [`${String(options.port)}/tcp`]: [{ HostPort: String(options.port) }],
+          [`${String(cPort)}/tcp`]: [{ HostPort: String(options.port) }],
         },
         NetworkMode: 'web', // Traefik network
         RestartPolicy: { Name: 'unless-stopped' },
@@ -191,6 +195,23 @@ export class Docker {
 
     await container.start();
     return container.id;
+  }
+
+  /** Get the first EXPOSE port from a Docker image. Returns undefined if none found. */
+  async getImageExposedPort(imageTag: string): Promise<number | undefined> {
+    try {
+      const image = this.client.getImage(imageTag);
+      const info = await image.inspect();
+      const keys = Object.keys(info.Config.ExposedPorts);
+      const first = keys[0]; // e.g. "80/tcp"
+      if (!first) return undefined;
+      const portStr = first.split('/')[0];
+      if (!portStr) return undefined;
+      const port = parseInt(portStr, 10);
+      return isNaN(port) ? undefined : port;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Stop a running container. */

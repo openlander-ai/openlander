@@ -53,6 +53,18 @@ export class GitRepoNotFoundError extends OpenLanderError {
   }
 }
 
+export class GitBranchNotFoundError extends OpenLanderError {
+  constructor(repoUrl: string, branch: string) {
+    super(
+      `Branch '${branch}' not found in ${repoUrl}. Try without specifying a branch to use the repo default.`,
+      'GIT_BRANCH_NOT_FOUND',
+      404,
+      { repoUrl, branch },
+    );
+    this.name = 'GitBranchNotFoundError';
+  }
+}
+
 export class GitAuthError extends OpenLanderError {
   constructor(repoUrl: string) {
     super(

@@ -1,6 +1,6 @@
 # v0.0.9 Server Awareness — 버그 트래킹
 
-> **도그푸딩 기간**: 2026-03-04 ~
+> **도그푸딩 기간**: 2026-03-04 ~ 2026-03-04 (완료)
 > **테스터**: AI (Sisyphus)
 > **PM**: AI (Sisyphus)
 
@@ -17,16 +17,19 @@
 
 ## 해결된 버그
 
-| ID      | 제목                                               | 심각도   | 발견일     | 해결일     | 수정 내용                                                                           |
-| ------- | -------------------------------------------------- | -------- | ---------- | ---------- | ----------------------------------------------------------------------------------- |
-| BUG-001 | WEB_DIST 경로 오류 (SPA 404)                       | blocking | 2026-03-04 | 2026-03-04 | `../../web/dist` → `../web/dist` (tsup 번들 후 경로 보정). Commit `07f35e5`         |
-| BUG-002 | ProjectDetail React #310 크래시 (useCallback 위반) | blocking | 2026-03-04 | 2026-03-04 | `useCallback`을 JSX 인라인에서 컴포넌트 상단으로 이동. Commit `6ee0031`             |
-| BUG-003 | LLM 상태 초기 렌더링 오류 (AI Offline → AI Online) | minor    | 2026-03-04 | 2026-03-04 | 초기 state를 `null`(로딩)로 변경, 중립 `...` 표시. Commit `1d33682`                 |
-| BUG-004 | 알림 드롭다운 Escape 키로 닫히지 않음              | minor    | 2026-03-04 | 2026-03-04 | `keydown` Escape 핸들러 추가. Commit `1d33682`                                      |
-| BUG-005 | 알림 드롭다운 위치 (벨 아이콘 아래가 아닌 중앙)    | minor    | 2026-03-04 | 2026-03-04 | 코드 확인 결과 `absolute right-0 top-full`로 이미 정상. 오보로 클로즈.              |
-| BUG-006 | Chat 다이얼로그 a11y 경고 (DialogTitle 누락)       | minor    | 2026-03-04 | 2026-03-04 | Chat/Sidebar Sheet에 visually-hidden `SheetTitle` 추가. Commit `1d33682`            |
-| BUG-007 | Chat 패널 light 테마 (앱은 dark)                   | minor    | 2026-03-04 | 2026-03-04 | Tailwind build가 `.dark` 블록 strip → `:root`에 dark 값 직접 설정. Commit `1d33682` |
-| BUG-010 | DB deploy_logs trigger_source 컬럼 누락            | major    | 2026-03-04 | 2026-03-04 | ALTER TABLE 마이그레이션 추가 + `exec`→`run` lint 수정. Commit `f1694e5`            |
+| ID      | 제목                                                              | 심각도   | 발견일     | 해결일     | 수정 내용                                                                                      |
+| ------- | ----------------------------------------------------------------- | -------- | ---------- | ---------- | ---------------------------------------------------------------------------------------------- |
+| BUG-001 | WEB_DIST 경로 오류 (SPA 404)                                      | blocking | 2026-03-04 | 2026-03-04 | `../../web/dist` → `../web/dist` (tsup 번들 후 경로 보정). Commit `07f35e5`                    |
+| BUG-002 | ProjectDetail React #310 크래시 (useCallback 위반)                | blocking | 2026-03-04 | 2026-03-04 | `useCallback`을 JSX 인라인에서 컴포넌트 상단으로 이동. Commit `6ee0031`                        |
+| BUG-003 | LLM 상태 초기 렌더링 오류 (AI Offline → AI Online)                | minor    | 2026-03-04 | 2026-03-04 | 초기 state를 `null`(로딩)로 변경, 중립 `...` 표시. Commit `1d33682`                            |
+| BUG-004 | 알림 드롭다운 Escape 키로 닫히지 않음                             | minor    | 2026-03-04 | 2026-03-04 | `keydown` Escape 핸들러 추가. Commit `1d33682`                                                 |
+| BUG-005 | 알림 드롭다운 위치 (벨 아이콘 아래가 아닌 중앙)                   | minor    | 2026-03-04 | 2026-03-04 | 코드 확인 결과 `absolute right-0 top-full`로 이미 정상. 오보로 클로즈.                         |
+| BUG-006 | Chat 다이얼로그 a11y 경고 (DialogTitle 누락)                      | minor    | 2026-03-04 | 2026-03-04 | Chat/Sidebar Sheet에 visually-hidden `SheetTitle` 추가. Commit `1d33682`                       |
+| BUG-007 | Chat 패널 light 테마 (앱은 dark)                                  | minor    | 2026-03-04 | 2026-03-04 | Tailwind build가 `.dark` 블록 strip → `:root`에 dark 값 직접 설정. Commit `1d33682`            |
+| BUG-010 | DB deploy_logs trigger_source 컬럼 누락                           | major    | 2026-03-04 | 2026-03-04 | ALTER TABLE 마이그레이션 추가 + `exec`→`run` lint 수정. Commit `f1694e5`                       |
+| BUG-011 | git clone 시 `--branch main` 강제로 master 기반 repo 실패         | blocking | 2026-03-04 | 2026-03-04 | branch 미지정 시 `--branch` 생략 → repo 기본 브랜치 사용. GitBranchNotFoundError 추가.         |
+| BUG-012 | 포트 매핑 오류: host↔container 동일 포트 가정                     | major    | 2026-03-04 | 2026-03-04 | Dockerfile EXPOSE 파싱 + Docker image inspect로 container 내부 포트 감지. 전 deploy 경로 수정. |
+| BUG-013 | Traefik v3.3 Docker API v1.24 ↔ Docker Engine v29 min 1.44 비호환 | major    | 2026-03-04 | 2026-03-04 | Traefik v3.3 → v3.6 업그레이드. Docker 29+ 호환.                                               |
 
 ---
 

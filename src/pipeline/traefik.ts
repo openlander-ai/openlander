@@ -4,7 +4,7 @@ const log = createModuleLogger('traefik');
 import type { Docker } from './docker.js';
 
 const TRAEFIK_CONTAINER_NAME = 'openlander-traefik';
-const TRAEFIK_IMAGE = 'traefik:v3.3';
+const TRAEFIK_IMAGE = 'traefik:v3.6';
 const TRAEFIK_NETWORK = 'web';
 
 /**

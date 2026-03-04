@@ -397,9 +397,10 @@ CMD ["sh", "-c", "echo 'Unknown framework. Provide a Dockerfile.' && sleep infin
 /**
  * Ensure Dockerfile exists for a project, generating Dockerfile and .dockerignore when missing.
  */
-export function ensureDockerfile(
-  projectPath: string,
-): { generated: boolean; detection: FrameworkDetection | null } {
+export function ensureDockerfile(projectPath: string): {
+  generated: boolean;
+  detection: FrameworkDetection | null;
+} {
   const dockerfilePath = join(projectPath, 'Dockerfile');
   const dockerignorePath = join(projectPath, '.dockerignore');
 
@@ -476,4 +477,28 @@ function readStringRecord(value: unknown): Record<string, string> {
   }
 
   return result;
+}
+
+/**
+ * Parse a Dockerfile and return the first EXPOSE port number.
+ * Returns undefined if no EXPOSE directive is found.
+ */
+export function parseDockerfileExposePort(dockerfilePath: string): number | undefined {
+  try {
+    const content = readFileSync(dockerfilePath, 'utf8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      // Match: EXPOSE 80, EXPOSE 8080/tcp, EXPOSE 3000
+      const match = trimmed.match(/^EXPOSE\s+(\d+)/i);
+      if (match?.[1]) {
+        const port = parseInt(match[1], 10);
+        if (!isNaN(port) && port > 0 && port <= 65535) {
+          return port;
+        }
+      }
+    }
+  } catch {
+    log.warn({ dockerfilePath }, 'Failed to parse Dockerfile for EXPOSE port');
+  }
+  return undefined;
 }

@@ -96,12 +96,14 @@ export class PreviewDeployer {
       await this.docker.buildImage(cloneResult.path, imageTag);
 
       const port = await this.allocatePreviewPort();
-      const traefikLabels = buildTraefikLabels(previewName, port);
+      const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? port;
+      const traefikLabels = buildTraefikLabels(previewName, containerPort);
 
       const containerId = await this.docker.runContainer({
         imageTag,
         name: `ol-preview-${safeBranch}`,
         port,
+        containerPort,
         envVars: {},
         traefikLabels,
       });
