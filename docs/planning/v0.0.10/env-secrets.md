@@ -1,9 +1,10 @@
 # v0.0.10 — Env & Secrets Management
 
-> **상태**: 📋 기획 스펙 (미착수) | **이전 문서**: `v0.0.9-10-unified-spec.md` (통합 기획서, 아카이브)
+> **상태**: ✅ 구현 완료 (2026-03) | **이전 문서**: `v0.0.9-10-unified-spec.md` (통합 기획서, 아카이브)
 >
 > 이 문서는 `v0.0.9-10-unified-spec.md`의 v0.0.10 파트에서 **Local Dev Mode를 완전히 제거**하고,
 > 환경변수/시크릿 관리만 남긴 것이다.
+> **v0.1.0 Web 전환 반영**: 10-4를 TUI /env 오버레이에서 Web Settings 페이지 Global Secrets 섹션으로 변경 (DEC-018).
 
 ---
 

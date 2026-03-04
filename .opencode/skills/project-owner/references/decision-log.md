@@ -279,6 +279,20 @@
 - .env.example 감지(`checkEnvRequirements()`)는 함수만 구현, 파이프라인 통합은 향후 진행 — QuestionBridge 통합 또는 Post-Deploy Insight 경고로 제공 가능
 **재검토 조건**: TUI 부활 또는 .env.example 감지의 파이프라인 통합이 필요해질 때
 
+### DEC-019: TUI 시대 문서 전체 아카이브
+
+**날짜**: 2026-03
+**결정**: v0.0.6(파일 3개), v0.0.7(파일 3개), analysis(파일 2개), onboarding-refactor.md, requirements.md → `docs/planning/archive/`로 이동.
+**거부한 대안**: 개별 수정 (문서별 TUI→Web 참조 교체) — 19건+ TUI 참조, 공수 대비 가치 낮음
+**이유**:
+
+- TUI freeze (태그 `tui-last`, v0.1.0 결정) 후 TUI 관련 스펙은 역사적 참조 외 활용 가치 없음
+- requirements.md는 TUI가 메인 인터페이스로 전제된 문서 — 19건의 TUI 참조 개별 수정 비효율
+- version-map.md가 이미 SSOT 역할을 하고 있어 requirements.md 삭제해도 정보 손실 없음
+- README.md 현행화 완료 (TUI→Web UI, 로드맵 전체 업데이트)
+**아카이브 파일 목록**: archive/v0.0.6/(3), archive/v0.0.7/(3), archive/analysis/(2), archive/onboarding-refactor.md, archive/requirements.md
+**재검토 조건**: TUI 부활 또는 아카이브 문서 삭제 검토 시
+
 ## 결정 추가 가이드
 
 새 결정을 내릴 때:

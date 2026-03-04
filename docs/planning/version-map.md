@@ -28,13 +28,13 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 | #      | 문서                           | 경로                                         | 버전           | 구현율 | 상태                                                            |
 | ------ | ------------------------------ | -------------------------------------------- | -------------- | ------ | --------------------------------------------------------------- |
-| 1      | 요구사항 정의서                | `requirements.md`                            | v0.0.1~v0.0.8  | 90%    | v0.0.4까지 완료, v0.0.6 체크 완료                               |
-| 2      | TUI 리팩토링 스펙              | `v0.0.6/tui-spec.md`                         | v0.0.6         | 97%    | 38/39 태스크 완료                                               |
-| 3      | UI/UX 레이아웃                 | `v0.0.7/ui-ux-layout.md`                     | v0.0.7         | 95%    | 16/16 TASK 완료 + 버그 수정                                     |
-| 4      | 빌드실패 + Compose             | `v0.0.6/ui-ux-build-compose.md`              | v0.0.6         | 100%   | 전체 구현 완료                                                  |
-| 5      | v0.0.6 상세 태스크             | `v0.0.6/tasks.md`                            | v0.0.6         | 97%    | 38/39 완료 (i18n 1개 남음)                                      |
-| 6      | v0.0.7 구현 태스크             | `v0.0.7/implementation-tasks.md`             | v0.0.7         | 100%   | 16/16 전부 완료                                                 |
-| 7      | Phase 1 개발계획               | `v0.0.7/phase1-plan.md`                      | v0.0.7         | 100%   | 9개 스텝 전부 완료                                              |
+| ~~1~~  | ~~요구사항 정의서~~            | `archive/requirements.md`                    | v0.0.1~v0.0.8  | 90%    | 📦 아카이브 (TUI 시대 문서, Web pivot 후 무효)                  |
+| ~~2~~  | ~~TUI 리팩토링 스펙~~          | `archive/v0.0.6/tui-spec.md`                 | v0.0.6         | 97%    | 📦 아카이브 (TUI freeze 후 무효)                                |
+| ~~3~~  | ~~UI/UX 레이아웃~~             | `archive/v0.0.7/ui-ux-layout.md`             | v0.0.7         | 95%    | 📦 아카이브 (TUI freeze 후 무효)                                |
+| ~~4~~  | ~~빌드실패 + Compose~~         | `archive/v0.0.6/ui-ux-build-compose.md`      | v0.0.6         | 100%   | 📦 아카이브                                                     |
+| ~~5~~  | ~~v0.0.6 상세 태스크~~         | `archive/v0.0.6/tasks.md`                    | v0.0.6         | 97%    | 📦 아카이브                                                     |
+| ~~6~~  | ~~v0.0.7 구현 태스크~~         | `archive/v0.0.7/implementation-tasks.md`     | v0.0.7         | 100%   | 📦 아카이브                                                     |
+| ~~7~~  | ~~Phase 1 개발계획~~           | `archive/v0.0.7/phase1-plan.md`              | v0.0.7         | 100%   | 📦 아카이브                                                     |
 | 8      | AI SDK 마이그레이션            | `v0.0.8/vercel-ai-sdk-migration.md`          | v0.0.8         | 조사만 | 조사 완료, 구현 미착수                                          |
 | 9      | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9/server-awareness.md`로 재정의                           |
 | 10     | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의                               |
@@ -43,7 +43,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 | 13     | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 100%   | ✅ 구현 완료. 4개 파트 전부 구현.                               |
 | 14     | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)          |
 | 15     | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                               |
-| ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~     | `v0.0.9/onboarding-refactor.md`              | v0.0.9         | —      | ⏸️ 보류 (DEC-017: Web Setup Screen으로 대체)                    |
+| ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~     | `archive/onboarding-refactor.md`             | v0.0.9         | —      | 📦 아카이브 (DEC-017: Web Setup Screen으로 대체)                |
 | 17     | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 0%     | 📋 기획 완료, 미착수                                            |
 | 18     | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                           |
 | 19     | **v0.0.11 Agent Proactivity**  | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have       |
@@ -113,9 +113,9 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.0.6 — TUI UI/UX 고도화 ✅ (97%)
+### v0.0.6 — TUI UI/UX 고도화 ✅ (97%) — 📦 아카이브
 
-**상태**: 거의 완료 | **관련 문서**: `v0.0.6/tui-spec.md`, `v0.0.6/tasks.md`, `v0.0.6/ui-ux-build-compose.md`
+**상태**: 완료, TUI freeze 후 아카이브 | **관련 문서**: `archive/v0.0.6/` (이동됨)
 
 | 관련 문서                               | 역할                                | 상태         |
 | --------------------------------------- | ----------------------------------- | ------------ |
@@ -143,9 +143,9 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.0.7 — TUI 마감 + UI 디테일 ✅
+### v0.0.7 — TUI 마감 + UI 디테일 ✅ — 📦 아카이브
 
-**상태**: 완료 | **관련 문서**: `v0.0.7/ui-ux-layout.md`, `v0.0.7/implementation-tasks.md`, `v0.0.7/phase1-plan.md`
+**상태**: 완료, TUI freeze 후 아카이브 | **관련 문서**: `archive/v0.0.7/` (이동됨)
 
 | 관련 문서                                | 역할                                        | 상태          |
 | ---------------------------------------- | ------------------------------------------- | ------------- |
@@ -353,84 +353,57 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ---
 
-## requirements.md v0.0.6 "남은 고도화 항목" 실제 구현 상태
-
-> `requirements.md` L451~481에 체크 안 된 항목들이 있으나, 다수가 실제로는 구현됨.
-> 문서 체크박스가 업데이트되지 않은 것.
-
-| 항목                        | requirements.md | 실제 상태    | 구현 위치                              |
-| --------------------------- | --------------- | ------------ | -------------------------------------- |
-| 멀티라인 입력               | `[ ]`           | ✅ 구현됨    | Phase 7 (v0.0.6-tasks.md T-TUI-23)     |
-| 코드 블록 신택스 하이라이팅 | `[ ]`           | ✅ 구현됨    | Phase 7                                |
-| 마크다운 렌더링             | `[ ]`           | ✅ 구현됨    | Phase 7                                |
-| 배포 진행률 시각화          | `[ ]`           | ✅ 부분 구현 | StatusBar 빌드 진행률 (TASK-07)        |
-| 선택지 UI                   | `[ ]`           | ✅ 구현됨    | QuestionBridge / QuestionDock          |
-| 프로젝트 카드 UI            | `[ ]`           | ✅ 부분 구현 | ProjectsSection 개선 (v0.0.7)          |
-| 시스템 리소스 바 차트       | `[ ]`           | ✅ 구현됨    | CPU/MEM ProgressBar (tui-spec Phase 2) |
-| 프로젝트 검색/필터          | `[ ]`           | ❌ 미구현    | —                                      |
-| 로그 뷰어                   | `[ ]`           | ✅ 구현됨    | 디버깅 모드 LogViewer (Phase 4)        |
-| 반응형 레이아웃             | `[ ]`           | ✅ 구현됨    | Phase 1 (60:40 / 65:35 / 단일)         |
-| 보더/구분선 스타일          | `[ ]`           | ✅ 구현됨    | Phase 7 보더 통일                      |
-| 컬러 팔레트 통일            | `[ ]`           | ✅ 구현됨    | Signal Green #36f0a0 통일              |
-| Vim-style j/k               | `[ ]`           | ✅ 구현됨    | Phase 7                                |
-| Ctrl+L 클리어               | `[ ]`           | ✅ 구현됨    | Phase 7                                |
-
-**결론**: 14개 중 13개 구현됨. `프로젝트 검색/필터`만 미구현 (우선순위 낮음).
-
 ---
 
 ## 미해결 항목 총정리
 
-| #      | 항목                        | 버전                 | 문서                                | 우선순위          |
-| ------ | --------------------------- | -------------------- | ----------------------------------- | ----------------- |
-| 1      | i18n (다국어 지원)          | v0.0.6               | `v0.0.6/tasks.md` T-INFRA-01        | 낮음              |
-| 2      | 프로젝트 검색/필터          | v0.0.6               | `requirements.md` L468              | 낮음              |
-| 3      | ~~전체 컨테이너 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료           |
-| 4      | ~~OS 레벨 포트 스캔~~       | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료           |
-| 5      | ~~리버스 프록시 감지~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료           |
-| 6      | ~~시스템 프롬프트 확장~~    | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료           |
-| 7      | ~~에이전트 도구 3개 추가~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료           |
-| 8      | ~~Dashboard Server 섹션~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료           |
-| 9      | ~~Preflight Check~~         | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료           |
-| ~~10~~ | ~~Global Secrets + 암호화~~ | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | ✅ 완료           |
-| ~~11~~ | ~~.env.example 감지~~       | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | ✅ 완료           |
-| ~~12~~ | ~~환경변수 도구 추가~~      | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | ✅ 완료           |
-| ~~13~~ | ~~/env 오버레이 확장~~      | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | ✅ 완료           |
-| 14     | Vercel AI SDK 마이그레이션  | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기)        |
-| 15     | 파인튜닝 모델               | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래              |
-| ~~16~~ | ~~Post-Deploy Insight~~     | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료           |
-| ~~17~~ | ~~Anomaly Nudge~~           | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료           |
+| #      | 항목                        | 버전                 | 문서                                | 우선순위               |
+| ------ | --------------------------- | -------------------- | ----------------------------------- | ---------------------- |
+| ~~1~~  | ~~i18n (다국어 지원)~~      | v0.0.6               | `archive/v0.0.6/tasks.md`           | ❌ 제거 (TUI 아카이브) |
+| ~~2~~  | ~~프로젝트 검색/필터~~      | v0.0.6               | `archive/requirements.md`           | ❌ 제거 (TUI 아카이브) |
+| 3      | ~~전체 컨테이너 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료                |
+| 4      | ~~OS 레벨 포트 스캔~~       | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료                |
+| 5      | ~~리버스 프록시 감지~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료                |
+| 6      | ~~시스템 프롬프트 확장~~    | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료                |
+| 7      | ~~에이전트 도구 3개 추가~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료                |
+| 8      | ~~Dashboard Server 섹션~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료                |
+| 9      | ~~Preflight Check~~         | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료                |
+| ~~10~~ | ~~Global Secrets + 암호화~~ | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | ✅ 완료                |
+| ~~11~~ | ~~.env.example 감지~~       | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | ✅ 완료                |
+| ~~12~~ | ~~환경변수 도구 추가~~      | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | ✅ 완료                |
+| ~~13~~ | ~~/env 오버레이 확장~~      | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | ✅ 완료                |
+| 14     | Vercel AI SDK 마이그레이션  | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기)             |
+| 15     | 파인튜닝 모델               | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래                   |
+| ~~16~~ | ~~Post-Deploy Insight~~     | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료                |
+| ~~17~~ | ~~Anomaly Nudge~~           | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료                |
 | ~~18~~ | ~~Smart Defaults~~          | v0.0.11              | ✅                                  |
 | ~~19~~ | ~~Idle Scan~~               | v0.0.11              | ❌                                  |
-| ~~20~~ | ~~온보딩 CLI 리팩토링~~     | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | ⏸️ 보류 (DEC-017) |
-| 21     | OpenAI OAuth PKCE           | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간              |
-| 22     | Anthropic Token Setup       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간              |
-| 23     | OpenRouter OAuth PKCE       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간              |
-| 24     | Google ADC                  | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간              |
-| 25     | 토큰 저장 & 리프레시        | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간              |
-| ~~26~~ | ~~Web MVP Phase 1~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료           |
-| ~~27~~ | ~~Web MVP Phase 2~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료           |
-| ~~28~~ | ~~Web MVP Phase 3~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료           |
-| ~~29~~ | ~~TUI Freeze~~              | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료           |
+| ~~20~~ | ~~온보딩 CLI 리팩토링~~     | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | ⏸️ 보류 (DEC-017)      |
+| 21     | OpenAI OAuth PKCE           | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간                   |
+| 22     | Anthropic Token Setup       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간                   |
+| 23     | OpenRouter OAuth PKCE       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간                   |
+| 24     | Google ADC                  | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간                   |
+| 25     | 토큰 저장 & 리프레시        | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간                   |
+| ~~26~~ | ~~Web MVP Phase 1~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료                |
+| ~~27~~ | ~~Web MVP Phase 2~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료                |
+| ~~28~~ | ~~Web MVP Phase 3~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료                |
+| ~~29~~ | ~~TUI Freeze~~              | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료                |
 
 ---
 
-## 문서 불일치 & 업데이트 필요 사항
+## 문서 아카이브 이력
 
-| 위치                              | 문제                                                | 권장 조치                                           |
-| --------------------------------- | --------------------------------------------------- | --------------------------------------------------- |
-| `requirements.md` L433            | v0.0.6 "🎯 In Progress" 표시                        | ✅ "✅ Complete (97%)" 로 변경 완료                 |
-| `requirements.md` L457~482        | v0.0.6 남은 고도화 체크박스 미체크                  | ✅ 구현된 13건 체크 처리 완료                       |
-| `v0.0.7-ui-ux-layout.md` L329~355 | 하단 "구현 우선순위" 체크박스 미체크                | ✅ 검증된 13건 체크, 미확인 3건 유지                |
-| `v0.0.6-tui-spec.md` L1           | 제목이 "v0.1.0"으로 표기되어 있었음                 | ✅ "v0.0.6" 으로 정정 완료                          |
-| `README.md` 로드맵                | v0.0.7 "In Progress"                                | ✅ v0.0.7 Done + v0.0.8/v0.0.9/v0.0.10 행 추가 완료 |
-| `v0.0.6-tasks.md` L12             | 진행률 "38/39" 정확하나 v0.0.6 이후 추가작업 미반영 | → 하단 "추가 작업" 섹션은 반영됨, OK                |
+| 날짜    | 조치                                                                                              |
+| ------- | ------------------------------------------------------------------------------------------------- |
+| 2026-02 | `v0.0.9-10-unified-spec.md` → `archive/` 이동 (v0.0.9/v0.0.10으로 분리)                           |
+| 2026-03 | v0.0.6 스펙 3개, v0.0.7 스펙 3개, analysis 2개, onboarding-refactor, requirements.md → `archive/` |
+| &nbsp;  | 이유: TUI freeze (v0.1.0) + Web pivot 후 TUI 시대 문서 무효화. README.md 현행화 완료.             |
 
 ---
 
 ## 검증 기준
 
-**2026-03-04 기준 빌드/테스트/E2E 상태**:
+**2026-03-04 기준 (v0.0.10 완료 후)**:
 
 ```
 ✅ tsup build — 성공 (backend + DTS)
@@ -438,6 +411,7 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 ✅ lsp_diagnostics — 0 errors
 ✅ lint-staged — 통과
 ✅ E2E deploy — traefik/whoami Chat→Agent→Clone→Build→Container→URL 성공
+✅ v0.0.10 — Global secrets + API + Web UI + agent tools + MCP
 ```
 
 ---

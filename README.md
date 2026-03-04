@@ -46,13 +46,13 @@ Agent:  Last 30 lines:
 
 Those are great tools — for people who already understand infrastructure.
 
-|           | Coolify / Dokploy           | OpenLander                        |
-| --------- | --------------------------- | --------------------------------- |
-| Analogy   | Self-service gas station    | Full-service gas station          |
-| Interface | Dashboard (forms & buttons) | TUI chat (natural language)       |
-| Target    | Devs with infra knowledge   | Anyone who can build an app w/ AI |
-| Install   | `docker compose`            | `npm i -g`                        |
-| Config    | You figure it out           | Agent figures it out              |
+|           | Coolify / Dokploy         | OpenLander                        |
+| --------- | ------------------------- | --------------------------------- |
+| Analogy   | Self-service gas station  | Full-service gas station          |
+| Interface | Web dashboard + chat      | Web chat (natural language)       |
+| Target    | Devs with infra knowledge | Anyone who can build an app w/ AI |
+| Install   | `docker compose`          | `npm i -g`                        |
+| Config    | You figure it out         | Agent figures it out              |
 
 OpenLander isn't a competitor — it's a different category.
 
@@ -78,22 +78,20 @@ openlander
 
 > **Note**: OpenLander uses [Bun](https://bun.sh) as its runtime. If Bun is not installed, the `openlander` command will guide you through setup.
 
-OpenLander will:
-
 1. Check Docker (install if missing, fix permissions if needed)
 2. Start the Traefik reverse proxy
-3. Launch the TUI — 3-mode adaptive dashboard + chat interface right in your terminal
-4. Prompt you to add an LLM API key (Gemini free tier works)
+3. Open the Web UI at `http://localhost:10003`
+4. Walk through setup: add an LLM API key (Gemini free tier works)
 5. You're ready to deploy
 
 ## Features
 
-### TUI (Terminal UI)
+### Web UI
 
-- **3-mode adaptive layout** — Monitoring, Deploying, Debugging modes with automatic transitions
-- **9 slash commands** — `/help`, `/model`, `/git`, `/repo`, `/tunnel`, `/env`, `/compact`, `/clear`, `/exit`
-- **Responsive panels** — Chat + status panels with adaptive breakpoints (60:40 / 65:35 / single)
-- **OpenCode-inspired design** — Dark theme, keyboard-first navigation, Tab panel switching
+- **Chat-driven interface** — Deploy, manage, and monitor through natural conversation
+- **Real-time dashboard** — Project status, system resources, deployment timeline
+- **Settings management** — AI provider, GitHub connection, global secrets
+- **Agent intervention** — Structured choices when the agent needs your input
 
 ### Deployment
 
@@ -102,7 +100,7 @@ OpenLander will:
 - **Traefik auto-routing** — Each project gets its own subdomain. No port conflicts.
 - **Public sharing** — Instant public URL via TryCloudflare. No domain needed.
 - **Production domains** — Permanent URLs via Cloudflare Tunnel. Multi-domain mapping.
-- **Environment variables** — Manage secrets through chat or TUI
+- **Environment variables** — Manage secrets through chat or Web UI. Global encrypted secrets shared across projects.
 - **Auto-redeploy** — Git push webhook triggers automatic redeployment
 - **Rollback & blue-green** — One-command rollback, zero-downtime deploys
 
@@ -124,7 +122,7 @@ OpenLander will:
 ## How It Works
 
 ```
-User (TUI — terminal chat + dashboard)
+User (Web UI — browser chat + dashboard)
     ↓
 AI Agent (LLM — intent parsing + conversation + error explanation)
     ↓
@@ -152,34 +150,35 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 ## Tech Stack
 
-| Area          | Technology                                                       |
-| ------------- | ---------------------------------------------------------------- |
-| Language      | TypeScript (strict mode, ESM)                                    |
-| Runtime       | [Bun](https://bun.sh)                                            |
-| Build         | [tsup](https://tsup.egoist.dev) (esbuild)                        |
-| Install       | npm global package                                               |
-| TUI           | [OpenTUI](https://github.com/anomalyco/opentui) + Solid.js       |
-| ORM           | [Drizzle ORM](https://orm.drizzle.team) + bun:sqlite             |
-| Docker        | dockerode                                                        |
-| Reverse Proxy | Traefik (Docker label routing)                                   |
-| Tunnel        | TryCloudflare / Cloudflare Tunnel                                |
-| AI            | BYOK \u2014 Gemini Flash / Claude / OpenAI / OpenRouter / Ollama |
-| Database      | SQLite (via Drizzle ORM)                                         |
-| Test          | Vitest + Node.js (with bun:sqlite shim)                          |
+| Area          | Technology                                                                      |
+| ------------- | ------------------------------------------------------------------------------- |
+| Language      | TypeScript (strict mode, ESM)                                                   |
+| Runtime       | [Bun](https://bun.sh)                                                           |
+| Build         | [tsup](https://tsup.egoist.dev) (backend) + [Vite](https://vite.dev) (frontend) |
+| Install       | npm global package                                                              |
+| Web UI        | React 19 + React Router + Tailwind CSS v3                                       |
+| ORM           | [Drizzle ORM](https://orm.drizzle.team) + bun:sqlite                            |
+| Docker        | dockerode                                                                       |
+| Reverse Proxy | Traefik (Docker label routing)                                                  |
+| Tunnel        | TryCloudflare / Cloudflare Tunnel                                               |
+| AI            | BYOK — Gemini Flash / Claude / OpenAI / OpenRouter / Ollama                     |
+| Database      | SQLite (via Drizzle ORM)                                                        |
+| Test          | Vitest + Node.js (with bun:sqlite shim)                                         |
 
 ## Roadmap
 
-| Version    | Focus                    | Status  | Highlights                                                             |
-| ---------- | ------------------------ | ------- | ---------------------------------------------------------------------- |
-| **v0.0.1** | Repo \u2192 URL (MVP)    | Done    | Git clone \u2192 Docker \u2192 Traefik \u2192 URL. TUI chat. REST API. |
-| **v0.0.2** | Daily Operations         | Done    | Auto-redeploy, monitoring, production domains, Ollama                  |
-| **v0.0.3** | Coding Agent Integration | Done    | MCP server (23 tools), rollback, blue-green, DB provisioning           |
-| **v0.0.4** | Multi-Channel + Advanced | Done    | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy     |
-| **v0.0.6** | TUI Rewrite              | Done    | Bun runtime, OpenTUI + Solid.js, Drizzle ORM, OpenCode-inspired UI     |
-| **v0.0.7** | TUI Polish               | Done    | 3-mode layout, 9 slash commands, adaptive panels, build failure tiers  |
-| v0.0.9     | Server Awareness         | Planned | Full container scan, OS port scan, proxy detection, preflight check    |
-| v0.0.10    | Env & Secrets Management | Planned | Global secrets (encrypted), .env.example detection, env tools          |
-| v0.0.8     | Vercel AI SDK Migration  | Planned | Multi-provider streaming, unified tool API (deferred)                  |
+| Version     | Focus                    | Status  | Highlights                                                           |
+| ----------- | ------------------------ | ------- | -------------------------------------------------------------------- |
+| **v0.0.1**  | Repo → URL (MVP)         | Done    | Git clone → Docker → Traefik → URL. Chat. REST API.                  |
+| **v0.0.2**  | Daily Operations         | Done    | Auto-redeploy, monitoring, production domains, Ollama                |
+| **v0.0.3**  | Coding Agent Integration | Done    | MCP server (23 tools), rollback, blue-green, DB provisioning         |
+| **v0.0.4**  | Multi-Channel + Advanced | Done    | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy   |
+| **v0.0.9**  | Server Awareness         | Done    | Full container scan, OS port scan, proxy detection, preflight check  |
+| **v0.1.0**  | Web MVP                  | Done    | React SPA, real-time timeline, NDJSON streaming, TUI→Web pivot       |
+| **v0.0.11** | Agent Proactivity        | Done    | Post-deploy insight, anomaly nudge, smart defaults                   |
+| **v0.0.10** | Env & Secrets            | Done    | Global encrypted secrets, .env.example detection, Web settings UI    |
+| v0.0.12     | Provider OAuth           | Planned | OAuth login for OpenAI, Anthropic, OpenRouter (no API key needed)    |
+| v0.0.8      | AI SDK Migration         | Planned | Vercel AI SDK, multi-provider streaming, unified tool API (deferred) |
 
 ## Requirements
 
