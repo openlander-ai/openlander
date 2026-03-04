@@ -111,6 +111,15 @@ ${projectLines}`,
     parts.push(deployHistory);
   }
 
+  // v0.0.10: Add global secrets summary
+  const globalSecrets = db.getGlobalSecrets();
+  if (globalSecrets.length > 0) {
+    const secretKeys = globalSecrets.map((s) => s.key).join(', ');
+    parts.push(
+      `Global secrets (${String(globalSecrets.length)}): ${secretKeys}\nThese are automatically injected into all deploys. Project env vars override them.`,
+    );
+  }
+
   return parts.join('\n\n');
 }
 
@@ -177,6 +186,8 @@ Choose the right tool based on user intent:
 | Connect a custom domain       | map_domain           | Requires Cloudflare setup.               |
 | List domain mappings          | list_domains         | Shows all custom domain connections.     |
 | Set/update env variables      | set_env_vars         | Auto-redeploys if project is running.    |
+| Set a global secret (all projects) | set_global_secret    | Encrypted. For shared API keys, DB creds.  |
+| List global secrets (masked)       | list_global_secrets  | Values masked. Shows key + description.    |
 | List all projects             | list_projects        | Shows status, ports, URLs.               |
 | Check server resources        | get_system_stats     | CPU, memory, disk usage.                 |
 | Rollback a bad deploy         | rollback_project     | Reverts to previous Docker image.        |
@@ -216,6 +227,11 @@ Example — "Deploy failed, what went wrong?":
 Example — "Update DATABASE_URL and restart":
 1. Call set_env_vars (auto-redeploys)
 2. Report the update and new status
+
+Example — "Set a shared API key for all projects":
+1. Call set_global_secret with key and value
+2. Global secrets are automatically included in all deploys
+
 
 Example — "Deploy my-app to api.mycompany.com":
 1. Call deploy_project → wait for completion via get_deploy_status

@@ -10,6 +10,7 @@ import {
   deployLogs,
   domainMappings,
   envVars,
+  globalSecrets,
   oauthTokens,
   projects,
   webhookConfigs,
@@ -153,6 +154,18 @@ export class Database {
         "ALTER TABLE deploy_logs ADD COLUMN trigger_source TEXT CHECK(trigger_source IN ('chat', 'webhook', 'api'))",
       );
     }
+
+    // global_secrets table (v0.0.10)
+    this.sqlite.run(`CREATE TABLE IF NOT EXISTS global_secrets (
+      id TEXT PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      encrypted_value TEXT NOT NULL,
+      iv TEXT NOT NULL,
+      description TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    this.sqlite.run('CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key)');
   }
 
   // ===== Projects =====
@@ -374,6 +387,66 @@ export class Database {
       .where(eq(envVars.key, key))
       .all();
     return rows.map((r: { project_id: string }) => r.project_id);
+  }
+
+  // ===== Global Secrets =====
+
+  /** Get all global secrets (encrypted values — caller must decrypt). */
+  getGlobalSecrets(): Array<{
+    id: string;
+    key: string;
+    encrypted_value: string;
+    iv: string;
+    description: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+  }> {
+    return this.db.select().from(globalSecrets).orderBy(asc(globalSecrets.key)).all();
+  }
+
+  /** Get a single global secret by key. */
+  getGlobalSecret(key: string):
+    | {
+        id: string;
+        key: string;
+        encrypted_value: string;
+        iv: string;
+        description: string | null;
+      }
+    | undefined {
+    return this.db.select().from(globalSecrets).where(eq(globalSecrets.key, key)).get();
+  }
+
+  /** Upsert a global secret (values must already be encrypted). */
+  setGlobalSecret(key: string, encryptedValue: string, iv: string, description?: string): void {
+    this.db
+      .insert(globalSecrets)
+      .values({
+        id: sql<string>`lower(hex(randomblob(8)))`,
+        key,
+        encrypted_value: encryptedValue,
+        iv,
+        description: description ?? null,
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .onConflictDoUpdate({
+        target: globalSecrets.key,
+        set: {
+          encrypted_value: encryptedValue,
+          iv,
+          description: description ?? null,
+          updated_at: sql`CURRENT_TIMESTAMP`,
+        },
+      })
+      .run();
+  }
+
+  /** Delete a global secret by key. Returns true if it existed. */
+  deleteGlobalSecret(key: string): boolean {
+    const existing = this.getGlobalSecret(key);
+    if (!existing) return false;
+    this.db.delete(globalSecrets).where(eq(globalSecrets.key, key)).run();
+    return true;
   }
 
   // ===== Deploy Logs =====

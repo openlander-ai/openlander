@@ -84,7 +84,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   }
 
   const autoDetector = new AutoDetector(llmClient);
-  const pipeline = new DeployPipeline(docker, db, jobManager, composePipeline, autoDetector);
+  const pipeline = new DeployPipeline(docker, db, env, jobManager, composePipeline, autoDetector);
 
   // Create agent only if LLM is configured
   let agent: Agent | null = null;
@@ -133,7 +133,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
 
   // v0.3: Blue-green deployer
-  const blueGreen = new BlueGreenDeployer(docker, db, eventBus);
+  const blueGreen = new BlueGreenDeployer(docker, db, env, eventBus);
 
   // v0.3: Database provisioner
   const dbProvisioner = new DatabaseProvisioner(docker, db);

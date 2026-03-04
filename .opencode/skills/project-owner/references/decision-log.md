@@ -266,6 +266,19 @@
 - 부족했던 부분(자동 리디렉트)은 SetupGuard 컴포넌트로 해결 (~20줄)
 **재검토 조건**: CLI-only 사용자가 실제로 필요해질 때 (npm global 설치 후 브라우저 없는 환경)
 
+### DEC-018: v0.0.10 Web UI 적용 (TUI /env 오버레이 → Web Settings Global Secrets)
+
+**날짜**: 2026-03
+**결정**: v0.0.10 스펙의 10-4(TUI /env 오버레이 확장)를 Web Settings 페이지 Global Secrets 섹션으로 대체 구현.
+**거부한 대안**: TUI /env 오버레이에 Global Secrets 탭 추가 (원래 스펙)
+**이유**:
+
+- DEC-017에서 CLI/TUI를 쓰지 않기로 결정, v0.1.0에서 Web으로 pivot 완료
+- Web Settings 페이지가 이미 AI Model/GitHub/System Stats 섹션 보유 — Global Secrets 추가가 자연스러움
+- TUI는 `tui-last` 태그로 freeze 상태 (v0.1.0 결정)
+- .env.example 감지(`checkEnvRequirements()`)는 함수만 구현, 파이프라인 통합은 향후 진행 — QuestionBridge 통합 또는 Post-Deploy Insight 경고로 제공 가능
+**재검토 조건**: TUI 부활 또는 .env.example 감지의 파이프라인 통합이 필요해질 때
+
 ## 결정 추가 가이드
 
 새 결정을 내릴 때:

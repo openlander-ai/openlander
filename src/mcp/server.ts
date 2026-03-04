@@ -40,6 +40,11 @@ const setEnvVarsSchema = z.object({
   variables: z.string().min(1),
 });
 
+const setGlobalSecretSchema = z.object({
+  key: z.string().min(1),
+  value: z.string().min(1),
+  description: z.string().optional(),
+});
 const domainSchema = z.object({
   project_name: z.string().min(1),
   domain: z.string().min(1),
@@ -132,6 +137,16 @@ const tools = [
     name: 'set_env_vars',
     description: 'Set environment variables for a project. Triggers redeploy if running.',
     inputSchema: toInputSchema(setEnvVarsSchema),
+  },
+  {
+    name: 'set_global_secret',
+    description: 'Set a global secret shared across all projects (stored encrypted).',
+    inputSchema: toInputSchema(setGlobalSecretSchema),
+  },
+  {
+    name: 'list_global_secrets',
+    description: 'List all global secrets (values are masked for security).',
+    inputSchema: toInputSchema(emptySchema),
   },
   {
     name: 'expose_public',
@@ -385,6 +400,17 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
             project: args.project_name,
             keys: Object.keys(vars),
           });
+        }
+
+        case 'set_global_secret': {
+          const args = parseInput(setGlobalSecretSchema, rawArgs);
+          ctx.env.setGlobalSecret(args.key, args.value, args.description);
+          return successResponse({ status: 'saved', key: args.key });
+        }
+
+        case 'list_global_secrets': {
+          const secrets = ctx.env.getGlobalSecretsMasked();
+          return successResponse({ secrets, count: secrets.length });
         }
 
         case 'expose_public': {

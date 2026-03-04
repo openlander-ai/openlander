@@ -336,6 +336,41 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
       },
     },
     {
+      name: 'set_global_secret',
+      description:
+        'Set a global secret that is available to all projects (stored encrypted). Use for shared API keys, database credentials, etc. that multiple projects need. Returns { status, key }.',
+      parameters: {
+        key: { type: 'string', description: 'Secret name (e.g. OPENAI_API_KEY)', required: true },
+        value: { type: 'string', description: 'Secret value', required: true },
+        description: {
+          type: 'string',
+          description: 'Optional description of what this secret is for',
+          required: false,
+        },
+      },
+      execute: (args) => {
+        const key = args['key'] as string;
+        const value = args['value'] as string;
+        const description = args['description'] as string | undefined;
+        ctx.env.setGlobalSecret(key, value, description);
+        return Promise.resolve({
+          status: 'saved',
+          key,
+          message: `Global secret "${key}" saved (encrypted).`,
+        });
+      },
+    },
+    {
+      name: 'list_global_secrets',
+      description:
+        'List all global secrets (values are masked for security). Returns { secrets: [{ key, maskedValue, description }], count }.',
+      parameters: {},
+      execute: () => {
+        const secrets = ctx.env.getGlobalSecretsMasked();
+        return Promise.resolve({ secrets, count: secrets.length });
+      },
+    },
+    {
       name: 'expose_public',
       description:
         'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',

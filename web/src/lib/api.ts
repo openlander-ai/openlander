@@ -1,6 +1,10 @@
 import type { Project, SystemStats, DeployResult } from '../types';
 
-export async function deployProject(repoUrl: string, branch?: string, name?: string): Promise<DeployResult> {
+export async function deployProject(
+  repoUrl: string,
+  branch?: string,
+  name?: string,
+): Promise<DeployResult> {
   const res = await fetch('/api/projects/deploy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -106,5 +110,37 @@ export async function startTraefik(): Promise<any> {
 export async function completeSetup(): Promise<any> {
   const res = await fetch('/api/setup/complete', { method: 'POST' });
   if (!res.ok) throw new Error('Failed to complete setup');
+  return res.json();
+}
+
+export interface GlobalSecret {
+  key: string;
+  maskedValue: string;
+  description: string | null;
+}
+
+export async function getGlobalSecrets(): Promise<{ secrets: GlobalSecret[] }> {
+  const res = await fetch('/api/secrets');
+  if (!res.ok) throw new Error('Failed to fetch secrets');
+  return res.json();
+}
+
+export async function setGlobalSecret(
+  key: string,
+  value: string,
+  description?: string,
+): Promise<any> {
+  const res = await fetch('/api/secrets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, value, description }),
+  });
+  if (!res.ok) throw new Error('Failed to save secret');
+  return res.json();
+}
+
+export async function deleteGlobalSecret(key: string): Promise<any> {
+  const res = await fetch(`/api/secrets/${encodeURIComponent(key)}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete secret');
   return res.json();
 }

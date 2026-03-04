@@ -49,6 +49,9 @@ const MAX_ACTIVITY = 100;
  * - POST   /projects/:id/env    — Set environment variables
  * - POST   /projects/:id/expose — Expose project publicly
  * - POST   /projects/:id/unexpose — Remove public URL
+ * - GET    /secrets             — List all global secrets (masked)
+ * - POST   /secrets             — Create or update a global secret
+ * - DELETE /secrets/:key        — Delete a global secret
  * - GET    /system/stats        — System resource usage
  * - POST   /chat                — Send a chat message to the agent
  */
@@ -346,6 +349,31 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const limit = c.req.query('limit') ? parseInt(c.req.query('limit') ?? '50', 10) : undefined;
     const messages = sessionStore.getMessages(sessionId, limit);
     return c.json({ messages });
+  });
+
+  // --- Global Secrets ---
+
+  api.get('/secrets', (c) => {
+    const secrets = ctx.env.getGlobalSecretsMasked();
+    return c.json({ secrets });
+  });
+
+  api.post('/secrets', async (c) => {
+    const body = await c.req.json<{ key: string; value: string; description?: string }>();
+    if (!body.key || !body.value) {
+      return c.json({ error: 'MISSING_FIELD', message: 'key and value are required' }, 400);
+    }
+    ctx.env.setGlobalSecret(body.key, body.value, body.description);
+    return c.json({ status: 'saved', key: body.key });
+  });
+
+  api.delete('/secrets/:key', (c) => {
+    const key = c.req.param('key');
+    const deleted = ctx.env.deleteGlobalSecret(key);
+    if (!deleted) {
+      return c.json({ error: 'NOT_FOUND', message: `Secret "${key}" not found` }, 404);
+    }
+    return c.json({ status: 'deleted', key });
   });
 
   // --- Projects ---

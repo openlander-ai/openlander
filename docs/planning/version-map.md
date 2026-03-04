@@ -8,14 +8,14 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.12 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.12 📋 ── v0.0.10 📋 ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 📋 ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
 
 ```
 
- MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    ProviderOAuth 에이전트능동  Env관리     AI SDK
+ MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    ProviderOAuth 에이전트능동  Env관리✅    AI SDK
 ```
 
 > ✅ = 완료 | 🧪 = 도그푸딩 중 | 🔧 = 진행 중 | 📋 = 기획/계획 | ❌ = 미착수
@@ -40,7 +40,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 | 10     | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의                               |
 | 11     | ~~v0.0.9–v0.0.10 통합 기획서~~ | `archive/v0.0.9-10-unified-spec.md`          | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체                              |
 | 12     | **v0.0.9 Server Awareness**    | `v0.0.9/server-awareness.md`                 | v0.0.9         | 100%   | ✅ 구현+도그푸딩 완료 (DEC-016). 버그 11건 해결, E2E 검증 완료. |
-| 13     | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 0%     | ✅ 기획 완료, 미착수                                            |
+| 13     | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 100%   | ✅ 구현 완료. 4개 파트 전부 구현.                               |
 | 14     | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)          |
 | 15     | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                               |
 | ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~     | `v0.0.9/onboarding-refactor.md`              | v0.0.9         | —      | ⏸️ 보류 (DEC-017: Web Setup Screen으로 대체)                    |
@@ -243,24 +243,35 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.0.10 — Env & Secrets Management 📋
+### v0.0.10 — Env & Secrets Management ✅
 
-**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.0.10/env-secrets.md`](v0.0.10/env-secrets.md)
+**상태**: 구현 완료 | **관련 문서**: [`v0.0.10/env-secrets.md`](v0.0.10/env-secrets.md)
 
 > 기존 `archive/v0.0.9-10-unified-spec.md`의 v0.0.10 파트에서 Local Dev Mode를 완전히 제거하고 환경변수/시크릿 관리만 남김.
+> **v0.1.0 Web 전환 반영**: 10-4를 TUI /env 오버레이에서 Web Settings 페이지 Global Secrets 섹션으로 변경.
 
-| 파트                     | 내용                                                            | 상태 |
-| ------------------------ | --------------------------------------------------------------- | ---- |
-| 10-1: Global Secrets     | `global_secrets` 테이블 + AES-256-GCM 암호화                    | 📋   |
-| 10-2: .env.example 감지  | 배포 시 누락 변수 감지 → 입력 요청                              | 📋   |
-| 10-3: 도구 추가          | `set_global_secret`, `list_global_secrets`, `get_env_vars` 수정 | 📋   |
-| 10-4: /env 오버레이 확장 | Global Secrets 탭 추가                                          | 📋   |
+| 파트                    | 내용                                                                | 상태 |
+| ----------------------- | ------------------------------------------------------------------- | ---- |
+| 10-1: Global Secrets    | `global_secrets` 테이블 + AES-256-GCM 암호화 + master key           | ✅   |
+| 10-2: .env.example 감지 | `checkEnvRequirements()` 구현 (파이프라인 통합은 향후)              | ✅   |
+| 10-3: 도구 추가         | `set_global_secret`, `list_global_secrets` (Agent + MCP + Registry) | ✅   |
+| 10-4: Web UI            | Settings 페이지 Global Secrets 섹션 (추가/조회/삭제)                | ✅   |
 
-**제거된 항목** (기존 통합 기획서 대비):
+**구현 내역**:
 
-- Local Dev Mode 전체 — 핵심 가치와 무관, 사용자 피드백 대기
-- User Overrides (3단계 스코프) — 2단계(Global + Project)로 충분
-- 멀티유저 포트 분리 — Local Dev Mode 제거에 따라 불필요
+- `src/env/crypto.ts` — 신규: AES-256-GCM 암호화/복호화, master key 자동생성 (~/.openlander/master.key)
+- `src/db/schema.ts` + `schema.drizzle.ts` — global_secrets 테이블 추가
+- `src/db/index.ts` — CRUD 4개 메서드 + 마이그레이션
+- `src/pipeline/env.ts` — EnvManager 확장: setGlobalSecret, getGlobalSecrets, getMergedForDeploy
+- `src/pipeline/env-inject.ts` — checkEnvRequirements() 함수 추가
+- `src/pipeline/deploy.ts` — EnvManager 주입, 3곳 getEnvVars→getMergedForDeploy 교체
+- `src/pipeline/blue-green.ts` — EnvManager 주입, getEnvVars→getMergedForDeploy 교체
+- `src/agent/tools.ts` + `src/tools/registry.ts` — set_global_secret, list_global_secrets 도구 추가
+- `src/mcp/server.ts` — MCP 도구 2개 추가
+- `src/agent/prompts.ts` — 도구 행 + 사용 예시 + 컨텍스트 스냅샷에 글로벌 시크릿 표시
+- `src/web/api/routes.ts` — GET/POST/DELETE /api/secrets 엔드포인트
+- `web/src/lib/api.ts` — 클라이언트 함수 3개 + GlobalSecret 인터페이스
+- `web/src/pages/SettingsPage.tsx` — Global Secrets 섹션 (리스트 + 추가 폼 + 삭제)
 
 ---
 
@@ -370,37 +381,37 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ## 미해결 항목 총정리
 
-| #      | 항목                       | 버전                 | 문서                                | 우선순위          |
-| ------ | -------------------------- | -------------------- | ----------------------------------- | ----------------- |
-| 1      | i18n (다국어 지원)         | v0.0.6               | `v0.0.6/tasks.md` T-INFRA-01        | 낮음              |
-| 2      | 프로젝트 검색/필터         | v0.0.6               | `requirements.md` L468              | 낮음              |
-| 3      | ~~전체 컨테이너 스캔~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료           |
-| 4      | ~~OS 레벨 포트 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료           |
-| 5      | ~~리버스 프록시 감지~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료           |
-| 6      | ~~시스템 프롬프트 확장~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료           |
-| 7      | ~~에이전트 도구 3개 추가~~ | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료           |
-| 8      | ~~Dashboard Server 섹션~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료           |
-| 9      | ~~Preflight Check~~        | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료           |
-| 10     | Global Secrets + 암호화    | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | 중간              |
-| 11     | .env.example 감지          | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | 중간              |
-| 12     | 환경변수 도구 추가         | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | 중간              |
-| 13     | /env 오버레이 확장         | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | 중간              |
-| 14     | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기)        |
-| 15     | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래              |
-| ~~16~~ | ~~Post-Deploy Insight~~    | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료           |
-| ~~17~~ | ~~Anomaly Nudge~~          | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료           |
-| ~~18~~ | ~~Smart Defaults~~         | v0.0.11              | ✅                                  |
-| ~~19~~ | ~~Idle Scan~~              | v0.0.11              | ❌                                  |
-| ~~20~~ | ~~온보딩 CLI 리팩토링~~    | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | ⏸️ 보류 (DEC-017) |
-| 21     | OpenAI OAuth PKCE          | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간              |
-| 22     | Anthropic Token Setup      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간              |
-| 23     | OpenRouter OAuth PKCE      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간              |
-| 24     | Google ADC                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간              |
-| 25     | 토큰 저장 & 리프레시       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간              |
-| ~~26~~ | ~~Web MVP Phase 1~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료           |
-| ~~27~~ | ~~Web MVP Phase 2~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료           |
-| ~~28~~ | ~~Web MVP Phase 3~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료           |
-| ~~29~~ | ~~TUI Freeze~~             | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료           |
+| #      | 항목                        | 버전                 | 문서                                | 우선순위          |
+| ------ | --------------------------- | -------------------- | ----------------------------------- | ----------------- |
+| 1      | i18n (다국어 지원)          | v0.0.6               | `v0.0.6/tasks.md` T-INFRA-01        | 낮음              |
+| 2      | 프로젝트 검색/필터          | v0.0.6               | `requirements.md` L468              | 낮음              |
+| 3      | ~~전체 컨테이너 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료           |
+| 4      | ~~OS 레벨 포트 스캔~~       | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료           |
+| 5      | ~~리버스 프록시 감지~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료           |
+| 6      | ~~시스템 프롬프트 확장~~    | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료           |
+| 7      | ~~에이전트 도구 3개 추가~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료           |
+| 8      | ~~Dashboard Server 섹션~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료           |
+| 9      | ~~Preflight Check~~         | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료           |
+| ~~10~~ | ~~Global Secrets + 암호화~~ | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | ✅ 완료           |
+| ~~11~~ | ~~.env.example 감지~~       | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | ✅ 완료           |
+| ~~12~~ | ~~환경변수 도구 추가~~      | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | ✅ 완료           |
+| ~~13~~ | ~~/env 오버레이 확장~~      | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | ✅ 완료           |
+| 14     | Vercel AI SDK 마이그레이션  | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기)        |
+| 15     | 파인튜닝 모델               | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래              |
+| ~~16~~ | ~~Post-Deploy Insight~~     | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료           |
+| ~~17~~ | ~~Anomaly Nudge~~           | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료           |
+| ~~18~~ | ~~Smart Defaults~~          | v0.0.11              | ✅                                  |
+| ~~19~~ | ~~Idle Scan~~               | v0.0.11              | ❌                                  |
+| ~~20~~ | ~~온보딩 CLI 리팩토링~~     | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | ⏸️ 보류 (DEC-017) |
+| 21     | OpenAI OAuth PKCE           | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간              |
+| 22     | Anthropic Token Setup       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간              |
+| 23     | OpenRouter OAuth PKCE       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간              |
+| 24     | Google ADC                  | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간              |
+| 25     | 토큰 저장 & 리프레시        | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간              |
+| ~~26~~ | ~~Web MVP Phase 1~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료           |
+| ~~27~~ | ~~Web MVP Phase 2~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료           |
+| ~~28~~ | ~~Web MVP Phase 3~~         | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료           |
+| ~~29~~ | ~~TUI Freeze~~              | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료           |
 
 ---
 

@@ -161,6 +161,20 @@ export const webhookConfigs = sqliteTable(
   ],
 );
 
+export const globalSecrets = sqliteTable(
+  'global_secrets',
+  {
+    id: text('id').primaryKey(),
+    key: text('key').notNull().unique(),
+    encrypted_value: text('encrypted_value').notNull(),
+    iv: text('iv').notNull(),
+    description: text('description'),
+    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index('idx_global_secrets_key').on(table.key)],
+);
+
 export const drizzleSchema = {
   projects,
   envVars,
@@ -169,4 +183,5 @@ export const drizzleSchema = {
   domainMappings,
   oauthTokens,
   webhookConfigs,
+  globalSecrets,
 };

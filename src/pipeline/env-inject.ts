@@ -180,6 +180,73 @@ export function generateEnvFile(projectPath: string, serviceNames: string[]): En
   };
 }
 
+/**
+ * Check .env.example requirements against provided env vars.
+ * Returns missing and optional variables.
+ *
+ * @param projectPath - Path to cloned repo
+ * @param providedVars - Already-configured env vars (global + project merged)
+ */
+export interface EnvCheckResult {
+  /** All keys defined in .env.example. */
+  required: string[];
+  /** Keys already provided via env vars or global secrets. */
+  provided: string[];
+  /** Keys missing from provided vars (secret or empty default). */
+  missing: string[];
+  /** Keys with non-empty defaults (won't block deploy). */
+  optional: string[];
+  /** Name of the detected template file (null if none). */
+  templateFile: string | null;
+}
+
+export function checkEnvRequirements(
+  projectPath: string,
+  providedVars: Record<string, string>,
+): EnvCheckResult {
+  const templatePath = detectEnvFile(projectPath);
+  if (!templatePath) {
+    return { required: [], provided: [], missing: [], optional: [], templateFile: null };
+  }
+
+  const parsed = parseEnvFile(templatePath);
+  const required: string[] = [];
+  const provided: string[] = [];
+  const missing: string[] = [];
+  const optional: string[] = [];
+
+  for (const [key, value] of parsed.entries()) {
+    required.push(key);
+
+    if (key in providedVars) {
+      provided.push(key);
+      continue;
+    }
+
+    const classification = classifyVar(key, value);
+    if (classification === 'secret' || value.trim() === '') {
+      // Must be provided by user
+      missing.push(key);
+    } else {
+      // Has a sensible default
+      optional.push(key);
+    }
+  }
+
+  const fileName = templatePath.split('/').pop() ?? null;
+  log.debug(
+    {
+      templateFile: fileName,
+      total: required.length,
+      missing: missing.length,
+      optional: optional.length,
+    },
+    'Env requirements check',
+  );
+
+  return { required, provided, missing, optional, templateFile: fileName };
+}
+
 function unquoteEnvValue(rawValue: string): string {
   if (rawValue.length < 2) {
     return rawValue;

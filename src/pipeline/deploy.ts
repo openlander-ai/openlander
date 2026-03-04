@@ -19,6 +19,7 @@ import { preflightCheckOrThrow } from './preflight.js';
 import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
+import type { EnvManager } from './env.js';
 
 /**
  * Project configuration for a deployment.
@@ -116,6 +117,7 @@ export class DeployPipeline {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
+    private readonly env: EnvManager,
     private readonly jobManager?: JobManager,
     private readonly composePipeline?: ComposePipeline,
     private readonly autoDetector?: AutoDetector,
@@ -332,7 +334,7 @@ export class DeployPipeline {
       // Step 4: docker run
       const port = await allocatePort(this.db, this.docker);
       const containerPort = parseDockerfileExposePort(dockerfilePath) ?? port;
-      const envVars = { ...config.envVars, ...this.db.getEnvVars(projectId) };
+      const envVars = { ...config.envVars, ...this.env.getMergedForDeploy(projectId) };
       const traefikLabels = buildTraefikLabels(projectName, containerPort);
 
       this.jobManager?.updatePhase(projectId, 'starting');
@@ -553,7 +555,7 @@ export class DeployPipeline {
           const port = await allocatePort(this.db, this.docker);
           const childDockerfilePath = join(config.clonePath, dockerfilePath);
           const childContainerPort = parseDockerfileExposePort(childDockerfilePath) ?? port;
-          const envVars = { ...config.envVars, ...this.db.getEnvVars(childId) };
+          const envVars = { ...config.envVars, ...this.env.getMergedForDeploy(childId) };
           const traefikLabels = buildTraefikLabels(childName.replace('/', '-'), childContainerPort);
 
           const containerId = await this.docker.runContainer({
@@ -714,7 +716,7 @@ export class DeployPipeline {
       // Allocate a new port and start container with previous image
       const port = await allocatePort(this.db, this.docker);
       const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
-      const envVars = this.db.getEnvVars(projectId);
+      const envVars = this.env.getMergedForDeploy(projectId);
       const traefikLabels = buildTraefikLabels(project.name, containerPort);
 
       const containerId = await this.docker.runContainer({

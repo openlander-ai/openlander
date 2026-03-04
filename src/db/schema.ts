@@ -85,6 +85,16 @@ CREATE TABLE IF NOT EXISTS webhook_configs (
   UNIQUE(project_id, source)
 );
 
+CREATE TABLE IF NOT EXISTS global_secrets (
+  id TEXT PRIMARY KEY,
+  key TEXT NOT NULL UNIQUE,
+  encrypted_value TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  description TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);
 CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id);
 CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id);
@@ -92,4 +102,5 @@ CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id);
 CREATE INDEX IF NOT EXISTS idx_domain_mappings_project ON domain_mappings(project_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens(provider);
 CREATE INDEX IF NOT EXISTS idx_webhook_configs_project_source ON webhook_configs(project_id, source);
+CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key);
 `;

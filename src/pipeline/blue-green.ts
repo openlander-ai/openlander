@@ -3,6 +3,7 @@ const log = createModuleLogger('blue-green');
 
 import type { Docker } from './docker.js';
 import type { Database } from '../db/index.js';
+import type { EnvManager } from './env.js';
 import type { EventBus } from '../events/index.js';
 import { cloneRepo } from './git.js';
 import { allocatePort } from './port.js';
@@ -27,6 +28,7 @@ export class BlueGreenDeployer {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
+    private readonly env: EnvManager,
     private readonly eventBus: EventBus,
   ) {}
 
@@ -118,7 +120,7 @@ export class BlueGreenDeployer {
 
       newPort = await allocatePort(this.db, this.docker);
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? newPort;
-      const envVars = this.db.getEnvVars(projectId);
+      const envVars = this.env.getMergedForDeploy(projectId);
       const traefikLabels = buildTraefikLabels(projectName, containerPort);
 
       greenContainerId = await this.docker.runContainer({

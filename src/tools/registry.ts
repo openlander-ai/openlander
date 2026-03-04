@@ -33,6 +33,12 @@ const setEnvVarsSchema = z.object({
   variables: z.string().min(1),
 });
 
+const setGlobalSecretSchema = z.object({
+  key: z.string().min(1),
+  value: z.string().min(1),
+  description: z.string().optional(),
+});
+
 const domainSchema = z.object({
   project_name: z.string().min(1),
   domain: z.string().min(1),
@@ -291,6 +297,39 @@ export function createToolRegistry(
           project: projectName,
           keys: Object.keys(vars),
         };
+      },
+    },
+    {
+      name: 'set_global_secret',
+      description:
+        'Set a global secret that is available to all projects (stored encrypted). Use for shared API keys, database credentials, etc. that multiple projects need. Returns { status, key }.',
+      parameters: {
+        key: { type: 'string', description: 'Secret name (e.g. OPENAI_API_KEY)', required: true },
+        value: { type: 'string', description: 'Secret value', required: true },
+        description: {
+          type: 'string',
+          description: 'Optional description of what this secret is for',
+          required: false,
+        },
+      },
+      inputSchema: setGlobalSecretSchema,
+      execute: (args) => {
+        const key = args['key'] as string;
+        const value = args['value'] as string;
+        const description = args['description'] as string | undefined;
+        ctx.env.setGlobalSecret(key, value, description);
+        return { status: 'saved', key, message: `Global secret "${key}" saved (encrypted).` };
+      },
+    },
+    {
+      name: 'list_global_secrets',
+      description:
+        'List all global secrets (values are masked for security). Returns { secrets: [{ key, maskedValue, description }], count }.',
+      parameters: {},
+      inputSchema: emptySchema,
+      execute: () => {
+        const secrets = ctx.env.getGlobalSecretsMasked();
+        return { secrets, count: secrets.length };
       },
     },
     {
