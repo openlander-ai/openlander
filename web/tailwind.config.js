@@ -18,6 +18,7 @@ module.exports = {
     },
     extend: {
       colors: {
+        /* shadcn/ui semantic colors */
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -51,6 +52,24 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        /* OpenLander design tokens */
+        'bg-app': 'var(--bg-app)',
+        'bg-panel': 'var(--bg-panel)',
+        'bg-subtle': 'var(--bg-subtle)',
+        agent: 'var(--color-agent)',
+        success: 'var(--color-success)',
+        warning: 'var(--color-warning)',
+        error: 'var(--color-error)',
+      },
+      textColor: {
+        'primary-ol': 'var(--text-primary)',
+        'secondary-ol': 'var(--text-secondary)',
+        'muted-ol': 'var(--text-muted)',
+      },
+      fontFamily: {
+        display: ['Outfit', 'sans-serif'],
+        body: ['Manrope', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -75,11 +94,3 @@ module.exports = {
   },
   plugins: [require("tailwindcss-animate")],
 }
-export default {
-  content: [],
-  theme: {
-    extend: {},
-  },
-  plugins: [],
-}
-

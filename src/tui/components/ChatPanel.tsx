@@ -131,7 +131,9 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const focus = () => props.focus;
 
   // --- Chat state ---
-  const [messages, setMessages] = createSignal<DisplayMessage[]>([]);
+  // { equals: false } enables in-place push without O(n) array spread.
+  // Subscribers still re-evaluate, but no allocation per append.
+  const [messages, setMessages] = createSignal<DisplayMessage[]>([], { equals: false });
   const [isStreaming, setIsStreaming] = createSignal(false);
   const [streamingStatus, setStreamingStatus] = createSignal('Thinking');
   const [streamingStep, setStreamingStep] = createSignal(0);
@@ -148,7 +150,10 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     if (!ext || ext.length <= lastExternalCount) return;
     const newMsgs = ext.slice(lastExternalCount);
     lastExternalCount = ext.length;
-    setMessages((prev) => [...prev, ...newMsgs]);
+    setMessages((prev) => {
+      prev.push(...newMsgs);
+      return prev;
+    });
   });
 
   // --- Auto-trim: prevent unbounded memory growth ---
@@ -156,7 +161,10 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const MAX_DISPLAY_MESSAGES = 500;
   createEffect(() => {
     if (messages().length > MAX_DISPLAY_MESSAGES) {
-      setMessages((prev) => prev.slice(-MAX_DISPLAY_MESSAGES));
+      setMessages((prev) => {
+        prev.splice(0, prev.length - MAX_DISPLAY_MESSAGES);
+        return prev;
+      });
     }
   });
 
@@ -331,58 +339,50 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             }
           }
 
-          setMessages((prev) => [
-            ...prev,
-            {
+          setMessages((prev) => {
+            prev.push({
               id: `tool-${String(Date.now())}`,
               role: 'assistant',
               content: '',
               type: messageType,
               timestamp: Date.now(),
               ...baseMsg,
-            },
-          ]);
+            });
+            return prev;
+          });
         });
         break;
       }
       case 'tool_result':
         batch(() => {
           setMessages((prev) => {
-            const updated = [...prev];
-            let lastToolIdx = -1;
-            for (let i = updated.length - 1; i >= 0; i--) {
-              const m = updated[i];
+            for (let i = prev.length - 1; i >= 0; i--) {
+              const m = prev[i];
               if (
                 m &&
                 (m.type === 'tool_start' || m.type === 'command' || m.type === 'file_edit') &&
                 m.toolName === event.toolName
               ) {
-                lastToolIdx = i;
-                break;
-              }
-            }
-            if (lastToolIdx !== -1) {
-              const item = updated[lastToolIdx];
-              if (item) {
                 const updates: Partial<DisplayMessage> = {
                   toolStatus: event.success ? 'success' : 'error',
                   toolDuration: event.success ? 0 : undefined,
                   content: event.error ?? '',
                 };
-                if (item.type === 'command') {
+                if (m.type === 'command') {
                   updates.output =
                     typeof event.result === 'string'
                       ? event.result
                       : JSON.stringify(event.result, null, 2);
-                } else if (item.type === 'file_edit') {
+                } else if (m.type === 'file_edit') {
                   if (typeof event.result === 'string') updates.diff = event.result;
                 } else {
                   updates.type = 'tool_result';
                 }
-                updated[lastToolIdx] = { ...item, ...updates };
+                prev[i] = { ...m, ...updates };
+                break;
               }
             }
-            return updated;
+            return prev;
           });
 
           // T-DEPLOY: Detect deploy_project tool_result → enter deploy mode
@@ -392,16 +392,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             const projectName = res.projectName as string | undefined;
             if (projectId && projectName) {
               enterDeployMode(projectId, projectName);
-              setMessages((prev) => [
-                ...prev,
-                {
+              setMessages((prev) => {
+                prev.push({
                   id: `deploy-mode-${String(Date.now())}`,
                   role: 'system' as const,
                   content: '[\u{1F4CB} Build panel opened]',
                   type: 'text' as const,
                   timestamp: Date.now(),
-                },
-              ]);
+                });
+                return prev;
+              });
             }
           }
         });
@@ -411,16 +411,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           setIsStreaming(false);
           setStreamingStep(0);
           setToolCallCount(0);
-          setMessages((prev) => [
-            ...prev,
-            {
+          setMessages((prev) => {
+            prev.push({
               id: `msg-${String(Date.now())}`,
               role: 'assistant',
               content: event.content,
               type: 'text',
               timestamp: Date.now(),
-            },
-          ]);
+            });
+            return prev;
+          });
         });
         break;
       case 'error':
@@ -428,16 +428,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
           setIsStreaming(false);
           setStreamingStep(0);
           setToolCallCount(0);
-          setMessages((prev) => [
-            ...prev,
-            {
+          setMessages((prev) => {
+            prev.push({
               id: `error-${String(Date.now())}`,
               role: 'assistant',
               content: event.error,
               type: 'error',
               timestamp: Date.now(),
-            },
-          ]);
+            });
+            return prev;
+          });
         });
         break;
       case 'question':
@@ -539,16 +539,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             try {
               await c.chatStream(compactionMessage, sessionIdRef, handleStreamEvent);
             } catch (err) {
-              setMessages((prev) => [
-                ...prev,
-                {
+              setMessages((prev) => {
+                prev.push({
                   id: `error-${String(Date.now())}`,
                   role: 'assistant',
                   content: err instanceof Error ? err.message : String(err),
                   type: 'error',
                   timestamp: Date.now(),
-                },
-              ]);
+                });
+                return prev;
+              });
               setIsStreaming(false);
             }
             break;
@@ -559,16 +559,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     }
 
     // ── Normal chat message: add to messages + history, send to LLM ──
-    setMessages((prev) => [
-      ...prev,
-      {
+    setMessages((prev) => {
+      prev.push({
         id: `user-${String(Date.now())}`,
         role: 'user',
         content: text,
         type: 'text',
         timestamp: Date.now(),
-      },
-    ]);
+      });
+      return prev;
+    });
 
     setChatHistory((prev) =>
       [...prev, { text, timestamp: Date.now() }].slice(-MAX_HISTORY_ENTRIES),
@@ -576,16 +576,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     setHistoryIndex(-1);
 
     if (!client()) {
-      setMessages((prev) => [
-        ...prev,
-        {
+      setMessages((prev) => {
+        prev.push({
           id: `error-${String(Date.now())}`,
           role: 'assistant',
           content: 'Daemon not connected. Start with: openlander daemon',
           type: 'error',
           timestamp: Date.now(),
-        },
-      ]);
+        });
+        return prev;
+      });
       return;
     }
 
@@ -595,16 +595,16 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
     try {
       await c.chatStream(text, sessionIdRef, handleStreamEvent);
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
+      setMessages((prev) => {
+        prev.push({
           id: `error-${String(Date.now())}`,
           role: 'assistant',
           content: err instanceof Error ? err.message : String(err),
           type: 'error',
           timestamp: Date.now(),
-        },
-      ]);
+        });
+        return prev;
+      });
       setIsStreaming(false);
     }
   };

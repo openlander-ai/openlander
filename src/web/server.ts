@@ -2,8 +2,8 @@ import { serve, createAdaptorServer } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { existsSync, unlinkSync, chmodSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, unlinkSync, chmodSync, mkdirSync, readFileSync } from 'node:fs';
+import { dirname, join, extname } from 'node:path';
 
 import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
@@ -152,8 +152,7 @@ function createApp(ctx: AppContext): Hono {
     app.post('/webhooks/telegram', createTelegramWebhookHandler(telegramChannel));
   }
 
-  // Root endpoint — server info
-  app.get('/', (c) =>
+  app.get('/api/info', (c) =>
     c.json({
       name: 'OpenLander',
       version: '0.4.0',
@@ -162,6 +161,59 @@ function createApp(ctx: AppContext): Hono {
       api: '/api',
     }),
   );
+
+  const WEB_DIST = join(dirname(new URL(import.meta.url).pathname), '../../web/dist');
+
+  const MIME_TYPES: Record<string, string> = {
+    '.html': 'text/html',
+    '.js': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.map': 'application/json',
+  };
+
+  app.get('/assets/*', async (c) => {
+    const filePath = join(WEB_DIST, c.req.path);
+    if (existsSync(filePath)) {
+      const ext = extname(filePath);
+      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      const content = readFileSync(filePath);
+      return new Response(content, {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      });
+    }
+    return c.notFound();
+  });
+
+  app.get('*', async (c) => {
+    if (
+      c.req.path.startsWith('/api/') ||
+      c.req.path.startsWith('/webhooks/') ||
+      c.req.path === '/health'
+    ) {
+      return c.notFound();
+    }
+
+    const indexPath = join(WEB_DIST, 'index.html');
+    if (existsSync(indexPath)) {
+      const html = readFileSync(indexPath, 'utf-8');
+      return c.html(html);
+    }
+    return c.json(
+      { name: 'OpenLander', message: 'Web UI not built. Run: cd web && npm run build' },
+      404,
+    );
+  });
 
   return app;
 }

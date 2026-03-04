@@ -103,11 +103,23 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     }
   }
 
-  // v0.7: Question bridge (agent ↔ TUI)
+  // v0.7: Question bridge (agent ↔ UI)
   const questionBridge = new QuestionBridge();
+  questionBridge.setEventBus(eventBus);
   if (agent) {
     agent.setQuestionBridge(questionBridge);
   }
+
+  // Track active project for question events
+  eventBus.on('deploy:start', (payload) => {
+    questionBridge.setActiveProject(payload.projectId);
+  });
+  eventBus.on('deploy:success', () => {
+    questionBridge.setActiveProject(null);
+  });
+  eventBus.on('deploy:failed', () => {
+    questionBridge.setActiveProject(null);
+  });
 
   // v0.2: Health monitoring
   const healthMonitor = new HealthMonitor(docker, db, eventBus, {

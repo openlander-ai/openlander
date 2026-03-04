@@ -38,8 +38,8 @@ coverage/
 tmp/
 temp/
 
-# Web frontend (removed — TUI replaced it)
-/web/
+# Web frontend build output
+/web/dist/
 
 
 # Runtime data

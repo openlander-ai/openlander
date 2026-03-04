@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plane, Menu, Cpu, MemoryStick } from 'lucide-react';
+import { Plane, Menu, Cpu, MemoryStick, MessageSquare } from 'lucide-react';
 import type { SystemStats } from '@/types';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -7,9 +7,11 @@ import { cn } from '@/lib/utils';
 interface HeaderProps {
   stats: SystemStats | null;
   onMenuClick?: () => void;
+  onChatToggle?: () => void;
+  isChatOpen?: boolean;
 }
 
-export function Header({ stats, onMenuClick }: HeaderProps) {
+export function Header({ stats, onMenuClick, onChatToggle, isChatOpen }: HeaderProps) {
   const [llmConnected, setLlmConnected] = useState<boolean>(false);
 
   useEffect(() => {
@@ -27,65 +29,95 @@ export function Header({ stats, onMenuClick }: HeaderProps) {
     };
 
     checkHealth();
-    // Poll health every 60s
     const interval = setInterval(checkHealth, 60000);
     return () => clearInterval(interval);
   }, []);
 
-  const formatMemory = (mem: number | { usedMB?: number; totalMB?: number; usagePercent?: number }) => {
+  const formatMemory = (
+    mem: number | { usedMB?: number; totalMB?: number; usagePercent?: number },
+  ) => {
     if (typeof mem === 'number') {
       const gb = mem / (1024 * 1024 * 1024);
-      return `${gb.toFixed(1)} GB`;
+      return `${gb.toFixed(1)}G`;
     }
     if (mem?.usagePercent != null) return `${mem.usagePercent.toFixed(0)}%`;
-    if (mem?.usedMB != null) return `${(mem.usedMB / 1024).toFixed(1)} GB`;
+    if (mem?.usedMB != null) return `${(mem.usedMB / 1024).toFixed(1)}G`;
     return '—';
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-12 border-b bg-background z-50 flex items-center justify-between px-4">
+    <header className="fixed top-0 left-0 right-0 h-12 border-b border-[hsl(var(--border))] bg-bg-app z-50 flex items-center justify-between px-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={onMenuClick}>
-          <Menu className="h-5 w-5" />
+        <Button variant="ghost" size="icon" className="md:hidden h-8 w-8" onClick={onMenuClick}>
+          <Menu className="h-4 w-4" />
         </Button>
 
-        <div className="flex items-center gap-2 font-semibold">
-          <div className="bg-primary/10 p-1 rounded-md">
-            <Plane className="h-5 w-5 text-primary rotate-[-45deg]" />
+        <div className="flex items-center gap-2">
+          <div className="bg-agent/10 p-1 rounded-md">
+            <Plane className="h-4 w-4 text-agent rotate-[-45deg]" />
           </div>
-          <span className="hidden sm:inline-block">OpenLander</span>
-          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+          <span className="hidden sm:inline-block font-display font-bold text-sm tracking-tight text-primary-ol">
+            OpenLander
+          </span>
+          <span className="text-[10px] font-mono text-secondary-ol bg-bg-subtle px-1.5 py-0.5 rounded">
             v0.1
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+      <div className="flex items-center gap-3 text-xs">
+        {/* System Stats */}
         {stats && (
-          <div className="hidden md:flex items-center gap-4">
-            <div className="flex items-center gap-1.5" title="CPU Usage">
-              <Cpu className="h-3.5 w-3.5" />
-              <span>{typeof stats.cpu === 'number' ? stats.cpu.toFixed(0) : stats.cpu?.usagePercent?.toFixed(0) ?? '—'}%</span>
+          <div className="hidden md:flex items-center gap-3 font-mono text-muted-ol">
+            <div className="flex items-center gap-1" title="CPU Usage">
+              <Cpu className="h-3 w-3" />
+              <span className="text-[10px]">
+                {typeof stats.cpu === 'number'
+                  ? stats.cpu.toFixed(0)
+                  : (stats.cpu?.usagePercent?.toFixed(0) ?? '—')}
+                %
+              </span>
             </div>
-            <div className="flex items-center gap-1.5" title="Memory Usage">
-              <MemoryStick className="h-3.5 w-3.5" />
-              <span>{formatMemory(stats.memory)}</span>
+            <div className="flex items-center gap-1" title="Memory Usage">
+              <MemoryStick className="h-3 w-3" />
+              <span className="text-[10px]">{formatMemory(stats.memory)}</span>
             </div>
-            <div className="w-px h-4 bg-border" />
+            <div className="w-px h-4 bg-[hsl(var(--border))]" />
           </div>
         )}
 
+        {/* Ask Agent Button */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            'gap-1.5 h-7 px-2.5 text-[11px] font-body transition-all',
+            isChatOpen
+              ? 'text-agent bg-agent/10'
+              : 'text-secondary-ol hover:text-agent hover:bg-agent/10',
+          )}
+          onClick={onChatToggle}
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Ask Agent</span>
+        </Button>
+
+        {/* LLM Status */}
         <div
-          className="flex items-center gap-2"
+          className="flex items-center gap-1.5"
           title={llmConnected ? 'LLM Connected' : 'LLM Not Configured'}
         >
           <div
             className={cn(
               'h-2 w-2 rounded-full',
-              llmConnected ? 'bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.5)]' : 'bg-red-500',
+              llmConnected
+                ? 'bg-success shadow-[0_0_4px_var(--color-success)]'
+                : 'bg-error shadow-[0_0_4px_var(--color-error)]',
             )}
           />
-          <span className="hidden sm:inline">{llmConnected ? 'AI Online' : 'AI Offline'}</span>
+          <span className="hidden sm:inline text-[11px] font-body text-secondary-ol">
+            {llmConnected ? 'AI Online' : 'AI Offline'}
+          </span>
         </div>
       </div>
     </header>

@@ -483,6 +483,24 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }),
       );
 
+      // Agent question events → question_pending in NDJSON stream
+      unsubscribers.push(
+        eventBus.on('question:pending', (payload) => {
+          if (payload.projectId !== project.id) return;
+          const firstQuestion = payload.questions[0];
+          void s.write(
+            JSON.stringify({
+              type: 'question_pending',
+              message: firstQuestion?.question ?? 'Agent needs input',
+              questionId: payload.requestId,
+              questions: payload.questions,
+              projectId: project.id,
+              timestamp: new Date().toISOString(),
+            }) + '\n',
+          );
+        }),
+      );
+
       s.onAbort(cleanup);
 
       // Emit initial status based on current project state (handles race with deploy:start)

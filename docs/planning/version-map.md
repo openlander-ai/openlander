@@ -9,6 +9,12 @@
 
 ```
 v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
+```
+
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.1.0 📋 ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
+
+```
+
  MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    ProviderOAuth 에이전트능동  Env관리     AI SDK
 ```
 
@@ -39,6 +45,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 | 15  | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료         |
 | 16  | **v0.0.9 온보딩 리팩토링**     | `v0.0.9/onboarding-refactor.md`              | v0.0.9         | 0%     | 📋 기획 완료, 구현 미착수                 |
 | 17  | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 0%     | 📋 기획 완료, 미착수                      |
+| 18  | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 0%     | 📋 기획 완료, TUI→Web pivot               |
 
 ---
 
@@ -368,6 +375,10 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 | 23  | OpenRouter OAuth PKCE      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간       |
 | 24  | Google ADC                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간       |
 | 25  | 토큰 저장 & 리프레시       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간       |
+| 26  | Web MVP Phase 1            | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | 높음       |
+| 27  | Web MVP Phase 2            | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | 높음       |
+| 28  | Web MVP Phase 3            | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | 중간       |
+| 29  | TUI Freeze                 | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | 높음       |
 
 ---
 
@@ -415,3 +426,56 @@ AI: bugs.md → 해결됨 + gh issue close
 **참조**: `v0.0.9/bugs.md` 워크플로우 섹션, `.opencode/instructions.md` §9
 
 **GitHub Issues Labels**: `bug`, `v0.0.6`~`v0.0.10`, `priority:high`, `priority:low`
+
+---
+
+### v0.1.0 — Web MVP 📋
+
+**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.1.0/web-mvp.md`](v0.1.0/web-mvp.md)
+
+> **핵심 가치**: TUI→Web pivot. 웹을 **히어로 화면**으로 하여, **"repo 연결해서 딸깍"** — Connect repo, click, done. Agent handles everything in background.
+
+**UI/UX 디자인**: [`docs/design/web-mvp-ui-ux.md`](../../design/web-mvp-ui-ux.md)
+
+**Phase 1 — Core** (2주):
+
+| 기능                     | 설명                                                 |
+| ------------------------ | ---------------------------------------------------- |
+| Theme Setup              | Tailwind v4 + 디자인 토큰                            |
+| Layout Refactor          | Sidebar + Main + Collapsible Chat 구조               |
+| Projects List Page       | 프로젝트 그리드 + 상태 표시                          |
+| New Project Flow         | 레포 선택 → 배포 트리거 → Timeline 이동              |
+| Agent Timeline Component | **히어로 화면** (에이전트 생각/액션 실시간 스트리밍) |
+| Build Progress Streaming | SSE/NDJSON → Timeline 이벤트 매핑                    |
+
+**Phase 2 — Essential** (1.5주):
+
+| 기능                       | 설명                                 |
+| -------------------------- | ------------------------------------ |
+| Agent Intervention Pattern | 인라인 폼 카드 (env vars, domain 등) |
+| Log Viewer                 | 실시간 스트리밍 + 검색 + Follow 모드 |
+| Project Configuration      | 환경변수 + 도메인 관리               |
+| Onboarding Flow            | 3단계 위자드 (LLM Key + GitHub Auth) |
+
+**Phase 3 — Polish** (1주):
+
+| 기능                        | 설명                            |
+| --------------------------- | ------------------------------- |
+| Chat Panel (Slide-over)     | 오버라이드/질문 전용            |
+| Settings Page               | LLM Provider + GitHub 계정 관리 |
+| Command Palette (Cmd+K)     | 전역 네비게이션 + 액션          |
+| Motion & Micro-interactions | Timeline 애니메이션 + 상태 전환 |
+| Responsive Design           | Tablet/Mobile 대응 (read-only)  |
+
+**Architecture Tasks**:
+
+| 항목                         | 내용                                              |
+| ---------------------------- | ------------------------------------------------- |
+| SPA Serving from Hono Daemon | Vite dist/ → 정적 파일 서빙                       |
+| SSE Event Unification        | Typed events (build_progress, log, deploy_status) |
+| CLI-lite Commands            | deploy, status, logs, open, projects ls           |
+| TUI Freeze                   | Git tag `tui-last`, 기본 빌드에서 제거            |
+
+**의사결정 기록**: [`references/decision-log.md`](../../references/decision-log.md)
+
+---

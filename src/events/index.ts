@@ -11,6 +11,7 @@
 
 import { createModuleLogger } from '../lib/logger.js';
 import type { BuildTier } from '../pipeline/build-recovery.js';
+import type { Question } from '../agent/question-bridge.js';
 import type { Alert } from '../monitor/alerts.js';
 
 const log = createModuleLogger('events');
@@ -57,7 +58,10 @@ export type EventType =
   // v0.5: Alerts
   | 'alert:new'
   | 'alert:resolved'
-  | 'alert:dismissed';
+  | 'alert:dismissed'
+  // v0.7: Agent questions
+  | 'question:pending'
+  | 'question:answered';
 
 export interface EventPayload {
   'deploy:start': { projectId: string; repoUrl: string };
@@ -93,6 +97,8 @@ export interface EventPayload {
   'alert:new': { alert: Alert };
   'alert:resolved': { alertId: string; type: Alert['type'] };
   'alert:dismissed': { alertId: string };
+  'question:pending': { projectId: string; requestId: string; questions: Question[] };
+  'question:answered': { projectId: string; requestId: string };
 }
 
 // --- Event handler type ---

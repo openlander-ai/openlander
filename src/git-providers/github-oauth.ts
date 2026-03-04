@@ -13,7 +13,7 @@ const log = createModuleLogger('github-oauth');
 // GitHub OAuth Device Flow endpoints
 const GITHUB_DEVICE_CODE_URL = 'https://github.com/login/device/code';
 const GITHUB_ACCESS_TOKEN_URL = 'https://github.com/login/oauth/access_token';
-const DEFAULT_SCOPE = 'repo read:user';
+const DEFAULT_SCOPE = 'repo read:user read:org';
 
 /**
  * OpenLander's GitHub OAuth App Client ID.

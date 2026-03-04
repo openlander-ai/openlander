@@ -93,21 +93,21 @@ export function App(props: AppProps): JSX.Element {
   const [reposError, setReposError] = createSignal<string | null>(null);
 
   // Deploy progress messages injected into ChatPanel
-  const [deployMessages, setDeployMessages] = createSignal<DisplayMessage[]>([]);
+  const [deployMessages, setDeployMessages] = createSignal<DisplayMessage[]>([], { equals: false });
   const [showBuildClosedOnDeployExit, setShowBuildClosedOnDeployExit] = createSignal(false);
   let deployAbortController: AbortController | null = null;
 
   const addBuildPanelClosedMessage = () => {
-    setDeployMessages((prev) => [
-      ...prev,
-      {
+    setDeployMessages((prev) => {
+      prev.push({
         id: `build-closed-${String(Date.now())}`,
         role: 'system' as const,
-        content: '📋 Build panel closed',
+        content: '\u{1F4CB} Build panel closed',
         type: 'text' as const,
         timestamp: Date.now(),
-      },
-    ]);
+      });
+      return prev;
+    });
   };
 
   // Abort deploy stream on unmount
@@ -295,16 +295,16 @@ export function App(props: AppProps): JSX.Element {
     setShowRepo(false);
     const c = status() === 'connected' ? client : null;
     if (!c) {
-      setDeployMessages((prev) => [
-        ...prev,
-        {
+      setDeployMessages((prev) => {
+        prev.push({
           id: `deploy-err-${String(Date.now())}`,
           role: 'system' as const,
-          content: '✗ Cannot deploy — daemon not connected.',
+          content: '\u2717 Cannot deploy \u2014 daemon not connected.',
           type: 'error' as const,
           timestamp: Date.now(),
-        },
-      ]);
+        });
+        return prev;
+      });
       return;
     }
 
@@ -312,16 +312,16 @@ export function App(props: AppProps): JSX.Element {
     const repoUrl = `https://github.com/${repoFullName}`;
 
     // Add initial deploy message
-    setDeployMessages((prev) => [
-      ...prev,
-      {
+    setDeployMessages((prev) => {
+      prev.push({
         id: `deploy-start-${String(Date.now())}`,
         role: 'system' as const,
-        content: `⟳ Deploying ${repoFullName}...`,
+        content: `\u27F3 Deploying ${repoFullName}...`,
         type: 'text' as const,
         timestamp: Date.now(),
-      },
-    ]);
+      });
+      return prev;
+    });
 
     // Start non-blocking deploy and enter deploy mode immediately
     void (async () => {
@@ -330,16 +330,16 @@ export function App(props: AppProps): JSX.Element {
         startResult = await c.startDeploy(repoUrl);
       } catch (err) {
         console.error('[deploy]', err instanceof Error ? err.message : String(err));
-        setDeployMessages((prev) => [
-          ...prev,
-          {
+        setDeployMessages((prev) => {
+          prev.push({
             id: `deploy-err-${String(Date.now())}`,
             role: 'system' as const,
-            content: `✗ Deploy failed: ${err instanceof Error ? err.message : String(err)}`,
+            content: `\u2717 Deploy failed: ${err instanceof Error ? err.message : String(err)}`,
             type: 'error' as const,
             timestamp: Date.now(),
-          },
-        ]);
+          });
+          return prev;
+        });
         return;
       }
 
@@ -349,16 +349,16 @@ export function App(props: AppProps): JSX.Element {
       enterDeployMode(startResult.projectId, projectName);
 
       // System message in chat
-      setDeployMessages((prev) => [
-        ...prev,
-        {
+      setDeployMessages((prev) => {
+        prev.push({
           id: `deploy-mode-${String(Date.now())}`,
           role: 'system' as const,
-          content: '[📋 Build panel opened]',
+          content: '[\u{1F4CB} Build panel opened]',
           type: 'text' as const,
           timestamp: Date.now(),
-        },
-      ]);
+        });
+        return prev;
+      });
 
       // Stream build progress into chat messages (BuildPanel has its own stream)
       deployAbortController = new AbortController();
@@ -368,28 +368,28 @@ export function App(props: AppProps): JSX.Element {
           deployAbortController.signal,
         )) {
           const symbol = getBuildEventSymbol(event);
-          setDeployMessages((prev) => [
-            ...prev,
-            {
+          setDeployMessages((prev) => {
+            prev.push({
               id: `deploy-progress-${String(Date.now())}-${String(Math.random())}`,
               role: 'system' as const,
               content: `${symbol} ${event.message}`,
               type: event.type === 'error' ? ('error' as const) : ('text' as const),
               timestamp: Date.now(),
-            },
-          ]);
+            });
+            return prev;
+          });
 
           if (event.type === 'complete') {
-            setDeployMessages((prev) => [
-              ...prev,
-              {
+            setDeployMessages((prev) => {
+              prev.push({
                 id: `deploy-done-${String(Date.now())}`,
                 role: 'system' as const,
-                content: `✓ ${event.message}`,
+                content: `\u2713 ${event.message}`,
                 type: 'text' as const,
                 timestamp: Date.now(),
-              },
-            ]);
+              });
+              return prev;
+            });
             setShowBuildClosedOnDeployExit(true);
             // Auto-return to monitoring after 3 seconds
             scheduleDeployReturn(3);
@@ -458,16 +458,16 @@ export function App(props: AppProps): JSX.Element {
           deployAbortController = null;
           setShowBuildClosedOnDeployExit(false);
           returnToMonitoring();
-          setDeployMessages((prev) => [
-            ...prev,
-            {
+          setDeployMessages((prev) => {
+            prev.push({
               id: `deploy-cancel-${String(Date.now())}`,
               role: 'system' as const,
-              content: '⚠ Deploy cancelled by user.',
+              content: '\u26A0 Deploy cancelled by user.',
               type: 'text' as const,
               timestamp: Date.now(),
-            },
-          ]);
+            });
+            return prev;
+          });
           return;
         }
         // No active work — double-tap to quit
@@ -541,29 +541,29 @@ export function App(props: AppProps): JSX.Element {
             void (async () => {
               try {
                 await c.redeployProject(dbgState.projectId);
-                setDeployMessages((prev) => [
-                  ...prev,
-                  {
+                setDeployMessages((prev) => {
+                  prev.push({
                     id: `redeploy-${String(Date.now())}`,
                     role: 'system' as const,
-                    content: `⟳ Redeploying ${dbgState.projectName}...`,
+                    content: `\u27F3 Redeploying ${dbgState.projectName}...`,
                     type: 'text' as const,
                     timestamp: Date.now(),
-                  },
-                ]);
+                  });
+                  return prev;
+                });
                 // Enter deploy mode for this project
                 enterDeployMode(dbgState.projectId, dbgState.projectName);
               } catch (err) {
-                setDeployMessages((prev) => [
-                  ...prev,
-                  {
+                setDeployMessages((prev) => {
+                  prev.push({
                     id: `redeploy-err-${String(Date.now())}`,
                     role: 'system' as const,
-                    content: `✗ Redeploy failed: ${err instanceof Error ? err.message : String(err)}`,
+                    content: `\u2717 Redeploy failed: ${err instanceof Error ? err.message : String(err)}`,
                     type: 'error' as const,
                     timestamp: Date.now(),
-                  },
-                ]);
+                  });
+                  return prev;
+                });
               }
             })();
             return;
@@ -573,28 +573,28 @@ export function App(props: AppProps): JSX.Element {
             void (async () => {
               try {
                 await c.stopProject(dbgState.projectId);
-                setDeployMessages((prev) => [
-                  ...prev,
-                  {
+                setDeployMessages((prev) => {
+                  prev.push({
                     id: `stop-${String(Date.now())}`,
                     role: 'system' as const,
-                    content: `■ ${dbgState.projectName} stopped.`,
+                    content: `\u25A0 ${dbgState.projectName} stopped.`,
                     type: 'text' as const,
                     timestamp: Date.now(),
-                  },
-                ]);
+                  });
+                  return prev;
+                });
                 returnToMonitoring();
               } catch (err) {
-                setDeployMessages((prev) => [
-                  ...prev,
-                  {
+                setDeployMessages((prev) => {
+                  prev.push({
                     id: `stop-err-${String(Date.now())}`,
                     role: 'system' as const,
-                    content: `✗ Stop failed: ${err instanceof Error ? err.message : String(err)}`,
+                    content: `\u2717 Stop failed: ${err instanceof Error ? err.message : String(err)}`,
                     type: 'error' as const,
                     timestamp: Date.now(),
-                  },
-                ]);
+                  });
+                  return prev;
+                });
               }
             })();
             return;

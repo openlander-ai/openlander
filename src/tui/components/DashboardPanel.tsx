@@ -506,8 +506,8 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
 
   const visibleItems = () => buildVisibleItems();
 
-  let lastSystemActivityKey = '';
-  let lastProjectsKey = '';
+  let lastSystemHash = 0;
+  let lastProjectsHash = 0;
   const onStatsUpdateRef = props.onStatsUpdate;
 
   createEffect(() => {
@@ -532,17 +532,18 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
       try {
         const [projectsResult] = await Promise.allSettled([c.listProjects()]);
 
-        let projectsKey = '';
+        let projectsHash = 0;
         let newProjects: Project[] = [];
 
         if (projectsResult.status === 'fulfilled') {
           newProjects = projectsResult.value.projects;
+          // Simple numeric hash: count + status mix. Avoids O(n) string concat.
           for (const p of newProjects)
-            projectsKey += `${p.name}:${p.status}:${String(p.port ?? '')}|`;
+            projectsHash = projectsHash * 31 + p.status.length + (p.port ?? 0);
         }
 
-        if (projectsKey !== lastProjectsKey) {
-          lastProjectsKey = projectsKey;
+        if (projectsHash !== lastProjectsHash) {
+          lastProjectsHash = projectsHash;
 
           // Fetch stats for running projects IN PARALLEL (was sequential for-await)
           const runningProjects = newProjects.filter((p) => p.status === 'running');
@@ -590,27 +591,31 @@ export function DashboardPanel(props: DashboardPanelProps): JSX.Element {
           c.getActivity(5),
         ]);
 
-        let displayKey = '';
+        // Build a cheap numeric hash instead of O(n) string concat.
+        let hash = 0;
         let newStats: SystemStats | null = null;
         let newHealth: HealthResponse | null = null;
         let newActivity: ActivityEvent[] = [];
 
         if (statsResult.status === 'fulfilled') {
           newStats = statsResult.value;
-          const s = newStats;
-          displayKey += `cpu:${String(Math.round(s.cpu.usagePercent))}|mem:${(s.memory.usedMB / 1024).toFixed(1)}/${(s.memory.totalMB / 1024).toFixed(1)}|disk:${String(Math.round(s.disk.usagePercent))}|up:${String(Math.floor(s.uptime.seconds / 60))}|`;
+          hash =
+            Math.round(newStats.cpu.usagePercent) * 1e6 +
+            Math.round(newStats.memory.usedMB) * 1e2 +
+            Math.round(newStats.disk.usagePercent);
         }
         if (healthResult.status === 'fulfilled') {
           newHealth = healthResult.value;
-          displayKey += `docker:${String(newHealth.dockerContainers)}|`;
+          hash = hash * 31 + newHealth.dockerContainers;
         }
         if (activityResult.status === 'fulfilled') {
           newActivity = activityResult.value;
-          for (const e of newActivity) displayKey += `${e.timestamp}:${e.message}|`;
+          hash = hash * 31 + newActivity.length;
+          if (newActivity[0]) hash = hash * 31 + newActivity[0].timestamp.length;
         }
 
-        if (displayKey !== lastSystemActivityKey) {
-          lastSystemActivityKey = displayKey;
+        if (hash !== lastSystemHash) {
+          lastSystemHash = hash;
           // Batch all signal updates → single render pass
           batch(() => {
             if (newStats) setSystemStats(newStats);

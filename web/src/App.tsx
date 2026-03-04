@@ -1,5 +1,11 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { SetupScreen } from '@/components/setup/SetupScreen';
+import { NewProjectFlow } from '@/pages/NewProjectFlow';
+import { ProjectDetail } from '@/pages/ProjectDetail';
+import { ProjectsGrid } from '@/pages/ProjectsGrid';
+import { SettingsPage } from '@/pages/SettingsPage';
 import './App.css';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -13,7 +19,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Uncaught error:", error, errorInfo);
+    console.error('Uncaught error:', error, errorInfo);
   }
 
   render() {
@@ -35,7 +41,22 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 function App() {
   return (
     <ErrorBoundary>
-      <AppLayout />
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path="/setup"
+            element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
+          />
+          <Route element={<AppLayout />}>
+            <Route path="/projects" element={<ProjectsGrid />} />
+            <Route path="/projects/new" element={<NewProjectFlow />} />
+            <Route path="/projects/:id" element={<ProjectDetail />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+          <Route path="/" element={<Navigate to="/projects" replace />} />
+          <Route path="*" element={<Navigate to="/projects" replace />} />
+        </Routes>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }

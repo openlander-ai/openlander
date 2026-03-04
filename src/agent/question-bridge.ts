@@ -1,16 +1,21 @@
 /**
- * QuestionBridge — Async bridge between the agent (tool execution) and the TUI.
+ * QuestionBridge — Async bridge between the agent (tool execution) and the UI.
  *
  * When the LLM calls `ask_user_question`, the tool creates a Promise via this bridge.
  * The agentic loop pauses on `await bridge.ask(...)`.
- * The TUI renders the question and calls `bridge.reply(answers)` when the user responds.
+ * The UI (TUI or web) renders the question and calls `bridge.reply(answers)` when the user responds.
  * The Promise resolves and the tool returns the answers to the LLM.
  *
  * Data flow:
  *   [LLM] → ask_user_question tool → bridge.ask() → Promise (pauses loop)
- *     → [TUI] renders QuestionDock → user picks → bridge.reply()
+ *     → [UI] renders question → user picks → bridge.reply()
  *       → Promise resolves → tool returns answers → [LLM] continues
+ *
+ * v0.1: Also emits `question:pending` via EventBus so the web build stream
+ *       can forward questions to the frontend timeline.
  */
+
+import type { EventBus } from '../events/index.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,10 +51,28 @@ export interface QuestionAnswer {
 export class QuestionBridge {
   private pendingResolve: ((answers: QuestionAnswer[]) => void) | null = null;
   private onQuestion: ((request: QuestionRequest) => void) | null = null;
+  private eventBus: EventBus | null = null;
+  private activeProjectId: string | null = null;
 
   /**
-   * Register the TUI handler that will render questions.
-   * Called once at startup when wiring TUI ↔ agent.
+   * Attach the EventBus so question events are broadcast to stream listeners.
+   * Called once at startup in createAppContext().
+   */
+  setEventBus(bus: EventBus): void {
+    this.eventBus = bus;
+  }
+
+  /**
+   * Set the project ID for the currently active deploy.
+   * Called before each deploy so question events carry the right projectId.
+   */
+  setActiveProject(projectId: string | null): void {
+    this.activeProjectId = projectId;
+  }
+
+  /**
+   * Register the TUI/UI handler that will render questions.
+   * Called once at startup when wiring UI ↔ agent.
    */
   setQuestionHandler(handler: (request: QuestionRequest) => void): void {
     this.onQuestion = handler;
@@ -62,22 +85,41 @@ export class QuestionBridge {
   ask(request: QuestionRequest): Promise<QuestionAnswer[]> {
     return new Promise<QuestionAnswer[]>((resolve) => {
       this.pendingResolve = resolve;
+
+      // Broadcast to EventBus so the web build stream can pick it up
+      if (this.eventBus && this.activeProjectId) {
+        void this.eventBus.emit('question:pending', {
+          projectId: this.activeProjectId,
+          requestId: request.id,
+          questions: request.questions,
+        });
+      }
+
       this.onQuestion?.(request);
     });
   }
 
   /**
-   * Called by the TUI when the user submits their answers.
+   * Called by the UI when the user submits their answers.
    * Resolves the pending Promise, resuming the agentic loop.
    */
   reply(answers: QuestionAnswer[]): void {
     const resolve = this.pendingResolve;
     this.pendingResolve = null;
+
+    // Broadcast answer event
+    if (this.eventBus && this.activeProjectId) {
+      void this.eventBus.emit('question:answered', {
+        projectId: this.activeProjectId,
+        requestId: '', // We don't track requestId in reply — best-effort
+      });
+    }
+
     resolve?.(answers);
   }
 
   /**
-   * Called by the TUI when the user dismisses/cancels the question.
+   * Called by the UI when the user dismisses/cancels the question.
    * Resolves with empty answers so the LLM knows the user declined.
    */
   reject(): void {

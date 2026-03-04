@@ -57,6 +57,7 @@ export class GitHubProvider implements GitProvider {
   readonly displayName = 'GitHub';
 
   private readonly apiBase: string;
+  private orgCache: string[] | null = null;
 
   constructor(
     private readonly token: string,
@@ -76,7 +77,7 @@ export class GitHubProvider implements GitProvider {
 
       return {
         valid: true,
-      user: mapUser(userData),
+        user: mapUser(userData),
         scopes,
       };
     } catch (error) {
@@ -93,10 +94,13 @@ export class GitHubProvider implements GitProvider {
     const page = opts?.page ?? 1;
     const perPage = opts?.perPage ?? 30;
     const sort = opts?.sort ?? 'pushed';
-    const type = opts?.visibility ?? 'all';
+    const visibility = opts?.visibility ?? 'all';
 
+    // Use visibility + affiliation instead of type param.
+    // type overrides affiliation, which can exclude org repos.
+    // affiliation=organization_member explicitly includes repos from user's orgs.
     const res = await this.request(
-      `/user/repos?page=${String(page)}&per_page=${String(perPage)}&sort=${sort}&type=${type}&direction=desc`,
+      `/user/repos?page=${String(page)}&per_page=${String(perPage)}&sort=${sort}&visibility=${visibility}&affiliation=owner,collaborator,organization_member&direction=desc`,
     );
 
     const repoData = res.data as GHApiRepo[];
@@ -112,8 +116,11 @@ export class GitHubProvider implements GitProvider {
     const page = opts?.page ?? 1;
     const perPage = opts?.perPage ?? 20;
 
-    // Search user's own repos + repos they have access to
-    const encodedQuery = encodeURIComponent(`${query} user:@me`);
+    // Include user's own repos + all org repos they belong to.
+    // user:@me alone only matches repos owned by the user, excluding org repos.
+    const orgs = await this.getUserOrgs();
+    const scopeParts = ['user:@me', ...orgs.map((o) => `org:${o}`)];
+    const encodedQuery = encodeURIComponent(`${query} ${scopeParts.join(' ')}`);
     const res = await this.request(
       `/search/repositories?q=${encodedQuery}&page=${String(page)}&per_page=${String(perPage)}&sort=updated`,
     );
@@ -125,13 +132,10 @@ export class GitHubProvider implements GitProvider {
     };
   }
 
-
   async getRepo(owner: string, name: string): Promise<GitRepo> {
     const res = await this.request(`/repos/${owner}/${name}`);
     return mapRepo(res.data as GHApiRepo);
-
   }
-
 
   async hasDockerfile(owner: string, name: string, branch?: string): Promise<boolean> {
     try {
@@ -150,6 +154,23 @@ export class GitHubProvider implements GitProvider {
   }
 
   // --- Internal ---
+
+  /**
+   * Fetch the authenticated user's organization logins.
+   * Cached after first call since orgs rarely change within a session.
+   */
+  private async getUserOrgs(): Promise<string[]> {
+    if (this.orgCache) return this.orgCache;
+    try {
+      const res = await this.request('/user/orgs?per_page=100');
+      const orgs = res.data as Array<{ login: string }>;
+      this.orgCache = orgs.map((o) => o.login);
+    } catch {
+      log.debug('Failed to fetch user orgs — falling back to user-only search');
+      this.orgCache = [];
+    }
+    return this.orgCache;
+  }
 
   private async request(path: string): Promise<{ data: unknown; headers: Headers }> {
     const url = `${this.apiBase}${path}`;

@@ -9,15 +9,17 @@ const log = createModuleLogger('cli');
 
 const program = new Command();
 
-// ── Default command: openlander (TUI mode) ─────────────────────────────────────
+// ── Default command: openlander (Web mode — default) ─────────────────────────
 
 program
   .name('openlander')
   .description('AI agent that deploys your app from a chat')
   .version(VERSION)
-  .option('-p, --port <port>', 'Port to listen on', '3000')
+  .option('-p, --port <port>', 'Port to listen on', '10003')
   .option('--host <host>', 'Host to bind to', '0.0.0.0')
-  .action(async (options: { port: string; host: string }) => {
+  .option('--tui', 'Launch legacy TUI mode instead of web UI')
+  .option('--no-open', 'Do not open browser automatically')
+  .action(async (options: { port: string; host: string; tui?: boolean; open?: boolean }) => {
     const port = parseInt(options.port, 10);
 
     // Step 1: Ensure Docker is ready
@@ -66,17 +68,41 @@ program
       }
     }
 
-    // Signal TUI mode BEFORE daemon starts (suppresses Hono HTTP logger)
-    process.env['OPENLANDER_TUI'] = '1';
+    if (options.tui) {
+      // ── Legacy TUI mode ──
+      process.env['OPENLANDER_TUI'] = '1';
 
-    // Step 4: Start daemon (Unix socket) for TUI client
-    const { startDaemon } = await import('../web/server.js');
-    const socketPath = join(getDataDir(), 'openlander.sock');
-    await startDaemon({ socketPath }, ctx);
+      const { startDaemon } = await import('../web/server.js');
+      const socketPath = join(getDataDir(), 'openlander.sock');
+      await startDaemon({ socketPath }, ctx);
 
-    // Step 6: Launch TUI
-    const { startTUI } = await import('../tui/index.js');
-    startTUI(ctx);
+      const { startTUI } = await import('../tui/index.js');
+      startTUI(ctx);
+    } else {
+      // ── Web mode (default) ──
+      const { createServer } = await import('../web/server.js');
+      createServer({ port, host: options.host }, ctx);
+
+      const url = `http://localhost:${String(port)}`;
+      console.log();
+      console.log(pc.bold(pc.cyan('  🛬 OpenLander')));
+      console.log(pc.dim(`  Web UI: ${url}`));
+      console.log();
+
+      // Open browser (unless --no-open)
+      if (options.open !== false) {
+        const { exec } = await import('node:child_process');
+        const openCmd =
+          process.platform === 'darwin'
+            ? 'open'
+            : process.platform === 'win32'
+              ? 'start'
+              : 'xdg-open';
+        exec(`${openCmd} ${url}`, (err) => {
+          if (err) log.debug({ err }, 'Failed to open browser');
+        });
+      }
+    }
 
     // Graceful shutdown
     const { shutdownAppContext } = await import('../app.js');
