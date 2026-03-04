@@ -72,7 +72,7 @@ export function AppLayout() {
           const projectId = notification.details?.projectId as string | undefined;
           const prefix = projectId ? `[Context: project ${projectId}] ` : '';
           openChatWithPrompt(
-            `${prefix}${action === 'view_logs' ? '로그 보여줘' : action === 'cleanup_disk' ? '디스크 정리해줘' : action === 'cleanup_images' ? '미사용 이미지 정리해줘' : action === 'view_stats' ? '리소스 상세 보여줘' : action}`,
+            `${prefix}${action === 'view_logs' ? 'Show me the logs' : action === 'cleanup_disk' ? 'Clean up disk space' : action === 'cleanup_images' ? 'Clean up unused images' : action === 'view_stats' ? 'Show resource details' : action}`,
           );
         }}
         onMenuClick={() => setIsMobileSidebarOpen(true)}

@@ -137,7 +137,7 @@ export function Header({
                   : 'text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle',
             )}
             onClick={() => setShowNotifications((prev) => !prev)}
-            title={`알림 ${unreadCount > 0 ? `(${unreadCount}건)` : ''}`}
+            title={`Notifications${unreadCount > 0 ? ` (${unreadCount})` : ''}`}
           >
             <Bell className="h-3.5 w-3.5" />
             {unreadCount > 0 && (

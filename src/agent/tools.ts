@@ -99,7 +99,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
               id: nanoid(12),
               questions: [
                 {
-                  question: '이전 배포 기록을 찾았어. 다음 설정을 적용할까?',
+                  question: 'Found previous deployment settings. Apply these defaults?',
                   header: 'Smart Defaults',
                   options: defaults.suggestions.map((s) => ({
                     label: s.label,

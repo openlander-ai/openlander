@@ -19,7 +19,7 @@ export function useIsMobile(): boolean {
 }
 
 /** Shows a toast-like message when a mobile user tries a desktop-only action */
-export function showMobileToast(message = '데스크톱에서 배포하세요') {
+export function showMobileToast(message = 'Please deploy from a desktop browser') {
   // Simple toast — create a temporary DOM element
   const el = document.createElement('div');
   el.textContent = message;

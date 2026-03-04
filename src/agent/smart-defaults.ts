@@ -66,32 +66,32 @@ const BUILD_FAILURE_PATTERNS: Array<{
 }> = [
   {
     pattern: /memory|oom|killed|cannot allocate/i,
-    label: '--memory 4g 추가',
-    description: '이전 빌드가 메모리 부족으로 실패. 메모리 제한 추가 권장.',
+    label: 'Add --memory 4g',
+    description: 'Previous build failed due to OOM. Recommend adding memory limit.',
     fix: { memoryLimit: '4g' },
   },
   {
     pattern: /ENOSPC|no space left/i,
-    label: '디스크 정리 후 재시도',
-    description: '이전 빌드가 디스크 부족으로 실패. 정리 후 재시도 권장.',
+    label: 'Clean disk and retry',
+    description: 'Previous build failed due to low disk. Clean up and retry.',
     fix: { cleanDisk: true },
   },
   {
     pattern: /timeout|timed out/i,
-    label: '빌드 타임아웃 연장',
-    description: '이전 빌드가 타임아웃으로 실패. 시간 제한 연장 권장.',
+    label: 'Extend build timeout',
+    description: 'Previous build timed out. Recommend extending timeout.',
     fix: { extendTimeout: true },
   },
   {
     pattern: /npm ERR!.*ERESOLVE|dependency conflict/i,
-    label: '--legacy-peer-deps 사용',
-    description: '이전 빌드가 의존성 충돌로 실패. legacy-peer-deps 옵션 권장.',
+    label: 'Use --legacy-peer-deps',
+    description: 'Previous build had dependency conflicts. Recommend legacy-peer-deps.',
     fix: { legacyPeerDeps: true },
   },
   {
     pattern: /no cache|cache.*corrupt/i,
-    label: '캐시 없이 빌드',
-    description: '이전 빌드가 캐시 문제로 실패. no-cache 빌드 권장.',
+    label: 'Build without cache',
+    description: 'Previous build had cache issues. Recommend no-cache build.',
     fix: { noCache: true },
   },
 ];
@@ -201,8 +201,8 @@ function suggestPort(project: ProjectRow): SmartDefault | null {
   if (project.assigned_port == null) return null;
 
   return {
-    label: `포트 ${String(project.assigned_port)} 유지`,
-    description: `저번 배포와 동일한 포트 사용`,
+    label: `Keep port ${String(project.assigned_port)}`,
+    description: `Reuse the same port as previous deployment`,
     category: 'port',
     data: { port: project.assigned_port },
   };
@@ -223,7 +223,7 @@ function suggestEnvVars(db: Database, project: ProjectRow): SmartDefault | null 
   });
 
   return {
-    label: `환경변수 유지 (${String(keys.length)}개)`,
+    label: `Keep env vars (${String(keys.length)})`,
     description: maskedKeys.join(', '),
     category: 'env',
     data: { envVars },
@@ -240,8 +240,8 @@ function suggestCloneReuse(project: ProjectRow): SmartDefault | null {
   if (!project.container_id && project.status !== 'stopped') return null;
 
   return {
-    label: 'git pull만 수행',
-    description: `이 레포는 이미 clone 되어있어. pull로 최신 코드만 가져옴.`,
+    label: 'Run git pull only',
+    description: `This repo is already cloned. Pull latest changes only.`,
     category: 'clone',
     data: { reuseProject: true, projectId: project.id },
   };

@@ -50,28 +50,28 @@ const typeIcons: Record<Notification['type'], typeof AlertCircle> = {
 };
 
 const typeLabels: Record<Notification['type'], string> = {
-  'container-crash': '컨테이너 크래시',
-  'restart-loop': '반복 재시작',
-  'resource-saturation': '리소스 포화',
-  disk: '디스크 부족',
-  'inactive-project': '비활성 프로젝트',
-  'dangling-images': '미사용 이미지',
-  'port-conflict': '포트 충돌',
+  'container-crash': 'Container Crash',
+  'restart-loop': 'Restart Loop',
+  'resource-saturation': 'Resource Saturation',
+  disk: 'Low Disk Space',
+  'inactive-project': 'Inactive Project',
+  'dangling-images': 'Unused Images',
+  'port-conflict': 'Port Conflict',
 };
 
 /** Action suggestions by alert type */
 function getActions(type: Notification['type']): Array<{ label: string; action: string }> {
   switch (type) {
     case 'container-crash':
-      return [{ label: '로그 보기', action: 'view_logs' }];
+      return [{ label: 'View Logs', action: 'view_logs' }];
     case 'restart-loop':
-      return [{ label: '로그 보기', action: 'view_logs' }];
+      return [{ label: 'View Logs', action: 'view_logs' }];
     case 'resource-saturation':
-      return [{ label: '상세 보기', action: 'view_stats' }];
+      return [{ label: 'View Details', action: 'view_stats' }];
     case 'disk':
-      return [{ label: '정리하기', action: 'cleanup_disk' }];
+      return [{ label: 'Clean Up', action: 'cleanup_disk' }];
     case 'dangling-images':
-      return [{ label: '정리하기', action: 'cleanup_images' }];
+      return [{ label: 'Clean Up', action: 'cleanup_images' }];
     default:
       return [];
   }
@@ -109,10 +109,10 @@ export function NotificationCenter({
     return (
       <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-[hsl(var(--border))] bg-bg-panel shadow-xl z-[60]">
         <div className="px-4 py-3 border-b border-[hsl(var(--border))]">
-          <h3 className="text-xs font-display font-semibold text-primary-ol">알림</h3>
+          <h3 className="text-xs font-display font-semibold text-primary-ol">Notifications</h3>
         </div>
         <div className="px-4 py-8 text-center">
-          <p className="text-xs text-muted-ol font-body">알림이 없습니다</p>
+          <p className="text-xs text-muted-ol font-body">No notifications</p>
         </div>
       </div>
     );
@@ -123,8 +123,8 @@ export function NotificationCenter({
       {/* Header */}
       <div className="px-4 py-3 border-b border-[hsl(var(--border))] shrink-0">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-display font-semibold text-primary-ol">알림</h3>
-          <span className="text-[10px] font-mono text-muted-ol">{notifications.length}건</span>
+          <h3 className="text-xs font-display font-semibold text-primary-ol">Notifications</h3>
+          <span className="text-[10px] font-mono text-muted-ol">{notifications.length}</span>
         </div>
       </div>
 
@@ -159,7 +159,7 @@ export function NotificationCenter({
                       onClick={() => void handleDismiss(notification.id)}
                       disabled={dismissingId !== null}
                       className="shrink-0 p-0.5 rounded hover:bg-bg-subtle transition-colors text-muted-ol hover:text-secondary-ol"
-                      title="닫기"
+                      title="Dismiss"
                     >
                       {dismissingId === notification.id ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
