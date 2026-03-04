@@ -12,6 +12,7 @@ interface TimelineFeedProps {
   onFixWithAI?: (errorMessage?: string) => void;
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
+  onInsightAction?: (projectId: string, action: string) => Promise<void>;
 }
 
 export function TimelineFeed({
@@ -20,6 +21,7 @@ export function TimelineFeed({
   onFixWithAI,
   onSubmitAnswer,
   onSkipQuestion,
+  onInsightAction,
 }: TimelineFeedProps) {
   const [autoFollow, setAutoFollow] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -76,6 +78,7 @@ export function TimelineFeed({
               onFixWithAI={item.type === 'error' ? () => onFixWithAI?.(item.title) : undefined}
               onSubmitAnswer={onSubmitAnswer}
               onSkipQuestion={onSkipQuestion}
+              onInsightAction={onInsightAction}
             />
           ))}
 

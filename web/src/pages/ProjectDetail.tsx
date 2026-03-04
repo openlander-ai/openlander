@@ -53,7 +53,7 @@ export function ProjectDetail() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { openChatWithPrompt } = useAppLayout();
   const isMobile = useIsMobile();
-  const { items, isStreaming, submitAnswer, skipQuestion } = useTimeline({
+  const { items, isStreaming, submitAnswer, skipQuestion, executeAction } = useTimeline({
     projectId: id,
     enabled: !!id,
   });
@@ -225,6 +225,7 @@ export function ProjectDetail() {
             isStreaming={isStreaming}
             onSubmitAnswer={submitAnswer}
             onSkipQuestion={skipQuestion}
+            onInsightAction={executeAction}
             onFixWithAI={useCallback(
               (errorMsg?: string) => {
                 openChatWithPrompt(

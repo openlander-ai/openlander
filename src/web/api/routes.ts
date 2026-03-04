@@ -11,6 +11,7 @@ import { eventBus, type EventType, type EventPayload } from '../../events/index.
 import { SessionStore } from '../session.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { detectReverseProxy, getProxyStatus } from '../../pipeline/traefik.js';
+import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
 
 const log = createModuleLogger('api');
 // --- Activity Event Buffer ---
@@ -460,13 +461,47 @@ export function createApiRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('deploy:success', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
-            type: 'complete',
-            message: `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
-            projectId: project.id,
-          });
-          cleanup();
-          void s.close();
+
+          // Generate post-deploy insights before sending complete event
+          void (async () => {
+            try {
+              const insights = await generatePostDeployInsights(
+                {
+                  projectId: payload.projectId,
+                  totalDurationMs: payload.totalDurationMs,
+                  url: payload.url,
+                },
+                ctx.docker,
+                ctx.db,
+              );
+
+              // Send each insight as an NDJSON event
+              for (const insight of insights) {
+                void s.write(
+                  JSON.stringify({
+                    type: 'insight',
+                    message: insight.title,
+                    detail: insight.detail ?? null,
+                    severity: insight.severity,
+                    actionButtons: insight.actions.length > 0 ? insight.actions : undefined,
+                    projectId: project.id,
+                    timestamp: new Date().toISOString(),
+                  }) + '\n',
+                );
+              }
+            } catch (err) {
+              log.warn({ err }, 'Post-deploy insight generation failed');
+            }
+
+            // Send complete event and close stream
+            write({
+              type: 'complete',
+              message: `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
+              projectId: project.id,
+            });
+            cleanup();
+            void s.close();
+          })();
         }),
       );
 
@@ -705,6 +740,59 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const previewId = c.req.param('id');
     await ctx.previewDeployer.cleanup(previewId);
     return c.json({ status: 'cleaned_up', previewId });
+  });
+
+  // --- v0.0.11: Insight action handlers ---
+
+  api.post('/projects/:id/actions', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req.json<{ action: string }>();
+    const { action } = body;
+
+    switch (action) {
+      case 'cleanup_stale': {
+        // Remove old containers for this project (keep the current one)
+        const managed = await ctx.docker.listManagedContainers();
+        const stale = managed.filter(
+          (c) =>
+            c.name.startsWith(project.name) &&
+            c.id !== project.container_id &&
+            c.status === 'running',
+        );
+        const client = ctx.docker.getClient();
+        for (const container of stale) {
+          try {
+            const dockerContainer = client.getContainer(container.id);
+            await dockerContainer.stop();
+            await dockerContainer.remove();
+          } catch (err) {
+            log.warn({ err, containerId: container.id }, 'Failed to remove stale container');
+          }
+        }
+        return c.json({ status: 'ok', action, removed: stale.length });
+      }
+
+      case 'view_logs': {
+        // Return a redirect hint — frontend navigates to logs tab
+        return c.json({ status: 'ok', action, redirect: 'logs' });
+      }
+
+      case 'retry_healthcheck': {
+        const result = await ctx.healthMonitor.checkProject(project.id);
+        return c.json({
+          status: 'ok',
+          action,
+          healthy: result.healthy,
+          responseTimeMs: result.responseTimeMs,
+        });
+      }
+
+      default:
+        return c.json({ status: 'error', message: `Unknown action: ${action}` }, 400);
+    }
   });
 
   api.delete('/projects/:id', async (c) => {

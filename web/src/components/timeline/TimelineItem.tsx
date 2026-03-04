@@ -2,6 +2,7 @@ import type { TimelineItem as TItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
 import { ExternalLink, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard';
+import { InsightCard } from './InsightCard';
 
 interface TimelineItemProps {
   item: TItem;
@@ -9,6 +10,7 @@ interface TimelineItemProps {
   onFixWithAI?: () => void;
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
+  onInsightAction?: (projectId: string, action: string) => Promise<void>;
 }
 
 function formatTime(timestamp: string): string {
@@ -30,11 +32,18 @@ export function TimelineItemCard({
   onFixWithAI,
   onSubmitAnswer,
   onSkipQuestion,
+  onInsightAction,
 }: TimelineItemProps) {
   const isProgress = item.type === 'progress';
   const isSuccess = item.type === 'success';
   const isError = item.type === 'error';
   const isQuestion = item.type === 'question';
+  const isInsight = item.type === 'insight';
+
+  // Insight items render via InsightCard
+  if (isInsight) {
+    return <InsightCard item={item} onAction={onInsightAction} />;
+  }
 
   // Question items render via InputRequestCard
   if (isQuestion && item.questionId && item.questions) {

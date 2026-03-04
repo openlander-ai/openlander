@@ -20,13 +20,23 @@ export interface QuestionData {
 
 /** Backend build stream raw event (NDJSON) */
 export interface BuildStreamEvent {
-  type: 'status' | 'complete' | 'error' | 'question_pending';
+  type: 'status' | 'complete' | 'error' | 'question_pending' | 'insight';
   message: string;
   projectId: string;
   timestamp: string;
   /** Present only for question_pending events */
   questionId?: string;
   questions?: QuestionData[];
+  /** Present only for insight events */
+  detail?: string | null;
+  severity?: 'info' | 'warning' | 'error';
+  actionButtons?: ActionButton[];
+}
+
+/** Action button for insight/anomaly timeline items */
+export interface ActionButton {
+  label: string;
+  action: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,7 +46,7 @@ export interface BuildStreamEvent {
 /** Frontend timeline display item */
 export interface TimelineItem {
   id: string;
-  type: 'progress' | 'success' | 'error' | 'question';
+  type: 'progress' | 'success' | 'error' | 'question' | 'insight';
   timestamp: string;
   title: string;
   detail?: string;
@@ -46,6 +56,9 @@ export interface TimelineItem {
   questionId?: string;
   questions?: QuestionData[];
   answered?: boolean;
+  /** Present only for insight items */
+  actionButtons?: ActionButton[];
+  severity?: 'info' | 'warning' | 'error';
 }
 
 /** Message pattern → progress percentage mapping */
@@ -105,6 +118,17 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         questionId: event.questionId,
         questions: event.questions,
         answered: false,
+      };
+    case 'insight':
+      return {
+        id,
+        type: 'insight',
+        timestamp: event.timestamp,
+        title: event.message,
+        detail: event.detail ?? undefined,
+        percent: -1,
+        severity: event.severity ?? 'info',
+        actionButtons: event.actionButtons,
       };
     default:
       return {

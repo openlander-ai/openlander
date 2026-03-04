@@ -14,6 +14,7 @@ interface UseTimelineReturn {
   error: string | null;
   submitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => Promise<void>;
   skipQuestion: (questionId: string) => Promise<void>;
+  executeAction: (projectId: string, action: string) => Promise<void>;
 }
 
 const MAX_RETRIES = 5;
@@ -175,5 +176,29 @@ export function useTimeline({ projectId, enabled = true }: UseTimelineOptions): 
     [markAnswered],
   );
 
-  return { items, isStreaming, isComplete, error, submitAnswer, skipQuestion };
+  /** Execute an insight action button (e.g. cleanup_stale, view_logs) */
+  const executeAction = useCallback(
+    async (_itemId: string, action: string) => {
+      if (!projectId) return;
+
+      // view_logs is a frontend-only action — no API call needed
+      // The frontend will handle tab switching via onAction callback
+
+      try {
+        const res = await fetch(`/api/projects/${projectId}/actions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }),
+        });
+        if (!res.ok) {
+          console.error('Action failed:', res.status);
+        }
+      } catch {
+        // Network error — user can retry
+      }
+    },
+    [projectId],
+  );
+
+  return { items, isStreaming, isComplete, error, submitAnswer, skipQuestion, executeAction };
 }
