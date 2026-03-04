@@ -252,6 +252,20 @@
 - traefik/whoami 실제 배포 성공 확인 (Traefik 라우팅 + 직접 포트 접속 모두 정상)
 **재검토 조건**: 새 버전 개발 중 regression 발견 시 도그푸딩 재개
 
+### DEC-017: Web 온보딩 채택, CLI 온보딩 스펙 보류
+
+**날짜**: 2026-03
+**결정**: Web Setup Screen(`/setup`)을 공식 온보딩으로 채택. CLI 온보딩 스펙(`v0.0.9/onboarding-refactor.md`)은 보류.
+**거부한 대안**: CLI `@inquirer/prompts` 기반 온보딩 구현 (onboarding-refactor.md)
+**이유**:
+
+- User가 CLI를 쓰지 않을 것으로 판단 ("cli는 안쓸거같은데..")
+- Web Setup Screen이 이미 ~90% 구현됨 (SetupScreen.tsx 586줄, setup-routes.ts 284줄)
+- LLM 설정 시 hot-reload 지원 (서버 재시작 불필요) — CLI에는 없는 장점
+- Docker 설치 가이드, GitHub 토큰 검증 등 CLI 스펙의 모든 기능이 Web에 이미 있음
+- 부족했던 부분(자동 리디렉트)은 SetupGuard 컴포넌트로 해결 (~20줄)
+**재검토 조건**: CLI-only 사용자가 실제로 필요해질 때 (npm global 설치 후 브라우저 없는 환경)
+
 ## 결정 추가 가이드
 
 새 결정을 내릴 때:

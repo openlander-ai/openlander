@@ -1,5 +1,5 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SetupScreen } from '@/components/setup/SetupScreen';
 import { NewProjectFlow } from '@/pages/NewProjectFlow';
@@ -7,6 +7,7 @@ import { ProjectDetail } from '@/pages/ProjectDetail';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
 import { SettingsPage } from '@/pages/SettingsPage';
 import './App.css';
+import { getSetupStatus } from '@/lib/api';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -38,6 +39,32 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
+/**
+ * Route guard: redirects to /setup when LLM is not configured.
+ * On API error, passes through (don't block existing users).
+ */
+function SetupGuard() {
+  const [status, setStatus] = useState<'loading' | 'ready' | 'needs-setup'>('loading');
+
+  useEffect(() => {
+    getSetupStatus()
+      .then((s) => setStatus(s.ready ? 'ready' : 'needs-setup'))
+      .catch(() => setStatus('ready'));
+  }, []);
+
+  if (status === 'loading') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-bg-app">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-agent border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (status === 'needs-setup') return <Navigate to="/setup" replace />;
+
+  return <Outlet />;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -47,11 +74,13 @@ function App() {
             path="/setup"
             element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
           />
-          <Route element={<AppLayout />}>
-            <Route path="/projects" element={<ProjectsGrid />} />
-            <Route path="/projects/new" element={<NewProjectFlow />} />
-            <Route path="/projects/:id" element={<ProjectDetail />} />
-            <Route path="/settings" element={<SettingsPage />} />
+          <Route element={<SetupGuard />}>
+            <Route element={<AppLayout />}>
+              <Route path="/projects" element={<ProjectsGrid />} />
+              <Route path="/projects/new" element={<NewProjectFlow />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
           </Route>
           <Route path="/" element={<Navigate to="/projects" replace />} />
           <Route path="*" element={<Navigate to="/projects" replace />} />

@@ -26,27 +26,27 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ## 스펙 문서 ↔ 버전 매핑
 
-| #   | 문서                           | 경로                                         | 버전           | 구현율 | 상태                                                            |
-| --- | ------------------------------ | -------------------------------------------- | -------------- | ------ | --------------------------------------------------------------- |
-| 1   | 요구사항 정의서                | `requirements.md`                            | v0.0.1~v0.0.8  | 90%    | v0.0.4까지 완료, v0.0.6 체크 완료                               |
-| 2   | TUI 리팩토링 스펙              | `v0.0.6/tui-spec.md`                         | v0.0.6         | 97%    | 38/39 태스크 완료                                               |
-| 3   | UI/UX 레이아웃                 | `v0.0.7/ui-ux-layout.md`                     | v0.0.7         | 95%    | 16/16 TASK 완료 + 버그 수정                                     |
-| 4   | 빌드실패 + Compose             | `v0.0.6/ui-ux-build-compose.md`              | v0.0.6         | 100%   | 전체 구현 완료                                                  |
-| 5   | v0.0.6 상세 태스크             | `v0.0.6/tasks.md`                            | v0.0.6         | 97%    | 38/39 완료 (i18n 1개 남음)                                      |
-| 6   | v0.0.7 구현 태스크             | `v0.0.7/implementation-tasks.md`             | v0.0.7         | 100%   | 16/16 전부 완료                                                 |
-| 7   | Phase 1 개발계획               | `v0.0.7/phase1-plan.md`                      | v0.0.7         | 100%   | 9개 스텝 전부 완료                                              |
-| 8   | AI SDK 마이그레이션            | `v0.0.8/vercel-ai-sdk-migration.md`          | v0.0.8         | 조사만 | 조사 완료, 구현 미착수                                          |
-| 9   | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9/server-awareness.md`로 재정의                           |
-| 10  | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의                               |
-| 11  | ~~v0.0.9–v0.0.10 통합 기획서~~ | `archive/v0.0.9-10-unified-spec.md`          | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체                              |
-| 12  | **v0.0.9 Server Awareness**    | `v0.0.9/server-awareness.md`                 | v0.0.9         | 100%   | ✅ 구현+도그푸딩 완료 (DEC-016). 버그 11건 해결, E2E 검증 완료. |
-| 13  | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 0%     | ✅ 기획 완료, 미착수                                            |
-| 14  | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)          |
-| 15  | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                               |
-| 16  | **v0.0.9 온보딩 리팩토링**     | `v0.0.9/onboarding-refactor.md`              | v0.0.9         | 0%     | 📋 기획 완료, 구현 미착수                                       |
-| 17  | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 0%     | 📋 기획 완료, 미착수                                            |
-| 18  | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                           |
-| 19  | **v0.0.11 Agent Proactivity**  | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have       |
+| #      | 문서                           | 경로                                         | 버전           | 구현율 | 상태                                                            |
+| ------ | ------------------------------ | -------------------------------------------- | -------------- | ------ | --------------------------------------------------------------- |
+| 1      | 요구사항 정의서                | `requirements.md`                            | v0.0.1~v0.0.8  | 90%    | v0.0.4까지 완료, v0.0.6 체크 완료                               |
+| 2      | TUI 리팩토링 스펙              | `v0.0.6/tui-spec.md`                         | v0.0.6         | 97%    | 38/39 태스크 완료                                               |
+| 3      | UI/UX 레이아웃                 | `v0.0.7/ui-ux-layout.md`                     | v0.0.7         | 95%    | 16/16 TASK 완료 + 버그 수정                                     |
+| 4      | 빌드실패 + Compose             | `v0.0.6/ui-ux-build-compose.md`              | v0.0.6         | 100%   | 전체 구현 완료                                                  |
+| 5      | v0.0.6 상세 태스크             | `v0.0.6/tasks.md`                            | v0.0.6         | 97%    | 38/39 완료 (i18n 1개 남음)                                      |
+| 6      | v0.0.7 구현 태스크             | `v0.0.7/implementation-tasks.md`             | v0.0.7         | 100%   | 16/16 전부 완료                                                 |
+| 7      | Phase 1 개발계획               | `v0.0.7/phase1-plan.md`                      | v0.0.7         | 100%   | 9개 스텝 전부 완료                                              |
+| 8      | AI SDK 마이그레이션            | `v0.0.8/vercel-ai-sdk-migration.md`          | v0.0.8         | 조사만 | 조사 완료, 구현 미착수                                          |
+| 9      | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9/server-awareness.md`로 재정의                           |
+| 10     | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의                               |
+| 11     | ~~v0.0.9–v0.0.10 통합 기획서~~ | `archive/v0.0.9-10-unified-spec.md`          | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체                              |
+| 12     | **v0.0.9 Server Awareness**    | `v0.0.9/server-awareness.md`                 | v0.0.9         | 100%   | ✅ 구현+도그푸딩 완료 (DEC-016). 버그 11건 해결, E2E 검증 완료. |
+| 13     | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 0%     | ✅ 기획 완료, 미착수                                            |
+| 14     | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)          |
+| 15     | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                               |
+| ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~     | `v0.0.9/onboarding-refactor.md`              | v0.0.9         | —      | ⏸️ 보류 (DEC-017: Web Setup Screen으로 대체)                    |
+| 17     | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 0%     | 📋 기획 완료, 미착수                                            |
+| 18     | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                           |
+| 19     | **v0.0.11 Agent Proactivity**  | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have       |
 
 ---
 
@@ -235,9 +235,9 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 **추가 스코프** (도그푸딩 중 발견):
 
-| 항목                | 내용                                                                          | 상태 |
-| ------------------- | ----------------------------------------------------------------------------- | ---- |
-| 온보딩 CLI 리팩토링 | TUI 팝업 온보딩 → CLI 스타일로 전환. Docker → LLM(BYOK) → Git(OAuth/SSH/Skip) | 📋   |
+| 항목                | 내용                                                                          | 상태              |
+| ------------------- | ----------------------------------------------------------------------------- | ----------------- |
+| 온보딩 CLI 리팩토링 | TUI 팝업 온보딩 → CLI 스타일로 전환. Docker → LLM(BYOK) → Git(OAuth/SSH/Skip) | ⏸️ 보류 (DEC-017) |
 
 > 관련 문서: [`v0.0.9/onboarding-refactor.md`](v0.0.9/onboarding-refactor.md)
 
@@ -370,37 +370,37 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ## 미해결 항목 총정리
 
-| #      | 항목                       | 버전                 | 문서                                | 우선순위   |
-| ------ | -------------------------- | -------------------- | ----------------------------------- | ---------- |
-| 1      | i18n (다국어 지원)         | v0.0.6               | `v0.0.6/tasks.md` T-INFRA-01        | 낮음       |
-| 2      | 프로젝트 검색/필터         | v0.0.6               | `requirements.md` L468              | 낮음       |
-| 3      | ~~전체 컨테이너 스캔~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료    |
-| 4      | ~~OS 레벨 포트 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료    |
-| 5      | ~~리버스 프록시 감지~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료    |
-| 6      | ~~시스템 프롬프트 확장~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료    |
-| 7      | ~~에이전트 도구 3개 추가~~ | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료    |
-| 8      | ~~Dashboard Server 섹션~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료    |
-| 9      | ~~Preflight Check~~        | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료    |
-| 10     | Global Secrets + 암호화    | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | 중간       |
-| 11     | .env.example 감지          | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | 중간       |
-| 12     | 환경변수 도구 추가         | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | 중간       |
-| 13     | /env 오버레이 확장         | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | 중간       |
-| 14     | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기) |
-| 15     | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래       |
-| ~~16~~ | ~~Post-Deploy Insight~~    | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료    |
-| ~~17~~ | ~~Anomaly Nudge~~          | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료    |
+| #      | 항목                       | 버전                 | 문서                                | 우선순위          |
+| ------ | -------------------------- | -------------------- | ----------------------------------- | ----------------- |
+| 1      | i18n (다국어 지원)         | v0.0.6               | `v0.0.6/tasks.md` T-INFRA-01        | 낮음              |
+| 2      | 프로젝트 검색/필터         | v0.0.6               | `requirements.md` L468              | 낮음              |
+| 3      | ~~전체 컨테이너 스캔~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료           |
+| 4      | ~~OS 레벨 포트 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료           |
+| 5      | ~~리버스 프록시 감지~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료           |
+| 6      | ~~시스템 프롬프트 확장~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료           |
+| 7      | ~~에이전트 도구 3개 추가~~ | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료           |
+| 8      | ~~Dashboard Server 섹션~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료           |
+| 9      | ~~Preflight Check~~        | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료           |
+| 10     | Global Secrets + 암호화    | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | 중간              |
+| 11     | .env.example 감지          | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | 중간              |
+| 12     | 환경변수 도구 추가         | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | 중간              |
+| 13     | /env 오버레이 확장         | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | 중간              |
+| 14     | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기)        |
+| 15     | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래              |
+| ~~16~~ | ~~Post-Deploy Insight~~    | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료           |
+| ~~17~~ | ~~Anomaly Nudge~~          | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료           |
 | ~~18~~ | ~~Smart Defaults~~         | v0.0.11              | ✅                                  |
 | ~~19~~ | ~~Idle Scan~~              | v0.0.11              | ❌                                  |
-| 20     | 온보딩 CLI 리팩토링        | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | 높음       |
-| 21     | OpenAI OAuth PKCE          | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간       |
-| 22     | Anthropic Token Setup      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간       |
-| 23     | OpenRouter OAuth PKCE      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간       |
-| 24     | Google ADC                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간       |
-| 25     | 토큰 저장 & 리프레시       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간       |
-| ~~26~~ | ~~Web MVP Phase 1~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료    |
-| ~~27~~ | ~~Web MVP Phase 2~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료    |
-| ~~28~~ | ~~Web MVP Phase 3~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료    |
-| ~~29~~ | ~~TUI Freeze~~             | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료    |
+| ~~20~~ | ~~온보딩 CLI 리팩토링~~    | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | ⏸️ 보류 (DEC-017) |
+| 21     | OpenAI OAuth PKCE          | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간              |
+| 22     | Anthropic Token Setup      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간              |
+| 23     | OpenRouter OAuth PKCE      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간              |
+| 24     | Google ADC                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간              |
+| 25     | 토큰 저장 & 리프레시       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간              |
+| ~~26~~ | ~~Web MVP Phase 1~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료           |
+| ~~27~~ | ~~Web MVP Phase 2~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료           |
+| ~~28~~ | ~~Web MVP Phase 3~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료           |
+| ~~29~~ | ~~TUI Freeze~~             | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료           |
 
 ---
 
