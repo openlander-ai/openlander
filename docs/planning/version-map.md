@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.1.0 ✅ ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.1.0 ✅ ── v0.0.11 🔧 ── v0.0.12 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.1.0 ✅ ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.1.0 ✅ ── v0.0.11 🔧 ── v0.0.12 📋 ── v0.0.10 📋 ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
 
 ```
 
@@ -46,6 +46,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 | 16  | **v0.0.9 온보딩 리팩토링**     | `v0.0.9/onboarding-refactor.md`              | v0.0.9         | 0%     | 📋 기획 완료, 구현 미착수                 |
 | 17  | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 0%     | 📋 기획 완료, 미착수                      |
 | 18  | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot     |
+| 19  | **v0.0.11 Agent Proactivity**  | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 33%    | 🔧 Phase 1(11-1) 완료, Phase 2-3 미착수   |
 
 ---
 
@@ -263,22 +264,30 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.0.11 — Agent Proactivity (에이전트 능동성) 📋
+### v0.0.11 — Agent Proactivity (에이전트 능동성) 🔧
 
-**상태**: 기획 초안 | **관련 문서**: [`v0.0.11/agent-proactivity.md`](v0.0.11/agent-proactivity.md)
+**상태**: Phase 1 구현 완료, Phase 2 진행 예정 | **관련 문서**: [`v0.0.11/agent-proactivity.md`](v0.0.11/agent-proactivity.md)
 
 > 에이전트가 정보를 수동적으로 제공하는 것에서, **적절한 타이밍에 능동적으로 인사이트를 전달**하는 것으로 전환.
+> **v2 변경사항**: TUI → Web 플랫폼 전환. Timeline Items 사용, 알림 시스템 추가, 11-4 Idle Scan 제거.
 
 **핵심 가치**: "서버 상태를 알고, 먼저 말해주는 배포 에이전트"
 
-| 파트                      | 내용                                                 | 상태 |
-| ------------------------- | ---------------------------------------------------- | ---- |
-| 11-1: Post-Deploy Insight | 배포 후 헬스체크/이전버전 정리/리소스 상태 자동 보고 | 📋   |
-| 11-2: Anomaly Nudge       | 크래시/재시작 루프/리소스 포화 감지 → 채팅 알림      | 📋   |
-| 11-3: Smart Defaults      | 이전 배포 히스토리 기반 스마트 기본값 제안           | 📋   |
-| 11-4: Idle Scan           | 유휴 시 미사용 컨테이너/이미지 정리 제안             | 📋   |
+| 파트                      | 내용                                                  | 상태      |
+| ------------------------- | ----------------------------------------------------- | --------- |
+| 11-1: Post-Deploy Insight | 배포 후 헬스체크/이전버전 정리/리소스 상태 자동 보고  | ✅        |
+| 11-2: Anomaly Nudge       | 크래시/재시작 루프/리소스 포화 감지 → Timeline + 알림 | 📋        |
+| 11-3: Smart Defaults      | 이전 배포 히스토리 기반 스마트 기본값 제안            | 📋        |
+| ~~11-4: Idle Scan~~       | ~~유휴 시 미사용 컨테이너/이미지 정리 제안~~          | ❌ 제거됨 |
 
-**우선순위 제안**: v0.0.10(환경변수)보다 먼저 진행 권장 — 제품 정체성 강화 + 경쟁 차별화. 최종 결정은 User.
+**Phase 1 구현 내역** (commit `3c5e640`):
+
+- `src/pipeline/post-deploy-insight.ts` — 신규: 인사이트 생성 로직 (헬스체크, 이전 컨테이너, 리소스, 빌드 시간)
+- `src/web/api/routes.ts` — deploy:success 후 insight NDJSON 이벤트 전송 + `POST /api/projects/:id/actions`
+- `web/src/lib/event-types.ts` — insight 타입 + ActionButton 인터페이스
+- `web/src/components/timeline/InsightCard.tsx` — 신규: severity별 스타일 + 액션 버튼
+
+**우선순위 제안**: v0.0.10(환경변수)보다 먼저 진행 권장 — 제품 정체성 강화 + 경쟁 차별화.
 
 ### v0.0.12 — Provider OAuth (인증 통합) 📋
 
@@ -365,10 +374,10 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 | 13     | /env 오버레이 확장         | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | 중간       |
 | 14     | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기) |
 | 15     | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래       |
-| 16     | Post-Deploy Insight        | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | 높음       |
-| 17     | Anomaly Nudge              | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | 높음       |
-| 18     | Smart Defaults             | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-3 | 높음       |
-| 19     | Idle Scan                  | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-4 | 중간       |
+| ~~16~~ | ~~Post-Deploy Insight~~    | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료    |
+| 17     | Anomaly Nudge              | v0.0.11              | 📋                                  |
+| 18     | Smart Defaults             | v0.0.11              | 📋                                  |
+| ~~19~~ | ~~Idle Scan~~              | v0.0.11              | ❌                                  |
 | 20     | 온보딩 CLI 리팩토링        | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | 높음       |
 | 21     | OpenAI OAuth PKCE          | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간       |
 | 22     | Anthropic Token Setup      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간       |
