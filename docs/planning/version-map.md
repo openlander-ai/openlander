@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.1.0 ✅ ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.1.0 📋 ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 🧪 ── v0.1.0 ✅ ── v0.0.12 📋 ── v0.0.11 📋 ── v0.0.10 📋 ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
 
 ```
 
@@ -45,7 +45,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 | 15  | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료         |
 | 16  | **v0.0.9 온보딩 리팩토링**     | `v0.0.9/onboarding-refactor.md`              | v0.0.9         | 0%     | 📋 기획 완료, 구현 미착수                 |
 | 17  | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 0%     | 📋 기획 완료, 미착수                      |
-| 18  | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 0%     | 📋 기획 완료, TUI→Web pivot               |
+| 18  | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot     |
 
 ---
 
@@ -348,37 +348,37 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ## 미해결 항목 총정리
 
-| #   | 항목                       | 버전                 | 문서                                | 우선순위   |
-| --- | -------------------------- | -------------------- | ----------------------------------- | ---------- |
-| 1   | i18n (다국어 지원)         | v0.0.6               | `v0.0.6/tasks.md` T-INFRA-01        | 낮음       |
-| 2   | 프로젝트 검색/필터         | v0.0.6               | `requirements.md` L468              | 낮음       |
-| 3   | ~~전체 컨테이너 스캔~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료    |
-| 4   | ~~OS 레벨 포트 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료    |
-| 5   | ~~리버스 프록시 감지~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료    |
-| 6   | ~~시스템 프롬프트 확장~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료    |
-| 7   | ~~에이전트 도구 3개 추가~~ | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료    |
-| 8   | ~~Dashboard Server 섹션~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료    |
-| 9   | ~~Preflight Check~~        | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료    |
-| 10  | Global Secrets + 암호화    | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | 중간       |
-| 11  | .env.example 감지          | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | 중간       |
-| 12  | 환경변수 도구 추가         | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | 중간       |
-| 13  | /env 오버레이 확장         | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | 중간       |
-| 14  | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기) |
-| 15  | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래       |
-| 16  | Post-Deploy Insight        | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | 높음       |
-| 17  | Anomaly Nudge              | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | 높음       |
-| 18  | Smart Defaults             | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-3 | 높음       |
-| 19  | Idle Scan                  | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-4 | 중간       |
-| 20  | 온보딩 CLI 리팩토링        | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | 높음       |
-| 21  | OpenAI OAuth PKCE          | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간       |
-| 22  | Anthropic Token Setup      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간       |
-| 23  | OpenRouter OAuth PKCE      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간       |
-| 24  | Google ADC                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간       |
-| 25  | 토큰 저장 & 리프레시       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간       |
-| 26  | Web MVP Phase 1            | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | 높음       |
-| 27  | Web MVP Phase 2            | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | 높음       |
-| 28  | Web MVP Phase 3            | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | 중간       |
-| 29  | TUI Freeze                 | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | 높음       |
+| #      | 항목                       | 버전                 | 문서                                | 우선순위   |
+| ------ | -------------------------- | -------------------- | ----------------------------------- | ---------- |
+| 1      | i18n (다국어 지원)         | v0.0.6               | `v0.0.6/tasks.md` T-INFRA-01        | 낮음       |
+| 2      | 프로젝트 검색/필터         | v0.0.6               | `requirements.md` L468              | 낮음       |
+| 3      | ~~전체 컨테이너 스캔~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료    |
+| 4      | ~~OS 레벨 포트 스캔~~      | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료    |
+| 5      | ~~리버스 프록시 감지~~     | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료    |
+| 6      | ~~시스템 프롬프트 확장~~   | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료    |
+| 7      | ~~에이전트 도구 3개 추가~~ | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료    |
+| 8      | ~~Dashboard Server 섹션~~  | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료    |
+| 9      | ~~Preflight Check~~        | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료    |
+| 10     | Global Secrets + 암호화    | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | 중간       |
+| 11     | .env.example 감지          | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | 중간       |
+| 12     | 환경변수 도구 추가         | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | 중간       |
+| 13     | /env 오버레이 확장         | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | 중간       |
+| 14     | Vercel AI SDK 마이그레이션 | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기) |
+| 15     | 파인튜닝 모델              | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래       |
+| 16     | Post-Deploy Insight        | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | 높음       |
+| 17     | Anomaly Nudge              | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | 높음       |
+| 18     | Smart Defaults             | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-3 | 높음       |
+| 19     | Idle Scan                  | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-4 | 중간       |
+| 20     | 온보딩 CLI 리팩토링        | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | 높음       |
+| 21     | OpenAI OAuth PKCE          | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 중간       |
+| 22     | Anthropic Token Setup      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 중간       |
+| 23     | OpenRouter OAuth PKCE      | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3    | 중간       |
+| 24     | Google ADC                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-4    | 중간       |
+| 25     | 토큰 저장 & 리프레시       | v0.0.12              | `v0.0.12/provider-oauth.md` 12-5    | 중간       |
+| ~~26~~ | ~~Web MVP Phase 1~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료    |
+| ~~27~~ | ~~Web MVP Phase 2~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료    |
+| ~~28~~ | ~~Web MVP Phase 3~~        | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료    |
+| ~~29~~ | ~~TUI Freeze~~             | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료    |
 
 ---
 
@@ -429,52 +429,29 @@ AI: bugs.md → 해결됨 + gh issue close
 
 ---
 
-### v0.1.0 — Web MVP 📋
+### v0.1.0 — Web MVP ✅
 
-**상태**: 기획 완료, 구현 미착수 | **관련 문서**: [`v0.1.0/web-mvp.md`](v0.1.0/web-mvp.md)
+**상태**: 구현 완료 | **관련 문서**: [`v0.1.0/web-mvp.md`](v0.1.0/web-mvp.md), [`v0.1.0/tech-lead-review.md`](v0.1.0/tech-lead-review.md)
 
-> **핵심 가치**: TUI→Web pivot. 웹을 **히어로 화면**으로 하여, **"repo 연결해서 딸깍"** — Connect repo, click, done. Agent handles everything in background.
+> **핵심 가치**: TUI→Web pivot. 웹을 **히어로 화면**으로 하여, **“repo 연결해서 딸깍”** — Connect repo, click, done. Agent handles everything in background.
 
 **UI/UX 디자인**: [`docs/design/web-mvp-ui-ux.md`](../../design/web-mvp-ui-ux.md)
 
-**Phase 1 — Core** (2주):
-
-| 기능                     | 설명                                                 |
-| ------------------------ | ---------------------------------------------------- |
-| Theme Setup              | Tailwind v4 + 디자인 토큰                            |
-| Layout Refactor          | Sidebar + Main + Collapsible Chat 구조               |
-| Projects List Page       | 프로젝트 그리드 + 상태 표시                          |
-| New Project Flow         | 레포 선택 → 배포 트리거 → Timeline 이동              |
-| Agent Timeline Component | **히어로 화면** (에이전트 생각/액션 실시간 스트리밍) |
-| Build Progress Streaming | SSE/NDJSON → Timeline 이벤트 매핑                    |
-
-**Phase 2 — Essential** (1.5주):
-
-| 기능                       | 설명                                 |
-| -------------------------- | ------------------------------------ |
-| Agent Intervention Pattern | 인라인 폼 카드 (env vars, domain 등) |
-| Log Viewer                 | 실시간 스트리밍 + 검색 + Follow 모드 |
-| Project Configuration      | 환경변수 + 도메인 관리               |
-| Onboarding Flow            | 3단계 위자드 (LLM Key + GitHub Auth) |
-
-**Phase 3 — Polish** (1주):
-
-| 기능                        | 설명                            |
-| --------------------------- | ------------------------------- |
-| Chat Panel (Slide-over)     | 오버라이드/질문 전용            |
-| Settings Page               | LLM Provider + GitHub 계정 관리 |
-| Command Palette (Cmd+K)     | 전역 네비게이션 + 액션          |
-| Motion & Micro-interactions | Timeline 애니메이션 + 상태 전환 |
-| Responsive Design           | Tablet/Mobile 대응 (read-only)  |
+| Phase                  | 내용                                                                          | 상태 |
+| ---------------------- | ----------------------------------------------------------------------------- | ---- |
+| Phase 0 — Architecture | TUI freeze, SPA serving, React Router, build verification                     | ✅   |
+| Phase 1 — Core         | Theme, Layout, Projects Grid, New Project, Timeline, NDJSON Streaming         | ✅   |
+| Phase 2 — Essential    | Agent Intervention (full-stack), Log Viewer, Config (env+domains), Onboarding | ✅   |
+| Phase 3 — Polish       | Chat (Cmd+.), Settings, Command Palette (Cmd+K), Motion, Responsive           | ✅   |
 
 **Architecture Tasks**:
 
-| 항목                         | 내용                                              |
-| ---------------------------- | ------------------------------------------------- |
-| SPA Serving from Hono Daemon | Vite dist/ → 정적 파일 서빙                       |
-| SSE Event Unification        | Typed events (build_progress, log, deploy_status) |
-| CLI-lite Commands            | deploy, status, logs, open, projects ls           |
-| TUI Freeze                   | Git tag `tui-last`, 기본 빌드에서 제거            |
+| 항목                                                        | 상태 |
+| ----------------------------------------------------------- | ---- |
+| SPA Serving from Hono Daemon                                | ✅   |
+| NDJSON Event Type 확장 (6종)                                | ✅   |
+| CLI-lite Commands (deploy, status, logs, open, projects ls) | ✅   |
+| TUI Freeze (git tag `tui-last` @ e927b30)                   | ✅   |
 
 **의사결정 기록**: [`references/decision-log.md`](../../references/decision-log.md)
 

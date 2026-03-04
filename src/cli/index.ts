@@ -421,4 +421,183 @@ program
     await startMcpServer(ctx);
   });
 
+// ── openlander deploy <repo> ─────────────────────────────────────────────────
+
+program
+  .command('deploy <repo>')
+  .description('Deploy a repo (shorthand for web API call)')
+  .option('-b, --branch <branch>', 'Branch to deploy', 'main')
+  .option('-n, --name <name>', 'Project name')
+  .option('-p, --port <port>', 'API port', '10003')
+  .action(async (repo: string, opts: { branch: string; name?: string; port: string }) => {
+    const base = `http://localhost:${opts.port}`;
+    const name =
+      opts.name ??
+      repo
+        .split('/')
+        .pop()
+        ?.replace(/\.git$/, '') ??
+      'project';
+
+    console.log(pc.dim(`  Deploying ${repo} (branch: ${opts.branch})...`));
+
+    try {
+      const res = await fetch(`${base}/api/projects/deploy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoUrl: repo, branch: opts.branch, name }),
+      });
+      const data = (await res.json()) as { project?: { id: string; name: string }; error?: string };
+      if (!res.ok) {
+        console.error(pc.red(`  Deploy failed: ${data.error ?? res.statusText}`));
+        process.exit(1);
+      }
+      console.log(pc.green(`  ✓ Project created: ${data.project?.name ?? name}`));
+      console.log(pc.dim(`    ID: ${data.project?.id ?? '—'}`));
+      console.log(pc.dim(`    Web: ${base}/projects/${data.project?.id ?? ''}`));
+    } catch {
+      console.error(pc.red('  Could not connect to OpenLander daemon.'));
+      console.error(pc.dim('  Make sure `openlander` is running.'));
+      process.exit(1);
+    }
+  });
+
+// ── openlander logs <project> ────────────────────────────────────────────────
+
+program
+  .command('logs <project>')
+  .description('Stream logs for a project')
+  .option('-p, --port <port>', 'API port', '10003')
+  .option('-n, --lines <n>', 'Number of lines', '100')
+  .action(async (project: string, opts: { port: string; lines: string }) => {
+    const base = `http://localhost:${opts.port}`;
+
+    // Resolve project name to ID
+    const projectId = await resolveProjectId(base, project);
+    if (!projectId) {
+      console.error(pc.red(`  Project "${project}" not found.`));
+      process.exit(1);
+    }
+
+    try {
+      const res = await fetch(`${base}/api/projects/${projectId}/logs?lines=${opts.lines}`);
+      if (!res.ok) {
+        console.error(pc.red(`  Failed to fetch logs: ${res.statusText}`));
+        process.exit(1);
+      }
+      const data = (await res.json()) as { logs?: string };
+      if (data.logs) {
+        process.stdout.write(data.logs);
+      } else {
+        console.log(pc.dim('  No logs available.'));
+      }
+    } catch {
+      console.error(pc.red('  Could not connect to OpenLander daemon.'));
+      process.exit(1);
+    }
+  });
+
+// ── openlander open <project> ────────────────────────────────────────────────
+
+program
+  .command('open <project>')
+  .description('Open project URL in browser')
+  .option('-p, --port <port>', 'API port', '10003')
+  .action(async (project: string, opts: { port: string }) => {
+    const base = `http://localhost:${opts.port}`;
+
+    const projectId = await resolveProjectId(base, project);
+    if (!projectId) {
+      console.error(pc.red(`  Project "${project}" not found.`));
+      process.exit(1);
+    }
+
+    try {
+      const res = await fetch(`${base}/api/projects/${projectId}`);
+      const data = (await res.json()) as { name?: string; url?: string; publicUrl?: string };
+      const url = data.publicUrl ?? data.url;
+      if (!url) {
+        console.error(pc.yellow(`  Project "${data.name ?? project}" has no URL yet.`));
+        process.exit(1);
+      }
+
+      console.log(pc.dim(`  Opening ${url}...`));
+      const { exec } = await import('node:child_process');
+      const openCmd =
+        process.platform === 'darwin'
+          ? 'open'
+          : process.platform === 'win32'
+            ? 'start'
+            : 'xdg-open';
+      exec(`${openCmd} ${url}`, (err) => {
+        if (err) console.error(pc.yellow('  Could not open browser.'));
+      });
+    } catch {
+      console.error(pc.red('  Could not connect to OpenLander daemon.'));
+      process.exit(1);
+    }
+  });
+
+// ── openlander projects ──────────────────────────────────────────────────────
+
+const projectsCmd = program.command('projects').description('Manage projects');
+
+projectsCmd
+  .command('ls')
+  .description('List all projects')
+  .option('-p, --port <port>', 'API port', '10003')
+  .action(async (opts: { port: string }) => {
+    const base = `http://localhost:${opts.port}`;
+
+    try {
+      const res = await fetch(`${base}/api/projects`);
+      if (!res.ok) {
+        console.error(pc.red(`  Failed: ${res.statusText}`));
+        process.exit(1);
+      }
+      const projects = (await res.json()) as Array<{
+        id: string;
+        name: string;
+        status: string;
+        url?: string;
+        publicUrl?: string;
+      }>;
+
+      if (projects.length === 0) {
+        console.log(pc.dim('  No projects deployed yet.'));
+        return;
+      }
+
+      console.log(pc.bold(`\n  Projects (${String(projects.length)}):\n`));
+      for (const p of projects) {
+        const icon =
+          p.status === 'running' ? pc.green('●') : p.status === 'error' ? pc.red('●') : pc.dim('○');
+        const url = p.publicUrl ?? p.url ?? '';
+        console.log(`  ${icon} ${pc.bold(p.name)}  ${pc.dim(p.status)}  ${pc.cyan(url)}`);
+      }
+      console.log();
+    } catch {
+      console.error(pc.red('  Could not connect to OpenLander daemon.'));
+      console.error(pc.dim('  Make sure `openlander` is running.'));
+      process.exit(1);
+    }
+  });
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+async function resolveProjectId(base: string, nameOrId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${base}/api/projects`);
+    if (!res.ok) return null;
+    const projects = (await res.json()) as Array<{ id: string; name: string }>;
+    // Match by ID first, then by name (case-insensitive)
+    const match =
+      projects.find((p) => p.id === nameOrId) ??
+      projects.find((p) => p.name.toLowerCase() === nameOrId.toLowerCase());
+    return match?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 program.parse();
