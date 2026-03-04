@@ -113,7 +113,7 @@ export class Database {
 
   /** Create tables if they don't exist. */
   private initialize(): void {
-    this.sqlite.exec(SCHEMA);
+    this.sqlite.run(SCHEMA);
     this.migrate();
   }
 
@@ -124,23 +124,35 @@ export class Database {
     const colNames = new Set(columns.map((c) => c.name));
 
     if (!colNames.has('parent_project_id')) {
-      this.sqlite.exec(
+      this.sqlite.run(
         'ALTER TABLE projects ADD COLUMN parent_project_id TEXT REFERENCES projects(id) ON DELETE CASCADE',
       );
     }
     if (!colNames.has('dockerfile_path')) {
-      this.sqlite.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
+      this.sqlite.run("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
     }
     if (!colNames.has('deploy_lock_session')) {
-      this.sqlite.exec('ALTER TABLE projects ADD COLUMN deploy_lock_session TEXT DEFAULT NULL');
+      this.sqlite.run('ALTER TABLE projects ADD COLUMN deploy_lock_session TEXT DEFAULT NULL');
     }
     if (!colNames.has('deploy_lock_at')) {
-      this.sqlite.exec('ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL');
+      this.sqlite.run('ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL');
     }
 
-    this.sqlite.exec(
+    this.sqlite.run(
       'CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)',
     );
+
+    // deploy_logs migrations
+    const dlCols = this.sqlite.prepare("PRAGMA table_info('deploy_logs')").all() as Array<{
+      name: string;
+    }>;
+    const dlColNames = new Set(dlCols.map((c) => c.name));
+
+    if (!dlColNames.has('trigger_source')) {
+      this.sqlite.run(
+        "ALTER TABLE deploy_logs ADD COLUMN trigger_source TEXT CHECK(trigger_source IN ('chat', 'webhook', 'api'))",
+      );
+    }
   }
 
   // ===== Projects =====
@@ -648,14 +660,17 @@ export class Database {
 
   /** Clean expired deploy locks (default: 10 min timeout). Returns count of cleaned locks. */
   cleanExpiredDeployLocks(timeoutMinutes = 10): number {
-    const result = this.db
+    this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null })
       .where(
         sql`${projects.deploy_lock_session} IS NOT NULL AND ${projects.deploy_lock_at} < datetime('now', '-' || ${timeoutMinutes} || ' minutes')`,
       )
-      .run() as unknown as { changes: number };
-    return result.changes;
+      .run();
+    const row = this.sqlite.query('SELECT changes() as changes').get() as {
+      changes: number;
+    } | null;
+    return row?.changes ?? 0;
   }
   // ===== Utility =====
 
