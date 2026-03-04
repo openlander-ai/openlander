@@ -9,7 +9,14 @@ const log = createModuleLogger('alerts');
 
 export interface Alert {
   id: string;
-  type: 'disk' | 'inactive-project' | 'restart-loop' | 'dangling-images' | 'port-conflict';
+  type:
+    | 'disk'
+    | 'inactive-project'
+    | 'restart-loop'
+    | 'dangling-images'
+    | 'port-conflict'
+    | 'container-crash'
+    | 'resource-saturation';
   severity: 'warning' | 'critical';
   message: string;
   details: Record<string, unknown>;
@@ -30,6 +37,9 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const INACTIVE_DAYS_THRESHOLD = 14;
 const RESTART_COUNT_THRESHOLD = 3;
 const DANGLING_IMAGES_THRESHOLD = 3;
+const CONTAINER_MEMORY_THRESHOLD = 90;
+const HOURLY_ALERT_CAP = 3;
+const COOLDOWN_MS = 5 * 60 * 1000;
 
 export class AlertMonitor {
   private readonly docker: Docker;
@@ -37,9 +47,11 @@ export class AlertMonitor {
   private readonly events: EventBus;
   private readonly options: Required<AlertMonitorOptions>;
   private readonly alerts = new Map<string, Alert>();
-  private readonly alertKeys = new Map<string, string>(); // type:targetId -> alertId
+  private readonly alertKeys = new Map<string, string>();
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private checking = false;
+  private hourlyCounts: number[] = [];
+  private lastAlertTime = 0;
 
   constructor(docker: Docker, db: Database, events: EventBus, options?: AlertMonitorOptions) {
     this.docker = docker;
@@ -107,6 +119,11 @@ export class AlertMonitor {
         const port = alert.details['port'];
         return typeof port === 'number' ? String(port) : 'unknown';
       }
+      case 'container-crash':
+      case 'resource-saturation': {
+        const containerId = alert.details['containerId'];
+        return typeof containerId === 'string' ? containerId : 'unknown';
+      }
       default:
         return 'unknown';
     }
@@ -123,6 +140,8 @@ export class AlertMonitor {
         this.checkDiskUsage(),
         this.checkInactiveProjects(),
         this.checkContainerRestartLoops(),
+        this.checkContainerCrashes(),
+        this.checkContainerMemory(),
         this.checkDanglingImages(),
         this.checkPortConflicts(),
       ]);
@@ -329,6 +348,15 @@ export class AlertMonitor {
     }
   }
 
+  private isRateLimited(): boolean {
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+    this.hourlyCounts = this.hourlyCounts.filter((t) => t > oneHourAgo);
+    if (this.hourlyCounts.length >= HOURLY_ALERT_CAP) return true;
+    if (now - this.lastAlertTime < COOLDOWN_MS) return true;
+    return false;
+  }
+
   private async upsertAlert(
     key: string,
     alertData: Omit<Alert, 'id' | 'createdAt' | 'dismissed'>,
@@ -336,10 +364,8 @@ export class AlertMonitor {
     const existingId = this.alertKeys.get(key);
 
     if (existingId) {
-      // Alert already exists, update it but preserve createdAt
       const existing = this.alerts.get(existingId);
       if (existing) {
-        // Update details and severity if changed
         existing.severity = alertData.severity;
         existing.message = alertData.message;
         existing.details = alertData.details;
@@ -348,7 +374,11 @@ export class AlertMonitor {
       }
     }
 
-    // Create new alert
+    if (this.isRateLimited()) {
+      log.debug({ key, type: alertData.type }, 'Alert rate-limited');
+      return;
+    }
+
     const alert: Alert = {
       id: nanoid(12),
       ...alertData,
@@ -358,6 +388,8 @@ export class AlertMonitor {
 
     this.alerts.set(alert.id, alert);
     this.alertKeys.set(key, alert.id);
+    this.hourlyCounts.push(Date.now());
+    this.lastAlertTime = Date.now();
 
     await this.events.emit('alert:new', { alert });
     log.info(
@@ -378,5 +410,106 @@ export class AlertMonitor {
 
     void this.events.emit('alert:resolved', { alertId, type });
     log.info({ alertId, type }, 'Alert resolved');
+  }
+
+  private async checkContainerCrashes(): Promise<void> {
+    const dockerClient = this.docker.getClient();
+    const projects = this.db.listProjects();
+
+    for (const project of projects) {
+      if (!project.container_id) continue;
+      if (project.status === 'building') continue;
+
+      const key = `container-crash:${project.container_id}`;
+
+      try {
+        const container = dockerClient.getContainer(project.container_id);
+        const info = await container.inspect();
+        const state = info.State;
+
+        if (state.Running || state.ExitCode === 0) {
+          this.resolveAlert(key, 'container-crash');
+          continue;
+        }
+
+        const message = `${project.name} 컨테이너가 크래시했어 (exit code ${String(state.ExitCode)})`;
+        const suggestion = `"get_logs ${project.name}"으로 로그를 확인하고 원인을 파악하세요.`;
+
+        await this.upsertAlert(key, {
+          type: 'container-crash',
+          severity: 'critical',
+          message,
+          details: {
+            projectId: project.id,
+            projectName: project.name,
+            containerId: project.container_id,
+            exitCode: state.ExitCode,
+            finishedAt: state.FinishedAt,
+          },
+          suggestion,
+        });
+      } catch (err) {
+        log.debug(
+          { err, containerId: project.container_id },
+          'Failed to inspect container for crash check',
+        );
+      }
+    }
+  }
+
+  private async checkContainerMemory(): Promise<void> {
+    const dockerClient = this.docker.getClient();
+    const projects = this.db.listProjects('running');
+
+    for (const project of projects) {
+      if (!project.container_id) continue;
+
+      const key = `resource-saturation:${project.container_id}`;
+
+      try {
+        const container = dockerClient.getContainer(project.container_id);
+        const statsStream = await container.stats({ stream: false });
+        const stats = statsStream as unknown as {
+          memory_stats?: { usage?: number; limit?: number };
+        };
+
+        const memUsage = stats.memory_stats?.usage;
+        const memLimit = stats.memory_stats?.limit;
+
+        if (memUsage == null || memLimit == null || memLimit === 0) {
+          this.resolveAlert(key, 'resource-saturation');
+          continue;
+        }
+
+        const usagePercent = (memUsage / memLimit) * 100;
+
+        if (usagePercent < CONTAINER_MEMORY_THRESHOLD) {
+          this.resolveAlert(key, 'resource-saturation');
+          continue;
+        }
+
+        const usageMB = Math.round(memUsage / (1024 * 1024));
+        const limitMB = Math.round(memLimit / (1024 * 1024));
+        const message = `${project.name} 메모리 ${usagePercent.toFixed(0)}% 사용 (${String(usageMB)}MB / ${String(limitMB)}MB)`;
+        const suggestion = `컨테이너 메모리 제한에 근접. --memory 옵션을 늘리거나 메모리 누수를 확인하세요.`;
+
+        await this.upsertAlert(key, {
+          type: 'resource-saturation',
+          severity: 'warning',
+          message,
+          details: {
+            projectId: project.id,
+            projectName: project.name,
+            containerId: project.container_id,
+            memoryUsagePercent: Math.round(usagePercent),
+            memoryUsageMB: usageMB,
+            memoryLimitMB: limitMB,
+          },
+          suggestion,
+        });
+      } catch (err) {
+        log.debug({ err, containerId: project.container_id }, 'Failed to check container memory');
+      }
+    }
   }
 }

@@ -1,18 +1,35 @@
-import { useEffect, useState } from 'react';
-import { Plane, Menu, Cpu, MemoryStick, MessageSquare } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Plane, Menu, Cpu, MemoryStick, MessageSquare, Bell } from 'lucide-react';
 import type { SystemStats } from '@/types';
+import type { Notification } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
+import { NotificationCenter } from './NotificationCenter';
 import { cn } from '@/lib/utils';
 
 interface HeaderProps {
   stats: SystemStats | null;
+  notifications?: Notification[];
+  unreadCount?: number;
+  onDismissNotification?: (id: string) => Promise<void>;
+  onNotificationAction?: (notification: Notification, action: string) => void;
   onMenuClick?: () => void;
   onChatToggle?: () => void;
   isChatOpen?: boolean;
 }
 
-export function Header({ stats, onMenuClick, onChatToggle, isChatOpen }: HeaderProps) {
+export function Header({
+  stats,
+  notifications = [],
+  unreadCount = 0,
+  onDismissNotification,
+  onNotificationAction,
+  onMenuClick,
+  onChatToggle,
+  isChatOpen,
+}: HeaderProps) {
   const [llmConnected, setLlmConnected] = useState<boolean>(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -32,6 +49,19 @@ export function Header({ stats, onMenuClick, onChatToggle, isChatOpen }: HeaderP
     const interval = setInterval(checkHealth, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Close notification dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    if (showNotifications) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showNotifications]);
 
   const formatMemory = (
     mem: number | { usedMB?: number; totalMB?: number; usagePercent?: number },
@@ -85,6 +115,38 @@ export function Header({ stats, onMenuClick, onChatToggle, isChatOpen }: HeaderP
             <div className="w-px h-4 bg-[hsl(var(--border))]" />
           </div>
         )}
+
+        {/* Notification Bell */}
+        <div className="relative" ref={notifRef}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              'h-7 w-7 transition-all',
+              showNotifications
+                ? 'text-warning bg-warning/10'
+                : unreadCount > 0
+                  ? 'text-warning hover:bg-warning/10'
+                  : 'text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle',
+            )}
+            onClick={() => setShowNotifications((prev) => !prev)}
+            title={`알림 ${unreadCount > 0 ? `(${unreadCount}건)` : ''}`}
+          >
+            <Bell className="h-3.5 w-3.5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-error text-[8px] font-mono font-bold text-white px-0.5">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Button>
+          {showNotifications && onDismissNotification && (
+            <NotificationCenter
+              notifications={notifications}
+              onDismiss={onDismissNotification}
+              onAction={onNotificationAction}
+            />
+          )}
+        </div>
 
         {/* Ask Agent Button */}
         <Button

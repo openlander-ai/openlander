@@ -6,6 +6,7 @@ import { ChatPanel } from '@/components/chat/ChatPanel';
 import { useProjects } from '@/hooks/use-projects';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import { useChat } from '@/hooks/use-chat';
+import { useNotifications } from '@/hooks/use-notifications';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { MessageSquare } from 'lucide-react';
 import { CommandPalette } from '@/components/command/CommandPalette';
@@ -22,6 +23,7 @@ export function useAppLayout(): AppLayoutContext {
 export function AppLayout() {
   const { projects, loading } = useProjects();
   const { stats } = useSystemStats();
+  const { notifications, unreadCount, dismiss: dismissNotification } = useNotifications();
   const chat = useChat();
   const location = useLocation();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -62,6 +64,17 @@ export function AppLayout() {
     <div className="flex flex-col h-screen overflow-hidden bg-bg-app">
       <Header
         stats={stats}
+        notifications={notifications}
+        unreadCount={unreadCount}
+        onDismissNotification={dismissNotification}
+        onNotificationAction={(notification, action) => {
+          // Route notification actions to chat as AI requests
+          const projectId = notification.details?.projectId as string | undefined;
+          const prefix = projectId ? `[Context: project ${projectId}] ` : '';
+          openChatWithPrompt(
+            `${prefix}${action === 'view_logs' ? '로그 보여줘' : action === 'cleanup_disk' ? '디스크 정리해줘' : action === 'cleanup_images' ? '미사용 이미지 정리해줘' : action === 'view_stats' ? '리소스 상세 보여줘' : action}`,
+          );
+        }}
         onMenuClick={() => setIsMobileSidebarOpen(true)}
         onChatToggle={toggleChat}
         isChatOpen={isChatOpen}
