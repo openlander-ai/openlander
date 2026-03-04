@@ -12,7 +12,7 @@
  */
 
 import { getSystemStats } from '../monitor/stats.js';
-import type { ProjectRow, Database } from '../db/index.js';
+import type { ProjectRow, DeployLogRow, Database } from '../db/index.js';
 import type { Docker } from '../pipeline/docker.js';
 import { scanUsedPorts } from '../pipeline/port.js';
 import { detectReverseProxy } from '../pipeline/traefik.js';
@@ -103,6 +103,12 @@ ${projectLines}`,
   // Add deployment rules if we have conflict info
   if (deploymentRules) {
     parts.push(deploymentRules);
+  }
+
+  // v0.0.11: Add deployment history for smart defaults context
+  const deployHistory = buildDeploymentHistory(db, projects);
+  if (deployHistory) {
+    parts.push(deployHistory);
   }
 
   return parts.join('\n\n');
@@ -256,6 +262,12 @@ Response format for container operations:
 - Not found: "❌ Project 'xyz' not found. Available projects: ..."
 - Ambiguous: Use ask_user_question to let user pick which project
 
+## Smart Defaults (Redeployment)
+When a user redeploys an existing project, deploy_project automatically checks for previous settings and presents smart suggestions via ask_user_question.
+The Deployment History section below shows per-project history — use it to make informed suggestions.
+- If the user explicitly specifies settings (port, env vars), respect their choice.
+- If you see previous deploy failures in the history, proactively mention the issue and suggest workarounds.
+
 
 ## Output Format
 - Status emojis: ✅ success · ❌ failure · ⚠️ warning · 🔒 internal · 🌐 public · 🔄 in progress
@@ -275,6 +287,53 @@ Messages prefixed with [Tool Results] are automated responses from tool executio
 
 // Legacy export for backward compatibility (static, no context).
 export const SYSTEM_PROMPT = BASE_PROMPT;
+
+/**
+ * Build deployment history section for the system prompt.
+ * Shows last 2 deploy logs per project (max 5 projects) so the LLM
+ * can naturally suggest smart defaults during conversation.
+ */
+function buildDeploymentHistory(db: Database, allProjects: ProjectRow[]): string | null {
+  const projectsWithHistory = allProjects.slice(0, 5);
+  if (projectsWithHistory.length === 0) return null;
+
+  const sections: string[] = [];
+
+  for (const project of projectsWithHistory) {
+    const logs = db.getDeployLogs(project.id, 2);
+    if (logs.length === 0) continue;
+
+    const envVars = db.getEnvVars(project.id);
+    const envKeys = Object.keys(envVars);
+
+    const logLines = logs.map((l: DeployLogRow) => {
+      const duration = l.duration_ms != null ? `${String(Math.round(l.duration_ms / 1000))}s` : '?';
+      const time = l.created_at;
+      return `    ${l.status === 'success' ? '✅' : '❌'} ${time} (${duration})${l.status === 'failed' && l.build_log ? ' — ' + extractFailureHint(l.build_log) : ''}`;
+    });
+
+    const portInfo =
+      project.assigned_port != null ? `port ${String(project.assigned_port)}` : 'no port';
+    const envInfo = envKeys.length > 0 ? `env: ${envKeys.join(', ')}` : 'no env vars';
+
+    sections.push(`  ${project.name}: ${portInfo}, ${envInfo}\n${logLines.join('\n')}`);
+  }
+
+  if (sections.length === 0) return null;
+
+  return `## Deployment History (for smart defaults)\n${sections.join('\n')}`;
+}
+
+function extractFailureHint(buildLog: string): string {
+  const lastErrorLine = buildLog
+    .split('\n')
+    .filter((line) => line.includes('[error]'))
+    .pop();
+  if (lastErrorLine) {
+    return lastErrorLine.replace('[error] ', '').slice(0, 80);
+  }
+  return 'see logs';
+}
 
 // ---------------------------------------------------------------------------
 // Helpers

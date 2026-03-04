@@ -8,6 +8,7 @@ import { join, relative } from 'node:path';
 import { createGitProvider } from '../git-providers/index.js';
 import { loadConfig } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { generateSmartDefaults } from './smart-defaults.js';
 
 const log = createModuleLogger('agent-tools');
 
@@ -84,15 +85,46 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           required: false,
         },
       },
-      execute: (args) => {
-        const result = ctx.pipeline.startDeploy({
-          repoUrl: args['repo_url'] as string,
-          branch: (args['branch'] as string | undefined) ?? undefined,
-          name: (args['name'] as string | undefined) ?? undefined,
+      execute: async (args) => {
+        const repoUrl = args['repo_url'] as string;
+        const branch = (args['branch'] as string | undefined) ?? undefined;
+        const name = (args['name'] as string | undefined) ?? undefined;
+
+        // v0.0.11: Smart Defaults — suggest previous settings for redeployments
+        if (questionBridge) {
+          const defaults = generateSmartDefaults(ctx.db, { repoUrl, branch, name });
+          if (defaults.hasSuggestions) {
+            const { nanoid } = await import('nanoid');
+            const request = {
+              id: nanoid(12),
+              questions: [
+                {
+                  question: '이전 배포 기록을 찾았어. 다음 설정을 적용할까?',
+                  header: 'Smart Defaults',
+                  options: defaults.suggestions.map((s) => ({
+                    label: s.label,
+                    description: s.description,
+                  })),
+                  multiple: true,
+                },
+              ],
+            };
+            const answers = await questionBridge.ask(request);
+            log.info(
+              { answers, suggestionCount: defaults.suggestions.length },
+              'Smart defaults response',
+            );
+          }
+        }
+
+        const result = await ctx.pipeline.startDeploy({
+          repoUrl,
+          branch,
+          name,
           sshKeyPath: ctx.config.git.sshKeyPath || undefined,
           trigger: 'chat',
         });
-        return Promise.resolve({ ...result, hint: 'Use get_deploy_status to check progress.' });
+        return { ...result, hint: 'Use get_deploy_status to check progress.' };
       },
     },
     {
