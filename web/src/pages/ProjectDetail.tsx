@@ -58,6 +58,17 @@ export function ProjectDetail() {
     enabled: !!id,
   });
 
+  const handleFixWithAI = useCallback(
+    (errorMsg?: string) => {
+      openChatWithPrompt(
+        errorMsg
+          ? `Fix this deployment error: ${errorMsg}`
+          : 'Help me fix the deployment error for this project',
+      );
+    },
+    [openChatWithPrompt],
+  );
+
   // Fetch project details
   useEffect(() => {
     if (!id) return;
@@ -226,16 +237,7 @@ export function ProjectDetail() {
             onSubmitAnswer={submitAnswer}
             onSkipQuestion={skipQuestion}
             onInsightAction={executeAction}
-            onFixWithAI={useCallback(
-              (errorMsg?: string) => {
-                openChatWithPrompt(
-                  errorMsg
-                    ? `Fix this deployment error: ${errorMsg}`
-                    : 'Help me fix the deployment error for this project',
-                );
-              },
-              [openChatWithPrompt],
-            )}
+            onFixWithAI={handleFixWithAI}
           />
         </TabsContent>
 
