@@ -5,7 +5,7 @@ import { TraefikManager } from './pipeline/traefik.js';
 import { EnvManager } from './pipeline/env.js';
 import { Agent } from './agent/index.js';
 import { QuestionBridge } from './agent/question-bridge.js';
-import { createLLMClient } from './llm/index.js';
+import { createModel } from './llm/index.js';
 import { HealthMonitor } from './monitor/health.js';
 import { WebhookManager } from './webhook/index.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
@@ -20,7 +20,7 @@ import { AutoDetector } from './pipeline/auto-detect.js';
 import { AlertMonitor } from './monitor/alerts.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
-import type { LLMClient } from './llm/index.js';
+import type { LanguageModel } from 'ai';
 import { buildContextSnapshot } from './agent/prompts.js';
 import { createModuleLogger } from './lib/logger.js';
 
@@ -68,10 +68,10 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   const traefik = new TraefikManager(docker);
   const env = new EnvManager(db);
 
-  let llmClient: LLMClient | null = null;
+  let model: LanguageModel | null = null;
   if (config.llm.apiKey || config.llm.authToken || config.llm.provider === 'ollama') {
     try {
-      llmClient = createLLMClient({
+      model = createModel({
         provider: config.llm.provider,
         apiKey: config.llm.apiKey,
         model: config.llm.model,
@@ -79,27 +79,26 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
         ollamaBaseUrl: config.llm.ollamaEndpoint || undefined,
       });
     } catch (err) {
-      log.debug({ err }, 'LLM client creation failed — LLM-powered features disabled');
+      log.debug({ err }, 'LLM model creation failed — LLM-powered features disabled');
     }
   }
 
-  const autoDetector = new AutoDetector(llmClient);
+  const autoDetector = new AutoDetector(model);
   const pipeline = new DeployPipeline(docker, db, env, jobManager, composePipeline, autoDetector);
 
   // Create agent only if LLM is configured
   let agent: Agent | null = null;
-  if (llmClient) {
+  if (model) {
     try {
       // contextProvider: lazily captures `ctx` — resolved when chat() is called, not here
       agent = new Agent(
-        llmClient,
+        model,
         db,
         async () => buildContextSnapshot(db, docker),
         config.llm.provider,
       );
     } catch (err) {
-      log.debug({ err }, 'LLM client creation failed — agent will be null');
-      // LLM provider not available — agent will be null
+      log.debug({ err }, 'Agent creation failed — agent will be null');
     }
   }
 
@@ -140,11 +139,11 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
   // v0.3: Build debugger (requires LLM)
   let buildDebugger: BuildDebugger | null = null;
-  if (llmClient) {
+  if (model) {
     try {
-      buildDebugger = new BuildDebugger(llmClient);
+      buildDebugger = new BuildDebugger(model);
     } catch (err) {
-      log.debug({ err }, 'Build debugger LLM client creation failed');
+      log.debug({ err }, 'Build debugger creation failed');
       // LLM not available
     }
   }

@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { LLMClient, ChatMessage } from '../llm/index.js';
+import { generateText } from 'ai';
+import type { LanguageModel } from 'ai';
+import type { ChatMessage } from '../llm/index.js';
 import { matchRecipe } from './recipes.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -75,18 +77,20 @@ function extractJsonObject(raw: string): string {
 
 function parseDiagnosis(content: string): BuildDiagnosis {
   const parsed: unknown = JSON.parse(extractJsonObject(content));
-  const root = typeof parsed === 'object' && parsed !== null
-    ? (parsed as Record<string, unknown>)
-    : null;
+  const root =
+    typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
 
   if (!root) {
     throw new Error('LLM response is not a JSON object');
   }
 
   const summary = typeof root['summary'] === 'string' ? root['summary'] : 'Build failed';
-  const rootCause = typeof root['rootCause'] === 'string' ? root['rootCause'] : 'No root cause provided';
+  const rootCause =
+    typeof root['rootCause'] === 'string' ? root['rootCause'] : 'No root cause provided';
 
-  const rawFixes = Array.isArray(root['suggestedFixes']) ? (root['suggestedFixes'] as unknown[]) : [];
+  const rawFixes = Array.isArray(root['suggestedFixes'])
+    ? (root['suggestedFixes'] as unknown[])
+    : [];
   const suggestedFixes: BuildDiagnosis['suggestedFixes'] = [];
 
   for (const item of rawFixes) {
@@ -131,7 +135,7 @@ export function readDockerfile(repoPath: string): string | null {
 }
 
 export class BuildDebugger {
-  constructor(private readonly llm: LLMClient) {}
+  constructor(private readonly model: LanguageModel) {}
 
   /**
    * Analyze a build failure and return diagnosis.
@@ -182,17 +186,23 @@ Diagnose this build failure. Respond ONLY with the JSON format specified.`;
       { role: 'user', content: userPrompt },
     ];
 
-    const response = await this.llm.chat(messages);
+    const response = await generateText({
+      model: this.model,
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    });
 
     try {
-      return parseDiagnosis(response.content);
+      return parseDiagnosis(response.text);
     } catch (err) {
       log.debug({ err }, 'Failed to parse LLM diagnosis response');
       return {
         summary: 'Build failed (could not parse LLM response)',
-        rootCause: response.content,
+        rootCause: response.text,
         suggestedFixes: [],
-        rawAnalysis: response.content,
+        rawAnalysis: response.text,
       };
     }
   }

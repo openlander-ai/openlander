@@ -137,19 +137,19 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     // Hot-reload: try to create the agent now so the user doesn't need to restart
     try {
-      const { createLLMClient } = await import('../../llm/index.js');
+      const { createModel } = await import('../../llm/index.js');
       const { Agent } = await import('../../agent/index.js');
       const { createTools } = await import('../../agent/tools.js');
       const { buildContextSnapshot } = await import('../../agent/prompts.js');
 
-      const llm = createLLMClient({
+      const llmModel = createModel({
         provider: body.provider as OpenLanderConfig['llm']['provider'],
         apiKey: body.api_key,
         model,
       });
 
       const agent = new Agent(
-        llm,
+        llmModel,
         ctx.db,
         async () => buildContextSnapshot(ctx.db, ctx.docker),
         body.provider as OpenLanderConfig['llm']['provider'],

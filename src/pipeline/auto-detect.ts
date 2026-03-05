@@ -2,7 +2,9 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 
 import { createModuleLogger } from '../lib/logger.js';
-import type { ChatMessage, LLMClient } from '../llm/index.js';
+import { generateText } from 'ai';
+import type { LanguageModel } from 'ai';
+import type { ChatMessage } from '../llm/index.js';
 
 const log = createModuleLogger('auto-detect');
 
@@ -18,7 +20,7 @@ export interface AutoDetectResult {
 }
 
 export class AutoDetector {
-  constructor(private readonly llmClient: LLMClient | null) {}
+  constructor(private readonly model: LanguageModel | null) {}
 
   collectContext(projectPath: string): string {
     const sections: string[] = [];
@@ -95,7 +97,7 @@ export class AutoDetector {
   }
 
   async generateDockerfile(projectPath: string): Promise<AutoDetectResult | null> {
-    if (!this.llmClient) {
+    if (!this.model) {
       return null;
     }
 
@@ -114,8 +116,14 @@ export class AutoDetector {
         },
       ];
 
-      const response = await this.llmClient.chat(messages);
-      const content = this.extractDockerfileContent(response.content);
+      const response = await generateText({
+        model: this.model,
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+      });
+      const content = this.extractDockerfileContent(response.text);
       if (!content) {
         return null;
       }
