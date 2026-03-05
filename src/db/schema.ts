@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS domain_mappings (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+
 CREATE TABLE IF NOT EXISTS oauth_tokens (
   id TEXT PRIMARY KEY,
   provider TEXT NOT NULL UNIQUE,
@@ -70,6 +71,9 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
   refresh_token TEXT,
   expires_at TEXT,
   token_type TEXT DEFAULT 'Bearer',
+  auth_method TEXT DEFAULT 'manual',
+  user_email TEXT,
+  iv TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );

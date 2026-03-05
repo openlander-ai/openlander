@@ -14,6 +14,8 @@ export interface ProjectRow {
   dockerfile_path: string;
   created_at: string;
   updated_at: string;
+  deploy_lock_session: string | null;
+  deploy_lock_at: string | null;
 }
 
 export interface DeployLogRow {
@@ -26,7 +28,6 @@ export interface DeployLogRow {
   duration_ms: number | null;
   created_at: string;
 }
-
 export interface ChatHistoryRow {
   id: string;
   session_id: string;
@@ -35,7 +36,6 @@ export interface ChatHistoryRow {
   tool_calls: string | null;
   created_at: string;
 }
-
 export interface DomainMappingRow {
   id: string;
   project_id: string;
@@ -45,7 +45,6 @@ export interface DomainMappingRow {
   status: 'active' | 'pending' | 'error';
   created_at: string;
 }
-
 export interface OAuthTokenRow {
   id: string;
   provider: string;
@@ -53,16 +52,9 @@ export interface OAuthTokenRow {
   refresh_token: string | null;
   expires_at: string | null;
   token_type: string;
+  auth_method: string | null;
+  user_email: string | null;
+  iv: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface WebhookConfigRow {
-  id: string;
-  project_id: string;
-  source: 'github' | 'gitlab' | 'bitbucket';
-  secret: string;
-  branch_filter: string;
-  enabled: 0 | 1;
-  created_at: string;
 }

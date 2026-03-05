@@ -75,6 +75,9 @@ export interface OAuthTokenRow {
   refresh_token: string | null;
   expires_at: string | null;
   token_type: string;
+  auth_method: string | null;
+  user_email: string | null;
+  iv: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -616,6 +619,9 @@ export class Database {
     refreshToken: string | null;
     expiresAt: string | null;
     tokenType: string;
+    authMethod?: string;
+    userEmail?: string | null;
+    iv?: string;
   }): void {
     this.db
       .insert(oauthTokens)
@@ -626,6 +632,9 @@ export class Database {
         refresh_token: token.refreshToken,
         expires_at: token.expiresAt,
         token_type: token.tokenType,
+        auth_method: token.authMethod ?? 'manual',
+        user_email: token.userEmail ?? null,
+        iv: token.iv ?? null,
       })
       .onConflictDoUpdate({
         target: oauthTokens.provider,
@@ -634,6 +643,9 @@ export class Database {
           refresh_token: token.refreshToken,
           expires_at: token.expiresAt,
           token_type: token.tokenType,
+          auth_method: token.authMethod ?? 'manual',
+          user_email: token.userEmail ?? null,
+          iv: token.iv ?? null,
           updated_at: sql`CURRENT_TIMESTAMP`,
         },
       })
