@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 📋 ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── 정식릴리즈(TBD)
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ┬ 정식릴리즈(TBD)
 
 ```
 
@@ -26,27 +26,27 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ## 스펙 문서 ↔ 버전 매핑
 
-| #      | 문서                           | 경로                                         | 버전           | 구현율 | 상태                                                            |
-| ------ | ------------------------------ | -------------------------------------------- | -------------- | ------ | --------------------------------------------------------------- |
-| ~~1~~  | ~~요구사항 정의서~~            | `archive/requirements.md`                    | v0.0.1~v0.0.8  | 90%    | 📦 아카이브 (TUI 시대 문서, Web pivot 후 무효)                  |
-| ~~2~~  | ~~TUI 리팩토링 스펙~~          | `archive/v0.0.6/tui-spec.md`                 | v0.0.6         | 97%    | 📦 아카이브 (TUI freeze 후 무효)                                |
-| ~~3~~  | ~~UI/UX 레이아웃~~             | `archive/v0.0.7/ui-ux-layout.md`             | v0.0.7         | 95%    | 📦 아카이브 (TUI freeze 후 무효)                                |
-| ~~4~~  | ~~빌드실패 + Compose~~         | `archive/v0.0.6/ui-ux-build-compose.md`      | v0.0.6         | 100%   | 📦 아카이브                                                     |
-| ~~5~~  | ~~v0.0.6 상세 태스크~~         | `archive/v0.0.6/tasks.md`                    | v0.0.6         | 97%    | 📦 아카이브                                                     |
-| ~~6~~  | ~~v0.0.7 구현 태스크~~         | `archive/v0.0.7/implementation-tasks.md`     | v0.0.7         | 100%   | 📦 아카이브                                                     |
-| ~~7~~  | ~~Phase 1 개발계획~~           | `archive/v0.0.7/phase1-plan.md`              | v0.0.7         | 100%   | 📦 아카이브                                                     |
-| 8      | AI SDK 마이그레이션            | `v0.0.8/vercel-ai-sdk-migration.md`          | v0.0.8         | 조사만 | 조사 완료, 구현 미착수                                          |
-| 9      | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9/server-awareness.md`로 재정의                           |
-| 10     | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의                               |
-| 11     | ~~v0.0.9–v0.0.10 통합 기획서~~ | `archive/v0.0.9-10-unified-spec.md`          | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체                              |
-| 12     | **v0.0.9 Server Awareness**    | `v0.0.9/server-awareness.md`                 | v0.0.9         | 100%   | ✅ 구현+도그푸딩 완료 (DEC-016). 버그 11건 해결, E2E 검증 완료. |
-| 13     | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 100%   | ✅ 구현 완료. 4개 파트 전부 구현.                               |
-| 14     | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)          |
-| 15     | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                               |
-| ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~     | `archive/onboarding-refactor.md`             | v0.0.9         | —      | 📦 아카이브 (DEC-017: Web Setup Screen으로 대체)                |
-| 17     | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 100%   | ✅ 구현 완료. 백엔드 OAuth 라우트 + 프론트엔드 통합.            |
-| 18     | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                           |
-| 19     | **v0.0.11 Agent Proactivity**  | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have       |
+| #      | 문서                           | 경로                                         | 버전           | 구현율 | 상태                                                              |
+| ------ | ------------------------------ | -------------------------------------------- | -------------- | ------ | ----------------------------------------------------------------- |
+| ~~1~~  | ~~요구사항 정의서~~            | `archive/requirements.md`                    | v0.0.1~v0.0.8  | 90%    | 📦 아카이브 (TUI 시대 문서, Web pivot 후 무효)                    |
+| ~~2~~  | ~~TUI 리팩토링 스펙~~          | `archive/v0.0.6/tui-spec.md`                 | v0.0.6         | 97%    | 📦 아카이브 (TUI freeze 후 무효)                                  |
+| ~~3~~  | ~~UI/UX 레이아웃~~             | `archive/v0.0.7/ui-ux-layout.md`             | v0.0.7         | 95%    | 📦 아카이브 (TUI freeze 후 무효)                                  |
+| ~~4~~  | ~~빌드실패 + Compose~~         | `archive/v0.0.6/ui-ux-build-compose.md`      | v0.0.6         | 100%   | 📦 아카이브                                                       |
+| ~~5~~  | ~~v0.0.6 상세 태스크~~         | `archive/v0.0.6/tasks.md`                    | v0.0.6         | 97%    | 📦 아카이브                                                       |
+| ~~6~~  | ~~v0.0.7 구현 태스크~~         | `archive/v0.0.7/implementation-tasks.md`     | v0.0.7         | 100%   | 📦 아카이브                                                       |
+| ~~7~~  | ~~Phase 1 개발계획~~           | `archive/v0.0.7/phase1-plan.md`              | v0.0.7         | 100%   | 📦 아카이브                                                       |
+| 8      | **AI SDK 마이그레이션**        | `v0.0.8/vercel-ai-sdk-migration.md`          | v0.0.8         | 100%   | ✅ 구현 완료. 5개 프로바이더 삭제, AI SDK 통합, 31 도구 Zod 변환. |
+| 9      | ~~마이그레이션 & 디스커버리~~  | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9/server-awareness.md`로 재정의                             |
+| 10     | ~~Local Dev & Env~~            | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의                                 |
+| 11     | ~~v0.0.9–v0.0.10 통합 기획서~~ | `archive/v0.0.9-10-unified-spec.md`          | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체                                |
+| 12     | **v0.0.9 Server Awareness**    | `v0.0.9/server-awareness.md`                 | v0.0.9         | 100%   | ✅ 구현+도그푸딩 완료 (DEC-016). 버그 11건 해결, E2E 검증 완료.   |
+| 13     | **v0.0.10 Env & Secrets**      | `v0.0.10/env-secrets.md`                     | v0.0.10        | 100%   | ✅ 구현 완료. 4개 파트 전부 구현.                                 |
+| 14     | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)            |
+| 15     | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                                 |
+| ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~     | `archive/onboarding-refactor.md`             | v0.0.9         | —      | 📦 아카이브 (DEC-017: Web Setup Screen으로 대체)                  |
+| 17     | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 100%   | ✅ 구현 완료. 백엔드 OAuth 라우트 + 프론트엔드 통합.              |
+| 18     | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                             |
+| 19     | **v0.0.11 Agent Proactivity**  | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have         |
 
 ---
 
@@ -189,22 +189,30 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.0.8 — AI SDK 마이그레이션 📋
+### v0.0.8 — AI SDK 마이그레이션 ✅
 
-**상태**: 조사 완료, 구현 미착수 | **관련 문서**: `v0.0.8/vercel-ai-sdk-migration.md`
+**상태**: 구현 완료 | **관련 문서**: `v0.0.8/vercel-ai-sdk-migration.md`
 
-| 항목                      | 상태 | 비고                             |
-| ------------------------- | ---- | -------------------------------- |
-| 현재 아키텍처 분석        | ✅   | 5개 LLM 프로바이더 + 자체 추상화 |
-| Vercel AI SDK 호환성 조사 | ✅   | `ai` 패키지 평가 완료            |
-| 마이그레이션 계획 수립    | ✅   | 점진적 마이그레이션 방안 도출    |
-| 실제 마이그레이션         | ❌   | 미착수                           |
+| 항목                          | 상태 | 비고                                                                   |
+| ----------------------------- | ---- | ---------------------------------------------------------------------- |
+| 현재 아키텍처 분석            | ✅   | 5개 LLM 프로바이더 + 자체 추상화                                       |
+| Vercel AI SDK 호환성 조사     | ✅   | `ai@6.0.116` 패키지 평가 완료                                          |
+| 마이그레이션 계획 수립        | ✅   | 5 Phase 점진적 마이그레이션                                            |
+| Phase 1: 의존성 + 모델 팩토리 | ✅   | AI SDK 패키지 설치, `createModel()` 구현, 5개 프로바이더 삭제 (~990줄) |
+| Phase 2: 도구 Zod 변환        | ✅   | 31개 도구 JSON Schema → `tool()` + Zod (993→829줄)                     |
+| Phase 3: Agent 루프 전환      | ✅   | `generateText()`/`streamText()` + `stopWhen`, 레거시 인터페이스 제거   |
+| Phase 4: 통합 검증            | ✅   | SSE 스트리밍, MCP 서버, tsup+vite 빌드 통과                            |
+| Phase 5: 테스트 + 정리        | ✅   | 테스트 리라이트, LSP 0 에러                                            |
 
-**마이그레이션 범위** (구현 시):
+**구현 내역**:
 
-- `src/llm/` 디렉토리 5개 프로바이더 → Vercel AI SDK 통합
-- 스트리밍 인터페이스 교체
-- Tool calling 인터페이스 통일
+- `src/llm/index.ts` — 재작성: `createModel()` → AI SDK `LanguageModel` 반환
+- `src/llm/gemini.ts`, `anthropic.ts`, `openai.ts`, `openrouter.ts`, `ollama.ts` — 삭제 (~990줄)
+- `src/agent/tools.ts` — 31개 도구 AI SDK `tool()` + Zod 변환
+- `src/agent/index.ts` — Agent 루프 `generateText()`/`streamText()` 전환
+- `src/agent/debugger.ts`, `src/pipeline/auto-detect.ts` — `LanguageModel` 전환
+- `src/app.ts`, `src/web/api/setup-routes.ts`, `auth-routes.ts` — `createModel()` 사용
+- `src/mcp/server.ts` — Record 기반 도구 조회로 수정
 
 ---
 
@@ -389,7 +397,7 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 | ~~11~~ | ~~.env.example 감지~~                 | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | ✅ 완료                |
 | ~~12~~ | ~~환경변수 도구 추가~~                | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | ✅ 완료                |
 | ~~13~~ | ~~/env 오버레이 확장~~                | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | ✅ 완료                |
-| 14     | Vercel AI SDK 마이그레이션            | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기)             |
+| ~~14~~ | ~~Vercel AI SDK 마이그레이션~~        | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | ✅ 완료                |
 | 15     | 파인튜닝 모델                         | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래                   |
 | ~~16~~ | ~~Post-Deploy Insight~~               | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료                |
 | ~~17~~ | ~~Anomaly Nudge~~                     | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료                |
@@ -420,14 +428,13 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ## 검증 기준
 
-**2026-03-05 기준 (v0.0.12 완료 후)**:
+**2026-03-05 기준 (v0.0.8 완료 후)**:
 
 ```
 ✅ tsup build — 성공 (backend + DTS)
 ✅ vite build — 성공 (web)
 ✅ lsp_diagnostics — 0 errors
-✅ lint-staged — 통과
-✅ v0.0.12 — OAuth PKCE (OpenAI + OpenRouter) + ProviderHelp (Anthropic + Gemini) + 프론트엔드 통합
+✅ v0.0.8 — AI SDK 마이그레이션 완료 (5개 프로바이더 삭제, 31 도구 Zod, Agent 루프 전환)
 ```
 
 ---
