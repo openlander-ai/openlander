@@ -9,6 +9,7 @@ import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
 import { createDomainRoutes } from './api/domain-routes.js';
 import { createSetupRoutes } from './api/setup-routes.js';
+import { createAuthRoutes } from './api/auth-routes.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
@@ -115,6 +116,10 @@ function createApp(ctx: AppContext): Hono {
   // v0.2: Webhook auto-redeploy routes
   const webhookRoutes = createWebhookRoutes(ctx);
   app.route('/api', webhookRoutes);
+
+  // v0.0.12: Provider OAuth routes
+  const authRoutes = createAuthRoutes(ctx);
+  app.route('/api', authRoutes);
 
   // v0.2: Domain management routes
   const domainRoutes = createDomainRoutes(ctx);
