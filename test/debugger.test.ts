@@ -1,14 +1,52 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { BuildDebugger } from '../src/agent/debugger.js';
-import type { LLMClient, ChatMessage, LLMResponse } from '../src/llm/index.js';
+import type { LanguageModel } from 'ai';
 
-function createMockLLM(response: string): LLMClient {
+// Mock generateText from 'ai' module
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
   return {
-    chat: vi.fn<(messages: ChatMessage[]) => Promise<LLMResponse>>().mockResolvedValue({
-      content: response,
-    }),
+    ...actual,
+    generateText: vi.fn(),
   };
+});
+
+import { generateText } from 'ai';
+const mockGenerateText = vi.mocked(generateText);
+
+/**
+ * Create a mock LanguageModel that satisfies the AI SDK interface.
+ * The actual model is never called directly — generateText is mocked.
+ */
+function createMockModel(): LanguageModel {
+  return {
+    modelId: 'mock-model',
+    specificationVersion: 'v2',
+    provider: 'mock',
+    defaultObjectGenerationMode: 'json',
+    supportsUrl: () => false,
+    doGenerate: vi.fn(),
+    doStream: vi.fn(),
+  } as unknown as LanguageModel;
+}
+
+function mockLLMResponse(text: string) {
+  mockGenerateText.mockResolvedValueOnce({
+    text,
+    steps: [],
+    toolCalls: [],
+    toolResults: [],
+    finishReason: 'stop',
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    response: { id: 'test', timestamp: new Date(), modelId: 'mock', headers: {} },
+    warnings: [],
+    providerMetadata: {},
+    sources: [],
+    reasoning: [],
+    files: [],
+    rawResponse: undefined,
+  } as unknown as Awaited<ReturnType<typeof generateText>>);
 }
 
 const baseContext = {
@@ -21,8 +59,8 @@ const baseContext = {
 
 describe('BuildDebugger — recipe shortcircuit', () => {
   it('returns recipe diagnosis for node-gyp errors without calling LLM', async () => {
-    const llm = createMockLLM('should not be called');
-    const debugger_ = new BuildDebugger(llm);
+    const model = createMockModel();
+    const debugger_ = new BuildDebugger(model);
 
     const result = await debugger_.diagnose({
       ...baseContext,
@@ -33,12 +71,12 @@ describe('BuildDebugger — recipe shortcircuit', () => {
     expect(result.suggestedFixes).toHaveLength(1);
     expect(result.suggestedFixes[0]!.confidence).toBe('high');
     expect(result.rawAnalysis).toContain('Matched recipe');
-    expect(llm.chat).not.toHaveBeenCalled();
+    expect(mockGenerateText).not.toHaveBeenCalled();
   });
 
   it('returns recipe diagnosis for OOM errors without calling LLM', async () => {
-    const llm = createMockLLM('should not be called');
-    const debugger_ = new BuildDebugger(llm);
+    const model = createMockModel();
+    const debugger_ = new BuildDebugger(model);
 
     const result = await debugger_.diagnose({
       ...baseContext,
@@ -46,12 +84,12 @@ describe('BuildDebugger — recipe shortcircuit', () => {
     });
 
     expect(result.summary).toContain('memory');
-    expect(llm.chat).not.toHaveBeenCalled();
+    expect(mockGenerateText).not.toHaveBeenCalled();
   });
 
   it('returns recipe diagnosis for COPY errors without calling LLM', async () => {
-    const llm = createMockLLM('should not be called');
-    const debugger_ = new BuildDebugger(llm);
+    const model = createMockModel();
+    const debugger_ = new BuildDebugger(model);
 
     const result = await debugger_.diagnose({
       ...baseContext,
@@ -59,7 +97,7 @@ describe('BuildDebugger — recipe shortcircuit', () => {
     });
 
     expect(result.summary).toContain('COPY');
-    expect(llm.chat).not.toHaveBeenCalled();
+    expect(mockGenerateText).not.toHaveBeenCalled();
   });
 });
 
@@ -73,15 +111,16 @@ describe('BuildDebugger — LLM fallback', () => {
       ],
     });
 
-    const llm = createMockLLM(validJson);
-    const debugger_ = new BuildDebugger(llm);
+    const model = createMockModel();
+    mockLLMResponse(validJson);
+    const debugger_ = new BuildDebugger(model);
 
     const result = await debugger_.diagnose({
       ...baseContext,
       buildLog: 'some completely unknown error that matches no recipe',
     });
 
-    expect(llm.chat).toHaveBeenCalledOnce();
+    expect(mockGenerateText).toHaveBeenCalledOnce();
     expect(result.summary).toBe('Unknown build error');
     expect(result.rootCause).toBe('The Dockerfile uses an unsupported instruction');
     expect(result.suggestedFixes).toHaveLength(1);
@@ -91,8 +130,10 @@ describe('BuildDebugger — LLM fallback', () => {
   it('parses fenced JSON from LLM response', async () => {
     const fenced =
       '```json\n{"summary":"Build failed","rootCause":"Missing dep","suggestedFixes":[]}\n```';
-    const llm = createMockLLM(fenced);
-    const debugger_ = new BuildDebugger(llm);
+
+    const model = createMockModel();
+    mockLLMResponse(fenced);
+    const debugger_ = new BuildDebugger(model);
 
     const result = await debugger_.diagnose({
       ...baseContext,
@@ -105,8 +146,9 @@ describe('BuildDebugger — LLM fallback', () => {
   });
 
   it('handles malformed LLM response gracefully', async () => {
-    const llm = createMockLLM('This is not JSON at all, just plain text about the error.');
-    const debugger_ = new BuildDebugger(llm);
+    const model = createMockModel();
+    mockLLMResponse('This is not JSON at all, just plain text about the error.');
+    const debugger_ = new BuildDebugger(model);
 
     const result = await debugger_.diagnose({
       ...baseContext,
@@ -120,8 +162,9 @@ describe('BuildDebugger — LLM fallback', () => {
 
   it('handles partially valid JSON from LLM', async () => {
     const partial = JSON.stringify({ summary: 'Partial result' });
-    const llm = createMockLLM(partial);
-    const debugger_ = new BuildDebugger(llm);
+    const model = createMockModel();
+    mockLLMResponse(partial);
+    const debugger_ = new BuildDebugger(model);
 
     const result = await debugger_.diagnose({
       ...baseContext,
