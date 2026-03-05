@@ -75,7 +75,7 @@ describe('requestDeviceCode', () => {
     expect(callArgs?.[0]).toBe('https://github.com/login/device/code');
     const body = JSON.parse(callArgs?.[1]?.body as string);
     expect(body.client_id).toBe('test-client-id');
-    expect(body.scope).toBe('repo read:user');
+    expect(body.scope).toBe('repo read:user read:org');
   });
 
   it('uses custom scope when provided', async () => {

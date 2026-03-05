@@ -204,6 +204,13 @@ describe('GitHubProvider', () => {
   });
 
   it('searchRepos returns mapped results', async () => {
+    // First call: getUserOrgs
+    mockFetch().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+      headers: new Headers(),
+    } as Response);
+    // Second call: search/repositories
     mockFetch().mockResolvedValueOnce({
       ok: true,
       json: async () => ({

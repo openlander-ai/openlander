@@ -32,7 +32,15 @@ describe('DeployPipeline — non-blocking deploy', () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-start-deploy-test-'));
     db = new Database(join(tmpDir, 'test.db'));
     jobManager = new JobManager();
-    pipeline = new DeployPipeline(createMockDocker(), db, jobManager);
+    pipeline = new DeployPipeline(
+      createMockDocker(),
+      db,
+      {
+        getEnvVars: vi.fn().mockReturnValue({}),
+        getMergedForDeploy: vi.fn().mockResolvedValue({}),
+      } as never,
+      jobManager,
+    );
   });
 
   afterEach(() => {

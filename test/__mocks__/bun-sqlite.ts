@@ -15,6 +15,11 @@ export class Database {
     this._db.exec(sql);
   }
 
+  run(sql: string): { changes: number; lastInsertRowid: number } {
+    const result = this._db.exec(sql);
+    return { changes: 0, lastInsertRowid: 0 };
+  }
+
   prepare(sql: string) {
     return this._db.prepare(sql);
   }
