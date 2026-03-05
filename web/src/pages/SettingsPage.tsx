@@ -6,11 +6,16 @@ import {
   getGlobalSecrets,
   setGlobalSecret,
   deleteGlobalSecret,
+  getOAuthStatus,
+  disconnectOAuth,
   type GlobalSecret,
+  type OAuthStatus,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { OAuthButton } from '@/components/setup/OAuthButton';
+import { ProviderHelp } from '@/components/setup/ProviderHelp';
 import { cn } from '@/lib/utils';
 import {
   Brain,
@@ -40,7 +45,16 @@ export function SettingsPage() {
   const [secretValue, setSecretValue] = useState('');
   const [secretDesc, setSecretDesc] = useState('');
   const [secretSaving, setSecretSaving] = useState(false);
+  const [oauthStatus, setOauthStatus] = useState<OAuthStatus | null>(null);
 
+  const fetchOAuthStatus = useCallback(async () => {
+    try {
+      const data = await getOAuthStatus();
+      setOauthStatus(data);
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const fetchSecrets = useCallback(async () => {
     try {
       const data = await getGlobalSecrets();
@@ -52,7 +66,8 @@ export function SettingsPage() {
 
   useEffect(() => {
     fetchSecrets();
-  }, [fetchSecrets]);
+    fetchOAuthStatus();
+  }, [fetchSecrets, fetchOAuthStatus]);
 
   const handleAddSecret = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,15 +184,73 @@ export function SettingsPage() {
             ))}
           </div>
 
-          {llmProvider && llmProvider !== 'ollama' && (
-            <Input
-              type="password"
-              placeholder="API Key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="font-mono text-sm bg-bg-app border-border"
-            />
+          {llmProvider === 'anthropic' && <ProviderHelp provider="anthropic" />}
+          {llmProvider === 'gemini' && <ProviderHelp provider="gemini" />}
+
+          {(llmProvider === 'openai' || llmProvider === 'openrouter') && (
+            <div className="space-y-3">
+              {oauthStatus?.providers[llmProvider]?.connected ? (
+                <div className="flex items-center justify-between p-3 rounded-lg border border-success/20 bg-success/5">
+                  <div className="flex items-center gap-2 text-success">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span className="text-sm font-medium">Connected via OAuth</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs text-error hover:text-error hover:bg-error/10"
+                    onClick={async () => {
+                      try {
+                        await disconnectOAuth(llmProvider);
+                        await fetchOAuthStatus();
+                        await refetch();
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }}
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <OAuthButton
+                    provider={llmProvider}
+                    onSuccess={async () => {
+                      await configureLLM(llmProvider, 'oauth');
+                      await fetchOAuthStatus();
+                      await refetch();
+                    }}
+                  />
+                  <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-bg-app px-2 text-muted-ol font-body">Or use API Key</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           )}
+
+          {llmProvider &&
+            llmProvider !== 'ollama' &&
+            !(
+              (llmProvider === 'openai' || llmProvider === 'openrouter') &&
+              oauthStatus?.providers[llmProvider]?.connected
+            ) && (
+              <Input
+                type="password"
+                placeholder="API Key"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                required={llmProvider !== 'openai' && llmProvider !== 'openrouter'}
+                className="font-mono text-sm bg-bg-app border-border"
+              />
+            )}
 
           {llmError && <p className="text-xs font-body text-error">{llmError}</p>}
 

@@ -4,6 +4,8 @@ import { configureLLM, startTraefik, completeSetup } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { OAuthButton } from './OAuthButton';
+import { ProviderHelp } from './ProviderHelp';
 import {
   CheckCircle2,
   XCircle,
@@ -287,6 +289,32 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                       ))}
                     </div>
                   </div>
+
+                  {llmProvider === 'anthropic' && <ProviderHelp provider="anthropic" />}
+                  {llmProvider === 'gemini' && <ProviderHelp provider="gemini" />}
+
+                  {(llmProvider === 'openai' || llmProvider === 'openrouter') && (
+                    <>
+                      <OAuthButton
+                        provider={llmProvider}
+                        onSuccess={async () => {
+                          await configureLLM(llmProvider, 'oauth');
+                          await refetch();
+                          goNext();
+                        }}
+                      />
+                      <div className="relative py-2">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t border-border" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                          <span className="bg-bg-app px-2 text-muted-ol font-body">
+                            Or use API Key
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   {llmProvider !== 'ollama' && (
                     <div className="space-y-2">

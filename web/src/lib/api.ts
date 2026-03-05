@@ -144,3 +144,27 @@ export async function deleteGlobalSecret(key: string): Promise<any> {
   if (!res.ok) throw new Error('Failed to delete secret');
   return res.json();
 }
+
+// OAuth status check
+export interface OAuthStatus {
+  providers: Record<string, { connected: boolean; expiresAt: string | null }>;
+}
+
+export async function getOAuthStatus(): Promise<OAuthStatus> {
+  const res = await fetch('/api/auth/status');
+  if (!res.ok) throw new Error('Failed to fetch OAuth status');
+  return res.json();
+}
+
+// Start OAuth flow
+export async function startOAuthFlow(provider: string): Promise<{ url: string; state: string }> {
+  const res = await fetch(`/api/auth/start/${provider}`);
+  if (!res.ok) throw new Error('Failed to start OAuth flow');
+  return res.json();
+}
+
+// Disconnect OAuth
+export async function disconnectOAuth(provider: string): Promise<void> {
+  const res = await fetch(`/api/auth/disconnect/${provider}`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to disconnect');
+}
