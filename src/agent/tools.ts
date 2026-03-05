@@ -9,6 +9,8 @@ import { createGitProvider } from '../git-providers/index.js';
 import { loadConfig } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { generateSmartDefaults } from './smart-defaults.js';
+import { tool } from 'ai';
+import { z } from 'zod';
 
 const log = createModuleLogger('agent-tools');
 
@@ -20,23 +22,6 @@ const log = createModuleLogger('agent-tools');
  *
  * Description format (per tool-design best practice):
  *   What it does → When to use → Returns → Errors → Notes
- */
-
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: Record<string, ToolParameter>;
-  execute: (args: Record<string, unknown>) => Promise<unknown>;
-}
-
-export interface ToolParameter {
-  type: 'string' | 'number' | 'boolean';
-  description: string;
-  required: boolean;
-}
-
-/**
- * Create tools wired to the application context.
  *
  * v0.1 tools:
  * - deploy_project: Deploy from a git repo URL
@@ -62,37 +47,27 @@ export interface ToolParameter {
  * - cleanup_preview: Remove preview
  * - list_previews: List active previews
  */
-export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): ToolDefinition[] {
-  return [
-    {
-      name: 'deploy_project',
+export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
+  const tools = {
+    deploy_project: tool({
       description:
         'Start deploying a project from a git repository URL. Returns immediately with { projectId, projectName, status: "building" } while the build runs in the background. ALWAYS follow up with get_deploy_status to check progress and report the result to the user. Errors: CLONE_FAILED (bad URL or private repo without SSH key), BUILD_FAILED (Dockerfile error — suggest debug_build_error next), ALREADY_EXISTS (project name taken). Only works with repos that have a Dockerfile.',
-      parameters: {
-        repo_url: {
-          type: 'string',
-          description: 'Git repository URL (e.g., github.com/user/repo)',
-          required: true,
-        },
-        branch: {
-          type: 'string',
-          description: 'Branch to deploy (default: repo default branch)',
-          required: false,
-        },
-        name: {
-          type: 'string',
-          description: 'Project name (auto-generated from repo if not provided)',
-          required: false,
-        },
-      },
-      execute: async (args) => {
-        const repoUrl = args['repo_url'] as string;
-        const branch = (args['branch'] as string | undefined) ?? undefined;
-        const name = (args['name'] as string | undefined) ?? undefined;
-
+      inputSchema: z.object({
+        repo_url: z.string().describe('Git repository URL (e.g., github.com/user/repo)'),
+        branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
+        name: z
+          .string()
+          .optional()
+          .describe('Project name (auto-generated from repo if not provided)'),
+      }),
+      execute: async ({ repo_url, branch, name }) => {
         // v0.0.11: Smart Defaults — suggest previous settings for redeployments
         if (questionBridge) {
-          const defaults = generateSmartDefaults(ctx.db, { repoUrl, branch, name });
+          const defaults = generateSmartDefaults(ctx.db, {
+            repoUrl: repo_url,
+            branch,
+            name,
+          });
           if (defaults.hasSuggestions) {
             const { nanoid } = await import('nanoid');
             const request = {
@@ -118,7 +93,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
         }
 
         const result = await ctx.pipeline.startDeploy({
-          repoUrl,
+          repoUrl: repo_url,
           branch,
           name,
           sshKeyPath: ctx.config.git.sshKeyPath || undefined,
@@ -126,35 +101,19 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
         });
         return { ...result, hint: 'Use get_deploy_status to check progress.' };
       },
-    },
-    {
-      name: 'deploy_compose',
+    }),
+
+    deploy_compose: tool({
       description:
         'Deploy a project that uses Docker Compose (multi-service). Auto-detected when compose file exists. Returns parent project with service statuses. Errors: COMPOSE_FILE_NOT_FOUND, BUILD_FAILED.',
-      parameters: {
-        repo_url: {
-          type: 'string',
-          description: 'Git repository URL',
-          required: true,
-        },
-        branch: {
-          type: 'string',
-          description: 'Branch (default: repo default branch)',
-          required: false,
-        },
-        name: {
-          type: 'string',
-          description: 'Project name (auto-generated from repo if omitted)',
-          required: false,
-        },
-      },
-      execute: async (args) => {
-        const repoUrl = args['repo_url'] as string;
-        const branch = (args['branch'] as string | undefined) ?? undefined;
-        const name = (args['name'] as string | undefined) ?? undefined;
-
+      inputSchema: z.object({
+        repo_url: z.string().describe('Git repository URL'),
+        branch: z.string().optional().describe('Branch (default: repo default branch)'),
+        name: z.string().optional().describe('Project name (auto-generated from repo if omitted)'),
+      }),
+      execute: async ({ repo_url, branch, name }) => {
         const cloneResult = await cloneRepo({
-          repoUrl,
+          repoUrl: repo_url,
           branch,
           sshKeyPath: ctx.config.git.sshKeyPath || undefined,
         });
@@ -168,7 +127,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
         }
 
         const result = await ctx.composePipeline.deployCompose({
-          repoUrl,
+          repoUrl: repo_url,
           branch,
           clonePath: cloneResult.path,
           composePath,
@@ -186,102 +145,78 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
 
         return result;
       },
-    },
-    {
-      name: 'list_compose_services',
+    }),
+
+    list_compose_services: tool({
       description:
         'List services in a Docker Compose project with per-service status, ports, and container IDs.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Compose project name',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Compose project name'),
+      }),
+      execute: async ({ project_name }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         const services = await ctx.composePipeline.getServiceStatuses(project.id);
         return {
-          project: projectName,
+          project: project_name,
           count: services.length,
           services,
         };
       },
-    },
-    {
-      name: 'stop_project',
+    }),
+
+    stop_project: tool({
       description:
         'Stop a running project container gracefully. Use when user wants to pause or shut down a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT remove the project; use remove_project for full cleanup.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project to stop',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project to stop'),
+      }),
+      execute: async ({ project_name }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         await ctx.pipeline.stop(project.id);
-        return { status: 'stopped', project: projectName };
+        return { status: 'stopped', project: project_name };
       },
-    },
-    {
-      name: 'remove_project',
+    }),
+
+    remove_project: tool({
       description:
         'Permanently remove a project — deletes the container, image, and database record. DESTRUCTIVE — cannot be undone. Use only when user explicitly wants to delete a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND. To just stop without deleting, use stop_project instead.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project to remove',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project to remove'),
+      }),
+      execute: async ({ project_name }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         await ctx.pipeline.remove(project.id);
-        return { status: 'removed', project: projectName };
+        return { status: 'removed', project: project_name };
       },
-    },
-    {
-      name: 'get_logs',
+    }),
+
+    get_logs: tool({
       description:
         'Get recent container stdout/stderr logs for a project. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of the most recent 20 lines. Errors: PROJECT_NOT_FOUND. If logs show a build error, suggest debug_build_error for diagnosis.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project',
-          required: true,
-        },
-        lines: {
-          type: 'number',
-          description: 'Number of log lines to return (default: 20)',
-          required: false,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project'),
+        lines: z.number().optional().describe('Number of log lines to return (default: 20)'),
+      }),
+      execute: async ({ project_name, lines }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
-        const lines = (args['lines'] as number | undefined) ?? 20;
-        const logs = await ctx.pipeline.getLogs(project.id, lines);
-        return { project: projectName, logs };
+        const logLines = lines ?? 20;
+        const logs = await ctx.pipeline.getLogs(project.id, logLines);
+        return { project: project_name, logs };
       },
-    },
-    {
-      name: 'list_projects',
+    }),
+
+    list_projects: tool({
       description:
         'List all deployed projects with name, status (running/stopped/error), ports, local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
-      parameters: {},
+      inputSchema: z.object({}),
       execute: () => {
         const projects = ctx.db.listProjects();
         return Promise.resolve({
@@ -297,29 +232,22 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           })),
         });
       },
-    },
-    {
-      name: 'set_env_vars',
+    }),
+
+    set_env_vars: tool({
       description:
         'Set environment variables for a project and trigger a redeploy if running. Use when user needs to configure DATABASE_URL, API keys, or other env vars. The variables parameter must be a JSON string of key-value pairs. Returns { status, project, keys[] }. Status is "updated_and_redeployed" if project was running, "updated" otherwise. Errors: PROJECT_NOT_FOUND, JSON parse error if variables is malformed.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project',
-          required: true,
-        },
-        variables: {
-          type: 'string',
-          description: 'JSON object of key-value pairs (e.g., {"DATABASE_URL": "..."})',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project'),
+        variables: z
+          .string()
+          .describe('JSON object of key-value pairs (e.g., {"DATABASE_URL": "..."})'),
+      }),
+      execute: async ({ project_name, variables }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
-        const vars = JSON.parse(args['variables'] as string) as Record<string, string>;
+        const vars = JSON.parse(variables) as Record<string, string>;
         const changed = ctx.env.setBulk(project.id, vars);
 
         if (changed && project.status === 'running') {
@@ -327,31 +255,27 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           await ctx.pipeline.redeploy(project.id);
           return {
             status: 'updated_and_redeployed',
-            project: projectName,
+            project: project_name,
             keys: Object.keys(vars),
           };
         }
 
-        return { status: 'updated', project: projectName, keys: Object.keys(vars) };
+        return { status: 'updated', project: project_name, keys: Object.keys(vars) };
       },
-    },
-    {
-      name: 'set_global_secret',
+    }),
+
+    set_global_secret: tool({
       description:
         'Set a global secret that is available to all projects (stored encrypted). Use for shared API keys, database credentials, etc. that multiple projects need. Returns { status, key }.',
-      parameters: {
-        key: { type: 'string', description: 'Secret name (e.g. OPENAI_API_KEY)', required: true },
-        value: { type: 'string', description: 'Secret value', required: true },
-        description: {
-          type: 'string',
-          description: 'Optional description of what this secret is for',
-          required: false,
-        },
-      },
-      execute: (args) => {
-        const key = args['key'] as string;
-        const value = args['value'] as string;
-        const description = args['description'] as string | undefined;
+      inputSchema: z.object({
+        key: z.string().describe('Secret name (e.g. OPENAI_API_KEY)'),
+        value: z.string().describe('Secret value'),
+        description: z
+          .string()
+          .optional()
+          .describe('Optional description of what this secret is for'),
+      }),
+      execute: ({ key, value, description }) => {
         ctx.env.setGlobalSecret(key, value, description);
         return Promise.resolve({
           status: 'saved',
@@ -359,65 +283,55 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           message: `Global secret "${key}" saved (encrypted).`,
         });
       },
-    },
-    {
-      name: 'list_global_secrets',
+    }),
+
+    list_global_secrets: tool({
       description:
         'List all global secrets (values are masked for security). Returns { secrets: [{ key, maskedValue, description }], count }.',
-      parameters: {},
+      inputSchema: z.object({}),
       execute: () => {
         const secrets = ctx.env.getGlobalSecretsMasked();
         return Promise.resolve({ secrets, count: secrets.length });
       },
-    },
-    {
-      name: 'expose_public',
+    }),
+
+    expose_public: tool({
       description:
         'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project to expose',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project to expose'),
+      }),
+      execute: async ({ project_name }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
         if (!project.assigned_port) {
           return { error: 'Project is not running — deploy it first' };
         }
 
         const url = await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
-        return { status: 'exposed', project: projectName, publicUrl: url };
+        return { status: 'exposed', project: project_name, publicUrl: url };
       },
-    },
-    {
-      name: 'unexpose_public',
+    }),
+
+    unexpose_public: tool({
       description:
         'Remove the public TryCloudflare tunnel URL for a project. Use when user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project to unexpose',
-          required: true,
-        },
-      },
-      execute: (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project to unexpose'),
+      }),
+      execute: ({ project_name }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         ctx.pipeline.closeTunnel(project.id);
-        return Promise.resolve({ status: 'unexposed', project: projectName });
+        return Promise.resolve({ status: 'unexposed', project: project_name });
       },
-    },
-    {
-      name: 'get_system_stats',
+    }),
+
+    get_system_stats: tool({
       description:
         'Get host system resource usage — CPU load, memory, and disk space. Use when user asks about server health, capacity, or before deploying to check if resources are available. Returns { summary, cpu, memory, disk } with percentage usage and warnings. Always available, no errors.',
-      parameters: {},
+      inputSchema: z.object({}),
       execute: () => {
         const stats = getSystemStats();
         return Promise.resolve({
@@ -425,93 +339,74 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           ...stats,
         });
       },
-    },
+    }),
+
     // --- v0.3 Tools ---
-    {
-      name: 'rollback_project',
+    rollback_project: tool({
       description:
         'Rollback a project to its previous Docker image. Use when a recent deploy broke something and user wants to revert. Returns the rollback result with previous image info. Errors: PROJECT_NOT_FOUND, NO_PREVIOUS_IMAGE if this is the first deploy.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project to rollback',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project to rollback'),
+      }),
+      execute: async ({ project_name }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         const result = await ctx.pipeline.rollback(project.id);
         return result;
       },
-    },
-    {
-      name: 'provision_database',
+    }),
+
+    provision_database: tool({
       description:
         'Provision a database sidecar (PostgreSQL or SQLite) for a project. Automatically sets DATABASE_URL in the project env vars and redeploys. Use when user says they need a database. Defaults to PostgreSQL. Returns { status, connectionUrl, type }. Errors: PROJECT_NOT_FOUND, ALREADY_PROVISIONED.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project',
-          required: true,
-        },
-        db_type: {
-          type: 'string',
-          description: 'Database type: "sqlite" or "postgres" (default: postgres)',
-          required: false,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project'),
+        db_type: z
+          .string()
+          .optional()
+          .describe('Database type: "sqlite" or "postgres" (default: postgres)'),
+      }),
+      execute: async ({ project_name, db_type }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
-        const dbType = (args['db_type'] as string | undefined) === 'sqlite' ? 'sqlite' : 'postgres';
-        const result = await ctx.dbProvisioner.provision(project.id, { type: dbType });
-        return { status: 'provisioned', project: projectName, ...result };
+        const type = db_type === 'sqlite' ? 'sqlite' : 'postgres';
+        const result = await ctx.dbProvisioner.provision(project.id, { type });
+        return { status: 'provisioned', project: project_name, ...result };
       },
-    },
-    {
-      name: 'deploy_blue_green',
+    }),
+
+    deploy_blue_green: tool({
       description:
         'Deploy a project with zero downtime using blue-green strategy. Builds a new version alongside the current one, runs health checks, then switches traffic atomically. Use for production projects where downtime is unacceptable. Returns deployment result with old/new container info. Errors: PROJECT_NOT_FOUND, HEALTH_CHECK_FAILED (new version unhealthy — old version kept running).',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project to deploy',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project to deploy'),
+      }),
+      execute: async ({ project_name }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         const result = await ctx.blueGreen.deploy(project.id);
         return result;
       },
-    },
-    {
-      name: 'debug_build_error',
+    }),
+
+    debug_build_error: tool({
       description:
         'Analyze a failed build and suggest fixes using AI. Matches against known error patterns first (fast), then uses LLM analysis (thorough). Use when a deploy_project call failed or user reports a build error. Returns { summary, rootCause, suggestedFixes[] }. Errors: PROJECT_NOT_FOUND, NO_FAILED_BUILD if the last deploy succeeded, NO_LLM if build debugger is not configured.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project with the build error',
-          required: true,
-        },
-      },
-      execute: async (args) => {
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project with the build error'),
+      }),
+      execute: async ({ project_name }) => {
         if (!ctx.buildDebugger) {
-          return { error: 'Build debugger requires an LLM provider. Configure one first.' };
+          return {
+            error: 'Build debugger requires an LLM provider. Configure one first.',
+          };
         }
 
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         const lastDeploy = ctx.db.getLastDeployLog(project.id);
         if (!lastDeploy || lastDeploy.status !== 'failed') {
@@ -520,62 +415,49 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
 
         const diagnosis = await ctx.buildDebugger.diagnose({
           buildLog: lastDeploy.build_log ?? 'No build log available',
-          projectName,
-          imageTag: project.image_tag ?? `openlander/${projectName}:latest`,
+          projectName: project_name,
+          imageTag: project.image_tag ?? `openlander/${project_name}:latest`,
           failedStep: 'build',
         });
 
         return diagnosis;
       },
-    },
+    }),
+
     // --- v0.4 Tools ---
-    {
-      name: 'preview_deploy',
+    preview_deploy: tool({
       description:
         'Deploy an ephemeral preview environment for a specific branch. Creates a separate container that does not affect the main deployment. Use when user wants to test a PR or feature branch before merging. Returns { previewId, branch, url, port }. The preview is temporary — clean up with cleanup_preview when done.',
-      parameters: {
-        repo_url: {
-          type: 'string',
-          description: 'Git repository URL',
-          required: true,
-        },
-        branch: {
-          type: 'string',
-          description: 'Branch name to preview',
-          required: true,
-        },
-      },
-      execute: async (args) => {
+      inputSchema: z.object({
+        repo_url: z.string().describe('Git repository URL'),
+        branch: z.string().describe('Branch name to preview'),
+      }),
+      execute: async ({ repo_url, branch }) => {
         const result = await ctx.previewDeployer.deploy({
-          repoUrl: args['repo_url'] as string,
-          branch: args['branch'] as string,
+          repoUrl: repo_url,
+          branch,
           sshKeyPath: ctx.config.git.sshKeyPath || undefined,
         });
         return result;
       },
-    },
-    {
-      name: 'cleanup_preview',
+    }),
+
+    cleanup_preview: tool({
       description:
         'Remove an ephemeral preview deployment created by preview_deploy. Pass the preview_id that was returned. Use when testing is done or to free resources. Returns { status, previewId }. Errors: PREVIEW_NOT_FOUND if the ID is invalid.',
-      parameters: {
-        preview_id: {
-          type: 'string',
-          description: 'Preview deployment ID to clean up',
-          required: true,
-        },
+      inputSchema: z.object({
+        preview_id: z.string().describe('Preview deployment ID to clean up'),
+      }),
+      execute: async ({ preview_id }) => {
+        await ctx.previewDeployer.cleanup(preview_id);
+        return { status: 'cleaned_up', previewId: preview_id };
       },
-      execute: async (args) => {
-        const previewId = args['preview_id'] as string;
-        await ctx.previewDeployer.cleanup(previewId);
-        return { status: 'cleaned_up', previewId };
-      },
-    },
-    {
-      name: 'list_previews',
+    }),
+
+    list_previews: tool({
       description:
         'List all active preview deployments with branch, URL, port, and creation time. Use to check what previews exist before creating new ones or to find a preview URL. Returns { count, previews[] }. Always available, no errors.',
-      parameters: {},
+      inputSchema: z.object({}),
       execute: () => {
         const previews = ctx.previewDeployer.list();
         return Promise.resolve({
@@ -588,60 +470,50 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           })),
         });
       },
-    },
+    }),
+
     // --- v0.2 Tools (added in agent enhancement) ---
-    {
-      name: 'restart_project',
+    restart_project: tool({
       description:
         'Restart a running project by stopping and redeploying it with the same configuration. Use when user reports the app is hung, unresponsive, or needs a fresh start after config changes. Returns { status, project } with redeploy result. Errors: PROJECT_NOT_FOUND.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project to restart',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project to restart'),
+      }),
+      execute: async ({ project_name }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         await ctx.pipeline.stop(project.id);
         const result = await ctx.pipeline.redeploy(project.id);
-        return { status: 'restarted', project: projectName, ...result };
+        return { status: 'restarted', project: project_name, ...result };
       },
-    },
-    {
-      name: 'map_domain',
+    }),
+
+    map_domain: tool({
       description:
         'Map a custom domain to a project via Cloudflare DNS and Tunnel for a permanent public URL. Use when user wants their own domain (e.g., api.myapp.com) instead of a temporary TryCloudflare URL. Requires Cloudflare configuration. Returns { status, project, domain, url }. Errors: PROJECT_NOT_FOUND, CLOUDFLARE_NOT_CONFIGURED.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Name of the project',
-          required: true,
-        },
-        domain: {
-          type: 'string',
-          description: 'Domain to map (e.g., api.myapp.com)',
-          required: true,
-        },
-      },
-      execute: async (args) => {
-        const projectName = args['project_name'] as string;
-        const domain = args['domain'] as string;
-        const project = ctx.db.getProjectByName(projectName);
-        if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of the project'),
+        domain: z.string().describe('Domain to map (e.g., api.myapp.com)'),
+      }),
+      execute: async ({ project_name, domain }) => {
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
 
         await ctx.cloudflare.createTunnel(project.id, domain);
-        return { status: 'mapped', project: projectName, domain, url: `https://${domain}` };
+        return {
+          status: 'mapped',
+          project: project_name,
+          domain,
+          url: `https://${domain}`,
+        };
       },
-    },
-    {
-      name: 'list_domains',
+    }),
+
+    list_domains: tool({
       description:
         'List all custom domain mappings across all projects with domain name, project ID, and status. Use to check existing domain configurations. Returns { count, domains[] }. Always available, no errors.',
-      parameters: {},
+      inputSchema: z.object({}),
       execute: () => {
         const mappings = ctx.db.listDomainMappings();
         return Promise.resolve({
@@ -653,23 +525,21 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           })),
         });
       },
-    },
-    {
-      name: 'get_deploy_status',
+    }),
+
+    get_deploy_status: tool({
       description:
         'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed) and timing. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }.',
-      parameters: {
-        project_name: {
-          type: 'string',
-          description: 'Specific project name to check. Omit for all active deploys.',
-          required: false,
-        },
-      },
-      execute: (args) => {
-        const projectName = args['project_name'] as string | undefined;
-        if (projectName) {
-          const project = ctx.db.getProjectByName(projectName);
-          if (!project) throw new ProjectNotFoundError(projectName);
+      inputSchema: z.object({
+        project_name: z
+          .string()
+          .optional()
+          .describe('Specific project name to check. Omit for all active deploys.'),
+      }),
+      execute: ({ project_name }) => {
+        if (project_name) {
+          const project = ctx.db.getProjectByName(project_name);
+          if (!project) throw new ProjectNotFoundError(project_name);
           const status = ctx.jobManager.getStatus(project.id);
           const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
           return Promise.resolve({
@@ -677,7 +547,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
             jobs: status
               ? [
                   {
-                    name: projectName,
+                    name: project_name,
                     phase: status.phase,
                     elapsed: `${String(Math.round((Date.now() - status.startedAt.getTime()) / 1000))}s`,
                     error: status.errorSummary,
@@ -697,104 +567,78 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           })),
         });
       },
-    },
-    {
-      name: 'scan_dockerfiles',
+    }),
+
+    scan_dockerfiles: tool({
       description:
         'Clone a repo and scan for all Dockerfiles. Use BEFORE deploy_project when you suspect a monorepo (multiple services). Returns paths like ["Dockerfile", "frontend/Dockerfile", "backend/Dockerfile"]. If only one Dockerfile is found, use deploy_project normally. If multiple are found, deploy each as a child project with the dockerfile_path parameter. Errors: CLONE_FAILED.',
-      parameters: {
-        repo_url: {
-          type: 'string',
-          description: 'Git repository URL to scan',
-          required: true,
-        },
-        branch: {
-          type: 'string',
-          description: 'Branch to scan (default: repo default branch)',
-          required: false,
-        },
-      },
-      execute: async (args) => {
-        const repoUrl = args['repo_url'] as string;
-        const branch = (args['branch'] as string | undefined) ?? undefined;
+      inputSchema: z.object({
+        repo_url: z.string().describe('Git repository URL to scan'),
+        branch: z.string().optional().describe('Branch to scan (default: repo default branch)'),
+      }),
+      execute: async ({ repo_url, branch }) => {
         const cloneResult = await cloneRepo({
-          repoUrl,
+          repoUrl: repo_url,
           branch,
           sshKeyPath: ctx.config.git.sshKeyPath || undefined,
         });
         const dockerfiles = findDockerfiles(cloneResult.path);
         const relativePaths = dockerfiles.map((f) => relative(cloneResult.path, f));
         return {
-          repoUrl,
+          repoUrl: repo_url,
           clonePath: cloneResult.path,
           commitSha: cloneResult.commitSha,
           dockerfiles: relativePaths,
           isMonorepo: relativePaths.length > 1,
         };
       },
-    },
-    {
-      name: 'deploy_monorepo',
+    }),
+
+    deploy_monorepo: tool({
       description:
         'Start deploying a monorepo with multiple services in the background. Use AFTER scan_dockerfiles confirms multiple Dockerfiles. Returns immediately with { parentProjectId, parentName, status: "building" } while all services build in parallel. Use get_deploy_status to check progress. Errors: BUILD_FAILED on individual services (others continue).',
-      parameters: {
-        repo_url: {
-          type: 'string',
-          description: 'Git repository URL',
-          required: true,
-        },
-        clone_path: {
-          type: 'string',
-          description: 'Path to already-cloned repo (from scan_dockerfiles)',
-          required: true,
-        },
-        commit_sha: {
-          type: 'string',
-          description: 'Commit SHA (from scan_dockerfiles)',
-          required: true,
-        },
-        dockerfiles: {
-          type: 'string',
-          description:
+      inputSchema: z.object({
+        repo_url: z.string().describe('Git repository URL'),
+        clone_path: z.string().describe('Path to already-cloned repo (from scan_dockerfiles)'),
+        commit_sha: z.string().describe('Commit SHA (from scan_dockerfiles)'),
+        dockerfiles: z
+          .string()
+          .describe(
             'JSON array of Dockerfile paths (from scan_dockerfiles), e.g. ["frontend/Dockerfile", "backend/Dockerfile"]',
-          required: true,
-        },
-        branch: {
-          type: 'string',
-          description: 'Branch (default: repo default branch)',
-          required: false,
-        },
-      },
-      execute: (args) => {
-        const dockerfiles = JSON.parse(args['dockerfiles'] as string) as string[];
+          ),
+        branch: z.string().optional().describe('Branch (default: repo default branch)'),
+      }),
+      execute: ({ repo_url, clone_path, commit_sha, dockerfiles, branch }) => {
+        const dockerfileList = JSON.parse(dockerfiles) as string[];
         const result = ctx.pipeline.startMonorepoDeploy({
-          repoUrl: args['repo_url'] as string,
-          clonePath: args['clone_path'] as string,
-          commitSha: args['commit_sha'] as string,
-          dockerfiles,
-          branch: (args['branch'] as string | undefined) ?? undefined,
+          repoUrl: repo_url,
+          clonePath: clone_path,
+          commitSha: commit_sha,
+          dockerfiles: dockerfileList,
+          branch,
         });
-        return Promise.resolve({ ...result, hint: 'Use get_deploy_status to check progress.' });
+        return Promise.resolve({
+          ...result,
+          hint: 'Use get_deploy_status to check progress.',
+        });
       },
-    },
+    }),
+
     // --- Git Provider Tools ---
-    {
-      name: 'list_github_repos',
+    list_github_repos: tool({
       description:
         'List repositories from the user\'s connected GitHub account, sorted by most recently pushed. Use when user asks "show my repos", "what can I deploy?", or needs to find a project by name. Returns { count, repos[] } with name, description, language, private flag, and clone URL. Errors: GITHUB_NOT_CONFIGURED if no GitHub token is set — tell user to add one in settings. Supports pagination with page parameter.',
-      parameters: {
-        page: {
-          type: 'number',
-          description: 'Page number for pagination (default: 1, 30 repos per page)',
-          required: false,
-        },
-        visibility: {
-          type: 'string',
-          description: 'Filter by visibility: "all", "public", or "private" (default: all)',
-          required: false,
-        },
-      },
-      execute: async (args) => {
+      inputSchema: z.object({
+        page: z
+          .number()
+          .optional()
+          .describe('Page number for pagination (default: 1, 30 repos per page)'),
+        visibility: z
+          .string()
+          .optional()
+          .describe('Filter by visibility: "all", "public", or "private" (default: all)'),
+      }),
+      execute: async ({ page, visibility }) => {
         const config = loadConfig();
         const ghConfig = config.gitProviders.github;
         if (!ghConfig.token) {
@@ -804,10 +648,13 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           };
         }
         const provider = createGitProvider('github', ghConfig);
-        const page = (args['page'] as number | undefined) ?? 1;
-        const visibility =
-          (args['visibility'] as 'all' | 'public' | 'private' | undefined) ?? 'all';
-        const result = await provider.listRepos({ page, perPage: 30, visibility });
+        const pageNum = page ?? 1;
+        const visibilityFilter = (visibility as 'all' | 'public' | 'private' | undefined) ?? 'all';
+        const result = await provider.listRepos({
+          page: pageNum,
+          perPage: 30,
+          visibility: visibilityFilter,
+        });
         return {
           count: result.repos.length,
           hasMore: result.hasMore,
@@ -825,19 +672,15 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           })),
         };
       },
-    },
-    {
-      name: 'search_github_repos',
+    }),
+
+    search_github_repos: tool({
       description:
         'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with clone URLs ready for deploy_project. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call deploy_project with the clone URL.',
-      parameters: {
-        query: {
-          type: 'string',
-          description: 'Search query — matches repo name, description, and README',
-          required: true,
-        },
-      },
-      execute: async (args) => {
+      inputSchema: z.object({
+        query: z.string().describe('Search query — matches repo name, description, and README'),
+      }),
+      execute: async ({ query }) => {
         const config = loadConfig();
         const ghConfig = config.gitProviders.github;
         if (!ghConfig.token) {
@@ -847,7 +690,6 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           };
         }
         const provider = createGitProvider('github', ghConfig);
-        const query = args['query'] as string;
         const result = await provider.searchRepos(query);
         return {
           total: result.total,
@@ -863,13 +705,13 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           })),
         };
       },
-    },
+    }),
+
     // --- v0.5 Tools: Alerts ---
-    {
-      name: 'get_alerts',
+    get_alerts: tool({
       description:
         'Get current system alerts for resource issues, inactive projects, and container problems. Returns active alerts with severity, message, and suggested actions. Use when user asks about system health, problems, or "show alerts". Always available.',
-      parameters: {},
+      inputSchema: z.object({}),
       execute: () => {
         const alerts = ctx.alertMonitor.getActiveAlerts();
         return Promise.resolve({
@@ -884,82 +726,76 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge): T
           })),
         });
       },
-    },
-    {
-      name: 'dismiss_alert',
+    }),
+
+    dismiss_alert: tool({
       description:
         'Dismiss a specific alert by ID so it no longer appears in active alerts. Use when user acknowledges an alert. Returns { status, alertId }.',
-      parameters: {
-        alert_id: { type: 'string', description: 'Alert ID to dismiss', required: true },
+      inputSchema: z.object({
+        alert_id: z.string().describe('Alert ID to dismiss'),
+      }),
+      execute: ({ alert_id }) => {
+        ctx.alertMonitor.dismissAlert(alert_id);
+        return Promise.resolve({ status: 'dismissed', alertId: alert_id });
       },
-      execute: (args) => {
-        const alertId = args['alert_id'] as string;
-        ctx.alertMonitor.dismissAlert(alertId);
-        return Promise.resolve({ status: 'dismissed', alertId });
-      },
-    },
-    // --- v0.7 Tools: User Interaction ---
-    ...(questionBridge
-      ? [
-          {
-            name: 'ask_user_question',
-            description:
-              "Ask the user a question with structured choices during a conversation. Use when you need to gather preferences, clarify ambiguous instructions, get decisions on implementation choices, or offer options. Each question has a header (max 30 chars), a question string, and an array of options with label (1-5 words) and description. A 'Type your own answer' option is automatically added. If you recommend a specific option, list it first and add '(Recommended)' to its label. Set multiple=true to allow multi-select. Returns an array of answers, each with selectedLabels (array of chosen label strings) and optional customText.",
-            parameters: {
-              questions: {
-                type: 'string' as const,
-                description:
-                  'JSON array of question objects. Each: { question: string, header?: string (max 30 chars), options: [{ label: string (1-5 words), description?: string }], multiple?: boolean }',
-                required: true,
-              },
-            },
-            execute: async (args: Record<string, unknown>) => {
-              const questionsRaw = args['questions'] as string;
-              const questions = JSON.parse(questionsRaw) as Array<{
-                question: string;
-                header?: string;
-                options: Array<{ label: string; description?: string }>;
-                multiple?: boolean;
-              }>;
-              const { nanoid } = await import('nanoid');
-              const request = {
-                id: nanoid(12),
-                questions: questions.map((q) => ({
-                  question: q.question,
-                  header: q.header?.slice(0, 30),
-                  options: q.options.map((o) => ({
-                    label: o.label.slice(0, 30),
-                    description: o.description,
-                  })),
-                  multiple: q.multiple ?? false,
-                })),
-              };
-              const answers = await questionBridge.ask(request);
-              if (answers.length === 0) {
-                return {
-                  dismissed: true,
-                  message: 'User dismissed the question without answering.',
-                };
-              }
-              return {
-                answers: answers.map((a) => ({
-                  questionIndex: a.questionIndex,
-                  selectedLabels: a.selectedLabels,
-                  customText: a.customText,
-                })),
-              };
-            },
-          } satisfies ToolDefinition,
-        ]
-      : []),
-  ];
-}
+    }),
+  };
 
-/**
- * Legacy TOOLS export for backward compatibility.
- * Use createTools(ctx) for wired tools.
- */
-export const TOOLS: ToolDefinition[] = [];
+  // Conditionally add ask_user_question tool if questionBridge is provided
+  if (questionBridge) {
+    return {
+      ...tools,
+      ask_user_question: tool({
+        description:
+          "Ask the user a question with structured choices during a conversation. Use when you need to gather preferences, clarify ambiguous instructions, get decisions on implementation choices, or offer options. Each question has a header (max 30 chars), a question string, and an array of options with label (1-5 words) and description. A 'Type your own answer' option is automatically added. If you recommend a specific option, list it first and add '(Recommended)' to its label. Set multiple=true to allow multi-select. Returns an array of answers, each with selectedLabels (array of chosen label strings) and optional customText.",
+        inputSchema: z.object({
+          questions: z
+            .string()
+            .describe(
+              'JSON array of question objects. Each: { question: string, header?: string (max 30 chars), options: [{ label: string (1-5 words), description?: string }], multiple?: boolean }',
+            ),
+        }),
+        execute: async ({ questions }) => {
+          const questionsParsed = JSON.parse(questions) as Array<{
+            question: string;
+            header?: string;
+            options: Array<{ label: string; description?: string }>;
+            multiple?: boolean;
+          }>;
+          const { nanoid } = await import('nanoid');
+          const request = {
+            id: nanoid(12),
+            questions: questionsParsed.map((q) => ({
+              question: q.question,
+              header: q.header?.slice(0, 30),
+              options: q.options.map((o) => ({
+                label: o.label.slice(0, 30),
+                description: o.description,
+              })),
+              multiple: q.multiple ?? false,
+            })),
+          };
+          const answers = await questionBridge.ask(request);
+          if (answers.length === 0) {
+            return {
+              dismissed: true,
+              message: 'User dismissed the question without answering.',
+            };
+          }
+          return {
+            answers: answers.map((a) => ({
+              questionIndex: a.questionIndex,
+              selectedLabels: a.selectedLabels,
+              customText: a.customText,
+            })),
+          };
+        },
+      }),
+    };
+  }
+
+  return tools;
+}
 
 function findDockerfiles(dir: string, maxDepth = 3): string[] {
   const results: string[] = [];
