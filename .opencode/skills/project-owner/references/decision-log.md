@@ -293,6 +293,21 @@
 **아카이브 파일 목록**: archive/v0.0.6/(3), archive/v0.0.7/(3), archive/analysis/(2), archive/onboarding-refactor.md, archive/requirements.md
 **재검토 조건**: TUI 부활 또는 아카이브 문서 삭제 검토 시
 
+### DEC-020: v0.0.12 Provider OAuth를 Web 기준으로 전면 재작성
+
+**날짜**: 2026-03
+**결정**: v0.0.12 스펙을 CLI 기준에서 Web 기준으로 전면 재작성. 온보딩(SetupScreen) + Settings 통합. 토큰 저장을 파일에서 DB 암호화로 변경.
+**거부한 대안**: CLI 기준 스펙 유지 후 구현 시점에 Web 적응 — 스펙과 구현의 괴리가 커질 위험
+**이유**:
+
+- DEC-017(Web 온보딩 채택), DEC-018(Web Settings 적용) 이후 CLI 기반 스펙은 전제가 무효
+- 임시 HTTP 서버 스폰 → Hono 라우트로 대체 (기존 서버 활용, 아키텍처 간소화)
+- `auth-tokens.json` 파일 → DB `provider_auth` 테이블 (v0.0.10 `global_secrets`와 동일 암호화 패턴 재사용)
+- 웹은 OAuth의 자연스러운 환경 — 팝업 플로우가 CLI보다 깔끔
+- SSH/원격 fallback 불필요 (웹 = 브라우저 항상 존재)
+- 구현 순서 변경: OpenRouter를 OpenAI보다 먼저 (callback_url 동적 → redirect URI 이슈 없음 → 인프라 검증에 적합)
+**재검토 조건**: 해당 없음 (확정)
+
 ## 결정 추가 가이드
 
 새 결정을 내릴 때:
