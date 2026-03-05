@@ -1,5 +1,5 @@
 /**
- * LLM provider abstraction.
+ * LLM provider abstraction — Vercel AI SDK.
  *
  * BYOK (Bring Your Own Key) — supports:
  * - Google Gemini (free tier available)
@@ -12,12 +12,17 @@
  * the deployment pipeline. The LLM never executes commands directly.
  */
 
-import { GeminiProvider } from './gemini.js';
-import { AnthropicProvider } from './anthropic.js';
-import { OpenAIProvider } from './openai.js';
-import { OpenRouterProvider } from './openrouter.js';
-import { OllamaProvider } from './ollama.js';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { createOllama } from 'ollama-ai-provider-v2';
+import type { LanguageModel } from 'ai';
 import { LLMNotConfiguredError } from '../errors.js';
+
+// ---------------------------------------------------------------------------
+// Config types
+// ---------------------------------------------------------------------------
 
 export interface LLMConfig {
   provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
@@ -29,33 +34,26 @@ export interface LLMConfig {
   authToken?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Shared message type — used by Agent, Debugger, AutoDetector for history
+// ---------------------------------------------------------------------------
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
-export interface ToolCall {
-  name: string;
-  arguments: Record<string, unknown>;
-}
-
-export interface LLMResponse {
-  content: string;
-  toolCalls?: ToolCall[];
-}
+// ---------------------------------------------------------------------------
+// AI SDK model factory
+// ---------------------------------------------------------------------------
 
 /**
- * Unified LLM client interface.
- * Each provider implements this interface.
+ * Create an AI SDK LanguageModel based on provider config.
+ *
+ * This is the new primary API. Returns a standard AI SDK LanguageModel
+ * for use with generateText/streamText.
  */
-export interface LLMClient {
-  chat(messages: ChatMessage[]): Promise<LLMResponse>;
-}
-
-/**
- * Create an LLM client based on provider config.
- */
-export function createLLMClient(config: LLMConfig): LLMClient {
+export function createModel(config: LLMConfig): LanguageModel {
   const apiKey = config.authToken ?? config.apiKey;
 
   // Ollama doesn't need an API key
@@ -65,16 +63,21 @@ export function createLLMClient(config: LLMConfig): LLMClient {
 
   switch (config.provider) {
     case 'gemini':
-      return new GeminiProvider(apiKey, config.model ?? 'gemini-2.0-flash');
+      return createGoogleGenerativeAI({ apiKey })(config.model ?? 'gemini-2.0-flash');
     case 'anthropic':
-      return new AnthropicProvider(apiKey, config.model ?? 'claude-sonnet-4-20250514');
+      return createAnthropic({ apiKey })(config.model ?? 'claude-sonnet-4-20250514');
     case 'openai':
-      return new OpenAIProvider(apiKey, config.model ?? 'gpt-4o');
+      return createOpenAI({ apiKey })(config.model ?? 'gpt-4o');
     case 'openrouter':
-      return new OpenRouterProvider(apiKey, config.model ?? 'openrouter/free');
+      return createOpenRouter({ apiKey })(config.model ?? 'openrouter/free');
     case 'ollama':
-      return new OllamaProvider(config.model ?? 'llama3.2', config.ollamaBaseUrl);
+      return createOllama({ baseURL: config.ollamaBaseUrl ?? 'http://localhost:11434' })(
+        config.model ?? 'llama3.2',
+      );
     default:
       throw new Error(`Unknown LLM provider: ${String(config.provider)}`);
   }
 }
+
+// Re-export AI SDK types for consumers
+export type { LanguageModel } from 'ai';

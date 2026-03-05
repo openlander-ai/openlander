@@ -14,11 +14,6 @@ export { loadConfig, saveConfig, updateConfig } from './config/index.js';
 export { Database } from './db/index.js';
 export { EventBus, eventBus } from './events/index.js';
 
-// v0.2: LLM providers
-export { GeminiProvider } from './llm/gemini.js';
-export { AnthropicProvider } from './llm/anthropic.js';
-export { OpenAIProvider } from './llm/openai.js';
-export { OpenRouterProvider } from './llm/openrouter.js';
-export { OllamaProvider } from './llm/ollama.js';
-export { createLLMClient } from './llm/index.js';
-export type { LLMClient, LLMConfig, ChatMessage, LLMResponse } from './llm/index.js';
+// v0.0.8: AI SDK providers (individual provider classes removed)
+export { createModel } from './llm/index.js';
+export type { LLMConfig, ChatMessage, LanguageModel } from './llm/index.js';
