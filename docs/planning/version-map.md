@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 📋 ── v0.0.8 📋 ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 📋 ── 정식릴리즈(TBD)
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 📋 ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 📋 ┬ 정식릴리즈(TBD)
 
 ```
 
@@ -44,7 +44,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 | 14     | **버그 트래커**                | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)          |
 | 15     | **개발 라이프사이클**          | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                               |
 | ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~     | `archive/onboarding-refactor.md`             | v0.0.9         | —      | 📦 아카이브 (DEC-017: Web Setup Screen으로 대체)                |
-| 17     | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 0%     | 📋 Web pivot 재작성 완료 (DEC-020), 구현 미착수                 |
+| 17     | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 100%   | ✅ 구현 완료. 백엔드 OAuth 라우트 + 프론트엔드 통합.            |
 | 18     | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                           |
 | 19     | **v0.0.11 Agent Proactivity**  | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have       |
 
@@ -313,23 +313,38 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 - `web/src/components/layout/Header.tsx` — Bell 아이콘 + 배지 + 드롭다운 토글
 - `web/src/components/layout/AppLayout.tsx` — useNotifications 훅 연결 + 알림 액션→채팅 라우팅
 
-### v0.0.12 — Provider OAuth (인증 통합) 📋
+### v0.0.12 — Provider OAuth (인증 통합) ✅
 
-**상태**: 기획 완료 (Web pivot 재작성 완료), 구현 미착수 | **관련 문서**: [`v0.0.12/provider-oauth.md`](v0.0.12/provider-oauth.md)
+**상태**: 구현 완료 | **관련 문서**: [`v0.0.12/provider-oauth.md`](v0.0.12/provider-oauth.md)
 
 > LLM 프로바이더 구독 계정(ChatGPT Plus, OpenRouter 등)으로 OAuth 로그인하여 BYOK 설정 없이 사용 가능하게.
 > **Web pivot 반영 (DEC-020)**: CLI → Web UI (SetupScreen + SettingsPage), 파일 → DB 암호화, 임시서버 → Hono 라우트.
 
 **핵심 가치**: API 키 수동 입력 번거로움 제거 + 기존 구독 활용으로 진입장벽 최소화.
 
-| 항목                                      | 내용                                                  | 상태 |
-| ----------------------------------------- | ----------------------------------------------------- | ---- |
-| 인프라: provider_auth DB + 토큰 저장/갱신 | AES-256-GCM 암호화, Hono OAuth 라우트, PKCE 공용 유틸 | 📋   |
-| 12-1: OpenAI OAuth PKCE                   | 팝업 로그인 + 토큰 교환 (Codex Client ID)             | 📋   |
-| 12-2: OpenRouter OAuth PKCE               | 팝업 로그인 + API 키 자동 발급 (기존 CLI 코드 재활용) | 📋   |
-| 12-3: Anthropic 안내 개선                 | `claude setup-token` 안내 텍스트 추가 (보조 UX)       | 📋   |
-| 12-4: Gemini 안내 개선                    | AI Studio 링크 안내 추가 (보조 UX)                    | 📋   |
-| 프론트엔드 통합                           | SetupScreen + SettingsPage에 OAuth 버튼 + 상태 표시   | 📋   |
+| 항목                                     | 내용                                                  | 상태 |
+| ---------------------------------------- | ----------------------------------------------------- | ---- |
+| 인프라: oauth_tokens DB + 토큰 저장/갱신 | AES-256-GCM 암호화, Hono OAuth 라우트, PKCE 공용 유틸 | ✅   |
+| 12-1: OpenAI OAuth PKCE                  | 팝업 로그인 + 토큰 교환 (Codex Client ID)             | ✅   |
+| 12-2: OpenRouter OAuth PKCE              | 팝업 로그인 + API 키 자동 발급 (기존 CLI 코드 재활용) | ✅   |
+| 12-3: Anthropic 안내 개선                | `claude setup-token` 안내 텍스트 추가 (보조 UX)       | ✅   |
+| 12-4: Gemini 안내 개선                   | AI Studio 링크 안내 추가 (보조 UX)                    | ✅   |
+| 프론트엔드 통합                          | SetupScreen + SettingsPage에 OAuth 버튼 + 상태 표시   | ✅   |
+
+**구현 내역**:
+
+- `src/auth/pkce.ts` — 신규: PKCE generatePkce() + generateState() 유틸
+- `src/auth/token-store.ts` — 신규: 토큰 암호화/복호화/저장/조회/삭제 + 만료 검사
+- `src/auth/openrouter-web.ts` — 신규: OpenRouter Web OAuth (auth URL 생성 + 코드 교환)
+- `src/web/api/auth-routes.ts` — 신규: Hono OAuth 라우트 4개 (start, callback, status, disconnect)
+- `src/db/schema.ts` + `schema.drizzle.ts` — oauth_tokens 테이블에 auth_method, user_email, iv 컬럼 추가
+- `src/db/index.ts` — OAuthTokenRow 인터페이스 확장 + upsertOAuthTokens 새 컬럼 지원
+- `src/web/server.ts` — auth-routes 마운트
+- `web/src/components/setup/OAuthButton.tsx` — 신규: OAuth 팝업 트리거 + postMessage 수신
+- `web/src/components/setup/ProviderHelp.tsx` — 신규: Anthropic/Gemini 프로바이더별 안내
+- `web/src/lib/api.ts` — OAuth API 클라이언트 함수 3개
+- `web/src/components/setup/SetupScreen.tsx` — Step 1에 OAuth 버튼 + 'or' 구분선 + ProviderHelp 추가
+- `web/src/pages/SettingsPage.tsx` — AI Model 섹션에 OAuth 상태 표시 + 연결/해제 UI 추가
 
 **선행 조건**: 없음 (v0.1.0 Web MVP + v0.0.10 완료). 관련 결정: DEC-013, DEC-020.
 
@@ -359,37 +374,37 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ## 미해결 항목 총정리
 
-| #      | 항목                              | 버전                 | 문서                                | 우선순위               |
-| ------ | --------------------------------- | -------------------- | ----------------------------------- | ---------------------- |
-| ~~1~~  | ~~i18n (다국어 지원)~~            | v0.0.6               | `archive/v0.0.6/tasks.md`           | ❌ 제거 (TUI 아카이브) |
-| ~~2~~  | ~~프로젝트 검색/필터~~            | v0.0.6               | `archive/requirements.md`           | ❌ 제거 (TUI 아카이브) |
-| 3      | ~~전체 컨테이너 스캔~~            | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료                |
-| 4      | ~~OS 레벨 포트 스캔~~             | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료                |
-| 5      | ~~리버스 프록시 감지~~            | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료                |
-| 6      | ~~시스템 프롬프트 확장~~          | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료                |
-| 7      | ~~에이전트 도구 3개 추가~~        | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료                |
-| 8      | ~~Dashboard Server 섹션~~         | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료                |
-| 9      | ~~Preflight Check~~               | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료                |
-| ~~10~~ | ~~Global Secrets + 암호화~~       | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | ✅ 완료                |
-| ~~11~~ | ~~.env.example 감지~~             | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | ✅ 완료                |
-| ~~12~~ | ~~환경변수 도구 추가~~            | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | ✅ 완료                |
-| ~~13~~ | ~~/env 오버레이 확장~~            | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | ✅ 완료                |
-| 14     | Vercel AI SDK 마이그레이션        | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기)             |
-| 15     | 파인튜닝 모델                     | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래                   |
-| ~~16~~ | ~~Post-Deploy Insight~~           | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료                |
-| ~~17~~ | ~~Anomaly Nudge~~                 | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료                |
-| ~~18~~ | ~~Smart Defaults~~                | v0.0.11              | ✅                                  |
-| ~~19~~ | ~~Idle Scan~~                     | v0.0.11              | ❌                                  |
-| ~~20~~ | ~~온보딩 CLI 리팩토링~~           | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | ⏸️ 보류 (DEC-017)      |
-| 21     | OAuth 인프라 (DB + 토큰 + 라우트) | v0.0.12              | `v0.0.12/provider-oauth.md` 인프라  | 높음                   |
-| 22     | OpenAI OAuth PKCE                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | 높음                   |
-| 23     | OpenRouter OAuth PKCE             | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | 높음                   |
-| 24     | Anthropic/Gemini 안내 개선        | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3,4  | 낮음                   |
-| 25     | 프론트엔드 OAuth 통합             | v0.0.12              | `v0.0.12/provider-oauth.md` 통합    | 높음                   |
-| ~~26~~ | ~~Web MVP Phase 1~~               | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료                |
-| ~~27~~ | ~~Web MVP Phase 2~~               | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료                |
-| ~~28~~ | ~~Web MVP Phase 3~~               | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료                |
-| ~~29~~ | ~~TUI Freeze~~                    | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료                |
+| #      | 항목                                  | 버전                 | 문서                                | 우선순위               |
+| ------ | ------------------------------------- | -------------------- | ----------------------------------- | ---------------------- |
+| ~~1~~  | ~~i18n (다국어 지원)~~                | v0.0.6               | `archive/v0.0.6/tasks.md`           | ❌ 제거 (TUI 아카이브) |
+| ~~2~~  | ~~프로젝트 검색/필터~~                | v0.0.6               | `archive/requirements.md`           | ❌ 제거 (TUI 아카이브) |
+| 3      | ~~전체 컨테이너 스캔~~                | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료                |
+| 4      | ~~OS 레벨 포트 스캔~~                 | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료                |
+| 5      | ~~리버스 프록시 감지~~                | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료                |
+| 6      | ~~시스템 프롬프트 확장~~              | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료                |
+| 7      | ~~에이전트 도구 3개 추가~~            | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료                |
+| 8      | ~~Dashboard Server 섹션~~             | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료                |
+| 9      | ~~Preflight Check~~                   | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료                |
+| ~~10~~ | ~~Global Secrets + 암호화~~           | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | ✅ 완료                |
+| ~~11~~ | ~~.env.example 감지~~                 | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | ✅ 완료                |
+| ~~12~~ | ~~환경변수 도구 추가~~                | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | ✅ 완료                |
+| ~~13~~ | ~~/env 오버레이 확장~~                | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | ✅ 완료                |
+| 14     | Vercel AI SDK 마이그레이션            | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | 낮음(연기)             |
+| 15     | 파인튜닝 모델                         | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래                   |
+| ~~16~~ | ~~Post-Deploy Insight~~               | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료                |
+| ~~17~~ | ~~Anomaly Nudge~~                     | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료                |
+| ~~18~~ | ~~Smart Defaults~~                    | v0.0.11              | ✅                                  |
+| ~~19~~ | ~~Idle Scan~~                         | v0.0.11              | ❌                                  |
+| ~~20~~ | ~~온보딩 CLI 리팩토링~~               | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | ⏸️ 보류 (DEC-017)      |
+| ~~21~~ | ~~OAuth 인프라 (DB + 토큰 + 라우트)~~ | v0.0.12              | `v0.0.12/provider-oauth.md` 인프라  | ✅ 완료                |
+| ~~22~~ | ~~OpenAI OAuth PKCE~~                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | ✅ 완료                |
+| ~~23~~ | ~~OpenRouter OAuth PKCE~~             | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | ✅ 완료                |
+| ~~24~~ | ~~Anthropic/Gemini 안내 개선~~        | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3,4  | ✅ 완료                |
+| ~~25~~ | ~~프론트엔드 OAuth 통합~~             | v0.0.12              | `v0.0.12/provider-oauth.md` 통합    | ✅ 완료                |
+| ~~26~~ | ~~Web MVP Phase 1~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료                |
+| ~~27~~ | ~~Web MVP Phase 2~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료                |
+| ~~28~~ | ~~Web MVP Phase 3~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료                |
+| ~~29~~ | ~~TUI Freeze~~                        | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료                |
 
 ---
 
@@ -405,15 +420,14 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ## 검증 기준
 
-**2026-03-04 기준 (v0.0.10 완료 후)**:
+**2026-03-05 기준 (v0.0.12 완료 후)**:
 
 ```
 ✅ tsup build — 성공 (backend + DTS)
 ✅ vite build — 성공 (web)
 ✅ lsp_diagnostics — 0 errors
 ✅ lint-staged — 통과
-✅ E2E deploy — traefik/whoami Chat→Agent→Clone→Build→Container→URL 성공
-✅ v0.0.10 — Global secrets + API + Web UI + agent tools + MCP
+✅ v0.0.12 — OAuth PKCE (OpenAI + OpenRouter) + ProviderHelp (Anthropic + Gemini) + 프론트엔드 통합
 ```
 
 ---
