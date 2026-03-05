@@ -568,10 +568,11 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
         case 'scan_dockerfiles': {
           const args = parseInput(scanDockerfilesSchema, rawArgs);
           const agentTools = (await import('../agent/tools.js')).createTools(ctx);
-          const tool = agentTools.find((t) => t.name === 'scan_dockerfiles');
-          if (!tool)
-            throw new McpError(ErrorCode.InternalError, 'scan_dockerfiles tool not available');
-          const result = await tool.execute({ repo_url: args.repo_url, branch: args.branch });
+          const scanTool = agentTools['scan_dockerfiles'];
+          const result = await scanTool.execute(
+            { repo_url: args.repo_url, branch: args.branch },
+            { toolCallId: 'mcp', messages: [] },
+          );
           return successResponse(result);
         }
 
