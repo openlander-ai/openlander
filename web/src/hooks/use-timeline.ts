@@ -5,6 +5,8 @@ import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCa
 interface UseTimelineOptions {
   projectId: string | undefined;
   enabled?: boolean;
+  /** Change this value to force timeline reset + stream reconnect (e.g. on redeploy) */
+  runKey?: number;
 }
 
 interface UseTimelineReturn {
@@ -20,7 +22,11 @@ interface UseTimelineReturn {
 const MAX_RETRIES = 5;
 const RETRY_DELAY = 3000;
 
-export function useTimeline({ projectId, enabled = true }: UseTimelineOptions): UseTimelineReturn {
+export function useTimeline({
+  projectId,
+  enabled = true,
+  runKey = 0,
+}: UseTimelineOptions): UseTimelineReturn {
   const [items, setItems] = useState<TimelineItem[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
@@ -113,12 +119,13 @@ export function useTimeline({ projectId, enabled = true }: UseTimelineOptions): 
     setItems([]);
     setIsComplete(false);
     setError(null);
+    retriesRef.current = 0;
     connect();
 
     return () => {
       abortRef.current?.abort();
     };
-  }, [projectId, enabled, connect]);
+  }, [projectId, enabled, runKey, connect]);
 
   /** Mark a question item as answered in the timeline */
   const markAnswered = useCallback((questionId: string) => {

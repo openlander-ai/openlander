@@ -120,10 +120,7 @@ export async function stopProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
 }
 
-export async function redeployProject(
-  id: string,
-  onEvent?: (event: ChatStreamEvent) => void,
-): Promise<DeployResult> {
+export async function redeployProject(id: string): Promise<void> {
   const res = await fetch(`/api/projects/${id}/redeploy`, { method: 'POST' });
 
   if (!res.ok) {
@@ -131,63 +128,14 @@ export async function redeployProject(
     throw new Error(error || 'Failed to redeploy project');
   }
 
-  // Check if response is SSE stream (agent-mediated) or JSON (direct fallback)
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('text/event-stream')) {
-    // Direct pipeline response (LLM not configured)
-    return res.json();
+  // SSE stream is consumed by the server-side build/stream endpoint via eventBus.
+  // We don't need to read the SSE here — just fire the request and let the
+  // timeline's NDJSON build stream pick up events.
+  // Close the response body to avoid leaking connections.
+  if (res.body) {
+    const reader = res.body.getReader();
+    void reader.cancel();
   }
-
-  // SSE stream: consume events
-  const reader = res.body?.getReader();
-  if (!reader) {
-    throw new Error('No response body');
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let deployError: string | undefined;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const jsonStr = line.slice(5).trim();
-        if (!jsonStr) continue;
-
-        try {
-          const event = JSON.parse(jsonStr) as ChatStreamEvent;
-          onEvent?.(event);
-
-          if ((event as Record<string, unknown>).type === 'fallback') {
-            return event as unknown as DeployResult;
-          }
-
-          if (event.type === 'error') {
-            deployError = event.error;
-          }
-        } catch {
-          // Skip malformed JSON
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  if (deployError) {
-    return { success: false, error: deployError };
-  }
-
-  // Redeploy doesn't need to extract projectId (already on the project page)
-  return { success: true, projectId: id };
 }
 
 export async function deleteProject(id: string): Promise<void> {

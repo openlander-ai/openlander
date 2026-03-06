@@ -51,11 +51,13 @@ export function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [timelineRunKey, setTimelineRunKey] = useState(0);
   const { openChatWithPrompt } = useAppLayout();
   const isMobile = useIsMobile();
   const { items, isStreaming, submitAnswer, skipQuestion, executeAction } = useTimeline({
     projectId: id,
     enabled: !!id,
+    runKey: timelineRunKey,
   });
 
   const handleFixWithAI = useCallback(
@@ -94,13 +96,24 @@ export function ProjectDetail() {
     }
     if (!id || actionLoading) return;
     setActionLoading('redeploy');
+
+    // Optimistic UI: immediately show building state + reset timeline
+    setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+
     try {
+      // Fire redeploy (server immediately sets DB status to 'building')
       await redeployProject(id);
-      // Refresh project data after redeploy
-      const data = await getProject(id);
-      setProject(data);
+      // Reset timeline to reconnect build stream (DB is now 'building')
+      setTimelineRunKey((k) => k + 1);
     } catch (err) {
       console.error('Redeploy failed:', err);
+      // Rollback: fetch actual project state on failure
+      try {
+        const data = await getProject(id);
+        setProject(data);
+      } catch {
+        // silent
+      }
     } finally {
       setActionLoading(null);
     }

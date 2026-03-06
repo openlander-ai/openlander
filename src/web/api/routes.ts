@@ -415,7 +415,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     return streamSSE(c, async (s) => {
       let eventId = 0;
-      let toolCallCount = 0;
+      let deployToolCalled = false;
       let fallbackTriggered = false;
 
       // Acquire deploy queue lock (sequential processing)
@@ -425,11 +425,11 @@ export function createApiRoutes(ctx: AppContext): Hono {
       // (acquire() resolves when it's our turn)
 
       try {
-        // 3-second fallback: if LLM doesn't call deploy_project, fall back to direct deploy
+        // 5-second fallback: if LLM doesn't call deploy_project, fall back to direct deploy
         const fallbackTimer = setTimeout(() => {
-          if (toolCallCount === 0 && !fallbackTriggered) {
+          if (!deployToolCalled && !fallbackTriggered) {
             fallbackTriggered = true;
-            log.warn('Agent did not call deploy_project within 3s — falling back to direct deploy');
+            log.warn('Agent did not call deploy_project within 5s — falling back to direct deploy');
             void (async () => {
               try {
                 const result = await ctx.pipeline.deploy({
@@ -456,14 +456,17 @@ export function createApiRoutes(ctx: AppContext): Hono {
               }
             })();
           }
-        }, 3000);
+        }, 5000);
 
         const agent = ctx.agent;
         if (!agent) throw new Error('Agent is null');
         await agent.chatStream(
           message,
           async (event) => {
-            if (event.type === 'tool_call') toolCallCount++;
+            // Only deploy-related tool calls should prevent fallback
+            if (event.type === 'tool_call' && event.toolName === 'deploy_project') {
+              deployToolCalled = true;
+            }
             // Inject timestamp at router level (spec §4.3)
             const eventWithTs = { ...event, timestamp: new Date().toISOString() };
             await s.writeSSE({
@@ -767,6 +770,9 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
+    // Immediately mark project as building so build/stream sees fresh state
+    ctx.db.updateProject(project.id, { status: 'building' });
+
     // Fallback: no agent (LLM not configured) → direct pipeline call
     if (!ctx.agent) {
       const result = await ctx.pipeline.redeploy(project.id);
@@ -779,17 +785,17 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     return streamSSE(c, async (s) => {
       let eventId = 0;
-      let toolCallCount = 0;
+      let deployToolCalled = false;
       let fallbackTriggered = false;
 
       const release = await deployQueue.acquire();
 
       try {
         const fallbackTimer = setTimeout(() => {
-          if (toolCallCount === 0 && !fallbackTriggered) {
+          if (!deployToolCalled && !fallbackTriggered) {
             fallbackTriggered = true;
             log.warn(
-              'Agent did not call tool within 3s for redeploy — falling back to direct redeploy',
+              'Agent did not call tool within 5s for redeploy — falling back to direct redeploy',
             );
             void (async () => {
               try {
@@ -809,14 +815,17 @@ export function createApiRoutes(ctx: AppContext): Hono {
               }
             })();
           }
-        }, 3000);
+        }, 5000);
 
         const agent = ctx.agent;
         if (!agent) throw new Error('Agent is null');
         await agent.chatStream(
           message,
           async (event) => {
-            if (event.type === 'tool_call') toolCallCount++;
+            // Only deploy-related tool calls should prevent fallback
+            if (event.type === 'tool_call' && event.toolName === 'redeploy_project') {
+              deployToolCalled = true;
+            }
             const eventWithTs = { ...event, timestamp: new Date().toISOString() };
             await s.writeSSE({
               id: String(eventId++),
