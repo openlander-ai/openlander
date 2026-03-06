@@ -1,0 +1,5 @@
+# Allow dist to be included in npm package
+# (overrides .gitignore which excludes dist)
+node_modules
+src
+*.local
