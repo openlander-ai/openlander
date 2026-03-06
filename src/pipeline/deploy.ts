@@ -1,14 +1,14 @@
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import type { Docker } from './docker.js';
 import { cloneRepo } from './git.js';
 import { allocatePort } from './port.js';
-import { buildTraefikLabels } from './traefik.js';
+import { buildTraefikLabels, getProjectUrl } from './traefik.js';
 import { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery, type BuildContext } from './build-recovery.js';
 import type { Database } from '../db/index.js';
@@ -20,6 +20,7 @@ import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
+import type { BuildDebugger } from '../agent/debugger.js';
 
 /**
  * Project configuration for a deployment.
@@ -121,6 +122,7 @@ export class DeployPipeline {
     private readonly jobManager?: JobManager,
     private readonly composePipeline?: ComposePipeline,
     private readonly autoDetector?: AutoDetector,
+    private readonly buildDebugger?: BuildDebugger,
   ) {}
 
   /**
@@ -361,7 +363,7 @@ export class DeployPipeline {
         traefikLabels,
       });
 
-      const internalUrl = `http://${projectName}.localhost`;
+      const internalUrl = getProjectUrl(projectName);
 
       await eventBus.emit('deploy:run', {
         projectId,
@@ -372,7 +374,39 @@ export class DeployPipeline {
 
       buildLog += `[run] ${containerId.slice(0, 12)} on port ${String(port)}\n`;
 
-      // Update project in DB
+      // Step 4b: Post-deploy health check — detect crash loops before marking as running
+      const healthResult = await this.docker.waitForHealthy(containerId, 20000);
+      if (!healthResult.healthy) {
+        const containerLogs = await this.docker
+          .getLogs(containerId, 50)
+          .catch(() => '(no logs available)');
+        log.error(
+          { projectId, error: healthResult.error, exitCode: healthResult.exitCode },
+          'Container crashed after deploy',
+        );
+
+        // Update DB to reflect actual error state
+        this.db.updateProject(projectId, {
+          status: 'error',
+          assignedPort: port,
+          containerId,
+          imageTag,
+          visibility: config.visibility ?? 'internal',
+        });
+
+        await eventBus.emit('deploy:crash', {
+          projectId,
+          containerId,
+          error: healthResult.error,
+          exitCode: healthResult.exitCode,
+        });
+
+        throw new Error(
+          `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs:\n${containerLogs}`,
+        );
+      }
+
+      // Container is healthy — update project in DB
       this.db.updateProject(projectId, {
         status: 'running',
         assignedPort: port,
@@ -438,7 +472,8 @@ export class DeployPipeline {
           failStep === 'clone' ||
           failStep === 'dockerfile' ||
           failStep === 'build' ||
-          failStep === 'run'
+          failStep === 'run' ||
+          failStep === 'runtime'
             ? failStep
             : 'build';
 
@@ -470,6 +505,56 @@ export class DeployPipeline {
             }
 
             buildLog += `[recovery] Tier 1 auto-fix: ${fixResult.action}\n`;
+            return await this.deploy(retryConfig);
+          }
+        }
+
+        // Tier 2.5: Dockerfile content auto-fix loop
+        if (classification.tier === 2.5 && classification.autoFixable && retryCount < 3) {
+          if (!this.buildDebugger) {
+            await eventBus.emit('build:inform', {
+              projectId,
+              summary: 'Dockerfile error detected but no LLM configured. Fix Dockerfile manually.',
+              tier: 3,
+            });
+          } else if (clonePath) {
+            buildLog += '[recovery] Dockerfile content error detected. Attempting fix...\n';
+
+            const dockerfilePath = join(clonePath, 'Dockerfile');
+            const currentDockerfile = existsSync(dockerfilePath)
+              ? readFileSync(dockerfilePath, 'utf8')
+              : 'Not available';
+
+            const fixResult = await this.buildDebugger.fixDockerfile({
+              projectPath: clonePath,
+              currentDockerfile,
+              buildError: buildLogWithError,
+              projectName,
+            });
+
+            // Write fixed Dockerfile
+            writeFileSync(dockerfilePath, fixResult.dockerfileContent + '\n', 'utf8');
+
+            buildLog += `[recovery] Fixed Dockerfile:\n${fixResult.changes.map((c) => `  - ${c}`).join('\n')}\n`;
+
+            // Emit event for timeline display
+            await eventBus.emit('build:dockerfile-fixed', {
+              projectId,
+              changes: fixResult.changes,
+              explanation: fixResult.explanation,
+              retryCount: retryCount + 1,
+            });
+
+            // Retry deploy with fixed Dockerfile
+            const nextRetryCount = retryCount + 1;
+            const retryConfig: ProjectConfig = {
+              ...config,
+              name: projectName,
+              _projectId: projectId,
+              _retryCount: nextRetryCount,
+              _noCacheBuild: true,
+            };
+
             return await this.deploy(retryConfig);
           }
         }
@@ -581,7 +666,7 @@ export class DeployPipeline {
             traefikLabels,
           });
 
-          const internalUrl = `http://${childName.replace('/', '-')}.localhost`;
+          const internalUrl = getProjectUrl(childName.replace('/', '-'));
 
           this.db.updateProject(childId, {
             status: 'running',
@@ -663,15 +748,20 @@ export class DeployPipeline {
       };
     }
 
-    // Stop old container if running
-    if (project.container_id && project.status === 'running') {
+    // Stop old container if exists (by ID or by name)
+    if (project.container_id) {
       try {
         await this.docker.stopContainer(project.container_id);
         await this.docker.removeContainer(project.container_id);
       } catch (err) {
-        log.warn({ err }, 'Container cleanup during redeploy failed');
-        // Container might already be stopped
+        log.warn({ err }, 'Container cleanup by ID during redeploy failed');
       }
+    }
+    // Also try removing by convention name to catch orphans
+    try {
+      await this.docker.removeContainer(`ol-${project.name}`);
+    } catch {
+      // Container may not exist — that's fine
     }
 
     // Save current image for rollback
@@ -782,7 +872,7 @@ export class DeployPipeline {
         projectId,
         projectName: project.name,
         containerId,
-        url: `http://${project.name}.localhost`,
+        url: getProjectUrl(project.name),
         port,
         buildDurationMs: totalDuration,
       };
@@ -885,6 +975,8 @@ export class DeployPipeline {
     if (!buildLog.includes('[dockerfile]')) return 'dockerfile';
     if (!buildLog.includes('[build]')) return 'build';
     if (!buildLog.includes('[run]')) return 'run';
+    // If all steps completed but error still occurred, it's a runtime crash
+    if (buildLog.includes('Container crashed after start')) return 'runtime';
     return 'unknown';
   }
 }

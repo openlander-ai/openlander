@@ -292,3 +292,12 @@ export class AutoDetector {
     return Object.fromEntries(Object.entries(record).slice(0, maxEntries));
   }
 }
+
+/**
+ * Standalone project context collector for use outside AutoDetector.
+ * Collects file tree, package manifests, and version files from a project directory.
+ */
+export function collectProjectContext(projectPath: string): string {
+  const detector = new AutoDetector(null);
+  return detector.collectContext(projectPath);
+}

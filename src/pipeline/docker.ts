@@ -56,6 +56,13 @@ export interface BuildImageOptions {
   noCache?: boolean;
 }
 
+/** Health check result from post-deploy container monitoring. */
+export interface WaitForHealthyResult {
+  healthy: boolean;
+  exitCode?: number;
+  error?: string;
+}
+
 /**
  * Docker control layer using dockerode.
  *
@@ -272,6 +279,78 @@ export class Docker {
         throw new ContainerNotFoundError(containerId);
       }
       throw error;
+    }
+  }
+
+  /**
+   * Wait for a container to stabilize after starting.
+   * Detects crash loops (container restarts) and immediate exits.
+   * Returns healthy=false if the container crashes within the timeout window.
+   */
+  async waitForHealthy(containerId: string, timeoutMs = 15000): Promise<WaitForHealthyResult> {
+    const startTime = Date.now();
+    const checkInterval = 2000;
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const container = this.client.getContainer(containerId);
+        const info = await container.inspect();
+
+        if (info.State.Restarting) {
+          return {
+            healthy: false,
+            exitCode: info.State.ExitCode,
+            error: `Container is in restart loop (exit code: ${String(info.State.ExitCode)})`,
+          };
+        }
+
+        if (!info.State.Running && info.State.ExitCode !== 0) {
+          return {
+            healthy: false,
+            exitCode: info.State.ExitCode,
+            error: `Container exited with code ${String(info.State.ExitCode)}`,
+          };
+        }
+
+        if (info.State.Running) {
+          // If health check is defined, wait for healthy status
+          if (info.State.Health?.Status === 'healthy') {
+            return { healthy: true };
+          }
+          // No health check defined — running is good enough
+          if (!info.State.Health) {
+            return { healthy: true };
+          }
+          // Health check exists but not yet healthy — keep waiting
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('not found') || msg.includes('No such container')) {
+          return { healthy: false, error: 'Container not found' };
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, checkInterval));
+    }
+
+    // Timeout — do a final check
+    try {
+      const container = this.client.getContainer(containerId);
+      const info = await container.inspect();
+      if (info.State.Restarting) {
+        return {
+          healthy: false,
+          exitCode: info.State.ExitCode,
+          error: `Container entered restart loop (exit code: ${String(info.State.ExitCode)})`,
+        };
+      }
+      return {
+        healthy: info.State.Running,
+        exitCode: info.State.ExitCode,
+        error: info.State.Running ? undefined : 'Container did not become healthy within timeout',
+      };
+    } catch {
+      return { healthy: false, error: 'Container check timed out' };
     }
   }
 

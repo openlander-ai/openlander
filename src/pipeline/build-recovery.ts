@@ -6,7 +6,7 @@ import { allocatePort } from './port.js';
 
 const log = createModuleLogger('build-recovery');
 
-export type BuildTier = 1 | 2 | 3;
+export type BuildTier = 1 | 2 | 2.5 | 3;
 
 export interface BuildRecoveryResult {
   tier: BuildTier;
@@ -30,7 +30,7 @@ export interface BuildContext {
   imageTag: string;
   clonePath: string;
   buildLog: string;
-  failedStep: 'clone' | 'dockerfile' | 'build' | 'run';
+  failedStep: 'clone' | 'dockerfile' | 'build' | 'run' | 'runtime';
 }
 
 interface CategoryDefinition {
@@ -124,6 +124,58 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     message: 'Tests failed during build pipeline.',
     patterns: [/\bFAIL\b/i, /tests failed/i, /AssertionError/i],
   },
+  {
+    category: 'runtime-wrong-cmd',
+    tier: 1,
+    autoFixable: true,
+    suggestible: false,
+    message: 'Container crashed due to incorrect start command in Dockerfile.',
+    patterns: [
+      /"next start" does not work with "output: export"/i,
+      /next start.*output.*export/i,
+      /Cannot find module.*next/i,
+    ],
+  },
+  {
+    category: 'runtime-permission',
+    tier: 1,
+    autoFixable: true,
+    suggestible: false,
+    message: 'Container crashed due to file permission issue.',
+    patterns: [/permission denied.*nginx\.pid/i, /EACCES.*permission denied/i],
+  },
+  {
+    category: 'runtime-crash',
+    tier: 2,
+    autoFixable: false,
+    suggestible: true,
+    message: 'Container crashed at runtime after successful build.',
+    suggestedAction:
+      'Check container logs for the root cause. The application may have a startup error.',
+    patterns: [
+      /Container crashed after start/i,
+      /Container is in restart loop/i,
+      /Container exited with code/i,
+    ],
+  },
+  {
+    category: 'dockerfile-content',
+    tier: 2.5 as BuildTier,
+    autoFixable: true,
+    suggestible: false,
+    message: 'Dockerfile content appears invalid or incompatible with project requirements.',
+    patterns: [
+      /version.*not supported/i,
+      /python version.*not found/i,
+      /golang version.*not found/i,
+      /unexpected token.*dockerfile/i,
+      /failed to solve.*process.*dockerfile/i,
+      /error building image.*dockerfile/i,
+      /base image.*not found/i,
+      /requires.*>=\s*\d+/i,
+      /engine.*incompatible/i,
+    ],
+  },
 ];
 
 export class BuildRecovery {
@@ -216,6 +268,19 @@ export class BuildRecovery {
         await new Promise((resolve) => setTimeout(resolve, 3000));
 
         const action = 'Waited 3 seconds to recover from transient network failure.';
+        await this.events.emit('build:autofix', {
+          projectId: context.projectId,
+          action,
+          category: result.category,
+        });
+
+        return { fixed: true, action, retryNeeded: true };
+      }
+
+      if (result.category === 'runtime-wrong-cmd' || result.category === 'runtime-permission') {
+        // Runtime crashes due to wrong CMD or permissions are fixed by updated Dockerfile templates.
+        // A retry will clone fresh, re-detect the framework, and generate a corrected Dockerfile.
+        const action = `Runtime crash detected (${result.category}). Retrying with corrected Dockerfile generation.`;
         await this.events.emit('build:autofix', {
           projectId: context.projectId,
           action,

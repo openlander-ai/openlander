@@ -167,7 +167,7 @@ function createApp(ctx: AppContext): Hono {
     }),
   );
 
-  const WEB_DIST = join(dirname(new URL(import.meta.url).pathname), '../web/dist');
+  const WEB_DIST = join(dirname(new URL(import.meta.url).pathname), '../../web/dist');
 
   const MIME_TYPES: Record<string, string> = {
     '.html': 'text/html',

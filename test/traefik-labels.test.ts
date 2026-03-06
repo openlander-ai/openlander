@@ -1,13 +1,15 @@
 import { describe, it, expect } from 'vitest';
 
-import { buildTraefikLabels } from '../src/pipeline/traefik.js';
+import { buildTraefikLabels, getProjectHostname } from '../src/pipeline/traefik.js';
 
 describe('Traefik Labels', () => {
   it('builds correct labels with default hostname', () => {
     const labels = buildTraefikLabels('my-app', 10001);
 
     expect(labels['traefik.enable']).toBe('true');
-    expect(labels['traefik.http.routers.ol-my-app.rule']).toBe('Host(`my-app.localhost`)');
+    expect(labels['traefik.http.routers.ol-my-app.rule']).toBe(
+      `Host(\`${getProjectHostname('my-app')}\`)`,
+    );
     expect(labels['traefik.http.routers.ol-my-app.entrypoints']).toBe('web');
     expect(labels['traefik.http.routers.ol-my-app.service']).toBe('ol-my-app');
     expect(labels['traefik.http.services.ol-my-app.loadbalancer.server.port']).toBe('10001');
@@ -23,7 +25,7 @@ describe('Traefik Labels', () => {
     const labels = buildTraefikLabels('my-cool-app', 10005);
 
     expect(labels['traefik.http.routers.ol-my-cool-app.rule']).toBe(
-      'Host(`my-cool-app.localhost`)',
+      `Host(\`${getProjectHostname('my-cool-app')}\`)`,
     );
   });
 

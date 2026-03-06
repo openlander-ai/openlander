@@ -1,3 +1,5 @@
+import { networkInterfaces } from 'os';
+
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('traefik');
 
@@ -122,19 +124,90 @@ export class TraefikManager {
 }
 
 /**
+ * Get the hostname for a project.
+ * Uses sslip.io wildcard DNS so the URL works from any device on the network.
+ * Falls back to .localhost if no LAN IP is available.
+ */
+export function getProjectHostname(projectName: string, lanIp?: string): string {
+  const ip = lanIp ?? getLanIp();
+  if (ip) {
+    return `${projectName}.${ip}.sslip.io`;
+  }
+  return `${projectName}.localhost`;
+}
+
+/**
+ * Get the full internal URL for a project.
+ */
+export function getProjectUrl(projectName: string, lanIp?: string): string {
+  return `http://${getProjectHostname(projectName, lanIp)}`;
+}
+
+/**
  * Build Traefik labels for a project container.
  *
  * Pattern from Dokploy/openclaw-host-kit:
  *   traefik.http.routers.{name}.rule = Host(`{hostname}`)
  *   traefik.http.services.{name}.loadbalancer.server.port = {port}
  */
+/**
+ * Get the primary LAN IP address of this machine.
+ * Returns undefined if no non-internal IPv4 address is found.
+ */
+export function getLanIp(): string | undefined {
+  const nets = networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] ?? []) {
+      // Skip internal (loopback) and non-IPv4 addresses
+      if (!net.internal && net.family === 'IPv4') {
+        return net.address;
+      }
+    }
+  }
+  return undefined;
+}
+
+export interface NetworkIp {
+  address: string;
+  interface: string;
+  /** 'lan' for regular network, 'vpn' for Tailscale/ZeroTier/WireGuard */
+  type: 'lan' | 'vpn';
+}
+
+/**
+ * Get all non-internal IPv4 addresses.
+ * Detects LAN IPs and VPN IPs (Tailscale, ZeroTier, WireGuard).
+ */
+export function getAllIps(): NetworkIp[] {
+  const nets = networkInterfaces();
+  const ips: NetworkIp[] = [];
+  const vpnPatterns = /^(tailscale|ts|zt|zerotier|wg|tun|utun)/i;
+  const dockerPatterns = /^(br-|docker|veth)/i;
+
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] ?? []) {
+      if (net.internal || net.family !== 'IPv4') continue;
+      // Skip Docker bridge networks
+      if (dockerPatterns.test(name)) continue;
+      const isVpn = vpnPatterns.test(name) || net.address.startsWith('100.');
+      ips.push({
+        address: net.address,
+        interface: name,
+        type: isVpn ? 'vpn' : 'lan',
+      });
+    }
+  }
+  // LAN first, then VPN
+  return ips.sort((a, b) => (a.type === 'lan' ? -1 : 1) - (b.type === 'lan' ? -1 : 1));
+}
+
 export function buildTraefikLabels(
   projectName: string,
   containerPort: number,
   hostname?: string,
 ): Record<string, string> {
   const routerName = `ol-${projectName}`;
-  const host = hostname ?? `${projectName}.localhost`;
+  const host = hostname ?? getProjectHostname(projectName);
 
   return {
     'traefik.enable': 'true',

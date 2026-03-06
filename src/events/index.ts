@@ -26,10 +26,12 @@ export type EventType =
   | 'deploy:auto-detect'
   | 'deploy:success'
   | 'deploy:failed'
+  | 'deploy:crash'
   | 'deploy:rollback'
   | 'build:autofix'
   | 'build:suggest'
   | 'build:inform'
+  | 'build:dockerfile-fixed'
   | 'compose:start'
   | 'compose:up'
   | 'compose:down'
@@ -71,10 +73,17 @@ export interface EventPayload {
   'deploy:auto-detect': { projectId: string; framework: string; type: 'dockerfile' | 'compose' };
   'deploy:success': { projectId: string; url: string; totalDurationMs: number };
   'deploy:failed': { projectId: string; step: string; error: string };
+  'deploy:crash': { projectId: string; containerId: string; error?: string; exitCode?: number };
   'deploy:rollback': { projectId: string; fromImage: string; toImage: string };
   'build:autofix': { projectId: string; action: string; category: string };
   'build:suggest': { projectId: string; suggestion: string; diff?: string };
   'build:inform': { projectId: string; summary: string; tier: BuildTier };
+  'build:dockerfile-fixed': {
+    projectId: string;
+    changes: string[];
+    explanation: string;
+    retryCount: number;
+  };
   'compose:start': { projectId: string; composePath: string; serviceCount: number };
   'compose:up': { projectId: string; services: string[] };
   'compose:down': { projectId: string };

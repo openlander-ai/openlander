@@ -1,4 +1,11 @@
-import type { Project, SystemStats, DeployResult, ChatStreamEvent } from '../types';
+import type {
+  Project,
+  SystemStats,
+  DeployResult,
+  ChatStreamEvent,
+  DeployLogSummary,
+  DeployLogDetail,
+} from '../types';
 
 /**
  * Deploy a project via agent-mediated SSE stream.
@@ -116,6 +123,22 @@ export async function getProject(id: string): Promise<Project> {
   return res.json();
 }
 
+export async function getProjectDeployments(id: string, limit = 50): Promise<DeployLogSummary[]> {
+  const res = await fetch(`/api/projects/${id}/deployments?limit=${limit}`);
+  if (!res.ok) throw new Error('Failed to fetch deployments');
+  const data = await res.json();
+  return data.deployments;
+}
+
+export async function getDeploymentDetail(
+  projectId: string,
+  deployId: string,
+): Promise<DeployLogDetail> {
+  const res = await fetch(`/api/projects/${projectId}/deployments/${deployId}`);
+  if (!res.ok) throw new Error('Failed to fetch deployment detail');
+  return res.json();
+}
+
 export async function stopProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
 }
@@ -170,6 +193,26 @@ export async function exposeProject(id: string): Promise<{ publicUrl: string }> 
 
 export async function unexposeProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}/unexpose`, { method: 'POST' });
+}
+
+export interface NetworkIp {
+  address: string;
+  interface: string;
+  type: 'lan' | 'vpn';
+}
+
+export async function getLanIp(): Promise<string | null> {
+  const res = await fetch('/api/system/lan-ip');
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.ip ?? null;
+}
+
+export async function getAllIps(): Promise<NetworkIp[]> {
+  const res = await fetch('/api/system/lan-ip');
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.allIps ?? [];
 }
 
 export async function getSystemStats(): Promise<SystemStats> {

@@ -7,6 +7,8 @@ interface UseTimelineOptions {
   enabled?: boolean;
   /** Change this value to force timeline reset + stream reconnect (e.g. on redeploy) */
   runKey?: number;
+  /** Called when the build stream completes or errors — use to refetch project data */
+  onSettled?: () => void;
 }
 
 interface UseTimelineReturn {
@@ -26,6 +28,7 @@ export function useTimeline({
   projectId,
   enabled = true,
   runKey = 0,
+  onSettled,
 }: UseTimelineOptions): UseTimelineReturn {
   const [items, setItems] = useState<TimelineItem[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -33,6 +36,8 @@ export function useTimeline({
   const [error, setError] = useState<string | null>(null);
   const retriesRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const onSettledRef = useRef(onSettled);
+  onSettledRef.current = onSettled;
 
   const connect = useCallback(async () => {
     if (!projectId) return;
@@ -80,11 +85,13 @@ export function useTimeline({
             if (event.type === 'complete') {
               setIsComplete(true);
               setIsStreaming(false);
+              onSettledRef.current?.();
               return;
             }
             if (event.type === 'error') {
               setError(event.message);
               setIsStreaming(false);
+              onSettledRef.current?.();
               return;
             }
           } catch {

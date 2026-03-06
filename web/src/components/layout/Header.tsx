@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plane, Menu, Cpu, MemoryStick, MessageSquare, Bell } from 'lucide-react';
+import { Plane, Menu, Cpu, MemoryStick, Bell } from 'lucide-react';
 import type { SystemStats } from '@/types';
 import type { Notification } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,6 @@ interface HeaderProps {
   onDismissNotification?: (id: string) => Promise<void>;
   onNotificationAction?: (notification: Notification, action: string) => void;
   onMenuClick?: () => void;
-  onChatToggle?: () => void;
-  isChatOpen?: boolean;
 }
 
 export function Header({
@@ -24,8 +22,6 @@ export function Header({
   onDismissNotification,
   onNotificationAction,
   onMenuClick,
-  onChatToggle,
-  isChatOpen,
 }: HeaderProps) {
   const [llmConnected, setLlmConnected] = useState<boolean | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -97,7 +93,7 @@ export function Header({
             OpenLander
           </span>
           <span className="text-[10px] font-mono text-secondary-ol bg-bg-subtle px-1.5 py-0.5 rounded">
-            v0.1
+            v0.2
           </span>
         </div>
       </div>
@@ -155,22 +151,6 @@ export function Header({
           )}
         </div>
 
-        {/* Ask Agent Button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn(
-            'gap-1.5 h-7 px-2.5 text-[11px] font-body transition-all',
-            isChatOpen
-              ? 'text-agent bg-agent/10'
-              : 'text-secondary-ol hover:text-agent hover:bg-agent/10',
-          )}
-          onClick={onChatToggle}
-        >
-          <MessageSquare className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Ask Agent</span>
-        </Button>
-
         {/* LLM Status */}
         <div
           className="flex items-center gap-1.5"
@@ -188,8 +168,8 @@ export function Header({
               llmConnected === null
                 ? 'bg-muted-foreground/40'
                 : llmConnected
-                  ? 'bg-success shadow-[0_0_4px_var(--color-success)]'
-                  : 'bg-error shadow-[0_0_4px_var(--color-error)]',
+                  ? 'bg-success'
+                  : 'bg-error',
             )}
           />
           <span className="hidden sm:inline text-[11px] font-body text-secondary-ol">

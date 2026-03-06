@@ -5,6 +5,7 @@ import type { LanguageModel } from 'ai';
 import type { ChatMessage } from '../llm/index.js';
 import { matchRecipe } from './recipes.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { collectProjectContext } from '../pipeline/auto-detect.js';
 
 const log = createModuleLogger('debugger');
 
@@ -23,6 +24,19 @@ export interface BuildDiagnosis {
   }>;
   /** Raw LLM response for display */
   rawAnalysis: string;
+}
+
+export interface FixDockerfileInput {
+  projectPath: string;
+  currentDockerfile: string;
+  buildError: string;
+  projectName: string;
+}
+
+export interface FixDockerfileOutput {
+  dockerfileContent: string;
+  explanation: string;
+  changes: string[];
 }
 
 const MAX_BUILD_LOG_CHARS = 3000;
@@ -205,5 +219,88 @@ Diagnose this build failure. Respond ONLY with the JSON format specified.`;
         rawAnalysis: response.text,
       };
     }
+  }
+
+  /**
+   * Analyze a build failure and generate a fixed Dockerfile using AI.
+   *
+   * Collects project context (file tree, package manifests, version files),
+   * combines with the current Dockerfile and build error, then asks the LLM
+   * to produce a corrected Dockerfile.
+   */
+  async fixDockerfile(input: FixDockerfileInput): Promise<FixDockerfileOutput> {
+    const buildLog = truncateBuildLog(input.buildError);
+    const context = collectProjectContext(input.projectPath);
+
+    const fixSystemPrompt = `You are an expert DevOps engineer specializing in Dockerfile debugging.
+Given the current Dockerfile, build error, and project context, generate a FIXED Dockerfile.
+
+Rules:
+1. Output ONLY the new Dockerfile content, no explanation, no markdown fences.
+2. Fix the specific error shown in the build log (e.g., wrong Node.js version, missing dependencies).
+3. Keep the same structure (multi-stage build, EXPOSE port, etc.) unless it causes the error.
+4. After the Dockerfile, on a new line starting with "CHANGES:", summarize what you changed in 1-3 bullet points.`;
+
+    const userPrompt = `Project name: ${input.projectName}
+Project path: ${input.projectPath}
+
+Current Dockerfile:
+${input.currentDockerfile}
+
+Build error:
+${buildLog}
+
+Project context:
+${context}`;
+
+    const response = await generateText({
+      model: this.model,
+      messages: [
+        { role: 'system', content: fixSystemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+
+    const { dockerfileContent, changes } = this.parseFixResponse(response.text);
+
+    return {
+      dockerfileContent,
+      explanation: 'Fixed Dockerfile based on build error and project context.',
+      changes,
+    };
+  }
+
+  private parseFixResponse(raw: string): { dockerfileContent: string; changes: string[] } {
+    const lines = raw.split('\n');
+    const changesLineIndex = lines.findIndex((line) => line.trim().startsWith('CHANGES:'));
+
+    let dockerfileContent = raw;
+    const changes: string[] = [];
+
+    if (changesLineIndex !== -1) {
+      dockerfileContent = lines.slice(0, changesLineIndex).join('\n').trim();
+      const changesText = lines
+        .slice(changesLineIndex + 1)
+        .join('\n')
+        .trim();
+      for (const line of changesText.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('-') || trimmed.startsWith('*')) {
+          changes.push(trimmed.replace(/^[-*]\s*/, ''));
+        }
+      }
+    }
+
+    // Strip markdown fences if present
+    dockerfileContent = dockerfileContent
+      .replace(/^```(?:dockerfile|Dockerfile)?\s*\n?/, '')
+      .replace(/\n?```\s*$/, '')
+      .trim();
+
+    if (changes.length === 0) {
+      changes.push('Dockerfile updated based on build error analysis');
+    }
+
+    return { dockerfileContent, changes };
   }
 }

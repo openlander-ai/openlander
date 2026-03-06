@@ -20,7 +20,7 @@ export interface QuestionData {
 
 /** Backend build stream raw event (NDJSON) */
 export interface BuildStreamEvent {
-  type: 'status' | 'complete' | 'error' | 'question_pending' | 'insight';
+  type: 'status' | 'complete' | 'error' | 'question_pending' | 'insight' | 'dockerfile_fixed';
   message: string;
   projectId: string;
   timestamp: string;
@@ -31,6 +31,9 @@ export interface BuildStreamEvent {
   detail?: string | null;
   severity?: 'info' | 'warning' | 'error';
   actionButtons?: ActionButton[];
+  /** Present only for dockerfile_fixed events */
+  dockerfileChanges?: string[];
+  retryCount?: number;
 }
 
 /** Action button for insight/anomaly timeline items */
@@ -52,6 +55,7 @@ export interface TimelineItem {
     | 'error'
     | 'question'
     | 'insight'
+    | 'dockerfile_fixed'
     | 'agent_thinking'
     | 'agent_tool_call'
     | 'agent_message';
@@ -67,6 +71,9 @@ export interface TimelineItem {
   /** Present only for insight items */
   actionButtons?: ActionButton[];
   severity?: 'info' | 'warning' | 'error';
+  /** Present only for dockerfile_fixed items */
+  dockerfileChanges?: string[];
+  retryCount?: number;
   /** Present only for agent_tool_call items */
   toolName?: string;
   toolArguments?: Record<string, unknown>;
@@ -140,6 +147,16 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         severity: event.severity ?? 'info',
         actionButtons: event.actionButtons,
+      };
+    case 'dockerfile_fixed':
+      return {
+        id,
+        type: 'dockerfile_fixed',
+        timestamp: event.timestamp,
+        title: event.message,
+        percent: -1,
+        dockerfileChanges: event.dockerfileChanges,
+        retryCount: event.retryCount,
       };
     default:
       return {

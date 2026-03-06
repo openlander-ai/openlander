@@ -72,6 +72,16 @@ export function detectFramework(projectPath: string): FrameworkDetection {
     const scripts = packageJson.scripts ?? {};
 
     if (hasKey(deps, 'next') || hasKey(devDeps, 'next')) {
+      // Check for Next.js static export (output: 'export' in next.config.*)
+      if (isNextjsStaticExport(projectPath)) {
+        return {
+          framework: 'nextjs-static',
+          language: 'node',
+          buildCommand: 'npm run build',
+          startCommand: 'nginx -g "daemon off;"',
+          port: 3000,
+        };
+      }
       return {
         framework: 'nextjs',
         language: 'node',
@@ -196,6 +206,22 @@ export function detectFramework(projectPath: string): FrameworkDetection {
 }
 
 /**
+ * Check if a Next.js project uses static export (output: 'export' in next.config.*).
+ * When output is 'export', `next start` fails — must use a static server instead.
+ */
+function isNextjsStaticExport(projectPath: string): boolean {
+  const configFiles = ['next.config.js', 'next.config.mjs', 'next.config.ts'];
+  for (const configFile of configFiles) {
+    const configPath = join(projectPath, configFile);
+    const content = readTextIfExists(configPath);
+    if (content && /output\s*:\s*['"]export['"]/.test(content)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Generate a production Dockerfile from a deterministic framework detection result.
  */
 export function generateDockerfile(detection: FrameworkDetection): string {
@@ -222,6 +248,27 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node 
 CMD ["npm", "start"]
 `;
 
+    case 'nextjs-static':
+      return `FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:1.27.4-alpine AS runner
+RUN addgroup -S app && adduser -S app -G app \
+  && sed -i 's|pid.*nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+  && rm -f /etc/nginx/conf.d/default.conf \
+  && printf 'server {\\n  listen 3000;\\n  server_name _;\\n  root /usr/share/nginx/html;\\n  index index.html;\\n  location / {\\n    try_files $uri $uri/ /index.html;\\n  }\\n}\\n' > /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/out /usr/share/nginx/html
+RUN chown -R app:app /usr/share/nginx/html /var/cache/nginx /var/run /var/log/nginx
+USER app
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1
+CMD ["nginx", "-g", "daemon off;"]
+`;
+
     case 'vite':
       return `FROM node:20-alpine AS builder
 WORKDIR /app
@@ -231,8 +278,9 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.27.4-alpine AS runner
-RUN addgroup -S app && adduser -S app -G app \\
-  && rm -f /etc/nginx/conf.d/default.conf \\
+RUN addgroup -S app && adduser -S app -G app \
+  && sed -i 's|pid.*nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+  && rm -f /etc/nginx/conf.d/default.conf \
   && printf 'server {\\n  listen 3000;\\n  server_name _;\\n  root /usr/share/nginx/html;\\n  index index.html;\\n  location / {\\n    try_files $uri /index.html;\\n  }\\n}\\n' > /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 RUN chown -R app:app /usr/share/nginx/html /var/cache/nginx /var/run /var/log/nginx
@@ -366,11 +414,12 @@ CMD ["sh", "-c", "set -e; BIN=$(find /app/bin -maxdepth 1 -type f -executable | 
 
     case 'static-html':
       return `FROM nginx:1.27.4-alpine
-RUN addgroup -S app && adduser -S app -G app \\
-  && apk add --no-cache libcap \\
-  && setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx \\
-  && apk del libcap \\
-  && rm -f /etc/nginx/conf.d/default.conf \\
+RUN addgroup -S app && adduser -S app -G app \
+  && sed -i 's|pid.*nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+  && apk add --no-cache libcap \
+  && setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx \
+  && apk del libcap \
+  && rm -f /etc/nginx/conf.d/default.conf \
   && printf 'server {\\n  listen 80;\\n  server_name _;\\n  root /usr/share/nginx/html;\\n  index index.html;\\n  location / {\\n    try_files $uri $uri/ =404;\\n  }\\n}\\n' > /etc/nginx/conf.d/default.conf
 COPY . /usr/share/nginx/html
 RUN chown -R app:app /usr/share/nginx/html /var/cache/nginx /var/run /var/log/nginx

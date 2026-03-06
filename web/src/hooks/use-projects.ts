@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Project } from '../types';
 import { listProjects } from '../lib/api';
+
+const IDLE_POLL_MS = 10_000;
+const ACTIVE_POLL_MS = 3_000;
 
 export interface UseProjectsReturn {
   projects: Project[];
@@ -14,7 +17,7 @@ export function useProjects(): UseProjectsReturn {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const data = await listProjects();
       setProjects(data);
@@ -24,13 +27,27 @@ export function useProjects(): UseProjectsReturn {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProjects();
-    const interval = setInterval(fetchProjects, 10000);
-    return () => clearInterval(interval);
-  }, []);
+
+    // Poll faster when any project is building
+    const hasBuilding = projects.some((p) => p.status === 'building');
+    const pollMs = hasBuilding ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+    const interval = setInterval(fetchProjects, pollMs);
+
+    // Refetch on tab focus
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void fetchProjects();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [fetchProjects, projects.some((p) => p.status === 'building')]);
 
   return { projects, loading, error, refetch: fetchProjects };
 }

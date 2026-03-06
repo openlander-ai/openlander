@@ -1,7 +1,7 @@
 import type { Database } from '../../db/index.js';
 import type { Docker } from '../docker.js';
 import { allocatePort } from '../port.js';
-import { buildTraefikLabels } from '../traefik.js';
+import { buildTraefikLabels, getProjectUrl } from '../traefik.js';
 
 export interface RunStepConfig {
   docker: Docker;
@@ -38,6 +38,6 @@ export async function executeRunStep(config: RunStepConfig): Promise<RunStepResu
   return {
     containerId,
     port,
-    internalUrl: `http://${config.projectName}.localhost`,
+    internalUrl: getProjectUrl(config.projectName),
   };
 }

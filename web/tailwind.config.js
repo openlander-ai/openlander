@@ -56,7 +56,7 @@ module.exports = {
         'bg-app': 'var(--bg-app)',
         'bg-panel': 'var(--bg-panel)',
         'bg-subtle': 'var(--bg-subtle)',
-        agent: 'var(--color-agent)',
+        agent: 'var(--color-accent)',
         success: 'var(--color-success)',
         warning: 'var(--color-warning)',
         error: 'var(--color-error)',

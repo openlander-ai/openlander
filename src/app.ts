@@ -84,7 +84,26 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   }
 
   const autoDetector = new AutoDetector(model);
-  const pipeline = new DeployPipeline(docker, db, env, jobManager, composePipeline, autoDetector);
+
+  // v0.3: Build debugger (requires LLM) — created before pipeline so it can be injected
+  let buildDebugger: BuildDebugger | null = null;
+  if (model) {
+    try {
+      buildDebugger = new BuildDebugger(model);
+    } catch (err) {
+      log.debug({ err }, 'Build debugger creation failed');
+    }
+  }
+
+  const pipeline = new DeployPipeline(
+    docker,
+    db,
+    env,
+    jobManager,
+    composePipeline,
+    autoDetector,
+    buildDebugger ?? undefined,
+  );
 
   // Create agent only if LLM is configured
   let agent: Agent | null = null;
@@ -137,16 +156,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   // v0.3: Database provisioner
   const dbProvisioner = new DatabaseProvisioner(docker, db);
 
-  // v0.3: Build debugger (requires LLM)
-  let buildDebugger: BuildDebugger | null = null;
-  if (model) {
-    try {
-      buildDebugger = new BuildDebugger(model);
-    } catch (err) {
-      log.debug({ err }, 'Build debugger creation failed');
-      // LLM not available
-    }
-  }
+  // (Build debugger moved above pipeline creation)
 
   // v0.4: Channel manager
   const channelManager = new ChannelManager({

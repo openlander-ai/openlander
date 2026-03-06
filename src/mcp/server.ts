@@ -12,6 +12,7 @@ import type { AppContext } from '../app.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { createGitProvider } from '../git-providers/index.js';
 import { loadConfig } from '../config/index.js';
+import { getProjectUrl } from '../pipeline/traefik.js';
 const log = createModuleLogger('mcp');
 
 import { createModuleLogger } from '../lib/logger.js';
@@ -373,7 +374,7 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
               repoUrl: p.repo_url,
               branch: p.branch,
               port: p.assigned_port,
-              url: p.assigned_port ? `http://${p.name}.localhost` : null,
+              url: p.assigned_port ? getProjectUrl(p.name) : null,
               publicUrl: p.public_url,
               createdAt: p.created_at,
               updatedAt: p.updated_at,

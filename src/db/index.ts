@@ -509,6 +509,13 @@ export class Database {
       .get() as DeployLogRow | undefined;
   }
 
+  /** Get a single deploy log by ID. */
+  getDeployLog(deployId: string): DeployLogRow | undefined {
+    return this.db.select().from(deployLogs).where(eq(deployLogs.id, deployId)).get() as
+      | DeployLogRow
+      | undefined;
+  }
+
   // ===== Chat History =====
 
   /** Save a chat message. */

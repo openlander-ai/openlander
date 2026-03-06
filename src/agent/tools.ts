@@ -3,6 +3,7 @@ import type { QuestionBridge } from './question-bridge.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { ProjectNotFoundError } from '../errors.js';
 import { cloneRepo } from '../pipeline/git.js';
+import { getProjectUrl } from '../pipeline/traefik.js';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createGitProvider } from '../git-providers/index.js';
@@ -226,7 +227,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
             status: p.status,
             visibility: p.visibility,
             port: p.assigned_port,
-            url: p.assigned_port ? `http://${p.name}.localhost` : null,
+            url: p.assigned_port ? getProjectUrl(p.name) : null,
             publicUrl: p.public_url,
             repoUrl: p.repo_url,
           })),
@@ -421,6 +422,48 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
         });
 
         return diagnosis;
+      },
+    }),
+
+    fix_dockerfile: tool({
+      description:
+        'Analyze a failed build and generate a fixed Dockerfile using AI. Use when a build fails due to Dockerfile content errors (wrong Node version, missing dependencies, invalid syntax). Returns { dockerfileContent, explanation, changes[] }. Errors: PROJECT_NOT_FOUND, NO_FAILED_BUILD if the last deploy succeeded, NO_LLM if build debugger is not configured.',
+      inputSchema: z.object({
+        project_name: z.string().describe('Name of project with Dockerfile build error'),
+      }),
+      execute: async ({ project_name }) => {
+        if (!ctx.buildDebugger) {
+          return {
+            error: 'Build debugger requires an LLM provider. Configure one first.',
+          };
+        }
+
+        const project = ctx.db.getProjectByName(project_name);
+        if (!project) throw new ProjectNotFoundError(project_name);
+
+        const lastDeploy = ctx.db.getLastDeployLog(project.id);
+        if (!lastDeploy || lastDeploy.status !== 'failed') {
+          return { error: 'No failed build found for this project.' };
+        }
+
+        // Clone path is ephemeral (temp dir), so re-clone to get current Dockerfile
+        const { cloneRepo: cloneForFix } = await import('../pipeline/git.js');
+        const { readDockerfile } = await import('./debugger.js');
+        const cloneResult = await cloneForFix({
+          repoUrl: project.repo_url ?? '',
+          branch: project.branch,
+          sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+        });
+        const currentDockerfile = readDockerfile(cloneResult.path) ?? 'Not available';
+
+        const fixResult = await ctx.buildDebugger.fixDockerfile({
+          projectPath: cloneResult.path,
+          currentDockerfile,
+          buildError: lastDeploy.build_log ?? 'No build log available',
+          projectName: project_name,
+        });
+
+        return fixResult;
       },
     }),
 

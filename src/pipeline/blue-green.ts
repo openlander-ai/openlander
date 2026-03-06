@@ -7,7 +7,7 @@ import type { EnvManager } from './env.js';
 import type { EventBus } from '../events/index.js';
 import { cloneRepo } from './git.js';
 import { allocatePort } from './port.js';
-import { buildTraefikLabels } from './traefik.js';
+import { buildTraefikLabels, getProjectUrl } from './traefik.js';
 
 export interface BlueGreenResult {
   success: boolean;
@@ -133,7 +133,7 @@ export class BlueGreenDeployer {
       });
       shouldCleanupGreen = true;
 
-      const routedUrl = `http://${projectName}.localhost`;
+      const routedUrl = getProjectUrl(projectName);
       await this.eventBus.emit('deploy:run', {
         projectId,
         containerId: greenContainerId,

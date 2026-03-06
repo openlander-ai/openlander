@@ -10,7 +10,13 @@ import { loadConfig } from '../../config/index.js';
 import { eventBus, type EventType, type EventPayload } from '../../events/index.js';
 import { SessionStore } from '../session.js';
 import { createModuleLogger } from '../../lib/logger.js';
-import { detectReverseProxy, getProxyStatus } from '../../pipeline/traefik.js';
+import {
+  detectReverseProxy,
+  getProxyStatus,
+  getLanIp,
+  getProjectUrl,
+  getAllIps,
+} from '../../pipeline/traefik.js';
 import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
 import { DeployQueue } from '../../agent/deploy-queue.js';
 
@@ -415,8 +421,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     return streamSSE(c, async (s) => {
       let eventId = 0;
-      let deployToolCalled = false;
-      let fallbackTriggered = false;
+      const deployState = { toolCalled: false, fallbackTriggered: false };
 
       // Acquire deploy queue lock (sequential processing)
       const release = await deployQueue.acquire();
@@ -427,8 +432,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
       try {
         // 5-second fallback: if LLM doesn't call deploy_project, fall back to direct deploy
         const fallbackTimer = setTimeout(() => {
-          if (!deployToolCalled && !fallbackTriggered) {
-            fallbackTriggered = true;
+          if (!deployState.toolCalled && !deployState.fallbackTriggered) {
+            deployState.fallbackTriggered = true;
             log.warn('Agent did not call deploy_project within 5s — falling back to direct deploy');
             void (async () => {
               try {
@@ -465,7 +470,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
           async (event) => {
             // Only deploy-related tool calls should prevent fallback
             if (event.type === 'tool_call' && event.toolName === 'deploy_project') {
-              deployToolCalled = true;
+              deployState.toolCalled = true;
             }
             // Inject timestamp at router level (spec §4.3)
             const eventWithTs = { ...event, timestamp: new Date().toISOString() };
@@ -479,6 +484,50 @@ export function createApiRoutes(ctx: AppContext): Hono {
         );
 
         clearTimeout(fallbackTimer);
+
+        // Agent completed without calling deploy_project and fallback hasn't fired
+        if (!deployState.toolCalled && !deployState.fallbackTriggered) {
+          deployState.fallbackTriggered = true;
+          log.warn(
+            'Agent completed without calling deploy_project — falling back to direct deploy',
+          );
+          try {
+            const result = await ctx.pipeline.deploy({
+              repoUrl: body.repo_url,
+              branch: body.branch,
+              name: body.name,
+              envVars: body.env_vars,
+              visibility: body.visibility,
+              sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+              trigger: 'api',
+            });
+            await s.writeSSE({
+              id: String(eventId++),
+              event: 'fallback',
+              data: JSON.stringify({ type: 'fallback', ...result }),
+            });
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            await s.writeSSE({
+              id: String(eventId++),
+              event: 'error',
+              data: JSON.stringify({ type: 'error', error: errMsg }),
+            });
+          }
+        }
+      } catch (err) {
+        // chatStream threw — report error to client
+        const errMsg = err instanceof Error ? err.message : String(err);
+        log.error({ err }, 'Agent chatStream failed during deploy');
+        try {
+          await s.writeSSE({
+            id: String(eventId++),
+            event: 'error',
+            data: JSON.stringify({ type: 'error', error: errMsg }),
+          });
+        } catch {
+          // SSE stream already closed by client — ignore write error
+        }
       } finally {
         release();
       }
@@ -661,6 +710,18 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }),
       );
 
+      // Dockerfile fix events → dockerfile_fixed in NDJSON stream
+      unsubscribers.push(
+        eventBus.on('build:dockerfile-fixed', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'status',
+            message: `Dockerfile fixed (attempt ${String(payload.retryCount)}/3): ${payload.changes.join(', ')}`,
+            projectId: project.id,
+          });
+        }),
+      );
+
       // Agent question events → question_pending in NDJSON stream
       unsubscribers.push(
         eventBus.on('question:pending', (payload) => {
@@ -729,7 +790,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
         repoUrl: p.repo_url,
         branch: p.branch,
         port: p.assigned_port,
-        url: p.assigned_port ? `http://${p.name}.localhost` : null,
+        url: p.assigned_port ? getProjectUrl(p.name) : null,
         publicUrl: p.public_url,
         createdAt: p.created_at,
         updatedAt: p.updated_at,
@@ -750,9 +811,55 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     return c.json({
       ...project,
-      url: project.assigned_port ? `http://${project.name}.localhost` : null,
+      url: project.assigned_port ? getProjectUrl(project.name) : null,
       envVars,
       recentDeploys: deployLogs,
+    });
+  });
+
+  // --- Deployment History ---
+
+  api.get('/projects/:id/deployments', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const limit = parseInt(c.req.query('limit') ?? '50', 10);
+    const logs = ctx.db.getDeployLogs(project.id, limit);
+
+    return c.json({
+      count: logs.length,
+      deployments: logs.map((log) => ({
+        id: log.id,
+        status: log.status,
+        trigger: log.trigger,
+        commitSha: log.commit_sha,
+        durationMs: log.duration_ms,
+        createdAt: log.created_at,
+      })),
+    });
+  });
+
+  api.get('/projects/:id/deployments/:deployId', (c) => {
+    const id = c.req.param('id');
+    const deployId = c.req.param('deployId');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const log = ctx.db.getDeployLog(deployId);
+    if (!log || log.project_id !== project.id) {
+      return c.json({ error: 'NOT_FOUND', message: 'Deployment not found' }, 404);
+    }
+
+    return c.json({
+      id: log.id,
+      projectId: log.project_id,
+      status: log.status,
+      trigger: log.trigger,
+      commitSha: log.commit_sha,
+      buildLog: log.build_log,
+      durationMs: log.duration_ms,
+      createdAt: log.created_at,
     });
   });
 
@@ -770,77 +877,19 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
-    // Immediately mark project as building so build/stream sees fresh state
+    // Mark project as building so build/stream sees fresh state
     ctx.db.updateProject(project.id, { status: 'building' });
 
-    // Fallback: no agent (LLM not configured) → direct pipeline call
-    if (!ctx.agent) {
+    // Redeploy is deterministic — no LLM needed. Direct pipeline call.
+    try {
       const result = await ctx.pipeline.redeploy(project.id);
       return c.json(result, result.success ? 200 : 500);
+    } catch (err) {
+      // Ensure status is reset on unexpected error
+      ctx.db.updateProject(project.id, { status: 'error' });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return c.json({ success: false, error: errMsg }, 500);
     }
-
-    // Agent-mediated redeploy: SSE stream through chatStream
-    const message = `Redeploy project ${project.name}`;
-    const sessionId = nanoid(12);
-
-    return streamSSE(c, async (s) => {
-      let eventId = 0;
-      let deployToolCalled = false;
-      let fallbackTriggered = false;
-
-      const release = await deployQueue.acquire();
-
-      try {
-        const fallbackTimer = setTimeout(() => {
-          if (!deployToolCalled && !fallbackTriggered) {
-            fallbackTriggered = true;
-            log.warn(
-              'Agent did not call tool within 5s for redeploy — falling back to direct redeploy',
-            );
-            void (async () => {
-              try {
-                const result = await ctx.pipeline.redeploy(project.id);
-                await s.writeSSE({
-                  id: String(eventId++),
-                  event: 'fallback',
-                  data: JSON.stringify({ type: 'fallback', ...result }),
-                });
-              } catch (err) {
-                const errMsg = err instanceof Error ? err.message : String(err);
-                await s.writeSSE({
-                  id: String(eventId++),
-                  event: 'error',
-                  data: JSON.stringify({ type: 'error', error: errMsg }),
-                });
-              }
-            })();
-          }
-        }, 5000);
-
-        const agent = ctx.agent;
-        if (!agent) throw new Error('Agent is null');
-        await agent.chatStream(
-          message,
-          async (event) => {
-            // Only deploy-related tool calls should prevent fallback
-            if (event.type === 'tool_call' && event.toolName === 'redeploy_project') {
-              deployToolCalled = true;
-            }
-            const eventWithTs = { ...event, timestamp: new Date().toISOString() };
-            await s.writeSSE({
-              id: String(eventId++),
-              event: event.type,
-              data: JSON.stringify(eventWithTs),
-            });
-          },
-          sessionId,
-        );
-
-        clearTimeout(fallbackTimer);
-      } finally {
-        release();
-      }
-    });
   });
 
   // v0.3: Rollback
@@ -1179,6 +1228,12 @@ export function createApiRoutes(ctx: AppContext): Hono {
     });
   });
 
+  api.get('/system/lan-ip', (c) => {
+    const ip = getLanIp();
+    const allIps = getAllIps();
+    return c.json({ ip: ip ?? null, allIps });
+  });
+
   // --- Server Status (v0.0.9) ---
 
   api.get('/server/status', async (c) => {
@@ -1244,117 +1299,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const alertId = c.req.param('id');
     ctx.alertMonitor.dismissAlert(alertId);
     return c.json({ success: true });
-  });
-
-  // --- Chat ---
-
-  api.post('/chat', async (c) => {
-    if (!ctx.agent) {
-      return c.json(
-        {
-          error: 'LLM_NOT_CONFIGURED',
-          message: 'No LLM provider configured. Run `openlander onboard` first.',
-        },
-        400,
-      );
-    }
-
-    const body = await c.req.json<{ message: string; session_id?: string }>();
-    if (!body.message) {
-      return c.json({ error: 'MISSING_FIELD', message: 'message is required' }, 400);
-    }
-
-    const sessionId = body.session_id ?? nanoid(12);
-    const response = await ctx.agent.chat(body.message, sessionId);
-
-    return c.json({
-      sessionId,
-      ...response,
-    });
-  });
-
-  // --- Chat (SSE Streaming) ---
-
-  api.post('/chat/stream', async (c) => {
-    if (!ctx.agent) {
-      return c.json(
-        {
-          error: 'LLM_NOT_CONFIGURED',
-          message: 'No LLM provider configured. Run `openlander onboard` first.',
-        },
-        400,
-      );
-    }
-
-    const body = await c.req.json<{ message: string; session_id?: string }>();
-    if (!body.message) {
-      return c.json({ error: 'MISSING_FIELD', message: 'message is required' }, 400);
-    }
-
-    const sessionId = body.session_id ?? nanoid(12);
-
-    // Save user message before streaming
-    sessionStore.addMessage(sessionId, 'user', body.message);
-
-    return streamSSE(c, async (s) => {
-      let eventId = 0;
-      let assistantContent = '';
-
-      await ctx.agent?.chatStream(
-        body.message,
-        async (event) => {
-          // Inject timestamp at router level (spec §4.3)
-          const eventWithTs = { ...event, timestamp: new Date().toISOString() };
-          await s.writeSSE({
-            id: String(eventId++),
-            event: event.type,
-            data: JSON.stringify(eventWithTs),
-          });
-
-          // Collect assistant content for saving
-          if (event.type === 'message') {
-            assistantContent += event.content;
-          }
-        },
-        sessionId,
-      );
-
-      // Save assistant message after streaming completes
-      if (assistantContent) {
-        sessionStore.addMessage(sessionId, 'assistant', assistantContent);
-      }
-    });
-  });
-
-  // --- Question Reply (for ask_user_question tool) ---
-
-  api.post('/question/reply', async (c) => {
-    const body = await c.req.json<{
-      request_id: string;
-      answers: Array<{
-        questionIndex: number;
-        selectedLabels: string[];
-        customText?: string;
-      }>;
-    }>();
-
-    ctx.questionBridge.reply(
-      body.request_id,
-      body.answers.map((a) => ({
-        questionIndex: a.questionIndex,
-        selectedLabels: a.selectedLabels,
-        customText: a.customText,
-      })),
-    );
-
-    return c.json({ status: 'ok' });
-  });
-
-  // --- Question Dismiss (cancel without answering) ---
-
-  api.post('/question/dismiss', (c) => {
-    ctx.questionBridge.reject();
-    return c.json({ status: 'dismissed' });
   });
 
   return api;

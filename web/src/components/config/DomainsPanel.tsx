@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getProject, exposeProject, unexposeProject } from '@/lib/api';
+import { getProject, exposeProject, unexposeProject, getAllIps, type NetworkIp } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Globe, Lock, ExternalLink, Loader2, Copy, Check } from 'lucide-react';
+import { Globe, ExternalLink, Loader2, Copy, Check, Wifi, Monitor } from 'lucide-react';
 
 interface DomainsPanelProps {
   projectId: string;
@@ -10,6 +10,8 @@ interface DomainsPanelProps {
 export function DomainsPanel({ projectId }: DomainsPanelProps) {
   const [internalUrl, setInternalUrl] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const [assignedPort, setAssignedPort] = useState<number | null>(null);
+  const [networkIps, setNetworkIps] = useState<NetworkIp[]>([]);
   const [loading, setLoading] = useState(true);
   const [exposing, setExposing] = useState(false);
   const [unexposing, setUnexposing] = useState(false);
@@ -20,6 +22,9 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
       const data = await getProject(projectId);
       setInternalUrl(data.url ?? null);
       setPublicUrl(data.publicUrl ?? null);
+      setAssignedPort(data.port ?? null);
+      const ips = await getAllIps();
+      setNetworkIps(ips);
     } catch {
       // silent
     } finally {
@@ -78,7 +83,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
       {/* Internal URL */}
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
         <div className="flex items-center gap-2">
-          <Lock className="h-3.5 w-3.5 text-muted-ol" />
+          <Wifi className="h-3.5 w-3.5 text-muted-ol" />
           <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
             Internal URL
           </span>
@@ -109,9 +114,56 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
           <p className="text-sm font-body text-muted-ol">Not available — project is not running.</p>
         )}
         <p className="text-[11px] font-body text-muted-ol">
-          Accessible from this machine and local network only.
+          Accessible from any device on the same network via sslip.io DNS.
         </p>
       </div>
+
+      {/* Direct Port Access */}
+      {assignedPort && networkIps.length > 0 && (
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <Monitor className="h-3.5 w-3.5 text-muted-ol" />
+            <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
+              Direct Access
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {networkIps.map((ip) => {
+              const directUrl = `http://${ip.address}:${assignedPort}`;
+              const label = ip.type === 'vpn' ? `${ip.interface} (VPN)` : ip.interface;
+              return (
+                <div key={ip.address} className="flex items-center gap-2">
+                  <a
+                    href={directUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-mono text-agent hover:text-agent/80 transition-colors flex items-center gap-1"
+                  >
+                    {directUrl}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <span className="text-[10px] font-body text-muted-ol px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))]">
+                    {label}
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(directUrl, ip.address)}
+                    className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                  >
+                    {copied === ip.address ? (
+                      <Check className="h-3.5 w-3.5 text-success" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[11px] font-body text-muted-ol">
+            Direct port access — works with LAN, VPN (Tailscale), or any network route.
+          </p>
+        </div>
+      )}
 
       {/* Public URL */}
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">

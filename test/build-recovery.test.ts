@@ -128,4 +128,40 @@ describe('BuildRecovery', () => {
       expect.objectContaining({ projectId: 'p1', category: 'disk-full' }),
     );
   });
+
+  // --- Tier 2.5: Dockerfile content errors ---
+
+  it('classifies Node version incompatibility as Tier 2.5 dockerfile-content', () => {
+    const result = recovery.classify(
+      'error: Node.js version not supported. requires >= 20.9.0',
+      context,
+    );
+    expect(result.tier).toBe(2.5);
+    expect(result.category).toBe('dockerfile-content');
+    expect(result.autoFixable).toBe(true);
+  });
+
+  it('classifies Dockerfile process failure as Tier 2.5 dockerfile-content', () => {
+    const result = recovery.classify(
+      'failed to solve: process "/bin/sh -c npm run build" did not complete successfully: dockerfile parse error',
+      context,
+    );
+    expect(result.tier).toBe(2.5);
+    expect(result.category).toBe('dockerfile-content');
+  });
+
+  it('classifies engine incompatible as Tier 2.5 dockerfile-content', () => {
+    const result = recovery.classify(
+      'npm ERR! engine incompatible: wanted node >=20 but got 18.20.4',
+      context,
+    );
+    expect(result.tier).toBe(2.5);
+    expect(result.category).toBe('dockerfile-content');
+  });
+
+  it('classifies base image not found as Tier 2.5 dockerfile-content', () => {
+    const result = recovery.classify('ERROR: base image not found: node:19-alpine-slim', context);
+    expect(result.tier).toBe(2.5);
+    expect(result.category).toBe('dockerfile-content');
+  });
 });

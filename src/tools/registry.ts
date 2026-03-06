@@ -8,6 +8,7 @@ import { createGitProvider } from '../git-providers/index.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { cloneRepo } from '../pipeline/git.js';
 import { scanUsedPorts } from '../pipeline/port.js';
+import { getProjectUrl } from '../pipeline/traefik.js';
 import type { ToolSpec, ToolTarget } from './types.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -238,7 +239,7 @@ export function createToolRegistry(
               repoUrl: project.repo_url,
               branch: project.branch,
               port: project.assigned_port,
-              url: project.assigned_port ? `http://${project.name}.localhost` : null,
+              url: project.assigned_port ? getProjectUrl(project.name) : null,
               publicUrl: project.public_url,
               createdAt: project.created_at,
               updatedAt: project.updated_at,
@@ -253,7 +254,7 @@ export function createToolRegistry(
             status: project.status,
             visibility: project.visibility,
             port: project.assigned_port,
-            url: project.assigned_port ? `http://${project.name}.localhost` : null,
+            url: project.assigned_port ? getProjectUrl(project.name) : null,
             publicUrl: project.public_url,
             repoUrl: project.repo_url,
           })),

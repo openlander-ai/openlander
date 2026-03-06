@@ -13,10 +13,10 @@ interface SidebarProps {
 }
 
 const statusColor: Record<string, string> = {
-  running: 'bg-success shadow-[0_0_6px_var(--color-success)]',
+  running: 'bg-success',
   stopped: 'bg-[var(--text-muted)]',
-  building: 'bg-warning shadow-[0_0_6px_var(--color-warning)] animate-pulse',
-  error: 'bg-error shadow-[0_0_6px_var(--color-error)]',
+  building: 'bg-warning animate-pulse',
+  error: 'bg-error',
 };
 
 export function Sidebar({ projects, loading, stats }: SidebarProps) {

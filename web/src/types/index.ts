@@ -57,3 +57,17 @@ export interface DeployResult {
   projectId?: string;
   error?: string;
 }
+
+export interface DeployLogSummary {
+  id: string;
+  status: 'success' | 'failed' | 'cancelled';
+  trigger: 'chat' | 'webhook' | 'api';
+  commitSha: string | null;
+  durationMs: number | null;
+  createdAt: string;
+}
+
+export interface DeployLogDetail extends DeployLogSummary {
+  projectId: string;
+  buildLog: string | null;
+}

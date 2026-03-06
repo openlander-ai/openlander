@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { useAppLayout } from '@/components/layout/AppLayout';
-import { getProject, redeployProject, stopProject } from '@/lib/api';
+import {
+  getProject,
+  redeployProject,
+  stopProject,
+  exposeProject,
+  unexposeProject,
+  getProjectDeployments,
+} from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { TimelineFeed } from '@/components/timeline/TimelineFeed';
@@ -9,7 +15,7 @@ import { LogViewer } from '@/components/logs/LogViewer';
 import { EnvVarsTable } from '@/components/config/EnvVarsTable';
 import { DomainsPanel } from '@/components/config/DomainsPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Project } from '@/types';
+import type { Project, DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 import {
   ExternalLink,
@@ -20,14 +26,20 @@ import {
   Activity,
   ScrollText,
   Settings,
+  Globe,
+  GlobeLock,
+  History,
+  Clock,
+  GitCommit,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 
 const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
   running: {
     label: 'Live',
     color: 'text-success',
-    dot: 'bg-success shadow-[0_0_6px_var(--color-success)]',
+    dot: 'bg-success',
   },
   stopped: {
     label: 'Stopped',
@@ -37,14 +49,122 @@ const statusConfig: Record<string, { label: string; color: string; dot: string }
   building: {
     label: 'Deploying',
     color: 'text-warning',
-    dot: 'bg-warning shadow-[0_0_6px_var(--color-warning)] animate-pulse',
+    dot: 'bg-warning animate-pulse',
   },
   error: {
     label: 'Failed',
     color: 'text-error',
-    dot: 'bg-error shadow-[0_0_6px_var(--color-error)]',
+    dot: 'bg-error',
   },
 };
+function formatRelativeTime(dateStr: string) {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays}d ago`;
+}
+
+function formatDuration(ms: number) {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+function DeploymentsList({ projectId }: { projectId: string }) {
+  const [deployments, setDeployments] = useState<DeployLogSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchDeployments = async () => {
+      try {
+        const data = await getProjectDeployments(projectId);
+        setDeployments(data);
+      } catch (err) {
+        console.error('Failed to fetch deployments:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDeployments();
+  }, [projectId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-5 w-5 animate-spin text-agent" />
+      </div>
+    );
+  }
+
+  if (deployments.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-secondary-ol">
+        <History className="h-8 w-8 mb-3 text-muted-ol" />
+        <p className="text-sm font-body">No deployments yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 space-y-2 overflow-auto h-full">
+      {deployments.map((deploy) => {
+        const statusColor =
+          deploy.status === 'success'
+            ? 'bg-success'
+            : deploy.status === 'failed'
+              ? 'bg-error'
+              : 'bg-[var(--text-muted)]';
+
+        return (
+          <div
+            key={deploy.id}
+            onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
+            className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel hover:border-agent/30 cursor-pointer transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', statusColor)} />
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-display font-medium text-primary-ol capitalize">
+                    {deploy.trigger} Deployment
+                  </span>
+                  {deploy.commitSha && (
+                    <span className="flex items-center gap-1 text-xs font-mono text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
+                      <GitCommit className="h-3 w-3" />
+                      {deploy.commitSha.substring(0, 7)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-1 text-xs font-body text-secondary-ol">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {formatRelativeTime(deploy.createdAt)}
+                  </span>
+                  {deploy.durationMs && (
+                    <span className="flex items-center gap-1">
+                      <Activity className="h-3 w-3" />
+                      {formatDuration(deploy.durationMs)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function ProjectDetail() {
   const { id } = useParams();
@@ -52,42 +172,33 @@ export function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [timelineRunKey, setTimelineRunKey] = useState(0);
-  const { openChatWithPrompt } = useAppLayout();
   const isMobile = useIsMobile();
+
+  // Fetch project details
+  const fetchProject = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await getProject(id);
+      setProject(data);
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchProject();
+    const interval = setInterval(fetchProject, 5000);
+    return () => clearInterval(interval);
+  }, [fetchProject]);
+
   const { items, isStreaming, submitAnswer, skipQuestion, executeAction } = useTimeline({
     projectId: id,
     enabled: !!id,
     runKey: timelineRunKey,
+    onSettled: fetchProject,
   });
-
-  const handleFixWithAI = useCallback(
-    (errorMsg?: string) => {
-      openChatWithPrompt(
-        errorMsg
-          ? `Fix this deployment error: ${errorMsg}`
-          : 'Help me fix the deployment error for this project',
-      );
-    },
-    [openChatWithPrompt],
-  );
-
-  // Fetch project details
-  useEffect(() => {
-    if (!id) return;
-    const fetchProject = async () => {
-      try {
-        const data = await getProject(id);
-        setProject(data);
-      } catch {
-        // silent
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProject();
-    const interval = setInterval(fetchProject, 5000);
-    return () => clearInterval(interval);
-  }, [id]);
 
   const handleRedeploy = async () => {
     if (isMobile) {
@@ -130,6 +241,28 @@ export function ProjectDetail() {
       await stopProject(id);
     } catch (err) {
       console.error('Stop failed:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleExpose = async () => {
+    if (isMobile) {
+      showMobileToast();
+      return;
+    }
+    if (!id || actionLoading) return;
+    setActionLoading('expose');
+    try {
+      if (project?.publicUrl) {
+        await unexposeProject(id);
+        setProject((prev) => (prev ? { ...prev, publicUrl: null } : prev));
+      } else {
+        const { publicUrl } = await exposeProject(id);
+        setProject((prev) => (prev ? { ...prev, publicUrl } : prev));
+      }
+    } catch (err) {
+      console.error('Expose/unexpose failed:', err);
     } finally {
       setActionLoading(null);
     }
@@ -184,6 +317,17 @@ export function ProjectDetail() {
                   </a>
                 )}
               </div>
+              {project.publicUrl && (
+                <a
+                  href={project.publicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-success hover:text-success/80 transition-colors"
+                >
+                  <Globe className="h-3 w-3" />
+                  {project.publicUrl.replace(/^https?:\/\//, '')}
+                </a>
+              )}
             </div>
           </div>
 
@@ -216,11 +360,32 @@ export function ProjectDetail() {
               )}
               Stop
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(
+                'h-7 text-[11px] font-body gap-1.5',
+                project.publicUrl
+                  ? 'text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30'
+                  : '',
+              )}
+              onClick={handleExpose}
+              disabled={project.status !== 'running' || !!actionLoading}
+            >
+              {actionLoading === 'expose' ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : project.publicUrl ? (
+                <GlobeLock className="h-3 w-3" />
+              ) : (
+                <Globe className="h-3 w-3" />
+              )}
+              {project.publicUrl ? 'Unexpose' : 'Expose'}
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Tabs: Timeline / Logs */}
+      {/* Tabs: Timeline / Logs / Config */}
       <Tabs defaultValue="timeline" className="flex-1 flex flex-col min-h-0">
         <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
           <TabsTrigger
@@ -229,6 +394,13 @@ export function ProjectDetail() {
           >
             <Activity className="h-3.5 w-3.5" />
             Timeline
+          </TabsTrigger>
+          <TabsTrigger
+            value="deployments"
+            className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+          >
+            <History className="h-3.5 w-3.5" />
+            Deployments
           </TabsTrigger>
           <TabsTrigger
             value="logs"
@@ -253,8 +425,11 @@ export function ProjectDetail() {
             onSubmitAnswer={submitAnswer}
             onSkipQuestion={skipQuestion}
             onInsightAction={executeAction}
-            onFixWithAI={handleFixWithAI}
           />
+        </TabsContent>
+
+        <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
+          {id && <DeploymentsList projectId={id} />}
         </TabsContent>
 
         <TabsContent value="logs" className="flex-1 min-h-0 mt-0 relative">

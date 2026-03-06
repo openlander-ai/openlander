@@ -7,7 +7,7 @@ import type { Docker } from './docker.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { allocatePort } from './port.js';
-import { buildTraefikLabels } from './traefik.js';
+import { buildTraefikLabels, getProjectUrl } from './traefik.js';
 import { cloneRepo } from './git.js';
 import { ensureDockerfile } from './dockerfile-gen.js';
 
@@ -108,7 +108,7 @@ export class PreviewDeployer {
         traefikLabels,
       });
 
-      const url = `http://${previewName}.localhost`;
+      const url = getProjectUrl(previewName);
       const ttlMs = options.ttlMs ?? DEFAULT_PREVIEW_TTL_MS;
 
       const preview: PreviewDeploy = {

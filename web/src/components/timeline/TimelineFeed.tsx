@@ -68,7 +68,7 @@ export function TimelineFeed({
       <ScrollArea className="h-full" ref={scrollRef}>
         <div className="p-4 space-y-1">
           {/* Vertical connector line */}
-          <div className="absolute left-[30px] top-4 bottom-4 w-px bg-[hsl(var(--border))]" />
+          <div className="absolute left-[29px] top-6 bottom-6 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
 
           {items.map((item, index) => (
             <TimelineItemCard
@@ -84,13 +84,28 @@ export function TimelineFeed({
 
           {/* Streaming indicator */}
           {isStreaming && items.length > 0 && (
-            <div className="flex items-center gap-3 py-3 px-4">
-              <div className="flex gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-agent animate-pulse" />
-                <span className="h-1.5 w-1.5 rounded-full bg-agent animate-pulse [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 rounded-full bg-agent animate-pulse [animation-delay:300ms]" />
+            <div className="flex items-center gap-4 py-4 px-5 relative overflow-hidden rounded-lg border border-agent/10 bg-agent/5 mt-2 timeline-item-enter">
+              <div className="absolute inset-0 bg-grid-pattern opacity-20" />
+              <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-agent/50 to-transparent scanline" />
+
+              <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-agent/10 border border-agent/20 shrink-0">
+                <div className="absolute inset-0 rounded-full border border-agent/30 animate-[pulse-ring_2s_cubic-bezier(0.215,0.61,0.355,1)_infinite]" />
+                <div className="w-2 h-2 rounded-full bg-agent animate-pulse" />
               </div>
-              <span className="text-[11px] font-body text-secondary-ol">Agent working...</span>
+
+              <div className="relative flex flex-col">
+                <span className="text-xs font-mono text-agent/90 uppercase tracking-widest flex items-center gap-2">
+                  System Active
+                  <span className="flex gap-0.5">
+                    <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce" />
+                    <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce [animation-delay:150ms]" />
+                    <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce [animation-delay:300ms]" />
+                  </span>
+                </span>
+                <span className="text-[10px] font-mono text-muted-ol mt-0.5">
+                  Awaiting next instruction...
+                </span>
+              </div>
             </div>
           )}
 

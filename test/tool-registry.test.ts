@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { getProjectUrl } from '../src/pipeline/traefik.js';
 import type { AppContext } from '../src/app.js';
 import { ProjectNotFoundError } from '../src/errors.js';
 import { createToolRegistry } from '../src/tools/registry.js';
@@ -163,7 +164,7 @@ describe('Tool Registry', () => {
           status: 'running',
           visibility: 'internal',
           port: 10001,
-          url: 'http://my-app.localhost',
+          url: getProjectUrl('my-app'),
           publicUrl: null,
           repoUrl: 'https://github.com/user/my-app',
         },

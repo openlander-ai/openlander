@@ -8,8 +8,8 @@ import { Plus, ExternalLink, GitBranch, Clock, RotateCw, Settings, Loader2 } fro
 const statusConfig: Record<string, { label: string; dot: string; badge: string }> = {
   running: {
     label: 'Live',
-    dot: 'bg-success shadow-[0_0_6px_var(--color-success)]',
-    badge: 'text-success border-success/30 bg-success/10 glow-success',
+    dot: 'bg-success',
+    badge: 'text-success border-success/30 bg-success/10',
   },
   stopped: {
     label: 'Stopped',
@@ -18,12 +18,12 @@ const statusConfig: Record<string, { label: string; dot: string; badge: string }
   },
   building: {
     label: 'Deploying',
-    dot: 'bg-warning shadow-[0_0_6px_var(--color-warning)] animate-pulse',
+    dot: 'bg-warning animate-pulse',
     badge: 'text-warning border-warning/30 bg-warning/10',
   },
   error: {
     label: 'Failed',
-    dot: 'bg-error shadow-[0_0_6px_var(--color-error)]',
+    dot: 'bg-error',
     badge: 'text-error border-error/30 bg-error/10',
   },
 };

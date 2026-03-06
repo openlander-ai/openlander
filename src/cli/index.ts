@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { createModuleLogger } from '../lib/logger.js';
 import { VERSION } from '../version.js';
+import { getProjectUrl } from '../pipeline/traefik.js';
 
 const log = createModuleLogger('cli');
 
@@ -347,7 +348,7 @@ program
       console.log(pc.bold(`  Projects (${String(projects.length)}):`));
       for (const p of projects) {
         const statusIcon = p.status === 'running' ? pc.green('●') : pc.red('○');
-        const url = p.assigned_port ? `http://${p.name}.localhost` : '';
+        const url = p.assigned_port ? getProjectUrl(p.name) : '';
         console.log(`  ${statusIcon} ${pc.bold(p.name)} — ${p.status} ${pc.dim(url)}`);
         if (p.public_url) {
           console.log(`    ${pc.cyan('↗')} ${p.public_url}`);

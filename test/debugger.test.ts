@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { BuildDebugger } from '../src/agent/debugger.js';
 import type { LanguageModel } from 'ai';
@@ -175,5 +175,93 @@ describe('BuildDebugger — LLM fallback', () => {
     // Missing rootCause should get default
     expect(result.rootCause).toBe('No root cause provided');
     expect(result.suggestedFixes).toHaveLength(0);
+  });
+});
+
+describe('BuildDebugger — fixDockerfile', () => {
+  beforeEach(() => {
+    mockGenerateText.mockClear();
+  });
+
+  it('generates fixed Dockerfile from LLM response with CHANGES section', async () => {
+    const llmResponse = [
+      'FROM node:20-alpine AS builder',
+      'WORKDIR /app',
+      'COPY package*.json ./',
+      'RUN npm ci',
+      'COPY . .',
+      'RUN npm run build',
+      '',
+      'FROM node:20-alpine',
+      'WORKDIR /app',
+      'COPY --from=builder /app/.next ./.next',
+      'COPY --from=builder /app/node_modules ./node_modules',
+      'COPY --from=builder /app/package.json ./package.json',
+      'EXPOSE 3000',
+      'CMD ["npm", "start"]',
+      '',
+      'CHANGES:',
+      '- Updated Node.js from 18.20.4 to 20 (Alpine)',
+      '- Fixed missing .next directory copy in production stage',
+    ].join('\n');
+
+    const model = createMockModel();
+    mockLLMResponse(llmResponse);
+    const debugger_ = new BuildDebugger(model);
+
+    const result = await debugger_.fixDockerfile({
+      projectPath: '/tmp/test',
+      currentDockerfile: 'FROM node:18-alpine\nCOPY . .\nRUN npm install',
+      buildError: 'error: Next.js requires Node.js >= 20.9.0',
+      projectName: 'test-app',
+    });
+
+    expect(mockGenerateText).toHaveBeenCalledOnce();
+    expect(result.dockerfileContent).toContain('FROM node:20-alpine');
+    expect(result.dockerfileContent).not.toContain('CHANGES:');
+    expect(result.changes).toHaveLength(2);
+    expect(result.changes[0]).toContain('Updated Node.js');
+    expect(result.explanation).toBeTruthy();
+  });
+
+  it('handles LLM response without CHANGES section', async () => {
+    const llmResponse =
+      'FROM node:20-alpine\nWORKDIR /app\nCOPY . .\nRUN npm ci && npm run build\nEXPOSE 3000\nCMD ["npm", "start"]';
+
+    const model = createMockModel();
+    mockLLMResponse(llmResponse);
+    const debugger_ = new BuildDebugger(model);
+
+    const result = await debugger_.fixDockerfile({
+      projectPath: '/tmp/test',
+      currentDockerfile: 'FROM node:18\nCOPY . .',
+      buildError: 'some build error',
+      projectName: 'test-app',
+    });
+
+    expect(result.dockerfileContent).toContain('FROM node:20-alpine');
+    expect(result.changes).toHaveLength(1);
+    expect(result.changes[0]).toContain('Dockerfile updated');
+  });
+
+  it('strips markdown fences from LLM Dockerfile response', async () => {
+    const llmResponse =
+      '```dockerfile\nFROM node:20\nCOPY . .\nRUN npm install\n```\n\nCHANGES:\n- Fixed Node version';
+
+    const model = createMockModel();
+    mockLLMResponse(llmResponse);
+    const debugger_ = new BuildDebugger(model);
+
+    const result = await debugger_.fixDockerfile({
+      projectPath: '/tmp/test',
+      currentDockerfile: 'FROM node:16',
+      buildError: 'version not supported',
+      projectName: 'test-app',
+    });
+
+    expect(result.dockerfileContent).not.toContain('```');
+    expect(result.dockerfileContent).toContain('FROM node:20');
+    expect(result.changes).toHaveLength(1);
+    expect(result.changes[0]).toContain('Fixed Node version');
   });
 });

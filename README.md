@@ -2,9 +2,9 @@
 
 # 🛬 OpenLander
 
-**AI agent that deploys your app from a chat.**
+**Self-hosted deployment platform that fixes its own failures.**
 
-Give it a repo URL. It clones, builds, deploys, and hands you a URL.
+Paste a Git URL. It builds, deploys, and hands you a URL — if something breaks, AI fixes it automatically.
 
 [![npm version](https://img.shields.io/npm/v/openlander.svg)](https://www.npmjs.com/package/openlander)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -21,40 +21,31 @@ AI coding tools (Cursor, Claude Code, etc.) made it so anyone can build an app. 
 
 You need to know Docker, reverse proxies, port mapping, SSL, DNS — or pay $10+/month per service on the cloud.
 
-**OpenLander fixes this.** Tell it what to deploy, and it handles the rest.
+**OpenLander fixes this.** A clean web dashboard for deploying — with AI that kicks in when things go wrong.
 
 ```
-You:    Deploy this repo github.com/user/my-app
-Agent:  Cloning... ✅
-        Dockerfile found ✅
-        Building... ✅ (38s)
-        Container running ✅
-        🔒 http://my-app.local:10003
+1. Paste a Git URL
+2. Click Deploy
+3. Get a URL
 
-You:    Make it public
-Agent:  ✅ https://shy-tiger-abc123.trycloudflare.com
-        ⚠️ Temporary URL. Changes on restart.
-
-You:    Show me the logs
-Agent:  Last 30 lines:
-        [14:32:01] Server started on port 3000
-        [14:32:03] Database connected
-        ...
+Build failed? AI analyzes the error and retries.
+Container crashed? AI detects it and fixes the Dockerfile.
 ```
 
 ## Why Not Just Use Coolify / Dokploy?
 
-Those are great tools — for people who already understand infrastructure.
+Those are great tools. OpenLander takes a different approach.
 
-|           | Coolify / Dokploy         | OpenLander                        |
-| --------- | ------------------------- | --------------------------------- |
-| Analogy   | Self-service gas station  | Full-service gas station          |
-| Interface | Web dashboard + chat      | Web chat (natural language)       |
-| Target    | Devs with infra knowledge | Anyone who can build an app w/ AI |
-| Install   | `docker compose`          | `npm i -g`                        |
-| Config    | You figure it out         | Agent figures it out              |
+|                       | Coolify / Dokploy               | OpenLander                                               |
+| --------------------- | ------------------------------- | -------------------------------------------------------- |
+| Interface             | Web dashboard (forms & buttons) | Web dashboard + AI auto-recovery                         |
+| When builds fail      | You read logs, you fix it       | AI analyzes the error and retries automatically          |
+| When containers crash | You get an alert                | AI detects it, diagnoses the cause, and attempts a fix   |
+| Coding agent support  | None                            | MCP protocol — deploy from Cursor, Claude Code, etc.     |
+| Server awareness      | Manual configuration            | Auto-detects ports, proxies, containers before deploying |
+| Install               | `docker compose`                | `npm i -g`                                               |
 
-OpenLander isn't a competitor — it's a different category.
+**Positioning**: Coolify's Docker foundation + Vercel's clean UX + AI auto-recovery.
 
 ## Cost
 
@@ -86,30 +77,39 @@ openlander
 
 ## Features
 
-### Web UI
+### Web Dashboard
 
-- **Chat-driven interface** — Deploy, manage, and monitor through natural conversation
-- **Real-time dashboard** — Project status, system resources, deployment timeline
+- **Project overview** — Status, deployment history, domains, environment variables at a glance
+- **Deployment history** — Every deploy with commit SHA, duration, status, and build logs
+- **Build log streaming** — Real-time build output as it happens
+- **AI analysis on failure** — When a build fails or container crashes, AI analysis appears inline
 - **Settings management** — AI provider, GitHub connection, global secrets
-- **Agent intervention** — Structured choices when the agent needs your input
+
+### AI Auto-Recovery
+
+- **Build failure analysis** — Recipe-based fast-path + LLM analysis for build errors
+- **Automatic Dockerfile fix** — AI detects the root cause and retries with a corrected Dockerfile
+- **Runtime crash detection** — Container health monitoring with automatic diagnosis
+- **Post-deploy insights** — Health check results, resource usage, cleanup recommendations
+- **Smart defaults** — Learns from previous deployments to suggest optimal settings
 
 ### Deployment
 
-- **Chat-driven deployment** — Describe what you want in plain English
-- **Git \u2192 Docker \u2192 URL** — Clone, build, run, expose. One conversation.
+- **Git → Docker → URL** — Clone, build, run, expose. One click.
 - **Traefik auto-routing** — Each project gets its own subdomain. No port conflicts.
+- **Server awareness** — Auto-detects all containers, ports, and proxies before deploying
+- **Preflight check** — Validates port availability, container names, resources before build starts
+- **Auto-redeploy** — Git push webhook triggers automatic redeployment
+- **Rollback & blue-green** — One-click rollback, zero-downtime deploys
 - **Public sharing** — Instant public URL via TryCloudflare. No domain needed.
 - **Production domains** — Permanent URLs via Cloudflare Tunnel. Multi-domain mapping.
-- **Environment variables** — Manage secrets through chat or Web UI. Global encrypted secrets shared across projects.
-- **Auto-redeploy** — Git push webhook triggers automatic redeployment
-- **Rollback & blue-green** — One-command rollback, zero-downtime deploys
 
 ### Infrastructure
 
-- **Logs & monitoring** — Container logs, health checks, system resource tracking
-- **Monorepo support** — Scan Dockerfiles, parallel builds, parent-child project model
 - **Auto-Dockerfile** — No Dockerfile? Auto-generates one for Next.js, FastAPI, Gradio, Streamlit
-- **Build debugger** — Recipe-based fast-path + LLM analysis for build errors
+- **Monorepo support** — Scan Dockerfiles, parallel builds, parent-child project model
+- **Logs & monitoring** — Container logs, health checks, system resource tracking
+- **Environment variables** — Global encrypted secrets shared across projects
 - **DB provisioning** — PostgreSQL, MySQL, Redis containers on demand
 
 ### Integration
@@ -117,26 +117,28 @@ openlander
 - **MCP server** — Deploy from Claude Code, Cursor, or any MCP client
 - **Multi-channel** — Slack, Discord, Telegram bots for remote management
 - **BYOK (Bring Your Own Key)** — Gemini Flash (free), Claude, OpenAI, OpenRouter, or Ollama (local)
+- **OAuth login** — Sign in with OpenAI or OpenRouter account (no API key needed)
 - **Private repos** — SSH key auth. Works with GitHub, GitLab, Bitbucket, Gitea.
 
 ## How It Works
 
 ```
-User (Web UI — browser chat + dashboard)
+User (Web Dashboard — deploy, monitor, configure)
     ↓
-AI Agent (LLM — intent parsing + conversation + error explanation)
+AI Agent (background — build error analysis, crash recovery, smart defaults)
     ↓
 Deploy Pipeline (deterministic — rule-based execution)
+    ├─ preflight check (port/name/resource/proxy validation)
     ├─ git clone
     ├─ docker build (Dockerfile or auto-generated template)
     ├─ docker run (auto port + Traefik labels)
     ├─ expose (TryCloudflare / Cloudflare Tunnel)
-    └─ monitor (health checks + resource tracking)
+    └─ monitor (health checks + crash detection + auto-recovery)
     ↓
 Infrastructure (Docker + Traefik + Cloudflare + SQLite)
 ```
 
-**Key principle**: Execution is deterministic (rule-based). The LLM only handles conversation, clarification, and error explanation — never makes deployment decisions.
+**Key principle**: Execution is deterministic (rule-based). The AI only handles error analysis, recovery, and insights — never makes deployment decisions autonomously.
 
 ## External Access
 
@@ -146,7 +148,7 @@ Infrastructure (Docker + Traefik + Cloudflare + SQLite)
 | 🌐 Quick Share | Demo/review  | TryCloudflare (temp URL)      | No              |
 | 🌐 Production  | Always-on    | Cloudflare Tunnel (permanent) | Yes             |
 
-Default is **Internal** (safe). Say "make it public" to switch.
+Default is **Internal** (safe). Switch to public from the dashboard.
 
 ## Tech Stack
 
@@ -157,11 +159,11 @@ Default is **Internal** (safe). Say "make it public" to switch.
 | Build         | [tsup](https://tsup.egoist.dev) (backend) + [Vite](https://vite.dev) (frontend) |
 | Install       | npm global package                                                              |
 | Web UI        | React 19 + React Router + Tailwind CSS v3                                       |
+| AI            | [Vercel AI SDK](https://ai-sdk.dev) — multi-provider, streaming, tool calling   |
 | ORM           | [Drizzle ORM](https://orm.drizzle.team) + bun:sqlite                            |
 | Docker        | dockerode                                                                       |
 | Reverse Proxy | Traefik (Docker label routing)                                                  |
 | Tunnel        | TryCloudflare / Cloudflare Tunnel                                               |
-| AI            | BYOK — Gemini Flash / Claude / OpenAI / OpenRouter / Ollama                     |
 | Database      | SQLite (via Drizzle ORM)                                                        |
 | Test          | Vitest + Node.js (with bun:sqlite shim)                                         |
 
@@ -169,16 +171,17 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 | Version     | Focus                    | Status | Highlights                                                          |
 | ----------- | ------------------------ | ------ | ------------------------------------------------------------------- |
-| **v0.0.1**  | Repo → URL (MVP)         | Done   | Git clone → Docker → Traefik → URL. Chat. REST API.                 |
+| **v0.0.1**  | Repo → URL (MVP)         | Done   | Git clone → Docker → Traefik → URL. REST API.                       |
 | **v0.0.2**  | Daily Operations         | Done   | Auto-redeploy, monitoring, production domains, Ollama               |
 | **v0.0.3**  | Coding Agent Integration | Done   | MCP server (23 tools), rollback, blue-green, DB provisioning        |
 | **v0.0.4**  | Multi-Channel + Advanced | Done   | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy  |
 | **v0.0.9**  | Server Awareness         | Done   | Full container scan, OS port scan, proxy detection, preflight check |
-| **v0.1.0**  | Web MVP                  | Done   | React SPA, real-time timeline, NDJSON streaming, TUI→Web pivot      |
+| **v0.1.0**  | Web MVP                  | Done   | React SPA, real-time timeline, NDJSON streaming                     |
 | **v0.0.11** | Agent Proactivity        | Done   | Post-deploy insight, anomaly nudge, smart defaults                  |
 | **v0.0.10** | Env & Secrets            | Done   | Global encrypted secrets, .env.example detection, Web settings UI   |
-| **v0.0.12** | Provider OAuth           | Done   | OAuth login for OpenAI, Anthropic, OpenRouter (no API key needed)   |
+| **v0.0.12** | Provider OAuth           | Done   | OAuth login for OpenAI, OpenRouter (no API key needed)              |
 | **v0.0.8**  | AI SDK Migration         | Done   | Vercel AI SDK, multi-provider streaming, unified tool API           |
+| **v0.2.0**  | Dashboard Redesign       | Done   | Light mode, Vercel-inspired UI, deployment history, chat removal    |
 
 ## Requirements
 
@@ -194,11 +197,11 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 ### Installing Docker
 
-OpenLander needs Docker to build and run containers. The `openlander onboard` command will detect Docker and guide you through installation.
+OpenLander needs Docker to build and run containers. The setup wizard will detect Docker and guide you through installation.
 
 **Option 1: Auto-install (Linux / WSL2)**
 
-The `openlander onboard` command will offer to install Docker automatically if it's not found.
+The setup wizard will offer to install Docker automatically if it's not found.
 
 **Option 2: Manual install**
 

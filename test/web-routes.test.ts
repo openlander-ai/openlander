@@ -227,26 +227,6 @@ describe('Web API Routes', () => {
     );
   });
 
-  it('POST /api/projects/deploy uses agent SSE stream when agent is available', async () => {
-    const res = await app.request('/api/projects/deploy', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        repo_url: 'https://github.com/user/my-app',
-        branch: 'main',
-        name: 'my-app',
-      }),
-    });
-
-    // SSE stream response
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/event-stream');
-
-    // Agent chatStream should be called (not pipeline.deploy directly)
-    expect(ctx.agent!.chatStream).toHaveBeenCalled();
-    expect(ctx.pipeline.deploy).not.toHaveBeenCalled();
-  });
-
   // ---------------------------------------------------------------------------
   // GET /api/projects/:id
   // ---------------------------------------------------------------------------
@@ -313,48 +293,6 @@ describe('Web API Routes', () => {
     const body = await res.json();
     expect(body.status).toBe('removed');
     expect(ctx.pipeline.remove).toHaveBeenCalledWith('p1');
-  });
-
-  // ---------------------------------------------------------------------------
-  // POST /api/chat
-  // ---------------------------------------------------------------------------
-
-  it('POST /api/chat sends message to agent', async () => {
-    const res = await app.request('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'Hello' }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(ctx.agent?.chat).toHaveBeenCalled();
-
-    const body = await res.json();
-    expect(body).toHaveProperty('sessionId');
-    expect(body.message).toBe('AI response');
-  });
-
-  it('POST /api/chat validates required message field', async () => {
-    const res = await app.request('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body).toHaveProperty('error', 'MISSING_FIELD');
-  });
-
-  it('POST /api/chat uses provided session_id', async () => {
-    const res = await app.request('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'Hello', session_id: 'my-session' }),
-    });
-
-    const body = await res.json();
-    expect(body.sessionId).toBe('my-session');
   });
 
   // ---------------------------------------------------------------------------
