@@ -30,7 +30,7 @@
 | 5   | `projectId` 추출 경로 미정의                 | §3.2 명시 — `tool_result` 이벤트의 `result.projectId`에서 추출                                  |
 | 6   | Redeploy 버튼 미고려                         | §3.3 신규 — Redeploy도 에이전트 경유로 변경                                                     |
 | 7   | 공수 과소추정 (4일 → 6-9일)                  | §6 수정 — 7일로 조정                                                                            |
-| 8   | LLM 미호출 fallback 미정의                   | §5 수락기준 #8 — 3초 타임아웃 후 직접 배포 fallback. 프롬프트에 `deploy_project` 필수 패턴 포함 |
+| 8   | LLM 미호출 fallback 미정의                   | §5 수락기준 #8 — 5초 타임아웃 후 직접 배포 fallback. 프롬프트에 `deploy_project` 필수 패턴 포함 |
 | 9   | `tool_call.arguments` 시크릿 노출            | §3.1 명시 — 프론트엔드에서 `arguments` 표시 시 `env_vars` 키 마스킹                             |
 
 ---
@@ -265,7 +265,7 @@ api.post('/projects/deploy', async (c) => {
   return streamSSE(c, async (s) => {
     let toolCallCount = 0;
     const timeout = setTimeout(async () => {
-      // 3초 내 tool_call 없으면 직접 배포 fallback (이슈 #8)
+      // 5초 내 tool_call 없으면 직접 배포 fallback (이슈 #8)
       if (toolCallCount === 0) {
         const result = await ctx.pipeline.deploy({ ... });
         await s.writeSSE({ event: 'fallback', data: JSON.stringify(result) });
@@ -412,8 +412,8 @@ await ctx.agent.chatStream(
   - 검증: ProjectDetailPage에서 Redeploy 클릭 시 에이전트 SSE 스트림 사용
 - [x] **AC-8**: LLM 미설정 시 기존 `pipeline.deploy()` 직접 호출로 fallback — ✅ 검증 완료
   - 검증: `ctx.agent === null` 분기 테스트 통과 (`web-routes.test.ts`)
-- [ ] **AC-9**: LLM이 3초 내 `deploy_project`를 호출하지 않으면 직접 배포 fallback — 🔧 코드 완료, 🔲 도그푸딩
-  - 검증: LLM 응답 지연/환각 시 3초 후 자동으로 직접 배포 진행
+- [ ] **AC-9**: LLM이 5초 내 `deploy_project`를 호출하지 않으면 직접 배포 fallback — 🔧 코드 완료, 🔲 도그푸딩
+  - 검증: LLM 응답 지연/환각 시 5초 후 자동으로 직접 배포 진행
 - [x] **AC-10**: 동시 배포 요청 시 큐에 대기 → 순차 처리됨 — ✅ 검증 완료
   - 검증: `deploy-queue.test.ts` 5개 테스트 통과 (FIFO, 타임아웃, 이중 해제 안전성)
 - [x] **AC-11**: `tool_call` 이벤트 표시 시 `env_vars` 값이 마스킹됨 — ✅ 검증 완료
@@ -441,9 +441,9 @@ await ctx.agent.chatStream(
 
 | 리스크                                         | 확률 | 대응                                              |
 | ---------------------------------------------- | ---- | ------------------------------------------------- |
-| LLM 응답 지연으로 배포 시작이 느려짐           | 중간 | 3초 fallback 타임아웃 (AC-9)                      |
+| LLM 응답 지연으로 배포 시작이 느려짐           | 중간 | 5초 fallback 타임아웃 (AC-9)                      |
 | LLM rate limit 초과 (무료 티어)                | 낮음 | fallback: 에이전트 없이 직접 배포 (AC-8)          |
-| LLM이 `deploy_project` 호출 실패 (환각)        | 낮음 | 3초 fallback + 프롬프트에 deploy 패턴 명시 (AC-9) |
+| LLM이 `deploy_project` 호출 실패 (환각)        | 낮음 | 5초 fallback + 프롬프트에 deploy 패턴 명시 (AC-9) |
 | 동시 배포 시 대기 시간                         | 중간 | 큐 대기 + position 표시로 UX 명확화 (AC-10)       |
 | `tool_result` 형식 변경 시 projectId 추출 실패 | 낮음 | 타입 체크 + nullish 시 에러 메시지 표시           |
 
