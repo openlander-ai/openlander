@@ -679,14 +679,21 @@ export class DeployPipeline {
       this.db.updateProject(projectId, { previousImageTag: project.image_tag });
     }
 
-    // Delete the old project record and redeploy
-    this.db.deleteProject(projectId);
+    // Reset project state for fresh deploy (keep same ID so build/stream listeners work)
+    this.db.updateProject(projectId, {
+      status: 'building',
+      containerId: null,
+      imageTag: null,
+      assignedPort: null,
+    });
+    this.jobManager?.trackJob(projectId, project.name);
 
     return this.deploy({
       repoUrl: project.repo_url ?? '',
       branch: project.branch,
       name: project.name,
       visibility: project.visibility,
+      _projectId: projectId,
     });
   }
 
