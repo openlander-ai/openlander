@@ -46,7 +46,15 @@ export interface ActionButton {
 /** Frontend timeline display item */
 export interface TimelineItem {
   id: string;
-  type: 'progress' | 'success' | 'error' | 'question' | 'insight';
+  type:
+    | 'progress'
+    | 'success'
+    | 'error'
+    | 'question'
+    | 'insight'
+    | 'agent_thinking'
+    | 'agent_tool_call'
+    | 'agent_message';
   timestamp: string;
   title: string;
   detail?: string;
@@ -59,6 +67,9 @@ export interface TimelineItem {
   /** Present only for insight items */
   actionButtons?: ActionButton[];
   severity?: 'info' | 'warning' | 'error';
+  /** Present only for agent_tool_call items */
+  toolName?: string;
+  toolArguments?: Record<string, unknown>;
 }
 
 /** Message pattern → progress percentage mapping */
@@ -138,5 +149,113 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         title: event.message,
         percent: estimatePercent(event.message),
       };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Secret masking for tool_call arguments (spec §3.1, issue #9)
+// ---------------------------------------------------------------------------
+
+/** Keys whose values should be fully masked */
+const SECRET_VALUE_KEYS = new Set(['env_vars', 'envVars', 'environment_variables']);
+
+/** Keys whose values should be replaced with [redacted] */
+const REDACTED_KEYS = new Set([
+  'ssh_key_path',
+  'sshKeyPath',
+  'ssh_key',
+  'private_key',
+  'token',
+  'api_key',
+  'apiKey',
+  'password',
+  'secret',
+]);
+
+/**
+ * Sanitize tool_call arguments for display.
+ * - env_vars values → ***
+ * - ssh_key_path etc. → [redacted]
+ */
+export function sanitizeToolArguments(args: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (SECRET_VALUE_KEYS.has(key) && typeof value === 'object' && value !== null) {
+      // Mask all values in env_vars-like objects
+      const masked: Record<string, string> = {};
+      for (const envKey of Object.keys(value as Record<string, unknown>)) {
+        masked[envKey] = '***';
+      }
+      sanitized[key] = masked;
+    } else if (REDACTED_KEYS.has(key)) {
+      sanitized[key] = '[redacted]';
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+// ---------------------------------------------------------------------------
+// Agent SSE event → Timeline item converter
+// ---------------------------------------------------------------------------
+
+import type { ChatStreamEvent } from '../types';
+
+/** Convert agent SSE event to a timeline item for Phase A display */
+export function agentEventToTimelineItem(
+  event: ChatStreamEvent & { timestamp?: string },
+): TimelineItem | null {
+  idCounter += 1;
+  const ts = ((event as Record<string, unknown>).timestamp as string) ?? new Date().toISOString();
+  const id = `agent-${idCounter}-${ts}`;
+
+  switch (event.type) {
+    case 'thinking':
+      return {
+        id,
+        type: 'agent_thinking',
+        timestamp: ts,
+        title: 'Agent is analyzing...',
+        percent: -1,
+      };
+    case 'tool_call':
+      return {
+        id,
+        type: 'agent_tool_call',
+        timestamp: ts,
+        title: `Calling ${event.toolName}`,
+        percent: -1,
+        toolName: event.toolName,
+        toolArguments: sanitizeToolArguments(event.arguments),
+      };
+    case 'message':
+      return {
+        id,
+        type: 'agent_message',
+        timestamp: ts,
+        title: event.content,
+        percent: -1,
+      };
+    case 'tool_result':
+      return {
+        id,
+        type: event.success ? 'success' : 'error',
+        timestamp: ts,
+        title: event.success
+          ? `${event.toolName} completed`
+          : `${event.toolName} failed: ${event.error ?? 'unknown error'}`,
+        percent: event.success ? 50 : -1,
+      };
+    case 'error':
+      return {
+        id,
+        type: 'error',
+        timestamp: ts,
+        title: event.error,
+        percent: -1,
+      };
+    default:
+      return null;
   }
 }

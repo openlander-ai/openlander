@@ -1,20 +1,105 @@
-import type { Project, SystemStats, DeployResult } from '../types';
+import type { Project, SystemStats, DeployResult, ChatStreamEvent } from '../types';
 
+/**
+ * Deploy a project via agent-mediated SSE stream.
+ * Consumes SSE events and resolves when projectId is extracted from tool_result.
+ *
+ * @param onEvent - Optional callback for SSE events (for UI updates during deploy)
+ * @returns DeployResult with projectId on success
+ */
 export async function deployProject(
   repoUrl: string,
   branch?: string,
   name?: string,
+  onEvent?: (event: ChatStreamEvent) => void,
 ): Promise<DeployResult> {
   const res = await fetch('/api/projects/deploy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ repo_url: repoUrl, branch, name }),
   });
+
   if (!res.ok) {
     const error = await res.text();
     throw new Error(error || 'Failed to deploy project');
   }
-  return res.json();
+
+  // Check if response is SSE stream (agent-mediated) or JSON (direct fallback)
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream')) {
+    // Direct pipeline response (LLM not configured)
+    return res.json();
+  }
+
+  // SSE stream: consume events and extract projectId from tool_result
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new Error('No response body');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let projectId: string | undefined;
+  let deployError: string | undefined;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const jsonStr = line.slice(5).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr) as ChatStreamEvent;
+          onEvent?.(event);
+
+          // Extract projectId from deploy_project tool_result
+          if (
+            event.type === 'tool_result' &&
+            event.toolName === 'deploy_project' &&
+            event.success
+          ) {
+            const result = event.result as Record<string, unknown> | undefined;
+            if (result?.projectId) {
+              projectId = String(result.projectId);
+            }
+          }
+
+          // Handle fallback event (direct deploy)
+          if ((event as Record<string, unknown>).type === 'fallback') {
+            const fallback = event as unknown as DeployResult;
+            return fallback;
+          }
+
+          // Handle error
+          if (event.type === 'error') {
+            deployError = event.error;
+          }
+        } catch {
+          // Skip malformed JSON
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (projectId) {
+    return { success: true, projectId };
+  }
+
+  if (deployError) {
+    return { success: false, error: deployError };
+  }
+
+  return { success: false, error: 'Deploy completed but no projectId received' };
 }
 
 export async function listProjects(): Promise<Project[]> {
@@ -35,8 +120,74 @@ export async function stopProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
 }
 
-export async function redeployProject(id: string): Promise<void> {
-  await fetch(`/api/projects/${id}/redeploy`, { method: 'POST' });
+export async function redeployProject(
+  id: string,
+  onEvent?: (event: ChatStreamEvent) => void,
+): Promise<DeployResult> {
+  const res = await fetch(`/api/projects/${id}/redeploy`, { method: 'POST' });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to redeploy project');
+  }
+
+  // Check if response is SSE stream (agent-mediated) or JSON (direct fallback)
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream')) {
+    // Direct pipeline response (LLM not configured)
+    return res.json();
+  }
+
+  // SSE stream: consume events
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new Error('No response body');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let deployError: string | undefined;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const jsonStr = line.slice(5).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr) as ChatStreamEvent;
+          onEvent?.(event);
+
+          if ((event as Record<string, unknown>).type === 'fallback') {
+            return event as unknown as DeployResult;
+          }
+
+          if (event.type === 'error') {
+            deployError = event.error;
+          }
+        } catch {
+          // Skip malformed JSON
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (deployError) {
+    return { success: false, error: deployError };
+  }
+
+  // Redeploy doesn't need to extract projectId (already on the project page)
+  return { success: true, projectId: id };
 }
 
 export async function deleteProject(id: string): Promise<void> {
@@ -83,6 +234,7 @@ export interface SetupStatus {
   docker: { ok: boolean; state?: string; groupFixed?: boolean; message: string };
   traefik: { ok: boolean; message: string };
   llm: { ok: boolean; provider: string; model: string; message: string };
+  github?: { ok: boolean; username?: string; message?: string };
 }
 
 export async function getSetupStatus(): Promise<SetupStatus> {
@@ -167,4 +319,54 @@ export async function startOAuthFlow(provider: string): Promise<{ url: string; s
 export async function disconnectOAuth(provider: string): Promise<void> {
   const res = await fetch(`/api/auth/disconnect/${provider}`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to disconnect');
+}
+
+export async function connectGithub(token: string): Promise<void> {
+  const res = await fetch('/api/setup/github', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to connect GitHub');
+  }
+}
+
+export async function disconnectGithub(): Promise<void> {
+  const res = await fetch('/api/setup/github', { method: 'DELETE' });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to disconnect GitHub');
+  }
+}
+
+// GitHub Device Flow
+export async function startGithubDeviceFlow(): Promise<{
+  user_code: string;
+  verification_uri: string;
+  device_code: string;
+  interval: number;
+  expires_in: number;
+}> {
+  const res = await fetch('/api/setup/github/device-code', { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to start GitHub auth');
+  return res.json();
+}
+
+export async function pollGithubDeviceFlow(
+  deviceCode: string,
+  interval: number,
+): Promise<{
+  status: 'pending' | 'slow_down' | 'complete' | 'expired' | 'denied' | 'error';
+  username?: string;
+  interval?: number;
+  message?: string;
+}> {
+  const res = await fetch('/api/setup/github/poll', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_code: deviceCode, interval }),
+  });
+  return res.json();
 }

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { ChatMessage } from '../types';
-
+import type { QuestionData } from '@/lib/event-types';
+import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCard';
 export interface UIToolCall {
   toolName: string;
   arguments: Record<string, unknown>;
@@ -14,8 +15,12 @@ export interface UIChatMessage extends Omit<ChatMessage, 'role'> {
   role: 'user' | 'assistant';
   isStreaming?: boolean;
   toolCalls?: UIToolCall[];
+  questionData?: {
+    questionId: string;
+    questions: QuestionData[];
+    answered?: boolean;
+  };
 }
-
 export interface UseChatReturn {
   messages: UIChatMessage[];
   isStreaming: boolean;
@@ -23,19 +28,69 @@ export interface UseChatReturn {
   sessionId: string | null;
   sendMessage: (content: string) => Promise<void>;
   clearChat: () => void;
+  submitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => Promise<void>;
+  skipQuestion: (questionId: string) => Promise<void>;
+  pendingQuestionId: string | null;
 }
-
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<UIChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [pendingQuestionId, setPendingQuestionId] = useState<string | null>(null);
 
   const clearChat = useCallback(() => {
     setMessages([]);
     setSessionId(null);
+    setPendingQuestionId(null);
     setError(null);
     setIsStreaming(false);
+  }, []);
+
+  const submitAnswer = useCallback(async (questionId: string, answers: QuestionAnswerPayload[]) => {
+    try {
+      const response = await fetch('/api/question/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: questionId, answers }),
+      });
+      if (!response.ok) throw new Error('Failed to submit answer');
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.questionData?.questionId === questionId
+            ? { ...m, questionData: { ...m.questionData, answered: true } }
+            : m,
+        ),
+      );
+      setPendingQuestionId(null);
+    } catch (err) {
+      console.error('Failed to submit answer:', err);
+      setError(err instanceof Error ? err.message : 'Failed to submit answer');
+    }
+  }, []);
+
+  const skipQuestion = useCallback(async (questionId: string) => {
+    try {
+      const response = await fetch('/api/question/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: questionId }),
+      });
+      if (!response.ok) throw new Error('Failed to skip question');
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.questionData?.questionId === questionId
+            ? { ...m, questionData: { ...m.questionData, answered: true } }
+            : m,
+        ),
+      );
+      setPendingQuestionId(null);
+    } catch (err) {
+      console.error('Failed to skip question:', err);
+      setError(err instanceof Error ? err.message : 'Failed to skip question');
+    }
   }, []);
 
   const sendMessage = useCallback(
@@ -139,6 +194,14 @@ export function useChat(): UseChatReturn {
                     }
                   } else if (eventType === 'message') {
                     msg.content = (msg.content || '') + data.content;
+                  } else if (eventType === 'question') {
+                    const request = data.request;
+                    msg.questionData = {
+                      questionId: request.id,
+                      questions: request.questions,
+                      answered: false,
+                    };
+                    setPendingQuestionId(request.id);
                   } else if (eventType === 'done') {
                     msg.isStreaming = false;
                   } else if (eventType === 'error') {
@@ -171,5 +234,15 @@ export function useChat(): UseChatReturn {
     [sessionId],
   );
 
-  return { messages, isStreaming, error, sessionId, sendMessage, clearChat };
+  return {
+    messages,
+    isStreaming,
+    error,
+    sessionId,
+    sendMessage,
+    clearChat,
+    submitAnswer,
+    skipQuestion,
+    pendingQuestionId,
+  };
 }

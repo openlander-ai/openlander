@@ -10,6 +10,7 @@ import {
   GitRepoNotFoundError,
   GitBranchNotFoundError,
 } from '../errors.js';
+import { loadConfig } from '../config/index.js';
 
 const exec = promisify(execFile);
 
@@ -37,7 +38,23 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   const { repoUrl, branch, sshKeyPath, depth = 1 } = options;
 
   // Normalize URL: prepend https:// if no protocol specified
-  const normalizedUrl = normalizeRepoUrl(repoUrl);
+  let normalizedUrl = normalizeRepoUrl(repoUrl);
+
+  // Inject GitHub token for HTTPS URLs to support private repos
+  if (!sshKeyPath && normalizedUrl.startsWith('https://github.com/')) {
+    try {
+      const config = loadConfig();
+      const token = config.gitProviders.github.token;
+      if (token) {
+        normalizedUrl = normalizedUrl.replace(
+          'https://github.com/',
+          `https://x-access-token:${token}@github.com/`,
+        );
+      }
+    } catch {
+      // Config not available, proceed without token
+    }
+  }
 
   const cloneDir = await mkdtemp(join(tmpdir(), 'openlander-'));
 

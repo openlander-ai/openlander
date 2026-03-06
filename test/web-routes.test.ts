@@ -203,7 +203,10 @@ describe('Web API Routes', () => {
     expect(body).toHaveProperty('error', 'MISSING_FIELD');
   });
 
-  it('POST /api/projects/deploy calls pipeline.deploy with correct params', async () => {
+  it('POST /api/projects/deploy calls pipeline.deploy directly when agent is null (fallback)', async () => {
+    // When agent is null, deploy should fall back to direct pipeline call
+    (ctx as Record<string, unknown>).agent = null;
+
     const res = await app.request('/api/projects/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -222,6 +225,26 @@ describe('Web API Routes', () => {
         name: 'my-app',
       }),
     );
+  });
+
+  it('POST /api/projects/deploy uses agent SSE stream when agent is available', async () => {
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_url: 'https://github.com/user/my-app',
+        branch: 'main',
+        name: 'my-app',
+      }),
+    });
+
+    // SSE stream response
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+
+    // Agent chatStream should be called (not pipeline.deploy directly)
+    expect(ctx.agent!.chatStream).toHaveBeenCalled();
+    expect(ctx.pipeline.deploy).not.toHaveBeenCalled();
   });
 
   // ---------------------------------------------------------------------------

@@ -1,6 +1,14 @@
 import type { TimelineItem as TItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
-import { ExternalLink, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import {
+  ExternalLink,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Brain,
+  Wrench,
+  MessageCircle,
+} from 'lucide-react';
 import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard';
 import { InsightCard } from './InsightCard';
 
@@ -39,6 +47,10 @@ export function TimelineItemCard({
   const isError = item.type === 'error';
   const isQuestion = item.type === 'question';
   const isInsight = item.type === 'insight';
+  const isAgentThinking = item.type === 'agent_thinking';
+  const isAgentToolCall = item.type === 'agent_tool_call';
+  const isAgentMessage = item.type === 'agent_message';
+  const isAgentEvent = isAgentThinking || isAgentToolCall || isAgentMessage;
 
   // Insight items render via InsightCard
   if (isInsight) {
@@ -63,6 +75,7 @@ export function TimelineItemCard({
       className={cn(
         'relative flex gap-3 py-3 px-4 rounded-lg transition-all duration-300 timeline-item-enter',
         isLatest && isProgress && 'bg-bg-subtle/50',
+        isLatest && isAgentEvent && 'bg-agent/5',
         isSuccess && 'bg-success/5 glow-success',
         isError && 'bg-error/5',
       )}
@@ -84,6 +97,21 @@ export function TimelineItemCard({
             <AlertCircle className="h-3.5 w-3.5 text-error" />
           </div>
         )}
+        {isAgentThinking && (
+          <div className={cn('p-1 rounded-md bg-agent/15')}>
+            <Brain className={cn('h-3.5 w-3.5 text-agent', isLatest && 'animate-pulse')} />
+          </div>
+        )}
+        {isAgentToolCall && (
+          <div className="p-1 rounded-md bg-agent/15">
+            <Wrench className="h-3.5 w-3.5 text-agent" />
+          </div>
+        )}
+        {isAgentMessage && (
+          <div className="p-1 rounded-md bg-agent/15">
+            <MessageCircle className="h-3.5 w-3.5 text-agent" />
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -95,6 +123,7 @@ export function TimelineItemCard({
               isSuccess && 'text-success',
               isError && 'text-error',
               isProgress && 'text-primary-ol',
+              isAgentEvent && 'text-agent',
             )}
           >
             {item.title}
@@ -125,6 +154,18 @@ export function TimelineItemCard({
             <ExternalLink className="h-3 w-3" />
             {item.url.replace(/^https?:\/\//, '')}
           </a>
+        )}
+
+        {/* Agent tool call arguments */}
+        {isAgentToolCall && item.toolArguments && (
+          <div className="mt-1.5 text-[11px] font-mono text-muted-ol bg-bg-subtle rounded px-2 py-1 overflow-hidden">
+            {Object.entries(item.toolArguments).map(([key, value]) => (
+              <div key={key} className="truncate">
+                <span className="text-secondary-ol">{key}</span>:{' '}
+                <span>{typeof value === 'string' ? value : JSON.stringify(value)}</span>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Error Action */}

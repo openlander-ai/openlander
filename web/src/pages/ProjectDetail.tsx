@@ -96,6 +96,9 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
     try {
       await redeployProject(id);
+      // Refresh project data after redeploy
+      const data = await getProject(id);
+      setProject(data);
     } catch (err) {
       console.error('Redeploy failed:', err);
     } finally {

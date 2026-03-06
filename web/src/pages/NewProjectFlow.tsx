@@ -50,6 +50,7 @@ export function NewProjectFlow() {
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ghError, setGhError] = useState<string | null>(null);
+  const [deployStatus, setDeployStatus] = useState<string | null>(null);
 
   const fetchRepos = useCallback(async (pageNum: number) => {
     setLoading(true);
@@ -108,17 +109,45 @@ export function NewProjectFlow() {
     }
     setDeploying(true);
     setError(null);
+    setDeployStatus('Connecting to agent...');
     try {
-      const result = await deployProject(repo.cloneUrl, repo.defaultBranch, repo.name);
+      const result = await deployProject(repo.cloneUrl, repo.defaultBranch, repo.name, (event) => {
+        // Update deploy status based on SSE events
+        switch (event.type) {
+          case 'thinking':
+            setDeployStatus('Agent is analyzing...');
+            break;
+          case 'tool_call':
+            if (event.toolName === 'deploy_project') {
+              setDeployStatus('Starting deployment...');
+            } else {
+              setDeployStatus(`Running ${event.toolName}...`);
+            }
+            break;
+          case 'tool_result':
+            if (event.toolName === 'deploy_project' && event.success) {
+              setDeployStatus('Deploy started! Redirecting...');
+            }
+            break;
+          case 'message':
+            setDeployStatus(event.content.slice(0, 100));
+            break;
+          case 'error':
+            setDeployStatus(null);
+            break;
+        }
+      });
       if (result.success && result.projectId) {
         navigate(`/projects/${result.projectId}`);
       } else {
         setError(result.error ?? 'Deploy failed');
         setDeploying(false);
+        setDeployStatus(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Deploy failed');
       setDeploying(false);
+      setDeployStatus(null);
     }
   };
 
@@ -197,7 +226,9 @@ export function NewProjectFlow() {
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-agent" />
-            <p className="text-sm font-body text-secondary-ol">Starting deployment...</p>
+            <p className="text-sm font-body text-secondary-ol">
+              {deployStatus ?? 'Starting deployment...'}
+            </p>
           </div>
         </div>
       )}

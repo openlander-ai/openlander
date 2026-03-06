@@ -112,6 +112,48 @@ describe('DeployPipeline — non-blocking deploy', () => {
       // Result has status building after preflight passes
       expect(result.status).toBe('building');
     });
+
+    it('reuses existing project instead of creating duplicate on same name', async () => {
+      // First deploy creates the project
+      const first = await pipeline.startDeploy({
+        repoUrl: 'https://github.com/user/my-app',
+        branch: 'main',
+      });
+
+      expect(first.projectName).toBe('my-app');
+      const firstProject = db.getProject(first.projectId);
+      expect(firstProject).toBeDefined();
+
+      // Second deploy with same repo (same extracted name) should reuse
+      const second = await pipeline.startDeploy({
+        repoUrl: 'https://github.com/user/my-app',
+        branch: 'main',
+      });
+
+      expect(second.projectName).toBe('my-app');
+      expect(second.projectId).toBe(first.projectId);
+      expect(second.status).toBe('building');
+
+      // Should still be only one project with that name
+      const project = db.getProjectByName('my-app');
+      expect(project).toBeDefined();
+      expect(project!.id).toBe(first.projectId);
+    });
+
+    it('reuses existing project when explicit name matches', async () => {
+      const first = await pipeline.startDeploy({
+        repoUrl: 'https://github.com/user/repo',
+        name: 'custom-name',
+      });
+
+      const second = await pipeline.startDeploy({
+        repoUrl: 'https://github.com/user/repo',
+        name: 'custom-name',
+      });
+
+      expect(second.projectId).toBe(first.projectId);
+      expect(second.status).toBe('building');
+    });
   });
 
   describe('startMonorepoDeploy', () => {

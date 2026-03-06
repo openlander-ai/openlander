@@ -18,7 +18,7 @@
 | 채널         | 파일                                                 | 사용자                                | 특징                                                     |
 | ------------ | ---------------------------------------------------- | ------------------------------------- | -------------------------------------------------------- |
 | **TUI**      | `src/tui/`                                           | 직접 터미널 접속                      | 3모드 대시보드 + 채팅. 메인 인터페이스.                  |
-| **MCP**      | `src/mcp/server.ts`                                  | IDE 에이전트 (Cursor, Claude Code 등) | 28개 도구를 MCP 프로토콜로 노출. **v0.0.9의 핵심 채널.** |
+| **MCP**      | `src/mcp/server.ts`                                  | IDE 에이전트 (Cursor, Claude Code 등) | 30개 도구를 MCP 프로토콜로 노출. **v0.0.9의 핵심 채널.** |
 | **Bot**      | `src/channels/slack.ts`, `discord.ts`, `telegram.ts` | 팀 원격 관리                          | Slack/Discord/Telegram에서 자연어로 배포/관리.           |
 | **REST API** | `src/web/`                                           | 커스텀 통합                           | HTTP API. 초기 MVP부터 존재.                             |
 
@@ -53,7 +53,7 @@ AI 에이전트 (LLM) — 의도 파악, 파라미터 추출
 
 ---
 
-## 도구 목록 (28개, 현재)
+## 도구 목록 (30개, 현재)
 
 ### 배포 & 라이프사이클 (9개)
 
@@ -79,13 +79,15 @@ AI 에이전트 (LLM) — 의도 파악, 파라미터 추출
 | `list_previews`     | 프리뷰 배포 목록            |
 | `get_deploy_status` | 배포 진행 상태 (JobManager) |
 
-### 환경변수 & DB (3개)
+### 환경변수 & DB & 시크릿 (5개)
 
 | 도구                 | 기능                                       |
 | -------------------- | ------------------------------------------ |
 | `set_env_vars`       | 환경변수 설정                              |
 | `provision_database` | PostgreSQL/MySQL/Redis 컨테이너 프로비저닝 |
 | `debug_build_error`  | 빌드 실패 분석 (레시피 + LLM)              |
+| `set_global_secret`  | 글로벌 시크릿 설정 (AES-256-GCM 암호화)    |
+| `list_global_secrets`| 글로벌 시크릿 목록 조회                     |
 
 ### 외부 접근 & 도메인 (4개)
 
@@ -158,15 +160,15 @@ openlander
 
 ## LLM 통합
 
-5개 프로바이더 지원 (BYOK — Bring Your Own Key):
+Vercel AI SDK 기반 5개 프로바이더 지원 (BYOK — Bring Your Own Key):
 
-| 프로바이더 | 파일            | 특징                               |
-| ---------- | --------------- | ---------------------------------- |
-| Gemini     | `gemini.ts`     | **무료 티어** 가능. 진입장벽 최저. |
-| OpenRouter | `openrouter.ts` | 멀티 모델 라우팅. 무료 모델 존재.  |
-| Anthropic  | `anthropic.ts`  | Claude. 품질 최상.                 |
-| OpenAI     | `openai.ts`     | GPT. 범용.                         |
-| Ollama     | `ollama.ts`     | **완전 로컬**. API 키 불필요.      |
+| 프로바이더 | AI SDK 패키지                    | 특징                               |
+| ---------- | -------------------------------- | ---------------------------------- |
+| Gemini     | `@ai-sdk/google`                | **무료 티어** 가능. 진입장벽 최저. |
+| OpenRouter | `@ai-sdk/openai` (호환)          | 멀티 모델 라우팅. 무료 모델 존재.  |
+| Anthropic  | `@ai-sdk/anthropic`             | Claude. 품질 최상.                 |
+| OpenAI     | `@ai-sdk/openai`                | GPT. 범용.                         |
+| Ollama     | `ollama-ai-provider`            | **완전 로컬**. API 키 불필요.      |
 
 **시스템 프롬프트 구조** (`prompts.ts`):
 
@@ -178,10 +180,9 @@ BASE_PROMPT (고정 ~120줄)
 
 **기획 시 고려**: Context Snapshot에 뭘 넣느냐가 에이전트 품질을 결정한다. v0.0.9에서 서버 전체 상태(컨테이너, 포트, 프록시)를 주입 완료.
 
-**v0.0.12 Provider OAuth 계획**:
+**v0.0.12 Provider OAuth (구현 완료)**:
 
-BYOK(API 키 수동 입력) 외에, LLM 프로바이더 구독 계정으로 직접 인증하는 방식 추가 예정:
-
+BYOK(API 키 수동 입력) 외에, LLM 프로바이더 구독 계정으로 직접 인증하는 방식 추가:
 - OpenAI: Codex CLI OAuth PKCE (`app_EMoamEEZ73f0CkXaXp7hrann`)
 - Anthropic: `claude setup-token` 스타일 토큰 설정
 - OpenRouter: OAuth PKCE + 콜백
@@ -255,10 +256,10 @@ Tier 3: 사용자 개입 (LLM도 실패 시)
 ## 주요 수치
 
 - 소스 코드: `src/` 하위 ~20개 디렉토리
-- 도구: 28개 (TUI+MCP+Bot 동시 노출) — v0.0.9에서 25→28
+- 도구: 30개 (Web+MCP+Bot 동시 노출) — v0.0.10에서 28→30
 - LLM 프로바이더: 5개
 - 슬래시 명령: 9개
-- 테스트: 648개 (bun test)
-- 외부 의존성: dockerode, drizzle-orm, @opentui/solid, cloudflare 관련
-- DB 테이블: 5개 (projects, env_vars, deploy_logs, domain_mappings, preview_deploys)
+- 테스트: 632개 (vitest)
+- 외부 의존성: ai (Vercel AI SDK), dockerode, drizzle-orm, cloudflare 관련
+- DB 테이블: 7개 (projects, env_vars, deploy_logs, domain_mappings, preview_deploys, global_secrets, oauth_tokens)
 - 파이프라인 파일: 20개 (`src/pipeline/`)

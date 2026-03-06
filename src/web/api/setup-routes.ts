@@ -1,3 +1,5 @@
+import { requestDeviceCode, getGitHubClientId } from '../../git-providers/github-oauth.js';
+
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
@@ -267,6 +269,137 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       },
     });
     return c.json({ status: 'disconnected', message: 'GitHub disconnected.' });
+  });
+
+  /**
+   * POST /setup/github/device-code
+   *
+   * Initiates GitHub Device Flow for browser-based OAuth.
+   * Returns device code and user code for the user to authorize.
+   */
+  api.post('/setup/github/device-code', async (c) => {
+    try {
+      const response = await requestDeviceCode(getGitHubClientId());
+      return c.json(response);
+    } catch (error) {
+      return c.json(
+        {
+          error: 'DEVICE_CODE_FAILED',
+          message: error instanceof Error ? error.message : 'Failed to request device code',
+        },
+        500,
+      );
+    }
+  });
+
+  /**
+   * POST /setup/github/poll
+   *
+   * Single poll attempt for Device Flow token.
+   * Frontend polls this endpoint at the specified interval.
+   *
+   * Body: { device_code: string, interval: number }
+   */
+  api.post('/setup/github/poll', async (c) => {
+    const body = await c.req.json<{ device_code: string; interval: number }>();
+
+    if (!body.device_code) {
+      return c.json({ error: 'MISSING_FIELD', message: 'device_code is required' }, 400);
+    }
+
+    // Single poll attempt against GitHub's token endpoint
+    const response = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: getGitHubClientId(),
+        device_code: body.device_code,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      }),
+    });
+
+    if (!response.ok) {
+      return c.json(
+        { status: 'error', message: `GitHub API error: ${String(response.status)}` },
+        500,
+      );
+    }
+
+    const data = (await response.json()) as {
+      access_token?: string;
+      error?: string;
+      error_description?: string;
+    };
+
+    // Handle GitHub OAuth errors
+    if (data.error) {
+      switch (data.error) {
+        case 'authorization_pending':
+          return c.json({ status: 'pending' });
+
+        case 'slow_down':
+          return c.json({ status: 'slow_down', interval: body.interval + 5 });
+
+        case 'expired_token':
+          return c.json({ status: 'expired', message: 'Code expired. Please restart.' }, 410);
+
+        case 'access_denied':
+          return c.json({ status: 'denied', message: 'Authorization denied.' }, 403);
+
+        default:
+          return c.json(
+            {
+              status: 'error',
+              message: data.error_description || data.error,
+            },
+            400,
+          );
+      }
+    }
+
+    // Success - validate token and save
+    if (data.access_token) {
+      try {
+        const provider = createGitProvider('github', {
+          token: data.access_token,
+          username: '',
+        });
+        const validation = await provider.validateToken();
+
+        if (!validation.valid) {
+          return c.json(
+            {
+              status: 'error',
+              message: 'Token validation failed',
+            },
+            400,
+          );
+        }
+
+        const username = validation.user?.username ?? '';
+        updateConfig({
+          gitProviders: {
+            github: { token: data.access_token, username },
+          },
+        });
+
+        return c.json({ status: 'complete', username });
+      } catch (error) {
+        return c.json(
+          {
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Failed to save token',
+          },
+          500,
+        );
+      }
+    }
+
+    // Unexpected response
+    return c.json({ status: 'error', message: 'Unexpected response from GitHub' }, 500);
   });
 
   /**

@@ -47,6 +47,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 | 17     | **v0.0.12 Provider OAuth**     | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 100%   | ✅ 구현 완료. 백엔드 OAuth 라우트 + 프론트엔드 통합.              |
 | 18     | **v0.1.0 Web MVP**             | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                             |
 | 19     | **v0.0.11 Agent Proactivity**  | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have         |
+| 20     | **Web Deploy Agent 경유**      | `v0.1.0/web-deploy-agent-mediated.md`        | v0.1.0         | 90%    | 🧪 구현 완료, 도그푸딩 대기                                       |
 
 ---
 
@@ -382,37 +383,38 @@ v0.0.12까지의 기능을 안정화하고 정식 릴리즈. 문서 정비, 테�
 
 ## 미해결 항목 총정리
 
-| #      | 항목                                  | 버전                 | 문서                                | 우선순위               |
-| ------ | ------------------------------------- | -------------------- | ----------------------------------- | ---------------------- |
-| ~~1~~  | ~~i18n (다국어 지원)~~                | v0.0.6               | `archive/v0.0.6/tasks.md`           | ❌ 제거 (TUI 아카이브) |
-| ~~2~~  | ~~프로젝트 검색/필터~~                | v0.0.6               | `archive/requirements.md`           | ❌ 제거 (TUI 아카이브) |
-| 3      | ~~전체 컨테이너 스캔~~                | v0.0.9               | `v0.0.9/server-awareness.md` 9-1    | ✅ 완료                |
-| 4      | ~~OS 레벨 포트 스캔~~                 | v0.0.9               | `v0.0.9/server-awareness.md` 9-2    | ✅ 완료                |
-| 5      | ~~리버스 프록시 감지~~                | v0.0.9               | `v0.0.9/server-awareness.md` 9-3    | ✅ 완료                |
-| 6      | ~~시스템 프롬프트 확장~~              | v0.0.9               | `v0.0.9/server-awareness.md` 9-4    | ✅ 완료                |
-| 7      | ~~에이전트 도구 3개 추가~~            | v0.0.9               | `v0.0.9/server-awareness.md` 9-5    | ✅ 완료                |
-| 8      | ~~Dashboard Server 섹션~~             | v0.0.9               | `v0.0.9/server-awareness.md` 9-6    | ✅ 완료                |
-| 9      | ~~Preflight Check~~                   | v0.0.9               | `v0.0.9/server-awareness.md` 9-7    | ✅ 완료                |
-| ~~10~~ | ~~Global Secrets + 암호화~~           | v0.0.10              | `v0.0.10/env-secrets.md` 10-1       | ✅ 완료                |
-| ~~11~~ | ~~.env.example 감지~~                 | v0.0.10              | `v0.0.10/env-secrets.md` 10-2       | ✅ 완료                |
-| ~~12~~ | ~~환경변수 도구 추가~~                | v0.0.10              | `v0.0.10/env-secrets.md` 10-3       | ✅ 완료                |
-| ~~13~~ | ~~/env 오버레이 확장~~                | v0.0.10              | `v0.0.10/env-secrets.md` 10-4       | ✅ 완료                |
-| ~~14~~ | ~~Vercel AI SDK 마이그레이션~~        | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md` | ✅ 완료                |
-| 15     | 파인튜닝 모델                         | TBD(정식릴리즈 이후) | `requirements.md` L425~429          | 미래                   |
-| ~~16~~ | ~~Post-Deploy Insight~~               | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1 | ✅ 완료                |
-| ~~17~~ | ~~Anomaly Nudge~~                     | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2 | ✅ 완료                |
-| ~~18~~ | ~~Smart Defaults~~                    | v0.0.11              | ✅                                  |
-| ~~19~~ | ~~Idle Scan~~                         | v0.0.11              | ❌                                  |
-| ~~20~~ | ~~온보딩 CLI 리팩토링~~               | v0.0.9               | `v0.0.9/onboarding-refactor.md`     | ⏸️ 보류 (DEC-017)      |
-| ~~21~~ | ~~OAuth 인프라 (DB + 토큰 + 라우트)~~ | v0.0.12              | `v0.0.12/provider-oauth.md` 인프라  | ✅ 완료                |
-| ~~22~~ | ~~OpenAI OAuth PKCE~~                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1    | ✅ 완료                |
-| ~~23~~ | ~~OpenRouter OAuth PKCE~~             | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2    | ✅ 완료                |
-| ~~24~~ | ~~Anthropic/Gemini 안내 개선~~        | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3,4  | ✅ 완료                |
-| ~~25~~ | ~~프론트엔드 OAuth 통합~~             | v0.0.12              | `v0.0.12/provider-oauth.md` 통합    | ✅ 완료                |
-| ~~26~~ | ~~Web MVP Phase 1~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1         | ✅ 완료                |
-| ~~27~~ | ~~Web MVP Phase 2~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2         | ✅ 완료                |
-| ~~28~~ | ~~Web MVP Phase 3~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3         | ✅ 완료                |
-| ~~29~~ | ~~TUI Freeze~~                        | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4          | ✅ 완료                |
+| #      | 항목                                  | 버전                 | 문서                                  | 우선순위                    |
+| ------ | ------------------------------------- | -------------------- | ------------------------------------- | --------------------------- |
+| ~~1~~  | ~~i18n (다국어 지원)~~                | v0.0.6               | `archive/v0.0.6/tasks.md`             | ❌ 제거 (TUI 아카이브)      |
+| ~~2~~  | ~~프로젝트 검색/필터~~                | v0.0.6               | `archive/requirements.md`             | ❌ 제거 (TUI 아카이브)      |
+| 3      | ~~전체 컨테이너 스캔~~                | v0.0.9               | `v0.0.9/server-awareness.md` 9-1      | ✅ 완료                     |
+| 4      | ~~OS 레벨 포트 스캔~~                 | v0.0.9               | `v0.0.9/server-awareness.md` 9-2      | ✅ 완료                     |
+| 5      | ~~리버스 프록시 감지~~                | v0.0.9               | `v0.0.9/server-awareness.md` 9-3      | ✅ 완료                     |
+| 6      | ~~시스템 프롬프트 확장~~              | v0.0.9               | `v0.0.9/server-awareness.md` 9-4      | ✅ 완료                     |
+| 7      | ~~에이전트 도구 3개 추가~~            | v0.0.9               | `v0.0.9/server-awareness.md` 9-5      | ✅ 완료                     |
+| 8      | ~~Dashboard Server 섹션~~             | v0.0.9               | `v0.0.9/server-awareness.md` 9-6      | ✅ 완료                     |
+| 9      | ~~Preflight Check~~                   | v0.0.9               | `v0.0.9/server-awareness.md` 9-7      | ✅ 완료                     |
+| ~~10~~ | ~~Global Secrets + 암호화~~           | v0.0.10              | `v0.0.10/env-secrets.md` 10-1         | ✅ 완료                     |
+| ~~11~~ | ~~.env.example 감지~~                 | v0.0.10              | `v0.0.10/env-secrets.md` 10-2         | ✅ 완료                     |
+| ~~12~~ | ~~환경변수 도구 추가~~                | v0.0.10              | `v0.0.10/env-secrets.md` 10-3         | ✅ 완료                     |
+| ~~13~~ | ~~/env 오버레이 확장~~                | v0.0.10              | `v0.0.10/env-secrets.md` 10-4         | ✅ 완료                     |
+| ~~14~~ | ~~Vercel AI SDK 마이그레이션~~        | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md`   | ✅ 완료                     |
+| 15     | 파인튜닝 모델                         | TBD(정식릴리즈 이후) | `requirements.md` L425~429            | 미래                        |
+| ~~16~~ | ~~Post-Deploy Insight~~               | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1   | ✅ 완료                     |
+| ~~17~~ | ~~Anomaly Nudge~~                     | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2   | ✅ 완료                     |
+| ~~18~~ | ~~Smart Defaults~~                    | v0.0.11              | ✅                                    |
+| ~~19~~ | ~~Idle Scan~~                         | v0.0.11              | ❌                                    |
+| ~~20~~ | ~~온보딩 CLI 리팩토링~~               | v0.0.9               | `v0.0.9/onboarding-refactor.md`       | ⏸️ 보류 (DEC-017)           |
+| ~~21~~ | ~~OAuth 인프라 (DB + 토큰 + 라우트)~~ | v0.0.12              | `v0.0.12/provider-oauth.md` 인프라    | ✅ 완료                     |
+| ~~22~~ | ~~OpenAI OAuth PKCE~~                 | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1      | ✅ 완료                     |
+| ~~23~~ | ~~OpenRouter OAuth PKCE~~             | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2      | ✅ 완료                     |
+| ~~24~~ | ~~Anthropic/Gemini 안내 개선~~        | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3,4    | ✅ 완료                     |
+| ~~25~~ | ~~프론트엔드 OAuth 통합~~             | v0.0.12              | `v0.0.12/provider-oauth.md` 통합      | ✅ 완료                     |
+| ~~26~~ | ~~Web MVP Phase 1~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1           | ✅ 완료                     |
+| ~~27~~ | ~~Web MVP Phase 2~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2           | ✅ 완료                     |
+| ~~28~~ | ~~Web MVP Phase 3~~                   | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3           | ✅ 완료                     |
+| ~~29~~ | ~~TUI Freeze~~                        | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4            | ✅ 완료                     |
+| ~~30~~ | ~~Web Deploy Agent 경유~~             | v0.1.0               | `v0.1.0/web-deploy-agent-mediated.md` | 🧪 구현 완료, 도그푸딩 대기 |
 
 ---
 

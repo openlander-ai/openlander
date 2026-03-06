@@ -152,16 +152,25 @@ export class Docker {
 
     // Collect build log and wait for completion
     let buildLog = '';
+    let buildError = '';
     await new Promise<void>((resolve, reject) => {
       this.client.modem.followProgress(
         stream,
         (err: Error | null) => {
-          if (err) reject(new DockerBuildError(tag, buildLog + '\n' + err.message));
-          else resolve();
+          if (err) {
+            reject(new DockerBuildError(tag, buildLog + '\n' + err.message));
+          } else if (buildError) {
+            reject(new DockerBuildError(tag, buildLog + '\n' + buildError));
+          } else {
+            resolve();
+          }
         },
         (event: { stream?: string; error?: string }) => {
           if (event.stream) buildLog += event.stream;
-          if (event.error) buildLog += `ERROR: ${event.error}\n`;
+          if (event.error) {
+            buildError += event.error + '\n';
+            buildLog += `ERROR: ${event.error}\n`;
+          }
         },
       );
     });

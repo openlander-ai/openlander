@@ -147,6 +147,20 @@ export class DeployPipeline {
       throw error;
     }
 
+    // Check if project with this name already exists
+    const existing = this.db.getProjectByName(projectName);
+    if (existing) {
+      // Reuse existing project — redeploy instead of creating duplicate
+      this.db.updateProject(existing.id, { status: 'building' });
+      this.jobManager?.trackJob(existing.id, projectName);
+
+      void this.deploy({ ...config, name: projectName, _projectId: existing.id }).catch(() => {
+        // Error handling is done inside deploy()
+      });
+
+      return { projectId: existing.id, projectName, status: 'building' };
+    }
+
     // Preflight passed - create project and start background deploy
     this.db.createProject({
       id: projectId,

@@ -4,15 +4,27 @@ import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import type { UIChatMessage as Message } from '@/hooks/use-chat';
 import { Bot, Terminal } from 'lucide-react';
-
+import {
+  InputRequestCard,
+  type QuestionAnswerPayload,
+} from '@/components/timeline/InputRequestCard';
 interface ChatPanelProps {
   messages: Message[];
   isStreaming: boolean;
   sendMessage: (content: string) => void;
   error: string | null;
+  submitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => void;
+  skipQuestion: (questionId: string) => void;
 }
 
-export function ChatPanel({ messages, isStreaming, sendMessage, error }: ChatPanelProps) {
+export function ChatPanel({
+  messages,
+  isStreaming,
+  sendMessage,
+  error,
+  submitAnswer,
+  skipQuestion,
+}: ChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom
@@ -67,7 +79,22 @@ export function ChatPanel({ messages, isStreaming, sendMessage, error }: ChatPan
             ) : (
               <div className="flex flex-col pb-4">
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} />
+                  <div key={msg.id}>
+                    <ChatMessage message={msg} />
+                    {msg.questionData && (
+                      <div className="flex w-full mb-4 justify-start">
+                        <div className="max-w-[85%]">
+                          <InputRequestCard
+                            questionId={msg.questionData.questionId}
+                            questions={msg.questionData.questions}
+                            answered={msg.questionData.answered}
+                            onSubmit={submitAnswer}
+                            onSkip={skipQuestion}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 ))}
                 {error && (
                   <div className="p-4 mb-4 text-sm text-red-500 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-200 dark:border-red-900/20">

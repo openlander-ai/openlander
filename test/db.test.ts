@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { Database } from '../src/db/index.js';
+import { ProjectAlreadyExistsError } from '../src/errors.js';
 
 describe('Database', () => {
   let db: Database;
@@ -235,7 +236,12 @@ describe('Database', () => {
 
     it('isParentProject returns true for parents', () => {
       db.createProject({ id: 'p1', name: 'parent', repoUrl: 'https://github.com/test/repo' });
-      db.createProject({ id: 'c1', name: 'parent/svc', repoUrl: 'https://github.com/test/repo', parentProjectId: 'p1' });
+      db.createProject({
+        id: 'c1',
+        name: 'parent/svc',
+        repoUrl: 'https://github.com/test/repo',
+        parentProjectId: 'p1',
+      });
 
       expect(db.isParentProject('p1')).toBe(true);
       expect(db.isParentProject('c1')).toBe(false);
@@ -260,15 +266,29 @@ describe('Database', () => {
     });
 
     it('defaults parent_project_id to null', () => {
-      db.createProject({ id: 'p1', name: 'standalone', repoUrl: 'https://github.com/test/standalone' });
+      db.createProject({
+        id: 'p1',
+        name: 'standalone',
+        repoUrl: 'https://github.com/test/standalone',
+      });
       const project = db.getProject('p1');
       expect(project!.parent_project_id).toBeNull();
     });
 
     it('cascading delete removes children when parent is deleted', () => {
       db.createProject({ id: 'parent', name: 'group', repoUrl: 'https://github.com/test/group' });
-      db.createProject({ id: 'child1', name: 'group/a', repoUrl: 'https://github.com/test/group', parentProjectId: 'parent' });
-      db.createProject({ id: 'child2', name: 'group/b', repoUrl: 'https://github.com/test/group', parentProjectId: 'parent' });
+      db.createProject({
+        id: 'child1',
+        name: 'group/a',
+        repoUrl: 'https://github.com/test/group',
+        parentProjectId: 'parent',
+      });
+      db.createProject({
+        id: 'child2',
+        name: 'group/b',
+        repoUrl: 'https://github.com/test/group',
+        parentProjectId: 'parent',
+      });
 
       db.deleteProject('parent');
 
@@ -292,6 +312,32 @@ describe('Database', () => {
       expect(updated!.parent_project_id).toBe('p1');
       expect(updated!.dockerfile_path).toBe('services/api/Dockerfile');
       expect(db.isParentProject('p1')).toBe(true);
+    });
+  });
+
+  describe('Duplicate project name', () => {
+    it('throws ProjectAlreadyExistsError when name already exists', () => {
+      db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/a' });
+
+      expect(() =>
+        db.createProject({ id: 'p2', name: 'my-app', repoUrl: 'https://github.com/test/b' }),
+      ).toThrow(ProjectAlreadyExistsError);
+    });
+
+    it('includes project name in error message', () => {
+      db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/a' });
+
+      expect(() =>
+        db.createProject({ id: 'p2', name: 'my-app', repoUrl: 'https://github.com/test/b' }),
+      ).toThrow('my-app');
+    });
+
+    it('allows creating projects with different names', () => {
+      db.createProject({ id: 'p1', name: 'app-1', repoUrl: 'https://github.com/test/a' });
+
+      expect(() =>
+        db.createProject({ id: 'p2', name: 'app-2', repoUrl: 'https://github.com/test/b' }),
+      ).not.toThrow();
     });
   });
 });

@@ -26,8 +26,19 @@ export type ChatStreamEvent =
   | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
   | { type: 'message'; content: string }
   | { type: 'done'; toolResults?: ToolResult[] }
-  | { type: 'error'; error: string };
-
+  | { type: 'error'; error: string }
+  | {
+      type: 'question';
+      request: {
+        id: string;
+        questions: Array<{
+          question: string;
+          header?: string;
+          options: Array<{ label: string; description?: string }>;
+          multiple?: boolean;
+        }>;
+      };
+    };
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;

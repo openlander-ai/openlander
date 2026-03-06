@@ -123,6 +123,8 @@ export function AppLayout() {
                   chat.sendMessage(prefix + msg);
                 }}
                 error={chat.error}
+                submitAnswer={chat.submitAnswer}
+                skipQuestion={chat.skipQuestion}
               />
             </div>
           </SheetContent>

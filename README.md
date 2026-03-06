@@ -167,18 +167,18 @@ Default is **Internal** (safe). Say "make it public" to switch.
 
 ## Roadmap
 
-| Version     | Focus                    | Status  | Highlights                                                           |
-| ----------- | ------------------------ | ------- | -------------------------------------------------------------------- |
-| **v0.0.1**  | Repo → URL (MVP)         | Done    | Git clone → Docker → Traefik → URL. Chat. REST API.                  |
-| **v0.0.2**  | Daily Operations         | Done    | Auto-redeploy, monitoring, production domains, Ollama                |
-| **v0.0.3**  | Coding Agent Integration | Done    | MCP server (23 tools), rollback, blue-green, DB provisioning         |
-| **v0.0.4**  | Multi-Channel + Advanced | Done    | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy   |
-| **v0.0.9**  | Server Awareness         | Done    | Full container scan, OS port scan, proxy detection, preflight check  |
-| **v0.1.0**  | Web MVP                  | Done    | React SPA, real-time timeline, NDJSON streaming, TUI→Web pivot       |
-| **v0.0.11** | Agent Proactivity        | Done    | Post-deploy insight, anomaly nudge, smart defaults                   |
-| **v0.0.10** | Env & Secrets            | Done    | Global encrypted secrets, .env.example detection, Web settings UI    |
-| v0.0.12     | Provider OAuth           | Planned | OAuth login for OpenAI, Anthropic, OpenRouter (no API key needed)    |
-| v0.0.8      | AI SDK Migration         | Planned | Vercel AI SDK, multi-provider streaming, unified tool API (deferred) |
+| Version     | Focus                    | Status | Highlights                                                          |
+| ----------- | ------------------------ | ------ | ------------------------------------------------------------------- |
+| **v0.0.1**  | Repo → URL (MVP)         | Done   | Git clone → Docker → Traefik → URL. Chat. REST API.                 |
+| **v0.0.2**  | Daily Operations         | Done   | Auto-redeploy, monitoring, production domains, Ollama               |
+| **v0.0.3**  | Coding Agent Integration | Done   | MCP server (23 tools), rollback, blue-green, DB provisioning        |
+| **v0.0.4**  | Multi-Channel + Advanced | Done   | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy  |
+| **v0.0.9**  | Server Awareness         | Done   | Full container scan, OS port scan, proxy detection, preflight check |
+| **v0.1.0**  | Web MVP                  | Done   | React SPA, real-time timeline, NDJSON streaming, TUI→Web pivot      |
+| **v0.0.11** | Agent Proactivity        | Done   | Post-deploy insight, anomaly nudge, smart defaults                  |
+| **v0.0.10** | Env & Secrets            | Done   | Global encrypted secrets, .env.example detection, Web settings UI   |
+| **v0.0.12** | Provider OAuth           | Done   | OAuth login for OpenAI, Anthropic, OpenRouter (no API key needed)   |
+| **v0.0.8**  | AI SDK Migration         | Done   | Vercel AI SDK, multi-provider streaming, unified tool API           |
 
 ## Requirements
 

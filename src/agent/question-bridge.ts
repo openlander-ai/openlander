@@ -102,8 +102,12 @@ export class QuestionBridge {
   /**
    * Called by the UI when the user submits their answers.
    * Resolves the pending Promise, resuming the agentic loop.
+   *
+   * @param requestId - The question request ID (wired for Phase 2 multiplexing).
+   *                    v0.1.0 ignores this internally but the API contract is ready.
+   * @param answers - User's selected answers.
    */
-  reply(answers: QuestionAnswer[]): void {
+  reply(requestId: string, answers: QuestionAnswer[]): void {
     const resolve = this.pendingResolve;
     this.pendingResolve = null;
 
@@ -111,7 +115,7 @@ export class QuestionBridge {
     if (this.eventBus && this.activeProjectId) {
       void this.eventBus.emit('question:answered', {
         projectId: this.activeProjectId,
-        requestId: '', // We don't track requestId in reply — best-effort
+        requestId,
       });
     }
 

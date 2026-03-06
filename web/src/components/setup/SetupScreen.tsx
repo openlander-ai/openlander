@@ -1,6 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSetup } from '@/hooks/use-setup';
-import { configureLLM, startTraefik, completeSetup } from '@/lib/api';
+import {
+  configureLLM,
+  startTraefik,
+  completeSetup,
+  connectGithub,
+  startGithubDeviceFlow,
+  pollGithubDeviceFlow,
+} from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +26,7 @@ import {
   Check,
   Github,
   Rocket,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -62,6 +70,20 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const [apiKey, setApiKey] = useState('');
   const [llmError, setLlmError] = useState('');
 
+  // GitHub Form State
+  const [githubToken, setGithubToken] = useState('');
+  const [githubConnecting, setGithubConnecting] = useState(false);
+  const [githubError, setGithubError] = useState('');
+  // Device Flow state
+  const [deviceFlow, setDeviceFlow] = useState<{
+    userCode: string;
+    verificationUri: string;
+    deviceCode: string;
+    interval: number;
+  } | null>(null);
+  const [deviceFlowPolling, setDeviceFlowPolling] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
   // Persist step on change
   useEffect(() => {
     storeStep(step);
@@ -103,6 +125,88 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       setConfiguringLLM(false);
     }
   };
+
+  const handleConnectGithub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!githubToken.trim()) return;
+    setGithubConnecting(true);
+    setGithubError('');
+    try {
+      await connectGithub(githubToken.trim());
+      await refetch();
+      setGithubToken('');
+    } catch (err: any) {
+      setGithubError(err.message || 'Failed to connect GitHub');
+    } finally {
+      setGithubConnecting(false);
+    }
+  };
+
+  // Device Flow handlers
+  const handleStartDeviceFlow = async () => {
+    setGithubError('');
+    try {
+      const response = await startGithubDeviceFlow();
+      setDeviceFlow({
+        userCode: response.user_code,
+        verificationUri: response.verification_uri,
+        deviceCode: response.device_code,
+        interval: response.interval,
+      });
+      setDeviceFlowPolling(true);
+    } catch {
+      setGithubError('Failed to start GitHub authorization');
+    }
+  };
+
+  const handleCopyCode = async () => {
+    if (deviceFlow?.userCode) {
+      await navigator.clipboard.writeText(deviceFlow.userCode);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
+  const handleCancelDeviceFlow = () => {
+    setDeviceFlow(null);
+    setDeviceFlowPolling(false);
+    setGithubError('');
+  };
+
+  // Polling effect for Device Flow
+  useEffect(() => {
+    if (!deviceFlowPolling || !deviceFlow) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const result = await pollGithubDeviceFlow(deviceFlow.deviceCode, deviceFlow.interval);
+
+        if (result.status === 'complete') {
+          clearInterval(pollInterval);
+          setDeviceFlow(null);
+          setDeviceFlowPolling(false);
+          await refetch();
+        } else if (result.status === 'slow_down') {
+          setDeviceFlow((prev) =>
+            prev ? { ...prev, interval: result.interval ?? prev.interval } : null,
+          );
+        } else if (
+          result.status === 'expired' ||
+          result.status === 'denied' ||
+          result.status === 'error'
+        ) {
+          clearInterval(pollInterval);
+          setDeviceFlow(null);
+          setDeviceFlowPolling(false);
+          setGithubError(result.message || `Authorization ${result.status}`);
+        }
+      } catch {
+        // Silently continue polling on network errors
+      }
+    }, deviceFlow.interval * 1000);
+
+    return () => clearInterval(pollInterval);
+  }, [deviceFlowPolling, deviceFlow, refetch]);
 
   const handleComplete = async () => {
     setCompleting(true);
@@ -404,15 +508,128 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   Connect your GitHub account to deploy private repositories. You can also set this
                   up later in Settings.
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs font-body"
-                  onClick={() => window.open('/api/auth/github', '_blank')}
-                >
-                  <Github className="h-3.5 w-3.5" />
-                  Connect GitHub
-                </Button>
+
+                {status?.github?.ok ? (
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-success/20 bg-success/5 text-success">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span className="text-sm font-medium">
+                      Connected as {status.github.username}
+                    </span>
+                  </div>
+                ) : deviceFlow ? (
+                  // Device Flow active - show code
+                  <div className="space-y-4">
+                    <div className="text-center space-y-3">
+                      <p className="text-sm font-body text-secondary-ol">
+                        Enter this code on GitHub:
+                      </p>
+                      <p className="font-mono text-2xl tracking-[0.3em] text-primary-ol font-bold">
+                        {deviceFlow.userCode}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(deviceFlow.verificationUri, '_blank')}
+                        className="gap-1.5 font-body"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Open GitHub
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyCode}
+                        className="gap-1.5 font-body"
+                      >
+                        {copiedCode ? (
+                          <Check className="h-3.5 w-3.5 text-success" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                        {copiedCode ? 'Copied' : 'Copy Code'}
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 text-muted-ol">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span className="text-xs font-body">Waiting for authorization...</span>
+                    </div>
+                    <div className="flex justify-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCancelDeviceFlow}
+                        className="text-xs font-body text-muted-ol"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  // Not connected - show OAuth button + PAT fallback
+                  <div className="space-y-3">
+                    <Button
+                      type="button"
+                      onClick={handleStartDeviceFlow}
+                      size="sm"
+                      className="w-full gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+                    >
+                      <Github className="h-3.5 w-3.5" />
+                      Connect with GitHub
+                    </Button>
+
+                    <div className="relative my-4">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-[hsl(var(--border))]" />
+                      </div>
+                      <div className="relative flex justify-center text-xs">
+                        <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">
+                          or enter a token
+                        </span>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleConnectGithub} className="space-y-3">
+                      <div className="space-y-2">
+                        <Input
+                          type="password"
+                          placeholder="ghp_..."
+                          value={githubToken}
+                          onChange={(e) => setGithubToken(e.target.value)}
+                          className="font-mono text-sm bg-bg-app border-border"
+                        />
+                        <a
+                          href="https://github.com/settings/tokens"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-body text-agent hover:underline inline-flex items-center gap-1"
+                        >
+                          Generate a token →
+                        </a>
+                      </div>
+                      <Button
+                        type="submit"
+                        disabled={githubConnecting || !githubToken.trim()}
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 font-body"
+                      >
+                        {githubConnecting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Github className="h-3.5 w-3.5" />
+                        )}
+                        Connect
+                      </Button>
+                    </form>
+
+                    {githubError && <p className="text-xs font-body text-error">{githubError}</p>}
+                  </div>
+                )}
               </div>
 
               {/* Summary */}

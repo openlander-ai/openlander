@@ -2,6 +2,7 @@ import type { Database as BunDatabase } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { and, asc, count, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { ProjectAlreadyExistsError } from '../errors.js';
 
 import { createDrizzleDatabase, type DrizzleClient } from './drizzle.js';
 import { SCHEMA } from './schema.js';
@@ -182,17 +183,25 @@ export class Database {
     parentProjectId?: string;
     dockerfilePath?: string;
   }): ProjectRow {
-    this.db
-      .insert(projects)
-      .values({
-        id: project.id,
-        name: project.name,
-        repo_url: project.repoUrl,
-        branch: project.branch ?? 'main',
-        parent_project_id: project.parentProjectId ?? null,
-        dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
-      })
-      .run();
+    try {
+      this.db
+        .insert(projects)
+        .values({
+          id: project.id,
+          name: project.name,
+          repo_url: project.repoUrl,
+          branch: project.branch ?? 'main',
+          parent_project_id: project.parentProjectId ?? null,
+          dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+        })
+        .run();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('UNIQUE constraint failed')) {
+        throw new ProjectAlreadyExistsError(project.name);
+      }
+      throw error;
+    }
 
     const created = this.getProject(project.id);
     if (!created) throw new Error(`Failed to create project ${project.id}`);
