@@ -201,18 +201,18 @@ export function detectFramework(projectPath: string): FrameworkDetection {
 export function generateDockerfile(detection: FrameworkDetection): string {
   switch (detection.framework) {
     case 'nextjs':
-      return `FROM node:18.20.4-alpine AS deps
+      return `FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-FROM node:18.20.4-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
-FROM node:18.20.4-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app ./
@@ -223,7 +223,7 @@ CMD ["npm", "start"]
 `;
 
     case 'vite':
-      return `FROM node:18.20.4-alpine AS builder
+      return `FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -244,12 +244,12 @@ CMD ["nginx", "-g", "daemon off;"]
 
     case 'express':
     case 'node':
-      return `FROM node:18.20.4-alpine AS deps
+      return `FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-FROM node:18.20.4-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules

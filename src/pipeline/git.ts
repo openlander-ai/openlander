@@ -11,6 +11,9 @@ import {
   GitBranchNotFoundError,
 } from '../errors.js';
 import { loadConfig } from '../config/index.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('git');
 
 const exec = promisify(execFile);
 
@@ -50,9 +53,12 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
           'https://github.com/',
           `https://x-access-token:${token}@github.com/`,
         );
+        log.debug('GitHub token injected for clone');
+      } else {
+        log.debug('No GitHub token found in config');
       }
-    } catch {
-      // Config not available, proceed without token
+    } catch (err) {
+      log.debug({ err }, 'Failed to load config for GitHub token injection');
     }
   }
 
@@ -65,6 +71,8 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   args.push(normalizedUrl, cloneDir);
 
   const env: Record<string, string> = { ...process.env } as Record<string, string>;
+  // Prevent git from trying to prompt for credentials (fails in non-interactive environments)
+  env['GIT_TERMINAL_PROMPT'] = '0';
   if (sshKeyPath) {
     env['GIT_SSH_COMMAND'] = `ssh -i ${sshKeyPath} -o StrictHostKeyChecking=no`;
   }

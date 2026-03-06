@@ -204,9 +204,9 @@ describe('generateDockerfile', () => {
 
     const dockerfile = generateDockerfile(detection);
 
-    expect(dockerfile).toContain('FROM node:18.20.4-alpine AS deps');
-    expect(dockerfile).toContain('FROM node:18.20.4-alpine AS builder');
-    expect(dockerfile).toContain('FROM node:18.20.4-alpine AS runner');
+    expect(dockerfile).toContain('FROM node:20-alpine AS deps');
+    expect(dockerfile).toContain('FROM node:20-alpine AS builder');
+    expect(dockerfile).toContain('FROM node:20-alpine AS runner');
     expect(dockerfile).toContain('npm run build');
     expect(dockerfile).toContain('EXPOSE 3000');
     expect(dockerfile).toContain('HEALTHCHECK');
@@ -238,7 +238,7 @@ describe('generateDockerfile', () => {
 
     const dockerfile = generateDockerfile(detection);
 
-    expect(dockerfile).toContain('FROM node:18.20.4-alpine AS deps');
+    expect(dockerfile).toContain('FROM node:20-alpine AS deps');
     expect(dockerfile).toContain('npm ci --omit=dev');
     expect(dockerfile).toContain('CMD ["npm", "start"]');
   });
