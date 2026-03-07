@@ -157,9 +157,9 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
     ollamaEndpoint: 'http://localhost:11434',
   },
   server: {
-    port: 3000,
+    port: 10003,
     host: '0.0.0.0',
-    baseUrl: 'http://localhost:3000',
+    baseUrl: 'http://localhost:10003',
   },
   docker: {
     socketPath: '',

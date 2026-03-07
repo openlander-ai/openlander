@@ -431,7 +431,7 @@ function isUserInDockerGroup(): boolean {
  * Resolve the Docker socket path for the current platform.
  * Priority: DOCKER_HOST env → common paths → docker context inspect
  */
-function resolveDockerSocket(): string | undefined {
+export function resolveDockerSocket(): string | undefined {
   // 1. DOCKER_HOST env var (set by Colima, Docker Desktop, etc.)
   const dockerHost = process.env['DOCKER_HOST'];
   if (dockerHost?.startsWith('unix://')) {
