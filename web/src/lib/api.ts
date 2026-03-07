@@ -194,10 +194,20 @@ export async function getSystemStats(): Promise<SystemStats> {
 
 export interface SetupStatus {
   ready: boolean;
+  language?: 'en' | 'ko';
   docker: { ok: boolean; state?: string; groupFixed?: boolean; message: string };
   traefik: { ok: boolean; message: string };
   llm: { ok: boolean; provider: string; model: string; message: string };
   github?: { ok: boolean; username?: string; message?: string };
+}
+
+export async function setLanguage(language: string): Promise<void> {
+  const res = await fetch('/api/setup/language', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language }),
+  });
+  if (!res.ok) throw new Error('Failed to set language');
 }
 
 export async function getSetupStatus(): Promise<SetupStatus> {

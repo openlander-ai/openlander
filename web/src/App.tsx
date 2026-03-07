@@ -1,3 +1,4 @@
+import { LanguageProvider } from '@/i18n/context';
 import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -68,27 +69,29 @@ function SetupGuard() {
 
 function App() {
   return (
-    <ErrorBoundary>
-      <BrowserRouter>
-        <Routes>
-          <Route
-            path="/setup"
-            element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
-          />
-          <Route element={<SetupGuard />}>
-            <Route element={<AppLayout />}>
-              <Route path="/projects" element={<ProjectsGrid />} />
-              <Route path="/projects/new" element={<NewProjectFlow />} />
-              <Route path="/projects/:id/deployments/:deployId" element={<DeploymentDetail />} />
-              <Route path="/projects/:id" element={<ProjectDetail />} />
-              <Route path="/settings" element={<SettingsPage />} />
+    <LanguageProvider>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <Routes>
+            <Route
+              path="/setup"
+              element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
+            />
+            <Route element={<SetupGuard />}>
+              <Route element={<AppLayout />}>
+                <Route path="/projects" element={<ProjectsGrid />} />
+                <Route path="/projects/new" element={<NewProjectFlow />} />
+                <Route path="/projects/:id/deployments/:deployId" element={<DeploymentDetail />} />
+                <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </Route>
             </Route>
-          </Route>
-          <Route path="/" element={<Navigate to="/projects" replace />} />
-          <Route path="*" element={<Navigate to="/projects" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </ErrorBoundary>
+            <Route path="/" element={<Navigate to="/projects" replace />} />
+            <Route path="*" element={<Navigate to="/projects" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </ErrorBoundary>
+    </LanguageProvider>
   );
 }
 
