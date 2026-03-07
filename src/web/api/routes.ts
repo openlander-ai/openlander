@@ -986,6 +986,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     return c.json({
       ...project,
+      port: project.assigned_port ?? null,
       url: project.assigned_port ? getProjectUrl(project.name) : null,
       envVars,
       recentDeploys: deployLogs,
