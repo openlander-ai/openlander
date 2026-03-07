@@ -2,6 +2,8 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('docker');
 
 import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import Dockerode from 'dockerode';
 
 import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
@@ -73,7 +75,12 @@ export class Docker {
   private readonly client: Dockerode;
 
   constructor(socketPath?: string) {
-    this.client = new Dockerode(socketPath ? { socketPath } : undefined);
+    if (socketPath) {
+      this.client = new Dockerode({ socketPath });
+    } else {
+      const resolved = resolveDockerSocket();
+      this.client = resolved ? new Dockerode({ socketPath: resolved }) : new Dockerode();
+    }
   }
 
   /** Verify Docker daemon is accessible. */
@@ -106,14 +113,14 @@ export class Docker {
       // fall through
     }
 
-    // 3. Try `sg docker` — reads /etc/group at runtime, picks up usermod
-    //    changes even without restarting the server process.
-    try {
-      execSync('sg docker -c "docker info"', { stdio: 'pipe', timeout: 5000 });
-      return { state: 'running' };
-    } catch (err) {
-      log.debug({ err }, 'sg docker check failed');
-      // sg failed too
+    // 3. Try `sg docker` — Linux only (macOS Docker Desktop doesn't use groups)
+    if (process.platform !== 'darwin') {
+      try {
+        execSync('sg docker -c "docker info"', { stdio: 'pipe', timeout: 5000 });
+        return { state: 'running' };
+      } catch (err) {
+        log.debug({ err }, 'sg docker check failed');
+      }
     }
 
     // 4. Determine permission vs daemon-not-running
@@ -418,4 +425,23 @@ function isUserInDockerGroup(): boolean {
     log.debug({ err }, 'Failed to check docker group membership');
     return false;
   }
+}
+
+/**
+ * Resolve the Docker socket path for the current platform.
+ * Checks DOCKER_HOST env, then common socket locations.
+ */
+function resolveDockerSocket(): string | undefined {
+  const dockerHost = process.env['DOCKER_HOST'];
+  if (dockerHost?.startsWith('unix://')) {
+    return dockerHost.replace('unix://', '');
+  }
+
+  const candidates = [
+    '/var/run/docker.sock',
+    `${homedir()}/.docker/run/docker.sock`,
+    `${homedir()}/.colima/default/docker.sock`,
+  ];
+
+  return candidates.find((p) => existsSync(p));
 }

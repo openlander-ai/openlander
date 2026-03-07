@@ -24,7 +24,7 @@
   "scripts": {
     "dev": "tsup --watch",
     "build": "tsup && npm run build:web",
-    "build:web": "cd web && npx vite build",
+    "build:web": "cd web && bun install && npx vite build",
     "start": "bun --conditions=browser dist/cli/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

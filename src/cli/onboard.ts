@@ -31,9 +31,13 @@ export async function ensureDocker(): Promise<void> {
     }
     // sg docker works but this process lacks the docker group.
     // Re-exec under sg docker so dockerode inherits the group.
-    if (!process.env.OPENLANDER_SG_REEXEC) {
+    // sg is Linux-only (macOS Docker Desktop doesn't use groups)
+    if (platform() !== 'darwin' && !process.env.OPENLANDER_SG_REEXEC) {
       console.log(pc.dim('  Activating docker group...'));
-      const args = process.argv.slice(1).map(a => `"${a}"`).join(' ');
+      const args = process.argv
+        .slice(1)
+        .map((a) => `"${a}"`)
+        .join(' ');
       const cmd = `sg docker -c "OPENLANDER_SG_REEXEC=1 ${process.execPath} ${args}"`;
       try {
         execSync(cmd, { stdio: 'inherit' });
@@ -85,9 +89,7 @@ export async function ensureDocker(): Promise<void> {
     console.log(pc.dim('    Linux:  sudo systemctl start docker'));
     console.log(pc.dim('    macOS:  open -a Docker\n'));
     process.exit(1);
-  }
-
-  else {
+  } else {
     console.log(pc.yellow('  ⚠ Docker permission denied. Fixing...'));
     const fixed = await tryFixDockerPermission();
     if (fixed) {
@@ -106,11 +108,17 @@ export async function ensureDocker(): Promise<void> {
 }
 
 function tryFixDockerPermission(): Promise<boolean> {
+  // macOS Docker Desktop doesn't use unix groups
+  if (platform() === 'darwin') {
+    console.log(pc.yellow('  Docker Desktop permission issue.'));
+    console.log(pc.dim('    Try: open -a Docker'));
+    return Promise.resolve(false);
+  }
+
   try {
     const user = execSync('whoami', { encoding: 'utf8', stdio: 'pipe' }).trim();
     console.log(pc.dim(`  Adding ${user} to docker group...`));
     execSync(`sudo usermod -aG docker ${user}`, { stdio: 'inherit' });
-    // Try newgrp to activate immediately
     try {
       execSync('sg docker -c "docker info"', { stdio: 'pipe', timeout: 5000 });
       return Promise.resolve(true);
@@ -118,13 +126,9 @@ function tryFixDockerPermission(): Promise<boolean> {
       log.debug({ err }, 'sg docker test failed — user needs to re-login');
       console.log(pc.yellow('  ⚠ Group added. Please log out and back in for it to take effect.'));
       return Promise.resolve(false);
-      // sg didn't work — user needs to re-login
-      console.log(pc.yellow('  ⚠ Group added. Please log out and back in for it to take effect.'));
-      return Promise.resolve(false);
     }
   } catch (err) {
-      log.debug({ err }, 'Docker permission fix failed');
-      return Promise.resolve(false);
+    log.debug({ err }, 'Docker permission fix failed');
     return Promise.resolve(false);
   }
 }
