@@ -162,7 +162,7 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
     baseUrl: 'http://localhost:3000',
   },
   docker: {
-    socketPath: '/var/run/docker.sock',
+    socketPath: '',
     networkName: 'web',
     portRangeStart: 10001,
     portRangeEnd: 10999,

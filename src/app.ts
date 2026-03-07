@@ -64,7 +64,7 @@ export interface AppContext {
 /** Create the application context from config. */
 export function createAppContext(config: OpenLanderConfig, dbPath: string): AppContext {
   const db = new Database(dbPath);
-  const docker = new Docker(config.docker.socketPath);
+  const docker = new Docker(config.docker.socketPath || undefined);
   const jobManager = new JobManager();
   const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager);
   const traefik = new TraefikManager(docker);
