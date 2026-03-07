@@ -273,6 +273,7 @@ export function createAuthRoutes(ctx: AppContext): Hono {
           ctx.db,
           async () => buildContextSnapshot(ctx.db, ctx.docker),
           ctx.config.llm.provider,
+          ctx.config.language,
         );
 
         const tools = createTools(ctx);

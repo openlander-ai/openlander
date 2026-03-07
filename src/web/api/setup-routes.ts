@@ -86,6 +86,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
           ? `Connected as ${config.gitProviders.github.username || 'unknown'}`
           : 'No GitHub token configured. Add one to browse and deploy private repos.',
       },
+      language: config.language,
     });
   });
 
@@ -179,6 +180,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         ctx.db,
         async () => buildContextSnapshot(ctx.db, ctx.docker),
         body.provider as OpenLanderConfig['llm']['provider'],
+        ctx.config.language,
       );
 
       const tools = createTools(ctx);
@@ -431,6 +433,57 @@ export function createSetupRoutes(ctx: AppContext): Hono {
    *
    * Ensure config file exists (marks onboarding as "done" for isOnboarded() check).
    */
+  /**
+   * POST /setup/language
+   *
+   * Save the user's preferred language.
+   * Body: { language: 'en' | 'ko' }
+   */
+  api.post('/setup/language', async (c) => {
+    const body = await c.req.json<{ language: string }>();
+    const lang = body.language;
+
+    if (!lang || !['en', 'ko'].includes(lang)) {
+      return c.json({ error: 'INVALID_LANGUAGE', message: 'Language must be "en" or "ko"' }, 400);
+    }
+
+    updateConfig({ language: lang as 'en' | 'ko' });
+    ctx.config.language = lang as 'en' | 'ko';
+
+    // If agent exists, recreate with new locale
+    if (ctx.agent) {
+      try {
+        const { createModel } = await import('../../llm/index.js');
+        const { Agent } = await import('../../agent/index.js');
+        const { createTools } = await import('../../agent/tools.js');
+        const { buildContextSnapshot } = await import('../../agent/prompts.js');
+
+        const llmModel = createModel({
+          provider: ctx.config.llm.provider,
+          apiKey: ctx.config.llm.apiKey,
+          model: ctx.config.llm.model,
+          authToken: ctx.config.llm.authToken || undefined,
+        });
+
+        const agent = new Agent(
+          llmModel,
+          ctx.db,
+          async () => buildContextSnapshot(ctx.db, ctx.docker),
+          ctx.config.llm.provider,
+          lang,
+        );
+
+        const tools = createTools(ctx);
+        agent.setTools(tools);
+        (ctx as { agent: typeof agent }).agent = agent;
+      } catch {
+        // Agent hot-reload failed — language saved but agent uses old locale until restart
+      }
+    }
+
+    return c.json({ status: 'saved', language: lang });
+  });
+
   api.post('/setup/complete', (c) => {
     const config = loadConfig();
     saveConfig(config);
