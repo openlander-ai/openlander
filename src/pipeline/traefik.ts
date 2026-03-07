@@ -3,7 +3,7 @@ import { networkInterfaces } from 'os';
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('traefik');
 
-import { type Docker, resolveDockerSocket } from './docker.js';
+import type { Docker } from './docker.js';
 
 const TRAEFIK_CONTAINER_NAME = 'openlander-traefik';
 const TRAEFIK_IMAGE = 'traefik:v3.6';
@@ -108,7 +108,7 @@ export class TraefikManager {
           '80/tcp': [{ HostPort: '80' }],
           '8080/tcp': [{ HostPort: '8080' }],
         },
-        Binds: [`${resolveDockerSocket() ?? '/var/run/docker.sock'}:/var/run/docker.sock:ro`],
+        Binds: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
         NetworkMode: TRAEFIK_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
       },
