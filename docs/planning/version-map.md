@@ -363,17 +363,18 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ### v0.2.0 — Dashboard Redesign ✅
 
-**상태**: 구현 완료, 도그푸딩 버그 해결 완료 | **관련 문서**: [`v0.2.0/dashboard-redesign.md`](v0.2.0/dashboard-redesign.md), [`v0.2.0/bugs.md`](v0.2.0/bugs.md), [`v0.2.0/deploy-ux-fix.md`](v0.2.0/deploy-ux-fix.md)
+**상태**: 구현 완료, 도그푸딩 버그 해결 + 자동 복구 구현 완료 | **관련 문서**: [`v0.2.0/dashboard-redesign.md`](v0.2.0/dashboard-redesign.md), [`v0.2.0/bugs.md`](v0.2.0/bugs.md), [`v0.2.0/deploy-ux-fix.md`](v0.2.0/deploy-ux-fix.md)
 
 > **핵심 가치**: 채팅 인터페이스 제거 → Vercel-inspired 라이트 모드 대시보드. AI는 백그라운드 어시스트로 전환.
 > **관련 결정**: DEC-023 (방향 전환), DEC-024 (라이트 모드), DEC-025 (MVP 스코프)
 
-| Phase                            | 내용                                                                                      | 상태 |
-| -------------------------------- | ----------------------------------------------------------------------------------------- | ---- |
-| Phase 1 — 디자인 토큰 + 레이아웃 | 라이트 모드 CSS 변수, Cyber 효과 제거, 채팅 제거, 2컬럼 레이아웃                          | ✅   |
-| Phase 2 — 기존 페이지 전환       | Sidebar, ProjectsGrid, ProjectDetail 라이트 스타일 적용                                   | ✅   |
-| Phase 3 — 신규 기능              | Deployments 탭, DeploymentDetail 페이지, 빌드 로그 뷰어, AI Analysis 박스, 백엔드 API 2개 | ✅   |
-| Phase 4 — 정리                   | Chat 컴포넌트 4개 삭제, use-chat.ts 삭제, Chat API 4개 엔드포인트 삭제, 빌드 검증         | ✅   |
+| Phase                               | 내용                                                                                             | 상태 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ | ---- |
+| Phase 1 — 디자인 토큰 + 레이아웃    | 라이트 모드 CSS 변수, Cyber 효과 제거, 채팅 제거, 2컬럼 레이아웃                                 | ✅   |
+| Phase 2 — 기존 페이지 전환          | Sidebar, ProjectsGrid, ProjectDetail 라이트 스타일 적용                                          | ✅   |
+| Phase 3 — 신규 기능                 | Deployments 탭, DeploymentDetail 페이지, 빌드 로그 뷰어, AI Analysis 박스, 백엔드 API 2개        | ✅   |
+| Phase 4 — 정리                      | Chat 컴포넌트 4개 삭제, use-chat.ts 삭제, Chat API 4개 엔드포인트 삭제, 빌드 검증                | ✅   |
+| Phase 5 — 자동 복구 (Auto-Recovery) | deploy:failed → AI 자동 분석 → 질문 → env 설정 → 재배포. Fix with AI 버튼 제거, 상태 표시로 대체 | ✅   |
 
 **구현 내역**:
 
@@ -408,6 +409,25 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 - `web/src/pages/ProjectDetail.tsx` — LogPreview 통합
 - `web/src/components/timeline/LogPreview.tsx` — 신규: 로그 미니 패널
 - `test/event-types.test.ts` — 신규: 3개 테스트
+
+**자동 복구 (Auto-Recovery) 구현** (Phase 5):
+
+| 항목                                       | 내용                                                                                         | 상태 |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------- | ---- |
+| deploy:failed/compose:failed 이벤트 리스너 | `app.ts` — 2초 딜레이 후 agent.chatStream() 자동 호출                                        | ✅   |
+| 안전장치                                   | 최대 3회 재시도, 동일 에러 반복 감지, 인프라 에러 스킵                                       | ✅   |
+| 프롬프트 개선                              | Auto-Recovery Mode 섹션, compose env 복구 워크플로우, options:[] 강제                        | ✅   |
+| 스트림 유지                                | routes.ts — error 이벤트에서 NDJSON 스트림/reader loop 유지                                  | ✅   |
+| UX 변경                                    | Fix with AI 버튼 → "AI is working on it..." 스피너로 교체                                    | ✅   |
+| E2E 검증                                   | summary-god (monorepo compose, 11개 env) — deploy→fail→auto-recovery→question→answer→running | ✅   |
+
+**수정된 파일** (자동 복구):
+
+- `src/app.ts` — handleAutoRecovery() 이벤트 리스너 (L144-233)
+- `src/agent/prompts.ts` — Auto-Recovery Mode + Compose env recovery + ask_user_question 규칙
+- `src/web/api/routes.ts` — deploy:failed/compose:failed 스트림 유지, 5분 타임아웃
+- `web/src/hooks/use-timeline.ts` — error 이벤트 reader loop 유지
+- `web/src/components/timeline/TimelineItem.tsx` — Fix with AI → AI working 상태 표시
 
 ---
 
@@ -491,9 +511,10 @@ v0.2.0까지의 기능을 안정화하고 정식 릴리즈. 아래 3가지 구�
 | ~~37~~ | ~~BUG-015: 에이전트 스트리밍 미노출~~  | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                     |
 | ~~38~~ | ~~BUG-016: Running 타임라인 비어있음~~ | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                     |
 | ~~39~~ | ~~BUG-017: 로그 미니 패널~~            | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                     |
-| 40     | **E2E 시나리오 테스트 (Q-1)**          | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔴 필수                     |
-| 41     | **이벤트 배선 검증 (Q-2)**             | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔴 필수                     |
-| 42     | **Config 조합 매트릭스 테스트 (Q-3)**  | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🟠 필수                     |
+| ~~40~~ | ~~E2E 시나리오 테스트 (Q-1)~~          | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료           |
+| ~~41~~ | ~~이벤트 배선 검증 (Q-2)~~             | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료           |
+| ~~42~~ | ~~Config 조합 매트릭스 테스트 (Q-3)~~  | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료           |
+| 43     | **자동 복구 (Auto-Recovery)**          | v0.2.0               | `version-map.md` v0.2.0 섹션           | ✅ 완료 (E2E 검증)          |
 
 ---
 
@@ -510,15 +531,16 @@ v0.2.0까지의 기능을 안정화하고 정식 릴리즈. 아래 3가지 구�
 
 ## 검증 기준
 
-**2026-03-07 기준 (v0.2.0 도그푸딩 버그 BUG-014~017 해결 후)**:
+**2026-03-07 기준 (v0.2.0 자동 복구 구현 + E2E 검증 완료 후)**:
 
 ```
 ✅ tsup build — 성공
-✅ vite build — 성공 (497KB JS, 36.7KB CSS)
-✅ vitest — 663/663 pass (3건 신규 추가: agent event timeline 변환)
+✅ vite build — 성공 (499KB JS, 36.7KB CSS)
+✅ vitest — 663/663 pass
 ✅ lsp_diagnostics — 0 errors
-✅ v0.2.0 — Dashboard Redesign + 도그푸딩 버그 4건 전부 해결
-✅ 아키텍쳐 개선 — 2-phase SSE→NDJSON → project-first event model
+✅ v0.2.0 — Dashboard Redesign + 도그푸딩 버그 4건 + 자동 복구 구현
+✅ 자동 복구 E2E — summary-god: deploy→fail→auto-recovery→question→env set→redeploy→running
+✅ 16 commits on main (ahead of origin)
 ```
 
 ---
