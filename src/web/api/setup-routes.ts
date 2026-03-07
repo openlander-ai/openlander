@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
+import { loadDecryptedToken } from '../../auth/token-store.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import { createGitProvider } from '../../git-providers/index.js';
 
@@ -76,7 +77,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         model: config.llm.model,
         message: llmConfigured
           ? `${config.llm.provider} (${config.llm.model})`
-          : 'No LLM configured. Add an API key to enable chat.',
+          : 'No LLM configured. Connect a provider and token/API key.',
       },
       github: {
         ok: Boolean(config.gitProviders.github.token),
@@ -99,16 +100,22 @@ export function createSetupRoutes(ctx: AppContext): Hono {
   api.post('/setup/llm', async (c) => {
     const body = await c.req.json<{
       provider: string;
-      api_key: string;
+      api_key?: string;
+      auth_token?: string;
       model?: string;
     }>();
 
-    if (!body.provider || !body.api_key) {
-      return c.json({ error: 'MISSING_FIELD', message: 'provider and api_key are required' }, 400);
+    const provider = body.provider;
+    const rawApiKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
+    const rawAuthToken = typeof body.auth_token === 'string' ? body.auth_token.trim() : '';
+    const isOauthProvider = provider === 'openrouter' || provider === 'openai';
+
+    if (!provider) {
+      return c.json({ error: 'MISSING_FIELD', message: 'provider is required' }, 400);
     }
 
     const validProviders = ['gemini', 'openrouter', 'anthropic', 'openai', 'ollama'];
-    if (!validProviders.includes(body.provider)) {
+    if (!validProviders.includes(provider)) {
       return c.json(
         {
           error: 'INVALID_PROVIDER',
@@ -127,12 +134,28 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       ollama: 'llama3.2',
     };
 
-    const model = body.model || modelDefaults[body.provider] || 'gemini-2.0-flash';
+    const model = body.model || modelDefaults[provider] || 'gemini-2.0-flash';
+    const storedOauthToken = isOauthProvider
+      ? (loadDecryptedToken(ctx.db, provider)?.accessToken ?? '')
+      : '';
+    const authToken = rawAuthToken || storedOauthToken;
+
+    if (isOauthProvider && !rawApiKey && !authToken) {
+      return c.json({ error: 'MISSING_FIELD', message: 'api_key or auth token is required' }, 400);
+    }
+
+    if (!isOauthProvider && !rawApiKey) {
+      return c.json({ error: 'MISSING_FIELD', message: 'api_key is required' }, 400);
+    }
+
+    const apiKey = !isOauthProvider || rawApiKey ? rawApiKey : '';
+    const resolvedAuthToken = isOauthProvider && !apiKey ? authToken : '';
 
     updateConfig({
       llm: {
-        provider: body.provider as OpenLanderConfig['llm']['provider'],
-        apiKey: body.api_key,
+        provider: provider as OpenLanderConfig['llm']['provider'],
+        apiKey,
+        authToken: resolvedAuthToken,
         model,
       },
     });
@@ -145,8 +168,9 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       const { buildContextSnapshot } = await import('../../agent/prompts.js');
 
       const llmModel = createModel({
-        provider: body.provider as OpenLanderConfig['llm']['provider'],
-        apiKey: body.api_key,
+        provider: provider as OpenLanderConfig['llm']['provider'],
+        apiKey,
+        authToken: resolvedAuthToken || undefined,
         model,
       });
 

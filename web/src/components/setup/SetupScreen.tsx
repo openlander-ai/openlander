@@ -120,7 +120,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       await refetch();
       goNext();
     } catch {
-      setLlmError('Failed to configure LLM. Check your API key.');
+      setLlmError('Failed to configure LLM. Check your API key/token.');
     } finally {
       setConfiguringLLM(false);
     }
@@ -416,7 +416,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                       <OAuthButton
                         provider={llmProvider}
                         onSuccess={async () => {
-                          await configureLLM(llmProvider, 'oauth');
+                          await configureLLM(llmProvider, '');
                           await refetch();
                           goNext();
                         }}
@@ -441,10 +441,10 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                       </label>
                       <Input
                         type="password"
-                        placeholder="Paste your API key..."
+                        placeholder="Paste your API key or token..."
                         value={apiKey}
                         onChange={(e) => setApiKey(e.target.value)}
-                        required
+                        required={llmProvider !== 'openai' && llmProvider !== 'openrouter'}
                         className="font-mono text-sm bg-bg-app border-border"
                       />
                     </div>

@@ -5,7 +5,7 @@ import { TimelineItemCard } from './TimelineItem';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
+import { Brain } from 'lucide-react';
 interface TimelineFeedProps {
   items: TimelineItem[];
   isStreaming: boolean;
@@ -69,8 +69,31 @@ export function TimelineFeed({
 
   const progressItems = items.filter((item) => item.type === 'progress');
   const latestProgress = progressItems.length > 0 ? progressItems[progressItems.length - 1] : null;
-  const nonProgressItems = items.filter((item) => item.type !== 'progress');
+  const timelineItems = items;
+  const groupedItems: { type: 'build' | 'ai'; item?: TimelineItem; items?: TimelineItem[] }[] = [];
+  let currentAiGroup: { type: 'ai'; items: TimelineItem[] } | null = null;
 
+  for (const item of timelineItems) {
+    const isAi = [
+      'agent_thinking',
+      'agent_tool_call',
+      'agent_message',
+      'insight',
+      'dockerfile_fixed',
+      'question',
+    ].includes(item.type);
+
+    if (isAi) {
+      if (!currentAiGroup) {
+        currentAiGroup = { type: 'ai', items: [] };
+        groupedItems.push(currentAiGroup);
+      }
+      currentAiGroup.items.push(item);
+    } else {
+      groupedItems.push({ type: 'build', item });
+      currentAiGroup = null;
+    }
+  }
   return (
     <div className="relative h-full">
       <ScrollArea className="h-full" ref={scrollRef}>
@@ -117,21 +140,73 @@ export function TimelineFeed({
             </div>
           )}
 
-          {nonProgressItems.map((item, index) => (
-            <TimelineItemCard
-              key={item.id}
-              item={item}
-              isLatest={index === nonProgressItems.length - 1 && isStreaming}
-              onFixWithAI={
-                item.type === 'error' ? () => onFixWithAI?.(item.title, item.id) : undefined
-              }
-              isFixWithAILoading={fixingItemId === item.id}
-              onSubmitAnswer={onSubmitAnswer}
-              onSkipQuestion={onSkipQuestion}
-              onInsightAction={onInsightAction}
-            />
-          ))}
+          {groupedItems.map((group, groupIndex) => {
+            if (group.type === 'build') {
+              const item = group.item!;
+              return (
+                <TimelineItemCard
+                  key={item.id}
+                  item={item}
+                  isLatest={groupIndex === groupedItems.length - 1 && isStreaming}
+                  onFixWithAI={
+                    item.type === 'error' ? () => onFixWithAI?.(item.title, item.id) : undefined
+                  }
+                  isFixWithAILoading={fixingItemId === item.id}
+                  onSubmitAnswer={onSubmitAnswer}
+                  onSkipQuestion={onSkipQuestion}
+                  onInsightAction={onInsightAction}
+                />
+              );
+            }
 
+            // AI Group
+            const aiItems = group.items!;
+            const collapsedAiItems: TimelineItem[] = [];
+            let hasThinking = false;
+
+            for (const item of aiItems) {
+              if (item.type === 'agent_thinking') {
+                if (!hasThinking) {
+                  collapsedAiItems.push(item);
+                  hasThinking = true;
+                } else {
+                  collapsedAiItems[collapsedAiItems.length - 1] = item;
+                }
+              } else {
+                collapsedAiItems.push(item);
+                hasThinking = false;
+              }
+            }
+
+            return (
+              <div
+                key={`ai-group-${groupIndex}`}
+                className="my-4 rounded-lg border border-agent/20 bg-agent/5 p-3 relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-agent/30 to-transparent" />
+                <div className="flex items-center gap-2 mb-3 px-1 text-[10px] font-mono text-agent/80 uppercase tracking-wider">
+                  <Brain className="h-3 w-3" />
+                  AI Analysis
+                </div>
+                <div className="space-y-1">
+                  {collapsedAiItems.map((item, index) => (
+                    <TimelineItemCard
+                      key={item.id}
+                      item={item}
+                      isLatest={
+                        groupIndex === groupedItems.length - 1 &&
+                        index === collapsedAiItems.length - 1 &&
+                        isStreaming
+                      }
+                      onSubmitAnswer={onSubmitAnswer}
+                      onSkipQuestion={onSkipQuestion}
+                      onInsightAction={onInsightAction}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
           {/* Streaming indicator */}
           {isStreaming && items.length > 0 && (
             <div className="flex items-center gap-4 py-4 px-5 relative overflow-hidden rounded-lg border border-agent/10 bg-agent/5 mt-2 timeline-item-enter">

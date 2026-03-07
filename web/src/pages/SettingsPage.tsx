@@ -124,7 +124,7 @@ export function SettingsPage() {
       await refetch();
       setApiKey('');
     } catch {
-      setLlmError('Failed to update LLM configuration.');
+      setLlmError('Failed to update LLM configuration. Check your API key/token.');
     } finally {
       setSaving(false);
     }
@@ -175,6 +175,9 @@ export function SettingsPage() {
       setGithubError('Failed to start GitHub authorization');
     }
   };
+
+  const isOauthProvider = llmProvider === 'openai' || llmProvider === 'openrouter';
+  const oauthConnected = isOauthProvider && Boolean(oauthStatus?.providers[llmProvider]?.connected);
 
   const handleCopyCode = async () => {
     if (!deviceFlow?.userCode) return;
@@ -347,7 +350,7 @@ export function SettingsPage() {
                   <OAuthButton
                     provider={llmProvider}
                     onSuccess={async () => {
-                      await configureLLM(llmProvider, 'oauth');
+                      await configureLLM(llmProvider, '');
                       await fetchOAuthStatus();
                       await refetch();
                     }}
@@ -386,7 +389,7 @@ export function SettingsPage() {
           {llmProvider && (
             <Button
               type="submit"
-              disabled={saving || (llmProvider !== 'ollama' && !apiKey.trim())}
+              disabled={saving || (llmProvider !== 'ollama' && !apiKey.trim() && !oauthConnected)}
               size="sm"
               className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
             >

@@ -8,6 +8,7 @@ import {
   Brain,
   Wrench,
   MessageCircle,
+  Activity,
 } from 'lucide-react';
 import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard';
 import { InsightCard } from './InsightCard';
@@ -34,6 +35,18 @@ function formatTime(timestamp: string): string {
   } catch {
     return '';
   }
+}
+function cleanMarkdown(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/```[\s\S]*?```/g, '[Code Block]')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '• ')
+    .trim();
 }
 
 export function TimelineItemCard({
@@ -120,6 +133,11 @@ export function TimelineItemCard({
             <MessageCircle className="h-3.5 w-3.5 text-agent" />
           </div>
         )}
+        {!isSuccess && !isError && !isAgentEvent && (
+          <div className="p-1.5 rounded-md bg-bg-subtle/50 border border-white/5">
+            <Activity className="h-3.5 w-3.5 text-secondary-ol" />
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -127,13 +145,14 @@ export function TimelineItemCard({
         <div className="flex items-start justify-between gap-2">
           <p
             className={cn(
-              'text-sm font-body leading-snug',
+              'text-sm font-body leading-snug whitespace-pre-wrap',
               isSuccess && 'text-success font-medium',
-              isError && 'text-error font-medium',
+              isError && 'text-error font-medium line-clamp-3',
               isAgentEvent && 'text-agent/90',
             )}
+            title={isError ? item.title : undefined}
           >
-            {item.title}
+            {isAgentEvent ? cleanMarkdown(item.title) : item.title}
           </p>
           <span className="text-[10px] font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
             {formatTime(item.timestamp)}

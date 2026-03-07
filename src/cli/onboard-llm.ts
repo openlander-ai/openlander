@@ -96,11 +96,14 @@ export async function setupLlm(): Promise<void> {
   });
 
   // Step 5: Save to config
+  const resolvedApiKey = apiKey.trim();
+  const resolvedAuthToken = usedOAuth ? resolvedApiKey : '';
+
   updateConfig({
     llm: {
       provider,
-      apiKey: provider === 'ollama' ? '' : apiKey.trim(),
-      authToken: usedOAuth ? apiKey.trim() : '',
+      apiKey: provider === 'ollama' || usedOAuth ? '' : resolvedApiKey,
+      authToken: resolvedAuthToken,
       model: model.trim() || defaultModel,
     },
   });

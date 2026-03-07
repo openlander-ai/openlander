@@ -206,11 +206,33 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   return res.json();
 }
 
-export async function configureLLM(provider: string, apiKey: string, model?: string): Promise<any> {
+export async function configureLLM(
+  provider: string,
+  apiKey = '',
+  model?: string,
+  authToken?: string,
+): Promise<any> {
+  const body: {
+    provider: string;
+    api_key?: string;
+    auth_token?: string;
+    model?: string;
+  } = { provider };
+
+  if (apiKey) {
+    body.api_key = apiKey;
+  }
+  if (authToken) {
+    body.auth_token = authToken;
+  }
+  if (model) {
+    body.model = model;
+  }
+
   const res = await fetch('/api/setup/llm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, api_key: apiKey, model }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error('Failed to configure LLM');
   return res.json();

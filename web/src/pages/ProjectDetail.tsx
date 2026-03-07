@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   getProject,
@@ -27,6 +27,7 @@ import {
   Loader2,
   GitBranch,
   Activity,
+  Brain,
   ScrollText,
   Settings,
   Globe,
@@ -61,6 +62,7 @@ const statusConfig: Record<string, { label: string; color: string; dot: string }
     dot: 'bg-error',
   },
 };
+
 function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis): string {
   const lines = ['Root cause:\n' + diagnosis.rootCause, ''];
 
@@ -226,6 +228,8 @@ export function ProjectDetail() {
     runKey: timelineRunKey,
     onSettled: fetchProject,
   });
+
+  const allTimelineItems = useMemo(() => [...items, ...fixWithAIItems], [items, fixWithAIItems]);
 
   useEffect(() => {
     setFixWithAIItems([]);
@@ -490,28 +494,42 @@ export function ProjectDetail() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="timeline" className="flex-1 min-h-0 mt-0 flex flex-col">
-          <div className="flex-1 min-h-0">
-            <TimelineFeed
-              items={[...items, ...fixWithAIItems]}
-              isStreaming={isStreaming}
-              projectStatus={project?.status}
-              onSubmitAnswer={submitAnswer}
-              onSkipQuestion={skipQuestion}
-              onInsightAction={executeAction}
-              onFixWithAI={handleFixWithAI}
-              fixingItemId={fixingItemId}
-            />
-          </div>
-          {id && project && (
-            <LogPreview
-              projectId={id}
-              status={project.status}
-              onOpenLogs={() => setActiveTab('logs')}
-            />
-          )}
-        </TabsContent>
+        <TabsContent value="timeline" className="flex-1 min-h-0 mt-0 overflow-auto p-4">
+          <div className="space-y-4">
+            <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[600px]">
+              <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol shrink-0 bg-bg-panel/50">
+                <Activity className="h-3.5 w-3.5" />
+                Deployment timeline
+              </div>
+              <div className="flex-1 min-h-0">
+                <TimelineFeed
+                  items={allTimelineItems}
+                  isStreaming={isStreaming}
+                  projectStatus={project.status}
+                  onSubmitAnswer={submitAnswer}
+                  onSkipQuestion={skipQuestion}
+                  onInsightAction={executeAction}
+                  onFixWithAI={handleFixWithAI}
+                  fixingItemId={fixingItemId}
+                />
+              </div>
+            </section>
 
+            {id && project && (
+              <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
+                <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol">
+                  <ScrollText className="h-3.5 w-3.5" />
+                  Build logs
+                </div>
+                <LogPreview
+                  projectId={id}
+                  status={project.status}
+                  onOpenLogs={() => setActiveTab('logs')}
+                />
+              </section>
+            )}
+          </div>
+        </TabsContent>
         <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
           {id && <DeploymentsList projectId={id} />}
         </TabsContent>
