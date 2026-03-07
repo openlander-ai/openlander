@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plane, Menu, Cpu, MemoryStick, Bell } from 'lucide-react';
+import { Menu, Cpu, MemoryStick, Bell } from 'lucide-react';
 import type { SystemStats } from '@/types';
 import type { Notification } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';

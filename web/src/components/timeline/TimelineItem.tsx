@@ -39,8 +39,9 @@ function formatTime(timestamp: string): string {
 export function TimelineItemCard({
   item,
   isLatest,
-  onFixWithAI,
-  isFixWithAILoading,
+  // onFixWithAI — reserved for future auto-fix UI
+  onFixWithAI: _onFixWithAI,
+  isFixWithAILoading: _isFixWithAILoading,
   onSubmitAnswer,
   onSkipQuestion,
   onInsightAction,
