@@ -44,6 +44,9 @@
   * {
     @apply border-border;
   }
+  [hidden] {
+    display: none !important;
+  }
   html,
   body,
   #root {

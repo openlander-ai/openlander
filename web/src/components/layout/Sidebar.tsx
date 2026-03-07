@@ -49,7 +49,7 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
           variant="outline"
           size="sm"
           className={cn(
-            'w-full gap-2 border-dashed border-agent/30 text-agent hover:bg-agent/10 hover:text-agent hover:border-agent/50 transition-all',
+            'w-full gap-2 border-dashed border-foreground/20 text-foreground hover:bg-foreground hover:text-background hover:border-foreground/50 transition-all',
             'xl:justify-start justify-center',
           )}
           onClick={() => navigate('/projects/new')}

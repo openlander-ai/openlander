@@ -273,7 +273,7 @@ export function NewProjectFlow() {
 
                     <Button
                       size="sm"
-                      className="h-7 px-3 text-[11px] font-body gap-1.5 bg-agent text-black hover:bg-agent/90 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      className="h-7 px-3 text-[11px] font-body gap-1.5 bg-foreground text-background hover:bg-foreground/90 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                       onClick={() => handleDeploy(repo)}
                       disabled={deploying}
                     >

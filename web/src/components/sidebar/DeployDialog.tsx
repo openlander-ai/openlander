@@ -103,7 +103,11 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="bg-foreground text-background hover:bg-foreground/90"
+            >
               {loading ? 'Deploying...' : 'Deploy'}
             </Button>
           </SheetFooter>

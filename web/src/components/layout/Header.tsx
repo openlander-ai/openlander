@@ -84,20 +84,7 @@ export function Header({
         <Button variant="ghost" size="icon" className="md:hidden h-8 w-8" onClick={onMenuClick}>
           <Menu className="h-4 w-4" />
         </Button>
-
-        <div className="flex items-center gap-2">
-          <div className="bg-agent/10 p-1 rounded-md">
-            <Plane className="h-4 w-4 text-agent rotate-[-45deg]" />
-          </div>
-          <span className="hidden sm:inline-block font-display font-bold text-sm tracking-tight text-primary-ol">
-            OpenLander
-          </span>
-          <span className="text-[10px] font-mono text-secondary-ol bg-bg-subtle px-1.5 py-0.5 rounded">
-            v0.2
-          </span>
-        </div>
       </div>
-
       <div className="flex items-center gap-3 text-xs">
         {/* System Stats */}
         {stats && (
