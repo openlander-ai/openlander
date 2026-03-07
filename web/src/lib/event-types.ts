@@ -20,7 +20,16 @@ export interface QuestionData {
 
 /** Backend build stream raw event (NDJSON) */
 export interface BuildStreamEvent {
-  type: 'status' | 'complete' | 'error' | 'question_pending' | 'insight' | 'dockerfile_fixed';
+  type:
+    | 'status'
+    | 'complete'
+    | 'error'
+    | 'question_pending'
+    | 'insight'
+    | 'dockerfile_fixed'
+    | 'agent_thinking'
+    | 'agent_tool_call'
+    | 'agent_message';
   message: string;
   projectId: string;
   timestamp: string;
@@ -34,6 +43,9 @@ export interface BuildStreamEvent {
   /** Present only for dockerfile_fixed events */
   dockerfileChanges?: string[];
   retryCount?: number;
+  toolName?: string;
+  toolArguments?: Record<string, unknown>;
+  content?: string;
 }
 
 /** Action button for insight/anomaly timeline items */
@@ -157,6 +169,32 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         dockerfileChanges: event.dockerfileChanges,
         retryCount: event.retryCount,
+      };
+    case 'agent_thinking':
+      return {
+        id,
+        type: 'agent_thinking',
+        timestamp: event.timestamp,
+        title: event.message || 'Agent is analyzing...',
+        percent: -1,
+      };
+    case 'agent_tool_call':
+      return {
+        id,
+        type: 'agent_tool_call',
+        timestamp: event.timestamp,
+        title: `Calling ${event.toolName ?? 'tool'}`,
+        percent: -1,
+        toolName: event.toolName,
+        toolArguments: event.toolArguments ? sanitizeToolArguments(event.toolArguments) : undefined,
+      };
+    case 'agent_message':
+      return {
+        id,
+        type: 'agent_message',
+        timestamp: event.timestamp,
+        title: event.content ?? event.message,
+        percent: -1,
       };
     default:
       return {

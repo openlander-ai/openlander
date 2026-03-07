@@ -109,34 +109,9 @@ export function NewProjectFlow() {
     }
     setDeploying(true);
     setError(null);
-    setDeployStatus('Connecting to agent...');
+    setDeployStatus('Starting deployment...');
     try {
-      const result = await deployProject(repo.cloneUrl, repo.defaultBranch, repo.name, (event) => {
-        // Update deploy status based on SSE events
-        switch (event.type) {
-          case 'thinking':
-            setDeployStatus('Agent is analyzing...');
-            break;
-          case 'tool_call':
-            if (event.toolName === 'deploy_project') {
-              setDeployStatus('Starting deployment...');
-            } else {
-              setDeployStatus(`Running ${event.toolName}...`);
-            }
-            break;
-          case 'tool_result':
-            if (event.toolName === 'deploy_project' && event.success) {
-              setDeployStatus('Deploy started! Redirecting...');
-            }
-            break;
-          case 'message':
-            setDeployStatus(event.content.slice(0, 100));
-            break;
-          case 'error':
-            setDeployStatus(null);
-            break;
-        }
-      });
+      const result = await deployProject(repo.cloneUrl, repo.defaultBranch, repo.name);
       if (result.success && result.projectId) {
         navigate(`/projects/${result.projectId}`);
       } else {

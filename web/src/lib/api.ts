@@ -2,23 +2,14 @@ import type {
   Project,
   SystemStats,
   DeployResult,
-  ChatStreamEvent,
   DeployLogSummary,
   DeployLogDetail,
 } from '../types';
 
-/**
- * Deploy a project via agent-mediated SSE stream.
- * Consumes SSE events and resolves when projectId is extracted from tool_result.
- *
- * @param onEvent - Optional callback for SSE events (for UI updates during deploy)
- * @returns DeployResult with projectId on success
- */
 export async function deployProject(
   repoUrl: string,
   branch?: string,
   name?: string,
-  onEvent?: (event: ChatStreamEvent) => void,
 ): Promise<DeployResult> {
   const res = await fetch('/api/projects/deploy', {
     method: 'POST',
@@ -31,82 +22,7 @@ export async function deployProject(
     throw new Error(error || 'Failed to deploy project');
   }
 
-  // Check if response is SSE stream (agent-mediated) or JSON (direct fallback)
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('text/event-stream')) {
-    // Direct pipeline response (LLM not configured)
-    return res.json();
-  }
-
-  // SSE stream: consume events and extract projectId from tool_result
-  const reader = res.body?.getReader();
-  if (!reader) {
-    throw new Error('No response body');
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let projectId: string | undefined;
-  let deployError: string | undefined;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue;
-        const jsonStr = line.slice(5).trim();
-        if (!jsonStr) continue;
-
-        try {
-          const event = JSON.parse(jsonStr) as ChatStreamEvent;
-          onEvent?.(event);
-
-          // Extract projectId from deploy_project tool_result
-          if (
-            event.type === 'tool_result' &&
-            event.toolName === 'deploy_project' &&
-            event.success
-          ) {
-            const result = event.result as Record<string, unknown> | undefined;
-            if (result?.projectId) {
-              projectId = String(result.projectId);
-            }
-          }
-
-          // Handle fallback event (direct deploy)
-          if ((event as Record<string, unknown>).type === 'fallback') {
-            const fallback = event as unknown as DeployResult;
-            return fallback;
-          }
-
-          // Handle error
-          if (event.type === 'error') {
-            deployError = event.error;
-          }
-        } catch {
-          // Skip malformed JSON
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  if (projectId) {
-    return { success: true, projectId };
-  }
-
-  if (deployError) {
-    return { success: false, error: deployError };
-  }
-
-  return { success: false, error: 'Deploy completed but no projectId received' };
+  return res.json();
 }
 
 export async function listProjects(): Promise<Project[]> {
