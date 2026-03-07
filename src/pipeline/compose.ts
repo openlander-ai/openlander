@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { createModuleLogger } from '../lib/logger.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { checkEnvRequirements, classifyVar, detectEnvFile, parseEnvFile } from './env-inject.js';
@@ -692,17 +693,28 @@ export class ComposePipeline {
     composePath: string,
     args: string[],
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const proc = Bun.spawn(['docker', 'compose', '-f', composePath, ...args], {
-      cwd: dirname(composePath),
-      stdout: 'pipe',
-      stderr: 'pipe',
+    return new Promise((resolve, reject) => {
+      const proc = spawn('docker', ['compose', '-f', composePath, ...args], {
+        cwd: dirname(composePath),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
+
+      proc.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+      proc.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+      proc.on('close', (code) => {
+        resolve({
+          stdout: Buffer.concat(stdoutChunks).toString(),
+          stderr: Buffer.concat(stderrChunks).toString(),
+          exitCode: code ?? 1,
+        });
+      });
+
+      proc.on('error', reject);
     });
-
-    const stdout = await new Response(proc.stdout).text();
-    const stderr = await new Response(proc.stderr).text();
-    const exitCode = await proc.exited;
-
-    return { stdout, stderr, exitCode };
   }
 
   private resolveParentProject(projectId: string): ProjectRow {

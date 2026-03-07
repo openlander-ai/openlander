@@ -4,11 +4,11 @@ Thanks for your interest in contributing to OpenLander. This guide will help you
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) >= 1.1 (runtime + test runner)
-- Node.js >= 22 (for npm scripts and tsup build)
+- [Node.js](https://nodejs.org/) >= 22
+- npm (comes with Node.js)
 - Docker installed and running
 
-> **Why both?** Bun is the runtime (`openlander` runs on Bun). npm manages packages and scripts. tsup builds with esbuild. Vitest runs tests (also callable via `bun test`).
+> npm manages packages and scripts. tsup builds with esbuild. Vitest runs tests under Node.js.
 
 ## Development Setup
 
@@ -29,12 +29,12 @@ npm run dev
 
 The dev command runs `tsup --watch` which compiles TypeScript via esbuild with SolidJS JSX transform.
 
-To run the TUI after building:
+To run the application after building:
 
 ```bash
 npm run start
 # or directly:
-bun --conditions=browser dist/cli/index.js
+node dist/cli/index.js
 ```
 
 ## Available Scripts
@@ -43,7 +43,7 @@ bun --conditions=browser dist/cli/index.js
 | ----------------------- | --------------------------------------------- |
 | `npm run dev`           | Build in watch mode (tsup --watch)            |
 | `npm run build`         | Build the project for production              |
-| `npm run start`         | Start the application via Bun                 |
+| `npm run start`         | Start the application via Node.js             |
 | `npm run lint`          | Run ESLint to check code quality              |
 | `npm run lint:fix`      | Fix ESLint issues automatically               |
 | `npm run format`        | Format code with Prettier                     |
@@ -133,8 +133,8 @@ npm run test:coverage
 
 ### Test Infrastructure
 
-Tests run under Node.js/Vitest with a `bun:sqlite` compatibility shim (`test/__mocks__/bun-sqlite.ts`).
-This allows all 420 tests across 22 suites to pass without requiring Bun runtime.
+Tests run under Node.js/Vitest with better-sqlite3 as the SQLite driver.
+All 665 tests across 42 suites pass under Node.js.
 
 Key test files:
 

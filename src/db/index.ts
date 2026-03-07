@@ -1,4 +1,4 @@
-import type { Database as BunDatabase } from 'bun:sqlite';
+import type BetterSqlite3 from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { and, asc, count, desc, eq, isNotNull, sql } from 'drizzle-orm';
@@ -102,7 +102,7 @@ export interface WebhookConfigRow {
  * Uses WAL mode for better concurrent read performance.
  */
 export class Database {
-  private sqlite: BunDatabase;
+  private sqlite: BetterSqlite3.Database;
   private db: DrizzleClient;
 
   constructor(dbPath: string) {
@@ -118,7 +118,7 @@ export class Database {
 
   /** Create tables if they don't exist. */
   private initialize(): void {
-    this.sqlite.run(SCHEMA);
+    this.sqlite.exec(SCHEMA);
     this.migrate();
   }
 
@@ -129,21 +129,21 @@ export class Database {
     const colNames = new Set(columns.map((c) => c.name));
 
     if (!colNames.has('parent_project_id')) {
-      this.sqlite.run(
+      this.sqlite.exec(
         'ALTER TABLE projects ADD COLUMN parent_project_id TEXT REFERENCES projects(id) ON DELETE CASCADE',
       );
     }
     if (!colNames.has('dockerfile_path')) {
-      this.sqlite.run("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
+      this.sqlite.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
     }
     if (!colNames.has('deploy_lock_session')) {
-      this.sqlite.run('ALTER TABLE projects ADD COLUMN deploy_lock_session TEXT DEFAULT NULL');
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN deploy_lock_session TEXT DEFAULT NULL');
     }
     if (!colNames.has('deploy_lock_at')) {
-      this.sqlite.run('ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL');
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL');
     }
 
-    this.sqlite.run(
+    this.sqlite.exec(
       'CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)',
     );
 
@@ -154,13 +154,13 @@ export class Database {
     const dlColNames = new Set(dlCols.map((c) => c.name));
 
     if (!dlColNames.has('trigger_source')) {
-      this.sqlite.run(
+      this.sqlite.exec(
         "ALTER TABLE deploy_logs ADD COLUMN trigger_source TEXT CHECK(trigger_source IN ('chat', 'webhook', 'api'))",
       );
     }
 
     // global_secrets table (v0.0.10)
-    this.sqlite.run(`CREATE TABLE IF NOT EXISTS global_secrets (
+    this.sqlite.exec(`CREATE TABLE IF NOT EXISTS global_secrets (
       id TEXT PRIMARY KEY,
       key TEXT NOT NULL UNIQUE,
       encrypted_value TEXT NOT NULL,
@@ -169,7 +169,7 @@ export class Database {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
-    this.sqlite.run('CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key)');
+    this.sqlite.exec('CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key)');
   }
 
   // ===== Projects =====
@@ -768,7 +768,7 @@ export class Database {
         sql`${projects.deploy_lock_session} IS NOT NULL AND ${projects.deploy_lock_at} < datetime('now', '-' || ${timeoutMinutes} || ' minutes')`,
       )
       .run();
-    const row = this.sqlite.query('SELECT changes() as changes').get() as {
+    const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
       changes: number;
     } | null;
     return row?.changes ?? 0;

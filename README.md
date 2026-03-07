@@ -63,11 +63,11 @@ Mac Mini + OpenLander:   ~$600 once, $0/month
 # Install
 npm install -g openlander
 
-# Run (requires Bun runtime)
+# Run
 openlander
 ```
 
-> **Note**: OpenLander uses [Bun](https://bun.sh) as its runtime. If Bun is not installed, the `openlander` command will guide you through setup.
+> **Note**: OpenLander requires [Node.js](https://nodejs.org/) >= 22 and Docker.
 
 1. Check Docker (install if missing, fix permissions if needed)
 2. Start the Traefik reverse proxy
@@ -155,17 +155,17 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | Area          | Technology                                                                      |
 | ------------- | ------------------------------------------------------------------------------- |
 | Language      | TypeScript (strict mode, ESM)                                                   |
-| Runtime       | [Bun](https://bun.sh)                                                           |
+| Runtime       | [Node.js](https://nodejs.org/) >= 22                                            |
 | Build         | [tsup](https://tsup.egoist.dev) (backend) + [Vite](https://vite.dev) (frontend) |
 | Install       | npm global package                                                              |
 | Web UI        | React 19 + React Router + Tailwind CSS v3                                       |
 | AI            | [Vercel AI SDK](https://ai-sdk.dev) — multi-provider, streaming, tool calling   |
-| ORM           | [Drizzle ORM](https://orm.drizzle.team) + bun:sqlite                            |
+| ORM           | [Drizzle ORM](https://orm.drizzle.team) + better-sqlite3                        |
 | Docker        | dockerode                                                                       |
 | Reverse Proxy | Traefik (Docker label routing)                                                  |
 | Tunnel        | TryCloudflare / Cloudflare Tunnel                                               |
 | Database      | SQLite (via Drizzle ORM)                                                        |
-| Test          | Vitest + Node.js (with bun:sqlite shim)                                         |
+| Test          | Vitest + Node.js                                                                |
 
 ## Roadmap
 
@@ -186,7 +186,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 ## Requirements
 
 - **Platform**: Linux or macOS (Windows is not supported, but WSL2 on Windows works)
-- **[Bun](https://bun.sh)** >= 1.1 (installed automatically or via `curl -fsSL https://bun.sh/install | bash`)
+- **[Node.js](https://nodejs.org/)** >= 22
 - **Docker** installed and running (see below)
 - **LLM API key** (configured during setup) — one of:
   - [Google Gemini](https://ai.google.dev/) (free tier available)
@@ -230,17 +230,16 @@ The agent will handle the installation for your platform.
 ## Development
 
 ```bash
-# Prerequisites: Bun >= 1.1, Docker
-curl -fsSL https://bun.sh/install | bash
+# Prerequisites: Node.js >= 22, Docker
 
 # Clone & build
 git clone https://github.com/openlander-ai/OpenLander.git
 cd OpenLander
-bun install
-bun run build
+npm install
+npm run build
 
 # Run
-bun dist/cli/index.js
+node dist/cli/index.js
 ```
 
 ## Contributing

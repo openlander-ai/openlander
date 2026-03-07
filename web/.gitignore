@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Bun lockfile (project uses npm)
+bun.lock
+bun.lockb
