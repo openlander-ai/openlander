@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { getProjectEnv, updateProjectEnv } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Eye, EyeOff, Plus, Trash2, ClipboardPaste, Save, Loader2 } from 'lucide-react';
@@ -15,6 +16,7 @@ interface EnvVar {
 }
 
 export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
+  const { t } = useLanguage();
   const [vars, setVars] = useState<EnvVar[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -130,7 +132,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <p className="text-xs font-body text-muted-ol">
-          {vars.length} variable{vars.length !== 1 ? 's' : ''}
+          {vars.length} {vars.length !== 1 ? t('envVars.variables') : t('envVars.variable')}
         </p>
         <div className="flex items-center gap-2">
           <Button
@@ -140,7 +142,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             onClick={() => setPasteMode(!pasteMode)}
           >
             <ClipboardPaste className="h-3 w-3" />
-            Paste .env
+            {t('envVars.pasteEnv')}
           </Button>
           <Button
             variant="outline"
@@ -149,7 +151,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             onClick={addVar}
           >
             <Plus className="h-3 w-3" />
-            Add
+            {t('envVars.add')}
           </Button>
           {dirty && (
             <Button
@@ -159,7 +161,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
               disabled={saving}
             >
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-              Save
+              {t('common.save')}
             </Button>
           )}
         </div>
@@ -168,9 +170,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       {/* Paste .env modal */}
       {pasteMode && (
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle p-3 space-y-2">
-          <p className="text-[11px] font-body text-secondary-ol">
-            Paste your .env content below. Lines starting with # are ignored.
-          </p>
+          <p className="text-[11px] font-body text-secondary-ol">{t('envVars.pasteDescription')}</p>
           <textarea
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
@@ -193,7 +193,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                 setPasteText('');
               }}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               size="sm"
@@ -201,7 +201,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
               onClick={handlePaste}
               disabled={!pasteText.trim()}
             >
-              Parse & Import
+              {t('envVars.parseAndImport')}
             </Button>
           </div>
         </div>
@@ -210,17 +210,15 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       {/* Env vars table */}
       {vars.length === 0 ? (
         <div className="text-center py-8">
-          <p className="text-sm font-body text-secondary-ol">No environment variables set</p>
-          <p className="text-xs font-body text-muted-ol mt-1">
-            Click "Add" or "Paste .env" to get started.
-          </p>
+          <p className="text-sm font-body text-secondary-ol">{t('envVars.noEnvVars')}</p>
+          <p className="text-xs font-body text-muted-ol mt-1">{t('envVars.getStarted')}</p>
         </div>
       ) : (
         <div className="space-y-1">
           {/* Header */}
           <div className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 px-2 pb-1 text-[10px] font-mono text-muted-ol uppercase tracking-wider">
-            <span>Key</span>
-            <span>Value</span>
+            <span>{t('envVars.key')}</span>
+            <span>{t('envVars.value')}</span>
             <span />
             <span />
           </div>
@@ -234,7 +232,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                 type="text"
                 value={v.key}
                 onChange={(e) => updateVar(index, 'key', e.target.value)}
-                placeholder="KEY"
+                placeholder={t('envVars.keyPlaceholder')}
                 className={cn(
                   'px-2 py-1.5 rounded-md text-xs font-mono',
                   'bg-bg-app border border-border text-primary-ol',
@@ -246,7 +244,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                 type={v.revealed ? 'text' : 'password'}
                 value={v.value}
                 onChange={(e) => updateVar(index, 'value', e.target.value)}
-                placeholder="value"
+                placeholder={t('envVars.valuePlaceholder')}
                 className={cn(
                   'px-2 py-1.5 rounded-md text-xs font-mono',
                   'bg-bg-app border border-border text-primary-ol',

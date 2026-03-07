@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { getProject, exposeProject, unexposeProject, getAllIps, type NetworkIp } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Globe, ExternalLink, Loader2, Copy, Check, Wifi, Monitor } from 'lucide-react';
@@ -8,6 +9,7 @@ interface DomainsPanelProps {
 }
 
 export function DomainsPanel({ projectId }: DomainsPanelProps) {
+  const { t } = useLanguage();
   const [internalUrl, setInternalUrl] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [assignedPort, setAssignedPort] = useState<number | null>(null);
@@ -85,7 +87,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
         <div className="flex items-center gap-2">
           <Wifi className="h-3.5 w-3.5 text-muted-ol" />
           <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
-            Internal URL
+            {t('domains.internalUrl')}
           </span>
         </div>
         {internalUrl ? (
@@ -111,11 +113,9 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
             </button>
           </div>
         ) : (
-          <p className="text-sm font-body text-muted-ol">Not available — project is not running.</p>
+          <p className="text-sm font-body text-muted-ol">{t('domains.notAvailable')}</p>
         )}
-        <p className="text-[11px] font-body text-muted-ol">
-          Accessible from any device on the same network via sslip.io DNS.
-        </p>
+        <p className="text-[11px] font-body text-muted-ol">{t('domains.accessibleFrom')}</p>
       </div>
 
       {/* Direct Port Access */}
@@ -124,7 +124,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
           <div className="flex items-center gap-2">
             <Monitor className="h-3.5 w-3.5 text-muted-ol" />
             <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
-              Direct Access
+              {t('domains.directAccess')}
             </span>
           </div>
           <div className="space-y-1.5">
@@ -159,9 +159,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
               );
             })}
           </div>
-          <p className="text-[11px] font-body text-muted-ol">
-            Direct port access — works with LAN, VPN (Tailscale), or any network route.
-          </p>
+          <p className="text-[11px] font-body text-muted-ol">{t('domains.directPortAccess')}</p>
         </div>
       )}
 
@@ -171,7 +169,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
           <div className="flex items-center gap-2">
             <Globe className="h-3.5 w-3.5 text-muted-ol" />
             <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
-              Public URL
+              {t('domains.publicUrl')}
             </span>
           </div>
 
@@ -188,7 +186,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
               )}
             >
               {unexposing && <Loader2 className="h-3 w-3 animate-spin" />}
-              Remove
+              {t('domains.remove')}
             </button>
           ) : (
             <button
@@ -202,7 +200,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
               )}
             >
               {exposing && <Loader2 className="h-3 w-3 animate-spin" />}
-              Expose to Internet
+              {t('domains.exposeToInternet')}
             </button>
           )}
         </div>
@@ -230,15 +228,11 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
             </button>
           </div>
         ) : (
-          <p className="text-sm font-body text-muted-ol">
-            Not exposed. Click "Expose to Internet" to generate a public URL via Cloudflare Tunnel.
-          </p>
+          <p className="text-sm font-body text-muted-ol">{t('domains.notExposed')}</p>
         )}
 
         <p className="text-[11px] font-body text-muted-ol">
-          {publicUrl
-            ? 'Anyone with this URL can access your project. Temporary URLs may change on restart.'
-            : 'Requires the project to be running.'}
+          {publicUrl ? t('domains.anyoneWithUrl') : t('domains.requiresRunning')}
         </p>
       </div>
     </div>
