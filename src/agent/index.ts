@@ -44,6 +44,7 @@ export class Agent {
     private readonly db: Database,
     private readonly contextProvider?: ContextProvider,
     private readonly provider: LLMProvider = 'gemini',
+    private readonly locale: string = 'en',
   ) {}
 
   /** Set the question bridge for ask_user_question tool support. */
@@ -281,7 +282,7 @@ export class Agent {
    */
   private async refreshSystemPrompt(): Promise<void> {
     const contextSnapshot = this.contextProvider ? await this.contextProvider() : '';
-    const systemContent = buildSystemPrompt(contextSnapshot, this.provider);
+    const systemContent = buildSystemPrompt(contextSnapshot, this.provider, this.locale);
 
     // Replace or insert system message at position 0
     const first = this.history[0];

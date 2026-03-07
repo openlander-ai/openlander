@@ -117,6 +117,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
         db,
         async () => buildContextSnapshot(db, docker),
         config.llm.provider,
+        config.language,
       );
     } catch (err) {
       log.debug({ err }, 'Agent creation failed — agent will be null');

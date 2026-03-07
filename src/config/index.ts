@@ -16,6 +16,9 @@ const log = createModuleLogger('config');
 // --- Config schema ---
 
 export interface OpenLanderConfig {
+  /** User-facing language for UI and agent responses */
+  language: 'en' | 'ko';
+
   /** v0.1: LLM provider settings */
   llm: LLMProviderConfig;
 
@@ -149,6 +152,7 @@ export interface GitProvidersConfig {
 // --- Defaults ---
 
 const DEFAULT_CONFIG: OpenLanderConfig = {
+  language: 'en',
   llm: {
     provider: 'gemini',
     apiKey: '',

@@ -34,7 +34,11 @@ export type LLMProvider = 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ol
  * Build the complete system prompt with dynamic context + model overlay.
  * Called at the START of each conversation turn so the agent always sees fresh state.
  */
-export function buildSystemPrompt(contextSnapshot: string, provider: LLMProvider): string {
+export function buildSystemPrompt(
+  contextSnapshot: string,
+  provider: LLMProvider,
+  locale: string = 'en',
+): string {
   const parts = [BASE_PROMPT];
 
   if (contextSnapshot) {
@@ -44,6 +48,12 @@ export function buildSystemPrompt(contextSnapshot: string, provider: LLMProvider
   const overlay = MODEL_OVERLAYS[provider];
   if (overlay) {
     parts.push(overlay);
+  }
+
+  // Inject locale directive (e.g., respond in Korean)
+  const localeDirective = LOCALE_DIRECTIVES[locale];
+  if (localeDirective) {
+    parts.push(localeDirective);
   }
 
   return parts.join('\n\n');
@@ -149,6 +159,20 @@ const MODEL_OVERLAYS: Partial<Record<LLMProvider, string>> = {
 - Keep responses very short and direct — this saves tokens.
 - ALWAYS use tools for any deployment action. Never answer from memory.
 - When unsure, call list_projects first to see current state.`,
+};
+
+// ---------------------------------------------------------------------------
+// Locale directives — instruct the model to respond in the user's language
+// ---------------------------------------------------------------------------
+
+const LOCALE_DIRECTIVES: Record<string, string> = {
+  ko: `## Language
+CRITICAL: You MUST respond to the user in Korean (한국어).
+- All explanations, status messages, error descriptions, and suggestions must be in Korean.
+- Tool calls, JSON keys, and technical identifiers (container names, URLs, ports) remain in English.
+- Status emojis remain the same: ✅ ❌ ⚠️ 🔒 🌐 🔄
+- Example: "✅ frontend 배포가 완료되었습니다" not "✅ frontend deployed successfully"
+- Keep standard technical terms in English: Docker, Traefik, API, Git, deploy, container, etc.`,
 };
 
 // ---------------------------------------------------------------------------
