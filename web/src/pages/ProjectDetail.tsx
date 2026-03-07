@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { useParams } from 'react-router-dom';
 import {
   getProject,
@@ -40,61 +41,66 @@ import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/lib/event-types';
 import { useNavigate } from 'react-router-dom';
 
-const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
-  running: {
-    label: 'Live',
-    color: 'text-success',
-    dot: 'bg-success',
-  },
-  stopped: {
-    label: 'Stopped',
-    color: 'text-muted-ol',
-    dot: 'bg-[var(--text-muted)]',
-  },
-  building: {
-    label: 'Deploying',
-    color: 'text-warning',
-    dot: 'bg-warning animate-pulse',
-  },
-  error: {
-    label: 'Failed',
-    color: 'text-error',
-    dot: 'bg-error',
-  },
-};
+function getStatusConfig(
+  t: (key: string) => string,
+): Record<string, { label: string; color: string; dot: string }> {
+  return {
+    running: {
+      label: t('projects.status.running'),
+      color: 'text-success',
+      dot: 'bg-success',
+    },
+    stopped: {
+      label: t('projects.status.stopped'),
+      color: 'text-muted-ol',
+      dot: 'bg-[var(--text-muted)]',
+    },
+    building: {
+      label: t('projects.status.building'),
+      color: 'text-warning',
+      dot: 'bg-warning animate-pulse',
+    },
+    error: {
+      label: t('projects.status.error'),
+      color: 'text-error',
+      dot: 'bg-error',
+    },
+  };
+}
 
-function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis): string {
-  const lines = ['Root cause:\n' + diagnosis.rootCause, ''];
+function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) => string): string {
+  const lines = [t('projectDetail.diagnosis.rootCause') + '\n' + diagnosis.rootCause, ''];
 
   if (diagnosis.suggestedFixes.length > 0) {
-    lines.push('Suggested fixes:');
+    lines.push(t('projectDetail.diagnosis.suggestedFixes'));
     diagnosis.suggestedFixes.forEach((fix, index) => {
       const location = fix.location ? ' (' + fix.location + ')' : '';
       lines.push(String(index + 1) + '. [' + fix.confidence + '] ' + fix.description + location);
     });
   } else {
-    lines.push('No specific fix suggestions were returned.');
+    lines.push(t('projectDetail.diagnosis.noFixes'));
   }
 
   if (diagnosis.rawAnalysis.trim()) {
-    lines.push('', 'Raw analysis:\n' + diagnosis.rawAnalysis);
+    lines.push('', t('projectDetail.diagnosis.rawAnalysis') + '\n' + diagnosis.rawAnalysis);
   }
 
   return lines.join('\n');
 }
 
-function formatRelativeTime(dateStr: string) {
+function formatRelativeTime(dateStr: string, t: (key: string) => string) {
   const date = new Date(dateStr);
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-  if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
+  if (diffInSeconds < 60)
+    return `${diffInSeconds}${t('projects.timeAgo.minutes').replace('m', 's')}`;
   const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  if (diffInMinutes < 60) return `${diffInMinutes}${t('projects.timeAgo.minutes')}`;
   const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) return `${diffInHours}h ago`;
+  if (diffInHours < 24) return `${diffInHours}${t('projects.timeAgo.hours')}`;
   const diffInDays = Math.floor(diffInHours / 24);
-  return `${diffInDays}d ago`;
+  return `${diffInDays}${t('projects.timeAgo.days')}`;
 }
 
 function formatDuration(ms: number) {
@@ -109,6 +115,7 @@ function DeploymentsList({ projectId }: { projectId: string }) {
   const [deployments, setDeployments] = useState<DeployLogSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   useEffect(() => {
     const fetchDeployments = async () => {
@@ -136,7 +143,7 @@ function DeploymentsList({ projectId }: { projectId: string }) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-secondary-ol">
         <History className="h-8 w-8 mb-3 text-muted-ol" />
-        <p className="text-sm font-body">No deployments yet</p>
+        <p className="text-sm font-body">{t('projectDetail.noDeployments')}</p>
       </div>
     );
   }
@@ -162,7 +169,7 @@ function DeploymentsList({ projectId }: { projectId: string }) {
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-display font-medium text-primary-ol capitalize">
-                    {deploy.trigger} Deployment
+                    {deploy.trigger} {t('projectDetail.deployment')}
                   </span>
                   {deploy.commitSha && (
                     <span className="flex items-center gap-1 text-xs font-mono text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
@@ -174,7 +181,7 @@ function DeploymentsList({ projectId }: { projectId: string }) {
                 <div className="flex items-center gap-3 mt-1 text-xs font-body text-secondary-ol">
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    {formatRelativeTime(deploy.createdAt)}
+                    {formatRelativeTime(deploy.createdAt, t)}
                   </span>
                   {deploy.durationMs && (
                     <span className="flex items-center gap-1">
@@ -194,6 +201,8 @@ function DeploymentsList({ projectId }: { projectId: string }) {
 
 export function ProjectDetail() {
   const { id } = useParams();
+  const { t } = useLanguage();
+  const statusConfig = getStatusConfig(t);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -250,8 +259,8 @@ export function ProjectDetail() {
           id: 'ai-fix-' + sourceItemId + '-' + Date.now(),
           type: 'insight',
           timestamp: new Date().toISOString(),
-          title: 'AI diagnosis: ' + diagnosis.summary,
-          detail: formatBuildDiagnosisDetail(diagnosis),
+          title: t('projectDetail.diagnosis.aiDiagnosis') + ' ' + diagnosis.summary,
+          detail: formatBuildDiagnosisDetail(diagnosis, t),
           percent: -1,
           severity: 'warning',
         },
@@ -264,7 +273,7 @@ export function ProjectDetail() {
           id: 'ai-fix-' + sourceItemId + '-' + Date.now() + '-error',
           type: 'insight',
           timestamp: new Date().toISOString(),
-          title: 'Fix with AI failed',
+          title: t('projectDetail.diagnosis.fixFailed'),
           detail: message,
           percent: -1,
           severity: 'error',
@@ -355,7 +364,7 @@ export function ProjectDetail() {
   if (!project) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm font-body text-secondary-ol">Project not found</p>
+        <p className="text-sm font-body text-secondary-ol">{t('projectDetail.notFound')}</p>
       </div>
     );
   }
@@ -420,7 +429,7 @@ export function ProjectDetail() {
               ) : (
                 <RotateCw className="h-3 w-3" />
               )}
-              Redeploy
+              {t('projects.redeploy')}
             </Button>
             <Button
               variant="outline"
@@ -434,7 +443,7 @@ export function ProjectDetail() {
               ) : (
                 <Square className="h-3 w-3" />
               )}
-              Stop
+              {t('projectDetail.stop')}
             </Button>
             <Button
               variant="outline"
@@ -455,7 +464,7 @@ export function ProjectDetail() {
               ) : (
                 <Globe className="h-3 w-3" />
               )}
-              {project.publicUrl ? 'Unexpose' : 'Expose'}
+              {project.publicUrl ? t('projectDetail.unexpose') : t('projectDetail.expose')}
             </Button>
           </div>
         </div>
@@ -469,28 +478,28 @@ export function ProjectDetail() {
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <Activity className="h-3.5 w-3.5" />
-            Timeline
+            {t('projectDetail.tabs.timeline')}
           </TabsTrigger>
           <TabsTrigger
             value="deployments"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <History className="h-3.5 w-3.5" />
-            Deployments
+            {t('projectDetail.tabs.deployments')}
           </TabsTrigger>
           <TabsTrigger
             value="logs"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <ScrollText className="h-3.5 w-3.5" />
-            Logs
+            {t('projectDetail.tabs.logs')}
           </TabsTrigger>
           <TabsTrigger
             value="config"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <Settings className="h-3.5 w-3.5" />
-            Configuration
+            {t('projectDetail.tabs.config')}
           </TabsTrigger>
         </TabsList>
 
@@ -499,7 +508,7 @@ export function ProjectDetail() {
             <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[600px]">
               <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol shrink-0 bg-bg-panel/50">
                 <Activity className="h-3.5 w-3.5" />
-                Deployment timeline
+                {t('projectDetail.deploymentTimeline')}
               </div>
               <div className="flex-1 min-h-0">
                 <TimelineFeed
@@ -519,7 +528,7 @@ export function ProjectDetail() {
               <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
                 <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol">
                   <ScrollText className="h-3.5 w-3.5" />
-                  Build logs
+                  {t('projectDetail.buildLogs')}
                 </div>
                 <LogPreview
                   projectId={id}
@@ -543,10 +552,10 @@ export function ProjectDetail() {
             <Tabs defaultValue="env" className="p-4">
               <TabsList className="bg-bg-subtle">
                 <TabsTrigger value="env" className="text-xs font-body">
-                  Environment Variables
+                  {t('projectDetail.tabs.envVars')}
                 </TabsTrigger>
                 <TabsTrigger value="domains" className="text-xs font-body">
-                  Domains
+                  {t('projectDetail.tabs.domains')}
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="env">

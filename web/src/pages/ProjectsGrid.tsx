@@ -1,48 +1,55 @@
 import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '@/i18n/context';
 import { useProjects } from '@/hooks/use-projects';
 import { redeployProject } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Plus, ExternalLink, GitBranch, Clock, RotateCw, Settings, Loader2 } from 'lucide-react';
 
-const statusConfig: Record<string, { label: string; dot: string; badge: string }> = {
-  running: {
-    label: 'Live',
-    dot: 'bg-success',
-    badge: 'text-success border-success/30 bg-success/10',
-  },
-  stopped: {
-    label: 'Stopped',
-    dot: 'bg-[var(--text-muted)]',
-    badge: 'text-muted-ol border-[var(--text-muted)]/30 bg-[var(--text-muted)]/10',
-  },
-  building: {
-    label: 'Deploying',
-    dot: 'bg-warning animate-pulse',
-    badge: 'text-warning border-warning/30 bg-warning/10',
-  },
-  error: {
-    label: 'Failed',
-    dot: 'bg-error',
-    badge: 'text-error border-error/30 bg-error/10',
-  },
-};
+function getStatusConfig(
+  t: (key: string) => string,
+): Record<string, { label: string; dot: string; badge: string }> {
+  return {
+    running: {
+      label: t('projects.status.running'),
+      dot: 'bg-success',
+      badge: 'text-success border-success/30 bg-success/10',
+    },
+    stopped: {
+      label: t('projects.status.stopped'),
+      dot: 'bg-[var(--text-muted)]',
+      badge: 'text-muted-ol border-[var(--text-muted)]/30 bg-[var(--text-muted)]/10',
+    },
+    building: {
+      label: t('projects.status.building'),
+      dot: 'bg-warning animate-pulse',
+      badge: 'text-warning border-warning/30 bg-warning/10',
+    },
+    error: {
+      label: t('projects.status.error'),
+      dot: 'bg-error',
+      badge: 'text-error border-error/30 bg-error/10',
+    },
+  };
+}
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, t: (key: string) => string): string {
   const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return t('projects.timeAgo.justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return `${minutes}${t('projects.timeAgo.minutes')}`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return `${hours}${t('projects.timeAgo.hours')}`;
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return `${days}${t('projects.timeAgo.days')}`;
 }
 
 export function ProjectsGrid() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { projects, loading } = useProjects();
+  const { projects, loading, refetch } = useProjects();
+  const { t } = useLanguage();
+  const statusConfig = getStatusConfig(t);
 
   const handleRedeploy = async (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();
@@ -52,6 +59,7 @@ export function ProjectsGrid() {
     }
     try {
       await redeployProject(projectId);
+      refetch();
     } catch (err) {
       console.error('Redeploy failed:', err);
     }
@@ -71,10 +79,11 @@ export function ProjectsGrid() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display font-bold text-xl text-primary-ol tracking-tight">
-            Projects
+            {t('projects.title')}
           </h1>
           <p className="text-xs font-body text-secondary-ol mt-0.5">
-            {projects.length} project{projects.length !== 1 ? 's' : ''} deployed
+            {projects.length}{' '}
+            {projects.length === 1 ? t('projects.projectCount') : t('projects.projectsCount')}
           </p>
         </div>
         <button
@@ -88,7 +97,7 @@ export function ProjectsGrid() {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-foreground text-background hover:bg-foreground/90 transition-colors"
         >
           <Plus className="h-3.5 w-3.5" />
-          New Project
+          {t('projects.newProject')}
         </button>
       </div>
 
@@ -103,9 +112,11 @@ export function ProjectsGrid() {
             <Plus className="h-8 w-8 text-agent" />
           </div>
           <div className="text-center">
-            <p className="font-display font-semibold text-primary-ol">Deploy your first app</p>
+            <p className="font-display font-semibold text-primary-ol">
+              {t('projects.deployFirstApp')}
+            </p>
             <p className="text-xs font-body text-secondary-ol mt-1">
-              Connect a GitHub repo and let the agent handle the rest.
+              {t('projects.connectGithub')}
             </p>
           </div>
         </button>
@@ -161,7 +172,7 @@ export function ProjectsGrid() {
                     )}
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {timeAgo(project.updatedAt)}
+                      {timeAgo(project.updatedAt, t)}
                     </span>
                   </div>
                 </div>
@@ -173,7 +184,7 @@ export function ProjectsGrid() {
                     className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-body text-secondary-ol hover:text-agent hover:bg-agent/10 transition-colors"
                   >
                     <RotateCw className="h-3 w-3" />
-                    Redeploy
+                    {t('projects.redeploy')}
                   </button>
                   <button
                     onClick={(e) => {
@@ -183,7 +194,7 @@ export function ProjectsGrid() {
                     className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-body text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle transition-colors"
                   >
                     <Settings className="h-3 w-3" />
-                    Settings
+                    {t('projects.settings')}
                   </button>
                 </div>
               </div>

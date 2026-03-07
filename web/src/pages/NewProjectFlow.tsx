@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { useNavigate } from 'react-router-dom';
 import { deployProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -39,6 +40,7 @@ const langColors: Record<string, string> = {
 export function NewProjectFlow() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
   const [tab, setTab] = useState<Tab>('repos');
   const [repos, setRepos] = useState<GitRepo[]>([]);
   const [searchResults, setSearchResults] = useState<GitRepo[]>([]);
@@ -60,16 +62,16 @@ export function NewProjectFlow() {
       if (!res.ok) {
         const data = await res.json();
         if (data.error === 'GITHUB_NOT_CONFIGURED') {
-          setGhError('GitHub not connected. Go to Settings to add your account.');
+          setGhError(t('newProject.githubNotConnected'));
           return;
         }
-        throw new Error(data.message ?? 'Failed to fetch repos');
+        throw new Error(data.message ?? t('newProject.fetchFailed'));
       }
       const data = await res.json();
       setRepos((prev) => (pageNum === 1 ? data.repos : [...prev, ...data.repos]));
       setHasMore(data.hasMore);
     } catch (err) {
-      setGhError(err instanceof Error ? err.message : 'Failed to fetch repos');
+      setGhError(err instanceof Error ? err.message : t('newProject.fetchFailed'));
     } finally {
       setLoading(false);
     }
@@ -109,18 +111,18 @@ export function NewProjectFlow() {
     }
     setDeploying(true);
     setError(null);
-    setDeployStatus('Starting deployment...');
+    setDeployStatus(t('newProject.startingDeployment'));
     try {
       const result = await deployProject(repo.cloneUrl, repo.defaultBranch, repo.name);
       if (result.success && result.projectId) {
         navigate(`/projects/${result.projectId}`);
       } else {
-        setError(result.error ?? 'Deploy failed');
+        setError(result.error ?? t('newProject.deployFailed'));
         setDeploying(false);
         setDeployStatus(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Deploy failed');
+      setError(err instanceof Error ? err.message : t('newProject.deployFailed'));
       setDeploying(false);
       setDeployStatus(null);
     }
@@ -141,9 +143,9 @@ export function NewProjectFlow() {
           </button>
           <div>
             <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight">
-              New Project
+              {t('newProject.title')}
             </h1>
-            <p className="text-xs font-body text-secondary-ol">Select a repository to deploy</p>
+            <p className="text-xs font-body text-secondary-ol">{t('newProject.selectRepo')}</p>
           </div>
         </div>
 
@@ -159,7 +161,7 @@ export function NewProjectFlow() {
                   : 'text-secondary-ol hover:text-primary-ol',
               )}
             >
-              My Repos
+              {t('newProject.myRepos')}
             </button>
             <button
               onClick={() => setTab('search')}
@@ -170,7 +172,7 @@ export function NewProjectFlow() {
                   : 'text-secondary-ol hover:text-primary-ol',
               )}
             >
-              Search
+              {t('newProject.search')}
             </button>
           </div>
 
@@ -178,7 +180,7 @@ export function NewProjectFlow() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-ol" />
               <Input
-                placeholder="Search repositories..."
+                placeholder={t('newProject.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-8 pl-8 text-xs font-body bg-bg-subtle border-[hsl(var(--border))]"
@@ -202,7 +204,7 @@ export function NewProjectFlow() {
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-agent" />
             <p className="text-sm font-body text-secondary-ol">
-              {deployStatus ?? 'Starting deployment...'}
+              {deployStatus ?? t('newProject.startingDeployment')}
             </p>
           </div>
         </div>
@@ -218,7 +220,7 @@ export function NewProjectFlow() {
               </div>
             ) : displayedRepos.length === 0 && tab === 'search' && searchQuery ? (
               <div className="text-center py-12 text-secondary-ol text-xs font-body">
-                No repositories found for \"{searchQuery}\"
+                {t('newProject.noReposFound')} "{searchQuery}"
               </div>
             ) : (
               <>
@@ -278,7 +280,7 @@ export function NewProjectFlow() {
                       disabled={deploying}
                     >
                       <Rocket className="h-3 w-3" />
-                      Deploy
+                      {t('newProject.deploy')}
                     </Button>
                   </div>
                 ))}
@@ -298,7 +300,7 @@ export function NewProjectFlow() {
                       disabled={loading}
                     >
                       {loading && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-                      Load more
+                      {t('newProject.loadMore')}
                     </Button>
                   </div>
                 )}

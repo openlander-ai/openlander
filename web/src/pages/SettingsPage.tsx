@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { useSetup } from '@/hooks/use-setup';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import {
@@ -42,6 +43,7 @@ import {
 export function SettingsPage() {
   const { status, loading, refetch } = useSetup();
   const { stats } = useSystemStats();
+  const { t } = useLanguage();
 
   const [llmProvider, setLlmProvider] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -124,7 +126,7 @@ export function SettingsPage() {
       await refetch();
       setApiKey('');
     } catch {
-      setLlmError('Failed to update LLM configuration. Check your API key/token.');
+      setLlmError(t('settings.aiModel.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -253,17 +255,19 @@ export function SettingsPage() {
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-8">
       <div>
-        <h1 className="font-display text-2xl font-bold text-primary-ol tracking-tight">Settings</h1>
-        <p className="text-sm font-body text-secondary-ol mt-1">
-          Manage your AI provider, connections, and system configuration.
-        </p>
+        <h1 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+          {t('settings.title')}
+        </h1>
+        <p className="text-sm font-body text-secondary-ol mt-1">{t('settings.description')}</p>
       </div>
 
       {/* AI Model */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">AI Model</h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">
+            {t('settings.aiModel.title')}
+          </h2>
         </div>
 
         {status?.llm.ok && (
@@ -276,14 +280,16 @@ export function SettingsPage() {
               <p className="text-xs font-body text-muted-ol mt-0.5">Model: {status.llm.model}</p>
             </div>
             <Badge variant="outline" className="text-success border-success/30">
-              Active
+              {t('settings.aiModel.active')}
             </Badge>
           </div>
         )}
 
         <form onSubmit={handleUpdateLLM} className="space-y-3">
           <p className="text-xs font-body text-secondary-ol">
-            {status?.llm.ok ? 'Switch to a different provider:' : 'Configure an AI provider:'}
+            {status?.llm.ok
+              ? t('settings.aiModel.switchProvider')
+              : t('settings.aiModel.configureProvider')}
           </p>
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -325,7 +331,9 @@ export function SettingsPage() {
                 <div className="flex items-center justify-between p-3 rounded-lg border border-success/20 bg-success/5">
                   <div className="flex items-center gap-2 text-success">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span className="text-sm font-medium">Connected via OAuth</span>
+                    <span className="text-sm font-medium">
+                      {t('settings.aiModel.connectedViaOauth')}
+                    </span>
                   </div>
                   <Button
                     type="button"
@@ -342,7 +350,7 @@ export function SettingsPage() {
                       }
                     }}
                   >
-                    Disconnect
+                    {t('settings.aiModel.disconnect')}
                   </Button>
                 </div>
               ) : (
@@ -360,7 +368,9 @@ export function SettingsPage() {
                       <span className="w-full border-t border-border" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-bg-app px-2 text-muted-ol font-body">Or use API Key</span>
+                      <span className="bg-bg-app px-2 text-muted-ol font-body">
+                        {t('settings.aiModel.orUseApiKey')}
+                      </span>
                     </div>
                   </div>
                 </>
@@ -376,7 +386,7 @@ export function SettingsPage() {
             ) && (
               <Input
                 type="password"
-                placeholder="API Key"
+                placeholder={t('settings.aiModel.apiKey')}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 required={llmProvider !== 'openai' && llmProvider !== 'openrouter'}
@@ -398,7 +408,7 @@ export function SettingsPage() {
               ) : (
                 <Save className="h-3.5 w-3.5" />
               )}
-              Update Provider
+              {t('settings.aiModel.updateProvider')}
             </Button>
           )}
         </form>
@@ -408,16 +418,16 @@ export function SettingsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">Global Secrets</h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">
+            {t('settings.secrets.title')}
+          </h2>
         </div>
-        <p className="text-xs font-body text-secondary-ol">
-          Encrypted secrets shared across all projects. Project-specific env vars override these.
-        </p>
+        <p className="text-xs font-body text-secondary-ol">{t('settings.secrets.description')}</p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
           {/* Existing secrets list */}
           {secrets.length === 0 ? (
-            <p className="text-sm font-body text-muted-ol">No global secrets configured.</p>
+            <p className="text-sm font-body text-muted-ol">{t('settings.secrets.noSecrets')}</p>
           ) : (
             <div className="space-y-2">
               {secrets.map((s) => (
@@ -453,21 +463,21 @@ export function SettingsPage() {
           <form onSubmit={handleAddSecret} className="space-y-2 pt-2 border-t border-border">
             <div className="grid grid-cols-2 gap-2">
               <Input
-                placeholder="KEY_NAME"
+                placeholder={t('settings.secrets.keyPlaceholder')}
                 value={secretKey}
                 onChange={(e) => setSecretKey(e.target.value)}
                 className="font-mono text-sm bg-bg-app border-border"
               />
               <Input
                 type="password"
-                placeholder="Secret value"
+                placeholder={t('settings.secrets.valuePlaceholder')}
                 value={secretValue}
                 onChange={(e) => setSecretValue(e.target.value)}
                 className="font-mono text-sm bg-bg-app border-border"
               />
             </div>
             <Input
-              placeholder="Description (optional)"
+              placeholder={t('settings.secrets.descPlaceholder')}
               value={secretDesc}
               onChange={(e) => setSecretDesc(e.target.value)}
               className="text-sm bg-bg-app border-border"
@@ -483,7 +493,7 @@ export function SettingsPage() {
               ) : (
                 <Plus className="h-3.5 w-3.5" />
               )}
-              Add Secret
+              {t('settings.secrets.addSecret')}
             </Button>
           </form>
         </div>
@@ -493,19 +503,21 @@ export function SettingsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Github className="h-4 w-4 text-secondary-ol" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">GitHub Connection</h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">
+            {t('settings.github.title')}
+          </h2>
         </div>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
-          <p className="text-sm font-body text-secondary-ol">
-            Connect your GitHub account to deploy private repositories.
-          </p>
+          <p className="text-sm font-body text-secondary-ol">{t('settings.github.description')}</p>
 
           {status?.github?.ok ? (
             <div className="flex items-center justify-between p-3 rounded-lg border border-success/20 bg-success/5">
               <div className="flex items-center gap-2 text-success">
                 <CheckCircle2 className="w-4 h-4" />
-                <span className="text-sm font-medium">Connected as {status.github.username}</span>
+                <span className="text-sm font-medium">
+                  {t('settings.github.connectedAs')} {status.github.username}
+                </span>
               </div>
               <Button
                 type="button"
@@ -526,7 +538,9 @@ export function SettingsPage() {
             // Device Flow active - show code
             <div className="space-y-4">
               <div className="text-center space-y-3">
-                <p className="text-sm font-body text-secondary-ol">Enter this code on GitHub:</p>
+                <p className="text-sm font-body text-secondary-ol">
+                  {t('settings.github.enterCode')}
+                </p>
                 <p className="font-mono text-2xl tracking-[0.3em] text-primary-ol font-bold">
                   {deviceFlow.userCode}
                 </p>
@@ -540,7 +554,7 @@ export function SettingsPage() {
                   className="gap-1.5 font-body"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Open GitHub
+                  {t('settings.github.openGithub')}
                 </Button>
                 <Button
                   type="button"
@@ -554,12 +568,12 @@ export function SettingsPage() {
                   ) : (
                     <Copy className="h-3.5 w-3.5" />
                   )}
-                  {copiedCode ? 'Copied' : 'Copy Code'}
+                  {copiedCode ? t('settings.github.copied') : t('settings.github.copyCode')}
                 </Button>
               </div>
               <div className="flex items-center justify-center gap-2 text-muted-ol">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span className="text-xs font-body">Waiting for authorization...</span>
+                <span className="text-xs font-body">{t('settings.github.waiting')}</span>
               </div>
               <div className="flex justify-center">
                 <Button
@@ -569,7 +583,7 @@ export function SettingsPage() {
                   onClick={handleCancelDeviceFlow}
                   className="text-xs font-body text-muted-ol"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
               </div>
             </div>
@@ -583,7 +597,7 @@ export function SettingsPage() {
                 className="w-full gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
               >
                 <Github className="h-3.5 w-3.5" />
-                Connect with GitHub
+                {t('settings.github.connectWithGithub')}
               </Button>
 
               <div className="relative my-4">
@@ -591,11 +605,13 @@ export function SettingsPage() {
                   <span className="w-full border-t border-[hsl(var(--border))]" />
                 </div>
                 <div className="relative flex justify-center text-xs">
-                  <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">or</span>
+                  <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">
+                    {t('settings.github.or')}
+                  </span>
                 </div>
               </div>
 
-              <p className="text-xs font-body text-muted-ol">Enter a Personal Access Token:</p>
+              <p className="text-xs font-body text-muted-ol">{t('settings.github.enterToken')}</p>
               <form onSubmit={handleConnectGithub} className="space-y-3">
                 <div className="space-y-2">
                   <Input
@@ -611,7 +627,7 @@ export function SettingsPage() {
                     rel="noreferrer"
                     className="text-xs font-body text-agent hover:underline inline-flex items-center gap-1"
                   >
-                    Generate a token →
+                    {t('settings.github.generateToken')}
                   </a>
                 </div>
                 <Button
@@ -626,7 +642,7 @@ export function SettingsPage() {
                   ) : (
                     <Github className="h-3.5 w-3.5" />
                   )}
-                  Connect
+                  {t('settings.github.connect')}
                 </Button>
               </form>
 
@@ -640,7 +656,7 @@ export function SettingsPage() {
                 onClick={refetch}
               >
                 <RefreshCw className="h-3 w-3" />
-                Refresh
+                {t('settings.github.refresh')}
               </Button>
             </div>
           )}
@@ -651,32 +667,34 @@ export function SettingsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Cpu className="h-4 w-4 text-secondary-ol" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">System Resources</h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">
+            {t('settings.system.title')}
+          </h2>
         </div>
 
         {stats ? (
           <div className="grid grid-cols-3 gap-3">
             <StatCard
               icon={<Cpu className="h-4 w-4" />}
-              label="CPU"
+              label={t('settings.system.cpu')}
               value={`${typeof stats.cpu === 'number' ? stats.cpu.toFixed(0) : (stats.cpu?.usagePercent?.toFixed(0) ?? '—')}%`}
               color="text-agent"
             />
             <StatCard
               icon={<MemoryStick className="h-4 w-4" />}
-              label="Memory"
+              label={t('settings.system.memory')}
               value={formatMemory(stats.memory)}
               color="text-warning"
             />
             <StatCard
               icon={<HardDrive className="h-4 w-4" />}
-              label="Disk"
+              label={t('settings.system.disk')}
               value={formatDisk(stats.disk)}
               color="text-success"
             />
           </div>
         ) : (
-          <p className="text-sm font-body text-muted-ol">Loading system stats...</p>
+          <p className="text-sm font-body text-muted-ol">{t('settings.system.loading')}</p>
         )}
       </section>
     </div>

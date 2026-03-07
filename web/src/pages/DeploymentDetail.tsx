@@ -14,6 +14,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context';
 
 function formatRelativeTime(dateStr: string) {
   const date = new Date(dateStr);
@@ -40,6 +41,7 @@ function formatDuration(ms: number) {
 export function DeploymentDetail() {
   const { id, deployId } = useParams();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [deployment, setDeployment] = useState<DeployLogDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
@@ -76,12 +78,12 @@ export function DeploymentDetail() {
   if (!deployment) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
-        <p className="text-sm font-body text-secondary-ol">Deployment not found</p>
+        <p className="text-sm font-body text-secondary-ol">{t('deploy.notFound')}</p>
         <button
           onClick={() => navigate(-1)}
           className="text-sm font-body text-agent hover:underline"
         >
-          Go back
+          {t('deploy.goBack')}
         </button>
       </div>
     );
@@ -117,7 +119,7 @@ export function DeploymentDetail() {
             className="flex items-center gap-1.5 text-xs font-body text-secondary-ol hover:text-primary-ol transition-colors w-fit"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to deployments
+            {t('deploy.backToDeployments')}
           </button>
 
           <div className="flex items-center justify-between">
@@ -125,7 +127,7 @@ export function DeploymentDetail() {
               <div className={cn('h-3 w-3 rounded-full shrink-0', statusBg)} />
               <div className="min-w-0">
                 <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate flex items-center gap-2">
-                  Deployment
+                  {t('deploy.deployment')}
                   {deployment.commitSha && (
                     <span className="flex items-center gap-1 text-sm font-mono font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
                       <GitCommit className="h-3.5 w-3.5" />
@@ -137,12 +139,14 @@ export function DeploymentDetail() {
                   <span className={cn('flex items-center gap-1', statusColor)}>
                     <StatusIcon className="h-3 w-3" />
                     {deployment.status === 'success'
-                      ? 'Production'
+                      ? t('deploy.status.production')
                       : deployment.status === 'failed'
-                        ? 'Failed'
-                        : 'Cancelled'}
+                        ? t('deploy.status.failed')
+                        : t('deploy.status.cancelled')}
                   </span>
-                  <span className="capitalize">{deployment.trigger} trigger</span>
+                  <span className="capitalize">
+                    {deployment.trigger} {t('deploy.trigger')}
+                  </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {formatRelativeTime(deployment.createdAt)}
@@ -166,9 +170,11 @@ export function DeploymentDetail() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <h3 className="text-sm font-display font-medium text-primary-ol">AI Analysis</h3>
+                <h3 className="text-sm font-display font-medium text-primary-ol">
+                  {t('deploy.aiAnalysis')}
+                </h3>
                 <p className="text-sm font-body text-secondary-ol">
-                  Build failure detected. AI analysis is available during live deployments.
+                  {t('deploy.buildFailureDetected')}
                 </p>
               </div>
             </div>
@@ -177,7 +183,7 @@ export function DeploymentDetail() {
 
         <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] bg-gray-900 overflow-hidden">
           <div className="flex items-center px-4 py-2 border-b border-gray-800 bg-gray-950">
-            <span className="text-xs font-mono text-gray-400">build_log</span>
+            <span className="text-xs font-mono text-gray-400">{t('deploy.buildLog')}</span>
           </div>
           <div className="flex-1 overflow-auto p-4">
             {deployment.buildLog ? (
@@ -187,7 +193,7 @@ export function DeploymentDetail() {
               </pre>
             ) : (
               <div className="flex items-center justify-center h-full text-sm font-mono text-gray-500">
-                No build log available
+                {t('deploy.noBuildLog')}
               </div>
             )}
           </div>
