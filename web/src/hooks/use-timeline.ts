@@ -80,7 +80,12 @@ export function useTimeline({
           try {
             const event: BuildStreamEvent = JSON.parse(line);
             const item = toTimelineItem(event);
-            setItems((prev) => [...prev, item]);
+            setItems((prev) => {
+              if (item.type === 'progress') {
+                return [...prev.filter((p) => p.type !== 'progress'), item];
+              }
+              return [...prev, item];
+            });
 
             if (event.type === 'complete') {
               setIsComplete(true);

@@ -1317,6 +1317,109 @@ export function createApiRoutes(ctx: AppContext): Hono {
     });
   });
 
+  api.post('/question/reply', async (c) => {
+    const body = await c.req
+      .json<{
+        request_id?: unknown;
+        requestId?: unknown;
+        answers?: Array<{
+          questionIndex?: unknown;
+          selectedLabels?: unknown;
+          customText?: unknown;
+        }>;
+      }>()
+      .catch(() => ({
+        request_id: undefined,
+        requestId: undefined,
+        answers: undefined,
+      }));
+
+    const requestId = body.request_id || body.requestId;
+    if (typeof requestId !== 'string' || requestId.trim() === '') {
+      return c.json({ error: 'MISSING_FIELD', message: 'request_id is required' }, 400);
+    }
+
+    const answers = body.answers;
+
+    if (!Array.isArray(answers)) {
+      return c.json({ error: 'MISSING_FIELD', message: 'answers array is required' }, 400);
+    }
+
+    for (const answer of answers) {
+      if (typeof answer !== 'object') {
+        return c.json({ error: 'INVALID_ANSWER', message: 'Each answer must be an object' }, 400);
+      }
+
+      const normalized = answer as {
+        questionIndex?: unknown;
+        selectedLabels?: unknown;
+        customText?: unknown;
+      };
+
+      const isValidQuestionIndex =
+        typeof normalized.questionIndex === 'number' &&
+        Number.isInteger(normalized.questionIndex) &&
+        normalized.questionIndex >= 0;
+      const isValidSelectedLabels =
+        Array.isArray(normalized.selectedLabels) &&
+        normalized.selectedLabels.every((value) => typeof value === 'string');
+      const isValidCustomText =
+        normalized.customText === undefined || typeof normalized.customText === 'string';
+
+      if (!isValidQuestionIndex || !isValidSelectedLabels || !isValidCustomText) {
+        return c.json(
+          {
+            error: 'INVALID_ANSWER',
+            message:
+              'Each answer must include questionIndex, selectedLabels, and optional customText',
+          },
+          400,
+        );
+      }
+    }
+
+    if (!ctx.questionBridge.hasPending()) {
+      return c.json(
+        { error: 'NO_PENDING_QUESTION', message: 'No pending question to answer' },
+        409,
+      );
+    }
+
+    const normalizedAnswers = answers.map((answer) => {
+      const normalized = answer as {
+        questionIndex: number;
+        selectedLabels: string[];
+        customText?: string;
+      };
+
+      return {
+        questionIndex: normalized.questionIndex,
+        selectedLabels: normalized.selectedLabels,
+        customText: normalized.customText,
+      };
+    });
+
+    ctx.questionBridge.reply(requestId, normalizedAnswers);
+
+    return c.json({ status: 'answered' });
+  });
+
+  api.post('/question/dismiss', async (c) => {
+    await c.req
+      .json<{ request_id?: string; requestId?: string }>()
+      .catch(() => ({ request_id: undefined, requestId: undefined }));
+
+    if (!ctx.questionBridge.hasPending()) {
+      return c.json(
+        { error: 'NO_PENDING_QUESTION', message: 'No pending question to dismiss' },
+        409,
+      );
+    }
+
+    ctx.questionBridge.reject();
+    return c.json({ status: 'dismissed' });
+  });
+
   api.post('/projects/:id/expose', async (c) => {
     const id = c.req.param('id');
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);

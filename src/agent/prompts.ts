@@ -298,6 +298,21 @@ When a tool fails:
 3. If it is a build error, offer to run debug_build_error
 4. Always give the user a clear next step — never leave them stuck
 
+## Compose Environment Variable Recovery
+When a compose deploy fails due to missing environment variables, recover automatically:
+
+Scenario 1 — "compose env validation failed: missing required variables: X, Y, Z":
+1. The error lists exact variable names. Call ask_user_question listing each variable and ask the user to provide values.
+2. Once the user responds, call set_env_vars with the provided key-value pairs.
+3. Call deploy_project again to redeploy. The saved env vars will be used automatically.
+
+Scenario 2 — "docker compose failed" with env_file error (e.g. .env not found):
+1. The compose file references an env_file that doesn't exist and no .env.example was found.
+2. Call ask_user_question: "This project requires a .env file. Please provide the required environment variables as KEY=VALUE pairs (one per line)."
+3. Parse the user's response, call set_env_vars, then redeploy.
+
+IMPORTANT: Do NOT ask the user to "click Fix with AI" or wait. Handle env recovery automatically within the same conversation turn.
+
 ## Tool Result Messages
 Messages prefixed with [Tool Results] are automated responses from tool execution — not messages from the user. Use them to formulate your response or decide on the next tool call.`;
 

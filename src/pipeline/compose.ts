@@ -1,5 +1,5 @@
 import { createModuleLogger } from '../lib/logger.js';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { checkEnvRequirements, classifyVar, detectEnvFile, parseEnvFile } from './env-inject.js';
 import { join, dirname } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
@@ -25,6 +25,7 @@ export interface ComposeService {
   build?: string | { context: string; dockerfile?: string };
   ports?: string[];
   environment?: Record<string, string> | string[];
+  envFile?: string[];
   dependsOn?: string[];
   volumes?: string[];
 }
@@ -68,6 +69,13 @@ export interface PortConflict {
   conflictsWith: string;
 }
 
+export interface EnvFileReferenceError {
+  service: string;
+  envFilePath: string;
+  requiredVars: string[];
+  templatePath: string | null;
+}
+
 interface ParsedComposePsRow {
   service: string;
   status: 'running' | 'stopped' | 'error';
@@ -95,6 +103,96 @@ export class ComposePipeline {
     return null;
   }
 
+  /**
+   * Check env_file references in docker-compose services.
+   * If providedVars are available and an env_file is missing, create it.
+   * Returns error info for any missing env files that could NOT be created.
+   */
+  checkEnvFileReferences(
+    composeProject: ComposeProject,
+    providedVars: Record<string, string>,
+  ): EnvFileReferenceError[] {
+    const errors: EnvFileReferenceError[] = [];
+    const { projectPath } = composeProject;
+
+    for (const service of composeProject.services) {
+      if (!service.envFile) continue;
+
+      for (const envFilePath of service.envFile) {
+        const fullPath = join(projectPath, envFilePath);
+
+        // Already exists — nothing to do
+        if (existsSync(fullPath)) {
+          continue;
+        }
+
+        // Look for template file in same directory
+        const envDir = dirname(fullPath);
+        let templatePath: string | null = null;
+        const templateNames = ['.env.example', '.env.sample', '.env.template'];
+        for (const templateName of templateNames) {
+          const candidate = join(envDir, templateName);
+          if (existsSync(candidate)) {
+            templatePath = candidate;
+            break;
+          }
+        }
+
+        // Try to create the missing env file from providedVars and/or template
+        if (Object.keys(providedVars).length > 0 || templatePath) {
+          const envLines: string[] = [];
+          const usedKeys = new Set<string>();
+
+          // Start from template if available — merge with providedVars
+          if (templatePath) {
+            const templateVars = parseEnvFile(templatePath);
+            for (const [key, templateValue] of templateVars.entries()) {
+              usedKeys.add(key);
+              const value = providedVars[key] ?? templateValue;
+              const classification = classifyVar(key, templateValue);
+              if (classification === 'secret' && providedVars[key] === undefined) {
+                envLines.push(`# TODO: Set ${key}`);
+                envLines.push(`${key}=`);
+              } else {
+                envLines.push(`${key}=${this.formatComposeEnvValue(value)}`);
+              }
+            }
+          }
+
+          // Append any providedVars not already covered by template
+          for (const [key, value] of Object.entries(providedVars)) {
+            if (usedKeys.has(key)) continue;
+            envLines.push(`${key}=${this.formatComposeEnvValue(value)}`);
+          }
+
+          // Write the file
+          mkdirSync(envDir, { recursive: true });
+          writeFileSync(fullPath, envLines.join('\n') + '\n', 'utf8');
+          log.info(
+            { envFilePath: fullPath, fromTemplate: !!templatePath, varCount: envLines.length },
+            'Created missing env_file from provided vars',
+          );
+          continue;
+        }
+
+        // No providedVars and no template — cannot auto-create
+        let requiredVars: string[] = [];
+        if (templatePath) {
+          const templateVars = parseEnvFile(templatePath);
+          requiredVars = Array.from(templateVars.keys());
+        }
+
+        errors.push({
+          service: service.name,
+          envFilePath,
+          requiredVars,
+          templatePath,
+        });
+      }
+    }
+
+    return errors;
+  }
   parseComposeFile(composePath: string): ComposeProject {
     const raw = readFileSync(composePath, 'utf8');
     const parsed = parseYaml(raw) as Record<string, unknown> | null;
@@ -153,6 +251,15 @@ export class ComposePipeline {
       const portsRaw = serviceObj['ports'];
       const volumesRaw = serviceObj['volumes'];
       const imageRaw = serviceObj['image'];
+      const envFileRaw = serviceObj['env_file'];
+
+      // Parse env_file - can be a string or array
+      let envFile: string[] | undefined;
+      if (typeof envFileRaw === 'string') {
+        envFile = [envFileRaw];
+      } else if (Array.isArray(envFileRaw)) {
+        envFile = envFileRaw.map((f) => String(f));
+      }
 
       services.push({
         name,
@@ -160,6 +267,7 @@ export class ComposePipeline {
         build,
         ports: Array.isArray(portsRaw) ? portsRaw.map((port) => String(port)) : undefined,
         environment,
+        envFile,
         dependsOn,
         volumes: Array.isArray(volumesRaw) ? volumesRaw.map((volume) => String(volume)) : undefined,
       });
@@ -212,6 +320,25 @@ export class ComposePipeline {
     const composeProject = this.parseComposeFile(config.composePath);
 
     const envVars = { ...(config.envVars ?? {}) };
+
+    // Check env_file references first - fail fast if missing
+    const envFileErrors = this.checkEnvFileReferences(composeProject, envVars);
+    if (envFileErrors.length > 0) {
+      const errorMessages = envFileErrors.map((err) => {
+        let msg = `env_file '${err.envFilePath}' referenced by service '${err.service}' not found`;
+        if (err.templatePath) {
+          const relativeTemplate = err.templatePath
+            .replace(composeProject.projectPath, '')
+            .replace(/^\//, '');
+          msg += `. Template '${relativeTemplate}' defines variables: ${err.requiredVars.join(', ')}`;
+        } else {
+          msg += '. Please provide required environment variables.';
+        }
+        return msg;
+      });
+      throw new Error(`Missing env_file(s) in docker-compose:\n${errorMessages.join('\n')}`);
+    }
+
     const envCheckResult = checkEnvRequirements(composeProject.projectPath, envVars);
     if (envCheckResult.missing.length > 0) {
       throw new Error(

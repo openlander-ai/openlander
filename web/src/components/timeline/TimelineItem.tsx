@@ -45,7 +45,6 @@ export function TimelineItemCard({
   onSkipQuestion,
   onInsightAction,
 }: TimelineItemProps) {
-  const isProgress = item.type === 'progress';
   const isSuccess = item.type === 'success';
   const isError = item.type === 'error';
   const isQuestion = item.type === 'question';
@@ -83,7 +82,6 @@ export function TimelineItemCard({
     <div
       className={cn(
         'relative flex gap-3.5 py-3.5 px-4 rounded-lg transition-all duration-300 timeline-item-enter border border-transparent',
-        isLatest && isProgress && 'bg-bg-subtle/40 border-white/5',
         isLatest && isAgentEvent && 'bg-agent/5 border-agent/10 glow-agent',
         isSuccess && 'bg-success/5 border-success/10 glow-success',
         isError && 'bg-error/5 border-error/10 glow-error',
@@ -92,16 +90,6 @@ export function TimelineItemCard({
     >
       {/* Icon */}
       <div className="shrink-0 mt-0.5 relative z-10">
-        {isProgress && (
-          <div
-            className={cn(
-              'p-1.5 rounded-md border',
-              isLatest ? 'bg-agent/10 border-agent/20' : 'bg-bg-subtle border-white/5',
-            )}
-          >
-            <Loader2 className={cn('h-3.5 w-3.5 text-agent', isLatest && 'animate-spin')} />
-          </div>
-        )}
         {isSuccess && (
           <div className="p-1.5 rounded-md bg-success/10 border border-success/20 relative">
             <div className="absolute inset-0 rounded-md bg-success/20 animate-ping opacity-20" />
@@ -141,7 +129,6 @@ export function TimelineItemCard({
               'text-sm font-body leading-snug',
               isSuccess && 'text-success font-medium',
               isError && 'text-error font-medium',
-              isProgress && 'text-primary-ol',
               isAgentEvent && 'text-agent/90',
             )}
           >
@@ -151,22 +138,6 @@ export function TimelineItemCard({
             {formatTime(item.timestamp)}
           </span>
         </div>
-
-        {/* Progress Bar */}
-        {isProgress && item.percent >= 0 && (
-          <div className="mt-3 space-y-1.5">
-            <div className="flex justify-between items-center text-[10px] font-mono text-agent/80 uppercase tracking-wider">
-              <span>System Progress</span>
-              <span>{item.percent}%</span>
-            </div>
-            <div className="h-1.5 w-full rounded-full bg-bg-subtle overflow-hidden border border-white/5 relative">
-              <div
-                className="absolute top-0 left-0 h-full rounded-full bg-agent progress-stripes progress-glow transition-all duration-700 ease-out"
-                style={{ width: `${item.percent}%` }}
-              />
-            </div>
-          </div>
-        )}
 
         {/* Success URL */}
         {isSuccess && item.url && (

@@ -495,6 +495,7 @@ export function ProjectDetail() {
             <TimelineFeed
               items={[...items, ...fixWithAIItems]}
               isStreaming={isStreaming}
+              projectStatus={project?.status}
               onSubmitAnswer={submitAnswer}
               onSkipQuestion={skipQuestion}
               onInsightAction={executeAction}

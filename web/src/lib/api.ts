@@ -101,7 +101,18 @@ export async function getProjectLogs(id: string): Promise<string> {
 
 export async function getProjectEnv(id: string): Promise<Record<string, string>> {
   const res = await fetch(`/api/projects/${id}/env`);
-  return res.json();
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to fetch env vars');
+  }
+
+  const data = (await res.json()) as { envVars: Record<string, string> } | Record<string, string>;
+
+  if ('envVars' in data && typeof data.envVars === 'object' && data.envVars !== null) {
+    return data.envVars;
+  }
+
+  return data as Record<string, string>;
 }
 
 export async function debugBuild(id: string): Promise<BuildDiagnosis> {
@@ -133,11 +144,15 @@ export async function debugBuild(id: string): Promise<BuildDiagnosis> {
 }
 
 export async function updateProjectEnv(id: string, env: Record<string, string>): Promise<void> {
-  await fetch(`/api/projects/${id}/env`, {
+  const res = await fetch(`/api/projects/${id}/env`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(env),
+    body: JSON.stringify({ variables: env }),
   });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to update env vars');
+  }
 }
 
 export async function exposeProject(id: string): Promise<{ publicUrl: string }> {
