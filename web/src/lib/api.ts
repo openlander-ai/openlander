@@ -6,6 +6,19 @@ import type {
   DeployLogDetail,
 } from '../types';
 
+export interface BuildFixSuggestion {
+  description: string;
+  location?: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface BuildDiagnosis {
+  summary: string;
+  rootCause: string;
+  suggestedFixes: BuildFixSuggestion[];
+  rawAnalysis: string;
+}
+
 export async function deployProject(
   repoUrl: string,
   branch?: string,
@@ -88,6 +101,34 @@ export async function getProjectLogs(id: string): Promise<string> {
 
 export async function getProjectEnv(id: string): Promise<Record<string, string>> {
   const res = await fetch(`/api/projects/${id}/env`);
+  return res.json();
+}
+
+export async function debugBuild(id: string): Promise<BuildDiagnosis> {
+  const res = await fetch(`/api/projects/${id}/debug-build`, {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    let message = 'Failed to run AI diagnosis';
+
+    try {
+      const payload = JSON.parse(text);
+      if (typeof payload.message === 'string') {
+        message = payload.message;
+      } else if (typeof payload.error === 'string') {
+        message = payload.error;
+      }
+    } catch {
+      if (text.trim()) {
+        message = text;
+      }
+    }
+
+    throw new Error(message);
+  }
+
   return res.json();
 }
 

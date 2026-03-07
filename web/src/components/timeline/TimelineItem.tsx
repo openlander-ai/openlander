@@ -17,6 +17,7 @@ interface TimelineItemProps {
   item: TItem;
   isLatest?: boolean;
   onFixWithAI?: () => void;
+  isFixWithAILoading?: boolean;
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
   onInsightAction?: (projectId: string, action: string) => Promise<void>;
@@ -39,6 +40,7 @@ export function TimelineItemCard({
   item,
   isLatest,
   onFixWithAI,
+  isFixWithAILoading,
   onSubmitAnswer,
   onSkipQuestion,
   onInsightAction,
@@ -205,10 +207,20 @@ export function TimelineItemCard({
         {isError && onFixWithAI && (
           <button
             onClick={onFixWithAI}
-            className="mt-3 px-3 py-1.5 rounded-md text-[11px] font-body bg-error/10 text-error hover:bg-error/20 border border-error/20 transition-colors flex items-center gap-1.5"
+            disabled={isFixWithAILoading}
+            className={cn(
+              'mt-3 px-3 py-1.5 rounded-md text-[11px] font-body border transition-colors flex items-center gap-1.5',
+              isFixWithAILoading
+                ? 'bg-error/5 text-error/60 border-error/10 cursor-not-allowed'
+                : 'bg-error/10 text-error hover:bg-error/20 border-error/20',
+            )}
           >
-            <Wrench className="h-3 w-3" />
-            Fix with AI
+            {isFixWithAILoading ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Wrench className="h-3 w-3" />
+            )}
+            {isFixWithAILoading ? 'Analyzing with AI...' : 'Fix with AI'}
           </button>
         )}
       </div>

@@ -461,7 +461,19 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     void (async () => {
       const deployState = { toolCalled: false, fallbackTriggered: false };
+
+      // Emit progress so user sees activity before agent responds
+      await emitAgentEvent({
+        type: 'thinking',
+        content: 'Acquiring deploy slot...',
+        timestamp: new Date().toISOString(),
+      });
       const release = await deployQueue.acquire();
+      await emitAgentEvent({
+        type: 'thinking',
+        content: 'Analyzing project and preparing deployment...',
+        timestamp: new Date().toISOString(),
+      });
       let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
       const runFallbackDeploy = async (reason: string) => {
@@ -507,6 +519,12 @@ export function createApiRoutes(ctx: AppContext): Hono {
         if (!agent) {
           throw new Error('Agent is null');
         }
+
+        await emitAgentEvent({
+          type: 'thinking',
+          content: 'Agent is reasoning about deployment strategy...',
+          timestamp: new Date().toISOString(),
+        });
 
         await agent.chatStream(
           message,

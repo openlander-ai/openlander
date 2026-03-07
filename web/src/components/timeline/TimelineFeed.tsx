@@ -9,10 +9,11 @@ import { cn } from '@/lib/utils';
 interface TimelineFeedProps {
   items: TimelineItem[];
   isStreaming: boolean;
-  onFixWithAI?: (errorMessage?: string) => void;
+  onFixWithAI?: (errorMessage?: string, timelineItemId?: string) => void;
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
   onInsightAction?: (projectId: string, action: string) => Promise<void>;
+  fixingItemId?: string | null;
 }
 
 export function TimelineFeed({
@@ -22,6 +23,7 @@ export function TimelineFeed({
   onSubmitAnswer,
   onSkipQuestion,
   onInsightAction,
+  fixingItemId,
 }: TimelineFeedProps) {
   const [autoFollow, setAutoFollow] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -75,7 +77,10 @@ export function TimelineFeed({
               key={item.id}
               item={item}
               isLatest={index === items.length - 1 && isStreaming}
-              onFixWithAI={item.type === 'error' ? () => onFixWithAI?.(item.title) : undefined}
+              onFixWithAI={
+                item.type === 'error' ? () => onFixWithAI?.(item.title, item.id) : undefined
+              }
+              isFixWithAILoading={fixingItemId === item.id}
               onSubmitAnswer={onSubmitAnswer}
               onSkipQuestion={onSkipQuestion}
               onInsightAction={onInsightAction}

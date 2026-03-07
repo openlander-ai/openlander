@@ -7,6 +7,8 @@ import {
   exposeProject,
   unexposeProject,
   getProjectDeployments,
+  debugBuild,
+  type BuildDiagnosis,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
@@ -34,6 +36,7 @@ import {
   GitCommit,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import type { TimelineItem } from '@/lib/event-types';
 import { useNavigate } from 'react-router-dom';
 
 const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
@@ -58,6 +61,26 @@ const statusConfig: Record<string, { label: string; color: string; dot: string }
     dot: 'bg-error',
   },
 };
+function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis): string {
+  const lines = ['Root cause:\n' + diagnosis.rootCause, ''];
+
+  if (diagnosis.suggestedFixes.length > 0) {
+    lines.push('Suggested fixes:');
+    diagnosis.suggestedFixes.forEach((fix, index) => {
+      const location = fix.location ? ' (' + fix.location + ')' : '';
+      lines.push(String(index + 1) + '. [' + fix.confidence + '] ' + fix.description + location);
+    });
+  } else {
+    lines.push('No specific fix suggestions were returned.');
+  }
+
+  if (diagnosis.rawAnalysis.trim()) {
+    lines.push('', 'Raw analysis:\n' + diagnosis.rawAnalysis);
+  }
+
+  return lines.join('\n');
+}
+
 function formatRelativeTime(dateStr: string) {
   const date = new Date(dateStr);
   const now = new Date();
@@ -174,6 +197,8 @@ export function ProjectDetail() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('timeline');
   const [timelineRunKey, setTimelineRunKey] = useState(0);
+  const [fixWithAIItems, setFixWithAIItems] = useState<TimelineItem[]>([]);
+  const [fixingItemId, setFixingItemId] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
   // Fetch project details
@@ -201,6 +226,51 @@ export function ProjectDetail() {
     runKey: timelineRunKey,
     onSettled: fetchProject,
   });
+
+  useEffect(() => {
+    setFixWithAIItems([]);
+    setFixingItemId(null);
+  }, [id, timelineRunKey]);
+
+  const handleFixWithAI = async (_errorMessage?: string, timelineItemId?: string) => {
+    if (!id || fixingItemId) return;
+
+    const sourceItemId = timelineItemId ?? 'manual-' + Date.now();
+    setFixingItemId(sourceItemId);
+
+    try {
+      const diagnosis = await debugBuild(id);
+      setFixWithAIItems((prev) => [
+        ...prev,
+        {
+          id: 'ai-fix-' + sourceItemId + '-' + Date.now(),
+          type: 'insight',
+          timestamp: new Date().toISOString(),
+          title: 'AI diagnosis: ' + diagnosis.summary,
+          detail: formatBuildDiagnosisDetail(diagnosis),
+          percent: -1,
+          severity: 'warning',
+        },
+      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to analyze build failure';
+      setFixWithAIItems((prev) => [
+        ...prev,
+        {
+          id: 'ai-fix-' + sourceItemId + '-' + Date.now() + '-error',
+          type: 'insight',
+          timestamp: new Date().toISOString(),
+          title: 'Fix with AI failed',
+          detail: message,
+          percent: -1,
+          severity: 'error',
+        },
+      ]);
+      console.error('Fix with AI failed:', err);
+    } finally {
+      setFixingItemId(null);
+    }
+  };
 
   const handleRedeploy = async () => {
     if (isMobile) {
@@ -423,11 +493,13 @@ export function ProjectDetail() {
         <TabsContent value="timeline" className="flex-1 min-h-0 mt-0 flex flex-col">
           <div className="flex-1 min-h-0">
             <TimelineFeed
-              items={items}
+              items={[...items, ...fixWithAIItems]}
               isStreaming={isStreaming}
               onSubmitAnswer={submitAnswer}
               onSkipQuestion={skipQuestion}
               onInsightAction={executeAction}
+              onFixWithAI={handleFixWithAI}
+              fixingItemId={fixingItemId}
             />
           </div>
           {id && project && (

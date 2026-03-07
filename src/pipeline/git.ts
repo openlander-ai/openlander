@@ -82,17 +82,38 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
 
-    // Classify the error
-    if (msg.includes('Authentication failed') || msg.includes('Permission denied')) {
-      throw new GitAuthError(repoUrl);
+    // Auto-retry with SSH if HTTPS auth fails and SSH key is available
+    const isAuthFailure =
+      msg.includes('terminal prompts disabled') ||
+      msg.includes('Authentication failed') ||
+      msg.includes('could not read Username');
+    const sshUrl = toSshUrl(normalizedUrl);
+    if (isAuthFailure && sshUrl && !sshKeyPath) {
+      log.info({ repoUrl, sshUrl }, 'HTTPS auth failed, retrying with SSH');
+      const sshArgs = ['clone', '--depth', String(depth)];
+      if (branch) sshArgs.push('--branch', branch);
+      sshArgs.push(sshUrl, cloneDir);
+      const sshEnv = { ...env, GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=no' };
+      try {
+        await exec('git', sshArgs, { env: sshEnv, timeout: 120_000 });
+      } catch (sshError) {
+        const sshMsg = sshError instanceof Error ? sshError.message : String(sshError);
+        throw new GitCloneError(repoUrl, `HTTPS and SSH both failed. SSH error: ${sshMsg}`);
+      }
+      // SSH clone succeeded — fall through to get commit SHA
+    } else {
+      // Classify the error
+      if (msg.includes('Authentication failed') || msg.includes('Permission denied')) {
+        throw new GitAuthError(repoUrl);
+      }
+      if (msg.includes('Remote branch') && msg.includes('not found')) {
+        throw new GitBranchNotFoundError(repoUrl, branch ?? 'unknown');
+      }
+      if (msg.includes('not found') || msg.includes('does not exist') || msg.includes('404')) {
+        throw new GitRepoNotFoundError(repoUrl);
+      }
+      throw new GitCloneError(repoUrl, msg);
     }
-    if (msg.includes('Remote branch') && msg.includes('not found')) {
-      throw new GitBranchNotFoundError(repoUrl, branch ?? 'unknown');
-    }
-    if (msg.includes('not found') || msg.includes('does not exist') || msg.includes('404')) {
-      throw new GitRepoNotFoundError(repoUrl);
-    }
-    throw new GitCloneError(repoUrl, msg);
   }
 
   // Get commit SHA
@@ -117,4 +138,15 @@ function normalizeRepoUrl(url: string): string {
   }
 
   return url;
+}
+
+/** Convert HTTPS GitHub/GitLab/Bitbucket URL to SSH format. Returns null if not convertible. */
+function toSshUrl(url: string): string | null {
+  const match = url.match(/https?:\/\/(?:[^@]+@)?([^/]+)\/(.+)/);
+  if (!match) return null;
+  const [, host, path] = match;
+  if (!host || !path) return null;
+  // Only convert known hosts
+  if (!['github.com', 'gitlab.com', 'bitbucket.org'].some((h) => host.includes(h))) return null;
+  return `git@${host}:${path}`;
 }
