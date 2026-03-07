@@ -75,7 +75,7 @@ export interface EventPayload {
   'deploy:run': { projectId: string; containerId: string; port: number; url: string };
   'deploy:auto-detect': { projectId: string; framework: string; type: 'dockerfile' | 'compose' };
   'deploy:success': { projectId: string; url: string; totalDurationMs: number };
-  'deploy:failed': { projectId: string; step: string; error: string };
+  'deploy:failed': { projectId: string; step: string; error: string; buildLog?: string };
   'deploy:crash': { projectId: string; containerId: string; error?: string; exitCode?: number };
   'deploy:rollback': { projectId: string; fromImage: string; toImage: string };
   'build:autofix': { projectId: string; action: string; category: string };

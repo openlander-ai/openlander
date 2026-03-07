@@ -601,6 +601,7 @@ export class DeployPipeline {
         projectId,
         step: failStep,
         error: errorMsg,
+        buildLog: buildLogWithError,
       });
 
       return {

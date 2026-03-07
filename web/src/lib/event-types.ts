@@ -136,6 +136,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         type: 'error',
         timestamp: event.timestamp,
         title: event.message,
+        detail: event.detail ?? undefined,
         percent: -1,
       };
     case 'question_pending':

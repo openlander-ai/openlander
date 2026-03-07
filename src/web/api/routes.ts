@@ -738,6 +738,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
           write({
             type: 'error',
             message: `Deploy failed at ${payload.step}: ${payload.error}`,
+            detail: payload.buildLog ?? null,
             projectId: project.id,
           });
           // Do NOT close stream — auto-recovery may follow
