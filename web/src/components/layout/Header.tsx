@@ -5,6 +5,7 @@ import type { Notification } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
 import { NotificationCenter } from './NotificationCenter';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context';
 
 interface HeaderProps {
   stats: SystemStats | null;
@@ -24,6 +25,7 @@ export function Header({
   onMenuClick,
 }: HeaderProps) {
   const [llmConnected, setLlmConnected] = useState<boolean | null>(null);
+  const { t } = useLanguage();
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -89,7 +91,7 @@ export function Header({
         {/* System Stats */}
         {stats && (
           <div className="hidden md:flex items-center gap-3 font-mono text-muted-ol">
-            <div className="flex items-center gap-1" title="CPU Usage">
+            <div className="flex items-center gap-1" title={t('header.cpuUsage')}>
               <Cpu className="h-3 w-3" />
               <span className="text-[10px]">
                 {typeof stats.cpu === 'number'
@@ -98,7 +100,7 @@ export function Header({
                 %
               </span>
             </div>
-            <div className="flex items-center gap-1" title="Memory Usage">
+            <div className="flex items-center gap-1" title={t('header.memoryUsage')}>
               <MemoryStick className="h-3 w-3" />
               <span className="text-[10px]">{formatMemory(stats.memory)}</span>
             </div>
@@ -143,10 +145,10 @@ export function Header({
           className="flex items-center gap-1.5"
           title={
             llmConnected === null
-              ? 'Checking LLM...'
+              ? t('header.checkingLlm')
               : llmConnected
-                ? 'LLM Connected'
-                : 'LLM Not Configured'
+                ? t('header.llmConnected')
+                : t('header.llmNotConfigured')
           }
         >
           <div
@@ -160,7 +162,11 @@ export function Header({
             )}
           />
           <span className="hidden sm:inline text-[11px] font-body text-secondary-ol">
-            {llmConnected === null ? '...' : llmConnected ? 'AI Online' : 'AI Offline'}
+            {llmConnected === null
+              ? '...'
+              : llmConnected
+                ? t('header.aiOnline')
+                : t('header.aiOffline')}
           </span>
         </div>
       </div>

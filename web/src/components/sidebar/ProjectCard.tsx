@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLanguage } from '@/i18n/context';
 import type { Project } from '@/types';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ interface ProjectCardProps {
 
 export function ProjectCard({ project, onUpdate }: ProjectCardProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   const handleStop = async () => {
     if (loadingAction) return;
@@ -30,7 +32,7 @@ export function ProjectCard({ project, onUpdate }: ProjectCardProps) {
 
   const handleDelete = async () => {
     if (loadingAction) return;
-    if (!confirm('Are you sure you want to delete this project?')) return;
+    if (!confirm(t('projectDetail.confirmDelete'))) return;
     setLoadingAction('delete');
     try {
       await deleteProject(project.id);

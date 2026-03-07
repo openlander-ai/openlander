@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLanguage } from '@/i18n/context';
 import {
   Sheet,
   SheetContent,
@@ -23,6 +24,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +41,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
       onDeploySuccess();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to deploy project');
+      setError(err instanceof Error ? err.message : t('deploy.dialog.failed'));
     } finally {
       setLoading(false);
     }
@@ -49,10 +51,8 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-[400px] sm:w-[540px]">
         <SheetHeader>
-          <SheetTitle>Deploy New Project</SheetTitle>
-          <SheetDescription>
-            Enter the repository URL to deploy. OpenLander will clone, build, and run it.
-          </SheetDescription>
+          <SheetTitle>{t('deploy.dialog.title')}</SheetTitle>
+          <SheetDescription>{t('deploy.dialog.description')}</SheetDescription>
         </SheetHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
@@ -60,7 +60,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
               htmlFor="repo-url"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
             >
-              Repository URL
+              {t('deploy.dialog.repoUrl')}
             </label>
             <Input
               id="repo-url"
@@ -75,7 +75,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
               htmlFor="branch"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
             >
-              Branch (Optional)
+              {t('deploy.dialog.branch')}
             </label>
             <Input
               id="branch"
@@ -89,11 +89,11 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
               htmlFor="name"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
             >
-              Project Name (Optional)
+              {t('deploy.dialog.projectName')}
             </label>
             <Input
               id="name"
-              placeholder="auto-detected from repo"
+              placeholder={t('deploy.dialog.autoDetected')}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -101,14 +101,14 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
           {error && <div className="text-sm text-red-500">{error}</div>}
           <SheetFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="submit"
               disabled={loading}
               className="bg-foreground text-background hover:bg-foreground/90"
             >
-              {loading ? 'Deploying...' : 'Deploy'}
+              {loading ? t('deploy.dialog.deploying') : t('deploy.dialog.deploy')}
             </Button>
           </SheetFooter>
         </form>
