@@ -34,7 +34,10 @@ interface OpenAITokenResponse {
 }
 
 // In-memory PKCE state storage (keyed by state param)
-const pendingFlows = new Map<string, { verifier: string; provider: string; createdAt: number }>();
+const pendingFlows = new Map<
+  string,
+  { verifier: string; provider: string; redirectUri: string; createdAt: number }
+>();
 
 // Cleanup stale flows (older than 5 min)
 setInterval(() => {
@@ -73,21 +76,24 @@ export function createAuthRoutes(ctx: AppContext): Hono {
       const state = generateState();
 
       // Store PKCE state for callback verification
+      const host = c.req.header('host') ?? `localhost:${String(ctx.config.server.port)}`;
+      const proto = c.req.header('x-forwarded-proto') ?? 'http';
+      const baseUrl = `${proto}://${host}`;
+      const redirectUri = `${baseUrl}/api/auth/callback/${provider}`;
+
       pendingFlows.set(state, {
         verifier,
         provider,
+        redirectUri,
         createdAt: Date.now(),
       });
 
-      const port = ctx.config.server.port;
       let authUrl: string;
 
       if (provider === 'openrouter') {
-        const callbackUrl = `http://localhost:${String(port)}/api/auth/callback/openrouter`;
-        authUrl = getOpenRouterAuthUrl(callbackUrl, challenge);
+        authUrl = getOpenRouterAuthUrl(redirectUri, challenge);
       } else {
         // OpenAI OAuth
-        const redirectUri = `http://localhost:${String(port)}/api/auth/callback/openai`;
         const url = new URL(OPENAI_AUTH_URL);
         url.searchParams.set('response_type', 'code');
         url.searchParams.set('client_id', OPENAI_CLIENT_ID);
@@ -138,6 +144,7 @@ export function createAuthRoutes(ctx: AppContext): Hono {
 
     // Verify state and extract verifier
     let verifier: string | undefined;
+    let storedRedirectUri: string | undefined;
 
     if (provider === 'openai') {
       // OpenAI uses state param for CSRF protection
@@ -147,10 +154,11 @@ export function createAuthRoutes(ctx: AppContext): Hono {
         return c.html(getErrorHtml(provider, 'Invalid or expired OAuth session'));
       }
       verifier = flow.verifier;
+      storedRedirectUri = flow.redirectUri;
       if (state) pendingFlows.delete(state);
     } else {
       // OpenRouter doesn't return state - find the most recent flow for this provider
-      let latestFlow: { verifier: string; createdAt: number } | null = null;
+      let latestFlow: { verifier: string; redirectUri: string; createdAt: number } | null = null;
       for (const [, flow] of pendingFlows) {
         if (flow.provider === 'openrouter') {
           if (!latestFlow || flow.createdAt > latestFlow.createdAt) {
@@ -160,6 +168,7 @@ export function createAuthRoutes(ctx: AppContext): Hono {
       }
       if (latestFlow) {
         verifier = latestFlow.verifier;
+        storedRedirectUri = latestFlow.redirectUri;
         // Clean up all OpenRouter flows
         for (const [key, flow] of pendingFlows) {
           if (flow.provider === 'openrouter') {
@@ -184,9 +193,10 @@ export function createAuthRoutes(ctx: AppContext): Hono {
         accessToken = await exchangeOpenRouterCode(code, verifier);
         // OpenRouter API keys don't expire
       } else {
-        // OpenAI OAuth token exchange
-        const port = ctx.config.server.port;
-        const redirectUri = `http://localhost:${String(port)}/api/auth/callback/openai`;
+        // OpenAI OAuth token exchange — use stored redirect URI for exact match
+        const redirectUri =
+          storedRedirectUri ??
+          `http://localhost:${String(ctx.config.server.port)}/api/auth/callback/openai`;
 
         const response = await fetch(OPENAI_TOKEN_URL, {
           method: 'POST',

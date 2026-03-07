@@ -160,10 +160,24 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   };
 
   const handleCopyCode = async () => {
-    if (deviceFlow?.userCode) {
-      await navigator.clipboard.writeText(deviceFlow.userCode);
+    if (!deviceFlow?.userCode) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(deviceFlow.userCode);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = deviceFlow.userCode;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
+    } catch {
+      window.prompt('Copy this code:', deviceFlow.userCode);
     }
   };
 
