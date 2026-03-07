@@ -84,6 +84,7 @@ openlander
 - **Build log streaming** — Real-time build output as it happens
 - **AI analysis on failure** — When a build fails or container crashes, AI analysis appears inline
 - **Settings management** — AI provider, GitHub connection, global secrets
+- **Multilingual (i18n)** — Korean and English. Language selection during onboarding, applies to all UI and AI responses
 
 ### AI Auto-Recovery
 
@@ -182,6 +183,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.0.12** | Provider OAuth           | Done   | OAuth login for OpenAI, OpenRouter (no API key needed)              |
 | **v0.0.8**  | AI SDK Migration         | Done   | Vercel AI SDK, multi-provider streaming, unified tool API           |
 | **v0.2.0**  | Dashboard Redesign       | Done   | Light mode, Vercel-inspired UI, deployment history, chat removal    |
+| **v0.2.1**  | i18n + Bugfixes          | Done   | Korean/English i18n, build error reporting, redeploy UI refresh     |
 
 ## Requirements
 

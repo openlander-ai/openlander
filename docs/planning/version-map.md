@@ -8,14 +8,14 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ── 정식릴리즈(TBD)
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ┬ 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ┬ 정식릴리즈(TBD)
 
 ```
 
- MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    ProviderOAuth 에이전트능동  Env관리✅    AI SDK      Dashboard
+ MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    ProviderOAuth 에이전트능동  Env관리✅    AI SDK      Dashboard   i18n+버그수정
 ```
 
 > ✅ = 완료 | 🧪 = 도그푸딩 중 | 🔧 = 진행 중 | 📋 = 기획/계획 | ❌ = 미착수
@@ -52,6 +52,7 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 | 22     | **v0.2.0 Dashboard Redesign**          | `v0.2.0/dashboard-redesign.md`               | v0.2.0         | 100%   | ✅ 구현 완료. Phase 1~4 전부 완료, 채팅 삭제, 라이트 모드 전환.              |
 | 23     | **v0.2.0 버그 트래커**                 | `v0.2.0/bugs.md`                             | v0.2.0         | 100%   | ✅ BUG-014~017 전부 해결. Deploy UX 아키텍쳐 개선 (project-first 모델).      |
 | 24     | **v0.2.0 Deploy UX 수정 스펙**         | `v0.2.0/deploy-ux-fix.md`                    | v0.2.0         | 100%   | ✅ 3 Phase 구현 완료. SSE→JSON deploy, agent event streaming, log panel.     |
+| 25     | **v0.2.1 i18n + 버그 수정**            | — (커밋 내 독립 파일)                        | v0.2.1         | 100%   | ✅ i18n (한/영) + 빌드 에러 리포팅 + Redeploy UI 갱신 버그 수정.             |
 
 ---
 
@@ -135,9 +136,9 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 **미완료 항목**:
 
-| 항목                           | 위치              | 비고          |
-| ------------------------------ | ----------------- | ------------- |
-| T-INFRA-01: i18n (다국어 지원) | `v0.0.6/tasks.md` | 우선순위 낮음 |
+| 항목                               | 위치              | 비고                                 |
+| ---------------------------------- | ----------------- | ------------------------------------ |
+| ~~T-INFRA-01: i18n (다국어 지원)~~ | `v0.0.6/tasks.md` | ✅ v0.2.1에서 Web i18n으로 구현 완료 |
 
 **v0.0.6 이후 추가 완료** (태스크 범위 외):
 
@@ -431,6 +432,32 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
+### v0.2.1 — i18n + 버그 수정 ✅
+
+**상태**: 구현 완료 | **관련 커밋**: 11개 (fix 1 + feat 10)
+
+> **핵심 가치**: 온보딩에서 언어 선택 (한국어/영어) → 에이전트 프롬프트 + 전체 UI 반영. 빌드 실패 시 에러 내용 타임라인 표시. Redeploy 후 UI 즉시 갱신.
+
+| 항목                          | 내용                                                                               | 상태 |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ---- |
+| i18n 백엔드                   | config.language (en/ko), LOCALE_DIRECTIVES 프롬프트 주입, agent hot-reload         | ✅   |
+| i18n API                      | POST /setup/language, GET /setup/status 언어 필드, OAuth locale 전달               | ✅   |
+| i18n 프론트엔드 인프라        | LanguageProvider, useLanguage() hook, t() dot-path lookup, en/ko 딕셔너리 (~316키) | ✅   |
+| 온보딩 언어 선택 Step 0       | SetupScreen 4단계로 확장 (Language → Welcome → LLM → GitHub)                       | ✅   |
+| 컴포넌트 t() 적용 (17개 파일) | 모든 하드코딩 문자열 → t() 호출로 교체                                             | ✅   |
+| 빌드 에러 리포팅 버그         | deploy:failed 이벤트에 buildLog 포함, 타임라인에 접이식 로그 렌더링                | ✅   |
+| Redeploy UI 갱신 버그         | ProjectsGrid에서 redeployProject() 성공 후 refetch() 호출                          | ✅   |
+
+**수정된 파일** (33개):
+
+- 백엔드 9개: config, prompts, agent, app, setup-routes, auth-routes, events, deploy, routes
+- 프론트엔드 인프라 5개: i18n/context.tsx(NEW), i18n/en.ts(NEW), i18n/ko.ts(NEW), App.tsx, api.ts
+- 컴포넌트 19개: SetupScreen, ProjectsGrid, ProjectDetail, NewProjectFlow, DeploymentDetail,
+  SettingsPage, Header, DeployDialog, ProjectCard, DomainsPanel, EnvVarsTable, TimelineItem,
+  TimelineFeed, InputRequestCard, LogViewer, CommandPalette, OAuthButton, ProviderHelp, event-types.ts
+
+---
+
 ### 정식 릴리즈 (TBD)
 
 **상태**: 버전 미정, 미착수
@@ -472,7 +499,7 @@ v0.2.0까지의 기능을 안정화하고 정식 릴리즈. 아래 3가지 구�
 
 | #      | 항목                                   | 버전                 | 문서                                   | 우선순위                    |
 | ------ | -------------------------------------- | -------------------- | -------------------------------------- | --------------------------- |
-| ~~1~~  | ~~i18n (다국어 지원)~~                 | v0.0.6               | `archive/v0.0.6/tasks.md`              | ❌ 제거 (TUI 아카이브)      |
+| ~~1~~  | ~~i18n (다국어 지원)~~                 | v0.2.1               | 11 commits on main                     | ✅ Web i18n 구현 완료       |
 | ~~2~~  | ~~프로젝트 검색/필터~~                 | v0.0.6               | `archive/requirements.md`              | ❌ 제거 (TUI 아카이브)      |
 | 3      | ~~전체 컨테이너 스캔~~                 | v0.0.9               | `v0.0.9/server-awareness.md` 9-1       | ✅ 완료                     |
 | 4      | ~~OS 레벨 포트 스캔~~                  | v0.0.9               | `v0.0.9/server-awareness.md` 9-2       | ✅ 완료                     |
@@ -515,6 +542,9 @@ v0.2.0까지의 기능을 안정화하고 정식 릴리즈. 아래 3가지 구�
 | ~~41~~ | ~~이벤트 배선 검증 (Q-2)~~             | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료           |
 | ~~42~~ | ~~Config 조합 매트릭스 테스트 (Q-3)~~  | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료           |
 | 43     | **자동 복구 (Auto-Recovery)**          | v0.2.0               | `version-map.md` v0.2.0 섹션           | ✅ 완료 (E2E 검증)          |
+| ~~44~~ | ~~i18n 백엔드 + 프론트엔드 + 온보딩~~  | v0.2.1               | 11 commits on main                     | ✅ 완료                     |
+| ~~45~~ | ~~빌드 에러 리포팅 버그~~              | v0.2.1               | 11 commits on main                     | ✅ 해결                     |
+| ~~46~~ | ~~Redeploy UI 갱신 버그~~              | v0.2.1               | 11 commits on main                     | ✅ 해결                     |
 
 ---
 
@@ -531,16 +561,15 @@ v0.2.0까지의 기능을 안정화하고 정식 릴리즈. 아래 3가지 구�
 
 ## 검증 기준
 
-**2026-03-07 기준 (v0.2.0 자동 복구 구현 + E2E 검증 완료 후)**:
+**2026-03-08 기준 (v0.2.1 i18n + 버그 수정 구현 완료 후)**:
 
 ```
 ✅ tsup build — 성공
-✅ vite build — 성공 (499KB JS, 36.7KB CSS)
-✅ vitest — 663/663 pass
-✅ lsp_diagnostics — 0 errors
-✅ v0.2.0 — Dashboard Redesign + 도그푸딩 버그 4건 + 자동 복구 구현
-✅ 자동 복구 E2E — summary-god: deploy→fail→auto-recovery→question→env set→redeploy→running
-✅ 16 commits on main (ahead of origin)
+✅ vite build — 성공 (520KB JS, 37KB CSS)
+✅ vitest — 664/665 pass (pre-existing git-clone test 1개)
+✅ lsp_diagnostics — 0 errors (pre-existing mcp/server.ts:573만)
+✅ v0.2.1 — i18n (한국어/영어) + 빌드 에러 리포팅 + Redeploy UI 갱신 버그 수정
+✅ 11 commits on main (i18n + bugfix)
 ```
 
 ---
