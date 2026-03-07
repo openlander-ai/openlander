@@ -227,6 +227,22 @@ Install Docker on this machine and start the daemon
 
 The agent will handle the installation for your platform.
 
+## Development
+
+```bash
+# Prerequisites: Bun >= 1.1, Docker
+curl -fsSL https://bun.sh/install | bash
+
+# Clone & build
+git clone https://github.com/openlander-ai/OpenLander.git
+cd OpenLander
+bun install
+bun run build
+
+# Run
+bun dist/cli/index.js
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and how to submit changes.
