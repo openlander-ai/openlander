@@ -63,6 +63,15 @@ export class TraefikManager {
 
     const client = this.docker.getClient();
 
+    // Remove any existing stopped container to avoid 409 Conflict on create
+    try {
+      const existing = client.getContainer(TRAEFIK_CONTAINER_NAME);
+      await existing.remove({ force: true });
+      log.debug('Removed existing Traefik container before recreation');
+    } catch {
+      // Container doesn't exist — expected on first run
+    }
+
     // Pull image first
     try {
       const stream = await client.pull(TRAEFIK_IMAGE);
