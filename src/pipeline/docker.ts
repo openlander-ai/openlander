@@ -429,19 +429,41 @@ function isUserInDockerGroup(): boolean {
 
 /**
  * Resolve the Docker socket path for the current platform.
- * Checks DOCKER_HOST env, then common socket locations.
+ * Priority: DOCKER_HOST env → common paths → docker context inspect
  */
 function resolveDockerSocket(): string | undefined {
+  // 1. DOCKER_HOST env var (set by Colima, Docker Desktop, etc.)
   const dockerHost = process.env['DOCKER_HOST'];
   if (dockerHost?.startsWith('unix://')) {
     return dockerHost.replace('unix://', '');
   }
 
+  // 2. Common socket file paths
   const candidates = [
     '/var/run/docker.sock',
     `${homedir()}/.docker/run/docker.sock`,
     `${homedir()}/.colima/default/docker.sock`,
   ];
+  const found = candidates.find((p) => existsSync(p));
+  if (found) return found;
 
-  return candidates.find((p) => existsSync(p));
+  // 3. Fallback: ask docker CLI for the active context socket
+  try {
+    const host = execSync('docker context inspect --format "{{.Endpoints.docker.Host}}"', {
+      encoding: 'utf8',
+      stdio: 'pipe',
+      timeout: 5000,
+    }).trim();
+    if (host.startsWith('unix://')) {
+      const sockPath = host.replace('unix://', '');
+      if (existsSync(sockPath)) return sockPath;
+      // Socket file might not pass existsSync on some runtimes (Bun),
+      // but docker CLI confirmed it — trust it.
+      return sockPath;
+    }
+  } catch {
+    // docker CLI not available or context not configured
+  }
+
+  return undefined;
 }
