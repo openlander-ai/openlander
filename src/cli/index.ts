@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { createModuleLogger } from '../lib/logger.js';
 import { VERSION } from '../version.js';
-import { getProjectUrl } from '../pipeline/traefik.js';
+import { getProjectUrl, getLanIp } from '../pipeline/traefik.js';
 
 const log = createModuleLogger('cli');
 
@@ -27,18 +27,8 @@ program
     const { ensureDocker } = await import('./onboard.js');
     await ensureDocker();
 
-    // Step 2: Check if onboarding needed (LLM + Git setup)
-    const { isOnboarded: checkOnboarded } = await import('../config/index.js');
-    if (!checkOnboarded()) {
-      const { setupLlm } = await import('./onboard-llm.js');
-      const { setupGit } = await import('./onboard-git.js');
-      await setupLlm();
-      await setupGit();
-      console.log();
-      console.log(pc.dim('  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
-      console.log(pc.green('  Launching OpenLander...'));
-      console.log();
-    }
+    // Step 2: Onboarding handled by Web UI (SetupScreen)
+    // CLI no longer runs LLM/Git setup — just start the server
 
     // Step 3: Load config & create app context
     const { loadConfig, getDbPath, getDataDir } = await import('../config/index.js');
@@ -84,10 +74,17 @@ program
       const { createServer } = await import('../web/server.js');
       createServer({ port, host: options.host }, ctx);
 
-      const url = `http://localhost:${String(port)}`;
+      const lanIp = getLanIp();
+      const localUrl = `http://localhost:${String(port)}`;
+      const networkUrl = lanIp ? `http://${lanIp}:${String(port)}` : null;
+
       console.log();
       console.log(pc.bold(pc.cyan('  🛬 OpenLander')));
-      console.log(pc.dim(`  Web UI: ${url}`));
+      console.log();
+      console.log(pc.dim('  Local:   ') + pc.cyan(localUrl));
+      if (networkUrl) {
+        console.log(pc.dim('  Network: ') + pc.cyan(networkUrl));
+      }
       console.log();
 
       // Open browser (unless --no-open)
@@ -99,7 +96,7 @@ program
             : process.platform === 'win32'
               ? 'start'
               : 'xdg-open';
-        exec(`${openCmd} ${url}`, (err) => {
+        exec(`${openCmd} ${localUrl}`, (err) => {
           if (err) log.debug({ err }, 'Failed to open browser');
         });
       }
