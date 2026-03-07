@@ -22,6 +22,7 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const { projects } = useProjects();
 
+  const { t } = useLanguage();
   // Cmd+K / Ctrl+K toggle
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -57,8 +58,8 @@ export function CommandPalette() {
     const commands: CommandItem[] = [
       {
         id: 'new-project',
-        label: 'New Project',
-        description: 'Deploy a new repository',
+        label: t('nav.newProject'),
+        description: t('command.deployNewRepo'),
         icon: <Plus className="h-4 w-4" />,
         action: () => {
           navigate('/new');
@@ -68,8 +69,8 @@ export function CommandPalette() {
       },
       {
         id: 'settings',
-        label: 'Settings',
-        description: 'Configure LLM and GitHub',
+        label: t('nav.settings'),
+        description: t('command.configureLlmGithub'),
         icon: <Settings className="h-4 w-4" />,
         action: () => {
           navigate('/settings');
@@ -84,7 +85,7 @@ export function CommandPalette() {
       commands.push({
         id: `go-${project.id}`,
         label: project.name,
-        description: `Go to ${project.name} (${project.status})`,
+        description: `${t('command.goTo')} ${project.name} (${project.status})`,
         icon: <FolderOpen className="h-4 w-4" />,
         action: () => {
           navigate(`/projects/${project.id}`);
@@ -96,8 +97,8 @@ export function CommandPalette() {
       if (project.status === 'running' || project.status === 'error') {
         commands.push({
           id: `redeploy-${project.id}`,
-          label: `Redeploy ${project.name}`,
-          description: 'Trigger a fresh deployment',
+          label: `${t('command.redeploy')} ${project.name}`,
+          description: t('command.triggerFreshDeploy'),
           icon: <RotateCw className="h-4 w-4" />,
           action: () => {
             redeployProject(project.id);
@@ -110,8 +111,8 @@ export function CommandPalette() {
       if (project.status === 'running') {
         commands.push({
           id: `stop-${project.id}`,
-          label: `Stop ${project.name}`,
-          description: 'Stop the running container',
+          label: `${t('command.stop')} ${project.name}`,
+          description: t('command.stopContainer'),
           icon: <Square className="h-4 w-4" />,
           action: () => {
             stopProject(project.id);
@@ -180,7 +181,7 @@ export function CommandPalette() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a command or search..."
+              placeholder={t('command.searchPlaceholder')}
               className="flex-1 py-3 bg-transparent text-sm font-body text-primary-ol placeholder:text-muted-ol focus:outline-none"
             />
             <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono text-muted-ol bg-bg-subtle border border-border">
@@ -192,7 +193,7 @@ export function CommandPalette() {
           <div className="max-h-[300px] overflow-y-auto py-2">
             {filtered.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <p className="text-sm font-body text-muted-ol">No results found</p>
+                <p className="text-sm font-body text-muted-ol">{t('command.noResults')}</p>
               </div>
             ) : (
               filtered.map((item, index) => (

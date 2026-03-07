@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { Button } from '@/components/ui/button';
 import { ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import { startOAuthFlow } from '@/lib/api';
@@ -13,6 +14,7 @@ interface OAuthButtonProps {
 export function OAuthButton({ provider, onSuccess, className }: OAuthButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
@@ -22,7 +24,7 @@ export function OAuthButton({ provider, onSuccess, className }: OAuthButtonProps
         onSuccess();
       } else if (e.data?.type === 'oauth-error' && e.data?.provider === provider) {
         setIsLoading(false);
-        setError(e.data.error || 'Authentication failed');
+        setError(e.data.error || t('oauth.authFailed'));
       }
     };
 
@@ -53,7 +55,7 @@ export function OAuthButton({ provider, onSuccess, className }: OAuthButtonProps
       // We could add a timer to check if the popup is closed, but keeping it simple for now
     } catch (err) {
       setIsLoading(false);
-      setError(err instanceof Error ? err.message : 'Failed to start authentication');
+      setError(err instanceof Error ? err.message : t('oauth.startFailed'));
     }
   };
 
@@ -72,7 +74,7 @@ export function OAuthButton({ provider, onSuccess, className }: OAuthButtonProps
         ) : (
           <ExternalLink className="w-4 h-4" />
         )}
-        Sign in with {providerName}
+        {t('oauth.signInWith')} {providerName}
       </Button>
 
       {error && (
@@ -82,9 +84,7 @@ export function OAuthButton({ provider, onSuccess, className }: OAuthButtonProps
         </div>
       )}
 
-      <p className="text-xs text-muted-ol text-center">
-        ⚠ Using your subscription for personal development only.
-      </p>
+      <p className="text-xs text-muted-ol text-center">{t('oauth.personalDevOnly')}</p>
     </div>
   );
 }

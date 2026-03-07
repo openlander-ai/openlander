@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLogStream, type LogEntry } from '@/hooks/use-log-stream';
 import { cn } from '@/lib/utils';
@@ -27,6 +28,7 @@ const levelColors: Record<string, string> = {
 };
 
 export function LogViewer({ projectId }: LogViewerProps) {
+  const { t } = useLanguage();
   const [follow, setFollow] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isRegex, setIsRegex] = useState(false);
@@ -97,7 +99,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search logs..."
+            placeholder={t('logs.searchPlaceholder')}
             className={cn(
               'flex-1 bg-transparent text-xs font-mono text-primary-ol',
               'placeholder:text-muted-ol focus:outline-none',
@@ -128,7 +130,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
             )}
           >
             <Radio className="h-3 w-3" />
-            Follow
+            {t('timeline.follow')}
           </button>
 
           {/* Clear */}
@@ -137,7 +139,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-body text-muted-ol hover:text-secondary-ol transition-colors"
           >
             <Trash2 className="h-3 w-3" />
-            Clear
+            {t('logs.clear')}
           </button>
         </div>
 
@@ -150,7 +152,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
             </span>
           )}
           <span className="text-[10px] font-mono text-muted-ol">
-            {filteredEntries.length.toLocaleString()} lines
+            {filteredEntries.length.toLocaleString()} {t('logs.lines')}
           </span>
         </div>
       </div>
@@ -171,7 +173,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
         {filteredEntries.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm font-body text-muted-ol">
-              {entries.length === 0 ? 'No logs available' : 'No matching lines'}
+              {entries.length === 0 ? t('logs.noLogs') : t('logs.noMatching')}
             </p>
           </div>
         ) : (
@@ -229,7 +231,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
           )}
         >
           <ArrowDown className="h-3 w-3" />
-          Bottom
+          {t('logs.bottom')}
         </button>
       )}
     </div>
