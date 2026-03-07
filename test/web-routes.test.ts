@@ -9,6 +9,27 @@ import { Database } from '../src/db/index.js';
 import { createApiRoutes } from '../src/web/api/routes.js';
 import { ProjectNotFoundError } from '../src/errors.js';
 
+// Mock preflight check to always pass in tests
+vi.mock('../src/pipeline/preflight.js', () => ({
+  preflightCheckOrThrow: vi.fn().mockResolvedValue({
+    pass: true,
+    checks: {
+      portAvailable: { pass: true, detail: 'OK' },
+      nameAvailable: { pass: true, detail: 'OK' },
+      resourceOk: { pass: true, detail: 'OK' },
+      proxyReady: { pass: true, detail: 'OK' },
+    },
+    warnings: [],
+  }),
+  PreflightCheckError: class PreflightCheckError extends Error {
+    result: unknown;
+    constructor(result: unknown) {
+      super('Preflight check failed');
+      this.result = result;
+    }
+  },
+}));
+
 // ---------------------------------------------------------------------------
 // Mock factories
 // ---------------------------------------------------------------------------
@@ -54,6 +75,24 @@ function createMockEnvManager() {
   return {
     getAllMasked: vi.fn().mockReturnValue({ API_KEY: 'sk-***' }),
     setBulk: vi.fn().mockReturnValue(true),
+  };
+}
+
+function createMockQuestionBridge() {
+  return {
+    setActiveProject: vi.fn(),
+    ask: vi.fn(),
+    reply: vi.fn(),
+    reject: vi.fn(),
+    hasPending: vi.fn().mockReturnValue(false),
+  };
+}
+
+function createMockJobManager() {
+  return {
+    trackJob: vi.fn(),
+    getStatus: vi.fn().mockReturnValue(null),
+    updatePhase: vi.fn(),
   };
 }
 
@@ -105,6 +144,8 @@ function createMockContext(db: Database): AppContext {
     db,
     docker: createMockDocker() as unknown as AppContext['docker'],
     pipeline: createMockPipeline() as unknown as AppContext['pipeline'],
+    composePipeline: {} as unknown as AppContext['composePipeline'],
+    traefik: {} as unknown as AppContext['traefik'],
     env: createMockEnvManager() as unknown as AppContext['env'],
     channelManager: createMockChannelManager() as unknown as AppContext['channelManager'],
     healthMonitor: createMockHealthMonitor() as unknown as AppContext['healthMonitor'],
@@ -121,6 +162,17 @@ function createMockContext(db: Database): AppContext {
       list: vi.fn().mockReturnValue([]),
       cleanup: vi.fn().mockResolvedValue(undefined),
     } as unknown as AppContext['previewDeployer'],
+    jobManager: createMockJobManager() as unknown as AppContext['jobManager'],
+    autoDetector: {} as unknown as AppContext['autoDetector'],
+    alertMonitor: {
+      getActiveAlerts: vi.fn().mockReturnValue([]),
+      dismissAlert: vi.fn(),
+    } as unknown as AppContext['alertMonitor'],
+    questionBridge: createMockQuestionBridge() as unknown as AppContext['questionBridge'],
+    webhookManager: {
+      triggerWebhook: vi.fn(),
+    } as unknown as AppContext['webhookManager'],
+    cloudflare: {} as unknown as AppContext['cloudflare'],
   };
 }
 
@@ -225,6 +277,59 @@ describe('Web API Routes', () => {
         name: 'my-app',
       }),
     );
+  });
+
+  // v0.2.0: Project-first deploy flow tests
+  it('POST /api/projects/deploy returns JSON immediately when agent is available (project-first)', async () => {
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_url: 'https://github.com/user/my-app',
+        branch: 'main',
+        name: 'my-app',
+      }),
+    });
+
+    // Response should be immediate JSON, not SSE
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    // Verify response structure
+    expect(body).toHaveProperty('success', true);
+    expect(body).toHaveProperty('projectId');
+    expect(body).toHaveProperty('projectName', 'my-app');
+    expect(body).toHaveProperty('status', 'building');
+    expect(body.projectId).toHaveLength(12);
+
+    // Verify project was created in DB
+    const project = db.getProject(body.projectId);
+    expect(project).toBeDefined();
+    expect(project!.name).toBe('my-app');
+    expect(project!.status).toBe('building');
+
+    // Verify questionBridge was set
+    expect(ctx.questionBridge.setActiveProject).toHaveBeenCalledWith(body.projectId);
+  });
+
+  it('POST /api/projects/deploy runs agent in background after returning JSON', async () => {
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_url: 'https://github.com/user/test-project',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.projectId).toBeDefined();
+
+    // Wait a tick for async agent.chatStream to be called
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Verify agent.chatStream was called (fire-and-forget)
+    expect(ctx.agent?.chatStream).toHaveBeenCalled();
   });
 
   // ---------------------------------------------------------------------------

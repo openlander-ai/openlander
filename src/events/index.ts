@@ -11,6 +11,7 @@
 
 import { createModuleLogger } from '../lib/logger.js';
 import type { BuildTier } from '../pipeline/build-recovery.js';
+import type { ChatStreamEvent } from '../agent/index.js';
 import type { Question } from '../agent/question-bridge.js';
 import type { Alert } from '../monitor/alerts.js';
 
@@ -63,7 +64,9 @@ export type EventType =
   | 'alert:dismissed'
   // v0.7: Agent questions
   | 'question:pending'
-  | 'question:answered';
+  | 'question:answered'
+  // v0.2.0: Agent events (deploy UX fix)
+  | 'agent:event';
 
 export interface EventPayload {
   'deploy:start': { projectId: string; repoUrl: string };
@@ -108,6 +111,7 @@ export interface EventPayload {
   'alert:dismissed': { alertId: string };
   'question:pending': { projectId: string; requestId: string; questions: Question[] };
   'question:answered': { projectId: string; requestId: string };
+  'agent:event': { projectId: string; event: ChatStreamEvent & { timestamp: string } };
 }
 
 // --- Event handler type ---

@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import { streamSSE, stream } from 'hono/streaming';
+import { stream } from 'hono/streaming';
 import { nanoid } from 'nanoid';
 
 import type { AppContext } from '../../app.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
-import { OpenLanderError, ProjectNotFoundError } from '../../errors.js';
+import { OpenLanderError, PreflightCheckError, ProjectNotFoundError } from '../../errors.js';
 import { createGitProvider } from '../../git-providers/index.js';
 import { loadConfig } from '../../config/index.js';
 import { eventBus, type EventType, type EventPayload } from '../../events/index.js';
@@ -17,6 +17,8 @@ import {
   getProjectUrl,
   getAllIps,
 } from '../../pipeline/traefik.js';
+import { extractProjectName } from '../../pipeline/helpers.js';
+import { preflightCheckOrThrow } from '../../pipeline/preflight.js';
 import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
 import { DeployQueue } from '../../agent/deploy-queue.js';
 
@@ -415,123 +417,134 @@ export function createApiRoutes(ctx: AppContext): Hono {
       return c.json(result, result.success ? 200 : 500);
     }
 
-    // Agent-mediated deploy: SSE stream through chatStream
+    const projectName = body.name ?? extractProjectName(body.repo_url);
+
+    try {
+      await preflightCheckOrThrow(ctx.db, ctx.docker, projectName);
+    } catch (err) {
+      if (err instanceof PreflightCheckError) {
+        return c.json(
+          {
+            success: false,
+            status: 'preflight_failed',
+            error: err.message,
+            preflightWarnings: err.result.warnings,
+          },
+          400,
+        );
+      }
+      throw err;
+    }
+
+    const existing = ctx.db.getProjectByName(projectName);
+    const projectId = existing?.id ?? nanoid(12);
+
+    if (!existing) {
+      ctx.db.createProject({
+        id: projectId,
+        name: projectName,
+        repoUrl: body.repo_url,
+        branch: body.branch,
+      });
+    }
+
+    ctx.db.updateProject(projectId, { status: 'building' });
+    ctx.jobManager.trackJob(projectId, projectName);
+    ctx.questionBridge.setActiveProject(projectId);
+
     const message = `Deploy ${body.repo_url}${body.branch ? ` branch ${body.branch}` : ''}${body.name ? ` as ${body.name}` : ''}`;
     const sessionId = nanoid(12);
 
-    return streamSSE(c, async (s) => {
-      let eventId = 0;
+    const emitAgentEvent = async (event: EventPayload['agent:event']['event']) => {
+      await eventBus.emit('agent:event', { projectId, event });
+    };
+
+    void (async () => {
       const deployState = { toolCalled: false, fallbackTriggered: false };
-
-      // Acquire deploy queue lock (sequential processing)
       const release = await deployQueue.acquire();
+      let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-      // Notify if there were other jobs queued ahead
-      // (acquire() resolves when it's our turn)
+      const runFallbackDeploy = async (reason: string) => {
+        log.warn({ projectId, reason }, 'Falling back to direct deploy');
+
+        await emitAgentEvent({
+          type: 'message',
+          content: 'Agent did not start deploy. Falling back to direct pipeline deploy.',
+          timestamp: new Date().toISOString(),
+        });
+
+        try {
+          await ctx.pipeline.deploy({
+            repoUrl: body.repo_url,
+            branch: body.branch,
+            name: projectName,
+            envVars: body.env_vars,
+            visibility: body.visibility,
+            sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+            trigger: 'api',
+            _projectId: projectId,
+          });
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          log.error({ err, projectId }, 'Fallback deploy failed');
+          await emitAgentEvent({
+            type: 'error',
+            error: errMsg,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      };
 
       try {
-        // 5-second fallback: if LLM doesn't call deploy_project, fall back to direct deploy
-        const fallbackTimer = setTimeout(() => {
+        fallbackTimer = setTimeout(() => {
           if (!deployState.toolCalled && !deployState.fallbackTriggered) {
             deployState.fallbackTriggered = true;
-            log.warn('Agent did not call deploy_project within 5s — falling back to direct deploy');
-            void (async () => {
-              try {
-                const result = await ctx.pipeline.deploy({
-                  repoUrl: body.repo_url,
-                  branch: body.branch,
-                  name: body.name,
-                  envVars: body.env_vars,
-                  visibility: body.visibility,
-                  sshKeyPath: ctx.config.git.sshKeyPath || undefined,
-                  trigger: 'api',
-                });
-                await s.writeSSE({
-                  id: String(eventId++),
-                  event: 'fallback',
-                  data: JSON.stringify({ type: 'fallback', ...result }),
-                });
-              } catch (err) {
-                const errMsg = err instanceof Error ? err.message : String(err);
-                await s.writeSSE({
-                  id: String(eventId++),
-                  event: 'error',
-                  data: JSON.stringify({ type: 'error', error: errMsg }),
-                });
-              }
-            })();
+            void runFallbackDeploy('timeout');
           }
         }, 5000);
 
         const agent = ctx.agent;
-        if (!agent) throw new Error('Agent is null');
+        if (!agent) {
+          throw new Error('Agent is null');
+        }
+
         await agent.chatStream(
           message,
           async (event) => {
-            // Only deploy-related tool calls should prevent fallback
             if (event.type === 'tool_call' && event.toolName === 'deploy_project') {
               deployState.toolCalled = true;
             }
-            // Inject timestamp at router level (spec §4.3)
-            const eventWithTs = { ...event, timestamp: new Date().toISOString() };
-            await s.writeSSE({
-              id: String(eventId++),
-              event: event.type,
-              data: JSON.stringify(eventWithTs),
+
+            await emitAgentEvent({
+              ...event,
+              timestamp: new Date().toISOString(),
             });
           },
           sessionId,
         );
 
-        clearTimeout(fallbackTimer);
-
-        // Agent completed without calling deploy_project and fallback hasn't fired
         if (!deployState.toolCalled && !deployState.fallbackTriggered) {
           deployState.fallbackTriggered = true;
-          log.warn(
-            'Agent completed without calling deploy_project — falling back to direct deploy',
-          );
-          try {
-            const result = await ctx.pipeline.deploy({
-              repoUrl: body.repo_url,
-              branch: body.branch,
-              name: body.name,
-              envVars: body.env_vars,
-              visibility: body.visibility,
-              sshKeyPath: ctx.config.git.sshKeyPath || undefined,
-              trigger: 'api',
-            });
-            await s.writeSSE({
-              id: String(eventId++),
-              event: 'fallback',
-              data: JSON.stringify({ type: 'fallback', ...result }),
-            });
-          } catch (err) {
-            const errMsg = err instanceof Error ? err.message : String(err);
-            await s.writeSSE({
-              id: String(eventId++),
-              event: 'error',
-              data: JSON.stringify({ type: 'error', error: errMsg }),
-            });
-          }
+          await runFallbackDeploy('agent_completed_without_deploy_project');
         }
       } catch (err) {
-        // chatStream threw — report error to client
         const errMsg = err instanceof Error ? err.message : String(err);
-        log.error({ err }, 'Agent chatStream failed during deploy');
-        try {
-          await s.writeSSE({
-            id: String(eventId++),
-            event: 'error',
-            data: JSON.stringify({ type: 'error', error: errMsg }),
-          });
-        } catch {
-          // SSE stream already closed by client — ignore write error
-        }
+        log.error({ err, projectId }, 'Agent chatStream failed during deploy');
+
+        await emitAgentEvent({
+          type: 'error',
+          error: errMsg,
+          timestamp: new Date().toISOString(),
+        });
       } finally {
+        if (fallbackTimer) {
+          clearTimeout(fallbackTimer);
+        }
         release();
       }
-    });
+    })();
+
+    return c.json({ success: true, projectId, projectName, status: 'building' });
   });
 
   api.post('/deploy/start', async (c) => {
@@ -572,9 +585,32 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }
       };
 
-      const write = (data: { type: string; message: string; projectId: string }) => {
-        void s.write(JSON.stringify({ ...data, timestamp: new Date().toISOString() }) + '\n');
+      const write = (data: {
+        type: string;
+        message: string;
+        projectId: string;
+        timestamp?: string;
+        [key: string]: unknown;
+      }) => {
+        void s.write(
+          JSON.stringify({
+            ...data,
+            timestamp: data.timestamp ?? new Date().toISOString(),
+          }) + '\n',
+        );
       };
+
+      function formatRelativeTime(dateStr: string): string {
+        const diffMs = Date.now() - new Date(dateStr).getTime();
+        const diffSec = Math.floor(diffMs / 1000);
+        if (diffSec < 60) return `${String(diffSec)}s ago`;
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) return `${String(diffMin)}m ago`;
+        const diffHr = Math.floor(diffMin / 60);
+        if (diffHr < 24) return `${String(diffHr)}h ago`;
+        const diffDay = Math.floor(diffHr / 24);
+        return `${String(diffDay)}d ago`;
+      }
 
       unsubscribers.push(
         eventBus.on('deploy:start', (payload) => {
@@ -722,6 +758,46 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }),
       );
 
+      unsubscribers.push(
+        eventBus.on('agent:event', (payload) => {
+          if (payload.projectId !== project.id) return;
+          const ev = payload.event;
+          const base = { projectId: project.id, timestamp: ev.timestamp };
+
+          switch (ev.type) {
+            case 'thinking':
+              write({ ...base, type: 'agent_thinking', message: 'Agent is analyzing...' });
+              break;
+            case 'tool_call':
+              write({
+                ...base,
+                type: 'agent_tool_call',
+                message: `Calling ${ev.toolName}...`,
+                toolName: ev.toolName,
+                toolArguments: ev.arguments,
+              });
+              break;
+            case 'tool_result':
+              write({
+                ...base,
+                type: ev.success ? 'status' : 'error',
+                message: ev.success
+                  ? `${ev.toolName} completed`
+                  : `${ev.toolName} failed: ${ev.error ?? 'unknown'}`,
+              });
+              break;
+            case 'message':
+              write({ ...base, type: 'agent_message', message: ev.content });
+              break;
+            case 'error':
+              write({ ...base, type: 'error', message: ev.error || 'Agent error' });
+              break;
+            default:
+              write({ ...base, type: 'status', message: `Agent: ${ev.type}` });
+          }
+        }),
+      );
+
       // Agent question events → question_pending in NDJSON stream
       unsubscribers.push(
         eventBus.on('question:pending', (payload) => {
@@ -745,14 +821,32 @@ export function createApiRoutes(ctx: AppContext): Hono {
       // Emit initial status based on current project state (handles race with deploy:start)
       const fresh = ctx.db.getProject(project.id);
       if (fresh) {
-        if (fresh.status === 'running') {
-          write({ type: 'complete', message: `Already running`, projectId: project.id });
-          cleanup();
-          void s.close();
-          return;
-        }
-        if (fresh.status === 'error') {
-          write({ type: 'error', message: `Build failed`, projectId: project.id });
+        if (fresh.status === 'running' || fresh.status === 'error' || fresh.status === 'stopped') {
+          const lastDeploy = ctx.db.getLastDeployLog(project.id);
+          if (lastDeploy) {
+            const ago = formatRelativeTime(lastDeploy.created_at);
+            const duration = lastDeploy.duration_ms
+              ? `${String(Math.round(lastDeploy.duration_ms / 1000))}s`
+              : '';
+            const trigger = lastDeploy.trigger;
+            const commitInfo = lastDeploy.commit_sha
+              ? ` (${lastDeploy.commit_sha.slice(0, 7)})`
+              : '';
+
+            write({
+              type: 'status',
+              message: `Last deploy: ${trigger}${commitInfo} — ${ago}${duration ? `, took ${duration}` : ''}`,
+              projectId: project.id,
+            });
+          }
+
+          if (fresh.status === 'running') {
+            write({ type: 'complete', message: 'Currently running', projectId: project.id });
+          } else if (fresh.status === 'error') {
+            write({ type: 'error', message: 'Build failed', projectId: project.id });
+          } else {
+            write({ type: 'status', message: 'Stopped', projectId: project.id });
+          }
           cleanup();
           void s.close();
           return;
