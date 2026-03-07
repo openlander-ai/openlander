@@ -186,7 +186,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 ## Requirements
 
 - **Platform**: Linux or macOS (Windows is not supported, but WSL2 on Windows works)
-- **[Node.js](https://nodejs.org/)** >= 22
+- **[Node.js](https://nodejs.org/)** >= 22 (includes npm)
 - **Docker** installed and running (see below)
 - **LLM API key** (configured during setup) — one of:
   - [Google Gemini](https://ai.google.dev/) (free tier available)
