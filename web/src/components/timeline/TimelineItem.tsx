@@ -1,3 +1,4 @@
+import { useLanguage } from '@/i18n/context';
 import type { TimelineItem as TItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
 import {
@@ -59,6 +60,7 @@ export function TimelineItemCard({
   onSkipQuestion,
   onInsightAction,
 }: TimelineItemProps) {
+  const { t } = useLanguage();
   const isSuccess = item.type === 'success';
   const isError = item.type === 'error';
   const isQuestion = item.type === 'question';
@@ -178,7 +180,9 @@ export function TimelineItemCard({
             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-agent/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="flex items-center gap-2 mb-1.5 text-agent/70">
               <span className="w-1.5 h-1.5 rounded-full bg-agent/50 animate-pulse" />
-              <span>Executing: {item.toolName || 'tool'}</span>
+              <span>
+                {t('timeline.executing')} {item.toolName || t('timeline.tool')}
+              </span>
             </div>
             <div className="pl-3.5 border-l border-white/10 space-y-1">
               {Object.entries(item.toolArguments).map(([key, value]) => (
@@ -194,11 +198,23 @@ export function TimelineItemCard({
           </div>
         )}
 
+        {/* Error build log detail */}
+        {isError && item.detail && (
+          <details className="mt-2 group/log">
+            <summary className="text-[11px] font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
+              Build log ▾
+            </summary>
+            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+              {item.detail.slice(-2000)}
+            </pre>
+          </details>
+        )}
+
         {/* Error Status — auto-recovery handles fixes */}
         {isError && (
           <div className="mt-3 px-3 py-1.5 rounded-md text-[11px] font-body border bg-warning/10 text-warning border-warning/20 flex items-center gap-1.5">
             <Loader2 className="h-3 w-3 animate-spin" />
-            AI is working on it...
+            {t('timeline.aiWorking')}
           </div>
         )}
       </div>

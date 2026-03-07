@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLanguage } from '@/i18n/context';
 import type { TimelineItem } from '@/lib/event-types';
 import type { QuestionAnswerPayload } from './InputRequestCard';
 import { TimelineItemCard } from './TimelineItem';
@@ -28,6 +29,7 @@ export function TimelineFeed({
   fixingItemId,
 }: TimelineFeedProps) {
   const [autoFollow, setAutoFollow] = useState(true);
+  const { t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -58,10 +60,8 @@ export function TimelineFeed({
     return (
       <div className="flex items-center justify-center h-full text-center">
         <div className="space-y-2">
-          <p className="text-sm font-body text-secondary-ol">No activity yet</p>
-          <p className="text-xs font-body text-muted-ol">
-            Deploy this project to see the agent timeline.
-          </p>
+          <p className="text-sm font-body text-secondary-ol">{t('timeline.empty')}</p>
+          <p className="text-xs font-body text-muted-ol">{t('timeline.deployToSee')}</p>
         </div>
       </div>
     );
@@ -108,7 +108,7 @@ export function TimelineFeed({
             projectStatus !== 'error' && (
               <div className="mb-4 px-4 py-3 rounded-lg bg-bg-subtle/40 border border-white/5">
                 <div className="flex justify-between items-center text-[10px] font-mono text-agent/80 uppercase tracking-wider mb-2">
-                  <span>System Progress</span>
+                  <span>{t('timeline.systemProgress')}</span>
                   <span>{latestProgress.percent}%</span>
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-bg-subtle overflow-hidden border border-white/5 relative">
@@ -220,7 +220,7 @@ export function TimelineFeed({
 
               <div className="relative flex flex-col">
                 <span className="text-xs font-mono text-agent/90 uppercase tracking-widest flex items-center gap-2">
-                  System Active
+                  {t('timeline.systemActive')}
                   <span className="flex gap-0.5">
                     <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce" />
                     <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce [animation-delay:150ms]" />
@@ -228,7 +228,7 @@ export function TimelineFeed({
                   </span>
                 </span>
                 <span className="text-[10px] font-mono text-muted-ol mt-0.5">
-                  Awaiting next instruction...
+                  {t('timeline.awaitingInstruction')}
                 </span>
               </div>
             </div>
@@ -253,7 +253,7 @@ export function TimelineFeed({
           )}
         >
           <ArrowDown className="h-3 w-3" />
-          Follow
+          {t('timeline.follow')}
         </button>
       )}
     </div>

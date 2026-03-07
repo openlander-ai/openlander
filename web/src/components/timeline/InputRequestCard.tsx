@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 import type { QuestionData } from '@/lib/event-types';
 import { MessageCircleQuestion, Send, SkipForward, Check } from 'lucide-react';
@@ -27,6 +28,7 @@ export function InputRequestCard({
   const [selections, setSelections] = useState<Map<number, Set<string>>>(new Map());
   const [customTexts, setCustomTexts] = useState<Map<number, string>>(new Map());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { t } = useLanguage();
 
   const toggleOption = useCallback((qIndex: number, label: string, multiple: boolean) => {
     setSelections((prev) => {
@@ -76,7 +78,7 @@ export function InputRequestCard({
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-body text-muted-ol">Question answered</p>
+          <p className="text-sm font-body text-muted-ol">{t('timeline.questionAnswered')}</p>
         </div>
       </div>
     );
@@ -153,7 +155,7 @@ export function InputRequestCard({
             {/* Custom text input (always available as fallback) */}
             <input
               type="text"
-              placeholder="Type your own answer..."
+              placeholder={t('timeline.typeAnswer')}
               disabled={isSubmitting}
               value={customTexts.get(qIndex) ?? ''}
               onChange={(e) => setCustomText(qIndex, e.target.value)}
@@ -187,7 +189,7 @@ export function InputRequestCard({
             )}
           >
             <Send className="h-3 w-3" />
-            Submit
+            {t('timeline.submit')}
           </button>
           <button
             onClick={handleSkip}
@@ -200,7 +202,7 @@ export function InputRequestCard({
             )}
           >
             <SkipForward className="h-3 w-3" />
-            Skip
+            {t('timeline.skip')}
           </button>
         </div>
       </div>
