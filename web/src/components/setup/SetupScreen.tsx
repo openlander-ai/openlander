@@ -27,15 +27,17 @@ import {
   Github,
   Rocket,
   ExternalLink,
+  Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context';
 
 const STORAGE_KEY = 'openlander-setup-step';
 
 function getStoredStep(): number {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return Math.min(parseInt(stored, 10), 2);
+    if (stored) return Math.min(parseInt(stored, 10), 3);
   } catch {
     // localStorage not available
   }
@@ -60,6 +62,7 @@ function clearStoredStep(): void {
 
 export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const { status, loading, refetch } = useSetup();
+  const { t, language, setLanguage } = useLanguage();
   const [step, setStep] = useState(getStoredStep);
   const [configuringLLM, setConfiguringLLM] = useState(false);
   const [startingTraefik, setStartingTraefik] = useState(false);
@@ -89,14 +92,14 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
     storeStep(step);
   }, [step]);
 
-  // If status shows LLM already configured, skip to step 2
+  // If status shows LLM already configured, skip to step 3
   useEffect(() => {
-    if (status?.llm.ok && step < 2) {
-      setStep(2);
+    if (status?.llm.ok && step < 3) {
+      setStep(3);
     }
   }, [status, step]);
 
-  const goNext = () => setStep((s) => Math.min(s + 1, 2));
+  const goNext = () => setStep((s) => Math.min(s + 1, 3));
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
 
   const handleStartTraefik = async () => {
@@ -251,7 +254,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       <div className="relative w-full max-w-xl z-10">
         {/* Step indicators */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {[0, 1, 2].map((s) => (
+          {[0, 1, 2, 3].map((s) => (
             <div key={s} className="flex items-center gap-2">
               <div
                 className={cn(
@@ -263,7 +266,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
               >
                 {s < step ? <Check className="h-4 w-4" /> : s + 1}
               </div>
-              {s < 2 && (
+              {s < 3 && (
                 <div
                   className={cn('w-12 h-px transition-colors', s < step ? 'bg-agent' : 'bg-border')}
                 />
@@ -272,8 +275,67 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
           ))}
         </div>
 
-        {/* Step 0: Welcome */}
+        {/* Step 0: Language */}
         {step === 0 && (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="text-center space-y-6">
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-agent/10 flex items-center justify-center">
+                <Globe className="h-8 w-8 text-agent" />
+              </div>
+              <div className="space-y-2">
+                <h1 className="font-display text-3xl font-bold text-primary-ol tracking-tight">
+                  {t('setup.language.title')}
+                </h1>
+              </div>
+
+              {/* Language selection cards */}
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setLanguage('en')}
+                  className={cn(
+                    'flex flex-col items-center gap-3 p-6 rounded-xl border-2 transition-all',
+                    language === 'en'
+                      ? 'border-foreground bg-bg-subtle/50'
+                      : 'border-border bg-bg-subtle/30 hover:border-border/80',
+                  )}
+                >
+                  <span className="text-4xl">🇺🇸</span>
+                  <span className="text-sm font-body font-medium">
+                    {t('setup.language.english')}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLanguage('ko')}
+                  className={cn(
+                    'flex flex-col items-center gap-3 p-6 rounded-xl border-2 transition-all',
+                    language === 'ko'
+                      ? 'border-foreground bg-bg-subtle/50'
+                      : 'border-border bg-bg-subtle/30 hover:border-border/80',
+                  )}
+                >
+                  <span className="text-4xl">🇰🇷</span>
+                  <span className="text-sm font-body font-medium">
+                    {t('setup.language.korean')}
+                  </span>
+                </button>
+              </div>
+
+              <Button
+                onClick={goNext}
+                size="lg"
+                className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
+              >
+                {t('setup.language.continue')}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 1: Welcome */}
+        {step === 1 && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="text-center space-y-6">
               <div className="mx-auto w-16 h-16 rounded-2xl bg-agent/10 flex items-center justify-center">
@@ -281,33 +343,35 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
               </div>
               <div className="space-y-2">
                 <h1 className="font-display text-3xl font-bold text-primary-ol tracking-tight">
-                  I am OpenLander
+                  {t('setup.welcome.title')}
                 </h1>
-                <p className="text-lg font-body text-secondary-ol">
-                  I control this server. Give me a repo, and I'll handle the rest.
-                </p>
+                <p className="text-lg font-body text-secondary-ol">{t('setup.welcome.subtitle')}</p>
               </div>
 
               {/* Infrastructure status */}
               <div className="space-y-3 text-left">
                 <StatusRow
                   ok={status.docker.ok}
-                  label="Docker Engine"
+                  label={t('setup.welcome.dockerEngine')}
                   detail={status.docker.message}
                 />
                 {!status.docker.ok && (
                   <div className="ml-10 space-y-2">
                     <DockerFixGuide state={status.docker.state} />
                     <Button onClick={refetch} variant="outline" size="sm" className="text-xs">
-                      Refresh Status
+                      {t('setup.welcome.refreshStatus')}
                     </Button>
                   </div>
                 )}
 
                 <StatusRow
                   ok={status.traefik.ok}
-                  label="Traefik Proxy"
-                  detail={status.traefik.ok ? 'Active' : 'Not started'}
+                  label={t('setup.welcome.traefikProxy')}
+                  detail={
+                    status.traefik.ok
+                      ? t('setup.welcome.traefikRunning')
+                      : t('setup.welcome.traefikStopped')
+                  }
                 />
                 {!status.traefik.ok && status.docker.ok && (
                   <div className="ml-10">
@@ -320,7 +384,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                     >
                       {startingTraefik && <Loader2 className="h-3 w-3 animate-spin" />}
                       <Network className="h-3 w-3" />
-                      Start Traefik
+                      {t('setup.welcome.traefikProxy')}
                     </Button>
                   </div>
                 )}
@@ -332,21 +396,21 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 size="lg"
                 className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
               >
-                Get Started
+                {t('setup.welcome.getStarted')}
                 <ArrowRight className="h-4 w-4" />
               </Button>
 
               {!status.docker.ok && (
                 <p className="text-xs font-body text-muted-ol">
-                  Docker must be running to continue.
+                  {t('setup.welcome.dockerRequired')}
                 </p>
               )}
             </div>
           </div>
         )}
 
-        {/* Step 1: Brain (LLM) */}
-        {step === 1 && (
+        {/* Step 2: Brain (LLM) */}
+        {step === 2 && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="space-y-6">
               <div className="text-center space-y-2">
@@ -354,11 +418,9 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   <Brain className="h-8 w-8 text-agent" />
                 </div>
                 <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
-                  Connect the Brain
+                  {t('setup.llm.title')}
                 </h2>
-                <p className="text-sm font-body text-secondary-ol">
-                  Choose an AI provider to power the deploy agent.
-                </p>
+                <p className="text-sm font-body text-secondary-ol">{t('setup.llm.subtitle')}</p>
               </div>
 
               {status.llm.ok ? (
@@ -374,7 +436,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 <form onSubmit={handleConfigureLLM} className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-xs font-body text-secondary-ol uppercase tracking-wider">
-                      Provider
+                      {t('setup.llm.chooseProvider')}
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {[
@@ -427,7 +489,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                         </div>
                         <div className="relative flex justify-center text-xs uppercase">
                           <span className="bg-bg-app px-2 text-muted-ol font-body">
-                            Or use API Key
+                            {t('settings.aiModel.orUseApiKey')}
                           </span>
                         </div>
                       </div>
@@ -437,7 +499,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   {llmProvider !== 'ollama' && (
                     <div className="space-y-2">
                       <label className="text-xs font-body text-secondary-ol uppercase tracking-wider">
-                        API Key
+                        {t('setup.llm.apiKey')}
                       </label>
                       <Input
                         type="password"
@@ -460,7 +522,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                       className="gap-1.5 font-body"
                     >
                       <ArrowLeft className="h-3.5 w-3.5" />
-                      Back
+                      {t('setup.llm.back')}
                     </Button>
                     <Button
                       type="submit"
@@ -472,7 +534,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                       ) : (
                         <Check className="h-4 w-4" />
                       )}
-                      Connect
+                      {t('common.save')}
                     </Button>
                   </div>
                 </form>
@@ -483,7 +545,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   onClick={goNext}
                   className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
                 >
-                  Continue
+                  {t('setup.llm.continue')}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               )}
@@ -491,8 +553,8 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
           </div>
         )}
 
-        {/* Step 2: Access (GitHub) + Complete */}
-        {step === 2 && (
+        {/* Step 3: Access (GitHub) + Complete */}
+        {step === 3 && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="space-y-6">
               <div className="text-center space-y-2">
@@ -500,11 +562,9 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   <Rocket className="h-8 w-8 text-agent" />
                 </div>
                 <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
-                  Ready for Launch
+                  {t('setup.github.title')}
                 </h2>
-                <p className="text-sm font-body text-secondary-ol">
-                  Optionally connect GitHub for private repos, or skip and deploy public repos.
-                </p>
+                <p className="text-sm font-body text-secondary-ol">{t('setup.github.subtitle')}</p>
               </div>
 
               {/* GitHub connection (optional) */}
@@ -512,16 +572,13 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 <div className="flex items-center gap-2">
                   <Github className="h-4 w-4 text-secondary-ol" />
                   <span className="text-sm font-body font-medium text-primary-ol">
-                    GitHub Access
+                    {t('setup.github.githubAccess')}
                   </span>
                   <Badge variant="outline" className="text-[10px] py-0">
                     Optional
                   </Badge>
                 </div>
-                <p className="text-xs font-body text-muted-ol">
-                  Connect your GitHub account to deploy private repositories. You can also set this
-                  up later in Settings.
-                </p>
+                <p className="text-xs font-body text-muted-ol">{t('setup.github.description')}</p>
 
                 {status?.github?.ok ? (
                   <div className="flex items-center gap-2 p-3 rounded-lg border border-success/20 bg-success/5 text-success">
@@ -535,7 +592,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   <div className="space-y-4">
                     <div className="text-center space-y-3">
                       <p className="text-sm font-body text-secondary-ol">
-                        Enter this code on GitHub:
+                        {t('settings.github.enterCode')}
                       </p>
                       <p className="font-mono text-2xl tracking-[0.3em] text-primary-ol font-bold">
                         {deviceFlow.userCode}
@@ -550,7 +607,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                         className="gap-1.5 font-body"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
-                        Open GitHub
+                        {t('settings.github.openGithub')}
                       </Button>
                       <Button
                         type="button"
@@ -564,12 +621,12 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                         ) : (
                           <Copy className="h-3.5 w-3.5" />
                         )}
-                        {copiedCode ? 'Copied' : 'Copy Code'}
+                        {copiedCode ? t('settings.github.copied') : t('settings.github.copyCode')}
                       </Button>
                     </div>
                     <div className="flex items-center justify-center gap-2 text-muted-ol">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      <span className="text-xs font-body">Waiting for authorization...</span>
+                      <span className="text-xs font-body">{t('settings.github.waiting')}</span>
                     </div>
                     <div className="flex justify-center">
                       <Button
@@ -579,7 +636,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                         onClick={handleCancelDeviceFlow}
                         className="text-xs font-body text-muted-ol"
                       >
-                        Cancel
+                        {t('settings.github.cancel')}
                       </Button>
                     </div>
                   </div>
@@ -593,7 +650,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                       className="w-full gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
                     >
                       <Github className="h-3.5 w-3.5" />
-                      Connect with GitHub
+                      {t('settings.github.connectWithGithub')}
                     </Button>
 
                     <div className="relative my-4">
@@ -602,7 +659,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                       </div>
                       <div className="relative flex justify-center text-xs">
                         <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">
-                          or enter a token
+                          {t('settings.github.or')}
                         </span>
                       </div>
                     </div>
@@ -622,7 +679,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                           rel="noreferrer"
                           className="text-xs font-body text-agent hover:underline inline-flex items-center gap-1"
                         >
-                          Generate a token →
+                          {t('settings.github.generateToken')}
                         </a>
                       </div>
                       <Button
@@ -637,7 +694,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                         ) : (
                           <Github className="h-3.5 w-3.5" />
                         )}
-                        Connect
+                        {t('settings.github.connect')}
                       </Button>
                     </form>
 
@@ -649,25 +706,29 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
               {/* Summary */}
               <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
                 <p className="text-xs font-body text-muted-ol uppercase tracking-wider">
-                  Setup Summary
+                  {t('setup.github.setupSummary')}
                 </p>
                 <StatusRow
                   ok={status.docker.ok}
                   label="Docker"
-                  detail={status.docker.ok ? 'Running' : 'Not ready'}
+                  detail={status.docker.ok ? t('setup.welcome.dockerRunning') : t('common.error')}
                 />
                 <StatusRow
                   ok={status.traefik.ok}
                   label="Traefik"
-                  detail={status.traefik.ok ? 'Active' : 'Not started'}
+                  detail={
+                    status.traefik.ok
+                      ? t('setup.welcome.traefikRunning')
+                      : t('setup.welcome.traefikStopped')
+                  }
                 />
                 <StatusRow
                   ok={status.llm.ok}
-                  label="AI Model"
+                  label={t('settings.aiModel.title')}
                   detail={
                     status.llm.ok
                       ? `${status.llm.provider} (${status.llm.model})`
-                      : 'Not configured'
+                      : t('settings.aiModel.configureProvider')
                   }
                 />
               </div>
@@ -680,7 +741,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   className="gap-1.5 font-body"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  Back
+                  {t('setup.github.back')}
                 </Button>
                 <Button
                   onClick={handleComplete}
@@ -693,7 +754,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   ) : (
                     <Rocket className="h-4 w-4" />
                   )}
-                  Start Deploying
+                  {t('setup.github.startDeploying')}
                 </Button>
               </div>
 
