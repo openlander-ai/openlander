@@ -42,8 +42,17 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
 
   // Normalize URL: prepend https:// if no protocol specified
   let normalizedUrl = normalizeRepoUrl(repoUrl);
+  // When SSH key is configured and URL is HTTPS, convert to SSH immediately
+  // (SSH key is useless for HTTPS cloning — must use git@host:path format)
+  if (sshKeyPath && normalizedUrl.startsWith('http')) {
+    const sshUrl = toSshUrl(normalizedUrl);
+    if (sshUrl) {
+      log.info({ repoUrl, sshUrl }, 'SSH key configured, converting to SSH URL');
+      normalizedUrl = sshUrl;
+    }
+  }
 
-  // Inject GitHub token for HTTPS URLs to support private repos
+  // Inject GitHub token for HTTPS URLs (only when no SSH key and still HTTPS)
   if (!sshKeyPath && normalizedUrl.startsWith('https://github.com/')) {
     try {
       const config = loadConfig();
@@ -82,18 +91,24 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
 
-    // Auto-retry with SSH if HTTPS auth fails and SSH key is available
+    // Auto-retry with SSH if HTTPS auth fails (only when current URL is still HTTPS)
     const isAuthFailure =
       msg.includes('terminal prompts disabled') ||
       msg.includes('Authentication failed') ||
       msg.includes('could not read Username');
-    const sshUrl = toSshUrl(normalizedUrl);
-    if (isAuthFailure && sshUrl && !sshKeyPath) {
+    const isHttpsUrl = normalizedUrl.startsWith('http');
+    const sshUrl = isHttpsUrl ? toSshUrl(normalizedUrl) : null;
+    if (isAuthFailure && sshUrl) {
       log.info({ repoUrl, sshUrl }, 'HTTPS auth failed, retrying with SSH');
       const sshArgs = ['clone', '--depth', String(depth)];
       if (branch) sshArgs.push('--branch', branch);
       sshArgs.push(sshUrl, cloneDir);
-      const sshEnv = { ...env, GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=no' };
+      const sshEnv = {
+        ...env,
+        GIT_SSH_COMMAND: sshKeyPath
+          ? `ssh -i ${sshKeyPath} -o StrictHostKeyChecking=no`
+          : 'ssh -o StrictHostKeyChecking=no',
+      };
       try {
         await exec('git', sshArgs, { env: sshEnv, timeout: 120_000 });
       } catch (sshError) {

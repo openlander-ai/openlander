@@ -276,6 +276,10 @@ export class DeployPipeline {
       buildLog += `[clone] ${config.repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
 
       const composePath = this.composePipeline?.detectComposeFile(cloneResult.path);
+      const composeEnvVars = {
+        ...(config.envVars ?? {}),
+        ...this.env.getMergedForDeploy(projectId),
+      };
       if (composePath && this.composePipeline) {
         log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
         const result = await this.composePipeline.deployCompose({
@@ -285,6 +289,7 @@ export class DeployPipeline {
           composePath,
           name: projectName,
           trigger: config.trigger,
+          envVars: composeEnvVars,
           _parentId: config._projectId,
         });
 

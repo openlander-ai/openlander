@@ -1,5 +1,6 @@
 import { createModuleLogger } from '../lib/logger.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { checkEnvRequirements, classifyVar, detectEnvFile, parseEnvFile } from './env-inject.js';
 import { join, dirname } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { nanoid } from 'nanoid';
@@ -40,6 +41,7 @@ export interface ComposeDeployConfig {
   clonePath: string;
   composePath: string;
   name?: string;
+  envVars?: Record<string, string>;
   trigger?: 'chat' | 'webhook' | 'api';
   _parentId?: string;
 }
@@ -208,6 +210,19 @@ export class ComposePipeline {
     let buildLog = '';
 
     const composeProject = this.parseComposeFile(config.composePath);
+
+    const envVars = { ...(config.envVars ?? {}) };
+    const envCheckResult = checkEnvRequirements(composeProject.projectPath, envVars);
+    if (envCheckResult.missing.length > 0) {
+      throw new Error(
+        'compose env validation failed: ' +
+          (envCheckResult.templateFile ?? '.env file') +
+          ' is missing required variables: ' +
+          envCheckResult.missing.join(', '),
+      );
+    }
+
+    this.createComposeEnvFileIfMissing(composeProject.projectPath, envVars);
 
     if (!config._parentId) {
       this.db.createProject({
@@ -494,6 +509,56 @@ export class ComposePipeline {
     const overridePath = join(dirname(composePath), 'docker-compose.override.yml');
     writeFileSync(overridePath, overrideContent, 'utf8');
     return overridePath;
+  }
+
+  private createComposeEnvFileIfMissing(
+    projectPath: string,
+    envVars: Record<string, string>,
+  ): void {
+    const envTemplatePath = detectEnvFile(projectPath);
+    if (!envTemplatePath) {
+      return;
+    }
+
+    const envFilePath = join(projectPath, '.env');
+    if (existsSync(envFilePath)) {
+      return;
+    }
+
+    const templateVars = parseEnvFile(envTemplatePath);
+    const envLines: string[] = [];
+
+    for (const [key, templateValue] of templateVars.entries()) {
+      const providedValue = envVars[key];
+      const classification = classifyVar(key, templateValue);
+
+      if (classification === 'secret' && providedValue === undefined) {
+        envLines.push('# TODO: Set ' + key);
+        envLines.push(key + '=');
+        continue;
+      }
+
+      const resolvedValue = providedValue === undefined ? templateValue : providedValue;
+      envLines.push(key + '=' + this.formatComposeEnvValue(resolvedValue));
+    }
+
+    writeFileSync(envFilePath, envLines.join('\n') + '\n', 'utf8');
+    log.info(
+      { envFilePath, templateFile: envTemplatePath },
+      'Generated compose .env file from template',
+    );
+  }
+
+  private formatComposeEnvValue(value: string): string {
+    if (!value) {
+      return '';
+    }
+
+    if (/\s|#/.test(value)) {
+      return '"' + value.replace(/"/g, '\\"') + '"';
+    }
+
+    return value;
   }
 
   private async execCompose(

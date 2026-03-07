@@ -96,6 +96,9 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'container:stop': 'stopped',
     'container:remove': 'removed',
     'container:health': 'health-check',
+    'compose:start': 'building',
+    'compose:up': 'running',
+    'compose:failed': 'error',
     'tunnel:start': 'tunnel-starting',
     'tunnel:stop': 'tunnel-stopped',
     'tunnel:url': 'tunnel-active',
@@ -120,6 +123,9 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'tunnel:url',
     'env:set',
     'env:delete',
+    'compose:start',
+    'compose:up',
+    'compose:failed',
   ];
 
   for (const eventType of eventTypes) {
@@ -143,6 +149,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
         activityEvent.detail = (payload as EventPayload['deploy:failed']).error;
       } else if (eventType === 'tunnel:url') {
         activityEvent.detail = (payload as EventPayload['tunnel:url']).url;
+      } else if (eventType === 'compose:failed') {
+        activityEvent.detail = (payload as EventPayload['compose:failed']).error;
       }
 
       activityBuffer.push(activityEvent);
@@ -157,6 +165,12 @@ export function createApiRoutes(ctx: AppContext): Hono {
     ctx.db.releaseDeployLock(p.projectId);
   });
   eventBus.on('deploy:failed', (p) => {
+    ctx.db.releaseDeployLock(p.projectId);
+  });
+  eventBus.on('compose:up', (p) => {
+    ctx.db.releaseDeployLock(p.projectId);
+  });
+  eventBus.on('compose:failed', (p) => {
     ctx.db.releaseDeployLock(p.projectId);
   });
 
@@ -464,13 +478,13 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
       // Emit progress so user sees activity before agent responds
       await emitAgentEvent({
-        type: 'thinking',
+        type: 'message',
         content: 'Acquiring deploy slot...',
         timestamp: new Date().toISOString(),
       });
       const release = await deployQueue.acquire();
       await emitAgentEvent({
-        type: 'thinking',
+        type: 'message',
         content: 'Analyzing project and preparing deployment...',
         timestamp: new Date().toISOString(),
       });
@@ -521,7 +535,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }
 
         await emitAgentEvent({
-          type: 'thinking',
+          type: 'message',
           content: 'Agent is reasoning about deployment strategy...',
           timestamp: new Date().toISOString(),
         });
@@ -773,6 +787,44 @@ export function createApiRoutes(ctx: AppContext): Hono {
             message: `Dockerfile fixed (attempt ${String(payload.retryCount)}/3): ${payload.changes.join(', ')}`,
             projectId: project.id,
           });
+        }),
+      );
+
+      // Compose lifecycle events
+      unsubscribers.push(
+        eventBus.on('compose:start', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'status',
+            message: `Compose build starting (${String(payload.serviceCount)} service${payload.serviceCount > 1 ? 's' : ''})`,
+            projectId: project.id,
+          });
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('compose:up', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'complete',
+            message: `Compose deploy complete — ${String(payload.services.length)} service${payload.services.length > 1 ? 's' : ''} running`,
+            projectId: project.id,
+          });
+          cleanup();
+          void s.close();
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('compose:failed', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({
+            type: 'error',
+            message: `Compose deploy failed: ${payload.error}`,
+            projectId: project.id,
+          });
+          cleanup();
+          void s.close();
         }),
       );
 
