@@ -12,6 +12,7 @@ import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { TimelineFeed } from '@/components/timeline/TimelineFeed';
 import { LogViewer } from '@/components/logs/LogViewer';
+import { LogPreview } from '@/components/timeline/LogPreview';
 import { EnvVarsTable } from '@/components/config/EnvVarsTable';
 import { DomainsPanel } from '@/components/config/DomainsPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -171,6 +172,7 @@ export function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('timeline');
   const [timelineRunKey, setTimelineRunKey] = useState(0);
   const isMobile = useIsMobile();
 
@@ -386,7 +388,7 @@ export function ProjectDetail() {
       </div>
 
       {/* Tabs: Timeline / Logs / Config */}
-      <Tabs defaultValue="timeline" className="flex-1 flex flex-col min-h-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
         <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
           <TabsTrigger
             value="timeline"
@@ -418,14 +420,23 @@ export function ProjectDetail() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="timeline" className="flex-1 min-h-0 mt-0">
-          <TimelineFeed
-            items={items}
-            isStreaming={isStreaming}
-            onSubmitAnswer={submitAnswer}
-            onSkipQuestion={skipQuestion}
-            onInsightAction={executeAction}
-          />
+        <TabsContent value="timeline" className="flex-1 min-h-0 mt-0 flex flex-col">
+          <div className="flex-1 min-h-0">
+            <TimelineFeed
+              items={items}
+              isStreaming={isStreaming}
+              onSubmitAnswer={submitAnswer}
+              onSkipQuestion={skipQuestion}
+              onInsightAction={executeAction}
+            />
+          </div>
+          {id && project && (
+            <LogPreview
+              projectId={id}
+              status={project.status}
+              onOpenLogs={() => setActiveTab('logs')}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
