@@ -95,9 +95,7 @@ export function useTimeline({
             }
             if (event.type === 'error') {
               setError(event.message);
-              setIsStreaming(false);
-              onSettledRef.current?.();
-              return;
+              // Do NOT return — auto-recovery may send more events after failure
             }
           } catch {
             // Skip malformed JSON lines

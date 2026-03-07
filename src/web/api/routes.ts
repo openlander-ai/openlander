@@ -725,6 +725,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
               message: `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
               projectId: project.id,
             });
+            clearTimeout(streamTimeout);
             cleanup();
             void s.close();
           })();
@@ -739,8 +740,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
             message: `Deploy failed at ${payload.step}: ${payload.error}`,
             projectId: project.id,
           });
-          cleanup();
-          void s.close();
+          // Do NOT close stream — auto-recovery may follow
         }),
       );
 
@@ -823,8 +823,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
             message: `Compose deploy failed: ${payload.error}`,
             projectId: project.id,
           });
-          cleanup();
-          void s.close();
+          // Do NOT close stream — auto-recovery may follow
         }),
       );
 
@@ -886,7 +885,19 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }),
       );
 
-      s.onAbort(cleanup);
+      // Auto-close stream after 5 min timeout (safety net for auto-recovery)
+      const streamTimeout = setTimeout(
+        () => {
+          cleanup();
+          void s.close();
+        },
+        5 * 60 * 1000,
+      );
+
+      s.onAbort(() => {
+        clearTimeout(streamTimeout);
+        cleanup();
+      });
 
       // Emit initial status based on current project state (handles race with deploy:start)
       const fresh = ctx.db.getProject(project.id);

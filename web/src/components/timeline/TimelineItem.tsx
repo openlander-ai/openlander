@@ -174,25 +174,12 @@ export function TimelineItemCard({
           </div>
         )}
 
-        {/* Error Action */}
-        {isError && onFixWithAI && (
-          <button
-            onClick={onFixWithAI}
-            disabled={isFixWithAILoading}
-            className={cn(
-              'mt-3 px-3 py-1.5 rounded-md text-[11px] font-body border transition-colors flex items-center gap-1.5',
-              isFixWithAILoading
-                ? 'bg-error/5 text-error/60 border-error/10 cursor-not-allowed'
-                : 'bg-error/10 text-error hover:bg-error/20 border-error/20',
-            )}
-          >
-            {isFixWithAILoading ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Wrench className="h-3 w-3" />
-            )}
-            {isFixWithAILoading ? 'Analyzing with AI...' : 'Fix with AI'}
-          </button>
+        {/* Error Status — auto-recovery handles fixes */}
+        {isError && (
+          <div className="mt-3 px-3 py-1.5 rounded-md text-[11px] font-body border bg-warning/10 text-warning border-warning/20 flex items-center gap-1.5">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            AI is working on it...
+          </div>
         )}
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { nanoid } from 'nanoid';
+
 import { Database } from './db/index.js';
 import { Docker } from './pipeline/docker.js';
 import { DeployPipeline } from './pipeline/deploy.js';
@@ -138,6 +140,100 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   eventBus.on('deploy:failed', () => {
     questionBridge.setActiveProject(null);
   });
+
+  // Auto-recovery: trigger agent on deploy failure
+  if (agent) {
+    const recoveryAttempts = new Map<string, { count: number; lastError: string }>();
+    const MAX_RECOVERY_ATTEMPTS = 3;
+
+    const handleAutoRecovery = async (projectId: string, error: string) => {
+      const attempts = recoveryAttempts.get(projectId) ?? { count: 0, lastError: '' };
+
+      // Guard: max retries
+      if (attempts.count >= MAX_RECOVERY_ATTEMPTS) {
+        log.info(
+          { projectId, attempts: attempts.count },
+          'Auto-recovery exhausted, manual intervention needed',
+        );
+        return;
+      }
+
+      // Guard: same error repeating (stuck loop)
+      if (attempts.lastError === error && attempts.count > 0) {
+        log.info({ projectId, error }, 'Same error repeating, stopping auto-recovery');
+        return;
+      }
+
+      // Guard: infrastructure errors (not fixable by agent)
+      const infraPatterns = [
+        /docker daemon/i,
+        /cannot connect to docker/i,
+        /permission denied.*docker/i,
+        /disk space/i,
+        /out of memory/i,
+      ];
+      if (infraPatterns.some((p) => p.test(error))) {
+        log.info({ projectId }, 'Infrastructure error detected, skipping auto-recovery');
+        return;
+      }
+
+      attempts.count++;
+      attempts.lastError = error;
+      recoveryAttempts.set(projectId, attempts);
+
+      log.info({ projectId, attempt: attempts.count }, 'Starting auto-recovery');
+
+      // Re-activate question bridge for this project
+      questionBridge.setActiveProject(projectId);
+
+      const project = db.getProject(projectId);
+      const projectName = project?.name ?? projectId;
+
+      // Emit timeline event so user sees activity
+      await eventBus.emit('agent:event', {
+        projectId,
+        event: {
+          type: 'message',
+          content: 'AI is analyzing the failure and attempting to fix it...',
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      try {
+        const sessionId = nanoid(12);
+        const recoveryMessage = `Deploy of "${projectName}" failed with error:\n\n${error}\n\nAnalyze this error. If you can fix it (e.g., by setting environment variables, fixing configuration), do so and redeploy. Use get_deploy_status to see the full error, ask_user_question if you need information from the user, set_env_vars to configure variables, and deploy_project to redeploy.`;
+
+        log.info({ projectId, sessionId }, 'Auto-recovery: calling agent.chatStream');
+        await agent.chatStream(
+          recoveryMessage,
+          async (event) => {
+            log.info({ projectId, eventType: event.type }, 'Auto-recovery: agent event');
+            await eventBus.emit('agent:event', {
+              projectId,
+              event: { ...event, timestamp: new Date().toISOString() },
+            });
+          },
+          sessionId,
+        );
+        log.info({ projectId }, 'Auto-recovery: agent.chatStream completed');
+      } catch (err) {
+        log.error({ err, projectId }, 'Auto-recovery agent call failed');
+      }
+    };
+
+    eventBus.on('deploy:failed', (payload) => {
+      // Small delay to let deploy log persist before agent reads it
+      setTimeout(() => {
+        void handleAutoRecovery(payload.projectId, payload.error);
+      }, 2000);
+    });
+
+    eventBus.on('compose:failed', (payload) => {
+      setTimeout(() => {
+        void handleAutoRecovery(payload.projectId, payload.error);
+      }, 2000);
+    });
+  }
 
   // v0.2: Health monitoring
   const healthMonitor = new HealthMonitor(docker, db, eventBus, {

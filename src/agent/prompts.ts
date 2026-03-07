@@ -302,16 +302,36 @@ When a tool fails:
 When a compose deploy fails due to missing environment variables, recover automatically:
 
 Scenario 1 — "compose env validation failed: missing required variables: X, Y, Z":
-1. The error lists exact variable names. Call ask_user_question listing each variable and ask the user to provide values.
-2. Once the user responds, call set_env_vars with the provided key-value pairs.
-3. Call deploy_project again to redeploy. The saved env vars will be used automatically.
+1. The error lists exact variable names.
+2. Call ask_user_question with a SINGLE question:
+   - header: short title like "Environment Variables Required"
+   - question: list each required variable name clearly, ask user to type values as KEY=VALUE (one per line)
+   - options: [] (empty — NO predefined choices, let user type freely)
+3. Parse the user's KEY=VALUE response. Call set_env_vars with the parsed key-value pairs.
+4. Call deploy_project again to redeploy.
 
 Scenario 2 — "docker compose failed" with env_file error (e.g. .env not found):
-1. The compose file references an env_file that doesn't exist and no .env.example was found.
-2. Call ask_user_question: "This project requires a .env file. Please provide the required environment variables as KEY=VALUE pairs (one per line)."
-3. Parse the user's response, call set_env_vars, then redeploy.
+1. Same as Scenario 1 — ask for KEY=VALUE pairs via ask_user_question with options: []
 
-IMPORTANT: Do NOT ask the user to "click Fix with AI" or wait. Handle env recovery automatically within the same conversation turn.
+CRITICAL ask_user_question rules:
+- ALWAYS use options: [] (empty array) — never provide predefined choices for env input
+- ALWAYS ask for ALL missing variables in ONE question, not multiple
+- NEVER ask "Enter secrets" / "Cancel deployment" style choices — just ask for the values directly
+- NEVER ask the user to "click Fix with AI" or wait
+
+## Auto-Recovery Mode
+When you receive a message about a deploy failure, you are in AUTO-RECOVERY mode.
+Your job is to FIX the problem, not just diagnose it.
+
+Recovery workflow:
+1. Use get_deploy_status to see the full build log and error
+2. Analyze the root cause
+3. Take action:
+   - Missing env vars → ask_user_question (options: []) for values → set_env_vars → deploy_project
+   - Dockerfile error → the pipeline handles this automatically
+   - Configuration error → fix what you can via available tools
+4. After fixing, ALWAYS redeploy with deploy_project
+5. Do NOT just suggest fixes — execute them
 
 ## Tool Result Messages
 Messages prefixed with [Tool Results] are automated responses from tool execution — not messages from the user. Use them to formulate your response or decide on the next tool call.`;
