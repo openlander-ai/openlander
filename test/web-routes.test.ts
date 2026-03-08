@@ -61,6 +61,7 @@ function createMockPipeline() {
     deploy: vi
       .fn()
       .mockResolvedValue({ success: true, projectId: 'p1', url: 'http://localhost:10001' }),
+    start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     redeploy: vi.fn().mockResolvedValue({ success: true }),
     remove: vi.fn().mockResolvedValue(undefined),
@@ -119,11 +120,13 @@ function createMockAgent() {
     chat: vi.fn().mockResolvedValue({ message: 'AI response', toolResults: undefined }),
     chatStream: vi
       .fn()
-      .mockImplementation(async (_msg: string, callback: (e: { type: string }) => void) => {
-        callback({ type: 'session' });
-        callback({ type: 'message', content: 'AI response' });
-        callback({ type: 'done' });
-      }),
+      .mockImplementation(
+        async (_msg: string, callback: (e: { type: string; content?: string }) => void) => {
+          callback({ type: 'session' });
+          callback({ type: 'message', content: 'AI response' });
+          callback({ type: 'done' });
+        },
+      ),
     setTools: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     clearHistory: vi.fn(),
@@ -133,14 +136,14 @@ function createMockAgent() {
 function createMockContext(db: Database): AppContext {
   return {
     config: {
-      git: { sshKeyPath: '' },
+      git: { sshKeyPath: '', cloneDir: '' },
       channels: {
         slack: { enabled: false, token: '', signingSecret: '' },
         discord: { enabled: false, applicationId: '', publicKey: '', token: '' },
         telegram: { enabled: false, token: '', webhookSecret: '' },
       },
-      gitProviders: { github: { token: '', username: '' } },
-    },
+      gitProviders: { github: { token: '', username: '' }, gitlab: { token: '', username: '' } },
+    } as unknown as AppContext['config'],
     db,
     docker: createMockDocker() as unknown as AppContext['docker'],
     pipeline: createMockPipeline() as unknown as AppContext['pipeline'],
@@ -257,7 +260,7 @@ describe('Web API Routes', () => {
 
   it('POST /api/projects/deploy calls pipeline.deploy directly when agent is null (fallback)', async () => {
     // When agent is null, deploy should fall back to direct pipeline call
-    (ctx as Record<string, unknown>).agent = null;
+    ctx.agent = null;
 
     const res = await app.request('/api/projects/deploy', {
       method: 'POST',
@@ -386,6 +389,45 @@ describe('Web API Routes', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /api/projects/:id/start
+  // ---------------------------------------------------------------------------
+
+  it('POST /api/projects/:id/start starts a stopped project', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+    db.updateProject('p1', { status: 'stopped', containerId: 'container-123' });
+
+    const res = await app.request('/api/projects/p1/start', { method: 'POST' });
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.status).toBe('started');
+    expect(ctx.pipeline.start).toHaveBeenCalledWith('p1');
+  });
+
+  it('POST /api/projects/:id/start returns 200 if already running', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+    db.updateProject('p1', { status: 'running', containerId: 'container-123' });
+
+    const res = await app.request('/api/projects/p1/start', { method: 'POST' });
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.status).toBe('already_running');
+  });
+
+  it('POST /api/projects/:id/start returns 400 if no container', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+
+    const res = await app.request('/api/projects/p1/start', { method: 'POST' });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/projects/:id/start returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/start', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  // ---------------------------------------------------------------------------
   // POST /api/projects/:id/rollback
   // ---------------------------------------------------------------------------
 
@@ -418,6 +460,94 @@ describe('Web API Routes', () => {
     const body = await res.json();
     expect(body.success).toBe(false);
     expect(body.error).toBe('No previous image');
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/projects/:id/blue-green
+  // ---------------------------------------------------------------------------
+
+  it('POST /api/projects/:id/blue-green deploys with zero downtime', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+
+    const res = await app.request('/api/projects/p1/blue-green', { method: 'POST' });
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(ctx.blueGreen.deploy).toHaveBeenCalledWith('p1', { healthCheckPath: undefined });
+  });
+
+  it('POST /api/projects/:id/blue-green returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/blue-green', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /api/projects/:id/blue-green returns 500 on failure', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+    (ctx.blueGreen.deploy as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: false,
+      message: 'Health check failed',
+    });
+
+    const res = await app.request('/api/projects/p1/blue-green', { method: 'POST' });
+    expect(res.status).toBe(500);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Webhook settings API
+  // ---------------------------------------------------------------------------
+
+  it('GET /api/projects/:id/webhooks returns empty list', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+    const res = await app.request('/api/projects/p1/webhooks');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.webhooks).toEqual([]);
+  });
+
+  it('POST /api/projects/:id/webhooks creates webhook config', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+    const res = await app.request('/api/projects/p1/webhooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'github', branch_filter: 'main' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.source).toBe('github');
+    expect(body.branchFilter).toBe('main');
+    expect(body.enabled).toBe(true);
+    expect(body.secret).toBeTruthy();
+    expect(body.webhookUrl).toContain('/api/webhooks/p1/github');
+  });
+
+  it('POST /api/projects/:id/webhooks rejects invalid source', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+    const res = await app.request('/api/projects/p1/webhooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'invalid' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('DELETE /api/projects/:id/webhooks/:source deletes config', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+    await app.request('/api/projects/p1/webhooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'github' }),
+    });
+    const res = await app.request('/api/projects/p1/webhooks/github', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const listRes = await app.request('/api/projects/p1/webhooks');
+    const body = await listRes.json();
+    expect(body.webhooks).toEqual([]);
+  });
+
+  it('GET /api/projects/:id/webhooks returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/webhooks');
+    expect(res.status).toBe(404);
   });
 
   // ---------------------------------------------------------------------------

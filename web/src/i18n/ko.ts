@@ -1,6 +1,4 @@
-import type { TranslationType } from './en';
-
-export const translations: TranslationType = {
+export const translations = {
   setup: {
     language: {
       title: '언어 🌐',
@@ -104,11 +102,13 @@ export const translations: TranslationType = {
       config: '설정',
       envVars: '환경 변수',
       domains: '도메인',
+      webhooks: '웹훅',
     },
     deploy: '배포',
     delete: '삭제',
     back: '뒤로',
     stop: '중지',
+    start: '시작',
     expose: '공개',
     unexpose: '비공개',
     rollback: '롤백',
@@ -286,6 +286,19 @@ export const translations: TranslationType = {
     anyoneWithUrl:
       '이 URL을 가진 누구나 프로젝트에 액세스할 수 있습니다. 임시 URL은 재시작 시 변경될 수 있습니다.',
     requiresRunning: '프로젝트가 실행 중이어야 합니다.',
+  },
+  webhooks: {
+    title: '웹훅',
+    noWebhooks: '웹훅이 설정되지 않았습니다',
+    description: 'git push 시 자동 재배포를 위한 웹훅을 설정하세요.',
+    url: '웹훅 URL',
+    secret: '시크릿',
+    branch: '브랜치 필터',
+    enabled: '활성',
+    disabled: '비활성',
+    enable: '활성화',
+    disable: '비활성화',
+    add: '웹훅 추가',
   },
   envVars: {
     variable: '개의 변수',

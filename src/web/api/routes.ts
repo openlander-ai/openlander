@@ -339,30 +339,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
     });
   });
 
-  // --- Start Project ---
-
-  api.post('/projects/:id/start', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    if (!project.container_id) {
-      return c.json({ error: 'NO_CONTAINER', message: 'No container found. Use redeploy.' }, 400);
-    }
-
-    const container = ctx.docker.getClient().getContainer(project.container_id);
-    await container.start();
-
-    ctx.db.updateProject(project.id, { status: 'running' });
-
-    void eventBus.emit('container:start', {
-      projectId: project.id,
-      containerId: project.container_id,
-    });
-
-    return c.json({ status: 'started', project: project.name });
-  });
-
   // --- Session Management ---
 
   api.get('/sessions', (c) => {
@@ -1040,6 +1016,23 @@ export function createApiRoutes(ctx: AppContext): Hono {
     });
   });
 
+  // v0.2.3: Start a stopped project
+  api.post('/projects/:id/start', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    if (project.status === 'running') {
+      return c.json({ status: 'already_running', project: project.name }, 200);
+    }
+    if (!project.container_id) {
+      return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
+    }
+
+    await ctx.pipeline.start(project.id);
+    return c.json({ status: 'started', project: project.name });
+  });
+
   api.post('/projects/:id/stop', async (c) => {
     const id = c.req.param('id');
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
@@ -1092,6 +1085,71 @@ export function createApiRoutes(ctx: AppContext): Hono {
       healthCheckPath: body.health_check_path,
     });
     return c.json(result, result.success ? 200 : 500);
+  });
+
+  // v0.2.3: Webhook settings API
+  api.get('/projects/:id/webhooks', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+    const configs = ctx.db.getWebhookConfigs(project.id);
+    return c.json({
+      webhooks: configs.map((cfg) => ({
+        id: cfg.id,
+        source: cfg.source,
+        secret: cfg.secret,
+        branchFilter: cfg.branch_filter,
+        enabled: cfg.enabled === 1,
+        webhookUrl: `/api/webhooks/${project.id}/${cfg.source}`,
+        createdAt: cfg.created_at,
+      })),
+    });
+  });
+
+  api.post('/projects/:id/webhooks', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+    const body = await c.req.json<{ source: string; branch_filter?: string; enabled?: boolean }>();
+    if (!body.source || !['github', 'gitlab', 'bitbucket'].includes(body.source)) {
+      return c.json({ error: 'Invalid source. Must be github, gitlab, or bitbucket.' }, 400);
+    }
+    const source = body.source as 'github' | 'gitlab' | 'bitbucket';
+    const existing = ctx.db.getWebhookConfig(project.id, source);
+    const secret = existing?.secret ?? `${project.id}.${crypto.randomUUID().replace(/-/g, '')}`;
+    const configId = existing?.id ?? crypto.randomUUID();
+    ctx.db.setWebhookConfig({
+      id: configId,
+      projectId: project.id,
+      source,
+      secret,
+      branchFilter: body.branch_filter ?? 'main',
+      enabled: body.enabled !== false,
+    });
+    const config = ctx.db.getWebhookConfig(project.id, source);
+    if (!config) {
+      return c.json({ error: 'Failed to configure webhook' }, 500);
+    }
+    return c.json({
+      id: config.id,
+      source: config.source,
+      secret: config.secret,
+      branchFilter: config.branch_filter,
+      enabled: config.enabled === 1,
+      webhookUrl: `/api/webhooks/${project.id}/${config.source}`,
+    });
+  });
+
+  api.delete('/projects/:id/webhooks/:source', (c) => {
+    const id = c.req.param('id');
+    const source = c.req.param('source');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+    if (!['github', 'gitlab', 'bitbucket'].includes(source)) {
+      return c.json({ error: 'Invalid source' }, 400);
+    }
+    ctx.db.deleteWebhookConfig(project.id, source as 'github' | 'gitlab' | 'bitbucket');
+    return c.json({ status: 'deleted' });
   });
 
   // v0.3: Database provisioning

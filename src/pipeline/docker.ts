@@ -254,6 +254,23 @@ export class Docker {
     }
   }
 
+  /** Start a stopped container. */
+  async startContainer(containerId: string): Promise<void> {
+    try {
+      const container = this.client.getContainer(containerId);
+      await container.start();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('not found') || msg.includes('No such container')) {
+        throw new ContainerNotFoundError(containerId);
+      }
+      // Already running is not an error
+      if (!msg.includes('is already running') && !msg.includes('already started')) {
+        throw error;
+      }
+    }
+  }
+
   /** Remove a container (force removes even if running). */
   async removeContainer(containerId: string): Promise<void> {
     try {

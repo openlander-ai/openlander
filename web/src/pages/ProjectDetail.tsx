@@ -4,13 +4,19 @@ import { useParams } from 'react-router-dom';
 import {
   getProject,
   redeployProject,
+  startProject,
   stopProject,
   exposeProject,
   unexposeProject,
   rollbackProject,
+  blueGreenProject,
   getProjectDeployments,
   debugBuild,
+  getProjectWebhooks,
+  setProjectWebhook,
+  deleteProjectWebhook,
   type BuildDiagnosis,
+  type WebhookConfig,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
@@ -26,6 +32,7 @@ import { cn } from '@/lib/utils';
 import {
   ExternalLink,
   RotateCw,
+  Play,
   Square,
   Loader2,
   GitBranch,
@@ -37,6 +44,12 @@ import {
   History,
   Clock,
   GitCommit,
+  Zap,
+  Webhook,
+  Copy,
+  Check,
+  Trash2,
+  Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/lib/event-types';
@@ -185,6 +198,242 @@ function DeploymentsList({ projectId }: { projectId: string }) {
   );
 }
 
+function WebhookPanel({ projectId }: { projectId: string }) {
+  const { t } = useLanguage();
+  const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [selectedSource, setSelectedSource] = useState<string>('github');
+  const [branchFilter, setBranchFilter] = useState('main');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const fetchWebhooks = useCallback(async () => {
+    try {
+      const data = await getProjectWebhooks(projectId);
+      setWebhooks(data);
+    } catch (err) {
+      console.error('Failed to fetch webhooks:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void fetchWebhooks();
+  }, [fetchWebhooks]);
+
+  const handleAdd = async () => {
+    try {
+      setAdding(true);
+      await setProjectWebhook(projectId, {
+        source: selectedSource,
+        branch_filter: branchFilter,
+        enabled: true,
+      });
+      await fetchWebhooks();
+      setBranchFilter('main');
+    } catch (err) {
+      console.error('Failed to add webhook:', err);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleToggle = async (webhook: WebhookConfig) => {
+    try {
+      await setProjectWebhook(projectId, {
+        source: webhook.source,
+        branch_filter: webhook.branchFilter,
+        enabled: !webhook.enabled,
+      });
+      await fetchWebhooks();
+    } catch (err) {
+      console.error('Failed to toggle webhook:', err);
+    }
+  };
+
+  const handleDelete = async (source: string) => {
+    try {
+      await deleteProjectWebhook(projectId, source);
+      await fetchWebhooks();
+    } catch (err) {
+      console.error('Failed to delete webhook:', err);
+    }
+  };
+
+  const handleCopy = (text: string, id: string) => {
+    void navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const configuredSources = new Set(webhooks.map((w) => w.source));
+  const availableSources = (['github', 'gitlab', 'bitbucket'] as const).filter(
+    (s) => !configuredSources.has(s),
+  );
+
+  useEffect(() => {
+    if (
+      availableSources.length > 0 &&
+      !availableSources.includes(selectedSource as (typeof availableSources)[number])
+    ) {
+      setSelectedSource(availableSources[0]);
+    }
+  }, [availableSources, selectedSource]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-5 w-5 animate-spin text-agent" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {webhooks.length === 0 ? (
+        <div className="text-center py-8 text-secondary-ol text-sm font-body">
+          <Webhook className="h-8 w-8 mx-auto mb-3 text-muted-ol" />
+          <p>{t('webhooks.noWebhooks')}</p>
+          <p className="text-xs text-muted-ol mt-1">{t('webhooks.description')}</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {webhooks.map((webhook) => {
+            const fullUrl = `${window.location.origin}${webhook.webhookUrl}`;
+            return (
+              <div
+                key={webhook.id}
+                className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-display font-medium text-primary-ol capitalize">
+                      {webhook.source}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded font-body',
+                        webhook.enabled
+                          ? 'bg-success/10 text-success'
+                          : 'bg-[var(--bg-subtle)] text-muted-ol',
+                      )}
+                    >
+                      {webhook.enabled ? t('webhooks.enabled') : t('webhooks.disabled')}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px] font-body"
+                      onClick={() => handleToggle(webhook)}
+                    >
+                      {webhook.enabled ? t('webhooks.disable') : t('webhooks.enable')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px] font-body text-error hover:text-error"
+                      onClick={() => handleDelete(webhook.source)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-xs font-body">
+                  <div>
+                    <span className="text-muted-ol">{t('webhooks.url')}:</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
+                        {fullUrl}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 shrink-0"
+                        onClick={() => handleCopy(fullUrl, `url-${webhook.id}`)}
+                      >
+                        {copiedId === `url-${webhook.id}` ? (
+                          <Check className="h-3 w-3 text-success" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-muted-ol">{t('webhooks.secret')}:</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
+                        {webhook.secret}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 shrink-0"
+                        onClick={() => handleCopy(webhook.secret, `secret-${webhook.id}`)}
+                      >
+                        {copiedId === `secret-${webhook.id}` ? (
+                          <Check className="h-3 w-3 text-success" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-muted-ol">
+                    <span>{t('webhooks.branch')}:</span>
+                    <span className="text-secondary-ol">{webhook.branchFilter}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {availableSources.length > 0 && (
+        <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4">
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+              className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol capitalize"
+            >
+              {availableSources.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              placeholder="main"
+              className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol w-24"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-body gap-1.5"
+              onClick={handleAdd}
+              disabled={adding}
+            >
+              {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              {t('webhooks.add')}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ProjectDetail() {
   const { id } = useParams();
   const { t } = useLanguage();
@@ -317,6 +566,23 @@ export function ProjectDetail() {
     }
   };
 
+  const handleStart = async () => {
+    if (isMobile) {
+      showMobileToast();
+      return;
+    }
+    if (!id || actionLoading) return;
+    setActionLoading('start');
+    try {
+      await startProject(id);
+      await fetchProject();
+    } catch (err) {
+      console.error('Start failed:', err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleExpose = async () => {
     if (isMobile) {
       showMobileToast();
@@ -360,6 +626,30 @@ export function ProjectDetail() {
         setProject(data);
       } catch {
         // silent
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleBlueGreen = async () => {
+    if (isMobile) {
+      showMobileToast();
+      return;
+    }
+    if (!id || actionLoading) return;
+    setActionLoading('bluegreen');
+    setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+    try {
+      await blueGreenProject(id);
+      setTimelineRunKey((k) => k + 1);
+    } catch (err) {
+      console.error('Blue-green deploy failed:', err);
+      try {
+        const data = await getProject(id);
+        setProject(data);
+      } catch {
+        /* silent */
       }
     } finally {
       setActionLoading(null);
@@ -460,17 +750,48 @@ export function ProjectDetail() {
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-[11px] font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
-              onClick={handleStop}
-              disabled={project.status === 'stopped' || !!actionLoading}
+              className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
+              onClick={handleBlueGreen}
+              disabled={project.status !== 'running' || !!actionLoading}
             >
-              {actionLoading === 'stop' ? (
+              {actionLoading === 'bluegreen' ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
-                <Square className="h-3 w-3" />
+                <Zap className="h-3 w-3" />
               )}
-              {t('projectDetail.stop')}
+              {t('projectDetail.blueGreen')}
             </Button>
+            {project.status === 'stopped' ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
+                onClick={handleStart}
+                disabled={!!actionLoading}
+              >
+                {actionLoading === 'start' ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Play className="h-3 w-3" />
+                )}
+                {t('projectDetail.start')}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
+                onClick={handleStop}
+                disabled={!!actionLoading}
+              >
+                {actionLoading === 'stop' ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Square className="h-3 w-3" />
+                )}
+                {t('projectDetail.stop')}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -583,12 +904,18 @@ export function ProjectDetail() {
                 <TabsTrigger value="domains" className="text-xs font-body">
                   {t('projectDetail.tabs.domains')}
                 </TabsTrigger>
+                <TabsTrigger value="webhooks" className="text-xs font-body">
+                  {t('projectDetail.tabs.webhooks')}
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="env">
                 <EnvVarsTable projectId={id} />
               </TabsContent>
               <TabsContent value="domains">
                 <DomainsPanel projectId={id} />
+              </TabsContent>
+              <TabsContent value="webhooks">
+                <WebhookPanel projectId={id} />
               </TabsContent>
             </Tabs>
           )}

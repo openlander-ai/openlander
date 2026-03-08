@@ -721,6 +721,21 @@ export class Database {
       .run();
   }
 
+  getWebhookConfigs(projectId: string): WebhookConfigRow[] {
+    return this.db
+      .select()
+      .from(webhookConfigs)
+      .where(eq(webhookConfigs.project_id, projectId))
+      .all() as WebhookConfigRow[];
+  }
+
+  deleteWebhookConfig(projectId: string, source: WebhookConfigRow['source']): void {
+    this.db
+      .delete(webhookConfigs)
+      .where(and(eq(webhookConfigs.project_id, projectId), eq(webhookConfigs.source, source)))
+      .run();
+  }
+
   // ===== Deploy Lock =====
 
   /** Acquire a deploy lock for a project. Returns true if lock was acquired. */

@@ -915,6 +915,23 @@ export class DeployPipeline {
     await eventBus.emit('container:stop', { projectId, containerId: project.container_id });
   }
 
+  /** Start a stopped project's container. */
+  async start(projectId: string): Promise<void> {
+    const children = this.db.getChildProjects(projectId);
+    if (children.length > 0) {
+      await Promise.all(children.map((c) => this.start(c.id)));
+      this.db.updateProject(projectId, { status: 'running' });
+      return;
+    }
+
+    const project = this.db.getProject(projectId);
+    if (!project?.container_id) return;
+
+    await this.docker.startContainer(project.container_id);
+    this.db.updateProject(projectId, { status: 'running' });
+    await eventBus.emit('container:start', { projectId, containerId: project.container_id });
+  }
+
   /** Remove a project entirely. */
   async remove(projectId: string): Promise<void> {
     const children = this.db.getChildProjects(projectId);

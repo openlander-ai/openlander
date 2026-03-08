@@ -81,6 +81,14 @@ export async function stopProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
 }
 
+export async function startProject(id: string): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/start`, { method: 'POST' });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to start project');
+  }
+}
+
 export async function redeployProject(id: string): Promise<void> {
   const res = await fetch(`/api/projects/${id}/redeploy`, { method: 'POST' });
 
@@ -108,6 +116,31 @@ export async function rollbackProject(id: string): Promise<DeployResult> {
 
   return res.json();
 }
+export interface BlueGreenResult {
+  success: boolean;
+  message?: string;
+  oldContainer?: string;
+  newContainer?: string;
+}
+
+export async function blueGreenProject(
+  id: string,
+  healthCheckPath?: string,
+): Promise<BlueGreenResult> {
+  const res = await fetch(`/api/projects/${id}/blue-green`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ health_check_path: healthCheckPath }),
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to run blue-green deploy');
+  }
+
+  return res.json();
+}
+
 export async function deleteProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}`, { method: 'DELETE' });
 }
@@ -393,4 +426,39 @@ export interface ServerStatus {
 export async function getServerStatus(): Promise<ServerStatus> {
   const res = await fetch('/api/server/status');
   return res.json();
+}
+
+export interface WebhookConfig {
+  id: string;
+  source: 'github' | 'gitlab' | 'bitbucket';
+  secret: string;
+  branchFilter: string;
+  enabled: boolean;
+  webhookUrl: string;
+  createdAt: string;
+}
+
+export async function getProjectWebhooks(projectId: string): Promise<WebhookConfig[]> {
+  const res = await fetch(`/api/projects/${projectId}/webhooks`);
+  if (!res.ok) throw new Error('Failed to fetch webhooks');
+  const data = await res.json();
+  return data.webhooks;
+}
+
+export async function setProjectWebhook(
+  projectId: string,
+  config: { source: string; branch_filter?: string; enabled?: boolean },
+): Promise<WebhookConfig> {
+  const res = await fetch(`/api/projects/${projectId}/webhooks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) throw new Error('Failed to configure webhook');
+  return res.json();
+}
+
+export async function deleteProjectWebhook(projectId: string, source: string): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/webhooks/${source}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete webhook');
 }
