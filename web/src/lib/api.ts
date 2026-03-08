@@ -497,3 +497,73 @@ export async function removeProjectDomain(projectId: string, domain: string): Pr
     throw new Error(data.message || 'Failed to remove domain');
   }
 }
+
+// --- Services ---
+
+export interface ServiceTemplate {
+  id: string;
+  name: string;
+  image: string;
+  port: number;
+}
+
+export interface Service {
+  id: string;
+  name: string;
+  type: string;
+  image: string;
+  status: 'running' | 'stopped' | 'error';
+  container_id: string | null;
+  container_name: string;
+  port: number;
+  env_vars: string | null;
+  credentials: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getServices(): Promise<Service[]> {
+  const res = await fetch('/api/services');
+  if (!res.ok) throw new Error('Failed to fetch services');
+  return res.json();
+}
+
+export async function getServiceTemplates(): Promise<ServiceTemplate[]> {
+  const res = await fetch('/api/services/templates');
+  if (!res.ok) throw new Error('Failed to fetch templates');
+  return res.json();
+}
+
+export async function createService(opts: {
+  name: string;
+  template?: string;
+  image?: string;
+  port?: number;
+  env_vars?: Array<{ key: string; value: string }>;
+}): Promise<Service> {
+  const res = await fetch('/api/services', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ message: 'Failed to create service' }));
+    throw new Error(data.message || 'Failed to create service');
+  }
+  return res.json();
+}
+
+export async function removeService(id: string): Promise<void> {
+  const res = await fetch(`/api/services/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to remove service');
+}
+
+export async function startService(id: string): Promise<void> {
+  const res = await fetch(`/api/services/${id}/start`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to start service');
+}
+
+export async function stopService(id: string): Promise<void> {
+  const res = await fetch(`/api/services/${id}/stop`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to stop service');
+}

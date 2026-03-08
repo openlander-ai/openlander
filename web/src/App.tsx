@@ -8,6 +8,7 @@ import { ProjectDetail } from '@/pages/ProjectDetail';
 import { ProjectsGrid } from '@/pages/ProjectsGrid';
 import { DeploymentDetail } from '@/pages/DeploymentDetail';
 import { SettingsPage } from '@/pages/SettingsPage';
+import { ServicesPage } from '@/pages/ServicesPage';
 import './App.css';
 import { getSetupStatus } from '@/lib/api';
 
@@ -83,6 +84,7 @@ function App() {
                 <Route path="/projects/new" element={<NewProjectFlow />} />
                 <Route path="/projects/:id/deployments/:deployId" element={<DeploymentDetail />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/services" element={<ServicesPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>
             </Route>

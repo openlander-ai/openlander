@@ -3,7 +3,7 @@ import type { Project, SystemStats } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Plane, Plus, Settings, Cpu, MemoryStick, Box, Loader2 } from 'lucide-react';
+import { Plane, Plus, Settings, Cpu, MemoryStick, Box, Loader2, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -127,6 +127,21 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
             </div>
           </div>
         )}
+
+        {/* Services Link */}
+        <button
+          onClick={() => navigate('/services')}
+          title="Services"
+          className={cn(
+            'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150',
+            'xl:justify-start justify-center',
+            'hover:bg-bg-subtle',
+            isActive('/services') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+          )}
+        >
+          <Database className="h-4 w-4 shrink-0" />
+          <span className="hidden xl:inline text-xs font-body">Services</span>
+        </button>
 
         {/* Settings Link */}
         <button
