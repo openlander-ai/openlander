@@ -779,7 +779,7 @@ export function ProjectDetail() {
               ) : (
                 <Zap className="h-3 w-3" />
               )}
-              {t('projectDetail.blueGreen')}
+              Blue-Green
             </Button>
             {project.status === 'stopped' ? (
               <Button
