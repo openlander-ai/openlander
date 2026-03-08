@@ -179,6 +179,21 @@
 
 ---
 
+## 시나리오 13: MCP 서버 연동
+
+**사전조건**: OpenLander 실행 중, MCP 클라이언트(Claude Desktop, Cursor 등) 설정 가능
+
+- [ ] MCP 클라이언트에서 OpenLander 서버 연결 (`npx openlander` 또는 stdio 모드)
+- [ ] `list_projects` 도구 호출 → 프로젝트 목록 반환 확인
+- [ ] `deploy_project` 도구로 public repo 배포 → 성공 확인
+- [ ] `get_logs` 도구로 배포된 프로젝트 로그 조회
+- [ ] `get_system_stats` 도구로 서버 상태 (CPU/메모리/디스크) 조회
+- [ ] `stop_project` → `restart_project` 도구로 프로젝트 중지/재시작
+- [ ] `set_env_vars` 도구로 환경변수 설정
+- [ ] `scan_ports` / `list_all_containers` 도구로 서버 인식 기능 확인
+
+**확인방법**: MCP 클라이언트에서 도구 호출 결과 정상 반환. 최소 위 8개 핵심 도구 동작 확인.
+
 ## 정리
 
 - [ ] 테스트용 프로젝트 전부 삭제 (Remove)
