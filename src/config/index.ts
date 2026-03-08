@@ -90,8 +90,6 @@ export interface CloudflareConfig {
   apiToken: string;
   /** Tunnel ID for production domains */
   tunnelId: string;
-  /** Tunnel secret */
-  tunnelSecret: string;
   /** Account ID */
   accountId: string;
 }
@@ -178,7 +176,6 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
   cloudflare: {
     apiToken: '',
     tunnelId: '',
-    tunnelSecret: '',
     accountId: '',
   },
   monitoring: {

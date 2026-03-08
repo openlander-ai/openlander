@@ -5,6 +5,7 @@ import { useSystemStats } from '@/hooks/use-system-stats';
 import {
   configureLLM,
   configureCloudflare,
+  connectCloudflare,
   getGlobalSecrets,
   getCloudflareStatus,
   setGlobalSecret,
@@ -84,11 +85,15 @@ export function SettingsPage() {
   const [copiedServiceUrl, setCopiedServiceUrl] = useState(false);
   const [cloudflareApiToken, setCloudflareApiToken] = useState('');
   const [cloudflareAccountId, setCloudflareAccountId] = useState('');
+  const [cloudflareAccountName, setCloudflareAccountName] = useState('');
   const [cloudflareTunnelId, setCloudflareTunnelId] = useState('');
-  const [cloudflareTunnelSecret, setCloudflareTunnelSecret] = useState('');
+  const [cloudflareTunnels, setCloudflareTunnels] = useState<Array<{ id: string; name: string }>>(
+    [],
+  );
+  const [cloudflareConnected, setCloudflareConnected] = useState(false);
+  const [cloudflareConnecting, setCloudflareConnecting] = useState(false);
   const [cloudflareConfigured, setCloudflareConfigured] = useState(false);
   const [cloudflareSaving, setCloudflareSaving] = useState(false);
-  const [cloudflareStatusLoading, setCloudflareStatusLoading] = useState(true);
   const [cloudflareMessage, setCloudflareMessage] = useState('');
   const [cloudflareError, setCloudflareError] = useState('');
 
@@ -127,17 +132,18 @@ export function SettingsPage() {
   }, []);
 
   const fetchCloudflareStatus = useCallback(async () => {
-    setCloudflareStatusLoading(true);
     try {
       const status = await getCloudflareStatus();
       setCloudflareConfigured(status.configured);
+      setCloudflareConnected(false);
+      setCloudflareAccountName('');
+      setCloudflareTunnels([]);
+      setCloudflareTunnelId('');
       if (status.accountId) {
         setCloudflareAccountId(status.accountId);
       }
     } catch {
       /* ignore */
-    } finally {
-      setCloudflareStatusLoading(false);
     }
   }, []);
 
@@ -228,16 +234,42 @@ export function SettingsPage() {
         apiToken: cloudflareApiToken.trim(),
         accountId: cloudflareAccountId.trim(),
         tunnelId: cloudflareTunnelId.trim(),
-        tunnelSecret: cloudflareTunnelSecret.trim(),
       });
-      setCloudflareApiToken('');
-      setCloudflareTunnelSecret('');
       await fetchCloudflareStatus();
       setCloudflareMessage(t('settings.proxy.cloudflare.saveSuccess'));
     } catch {
       setCloudflareError(t('settings.proxy.cloudflare.saveFailed'));
     } finally {
       setCloudflareSaving(false);
+    }
+  };
+
+  const handleConnectCloudflare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cloudflareApiToken.trim()) {
+      return;
+    }
+
+    setCloudflareConnecting(true);
+    setCloudflareMessage('');
+    setCloudflareError('');
+
+    try {
+      const result = await connectCloudflare(cloudflareApiToken.trim());
+      setCloudflareAccountId(result.accountId);
+      setCloudflareAccountName(result.accountName);
+      setCloudflareTunnels(result.tunnels);
+      setCloudflareTunnelId('');
+      setCloudflareConnected(true);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to connect Cloudflare';
+      setCloudflareError(message);
+      setCloudflareConnected(false);
+      setCloudflareAccountName('');
+      setCloudflareTunnels([]);
+      setCloudflareTunnelId('');
+    } finally {
+      setCloudflareConnecting(false);
     }
   };
 
@@ -803,7 +835,11 @@ export function SettingsPage() {
                     {t('settings.proxy.cloudflare.description')}
                   </p>
                 </div>
-                {cloudflareConfigured ? (
+                {cloudflareConnected ? (
+                  <Badge variant="outline" className="text-agent border-agent/30">
+                    Connected as: {cloudflareAccountName}
+                  </Badge>
+                ) : cloudflareConfigured ? (
                   <Badge variant="outline" className="text-success border-success/30">
                     Configured ✓
                   </Badge>
@@ -814,79 +850,101 @@ export function SettingsPage() {
                 )}
               </div>
 
-              {!cloudflareStatusLoading && cloudflareConfigured && cloudflareAccountId && (
-                <p className="text-xs font-mono text-muted-ol">Account ID: {cloudflareAccountId}</p>
-              )}
-
-              <form onSubmit={handleConfigureCloudflare} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {!cloudflareConnected ? (
+                <form onSubmit={handleConnectCloudflare} className="space-y-3">
                   <div className="space-y-1.5">
                     <p className="text-xs font-body text-muted-ol">API Token</p>
-                    <Input
-                      type="password"
-                      value={cloudflareApiToken}
-                      onChange={(e) => setCloudflareApiToken(e.target.value)}
-                      className="font-mono text-sm bg-bg-app border-border"
-                      required
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        type="password"
+                        value={cloudflareApiToken}
+                        onChange={(e) => setCloudflareApiToken(e.target.value)}
+                        className="font-mono text-sm bg-bg-app border-border"
+                        required
+                      />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={cloudflareConnecting || !cloudflareApiToken.trim()}
+                        className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+                      >
+                        {cloudflareConnecting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        )}
+                        Connect
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-body text-muted-ol">Account ID</p>
-                    <Input
-                      value={cloudflareAccountId}
-                      onChange={(e) => setCloudflareAccountId(e.target.value)}
-                      className="font-mono text-sm bg-bg-app border-border"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-body text-muted-ol">Tunnel ID</p>
-                    <Input
-                      value={cloudflareTunnelId}
-                      onChange={(e) => setCloudflareTunnelId(e.target.value)}
-                      className="font-mono text-sm bg-bg-app border-border"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-body text-muted-ol">Tunnel Secret</p>
-                    <Input
-                      type="password"
-                      value={cloudflareTunnelSecret}
-                      onChange={(e) => setCloudflareTunnelSecret(e.target.value)}
-                      className="font-mono text-sm bg-bg-app border-border"
-                      required
-                    />
-                  </div>
-                </div>
 
-                {cloudflareMessage && (
-                  <p className="text-xs font-body text-success">{cloudflareMessage}</p>
-                )}
-                {cloudflareError && (
-                  <p className="text-xs font-body text-error">{cloudflareError}</p>
-                )}
-
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={
-                    cloudflareSaving ||
-                    !cloudflareApiToken.trim() ||
-                    !cloudflareAccountId.trim() ||
-                    !cloudflareTunnelId.trim() ||
-                    !cloudflareTunnelSecret.trim()
-                  }
-                  className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
-                >
-                  {cloudflareSaving ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Save className="h-3.5 w-3.5" />
+                  {cloudflareError && (
+                    <p className="text-xs font-body text-error">{cloudflareError}</p>
                   )}
-                  Save
-                </Button>
-              </form>
+                </form>
+              ) : (
+                <form onSubmit={handleConfigureCloudflare} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-body text-muted-ol">API Token</p>
+                      <Input
+                        type="text"
+                        value={'••••••••••••'}
+                        disabled
+                        className="font-mono text-sm bg-bg-app border-border"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-body text-muted-ol">Account</p>
+                      <div className="h-9 rounded-md border border-border bg-bg-app px-3 flex items-center text-sm font-mono text-primary-ol">
+                        {cloudflareAccountName}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <p className="text-xs font-body text-muted-ol">Tunnel</p>
+                      <select
+                        value={cloudflareTunnelId}
+                        onChange={(e) => setCloudflareTunnelId(e.target.value)}
+                        className="w-full rounded-md border border-border bg-bg-app px-3 py-2 text-sm font-mono"
+                        required
+                      >
+                        <option value="">Select tunnel</option>
+                        {cloudflareTunnels.map((tunnel) => (
+                          <option key={tunnel.id} value={tunnel.id}>
+                            {tunnel.name || tunnel.id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {cloudflareMessage && (
+                    <p className="text-xs font-body text-success">{cloudflareMessage}</p>
+                  )}
+                  {cloudflareError && (
+                    <p className="text-xs font-body text-error">{cloudflareError}</p>
+                  )}
+
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={
+                      cloudflareSaving ||
+                      !cloudflareApiToken.trim() ||
+                      !cloudflareAccountId.trim() ||
+                      !cloudflareTunnelId.trim()
+                    }
+                    className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+                  >
+                    {cloudflareSaving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )}
+                    Save
+                  </Button>
+                </form>
+              )}
             </div>
 
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 overflow-hidden">
@@ -1025,7 +1083,9 @@ export function SettingsPage() {
                             {container.name}
                           </p>
                           <p className="text-[11px] font-body text-muted-ol truncate">
-                            {container.image}
+                            {container.image.includes('sha256:')
+                              ? container.image.substring(0, 19) + '...'
+                              : container.image}
                           </p>
                         </div>
                       </div>
@@ -1112,7 +1172,7 @@ function StatCard({
         {icon}
         <span className="text-xs font-body uppercase tracking-wider">{label}</span>
       </div>
-      <p className="text-2xl font-mono font-bold text-primary-ol">{value}</p>
+      <p className="text-2xl font-mono font-bold text-primary-ol truncate">{value}</p>
     </div>
   );
 }

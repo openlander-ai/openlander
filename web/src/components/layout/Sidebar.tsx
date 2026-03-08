@@ -1,15 +1,14 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import type { Project, SystemStats } from '@/types';
+import type { Project } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Settings, Cpu, MemoryStick, Box, Loader2, Database } from 'lucide-react';
+import { Plus, Settings, Box, Loader2, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
   projects: Project[];
   loading: boolean;
-  stats: SystemStats | null;
 }
 
 const statusColor: Record<string, string> = {
@@ -19,7 +18,7 @@ const statusColor: Record<string, string> = {
   error: 'bg-error',
 };
 
-export function Sidebar({ projects, loading, stats }: SidebarProps) {
+export function Sidebar({ projects, loading }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -93,28 +92,6 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
 
       {/* Bottom: Settings + Stats */}
       <div className="shrink-0 p-2 lg:p-3 space-y-2">
-        {/* System Stats (xl only) */}
-        {stats && (
-          <div className="hidden lg:flex items-center gap-3 px-2.5 py-1.5 text-muted-ol">
-            <div className="flex items-center gap-1" title="CPU">
-              <Cpu className="h-3 w-3" />
-              <span className="text-[10px] font-mono">
-                {typeof stats.cpu === 'number'
-                  ? `${stats.cpu.toFixed(0)}%`
-                  : `${stats.cpu?.usagePercent?.toFixed(0) ?? '—'}%`}
-              </span>
-            </div>
-            <div className="flex items-center gap-1" title="Memory">
-              <MemoryStick className="h-3 w-3" />
-              <span className="text-[10px] font-mono">
-                {typeof stats.memory === 'number'
-                  ? `${(stats.memory / (1024 * 1024 * 1024)).toFixed(1)}G`
-                  : `${stats.memory?.usagePercent?.toFixed(0) ?? '—'}%`}
-              </span>
-            </div>
-          </div>
-        )}
-
         {/* Services Link */}
         <button
           onClick={() => navigate('/services')}

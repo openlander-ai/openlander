@@ -303,7 +303,6 @@ export async function configureCloudflare(config: {
   apiToken: string;
   accountId: string;
   tunnelId: string;
-  tunnelSecret: string;
 }): Promise<any> {
   const res = await fetch('/api/setup/cloudflare', {
     method: 'POST',
@@ -312,10 +311,26 @@ export async function configureCloudflare(config: {
       api_token: config.apiToken,
       account_id: config.accountId,
       tunnel_id: config.tunnelId,
-      tunnel_secret: config.tunnelSecret,
     }),
   });
   if (!res.ok) throw new Error('Failed to configure Cloudflare');
+  return res.json();
+}
+
+export async function connectCloudflare(
+  apiToken: string,
+): Promise<{ accountId: string; accountName: string; tunnels: { id: string; name: string }[] }> {
+  const res = await fetch('/api/setup/cloudflare/connect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_token: apiToken }),
+  });
+
+  if (!res.ok) {
+    const error = (await res.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(error?.message || 'Failed to connect Cloudflare');
+  }
+
   return res.json();
 }
 

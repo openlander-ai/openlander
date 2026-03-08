@@ -181,7 +181,7 @@ export function ServicesPage() {
           </h1>
           <p className="text-sm text-secondary-ol mt-1">{t('services.subtitle')}</p>
         </div>
-        {!showCreate && (
+        {!showCreate && services.length > 0 && (
           <Button onClick={openCustom} className="gap-2">
             <Plus className="h-4 w-4" />
             {'Create Service'}

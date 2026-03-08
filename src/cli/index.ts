@@ -310,7 +310,6 @@ program
       cloudflare: {
         ...config.cloudflare,
         apiToken: config.cloudflare.apiToken ? '***masked***' : '(not set)',
-        tunnelSecret: config.cloudflare.tunnelSecret ? '***masked***' : '(not set)',
       },
     };
 
