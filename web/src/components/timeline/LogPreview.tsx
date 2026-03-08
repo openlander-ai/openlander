@@ -10,7 +10,7 @@ interface LogPreviewProps {
 }
 
 export function LogPreview({ projectId, status, onOpenLogs }: LogPreviewProps) {
-  const [isOpen, setIsOpen] = useState(status === 'building');
+  const [isOpen, setIsOpen] = useState(true);
   const { entries } = useLogStream({
     projectId,
     follow: true,
@@ -32,8 +32,8 @@ export function LogPreview({ projectId, status, onOpenLogs }: LogPreviewProps) {
     }
   }, [entries, isOpen]);
 
-  // Get last 10 entries
-  const displayEntries = entries.slice(-10);
+  // Get last 20 entries
+  const displayEntries = entries.slice(-20);
 
   return (
     <div className="border-t border-[hsl(var(--border))] bg-bg-panel flex flex-col shrink-0">
@@ -70,12 +70,12 @@ export function LogPreview({ projectId, status, onOpenLogs }: LogPreviewProps) {
       <div
         className={cn(
           'overflow-hidden transition-all duration-200 ease-in-out bg-[#0a0a0a]',
-          isOpen ? 'max-h-[150px] border-t border-[hsl(var(--border))]' : 'max-h-0',
+          isOpen ? 'max-h-[220px] border-t border-[hsl(var(--border))]' : 'max-h-0',
         )}
       >
         <div
           ref={scrollRef}
-          className="p-3 h-[150px] overflow-y-auto font-mono text-xs leading-relaxed"
+          className="p-3 h-[220px] overflow-y-auto font-mono text-xs leading-relaxed"
         >
           {displayEntries.length === 0 ? (
             <div className="text-muted-ol italic">Waiting for logs...</div>

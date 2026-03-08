@@ -87,6 +87,26 @@ export const deployLogs = sqliteTable(
   ],
 );
 
+export const timelineEvents = sqliteTable(
+  'timeline_events',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    deploy_id: text('deploy_id'),
+    type: text('type').notNull(),
+    message: text('message').notNull(),
+    detail: text('detail'),
+    severity: text('severity'),
+    percent: integer('percent'),
+    tool_name: text('tool_name'),
+    action_buttons: text('action_buttons'),
+    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index('idx_timeline_project').on(table.project_id, table.created_at)],
+);
+
 export const chatHistory = sqliteTable(
   'chat_history',
   {
@@ -204,6 +224,7 @@ export const drizzleSchema = {
   projects,
   envVars,
   deployLogs,
+  timelineEvents,
   chatHistory,
   domainMappings,
   oauthTokens,

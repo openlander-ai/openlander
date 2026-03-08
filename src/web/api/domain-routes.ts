@@ -87,5 +87,11 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
 }
 
 function normalizeDomainParam(domain: string): string {
-  return domain.trim().toLowerCase().replace(/^\*\./, '').replace(/\.$/, '');
+  return domain
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/^\*\./, '')
+    .replace(/\.$/, '');
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { type TimelineItem, type BuildStreamEvent, toTimelineItem } from '@/lib/event-types';
 import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCard';
+import { getProjectTimeline } from '@/lib/api';
 
 interface UseTimelineOptions {
   projectId: string | undefined;
@@ -36,8 +37,33 @@ export function useTimeline({
   const [error, setError] = useState<string | null>(null);
   const retriesRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const seenEventKeysRef = useRef<Set<string>>(new Set());
   const onSettledRef = useRef(onSettled);
   onSettledRef.current = onSettled;
+
+  const getEventKey = useCallback((event: BuildStreamEvent): string => {
+    if (event.id) return event.id;
+    return `${event.type}|${event.timestamp}|${event.message}`;
+  }, []);
+
+  const appendEvent = useCallback(
+    (event: BuildStreamEvent) => {
+      const key = getEventKey(event);
+      if (seenEventKeysRef.current.has(key)) {
+        return;
+      }
+      seenEventKeysRef.current.add(key);
+
+      const item = toTimelineItem(event);
+      setItems((prev) => {
+        if (item.type === 'progress') {
+          return [...prev.filter((p) => p.type !== 'progress'), item];
+        }
+        return [...prev, item];
+      });
+    },
+    [getEventKey],
+  );
 
   const connect = useCallback(async () => {
     if (!projectId) return;
@@ -79,13 +105,7 @@ export function useTimeline({
           if (!line.trim()) continue;
           try {
             const event: BuildStreamEvent = JSON.parse(line);
-            const item = toTimelineItem(event);
-            setItems((prev) => {
-              if (item.type === 'progress') {
-                return [...prev.filter((p) => p.type !== 'progress'), item];
-              }
-              return [...prev, item];
-            });
+            appendEvent(event);
 
             if (event.type === 'complete') {
               setIsComplete(true);
@@ -121,7 +141,7 @@ export function useTimeline({
         }, RETRY_DELAY);
       }
     }
-  }, [projectId]);
+  }, [projectId, appendEvent]);
 
   useEffect(() => {
     if (!enabled || !projectId) return;
@@ -130,12 +150,30 @@ export function useTimeline({
     setIsComplete(false);
     setError(null);
     retriesRef.current = 0;
-    connect();
+    seenEventKeysRef.current.clear();
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const history = await getProjectTimeline(projectId);
+        if (cancelled) return;
+        for (const event of history) {
+          appendEvent(event);
+        }
+      } catch (err) {
+        void err;
+      }
+
+      if (!cancelled) {
+        void connect();
+      }
+    })();
 
     return () => {
+      cancelled = true;
       abortRef.current?.abort();
     };
-  }, [projectId, enabled, runKey, connect]);
+  }, [projectId, enabled, runKey, connect, appendEvent]);
 
   /** Mark a question item as answered in the timeline */
   const markAnswered = useCallback((questionId: string) => {

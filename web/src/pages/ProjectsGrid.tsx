@@ -7,9 +7,7 @@ import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Plus, ExternalLink, GitBranch, Clock, RotateCw, Settings, Loader2 } from 'lucide-react';
 
-function getStatusConfig(
-  t: (key: string) => string,
-): Record<string, { label: string; dot: string; badge: string }> {
+function getStatusConfig(): Record<string, { label: string; dot: string; badge: string }> {
   return {
     running: {
       label: 'Live',
@@ -39,7 +37,7 @@ export function ProjectsGrid() {
   const isMobile = useIsMobile();
   const { projects, loading, refetch } = useProjects();
   const { t } = useLanguage();
-  const statusConfig = getStatusConfig(t);
+  const statusConfig = getStatusConfig();
 
   const handleRedeploy = async (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();

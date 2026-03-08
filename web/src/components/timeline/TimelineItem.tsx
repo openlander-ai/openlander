@@ -86,7 +86,7 @@ export function TimelineItemCard({
         isSuccess && 'bg-success/5 border-success/10 glow-success',
         isError && 'bg-error/5 border-error/10 glow-error',
         !isLatest && !isSuccess && !isError && !isAgentEvent && 'hover:bg-bg-subtle/20',
-        isAgentEvent && !isLatest && 'bg-agent/[0.02]',
+        isAgentEvent && !isLatest && 'bg-agent/5 border-agent/10',
       )}
     >
       {/* Icon */}
@@ -135,7 +135,7 @@ export function TimelineItemCard({
               isSuccess && 'text-success font-medium',
               isError && 'text-error font-medium line-clamp-3',
               isAgentEvent && 'text-agent/90',
-              isAgentThinking && 'text-xs italic text-muted-ol tracking-tight',
+              isAgentThinking && 'text-sm text-secondary-ol',
               isAgentToolCall && 'text-xs text-agent/70',
               isAgentMessage && 'text-sm text-primary-ol',
             )}
@@ -143,9 +143,11 @@ export function TimelineItemCard({
           >
             {isAgentToolCall
               ? `▸ ${item.toolName || 'tool'} 실행`
-              : isAgentEvent
-                ? cleanMarkdown(item.title)
-                : item.title}
+              : isAgentMessage || isAgentThinking
+                ? item.title
+                : isAgentEvent
+                  ? cleanMarkdown(item.title)
+                  : item.title}
           </p>
           <span className="text-[10px] font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
             {formatTime(item.timestamp)}

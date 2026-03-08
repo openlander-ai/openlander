@@ -11,28 +11,28 @@ interface InsightCardProps {
 
 const severityConfig = {
   info: {
-    bg: 'bg-agent/5',
-    border: 'border-agent/15',
+    bg: 'bg-agent/10',
+    border: 'border-agent/20 border-l-4 border-l-agent',
     icon: Info,
-    iconBg: 'bg-agent/15',
+    iconBg: 'bg-agent/20',
     iconColor: 'text-agent',
     titleColor: 'text-primary-ol',
     btnBg: 'bg-agent/10 hover:bg-agent/20 border-agent/20 text-agent',
   },
   warning: {
-    bg: 'bg-warning/5',
-    border: 'border-warning/20',
+    bg: 'bg-warning/10',
+    border: 'border-warning/20 border-l-4 border-l-warning',
     icon: AlertTriangle,
-    iconBg: 'bg-warning/15',
+    iconBg: 'bg-warning/20',
     iconColor: 'text-warning',
     titleColor: 'text-warning',
     btnBg: 'bg-warning/10 hover:bg-warning/20 border-warning/20 text-warning',
   },
   error: {
-    bg: 'bg-error/5',
-    border: 'border-error/20',
+    bg: 'bg-error/10',
+    border: 'border-error/20 border-l-4 border-l-error',
     icon: AlertCircle,
-    iconBg: 'bg-error/15',
+    iconBg: 'bg-error/20',
     iconColor: 'text-error',
     titleColor: 'text-error',
     btnBg: 'bg-error/10 hover:bg-error/20 border-error/20 text-error',
@@ -74,7 +74,9 @@ export function InsightCard({ item, onAction }: InsightCardProps) {
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className={cn('text-sm font-body leading-snug', config.titleColor)}>{item.title}</p>
+          <p className={cn('text-base font-medium font-body leading-snug', config.titleColor)}>
+            {item.title}
+          </p>
           <span className="text-[10px] font-mono text-muted-ol shrink-0 mt-0.5">
             {formatTime(item.timestamp)}
           </span>

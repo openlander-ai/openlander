@@ -40,6 +40,8 @@ interface InsightContext {
   url: string;
 }
 
+type Locale = 'en' | 'ko';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -65,15 +67,17 @@ export async function generatePostDeployInsights(
   ctx: InsightContext,
   docker: Docker,
   db: Database,
+  locale: string = 'en',
 ): Promise<Insight[]> {
   const insights: Insight[] = [];
+  const resolvedLocale: Locale = locale === 'ko' ? 'ko' : 'en';
 
   // Run all checks concurrently
   const results = await Promise.allSettled([
-    checkHealth(ctx, db),
-    checkStaleContainers(ctx.projectId, docker, db),
-    Promise.resolve(checkResourceUsage()),
-    Promise.resolve(checkBuildTime(ctx, db)),
+    checkHealth(ctx, db, resolvedLocale),
+    checkStaleContainers(ctx.projectId, docker, db, resolvedLocale),
+    Promise.resolve(checkResourceUsage(resolvedLocale)),
+    Promise.resolve(checkBuildTime(ctx, db, resolvedLocale)),
   ]);
 
   for (const result of results) {
@@ -91,7 +95,10 @@ export async function generatePostDeployInsights(
   // If nothing noteworthy, add a single "all clear" insight
   if (insights.length === 0) {
     insights.push({
-      title: '✅ 배포 완료. 이상 없음.',
+      title: pickLocale(resolvedLocale, {
+        ko: '✅ 배포 완료. 이상 징후가 없습니다.',
+        en: '✅ Deploy complete. No issues detected.',
+      }),
       severity: 'info',
       actions: [],
     });
@@ -108,11 +115,14 @@ export async function generatePostDeployInsights(
  * Wait up to 30s for a health check on the project's assigned port.
  * Returns an insight about the health check result.
  */
-async function checkHealth(ctx: InsightContext, db: Database): Promise<Insight> {
+async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): Promise<Insight> {
   const project = db.getProject(ctx.projectId);
   if (!project || project.assigned_port == null) {
     return {
-      title: '⚠️ 헬스체크 스킵 — 포트 정보 없음.',
+      title: pickLocale(locale, {
+        ko: '⚠️ 헬스체크 건너뜀 - 포트 정보가 없습니다.',
+        en: '⚠️ Health check skipped - no assigned port found.',
+      }),
       severity: 'warning',
       actions: [],
     };
@@ -132,7 +142,10 @@ async function checkHealth(ctx: InsightContext, db: Database): Promise<Insight> 
 
       if (res.ok) {
         return {
-          title: `✅ 헬스체크 통과 (응답 ${String(res.status)}, ${String(elapsed)}ms)`,
+          title: pickLocale(locale, {
+            ko: `✅ 헬스체크 통과 (응답 ${String(res.status)}, ${String(elapsed)}ms)`,
+            en: `✅ Health check passed (${String(res.status)}, ${String(elapsed)}ms)`,
+          }),
           severity: 'info',
           actions: [],
         };
@@ -145,9 +158,17 @@ async function checkHealth(ctx: InsightContext, db: Database): Promise<Insight> 
   }
 
   return {
-    title: '⚠️ 헬스체크 아직 미통과. 로그를 확인할까?',
+    title: pickLocale(locale, {
+      ko: '⚠️ 헬스체크가 아직 통과하지 않았습니다. 로그 확인이 필요합니다.',
+      en: '⚠️ Health check is still failing. Review logs for details.',
+    }),
     severity: 'warning',
-    actions: [{ label: '로그 보기', action: 'view_logs' }],
+    actions: [
+      {
+        label: pickLocale(locale, { ko: '로그 보기', en: 'View logs' }),
+        action: 'view_logs',
+      },
+    ],
   };
 }
 
@@ -159,6 +180,7 @@ async function checkStaleContainers(
   projectId: string,
   docker: Docker,
   db: Database,
+  locale: Locale,
 ): Promise<Insight | null> {
   const project = db.getProject(projectId);
   if (!project) return null;
@@ -182,10 +204,18 @@ async function checkStaleContainers(
 
     const names = stale.map((c) => c.name).join(', ');
     return {
-      title: `💡 이전 버전 컨테이너 ${String(stale.length)}개가 있어. 정리할까?`,
+      title: pickLocale(locale, {
+        ko: `💡 이전 버전 컨테이너 ${String(stale.length)}개가 실행 중입니다. 정리를 권장합니다.`,
+        en: `💡 ${String(stale.length)} stale container(s) from previous versions are still running. Cleanup is recommended.`,
+      }),
       detail: names,
       severity: 'info',
-      actions: [{ label: '정리', action: 'cleanup_stale' }],
+      actions: [
+        {
+          label: pickLocale(locale, { ko: '정리', en: 'Clean up' }),
+          action: 'cleanup_stale',
+        },
+      ],
     };
   } catch (err) {
     log.warn({ err }, 'Failed to check stale containers');
@@ -197,13 +227,16 @@ async function checkStaleContainers(
  * Check system resource usage after deploy.
  * Warns if memory exceeds the configured threshold.
  */
-function checkResourceUsage(): Insight | null {
+function checkResourceUsage(locale: Locale): Insight | null {
   try {
     const stats = getSystemStats();
 
     if (stats.memory.usagePercent > MEMORY_WARNING_PERCENT) {
       return {
-        title: `⚠️ 메모리 ${String(stats.memory.usagePercent)}% 사용 중.`,
+        title: pickLocale(locale, {
+          ko: `⚠️ 메모리 사용률이 ${String(stats.memory.usagePercent)}%입니다.`,
+          en: `⚠️ Memory usage is ${String(stats.memory.usagePercent)}%.`,
+        }),
         detail: `${String(stats.memory.usedMB)}MB / ${String(stats.memory.totalMB)}MB`,
         severity: 'warning',
         actions: [],
@@ -217,7 +250,7 @@ function checkResourceUsage(): Insight | null {
   }
 }
 
-function checkBuildTime(ctx: InsightContext, db: Database): Insight | null {
+function checkBuildTime(ctx: InsightContext, db: Database, locale: Locale): Insight | null {
   try {
     const logs = db.getDeployLogs(ctx.projectId, 10);
 
@@ -240,7 +273,10 @@ function checkBuildTime(ctx: InsightContext, db: Database): Insight | null {
       const currentSec = Math.round(ctx.totalDurationMs / 1000);
       const avgSec = Math.round(avgMs / 1000);
       return {
-        title: `📊 빌드 시간 ${String(currentSec)}초 — 평균(${String(avgSec)}초)보다 ${String(percentChange)}% 느려졌어.`,
+        title: pickLocale(locale, {
+          ko: `📊 빌드 시간 ${String(currentSec)}초 - 평균(${String(avgSec)}초) 대비 ${String(percentChange)}% 느립니다.`,
+          en: `📊 Build took ${String(currentSec)}s - ${String(percentChange)}% slower than average (${String(avgSec)}s).`,
+        }),
         severity: 'warning',
         actions: [],
       };
@@ -248,8 +284,14 @@ function checkBuildTime(ctx: InsightContext, db: Database): Insight | null {
 
     if (percentChange <= -20) {
       return {
-        title: '📊 빌드 시간 개선!',
-        detail: `평균보다 ${String(Math.abs(percentChange))}% 빨라졌어.`,
+        title: pickLocale(locale, {
+          ko: '📊 빌드 시간이 개선되었습니다.',
+          en: '📊 Build time improved.',
+        }),
+        detail: pickLocale(locale, {
+          ko: `평균 대비 ${String(Math.abs(percentChange))}% 빨라졌습니다.`,
+          en: `${String(Math.abs(percentChange))}% faster than average.`,
+        }),
         severity: 'info',
         actions: [],
       };
@@ -268,4 +310,8 @@ function checkBuildTime(ctx: InsightContext, db: Database): Insight | null {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function pickLocale(locale: Locale, text: { ko: string; en: string }): string {
+  return locale === 'ko' ? text.ko : text.en;
 }

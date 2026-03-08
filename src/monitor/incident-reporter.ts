@@ -13,17 +13,26 @@ interface IncidentState {
   attempt: number;
 }
 
+type Locale = 'en' | 'ko';
+
 export class IncidentReporter {
   private readonly channelManager: ChannelManager;
   private readonly events: EventBus;
   private readonly db: Database;
+  private readonly locale: Locale;
   private readonly incidents = new Map<string, IncidentState>();
   private unsubscribers: Array<() => void> = [];
 
-  constructor(channelManager: ChannelManager, events: EventBus, db: Database) {
+  constructor(
+    channelManager: ChannelManager,
+    events: EventBus,
+    db: Database,
+    locale: string = 'en',
+  ) {
     this.channelManager = channelManager;
     this.events = events;
     this.db = db;
+    this.locale = locale === 'ko' ? 'ko' : 'en';
   }
 
   start(): void {
@@ -139,17 +148,32 @@ export class IncidentReporter {
   ): string {
     const durationSec = Math.max(1, Math.round(durationMs / 1000));
 
+    if (this.locale === 'ko') {
+      return [
+        '🛬 OpenLander — 장애 복구 완료',
+        '',
+        `📋 프로젝트: ${incident.projectName}`,
+        `⏰ 발생 시각: ${this.formatTimestamp(incident.failedAt)}`,
+        `✅ 복구 시각: ${this.formatTimestamp(recoveredAt)}`,
+        `⏱ 소요 시간: ${String(durationSec)}초`,
+        `🔄 시도 횟수: ${String(attempt)}회`,
+        '',
+        `📝 원인: ${incident.lastError}`,
+        '🤖 AI가 자동으로 문제를 분석하고 복구했습니다.',
+      ].join('\n');
+    }
+
     return [
-      '🛬 OpenLander — 장애 복구 완료',
+      '🛬 OpenLander - Incident Recovery Complete',
       '',
-      `📋 프로젝트: ${incident.projectName}`,
-      `⏰ 발생 시각: ${this.formatTimestamp(incident.failedAt)}`,
-      `✅ 복구 시각: ${this.formatTimestamp(recoveredAt)}`,
-      `⏱ 소요 시간: ${String(durationSec)}초`,
-      `🔄 시도 횟수: ${String(attempt)}회`,
+      `📋 Project: ${incident.projectName}`,
+      `⏰ Detected At: ${this.formatTimestamp(incident.failedAt)}`,
+      `✅ Recovered At: ${this.formatTimestamp(recoveredAt)}`,
+      `⏱ Duration: ${String(durationSec)}s`,
+      `🔄 Attempts: ${String(attempt)}`,
       '',
-      `📝 원인: ${incident.lastError}`,
-      '🤖 AI가 자동으로 문제를 분석하고 복구했습니다.',
+      `📝 Root Cause: ${incident.lastError}`,
+      '🤖 AI analyzed the issue and recovered automatically.',
     ].join('\n');
   }
 
@@ -158,19 +182,33 @@ export class IncidentReporter {
     totalAttempts: number,
     lastError: string,
   ): string {
+    if (this.locale === 'ko') {
+      return [
+        '🛬 OpenLander — 장애 복구 실패',
+        '',
+        `📋 프로젝트: ${incident.projectName}`,
+        `⏰ 발생 시각: ${this.formatTimestamp(incident.failedAt)}`,
+        `❌ 복구 실패 — ${String(totalAttempts)}회 시도 후 포기`,
+        `📝 마지막 에러: ${lastError}`,
+        '',
+        '⚠️ 수동 확인이 필요합니다.',
+      ].join('\n');
+    }
+
     return [
-      '🛬 OpenLander — 장애 복구 실패',
+      '🛬 OpenLander - Incident Recovery Failed',
       '',
-      `📋 프로젝트: ${incident.projectName}`,
-      `⏰ 발생 시각: ${this.formatTimestamp(incident.failedAt)}`,
-      `❌ 복구 실패 — ${String(totalAttempts)}회 시도 후 포기`,
-      `📝 마지막 에러: ${lastError}`,
+      `📋 Project: ${incident.projectName}`,
+      `⏰ Detected At: ${this.formatTimestamp(incident.failedAt)}`,
+      `❌ Recovery exhausted after ${String(totalAttempts)} attempts`,
+      `📝 Last Error: ${lastError}`,
       '',
-      '⚠️ 수동 확인이 필요합니다.',
+      '⚠️ Manual investigation is required.',
     ].join('\n');
   }
 
   private formatTimestamp(date: Date): string {
-    return date.toLocaleString('ko-KR', { hour12: false });
+    const locale = this.locale === 'ko' ? 'ko-KR' : 'en-US';
+    return date.toLocaleString(locale, { hour12: false });
   }
 }

@@ -158,13 +158,13 @@ export function TimelineFeed({
           {processedItems.map((item, index) => {
             if ('type' in item && item.type === 'ai_divider') {
               return (
-                <div key={item.id} className="flex items-center gap-3 my-4 px-4 opacity-70">
-                  <div className="h-px bg-border flex-1" />
-                  <div className="text-[10px] font-mono text-muted-ol flex items-center gap-1.5 uppercase tracking-wider">
-                    <Brain className="h-3 w-3" />
+                <div key={item.id} className="flex items-center gap-3 my-6 px-4">
+                  <div className="h-px bg-gradient-to-r from-transparent via-agent/50 to-agent/50 flex-1" />
+                  <div className="text-xs font-mono font-bold text-agent flex items-center gap-2 uppercase tracking-widest px-3 py-1 rounded-full bg-agent/10 border border-agent/20 shadow-sm shadow-agent/20">
+                    <Brain className="h-4 w-4" />
                     {'AI Analysis'}
                   </div>
-                  <div className="h-px bg-border flex-1" />
+                  <div className="h-px bg-gradient-to-l from-transparent via-agent/50 to-agent/50 flex-1" />
                 </div>
               );
             }

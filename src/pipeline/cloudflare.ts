@@ -9,6 +9,7 @@ import type { EventBus } from '../events/index.js';
 import { buildTraefikLabels } from './traefik.js';
 
 interface CloudflareApiError {
+  code?: number;
   message: string;
 }
 
@@ -247,9 +248,19 @@ export class CloudflareTunnelManager {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Cloudflare API request failed (${String(response.status)}): ${response.statusText}`,
-      );
+      let detail = response.statusText;
+      try {
+        const errorBody = (await response.json()) as CloudflareApiResponse<unknown>;
+        if (errorBody.errors.length > 0) {
+          detail = errorBody.errors
+            .map((e) => `${e.message} (code: ${String(e.code ?? 'unknown')})`)
+            .join('; ');
+        }
+      } catch {
+        // response body not JSON
+      }
+      log.error({ status: response.status, detail, path }, 'Cloudflare API request failed');
+      throw new Error(`Cloudflare API request failed (${String(response.status)}): ${detail}`);
     }
 
     const body = (await response.json()) as CloudflareApiResponse<T>;
@@ -263,7 +274,13 @@ export class CloudflareTunnelManager {
 }
 
 function normalizeDomain(domain: string): string {
-  return domain.trim().toLowerCase().replace(/^\*\./, '').replace(/\.$/, '');
+  return domain
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/^\*\./, '')
+    .replace(/\.$/, '');
 }
 
 function normalizeHost(host: string): string {

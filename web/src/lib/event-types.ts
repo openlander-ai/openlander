@@ -20,6 +20,7 @@ export interface QuestionData {
 
 /** Backend build stream raw event (NDJSON) */
 export interface BuildStreamEvent {
+  id?: string;
   type:
     | 'status'
     | 'complete'
@@ -33,6 +34,7 @@ export interface BuildStreamEvent {
   message: string;
   projectId: string;
   timestamp: string;
+  percent?: number;
   /** Present only for question_pending events */
   questionId?: string;
   questions?: QuestionData[];
@@ -118,7 +120,8 @@ let idCounter = 0;
 /** Convert backend NDJSON event to frontend timeline item */
 export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
   idCounter += 1;
-  const id = `tl-${idCounter}-${event.timestamp}`;
+  const id = event.id ?? `tl-${idCounter}-${event.timestamp}`;
+  const progressPercent = event.percent ?? estimatePercent(event.message);
 
   switch (event.type) {
     case 'complete':
@@ -127,7 +130,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         type: 'success',
         timestamp: event.timestamp,
         title: event.message,
-        percent: 100,
+        percent: event.percent ?? 100,
         url: extractUrl(event.message),
       };
     case 'error':
@@ -137,7 +140,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         timestamp: event.timestamp,
         title: event.message,
         detail: event.detail ?? undefined,
-        percent: -1,
+        percent: event.percent ?? -1,
       };
     case 'question_pending':
       return {
@@ -203,7 +206,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         type: 'progress',
         timestamp: event.timestamp,
         title: event.message,
-        percent: estimatePercent(event.message),
+        percent: progressPercent,
       };
   }
 }

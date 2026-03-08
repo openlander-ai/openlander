@@ -282,6 +282,37 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     return c.json(result, 200);
   });
 
+  api.get('/projects/:id/timeline', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const events = ctx.db.getTimelineEvents(project.id).reverse();
+
+    return c.json({
+      events: events.map((event) => ({
+        id: event.id,
+        type: event.type,
+        message: event.message,
+        detail: event.detail,
+        severity: event.severity,
+        percent: event.percent,
+        toolName: event.tool_name,
+        actionButtons: (() => {
+          if (!event.action_buttons) return undefined;
+          try {
+            return JSON.parse(event.action_buttons) as unknown;
+          } catch (err) {
+            void err;
+            return undefined;
+          }
+        })(),
+        projectId: event.project_id,
+        timestamp: event.created_at,
+      })),
+    });
+  });
+
   api.get('/projects/:id/build/stream', (c) => {
     const id = c.req.param('id');
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
@@ -302,7 +333,13 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         type: string;
         message: string;
         projectId: string;
+        id?: string;
         timestamp?: string;
+        percent?: number;
+        detail?: string | null;
+        severity?: 'info' | 'warning' | 'error';
+        toolName?: string;
+        actionButtons?: unknown;
         [key: string]: unknown;
       }) => {
         void s.write(
@@ -311,6 +348,44 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
             timestamp: data.timestamp ?? new Date().toISOString(),
           }) + '\n',
         );
+      };
+
+      const emitTimelineEvent = (data: {
+        id?: string;
+        type: string;
+        message: string;
+        projectId: string;
+        timestamp?: string;
+        detail?: string | null;
+        severity?: 'info' | 'warning' | 'error';
+        percent?: number;
+        toolName?: string;
+        actionButtons?: unknown;
+        deployId?: string;
+        [key: string]: unknown;
+      }) => {
+        const eventId = data.id ?? nanoid(16);
+        const eventTimestamp = data.timestamp ?? new Date().toISOString();
+
+        ctx.db.createTimelineEvent({
+          id: eventId,
+          projectId: data.projectId,
+          deployId: data.deployId,
+          type: data.type,
+          message: data.message,
+          detail: typeof data.detail === 'string' ? data.detail : undefined,
+          severity: data.severity,
+          percent: data.percent,
+          toolName: data.toolName,
+          actionButtons: data.actionButtons ? JSON.stringify(data.actionButtons) : undefined,
+          createdAt: eventTimestamp,
+        });
+
+        write({
+          ...data,
+          id: eventId,
+          timestamp: eventTimestamp,
+        });
       };
 
       function formatRelativeTime(dateStr: string): string {
@@ -328,17 +403,23 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('deploy:start', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({ type: 'status', message: 'Starting deployment...', projectId: project.id });
+          emitTimelineEvent({
+            type: 'status',
+            message: 'Starting deployment...',
+            projectId: project.id,
+            percent: 0,
+          });
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:clone', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'status',
             message: `Cloning repository (${payload.commitSha.slice(0, 7)})`,
             projectId: project.id,
+            percent: 25,
           });
         }),
       );
@@ -346,10 +427,11 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('deploy:build', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'status',
             message: `Docker image built (${String(Math.round(payload.durationMs / 1000))}s)`,
             projectId: project.id,
+            percent: 60,
           });
         }),
       );
@@ -357,10 +439,11 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('deploy:run', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'status',
             message: `Starting container on port ${String(payload.port)}`,
             projectId: project.id,
+            percent: 90,
           });
         }),
       );
@@ -380,31 +463,30 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
                 },
                 ctx.docker,
                 ctx.db,
+                ctx.config.language,
               );
 
               // Send each insight as an NDJSON event
               for (const insight of insights) {
-                void s.write(
-                  JSON.stringify({
-                    type: 'insight',
-                    message: insight.title,
-                    detail: insight.detail ?? null,
-                    severity: insight.severity,
-                    actionButtons: insight.actions.length > 0 ? insight.actions : undefined,
-                    projectId: project.id,
-                    timestamp: new Date().toISOString(),
-                  }) + '\n',
-                );
+                emitTimelineEvent({
+                  type: 'insight',
+                  message: insight.title,
+                  detail: insight.detail ?? null,
+                  severity: insight.severity,
+                  actionButtons: insight.actions.length > 0 ? insight.actions : undefined,
+                  projectId: project.id,
+                });
               }
             } catch (err) {
               log.warn({ err }, 'Post-deploy insight generation failed');
             }
 
             // Send complete event and close stream
-            write({
+            emitTimelineEvent({
               type: 'complete',
               message: `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
               projectId: project.id,
+              percent: 100,
             });
             clearTimeout(streamTimeout);
             cleanup();
@@ -416,11 +498,12 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('deploy:failed', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'error',
             message: `Deploy failed at ${payload.step}: ${payload.error}`,
             detail: payload.buildLog ?? null,
             projectId: project.id,
+            percent: -1,
           });
           // Do NOT close stream — auto-recovery may follow
         }),
@@ -430,7 +513,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('build:autofix', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'status',
             message: `Auto-fix applied: ${payload.action} (${payload.category})`,
             projectId: project.id,
@@ -441,7 +524,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('build:suggest', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'status',
             message: `Suggestion: ${payload.suggestion}`,
             projectId: project.id,
@@ -452,7 +535,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('build:inform', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'status',
             message: `Build analysis: ${payload.summary}`,
             projectId: project.id,
@@ -464,7 +547,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('build:dockerfile-fixed', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'status',
             message: `Dockerfile fixed (attempt ${String(payload.retryCount)}/3): ${payload.changes.join(', ')}`,
             projectId: project.id,
@@ -476,7 +559,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('compose:start', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'status',
             message: `Compose build starting (${String(payload.serviceCount)} service${payload.serviceCount > 1 ? 's' : ''})`,
             projectId: project.id,
@@ -487,7 +570,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('compose:up', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'complete',
             message: `Compose deploy complete — ${String(payload.services.length)} service${payload.services.length > 1 ? 's' : ''} running`,
             projectId: project.id,
@@ -500,7 +583,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('compose:failed', (payload) => {
           if (payload.projectId !== project.id) return;
-          write({
+          emitTimelineEvent({
             type: 'error',
             message: `Compose deploy failed: ${payload.error}`,
             projectId: project.id,
@@ -517,10 +600,14 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
           switch (ev.type) {
             case 'thinking':
-              write({ ...base, type: 'agent_thinking', message: 'Agent is analyzing...' });
+              emitTimelineEvent({
+                ...base,
+                type: 'agent_thinking',
+                message: 'Agent is analyzing...',
+              });
               break;
             case 'tool_call':
-              write({
+              emitTimelineEvent({
                 ...base,
                 type: 'agent_tool_call',
                 message: `Calling ${ev.toolName}...`,
@@ -529,7 +616,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
               });
               break;
             case 'tool_result':
-              write({
+              emitTimelineEvent({
                 ...base,
                 type: ev.success ? 'status' : 'error',
                 message: ev.success
@@ -538,13 +625,13 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
               });
               break;
             case 'message':
-              write({ ...base, type: 'agent_message', message: ev.content });
+              emitTimelineEvent({ ...base, type: 'agent_message', message: ev.content });
               break;
             case 'error':
-              write({ ...base, type: 'error', message: ev.error || 'Agent error' });
+              emitTimelineEvent({ ...base, type: 'error', message: ev.error || 'Agent error' });
               break;
             default:
-              write({ ...base, type: 'status', message: `Agent: ${ev.type}` });
+              emitTimelineEvent({ ...base, type: 'status', message: `Agent: ${ev.type}` });
           }
         }),
       );
@@ -554,16 +641,14 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         eventBus.on('question:pending', (payload) => {
           if (payload.projectId !== project.id) return;
           const firstQuestion = payload.questions[0];
-          void s.write(
-            JSON.stringify({
-              type: 'question_pending',
-              message: firstQuestion?.question ?? 'Agent needs input',
-              questionId: payload.requestId,
-              questions: payload.questions,
-              projectId: project.id,
-              timestamp: new Date().toISOString(),
-            }) + '\n',
-          );
+          emitTimelineEvent({
+            id: payload.requestId,
+            type: 'question_pending',
+            message: firstQuestion?.question ?? 'Agent needs input',
+            questionId: payload.requestId,
+            questions: payload.questions,
+            projectId: project.id,
+          });
         }),
       );
 
@@ -597,6 +682,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
               : '';
 
             write({
+              id: `last-deploy-${lastDeploy.id}`,
               type: 'status',
               message: `Last deploy: ${trigger}${commitInfo} — ${ago}${duration ? `, took ${duration}` : ''}`,
               projectId: project.id,
@@ -604,17 +690,33 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           }
 
           if (fresh.status === 'running') {
-            write({ type: 'complete', message: 'Currently running', projectId: project.id });
+            write({
+              id: 'current-running',
+              type: 'complete',
+              message: 'Currently running',
+              projectId: project.id,
+            });
           } else if (fresh.status === 'error') {
-            write({ type: 'error', message: 'Build failed', projectId: project.id });
+            write({
+              id: 'current-error',
+              type: 'error',
+              message: 'Build failed',
+              projectId: project.id,
+            });
           } else {
-            write({ type: 'status', message: 'Stopped', projectId: project.id });
+            write({
+              id: 'current-stopped',
+              type: 'status',
+              message: 'Stopped',
+              projectId: project.id,
+            });
           }
           cleanup();
           void s.close();
           return;
         }
         write({
+          id: 'current-building',
           type: 'status',
           message: `Build in progress (${fresh.status})...`,
           projectId: project.id,

@@ -10,6 +10,7 @@ import {
   addProjectDomain,
   removeProjectDomain,
   type DomainMapping,
+  getCloudflareStatus,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
@@ -42,16 +43,21 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
   const [domains, setDomains] = useState<DomainMapping[]>([]);
   const [newDomain, setNewDomain] = useState('');
   const [addingDomain, setAddingDomain] = useState(false);
+  const [cfConfigured, setCfConfigured] = useState<boolean | null>(null);
   const fetchProject = useCallback(async () => {
     try {
-      const data = await getProject(projectId);
+      const [data, ips, domainsList, cfStatus] = await Promise.all([
+        getProject(projectId),
+        getAllIps(),
+        getProjectDomains(projectId),
+        getCloudflareStatus().catch(() => ({ configured: false })),
+      ]);
       setInternalUrl(data.url ?? null);
       setPublicUrl(data.publicUrl ?? null);
       setAssignedPort(data.port ?? null);
-      const ips = await getAllIps();
       setNetworkIps(ips);
-      const domainsList = await getProjectDomains(projectId);
       setDomains(domainsList);
+      setCfConfigured(cfStatus.configured);
     } catch {
       // silent
     } finally {
@@ -254,34 +260,43 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
         )}
 
         {/* Add domain form */}
-        <div className="flex items-center gap-2 pt-1">
-          <input
-            type="text"
-            value={newDomain}
-            onChange={(e) => setNewDomain(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleAddDomain();
-            }}
-            placeholder="example.com"
-            className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-sm font-mono text-primary-ol placeholder:text-muted-ol"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs font-body gap-1.5"
-            onClick={handleAddDomain}
-            disabled={!newDomain.trim() || addingDomain}
-          >
-            {addingDomain ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Plus className="h-3 w-3" />
-            )}
-            {'Add Domain'}
-          </Button>
-        </div>
-
-        <p className="text-[11px] font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
+        {cfConfigured === false ? (
+          <p className="text-xs font-body text-warning">
+            {'Cloudflare not configured. Go to Settings → Cloudflare Tunnel to connect.'}
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={newDomain}
+                onChange={(e) =>
+                  setNewDomain(e.target.value.replace(/^https?:\/\//, '').replace(/\/.*$/, ''))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddDomain();
+                }}
+                placeholder="example.com"
+                className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-sm font-mono text-primary-ol placeholder:text-muted-ol"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs font-body gap-1.5"
+                onClick={handleAddDomain}
+                disabled={!newDomain.trim() || addingDomain}
+              >
+                {addingDomain ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Plus className="h-3 w-3" />
+                )}
+                {'Add Domain'}
+              </Button>
+            </div>
+            <p className="text-[11px] font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
+          </>
+        )}
       </div>
 
       {/* Public URL */}

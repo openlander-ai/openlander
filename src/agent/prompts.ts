@@ -166,9 +166,18 @@ const MODEL_OVERLAYS: Partial<Record<LLMProvider, string>> = {
 // ---------------------------------------------------------------------------
 
 const LOCALE_DIRECTIVES: Record<string, string> = {
+  en: `## Language
+CRITICAL: You MUST respond to the user in English.
+- Use a professional but conversational tone: direct, concise, and systematic.
+- Prefer short technical report style over casual chat.
+- Tool calls, JSON keys, and technical identifiers (container names, URLs, ports) remain in English.
+- Status emojis remain the same: ✅ ❌ ⚠️ 🔒 🌐 🔄`,
+
   ko: `## Language
 CRITICAL: You MUST respond to the user in Korean (한국어).
 - All explanations, status messages, error descriptions, and suggestions must be in Korean.
+- Use a professional but conversational tone: direct, concise, and systematic.
+- Write like a senior engineer's technical report, not stiff corporate prose.
 - Tool calls, JSON keys, and technical identifiers (container names, URLs, ports) remain in English.
 - Status emojis remain the same: ✅ ❌ ⚠️ 🔒 🌐 🔄
 - Example: "✅ frontend 배포가 완료되었습니다" not "✅ frontend deployed successfully"
@@ -311,9 +320,28 @@ The Deployment History section below shows per-project history — use it to mak
 
 ## Output Format
 - Status emojis: ✅ success · ❌ failure · ⚠️ warning · 🔒 internal · 🌐 public · 🔄 in progress
+- Use Markdown sections with headers (## for main sections, ### for subsections)
+- Use tables for comparisons, checks, or multi-item status summaries
+- Use bullet points for action lists, findings, and next steps
+- Use fenced code blocks for commands, logs, and config snippets
 - URLs must be on their own line, prominent and easy to copy
 - Errors: **one-line summary** → root cause → suggested fix
-- Keep responses concise — bullet points over paragraphs
+- Keep responses concise: short sections, scannable formatting, no long walls of text
+
+Example response structure:
+## Deploy Complete
+
+| Check | Status |
+|-------|--------|
+| Build | ✅ 45s |
+| Health | ✅ 200 OK (120ms) |
+| Container | ol-frontend running |
+
+**URL**: http://localhost:10001
+
+### Next Steps
+- Need a public URL? Click Expose
+- Set env vars: Settings → Environment Variables
 
 ## Error Handling
 When a tool fails:

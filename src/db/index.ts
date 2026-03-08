@@ -15,6 +15,7 @@ import {
   oauthTokens,
   projects,
   services,
+  timelineEvents,
   webhookConfigs,
 } from './schema.drizzle.js';
 
@@ -48,6 +49,20 @@ export interface DeployLogRow {
   commit_sha: string | null;
   build_log: string | null;
   duration_ms: number | null;
+  created_at: string;
+}
+
+export interface TimelineEventRow {
+  id: string;
+  project_id: string;
+  deploy_id: string | null;
+  type: string;
+  message: string;
+  detail: string | null;
+  severity: string | null;
+  percent: number | null;
+  tool_name: string | null;
+  action_buttons: string | null;
   created_at: string;
 }
 
@@ -202,6 +217,23 @@ export class Database {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
     this.sqlite.exec('CREATE INDEX IF NOT EXISTS idx_services_type ON services(type)');
+
+    this.sqlite.exec(`CREATE TABLE IF NOT EXISTS timeline_events (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      deploy_id TEXT,
+      type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      detail TEXT,
+      severity TEXT,
+      percent INTEGER,
+      tool_name TEXT,
+      action_buttons TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    this.sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_timeline_project ON timeline_events(project_id, created_at)',
+    );
 
     const svcTable = this.sqlite
       .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'services'")
@@ -677,6 +709,66 @@ export class Database {
     return this.db.select().from(deployLogs).where(eq(deployLogs.id, deployId)).get() as
       | DeployLogRow
       | undefined;
+  }
+
+  createTimelineEvent(event: {
+    id: string;
+    projectId: string;
+    deployId?: string;
+    type: string;
+    message: string;
+    detail?: string;
+    severity?: string;
+    percent?: number;
+    toolName?: string;
+    actionButtons?: string;
+    createdAt?: string;
+  }): void {
+    this.db
+      .insert(timelineEvents)
+      .values({
+        id: event.id,
+        project_id: event.projectId,
+        deploy_id: event.deployId ?? null,
+        type: event.type,
+        message: event.message,
+        detail: event.detail ?? null,
+        severity: event.severity ?? null,
+        percent: event.percent ?? null,
+        tool_name: event.toolName ?? null,
+        action_buttons: event.actionButtons ?? null,
+        created_at: event.createdAt ?? new Date().toISOString(),
+      })
+      .onConflictDoNothing({ target: timelineEvents.id })
+      .run();
+
+    this.sqlite
+      .prepare(
+        `DELETE FROM timeline_events
+         WHERE project_id = ?
+           AND id NOT IN (
+             SELECT id
+             FROM timeline_events
+             WHERE project_id = ?
+             ORDER BY datetime(created_at) DESC, rowid DESC
+             LIMIT 200
+           )`,
+      )
+      .run(event.projectId, event.projectId);
+  }
+
+  getTimelineEvents(projectId: string, limit = 200): TimelineEventRow[] {
+    return this.db
+      .select()
+      .from(timelineEvents)
+      .where(eq(timelineEvents.project_id, projectId))
+      .orderBy(desc(sql`datetime(${timelineEvents.created_at})`), desc(sql`rowid`))
+      .limit(limit)
+      .all() as TimelineEventRow[];
+  }
+
+  deleteTimelineEvents(projectId: string): void {
+    this.db.delete(timelineEvents).where(eq(timelineEvents.project_id, projectId)).run();
   }
 
   // ===== Chat History =====

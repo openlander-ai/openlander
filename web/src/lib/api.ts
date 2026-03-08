@@ -5,6 +5,7 @@ import type {
   DeployLogSummary,
   DeployLogDetail,
 } from '../types';
+import type { BuildStreamEvent } from './event-types';
 
 export interface BuildFixSuggestion {
   description: string;
@@ -66,6 +67,15 @@ export async function getProjectDeployments(id: string, limit = 50): Promise<Dep
   if (!res.ok) throw new Error('Failed to fetch deployments');
   const data = await res.json();
   return data.deployments;
+}
+
+export async function getProjectTimeline(id: string): Promise<BuildStreamEvent[]> {
+  const res = await fetch(`/api/projects/${id}/timeline`);
+  if (!res.ok) {
+    throw new Error('Failed to fetch timeline events');
+  }
+  const data = (await res.json()) as { events?: BuildStreamEvent[] };
+  return data.events ?? [];
 }
 
 export async function getDeploymentDetail(

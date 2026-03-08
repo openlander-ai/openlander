@@ -12,17 +12,21 @@ interface PostmortemEntry {
   generatedAt: Date;
 }
 
+type Locale = 'en' | 'ko';
+
 export class PostmortemGenerator {
   private readonly events: EventBus;
   private readonly db: Database;
   private readonly agent: Agent;
+  private readonly locale: Locale;
   private readonly postmortems = new Map<string, PostmortemEntry>();
   private unsubscribers: Array<() => void> = [];
 
-  constructor(events: EventBus, db: Database, agent: Agent) {
+  constructor(events: EventBus, db: Database, agent: Agent, locale: string = 'en') {
     this.events = events;
     this.db = db;
     this.agent = agent;
+    this.locale = locale === 'ko' ? 'ko' : 'en';
   }
 
   start(): void {
@@ -89,16 +93,54 @@ export class PostmortemGenerator {
             : 0;
       const durationMs = 'durationMs' in payload ? payload.durationMs : 0;
 
-      const prompt = `Generate a postmortem markdown for this incident.
-Project: ${projectName}, Error: ${errorMessage}, Build log (last 3000 chars): ${buildLogTail}
-Recovery: ${recovered ? 'success' : 'failed'}, Attempts: ${String(attempts)}, Duration: ${String(durationMs)}ms
+      const languageInstruction =
+        this.locale === 'ko'
+          ? 'Write the entire report in Korean (한국어). Keep technical identifiers (service names, URLs, ports, error codes) in English.'
+          : 'Write the entire report in English.';
 
-Format:
-# 장애 포스트모템 — ${projectName}
-## 타임라인
-## 근본 원인
-## 수정 내용
-## 예방 조치`;
+      const prompt = `You are generating an incident postmortem for an SRE audience.
+
+${languageInstruction}
+
+Tone and quality requirements:
+- Write like a senior SRE incident report: direct, factual, actionable.
+- Avoid filler and avoid vague language.
+- Ground all claims in the given incident data and logs.
+
+Output requirements (Markdown):
+- Use clear headers.
+- Include a timeline table with event, timestamp/sequence, and evidence.
+- Include root cause analysis with "Immediate Cause", "Contributing Factors", and "Why It Escaped".
+- Include remediation and prevention actions with owner and priority.
+- Include a short "Next 24 Hours" checklist.
+
+Required structure:
+## Incident Summary
+## Impact
+## Timeline
+| Sequence | Event | Evidence |
+|----------|-------|----------|
+## Root Cause Analysis
+### Immediate Cause
+### Contributing Factors
+### Why It Escaped
+## Remediation Completed
+## Prevention Actions
+| Action | Owner | Priority | Status |
+|--------|-------|----------|--------|
+## Next 24 Hours
+
+Incident data:
+- Project: ${projectName}
+- Recovery Status: ${recovered ? 'success' : 'failed'}
+- Attempts: ${String(attempts)}
+- Recovery Duration: ${String(durationMs)}ms
+- Last Error: ${errorMessage}
+
+Build log tail (last 3000 chars, secrets redacted):
+\`\`\`
+${buildLogTail}
+\`\`\``;
 
       const result = await this.agent.chat(prompt, `postmortem-${projectId}`);
 
