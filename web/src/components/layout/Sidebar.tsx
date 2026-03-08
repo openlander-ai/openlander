@@ -3,7 +3,7 @@ import type { Project, SystemStats } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Plane, Plus, Settings, Cpu, MemoryStick, Box, Loader2, Database } from 'lucide-react';
+import { Plus, Settings, Cpu, MemoryStick, Box, Loader2, Database } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -28,19 +28,6 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Brand */}
-      <div
-        className="flex items-center gap-2.5 px-4 xl:px-5 h-12 shrink-0 cursor-pointer hover:bg-bg-subtle/50 transition-colors"
-        onClick={() => navigate('/projects')}
-      >
-        <div className="bg-agent/10 p-1 rounded-md shrink-0">
-          <Plane className="h-4 w-4 text-agent rotate-[-45deg]" />
-        </div>
-        <span className="hidden xl:inline font-display font-bold text-sm text-primary-ol tracking-tight">
-          OpenLander
-        </span>
-      </div>
-
       <Separator className="bg-[hsl(var(--border))]" />
 
       {/* New Project */}

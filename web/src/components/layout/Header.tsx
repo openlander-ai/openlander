@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { NotificationCenter } from './NotificationCenter';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
+import { useNavigate } from 'react-router-dom';
+import { Logo } from '@/components/icons/Logo';
 
 interface HeaderProps {
   stats: SystemStats | null;
@@ -25,7 +27,9 @@ export function Header({
   onMenuClick,
 }: HeaderProps) {
   const [llmConnected, setLlmConnected] = useState<boolean | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -36,6 +40,7 @@ export function Header({
         if (res.ok) {
           const data = await res.json();
           setLlmConnected(data.llmConfigured === true);
+          if (data.version) setVersion(data.version);
         }
       } catch (e) {
         console.error('Health check failed', e);
@@ -83,7 +88,28 @@ export function Header({
   return (
     <header className="fixed top-0 left-0 right-0 h-12 border-b border-[hsl(var(--border))] bg-bg-app z-50 flex items-center justify-between px-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="md:hidden h-8 w-8" onClick={onMenuClick}>
+        <div
+          className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity"
+          onClick={() => navigate('/projects')}
+        >
+          <div className="bg-agent/10 p-1 rounded-md shrink-0">
+            <Logo className="h-4 w-4 text-agent" />
+          </div>
+          <span className="font-display font-bold text-sm text-primary-ol tracking-tight">
+            OpenLander
+          </span>
+          {version && (
+            <span className="px-1.5 py-0.5 rounded-md bg-bg-subtle text-[10px] font-mono text-muted-ol border border-[hsl(var(--border))]">
+              v{version}
+            </span>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden h-8 w-8 ml-2"
+          onClick={onMenuClick}
+        >
           <Menu className="h-4 w-4" />
         </Button>
       </div>

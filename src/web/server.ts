@@ -5,6 +5,7 @@ import { logger } from 'hono/logger';
 import { existsSync, unlinkSync, chmodSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, extname } from 'node:path';
 
+import { VERSION } from '../version.js';
 import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
 import { createDomainRoutes } from './api/domain-routes.js';
@@ -98,7 +99,7 @@ function createApp(ctx: AppContext): Hono {
 
     return c.json({
       status: 'ok',
-      version: '0.4.0',
+      version: VERSION,
       llmConfigured: ctx.agent !== null,
       timestamp: new Date().toISOString(),
       uptime,
@@ -160,7 +161,7 @@ function createApp(ctx: AppContext): Hono {
   app.get('/api/info', (c) =>
     c.json({
       name: 'OpenLander',
-      version: '0.4.0',
+      version: VERSION,
       mode: 'headless',
       docs: '/health',
       api: '/api',
