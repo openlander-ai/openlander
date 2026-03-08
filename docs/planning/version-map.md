@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ── v0.2.2 ✅ ── v0.2.3 ✅ ── v0.2.4 ✅ ── v0.2.5 ✅(partial) ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ── v0.2.2 ✅ ── v0.2.3 ✅ ── v0.2.4 ✅ ── v0.2.5 ✅(partial) ── v1.0.0 🔧
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ┬ v0.2.2 ✅ ── v0.2.3 ✅ ── v0.2.4 ✅ ── v0.2.5 ✅(partial) ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ── v0.2.2 ✅ ── v0.2.3 ✅ ── v0.2.4 ✅ ── v0.2.5 ✅(partial) ── v1.0.0 🔧
 
 ```
 
@@ -26,33 +26,34 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ## 스펙 문서 ↔ 버전 매핑
 
-| #      | 문서                                   | 경로                                         | 버전           | 구현율 | 상태                                                                         |
-| ------ | -------------------------------------- | -------------------------------------------- | -------------- | ------ | ---------------------------------------------------------------------------- |
-| ~~1~~  | ~~요구사항 정의서~~                    | `archive/requirements.md`                    | v0.0.1~v0.0.8  | 90%    | 📦 아카이브 (TUI 시대 문서, Web pivot 후 무효)                               |
-| ~~2~~  | ~~TUI 리팩토링 스펙~~                  | `archive/v0.0.6/tui-spec.md`                 | v0.0.6         | 97%    | 📦 아카이브 (TUI freeze 후 무효)                                             |
-| ~~3~~  | ~~UI/UX 레이아웃~~                     | `archive/v0.0.7/ui-ux-layout.md`             | v0.0.7         | 95%    | 📦 아카이브 (TUI freeze 후 무효)                                             |
-| ~~4~~  | ~~빌드실패 + Compose~~                 | `archive/v0.0.6/ui-ux-build-compose.md`      | v0.0.6         | 100%   | 📦 아카이브                                                                  |
-| ~~5~~  | ~~v0.0.6 상세 태스크~~                 | `archive/v0.0.6/tasks.md`                    | v0.0.6         | 97%    | 📦 아카이브                                                                  |
-| ~~6~~  | ~~v0.0.7 구현 태스크~~                 | `archive/v0.0.7/implementation-tasks.md`     | v0.0.7         | 100%   | 📦 아카이브                                                                  |
-| ~~7~~  | ~~Phase 1 개발계획~~                   | `archive/v0.0.7/phase1-plan.md`              | v0.0.7         | 100%   | 📦 아카이브                                                                  |
-| 8      | **AI SDK 마이그레이션**                | `v0.0.8/vercel-ai-sdk-migration.md`          | v0.0.8         | 100%   | ✅ 구현 완료. 5개 프로바이더 삭제, AI SDK 통합, 31 도구 Zod 변환.            |
-| 9      | ~~마이그레이션 & 디스커버리~~          | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9/server-awareness.md`로 재정의                                        |
-| 10     | ~~Local Dev & Env~~                    | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의                                            |
-| 11     | ~~v0.0.9–v0.0.10 통합 기획서~~         | `archive/v0.0.9-10-unified-spec.md`          | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체                                           |
-| 12     | **v0.0.9 Server Awareness**            | `v0.0.9/server-awareness.md`                 | v0.0.9         | 100%   | ✅ 구현+도그푸딩 완료 (DEC-016). 버그 11건 해결, E2E 검증 완료.              |
-| 13     | **v0.0.10 Env & Secrets**              | `v0.0.10/env-secrets.md`                     | v0.0.10        | 100%   | ✅ 구현 완료. 4개 파트 전부 구현.                                            |
-| 14     | **버그 트래커**                        | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)                       |
-| 15     | **개발 라이프사이클**                  | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                                            |
-| ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~             | `archive/onboarding-refactor.md`             | v0.0.9         | —      | 📦 아카이브 (DEC-017: Web Setup Screen으로 대체)                             |
-| 17     | **v0.0.12 Provider OAuth**             | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 100%   | ✅ 구현 완료. 백엔드 OAuth 라우트 + 프론트엔드 통합.                         |
-| 18     | **v0.1.0 Web MVP**                     | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                                        |
-| 19     | **v0.0.11 Agent Proactivity**          | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have                    |
-| 20     | **Web Deploy Agent 경유**              | `v0.1.0/web-deploy-agent-mediated.md`        | v0.1.0         | 90%    | 🧪 구현 완료, 도그푸딩 대기                                                  |
-| 21     | **에이전트 경유 Dockerfile 수정 루프** | `v0.1.0/dockerfile-fix-loop.md`              | v0.1.0         | 100%   | ✅ 구현 완료. Tier 2.5 분류 + fixDockerfile + 파이프라인 루프 + Web UI 카드. |
-| 22     | **v0.2.0 Dashboard Redesign**          | `v0.2.0/dashboard-redesign.md`               | v0.2.0         | 100%   | ✅ 구현 완료. Phase 1~4 전부 완료, 채팅 삭제, 라이트 모드 전환.              |
-| 23     | **v0.2.0 버그 트래커**                 | `v0.2.0/bugs.md`                             | v0.2.0         | 100%   | ✅ BUG-014~017 전부 해결. Deploy UX 아키텍쳐 개선 (project-first 모델).      |
-| 24     | **v0.2.0 Deploy UX 수정 스펙**         | `v0.2.0/deploy-ux-fix.md`                    | v0.2.0         | 100%   | ✅ 3 Phase 구현 완료. SSE→JSON deploy, agent event streaming, log panel.     |
-| 25     | **v0.2.1 i18n + 버그 수정**            | — (커밋 내 독립 파일)                        | v0.2.1         | 100%   | ✅ i18n (한/영) + 빌드 에러 리포팅 + Redeploy UI 갱신 버그 수정.             |
+| #      | 문서                                   | 경로                                         | 버전           | 구현율 | 상태                                                                                       |
+| ------ | -------------------------------------- | -------------------------------------------- | -------------- | ------ | ------------------------------------------------------------------------------------------ |
+| ~~1~~  | ~~요구사항 정의서~~                    | `archive/requirements.md`                    | v0.0.1~v0.0.8  | 90%    | 📦 아카이브 (TUI 시대 문서, Web pivot 후 무효)                                             |
+| ~~2~~  | ~~TUI 리팩토링 스펙~~                  | `archive/v0.0.6/tui-spec.md`                 | v0.0.6         | 97%    | 📦 아카이브 (TUI freeze 후 무효)                                                           |
+| ~~3~~  | ~~UI/UX 레이아웃~~                     | `archive/v0.0.7/ui-ux-layout.md`             | v0.0.7         | 95%    | 📦 아카이브 (TUI freeze 후 무효)                                                           |
+| ~~4~~  | ~~빌드실패 + Compose~~                 | `archive/v0.0.6/ui-ux-build-compose.md`      | v0.0.6         | 100%   | 📦 아카이브                                                                                |
+| ~~5~~  | ~~v0.0.6 상세 태스크~~                 | `archive/v0.0.6/tasks.md`                    | v0.0.6         | 97%    | 📦 아카이브                                                                                |
+| ~~6~~  | ~~v0.0.7 구현 태스크~~                 | `archive/v0.0.7/implementation-tasks.md`     | v0.0.7         | 100%   | 📦 아카이브                                                                                |
+| ~~7~~  | ~~Phase 1 개발계획~~                   | `archive/v0.0.7/phase1-plan.md`              | v0.0.7         | 100%   | 📦 아카이브                                                                                |
+| 8      | **AI SDK 마이그레이션**                | `v0.0.8/vercel-ai-sdk-migration.md`          | v0.0.8         | 100%   | ✅ 구현 완료. 5개 프로바이더 삭제, AI SDK 통합, 31 도구 Zod 변환.                          |
+| 9      | ~~마이그레이션 & 디스커버리~~          | ~~`v0.0.9-migration-discovery.md`~~ (삭제됨) | v0.0.9         | —      | `v0.0.9/server-awareness.md`로 재정의                                                      |
+| 10     | ~~Local Dev & Env~~                    | ~~`env-spec.md`~~ (삭제됨)                   | v0.0.10        | —      | `v0.0.10/env-secrets.md`로 재정의                                                          |
+| 11     | ~~v0.0.9–v0.0.10 통합 기획서~~         | `archive/v0.0.9-10-unified-spec.md`          | v0.0.9–v0.0.10 | 0%     | ⚠ **아카이브** — 12, 13번으로 대체                                                         |
+| 12     | **v0.0.9 Server Awareness**            | `v0.0.9/server-awareness.md`                 | v0.0.9         | 100%   | ✅ 구현+도그푸딩 완료 (DEC-016). 버그 11건 해결, E2E 검증 완료.                            |
+| 13     | **v0.0.10 Env & Secrets**              | `v0.0.10/env-secrets.md`                     | v0.0.10        | 100%   | ✅ 구현 완료. 4개 파트 전부 구현.                                                          |
+| 14     | **버그 트래커**                        | `v0.0.9/bugs.md`                             | v0.0.9         | —      | 11건 해결, 2건 이관 (BUG-008 미재현, BUG-009 결정대기)                                     |
+| 15     | **개발 라이프사이클**                  | `dev-lifecycle.md`                           | 전체           | —      | ✅ 11단계 플로우 + 역할 정의 완료                                                          |
+| ~~16~~ | ~~v0.0.9 온보딩 리팩토링~~             | `archive/onboarding-refactor.md`             | v0.0.9         | —      | 📦 아카이브 (DEC-017: Web Setup Screen으로 대체)                                           |
+| 17     | **v0.0.12 Provider OAuth**             | `v0.0.12/provider-oauth.md`                  | v0.0.12        | 100%   | ✅ 구현 완료. 백엔드 OAuth 라우트 + 프론트엔드 통합.                                       |
+| 18     | **v0.1.0 Web MVP**                     | `v0.1.0/web-mvp.md`                          | v0.1.0         | 100%   | ✅ Phase 0-3 구현 완료, TUI→Web pivot                                                      |
+| 19     | **v0.0.11 Agent Proactivity**          | `v0.0.11/agent-proactivity.md`               | v0.0.11        | 90%    | ✅ Phase 1-3 완료, 도그푸딩 완료. 잔여 3건은 nice-to-have                                  |
+| 20     | **Web Deploy Agent 경유**              | `v0.1.0/web-deploy-agent-mediated.md`        | v0.1.0         | 90%    | 🧪 구현 완료, 도그푸딩 대기                                                                |
+| 21     | **에이전트 경유 Dockerfile 수정 루프** | `v0.1.0/dockerfile-fix-loop.md`              | v0.1.0         | 100%   | ✅ 구현 완료. Tier 2.5 분류 + fixDockerfile + 파이프라인 루프 + Web UI 카드.               |
+| 22     | **v0.2.0 Dashboard Redesign**          | `v0.2.0/dashboard-redesign.md`               | v0.2.0         | 100%   | ✅ 구현 완료. Phase 1~4 전부 완료, 채팅 삭제, 라이트 모드 전환.                            |
+| 23     | **v0.2.0 버그 트래커**                 | `v0.2.0/bugs.md`                             | v0.2.0         | 100%   | ✅ BUG-014~017 전부 해결. Deploy UX 아키텍쳐 개선 (project-first 모델).                    |
+| 24     | **v0.2.0 Deploy UX 수정 스펙**         | `v0.2.0/deploy-ux-fix.md`                    | v0.2.0         | 100%   | ✅ 3 Phase 구현 완료. SSE→JSON deploy, agent event streaming, log panel.                   |
+| 25     | **v0.2.1 i18n + 버그 수정**            | — (커밋 내 독립 파일)                        | v0.2.1         | 100%   | ✅ i18n (한/영) + 빌드 에러 리포팅 + Redeploy UI 갱신 버그 수정.                           |
+| 26     | **v1.0.0 AI Co-pilot**                 | `release/v1.0.0-ai-copilot.md`               | v1.0.0         | 85%    | 🔧 백엔드 7개 기능 ✅, 프론트엔드 핵심 ✅, 테스트 50개 ✅. 디자이너 협업 대상 일부 미구현. |
 
 ---
 
@@ -550,23 +551,58 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### 정식 릴리즈 (TBD)
+### v1.0.0 — AI Co-pilot (배포 라이프사이클 AI 통합) 🔧
 
-**상태**: ✅ 품질 게이트 완료 | 버전 미정
+**상태**: 🔧 백엔드 완료, 프론트엔드 핵심 완료 | **관련 문서**: [`release/v1.0.0-ai-copilot.md`](release/v1.0.0-ai-copilot.md)
 
-v0.2.5까지의 기능을 안정화하고 정식 릴리즈. 아래 3가지 구조적 품질 항목 완료.
+> **핵심 가치**: AI를 에러 시 소방관에서, 배포 전체 라이프사이클의 "조용한 부조종사"로 전환.
+> **관련 결정**: DEC-033 (AI 기능 전체 재설계), DEC-034 (인라인 AI 안 B 채택)
 
-#### 필수 품질 항목 (도그푸딩에서 반복 발견된 구조적 문제 해결) ✅
+| Phase | 항목                      | 내용                                                                      | 상태 |
+| ----- | ------------------------- | ------------------------------------------------------------------------- | ---- |
+| 1     | F-A: AI 자동 복구         | deploy:failed → agent.chatStream → 복구 시도 (최대 3회) — 기존 기능 강화  | ✅   |
+| 1     | F-B: 자동 장애 리포트     | recovery:success/exhausted → Slack/Discord/Telegram 채널 브로드캐스트     | ✅   |
+| 1     | F-C: 롤백 자동 제안       | 배포 후 60초간 헬스 감시 → 연속 3회 실패 시 rollback:suggested 이벤트     | ✅   |
+| 1     | F-D: 환경변수 변경 감지   | 리디플로이 시 .env.example 스캔 → 새 키 발견 시 agent가 값 요청           | ✅   |
+| 1     | F-E: 포스트모템 자동 생성 | recovery 후 마크다운 포스트모템 자동 생성 (success/exhausted)             | ✅   |
+| 1     | F-F: 시크릿 스캔          | clone 후 하드코딩 API 키/자격증명 감지 (12개 패턴)                        | ✅   |
+| 1     | F-G: 성공 인사이트 강화   | 빌드 시간 20% 임계값 비교, 이전 대비 인사이트 표시                        | ✅   |
+| 2     | F-H: 인라인 AI 표시       | 빌드 실패 후 AI 분석이 같은 타임라인 흐름에서 인라인 렌더링 (안 B)        | ✅   |
+| 2     | PostmortemCard UI         | 포스트모템 마크다운 뷰어 커포넌트 (expand/collapse)                       | ✅   |
+| 3     | Oracle 코드 리뷰 수정     | 보안(동시성 직렬화), 신뢰성(타임아웃 증가), 리소스 정리(stop/unsubscribe) | ✅   |
+| 3     | AI co-pilot 테스트        | secret-scan, postmortem, rollback-watcher — 50+ 신규 테스트               | ✅   |
+
+**구현 내역** (18개 파일 신규/변경, 1346행 추가):
+
+- `src/monitor/incident-reporter.ts` — 신규: 장애 리포트 생성 + 채널 브로드캐스트
+- `src/monitor/postmortem.ts` — 신규: LLM 기반 포스트모템 마크다운 생성기
+- `src/monitor/rollback-watcher.ts` — 신규: 배포 후 헬스 감시 → 롤백 제안
+- `src/pipeline/secret-scan.ts` — 신규: 코드 내 하드코딩 시크릿 감지 (12개 패턴)
+- `src/channels/base.ts` — ChannelManager.broadcast() 추가
+- `src/app.ts` — 복구 결과 추적, 모듈 연결, 동시성 직렬화, 리소스 정리
+- `src/events/index.ts` — recovery/secret/rollback 이벤트 타입 추가
+- `web/src/components/timeline/PostmortemCard.tsx` — 신규: 포스트모템 UI
+- `web/src/components/timeline/TimelineFeed.tsx` — 인라인 AI 분석 렌더링
+- `web/src/components/timeline/TimelineItem.tsx` — AI 인사이트 카드 타입 추가
+- `test/secret-scan.test.ts`, `test/postmortem.test.ts`, `test/rollback-watcher.test.ts` — 50+ 신규 테스트
+
+### 정식 릴리즈 (v1.0.0)
+
+**상태**: 🔧 AI co-pilot 구현 완료, 품질 게이트 완료 | npm publish 대기
+
+v0.2.5까지의 기능을 안정화하고 AI co-pilot 7개 기능 추가 후 정식 릴리즈. 아래 품질 항목 + AI 기능 구현 완료.
+
+#### 필수 품질 항목 (4건 전부 완료) ✅
 
 | #   | 항목                        | 내용                                                                                                      | 우선순위  | 상태 |
 | --- | --------------------------- | --------------------------------------------------------------------------------------------------------- | --------- | ---- |
-| Q-1 | E2E 시나리오 테스트         | 수동 도그푸딩 체크리스트 12개 시나리오 (`docs/planning/release-checklist.md`). 릴리즈 전 1회 수동 실행    | 🔴 high   | ✅   |
+| Q-1 | E2E 시나리오 테스트         | 수동 도그푸딩 체크리스트 20개 시나리오 (`docs/planning/release-checklist.md`). 릴리즈 전 1회 수동 실행    | 🔴 high   | ✅   |
 | Q-2 | 이벤트 배선 검증            | `test/event-wiring.test.ts` — 정적 소스 스캔으로 emit↔subscribe 교차 검증. allow-list 기반 dead wire 감지 | 🔴 high   | ✅   |
 | Q-3 | Config 조합 매트릭스 테스트 | `test/git-clone.test.ts` — SSH retry, 에러 분류, URL 변환, 호스트별 분기 등 11개 테스트 추가 (689→703)    | 🟠 medium | ✅   |
+| Q-4 | AI co-pilot 테스트          | secret-scan, postmortem, rollback-watcher — 50+ 신규 테스트 (703→753)                                     | 🔴 high   | ✅   |
 
 > **배경**: v0.2.0 도그푸딩에서 SSH+토큰 충돌, compose 이벤트 미연결, dead code 등 모듈 간 연결 버그가 반복 발견됨.
-> 단위 테스트 689개 전부 통과해도 이런 통합 버그를 못 잡는 구조적 한계 → Q-2/Q-3 자동 테스트 + Q-1 수동 체크리스트로 해결.
-> 그 외: 문서 정비, 테스트 커버리지 강화, 온보딩 UX 최종 점검. 버전 번호는 개발 진행 상황에 따라 결정.
+> 단위 테스트 753개 전부 통과해도 이런 통합 버그를 못 잡는 구조적 한계 → Q-2/Q-3/Q-4 자동 테스트 + Q-1 수동 체크리스트로 해결.
 
 #### 정식 릴리즈 이후 로드맵 (경쟁사 대비 갭 — 실수요 발생 시 진행)
 
@@ -680,15 +716,15 @@ v0.2.5까지의 기능을 안정화하고 정식 릴리즈. 아래 3가지 구�
 
 ## 검증 기준
 
-**2026-03-08 기준 (v0.2.1 i18n + 버그 수정 구현 완료 후)**:
+**2026-03-08 기준 (v1.0.0 AI co-pilot 구현 완료 후)**:
 
 ```
 ✅ tsup build — 성공
-✅ vite build — 성공 (520KB JS, 37KB CSS)
-✅ vitest — 664/665 pass (pre-existing git-clone test 1개)
-✅ lsp_diagnostics — 0 errors (pre-existing mcp/server.ts:573만)
-✅ v0.2.1 — i18n (한국어/영어) + 빌드 에러 리포팅 + Redeploy UI 갱신 버그 수정
-✅ 11 commits on main (i18n + bugfix)
+✅ vite build — 성공
+✅ vitest — 753/753 pass (46 test files)
+✅ lsp_diagnostics — 0 errors
+✅ v1.0.0 — AI co-pilot 7개 기능 + Oracle 코드 리뷰 + 테스트 50개
+✅ 5 commits on main (feat 2 + fix 2 + test 1)
 ```
 
 ---

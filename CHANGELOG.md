@@ -9,7 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- AI co-pilot features for v1.0.0 — 7 backend modules + inline frontend integration
+  - Auto incident report: recovery events → Slack/Discord/Telegram channel broadcast
+  - Rollback watcher: 60s post-deploy health monitoring → rollback suggestion on 3 consecutive failures
+  - Env var change detection: .env.example scan on redeploy → prompt for new key values
+  - Auto postmortem generation: markdown report after recovery (success or exhausted)
+  - Secret scanning: hardcoded API keys/credentials detection after git clone
+  - Enhanced success insight: build time comparison against 20% historical threshold
+  - Inline AI analysis: build failure → AI analysis in same timeline flow (no separate panel)
+- PostmortemCard UI component with expand/collapse markdown viewer
+- Cloudflare 2-step connect flow (TryCloudflare + Cloudflare Tunnel per-project expose)
 - Cloudflare Settings configuration form (API token input UI + backend API)
+- Comprehensive tests for AI co-pilot modules — 50+ new tests (secret-scan, postmortem, rollback-watcher)
 
 ### Changed
 
@@ -22,6 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Agent concurrency: serialize chatStream calls via promise chain queue to prevent cross-project state pollution
+- Recovery timeout increased from 120s to 300s for long builds
+- Removed agent.clearHistory() that poisoned unrelated sessions
+- Added 6 secret scan patterns (sk-proj-, github_pat-, ASIA, xoxb/p/s)
+- Rollback prompt parameter mismatch (projectId → project_name)
+- Wrapped all fire-and-forget chatStream calls with .catch() for error handling
+- Secret redaction in postmortem before sending to LLM
+- Resource cleanup: stop() + unsubscribe for RollbackWatcher, IncidentReporter, PostmortemGenerator on shutdown
+- AbortController cleanup for PostmortemCard fetch
+- Blue-Green button label hardcoded per i18n policy (short labels stay in English)
 - Addressed Oracle code review findings: Docker network name from config, removed dead pipeline code (5 files), split routes.ts into domain modules
 
 ## [0.2.5] - Release Preparation
