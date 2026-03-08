@@ -16,7 +16,7 @@ program
   .name('openlander')
   .description('AI agent that deploys your app from a chat')
   .version(VERSION)
-  .option('-p, --port <port>', 'Port to listen on', '10003')
+  .option('-p, --port <port>', 'Port to listen on', '10114')
   .option('--host <host>', 'Host to bind to', '0.0.0.0')
   .option('--tui', 'Launch legacy TUI mode instead of web UI')
   .option('--no-open', 'Do not open browser automatically')
@@ -426,7 +426,7 @@ program
   .description('Deploy a repo (shorthand for web API call)')
   .option('-b, --branch <branch>', 'Branch to deploy', 'main')
   .option('-n, --name <name>', 'Project name')
-  .option('-p, --port <port>', 'API port', '10003')
+  .option('-p, --port <port>', 'API port', '10114')
   .action(async (repo: string, opts: { branch: string; name?: string; port: string }) => {
     const base = `http://localhost:${opts.port}`;
     const name =
@@ -465,7 +465,7 @@ program
 program
   .command('logs <project>')
   .description('Stream logs for a project')
-  .option('-p, --port <port>', 'API port', '10003')
+  .option('-p, --port <port>', 'API port', '10114')
   .option('-n, --lines <n>', 'Number of lines', '100')
   .action(async (project: string, opts: { port: string; lines: string }) => {
     const base = `http://localhost:${opts.port}`;
@@ -500,7 +500,7 @@ program
 program
   .command('open <project>')
   .description('Open project URL in browser')
-  .option('-p, --port <port>', 'API port', '10003')
+  .option('-p, --port <port>', 'API port', '10114')
   .action(async (project: string, opts: { port: string }) => {
     const base = `http://localhost:${opts.port}`;
 
@@ -543,7 +543,7 @@ const projectsCmd = program.command('projects').description('Manage projects');
 projectsCmd
   .command('ls')
   .description('List all projects')
-  .option('-p, --port <port>', 'API port', '10003')
+  .option('-p, --port <port>', 'API port', '10114')
   .action(async (opts: { port: string }) => {
     const base = `http://localhost:${opts.port}`;
 

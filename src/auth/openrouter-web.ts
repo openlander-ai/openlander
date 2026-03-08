@@ -15,7 +15,7 @@ const OPENROUTER_TOKEN_URL = 'https://openrouter.ai/api/v1/auth/keys';
 /**
  * Build the OpenRouter authorization URL for web OAuth flow.
  *
- * @param callbackUrl - The callback URL (e.g., http://localhost:10003/api/auth/callback/openrouter)
+ * @param callbackUrl - The callback URL (e.g., http://localhost:10114/api/auth/callback/openrouter)
  * @param challenge - PKCE code challenge
  * @returns Authorization URL string
  */

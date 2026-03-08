@@ -13,7 +13,7 @@
 - [ ] Docker 데몬 실행 확인 (`docker ps` 응답)
 - [ ] Traefik 실행 확인 (`docker ps`에서 Traefik 컨테이너 확인)
 - [ ] OpenLander 실행 (`npm start`)
-- [ ] 웹 UI 접근 확인 (`http://localhost:10003`)
+- [ ] 웹 UI 접근 확인 (`http://localhost:10114`)
 - [ ] 첫 실행 시 `/projects` 진입 전에 `/setup`으로 리다이렉트되는지 확인 (SetupGuard)
 
 ---

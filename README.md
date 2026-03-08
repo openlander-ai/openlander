@@ -71,7 +71,7 @@ openlander
 
 1. Check Docker (install if missing, fix permissions if needed)
 2. Start the Traefik reverse proxy
-3. Open the Web UI at `http://localhost:10003`
+3. Open the Web UI at `http://localhost:10114`
 4. Walk through setup: add an LLM API key (Gemini free tier works)
 5. You're ready to deploy
 
