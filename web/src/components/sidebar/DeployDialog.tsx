@@ -60,7 +60,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
               htmlFor="repo-url"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
             >
-              {t('deploy.dialog.repoUrl')}
+              {'Repository URL'}
             </label>
             <Input
               id="repo-url"
@@ -75,7 +75,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
               htmlFor="branch"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
             >
-              {t('deploy.dialog.branch')}
+              {'Branch (Optional)'}
             </label>
             <Input
               id="branch"
@@ -101,14 +101,14 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
           {error && <div className="text-sm text-red-500">{error}</div>}
           <SheetFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t('common.cancel')}
+              {'Cancel'}
             </Button>
             <Button
               type="submit"
               disabled={loading}
               className="bg-foreground text-background hover:bg-foreground/90"
             >
-              {loading ? t('deploy.dialog.deploying') : t('deploy.dialog.deploy')}
+              {loading ? 'Deploying...' : 'Deploy'}
             </Button>
           </SheetFooter>
         </form>

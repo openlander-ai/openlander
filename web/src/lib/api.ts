@@ -299,6 +299,32 @@ export async function configureLLM(
   return res.json();
 }
 
+export async function configureCloudflare(config: {
+  apiToken: string;
+  accountId: string;
+  tunnelId: string;
+  tunnelSecret: string;
+}): Promise<any> {
+  const res = await fetch('/api/setup/cloudflare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_token: config.apiToken,
+      account_id: config.accountId,
+      tunnel_id: config.tunnelId,
+      tunnel_secret: config.tunnelSecret,
+    }),
+  });
+  if (!res.ok) throw new Error('Failed to configure Cloudflare');
+  return res.json();
+}
+
+export async function getCloudflareStatus(): Promise<{ configured: boolean; accountId?: string }> {
+  const res = await fetch('/api/setup/cloudflare');
+  if (!res.ok) throw new Error('Failed to fetch Cloudflare status');
+  return res.json();
+}
+
 export async function startTraefik(): Promise<any> {
   const res = await fetch('/api/setup/traefik', { method: 'POST' });
   if (!res.ok) throw new Error('Failed to start Traefik');

@@ -4,7 +4,9 @@ import { useSetup } from '@/hooks/use-setup';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import {
   configureLLM,
+  configureCloudflare,
   getGlobalSecrets,
+  getCloudflareStatus,
   setGlobalSecret,
   deleteGlobalSecret,
   getOAuthStatus,
@@ -80,6 +82,15 @@ export function SettingsPage() {
   const [serverStatusLoading, setServerStatusLoading] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
   const [copiedServiceUrl, setCopiedServiceUrl] = useState(false);
+  const [cloudflareApiToken, setCloudflareApiToken] = useState('');
+  const [cloudflareAccountId, setCloudflareAccountId] = useState('');
+  const [cloudflareTunnelId, setCloudflareTunnelId] = useState('');
+  const [cloudflareTunnelSecret, setCloudflareTunnelSecret] = useState('');
+  const [cloudflareConfigured, setCloudflareConfigured] = useState(false);
+  const [cloudflareSaving, setCloudflareSaving] = useState(false);
+  const [cloudflareStatusLoading, setCloudflareStatusLoading] = useState(true);
+  const [cloudflareMessage, setCloudflareMessage] = useState('');
+  const [cloudflareError, setCloudflareError] = useState('');
 
   useEffect(() => {
     getServerStatus()
@@ -115,10 +126,26 @@ export function SettingsPage() {
     }
   }, []);
 
+  const fetchCloudflareStatus = useCallback(async () => {
+    setCloudflareStatusLoading(true);
+    try {
+      const status = await getCloudflareStatus();
+      setCloudflareConfigured(status.configured);
+      if (status.accountId) {
+        setCloudflareAccountId(status.accountId);
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setCloudflareStatusLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchSecrets();
     fetchOAuthStatus();
-  }, [fetchSecrets, fetchOAuthStatus]);
+    fetchCloudflareStatus();
+  }, [fetchSecrets, fetchOAuthStatus, fetchCloudflareStatus]);
 
   const handleAddSecret = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,6 +214,30 @@ export function SettingsPage() {
       setGithubError(err.message || 'Failed to disconnect GitHub');
     } finally {
       setGithubDisconnecting(false);
+    }
+  };
+
+  const handleConfigureCloudflare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCloudflareSaving(true);
+    setCloudflareMessage('');
+    setCloudflareError('');
+
+    try {
+      await configureCloudflare({
+        apiToken: cloudflareApiToken.trim(),
+        accountId: cloudflareAccountId.trim(),
+        tunnelId: cloudflareTunnelId.trim(),
+        tunnelSecret: cloudflareTunnelSecret.trim(),
+      });
+      setCloudflareApiToken('');
+      setCloudflareTunnelSecret('');
+      await fetchCloudflareStatus();
+      setCloudflareMessage(t('settings.proxy.cloudflare.saveSuccess'));
+    } catch {
+      setCloudflareError(t('settings.proxy.cloudflare.saveFailed'));
+    } finally {
+      setCloudflareSaving(false);
     }
   };
 
@@ -285,7 +336,7 @@ export function SettingsPage() {
     <div className="max-w-2xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
-          {t('settings.title')}
+          {'Settings'}
         </h1>
         <p className="text-sm font-body text-secondary-ol mt-1">{t('settings.description')}</p>
       </div>
@@ -294,9 +345,7 @@ export function SettingsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
-            {t('settings.aiModel.title')}
-          </h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">{'AI Model'}</h2>
         </div>
 
         {status?.llm.ok && (
@@ -309,7 +358,7 @@ export function SettingsPage() {
               <p className="text-xs font-body text-muted-ol mt-0.5">Model: {status.llm.model}</p>
             </div>
             <Badge variant="outline" className="text-success border-success/30">
-              {t('settings.aiModel.active')}
+              {'Active'}
             </Badge>
           </div>
         )}
@@ -379,7 +428,7 @@ export function SettingsPage() {
                       }
                     }}
                   >
-                    {t('settings.aiModel.disconnect')}
+                    {'Disconnect'}
                   </Button>
                 </div>
               ) : (
@@ -415,7 +464,7 @@ export function SettingsPage() {
             ) && (
               <Input
                 type="password"
-                placeholder={t('settings.aiModel.apiKey')}
+                placeholder={'API Key'}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 required={llmProvider !== 'openai' && llmProvider !== 'openrouter'}
@@ -437,7 +486,7 @@ export function SettingsPage() {
               ) : (
                 <Save className="h-3.5 w-3.5" />
               )}
-              {t('settings.aiModel.updateProvider')}
+              {'Update Provider'}
             </Button>
           )}
         </form>
@@ -447,9 +496,7 @@ export function SettingsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
-            {t('settings.secrets.title')}
-          </h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">{'Global Secrets'}</h2>
         </div>
         <p className="text-xs font-body text-secondary-ol">{t('settings.secrets.description')}</p>
 
@@ -492,21 +539,21 @@ export function SettingsPage() {
           <form onSubmit={handleAddSecret} className="space-y-2 pt-2 border-t border-border">
             <div className="grid grid-cols-2 gap-2">
               <Input
-                placeholder={t('settings.secrets.keyPlaceholder')}
+                placeholder={'KEY_NAME'}
                 value={secretKey}
                 onChange={(e) => setSecretKey(e.target.value)}
                 className="font-mono text-sm bg-bg-app border-border"
               />
               <Input
                 type="password"
-                placeholder={t('settings.secrets.valuePlaceholder')}
+                placeholder={'Secret value'}
                 value={secretValue}
                 onChange={(e) => setSecretValue(e.target.value)}
                 className="font-mono text-sm bg-bg-app border-border"
               />
             </div>
             <Input
-              placeholder={t('settings.secrets.descPlaceholder')}
+              placeholder={'Description (optional)'}
               value={secretDesc}
               onChange={(e) => setSecretDesc(e.target.value)}
               className="text-sm bg-bg-app border-border"
@@ -522,7 +569,7 @@ export function SettingsPage() {
               ) : (
                 <Plus className="h-3.5 w-3.5" />
               )}
-              {t('settings.secrets.addSecret')}
+              {'Add Secret'}
             </Button>
           </form>
         </div>
@@ -533,7 +580,7 @@ export function SettingsPage() {
         <div className="flex items-center gap-2">
           <Github className="h-4 w-4 text-secondary-ol" />
           <h2 className="font-display text-lg font-semibold text-primary-ol">
-            {t('settings.github.title')}
+            {'GitHub Connection'}
           </h2>
         </div>
 
@@ -545,7 +592,7 @@ export function SettingsPage() {
               <div className="flex items-center gap-2 text-success">
                 <CheckCircle2 className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  {t('settings.github.connectedAs')} {status.github.username}
+                  {'Connected as'} {status.github.username}
                 </span>
               </div>
               <Button
@@ -583,7 +630,7 @@ export function SettingsPage() {
                   className="gap-1.5 font-body"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  {t('settings.github.openGithub')}
+                  {'Open GitHub'}
                 </Button>
                 <Button
                   type="button"
@@ -597,7 +644,7 @@ export function SettingsPage() {
                   ) : (
                     <Copy className="h-3.5 w-3.5" />
                   )}
-                  {copiedCode ? t('settings.github.copied') : t('settings.github.copyCode')}
+                  {copiedCode ? 'Copied' : 'Copy Code'}
                 </Button>
               </div>
               <div className="flex items-center justify-center gap-2 text-muted-ol">
@@ -612,7 +659,7 @@ export function SettingsPage() {
                   onClick={handleCancelDeviceFlow}
                   className="text-xs font-body text-muted-ol"
                 >
-                  {t('common.cancel')}
+                  {'Cancel'}
                 </Button>
               </div>
             </div>
@@ -634,9 +681,7 @@ export function SettingsPage() {
                   <span className="w-full border-t border-[hsl(var(--border))]" />
                 </div>
                 <div className="relative flex justify-center text-xs">
-                  <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">
-                    {t('settings.github.or')}
-                  </span>
+                  <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">{'or'}</span>
                 </div>
               </div>
 
@@ -671,7 +716,7 @@ export function SettingsPage() {
                   ) : (
                     <Github className="h-3.5 w-3.5" />
                   )}
-                  {t('settings.github.connect')}
+                  {'Connect'}
                 </Button>
               </form>
 
@@ -685,7 +730,7 @@ export function SettingsPage() {
                 onClick={refetch}
               >
                 <RefreshCw className="h-3 w-3" />
-                {t('settings.github.refresh')}
+                {'Refresh'}
               </Button>
             </div>
           )}
@@ -696,9 +741,7 @@ export function SettingsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Network className="h-4 w-4 text-secondary-ol" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
-            {t('settings.proxy.title')}
-          </h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">{'Reverse Proxy'}</h2>
         </div>
 
         {serverStatusLoading ? (
@@ -717,7 +760,7 @@ export function SettingsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard
                 icon={<Network className="h-4 w-4" />}
-                label={t('settings.proxy.type')}
+                label={'Type'}
                 value={
                   serverStatus.proxy.type === 'none'
                     ? 'None'
@@ -728,7 +771,7 @@ export function SettingsPage() {
               />
               <StatCard
                 icon={<CheckCircle2 className="h-4 w-4" />}
-                label={t('settings.proxy.status')}
+                label={'Status'}
                 value={serverStatus.proxy.status}
                 color={
                   serverStatus.proxy.status.toLowerCase() === 'running'
@@ -738,7 +781,7 @@ export function SettingsPage() {
               />
               <StatCard
                 icon={<HardDrive className="h-4 w-4" />}
-                label={t('settings.proxy.containers')}
+                label={'Containers'}
                 value={`${serverStatus.containers.managed}/${serverStatus.containers.total}`}
                 color="text-secondary-ol"
               />
@@ -748,6 +791,102 @@ export function SettingsPage() {
                 value={serverStatus.portsInUse.toString()}
                 color="text-secondary-ol"
               />
+            </div>
+
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="space-y-1">
+                  <h3 className="font-display text-base font-semibold text-primary-ol">
+                    Cloudflare Tunnel
+                  </h3>
+                  <p className="text-xs font-body text-secondary-ol">
+                    {t('settings.proxy.cloudflare.description')}
+                  </p>
+                </div>
+                {cloudflareConfigured ? (
+                  <Badge variant="outline" className="text-success border-success/30">
+                    Configured ✓
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-warning border-warning/30">
+                    Not configured
+                  </Badge>
+                )}
+              </div>
+
+              {!cloudflareStatusLoading && cloudflareConfigured && cloudflareAccountId && (
+                <p className="text-xs font-mono text-muted-ol">Account ID: {cloudflareAccountId}</p>
+              )}
+
+              <form onSubmit={handleConfigureCloudflare} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-body text-muted-ol">API Token</p>
+                    <Input
+                      type="password"
+                      value={cloudflareApiToken}
+                      onChange={(e) => setCloudflareApiToken(e.target.value)}
+                      className="font-mono text-sm bg-bg-app border-border"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-body text-muted-ol">Account ID</p>
+                    <Input
+                      value={cloudflareAccountId}
+                      onChange={(e) => setCloudflareAccountId(e.target.value)}
+                      className="font-mono text-sm bg-bg-app border-border"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-body text-muted-ol">Tunnel ID</p>
+                    <Input
+                      value={cloudflareTunnelId}
+                      onChange={(e) => setCloudflareTunnelId(e.target.value)}
+                      className="font-mono text-sm bg-bg-app border-border"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-body text-muted-ol">Tunnel Secret</p>
+                    <Input
+                      type="password"
+                      value={cloudflareTunnelSecret}
+                      onChange={(e) => setCloudflareTunnelSecret(e.target.value)}
+                      className="font-mono text-sm bg-bg-app border-border"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {cloudflareMessage && (
+                  <p className="text-xs font-body text-success">{cloudflareMessage}</p>
+                )}
+                {cloudflareError && (
+                  <p className="text-xs font-body text-error">{cloudflareError}</p>
+                )}
+
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={
+                    cloudflareSaving ||
+                    !cloudflareApiToken.trim() ||
+                    !cloudflareAccountId.trim() ||
+                    !cloudflareTunnelId.trim() ||
+                    !cloudflareTunnelSecret.trim()
+                  }
+                  className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+                >
+                  {cloudflareSaving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Save
+                </Button>
+              </form>
             </div>
 
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 overflow-hidden">
@@ -817,7 +956,7 @@ export function SettingsPage() {
                         3
                       </div>
                       <p className="text-sm font-body text-primary-ol pt-0.5">
-                        {t('settings.proxy.tunnelGuide.step3')}
+                        {'Restart cloudflared'}
                       </p>
                     </div>
                   </div>
@@ -832,38 +971,36 @@ export function SettingsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Server className="h-4 w-4 text-agent" />
-          <h2 className="text-sm font-display font-semibold text-primary-ol">
-            {t('settings.serverScan.title')}
-          </h2>
+          <h2 className="text-sm font-display font-semibold text-primary-ol">{'Server Scan'}</h2>
         </div>
 
         {!serverStatus ? (
-          <p className="text-sm font-body text-muted-ol">{t('settings.serverScan.loading')}</p>
+          <p className="text-sm font-body text-muted-ol">{'Scanning server...'}</p>
         ) : (
           <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
             {/* Summary row */}
             <div className="px-4 py-3 border-b border-[hsl(var(--border))] bg-bg-subtle/30">
               <div className="flex items-center gap-6 text-xs font-body">
                 <div>
-                  <span className="text-muted-ol">{t('settings.serverScan.totalContainers')}:</span>{' '}
+                  <span className="text-muted-ol">{'Total'}:</span>{' '}
                   <span className="font-medium text-primary-ol">
                     {serverStatus.containers.total}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-ol">{t('settings.serverScan.managed')}:</span>{' '}
+                  <span className="text-muted-ol">{'Managed'}:</span>{' '}
                   <span className="font-medium text-success">
                     {serverStatus.containers.managed}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-ol">{t('settings.serverScan.external')}:</span>{' '}
+                  <span className="text-muted-ol">{'External'}:</span>{' '}
                   <span className="font-medium text-warning">
                     {serverStatus.containers.external}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-ol">{t('settings.serverScan.portsInUse')}:</span>{' '}
+                  <span className="text-muted-ol">{'Ports'}:</span>{' '}
                   <span className="font-medium text-primary-ol">{serverStatus.portsInUse}</span>
                 </div>
               </div>
@@ -909,9 +1046,7 @@ export function SettingsPage() {
                 </div>
               ) : (
                 <div className="text-center py-4">
-                  <p className="text-sm font-body text-success">
-                    {t('settings.serverScan.allClear')}
-                  </p>
+                  <p className="text-sm font-body text-success">{'All clear'}</p>
                   <p className="text-[11px] font-body text-muted-ol mt-1">
                     {t('settings.serverScan.noExternal')}
                   </p>
@@ -927,7 +1062,7 @@ export function SettingsPage() {
         <div className="flex items-center gap-2">
           <Cpu className="h-4 w-4 text-secondary-ol" />
           <h2 className="font-display text-lg font-semibold text-primary-ol">
-            {t('settings.system.title')}
+            {'System Resources'}
           </h2>
         </div>
 
@@ -935,19 +1070,19 @@ export function SettingsPage() {
           <div className="grid grid-cols-3 gap-3">
             <StatCard
               icon={<Cpu className="h-4 w-4" />}
-              label={t('settings.system.cpu')}
+              label={'CPU'}
               value={`${typeof stats.cpu === 'number' ? stats.cpu.toFixed(0) : (stats.cpu?.usagePercent?.toFixed(0) ?? '—')}%`}
               color="text-agent"
             />
             <StatCard
               icon={<MemoryStick className="h-4 w-4" />}
-              label={t('settings.system.memory')}
+              label={'Memory'}
               value={formatMemory(stats.memory)}
               color="text-warning"
             />
             <StatCard
               icon={<HardDrive className="h-4 w-4" />}
-              label={t('settings.system.disk')}
+              label={'Disk'}
               value={formatDisk(stats.disk)}
               color="text-success"
             />

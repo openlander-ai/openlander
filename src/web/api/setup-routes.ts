@@ -208,6 +208,62 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     }
   });
 
+  api.get('/setup/cloudflare', (c) => {
+    const config = loadConfig();
+    const cloudflare = config.cloudflare;
+    const configured =
+      cloudflare.apiToken.trim() !== '' &&
+      cloudflare.accountId.trim() !== '' &&
+      cloudflare.tunnelId.trim() !== '' &&
+      cloudflare.tunnelSecret.trim() !== '';
+
+    return c.json(
+      configured
+        ? {
+            configured: true,
+            accountId: cloudflare.accountId,
+          }
+        : {
+            configured: false,
+          },
+    );
+  });
+
+  api.post('/setup/cloudflare', async (c) => {
+    const body = await c.req.json<{
+      api_token?: string;
+      account_id?: string;
+      tunnel_id?: string;
+      tunnel_secret?: string;
+    }>();
+
+    const apiToken = typeof body.api_token === 'string' ? body.api_token.trim() : '';
+    const accountId = typeof body.account_id === 'string' ? body.account_id.trim() : '';
+    const tunnelId = typeof body.tunnel_id === 'string' ? body.tunnel_id.trim() : '';
+    const tunnelSecret = typeof body.tunnel_secret === 'string' ? body.tunnel_secret.trim() : '';
+
+    if (!apiToken || !accountId || !tunnelId || !tunnelSecret) {
+      return c.json(
+        {
+          error: 'MISSING_FIELD',
+          message: 'api_token, account_id, tunnel_id, and tunnel_secret are required',
+        },
+        400,
+      );
+    }
+
+    updateConfig({
+      cloudflare: {
+        apiToken,
+        accountId,
+        tunnelId,
+        tunnelSecret,
+      },
+    });
+
+    return c.json({ status: 'configured' });
+  });
+
   /**
    * POST /setup/traefik
    *

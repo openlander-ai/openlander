@@ -12,7 +12,7 @@ const solid = solidPlugin({
 });
 
 // Runtime modules — resolved at runtime, not bundled
-const externals = ['better-sqlite3', '@opentui/solid', '@opentui/core', 'solid-js'];
+const externals = ['better-sqlite3', '@opentui/solid', 'solid-js'];
 
 export default defineConfig([
   // CLI entry — needs shebang for `npx openlander`

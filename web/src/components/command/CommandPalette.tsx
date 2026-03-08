@@ -59,7 +59,7 @@ export function CommandPalette() {
     const commands: CommandItem[] = [
       {
         id: 'new-project',
-        label: t('nav.newProject'),
+        label: 'New Project',
         description: t('command.deployNewRepo'),
         icon: <Plus className="h-4 w-4" />,
         action: () => {
@@ -70,7 +70,7 @@ export function CommandPalette() {
       },
       {
         id: 'settings',
-        label: t('nav.settings'),
+        label: 'Settings',
         description: t('command.configureLlmGithub'),
         icon: <Settings className="h-4 w-4" />,
         action: () => {
@@ -86,7 +86,7 @@ export function CommandPalette() {
       commands.push({
         id: `go-${project.id}`,
         label: project.name,
-        description: `${t('command.goTo')} ${project.name} (${project.status})`,
+        description: `${'Go to'} ${project.name} (${project.status})`,
         icon: <FolderOpen className="h-4 w-4" />,
         action: () => {
           navigate(`/projects/${project.id}`);
@@ -98,7 +98,7 @@ export function CommandPalette() {
       if (project.status === 'running' || project.status === 'error') {
         commands.push({
           id: `redeploy-${project.id}`,
-          label: `${t('command.redeploy')} ${project.name}`,
+          label: `${'Redeploy'} ${project.name}`,
           description: t('command.triggerFreshDeploy'),
           icon: <RotateCw className="h-4 w-4" />,
           action: () => {
@@ -112,7 +112,7 @@ export function CommandPalette() {
       if (project.status === 'running') {
         commands.push({
           id: `stop-${project.id}`,
-          label: `${t('command.stop')} ${project.name}`,
+          label: `${'Stop'} ${project.name}`,
           description: t('command.stopContainer'),
           icon: <Square className="h-4 w-4" />,
           action: () => {

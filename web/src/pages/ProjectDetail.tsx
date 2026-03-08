@@ -60,22 +60,22 @@ function getStatusConfig(
 ): Record<string, { label: string; color: string; dot: string }> {
   return {
     running: {
-      label: t('projects.status.running'),
+      label: 'Live',
       color: 'text-success',
       dot: 'bg-success',
     },
     stopped: {
-      label: t('projects.status.stopped'),
+      label: 'Stopped',
       color: 'text-muted-ol',
       dot: 'bg-[var(--text-muted)]',
     },
     building: {
-      label: t('projects.status.building'),
+      label: 'Deploying',
       color: 'text-warning',
       dot: 'bg-warning animate-pulse',
     },
     error: {
-      label: t('projects.status.error'),
+      label: 'Failed',
       color: 'text-error',
       dot: 'bg-error',
     },
@@ -83,10 +83,10 @@ function getStatusConfig(
 }
 
 function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) => string): string {
-  const lines = [t('projectDetail.diagnosis.rootCause') + '\n' + diagnosis.rootCause, ''];
+  const lines = ['Root cause:' + '\n' + diagnosis.rootCause, ''];
 
   if (diagnosis.suggestedFixes.length > 0) {
-    lines.push(t('projectDetail.diagnosis.suggestedFixes'));
+    lines.push('Suggested fixes:');
     diagnosis.suggestedFixes.forEach((fix, index) => {
       const location = fix.location ? ' (' + fix.location + ')' : '';
       lines.push(String(index + 1) + '. [' + fix.confidence + '] ' + fix.description + location);
@@ -96,7 +96,7 @@ function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) 
   }
 
   if (diagnosis.rawAnalysis.trim()) {
-    lines.push('', t('projectDetail.diagnosis.rawAnalysis') + '\n' + diagnosis.rawAnalysis);
+    lines.push('', 'Raw analysis:' + '\n' + diagnosis.rawAnalysis);
   }
 
   return lines.join('\n');
@@ -168,7 +168,7 @@ function DeploymentsList({ projectId }: { projectId: string }) {
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-display font-medium text-primary-ol capitalize">
-                    {deploy.trigger} {t('projectDetail.deployment')}
+                    {deploy.trigger} {'Deployment'}
                   </span>
                   {deploy.commitSha && (
                     <span className="flex items-center gap-1 text-xs font-mono text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
@@ -319,7 +319,7 @@ function WebhookPanel({ projectId }: { projectId: string }) {
                           : 'bg-[var(--bg-subtle)] text-muted-ol',
                       )}
                     >
-                      {webhook.enabled ? t('webhooks.enabled') : t('webhooks.disabled')}
+                      {webhook.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
@@ -329,7 +329,7 @@ function WebhookPanel({ projectId }: { projectId: string }) {
                       className="h-7 text-[11px] font-body"
                       onClick={() => handleToggle(webhook)}
                     >
-                      {webhook.enabled ? t('webhooks.disable') : t('webhooks.enable')}
+                      {webhook.enabled ? 'Disable' : 'Enable'}
                     </Button>
                     <Button
                       variant="ghost"
@@ -344,7 +344,7 @@ function WebhookPanel({ projectId }: { projectId: string }) {
 
                 <div className="space-y-2 text-xs font-body">
                   <div>
-                    <span className="text-muted-ol">{t('webhooks.url')}:</span>
+                    <span className="text-muted-ol">{'Webhook URL'}:</span>
                     <div className="flex items-center gap-1 mt-0.5">
                       <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
                         {fullUrl}
@@ -365,7 +365,7 @@ function WebhookPanel({ projectId }: { projectId: string }) {
                   </div>
 
                   <div>
-                    <span className="text-muted-ol">{t('webhooks.secret')}:</span>
+                    <span className="text-muted-ol">{'Secret'}:</span>
                     <div className="flex items-center gap-1 mt-0.5">
                       <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
                         {webhook.secret}
@@ -386,7 +386,7 @@ function WebhookPanel({ projectId }: { projectId: string }) {
                   </div>
 
                   <div className="flex items-center gap-2 text-muted-ol">
-                    <span>{t('webhooks.branch')}:</span>
+                    <span>{'Branch filter'}:</span>
                     <span className="text-secondary-ol">{webhook.branchFilter}</span>
                   </div>
                 </div>
@@ -425,7 +425,7 @@ function WebhookPanel({ projectId }: { projectId: string }) {
               disabled={adding}
             >
               {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-              {t('webhooks.add')}
+              {'Add Webhook'}
             </Button>
           </div>
         </div>
@@ -494,7 +494,7 @@ export function ProjectDetail() {
           id: 'ai-fix-' + sourceItemId + '-' + Date.now(),
           type: 'insight',
           timestamp: new Date().toISOString(),
-          title: t('projectDetail.diagnosis.aiDiagnosis') + ' ' + diagnosis.summary,
+          title: 'AI diagnosis:' + ' ' + diagnosis.summary,
           detail: formatBuildDiagnosisDetail(diagnosis, t),
           percent: -1,
           severity: 'warning',
@@ -731,7 +731,7 @@ export function ProjectDetail() {
               ) : (
                 <RotateCw className="h-3 w-3" />
               )}
-              {t('projects.redeploy')}
+              {'Redeploy'}
             </Button>
             <Button
               variant="outline"
@@ -745,7 +745,7 @@ export function ProjectDetail() {
               ) : (
                 <History className="h-3 w-3" />
               )}
-              {t('projectDetail.rollback')}
+              {'Rollback'}
             </Button>
             <Button
               variant="outline"
@@ -774,7 +774,7 @@ export function ProjectDetail() {
                 ) : (
                   <Play className="h-3 w-3" />
                 )}
-                {t('projectDetail.start')}
+                {'Start'}
               </Button>
             ) : (
               <Button
@@ -789,7 +789,7 @@ export function ProjectDetail() {
                 ) : (
                   <Square className="h-3 w-3" />
                 )}
-                {t('projectDetail.stop')}
+                {'Stop'}
               </Button>
             )}
             <Button
@@ -811,7 +811,7 @@ export function ProjectDetail() {
               ) : (
                 <Globe className="h-3 w-3" />
               )}
-              {project.publicUrl ? t('projectDetail.unexpose') : t('projectDetail.expose')}
+              {project.publicUrl ? 'Unexpose' : 'Expose'}
             </Button>
           </div>
         </div>
@@ -825,28 +825,28 @@ export function ProjectDetail() {
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <Activity className="h-3.5 w-3.5" />
-            {t('projectDetail.tabs.timeline')}
+            {'Timeline'}
           </TabsTrigger>
           <TabsTrigger
             value="deployments"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <History className="h-3.5 w-3.5" />
-            {t('projectDetail.tabs.deployments')}
+            {'Deployments'}
           </TabsTrigger>
           <TabsTrigger
             value="logs"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <ScrollText className="h-3.5 w-3.5" />
-            {t('projectDetail.tabs.logs')}
+            {'Logs'}
           </TabsTrigger>
           <TabsTrigger
             value="config"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <Settings className="h-3.5 w-3.5" />
-            {t('projectDetail.tabs.config')}
+            {'Configuration'}
           </TabsTrigger>
         </TabsList>
 
@@ -855,7 +855,7 @@ export function ProjectDetail() {
             <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[600px]">
               <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol shrink-0 bg-bg-panel/50">
                 <Activity className="h-3.5 w-3.5" />
-                {t('projectDetail.deploymentTimeline')}
+                {'Deployment timeline'}
               </div>
               <div className="flex-1 min-h-0">
                 <TimelineFeed
@@ -875,7 +875,7 @@ export function ProjectDetail() {
               <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
                 <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol">
                   <ScrollText className="h-3.5 w-3.5" />
-                  {t('projectDetail.buildLogs')}
+                  {'Build logs'}
                 </div>
                 <LogPreview
                   projectId={id}
@@ -899,13 +899,13 @@ export function ProjectDetail() {
             <Tabs defaultValue="env" className="p-4">
               <TabsList className="bg-bg-subtle">
                 <TabsTrigger value="env" className="text-xs font-body">
-                  {t('projectDetail.tabs.envVars')}
+                  {'Environment Variables'}
                 </TabsTrigger>
                 <TabsTrigger value="domains" className="text-xs font-body">
-                  {t('projectDetail.tabs.domains')}
+                  {'Domains'}
                 </TabsTrigger>
                 <TabsTrigger value="webhooks" className="text-xs font-body">
-                  {t('projectDetail.tabs.webhooks')}
+                  {'Webhooks'}
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="env">

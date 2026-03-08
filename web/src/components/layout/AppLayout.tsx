@@ -36,7 +36,7 @@ export function AppLayout() {
 
       <div className="flex flex-1 overflow-hidden pt-12">
         {/* Desktop Sidebar */}
-        <aside className="hidden md:flex md:w-16 xl:w-[240px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
+        <aside className="hidden md:flex md:w-16 lg:w-[240px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
           <Sidebar projects={projects} loading={loading} stats={stats} />
         </aside>
 

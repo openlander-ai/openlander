@@ -78,7 +78,7 @@ export function InputRequestCard({
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-body text-muted-ol">{t('timeline.questionAnswered')}</p>
+          <p className="text-sm font-body text-muted-ol">{'Question answered'}</p>
         </div>
       </div>
     );
@@ -189,7 +189,7 @@ export function InputRequestCard({
             )}
           >
             <Send className="h-3 w-3" />
-            {t('timeline.submit')}
+            {'Submit'}
           </button>
           <button
             onClick={handleSkip}
@@ -202,7 +202,7 @@ export function InputRequestCard({
             )}
           >
             <SkipForward className="h-3 w-3" />
-            {t('timeline.skip')}
+            {'Skip'}
           </button>
         </div>
       </div>

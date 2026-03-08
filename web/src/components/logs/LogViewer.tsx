@@ -99,7 +99,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('logs.searchPlaceholder')}
+            placeholder={'Search logs...'}
             className={cn(
               'flex-1 bg-transparent text-xs font-mono text-primary-ol',
               'placeholder:text-muted-ol focus:outline-none',
@@ -130,7 +130,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
             )}
           >
             <Radio className="h-3 w-3" />
-            {t('timeline.follow')}
+            {'Follow'}
           </button>
 
           {/* Clear */}
@@ -139,7 +139,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-body text-muted-ol hover:text-secondary-ol transition-colors"
           >
             <Trash2 className="h-3 w-3" />
-            {t('logs.clear')}
+            {'Clear'}
           </button>
         </div>
 
@@ -152,7 +152,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
             </span>
           )}
           <span className="text-[10px] font-mono text-muted-ol">
-            {filteredEntries.length.toLocaleString()} {t('logs.lines')}
+            {filteredEntries.length.toLocaleString()} {'lines'}
           </span>
         </div>
       </div>
@@ -231,7 +231,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
           )}
         >
           <ArrowDown className="h-3 w-3" />
-          {t('logs.bottom')}
+          {'Bottom'}
         </button>
       )}
     </div>

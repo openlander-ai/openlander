@@ -117,7 +117,7 @@ export function Header({
         {/* System Stats */}
         {stats && (
           <div className="hidden md:flex items-center gap-3 font-mono text-muted-ol">
-            <div className="flex items-center gap-1" title={t('header.cpuUsage')}>
+            <div className="flex items-center gap-1" title={'CPU Usage'}>
               <Cpu className="h-3 w-3" />
               <span className="text-[10px]">
                 {typeof stats.cpu === 'number'
@@ -126,7 +126,7 @@ export function Header({
                 %
               </span>
             </div>
-            <div className="flex items-center gap-1" title={t('header.memoryUsage')}>
+            <div className="flex items-center gap-1" title={'Memory Usage'}>
               <MemoryStick className="h-3 w-3" />
               <span className="text-[10px]">{formatMemory(stats.memory)}</span>
             </div>
@@ -171,9 +171,9 @@ export function Header({
           className="flex items-center gap-1.5"
           title={
             llmConnected === null
-              ? t('header.checkingLlm')
+              ? 'Checking LLM...'
               : llmConnected
-                ? t('header.llmConnected')
+                ? 'LLM Connected'
                 : t('header.llmNotConfigured')
           }
         >
@@ -188,11 +188,7 @@ export function Header({
             )}
           />
           <span className="hidden sm:inline text-[11px] font-body text-secondary-ol">
-            {llmConnected === null
-              ? '...'
-              : llmConnected
-                ? t('header.aiOnline')
-                : t('header.aiOffline')}
+            {llmConnected === null ? '...' : llmConnected ? 'AI Online' : 'AI Offline'}
           </span>
         </div>
       </div>

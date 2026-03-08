@@ -177,14 +177,14 @@ export function ServicesPage() {
         <div>
           <h1 className="text-xl font-display font-bold text-primary-ol flex items-center gap-2">
             <Database className="h-6 w-6" />
-            {t('services.title')}
+            {'Services'}
           </h1>
           <p className="text-sm text-secondary-ol mt-1">{t('services.subtitle')}</p>
         </div>
         {!showCreate && (
           <Button onClick={openCustom} className="gap-2">
             <Plus className="h-4 w-4" />
-            {t('services.createService')}
+            {'Create Service'}
           </Button>
         )}
       </div>
@@ -194,10 +194,10 @@ export function ServicesPage() {
         <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-6 space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-display font-semibold text-primary-ol">
-              {t('services.createService')}
+              {'Create Service'}
             </h2>
             <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
-              {t('common.cancel')}
+              {'Cancel'}
             </Button>
           </div>
 
@@ -238,12 +238,12 @@ export function ServicesPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-primary-ol mb-1">
-                    {t('services.name')}
+                    {'Service Name'}
                   </label>
                   <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder={t('services.namePlaceholder')}
+                    placeholder={'my-database'}
                     required
                     className="max-w-md"
                   />
@@ -254,7 +254,7 @@ export function ServicesPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
                       <div>
                         <label className="block text-sm font-medium text-primary-ol mb-1">
-                          {t('services.image')}
+                          {'Docker Image'}
                         </label>
                         <Input
                           value={image}
@@ -265,12 +265,12 @@ export function ServicesPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-primary-ol mb-1">
-                          {t('services.port')}
+                          {'Port'}
                         </label>
                         <Input
                           value={port}
                           onChange={(e) => setPort(e.target.value)}
-                          placeholder={t('services.portPlaceholder')}
+                          placeholder={'4000'}
                           type="number"
                         />
                       </div>
@@ -279,11 +279,11 @@ export function ServicesPage() {
                     <div>
                       <div className="flex items-center justify-between max-w-2xl mb-2">
                         <label className="block text-sm font-medium text-primary-ol">
-                          {t('services.envVars')}
+                          {'Environment Variables'}
                         </label>
                         <Button type="button" variant="outline" size="sm" onClick={addEnvVar}>
                           <Plus className="h-3 w-3 mr-1" />
-                          {t('services.addEnvVar')}
+                          {'Add Variable'}
                         </Button>
                       </div>
                       <div className="space-y-2 max-w-2xl">
@@ -292,13 +292,13 @@ export function ServicesPage() {
                             <Input
                               value={env.key}
                               onChange={(e) => updateEnvVar(i, 'key', e.target.value)}
-                              placeholder={t('services.keyPlaceholder')}
+                              placeholder={'KEY'}
                               className="flex-1"
                             />
                             <Input
                               value={env.value}
                               onChange={(e) => updateEnvVar(i, 'value', e.target.value)}
-                              placeholder={t('services.valuePlaceholder')}
+                              placeholder={'value'}
                               className="flex-1"
                             />
                             <Button
@@ -327,7 +327,7 @@ export function ServicesPage() {
                   disabled={creating || !name || (createMode === 'custom' && !image)}
                 >
                   {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {creating ? t('services.creating') : t('services.createService')}
+                  {creating ? 'Creating...' : 'Create Service'}
                 </Button>
               </div>
             </form>
@@ -342,9 +342,9 @@ export function ServicesPage() {
             <Database className="h-12 w-12 mx-auto text-secondary-ol/50 mb-3" />
             <h3 className="text-lg font-medium text-primary-ol">{t('services.noServices')}</h3>
             <p className="text-sm text-secondary-ol mt-1 mb-4">{t('services.getStarted')}</p>
-            <Button onClick={() => setShowCreate(true)}>
+            <Button onClick={openCustom}>
               <Plus className="h-4 w-4 mr-2" />
-              {t('services.createService')}
+              {'Create Service'}
             </Button>
           </div>
         ) : (
@@ -403,7 +403,7 @@ export function ServicesPage() {
                         onClick={() => setExpandedService(isExpanded ? null : service.id)}
                         className="text-xs"
                       >
-                        {t('services.connectionInfo')}
+                        {'Connection Info'}
                         {isExpanded ? (
                           <ChevronUp className="h-3 w-3 ml-1" />
                         ) : (
@@ -424,7 +424,7 @@ export function ServicesPage() {
                         ) : (
                           <Square className="h-3 w-3 mr-1" />
                         )}
-                        {t('services.stop')}
+                        {'Stop'}
                       </Button>
                     ) : (
                       <Button
@@ -438,7 +438,7 @@ export function ServicesPage() {
                         ) : (
                           <Play className="h-3 w-3 mr-1" />
                         )}
-                        {t('services.start')}
+                        {'Start'}
                       </Button>
                     )}
 
@@ -465,17 +465,17 @@ export function ServicesPage() {
                         {Object.entries(creds).map(([key, value]) => {
                           const displayKey =
                             key === 'connectionString'
-                              ? t('services.connectionString')
+                              ? 'Connection String'
                               : key === 'host'
-                                ? t('services.host')
+                                ? 'Host'
                                 : key === 'port'
-                                  ? t('services.portLabel')
+                                  ? 'Port'
                                   : key === 'user'
-                                    ? t('services.user')
+                                    ? 'User'
                                     : key === 'password'
-                                      ? t('services.password')
+                                      ? 'Password'
                                       : key === 'database'
-                                        ? t('services.database')
+                                        ? 'Database'
                                         : key;
 
                           const fieldId = `${service.id}-${key}`;
@@ -514,7 +514,7 @@ export function ServicesPage() {
 
                     {!creds && parsedEnv && Object.keys(parsedEnv).length > 0 && (
                       <div className="space-y-2">
-                        <span className="text-xs text-secondary-ol">{t('services.envVars')}</span>
+                        <span className="text-xs text-secondary-ol">{'Environment Variables'}</span>
                         <div className="grid grid-cols-1 gap-2">
                           {Object.entries(parsedEnv).map(([key, value]) => {
                             const fieldId = `${service.id}-env-${key}`;

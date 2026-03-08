@@ -24,7 +24,7 @@ export function OAuthButton({ provider, onSuccess, className }: OAuthButtonProps
         onSuccess();
       } else if (e.data?.type === 'oauth-error' && e.data?.provider === provider) {
         setIsLoading(false);
-        setError(e.data.error || t('oauth.authFailed'));
+        setError(e.data.error || 'Authentication failed');
       }
     };
 

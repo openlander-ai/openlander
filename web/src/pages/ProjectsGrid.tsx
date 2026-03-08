@@ -12,22 +12,22 @@ function getStatusConfig(
 ): Record<string, { label: string; dot: string; badge: string }> {
   return {
     running: {
-      label: t('projects.status.running'),
+      label: 'Live',
       dot: 'bg-success',
       badge: 'text-success border-success/30 bg-success/10',
     },
     stopped: {
-      label: t('projects.status.stopped'),
+      label: 'Stopped',
       dot: 'bg-[var(--text-muted)]',
       badge: 'text-muted-ol border-[var(--text-muted)]/30 bg-[var(--text-muted)]/10',
     },
     building: {
-      label: t('projects.status.building'),
+      label: 'Deploying',
       dot: 'bg-warning animate-pulse',
       badge: 'text-warning border-warning/30 bg-warning/10',
     },
     error: {
-      label: t('projects.status.error'),
+      label: 'Failed',
       dot: 'bg-error',
       badge: 'text-error border-error/30 bg-error/10',
     },
@@ -69,11 +69,10 @@ export function ProjectsGrid() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-display font-bold text-xl text-primary-ol tracking-tight">
-            {t('projects.title')}
+            {'Projects'}
           </h1>
           <p className="text-xs font-body text-secondary-ol mt-0.5">
-            {projects.length}{' '}
-            {projects.length === 1 ? t('projects.projectCount') : t('projects.projectsCount')}
+            {projects.length} {projects.length === 1 ? 'project deployed' : 'projects deployed'}
           </p>
         </div>
         <button
@@ -87,7 +86,7 @@ export function ProjectsGrid() {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-foreground text-background hover:bg-foreground/90 transition-colors"
         >
           <Plus className="h-3.5 w-3.5" />
-          {t('projects.newProject')}
+          {'New Project'}
         </button>
       </div>
 
@@ -174,7 +173,7 @@ export function ProjectsGrid() {
                     className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-body text-secondary-ol hover:text-agent hover:bg-agent/10 transition-colors"
                   >
                     <RotateCw className="h-3 w-3" />
-                    {t('projects.redeploy')}
+                    {'Redeploy'}
                   </button>
                   <button
                     onClick={(e) => {
@@ -184,7 +183,7 @@ export function ProjectsGrid() {
                     className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-body text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle transition-colors"
                   >
                     <Settings className="h-3 w-3" />
-                    {t('projects.settings')}
+                    {'Settings'}
                   </button>
                 </div>
               </div>

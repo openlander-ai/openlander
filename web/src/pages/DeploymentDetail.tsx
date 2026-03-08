@@ -70,7 +70,7 @@ export function DeploymentDetail() {
           onClick={() => navigate(-1)}
           className="text-sm font-body text-agent hover:underline"
         >
-          {t('deploy.goBack')}
+          {'Go back'}
         </button>
       </div>
     );
@@ -114,7 +114,7 @@ export function DeploymentDetail() {
               <div className={cn('h-3 w-3 rounded-full shrink-0', statusBg)} />
               <div className="min-w-0">
                 <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate flex items-center gap-2">
-                  {t('deploy.deployment')}
+                  {'Deployment'}
                   {deployment.commitSha && (
                     <span className="flex items-center gap-1 text-sm font-mono font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
                       <GitCommit className="h-3.5 w-3.5" />
@@ -126,13 +126,13 @@ export function DeploymentDetail() {
                   <span className={cn('flex items-center gap-1', statusColor)}>
                     <StatusIcon className="h-3 w-3" />
                     {deployment.status === 'success'
-                      ? t('deploy.status.production')
+                      ? 'Production'
                       : deployment.status === 'failed'
-                        ? t('deploy.status.failed')
-                        : t('deploy.status.cancelled')}
+                        ? 'Failed'
+                        : 'Cancelled'}
                   </span>
                   <span className="capitalize">
-                    {deployment.trigger} {t('deploy.trigger')}
+                    {deployment.trigger} {'trigger'}
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
@@ -158,7 +158,7 @@ export function DeploymentDetail() {
               <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h3 className="text-sm font-display font-medium text-primary-ol">
-                  {t('deploy.aiAnalysis')}
+                  {'AI Analysis'}
                 </h3>
                 <p className="text-sm font-body text-secondary-ol">
                   {t('deploy.buildFailureDetected')}
@@ -170,7 +170,7 @@ export function DeploymentDetail() {
 
         <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] bg-gray-900 overflow-hidden">
           <div className="flex items-center px-4 py-2 border-b border-gray-800 bg-gray-950">
-            <span className="text-xs font-mono text-gray-400">{t('deploy.buildLog')}</span>
+            <span className="text-xs font-mono text-gray-400">{'build_log'}</span>
           </div>
           <div className="flex-1 overflow-auto p-4">
             {deployment.buildLog ? (

@@ -17,7 +17,7 @@ export function ProviderHelp({ provider, className }: ProviderHelpProps) {
           <div className="space-y-1">
             <p className="text-sm font-medium">{t('providerHelp.anthropic.usingClaudeCode')}</p>
             <p className="text-xs text-muted-ol">
-              {t('providerHelp.anthropic.run')}{' '}
+              {'Run'}{' '}
               <code className="px-1 py-0.5 rounded bg-bg-subtle font-mono text-primary-ol">
                 claude setup-token
               </code>{' '}

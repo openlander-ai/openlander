@@ -135,7 +135,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
         <div className="flex items-center gap-2">
           <Wifi className="h-3.5 w-3.5 text-muted-ol" />
           <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
-            {t('domains.internalUrl')}
+            {'Internal URL'}
           </span>
         </div>
         {internalUrl ? (
@@ -172,7 +172,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
           <div className="flex items-center gap-2">
             <Monitor className="h-3.5 w-3.5 text-muted-ol" />
             <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
-              {t('domains.directAccess')}
+              {'Direct Access'}
             </span>
           </div>
           <div className="space-y-1.5">
@@ -217,7 +217,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
           <div className="flex items-center gap-2">
             <Globe className="h-3.5 w-3.5 text-muted-ol" />
             <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
-              {t('domains.customDomains')}
+              {'Custom Domains'}
             </span>
           </div>
         </div>
@@ -277,7 +277,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
             ) : (
               <Plus className="h-3 w-3" />
             )}
-            {t('domains.addDomain')}
+            {'Add Domain'}
           </Button>
         </div>
 
@@ -290,7 +290,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
           <div className="flex items-center gap-2">
             <Globe className="h-3.5 w-3.5 text-muted-ol" />
             <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
-              {t('domains.publicUrl')}
+              {'Public URL'}
             </span>
           </div>
 
@@ -307,7 +307,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
               )}
             >
               {unexposing && <Loader2 className="h-3 w-3 animate-spin" />}
-              {t('domains.remove')}
+              {'Remove'}
             </button>
           ) : (
             <button

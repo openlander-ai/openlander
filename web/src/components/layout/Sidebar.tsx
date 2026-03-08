@@ -31,18 +31,18 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
       <Separator className="bg-[hsl(var(--border))]" />
 
       {/* New Project */}
-      <div className="p-2 xl:p-3 shrink-0">
+      <div className="p-2 lg:p-3 shrink-0">
         <Button
           variant="outline"
           size="sm"
           className={cn(
             'w-full gap-2 border-dashed border-foreground/20 text-foreground hover:bg-foreground hover:text-background hover:border-foreground/50 transition-all',
-            'xl:justify-start justify-center',
+            'lg:justify-start justify-center',
           )}
           onClick={() => navigate('/projects/new')}
         >
           <Plus className="h-4 w-4 shrink-0" />
-          <span className="hidden xl:inline text-xs font-body">New Project</span>
+          <span className="hidden lg:inline text-xs font-body">New Project</span>
         </Button>
       </div>
 
@@ -50,18 +50,18 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
 
       {/* Projects List */}
       <ScrollArea className="flex-1">
-        <div className="p-2 xl:p-3 space-y-0.5">
+        <div className="p-2 lg:p-3 space-y-0.5">
           {loading && (
-            <div className="flex items-center justify-center xl:justify-start gap-2 py-3 px-2 text-secondary-ol">
+            <div className="flex items-center justify-center lg:justify-start gap-2 py-3 px-2 text-secondary-ol">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-              <span className="hidden xl:inline text-xs font-body">Loading...</span>
+              <span className="hidden lg:inline text-xs font-body">Loading...</span>
             </div>
           )}
 
           {!loading && projects.length === 0 && (
-            <div className="flex items-center justify-center xl:justify-start gap-2 py-3 px-2 text-muted-ol">
+            <div className="flex items-center justify-center lg:justify-start gap-2 py-3 px-2 text-muted-ol">
               <Box className="h-4 w-4 shrink-0" />
-              <span className="hidden xl:inline text-xs font-body">No projects</span>
+              <span className="hidden lg:inline text-xs font-body">No projects</span>
             </div>
           )}
 
@@ -72,7 +72,7 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
               title={project.name}
               className={cn(
                 'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150',
-                'xl:justify-start justify-center',
+                'lg:justify-start justify-center',
                 'hover:bg-bg-subtle',
                 isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
               )}
@@ -83,7 +83,7 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
                   statusColor[project.status] ?? 'bg-[var(--text-muted)]',
                 )}
               />
-              <span className="hidden xl:inline text-xs font-body truncate">{project.name}</span>
+              <span className="hidden lg:inline text-xs font-body truncate">{project.name}</span>
             </button>
           ))}
         </div>
@@ -92,10 +92,10 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
       <Separator className="bg-[hsl(var(--border))]" />
 
       {/* Bottom: Settings + Stats */}
-      <div className="shrink-0 p-2 xl:p-3 space-y-2">
+      <div className="shrink-0 p-2 lg:p-3 space-y-2">
         {/* System Stats (xl only) */}
         {stats && (
-          <div className="hidden xl:flex items-center gap-3 px-2.5 py-1.5 text-muted-ol">
+          <div className="hidden lg:flex items-center gap-3 px-2.5 py-1.5 text-muted-ol">
             <div className="flex items-center gap-1" title="CPU">
               <Cpu className="h-3 w-3" />
               <span className="text-[10px] font-mono">
@@ -121,13 +121,13 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
           title="Services"
           className={cn(
             'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150',
-            'xl:justify-start justify-center',
+            'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
             isActive('/services') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
           )}
         >
           <Database className="h-4 w-4 shrink-0" />
-          <span className="hidden xl:inline text-xs font-body">Services</span>
+          <span className="hidden lg:inline text-xs font-body">Services</span>
         </button>
 
         {/* Settings Link */}
@@ -136,13 +136,13 @@ export function Sidebar({ projects, loading, stats }: SidebarProps) {
           title="Settings"
           className={cn(
             'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150',
-            'xl:justify-start justify-center',
+            'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
             isActive('/settings') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
           )}
         >
           <Settings className="h-4 w-4 shrink-0" />
-          <span className="hidden xl:inline text-xs font-body">Settings</span>
+          <span className="hidden lg:inline text-xs font-body">Settings</span>
         </button>
       </div>
     </div>

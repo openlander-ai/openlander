@@ -169,7 +169,7 @@ export function TimelineItemCard({
             <div className="flex items-center gap-2 mb-1.5 text-agent/70">
               <span className="w-1.5 h-1.5 rounded-full bg-agent/50 animate-pulse" />
               <span>
-                {t('timeline.executing')} {item.toolName || t('timeline.tool')}
+                {'Executing:'} {item.toolName || 'tool'}
               </span>
             </div>
             <div className="pl-3.5 border-l border-white/10 space-y-1">

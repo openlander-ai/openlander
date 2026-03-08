@@ -1,18 +1,18 @@
 export function formatRelativeTime(dateStr: string, t?: (key: string) => string): string {
   const diffInSeconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
   if (diffInSeconds < 60) {
-    return t ? t('projects.timeAgo.justNow') : 'just now';
+    return t ? 'just now' : 'just now';
   }
   const diffInMinutes = Math.floor(diffInSeconds / 60);
   if (diffInMinutes < 60) {
-    return t ? `${diffInMinutes}${t('projects.timeAgo.minutes')}` : `${diffInMinutes}m ago`;
+    return t ? `${diffInMinutes}${'m ago'}` : `${diffInMinutes}m ago`;
   }
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24) {
-    return t ? `${diffInHours}${t('projects.timeAgo.hours')}` : `${diffInHours}h ago`;
+    return t ? `${diffInHours}${'h ago'}` : `${diffInHours}h ago`;
   }
   const diffInDays = Math.floor(diffInHours / 24);
-  return t ? `${diffInDays}${t('projects.timeAgo.days')}` : `${diffInDays}d ago`;
+  return t ? `${diffInDays}${'d ago'}` : `${diffInDays}d ago`;
 }
 
 export function formatTime(timestamp: string): string {

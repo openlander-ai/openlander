@@ -108,7 +108,7 @@ export function TimelineFeed({
             projectStatus !== 'error' && (
               <div className="mb-4 px-4 py-3 rounded-lg bg-bg-subtle/40 border border-white/5">
                 <div className="flex justify-between items-center text-[10px] font-mono text-agent/80 uppercase tracking-wider mb-2">
-                  <span>{t('timeline.systemProgress')}</span>
+                  <span>{'System Progress'}</span>
                   <span>{latestProgress.percent}%</span>
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-bg-subtle overflow-hidden border border-white/5 relative">
@@ -220,7 +220,7 @@ export function TimelineFeed({
 
               <div className="relative flex flex-col">
                 <span className="text-xs font-mono text-agent/90 uppercase tracking-widest flex items-center gap-2">
-                  {t('timeline.systemActive')}
+                  {'System Active'}
                   <span className="flex gap-0.5">
                     <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce" />
                     <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce [animation-delay:150ms]" />
@@ -253,7 +253,7 @@ export function TimelineFeed({
           )}
         >
           <ArrowDown className="h-3 w-3" />
-          {t('timeline.follow')}
+          {'Follow'}
         </button>
       )}
     </div>

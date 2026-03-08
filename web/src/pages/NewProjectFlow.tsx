@@ -111,18 +111,18 @@ export function NewProjectFlow() {
     }
     setDeploying(true);
     setError(null);
-    setDeployStatus(t('newProject.startingDeployment'));
+    setDeployStatus('Starting deployment...');
     try {
       const result = await deployProject(repo.cloneUrl, repo.defaultBranch, repo.name);
       if (result.success && result.projectId) {
         navigate(`/projects/${result.projectId}`);
       } else {
-        setError(result.error ?? t('newProject.deployFailed'));
+        setError(result.error ?? 'Deploy failed');
         setDeploying(false);
         setDeployStatus(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('newProject.deployFailed'));
+      setError(err instanceof Error ? err.message : 'Deploy failed');
       setDeploying(false);
       setDeployStatus(null);
     }
@@ -143,7 +143,7 @@ export function NewProjectFlow() {
           </button>
           <div>
             <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight">
-              {t('newProject.title')}
+              {'New Project'}
             </h1>
             <p className="text-xs font-body text-secondary-ol">{t('newProject.selectRepo')}</p>
           </div>
@@ -161,7 +161,7 @@ export function NewProjectFlow() {
                   : 'text-secondary-ol hover:text-primary-ol',
               )}
             >
-              {t('newProject.myRepos')}
+              {'My Repos'}
             </button>
             <button
               onClick={() => setTab('search')}
@@ -172,7 +172,7 @@ export function NewProjectFlow() {
                   : 'text-secondary-ol hover:text-primary-ol',
               )}
             >
-              {t('newProject.search')}
+              {'Search'}
             </button>
           </div>
 
@@ -180,7 +180,7 @@ export function NewProjectFlow() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-ol" />
               <Input
-                placeholder={t('newProject.searchPlaceholder')}
+                placeholder={'Search repositories...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-8 pl-8 text-xs font-body bg-bg-subtle border-[hsl(var(--border))]"
@@ -204,7 +204,7 @@ export function NewProjectFlow() {
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-agent" />
             <p className="text-sm font-body text-secondary-ol">
-              {deployStatus ?? t('newProject.startingDeployment')}
+              {deployStatus ?? 'Starting deployment...'}
             </p>
           </div>
         </div>
@@ -280,7 +280,7 @@ export function NewProjectFlow() {
                       disabled={deploying}
                     >
                       <Rocket className="h-3 w-3" />
-                      {t('newProject.deploy')}
+                      {'Deploy'}
                     </Button>
                   </div>
                 ))}
@@ -300,7 +300,7 @@ export function NewProjectFlow() {
                       disabled={loading}
                     >
                       {loading && <Loader2 className="h-3 w-3 animate-spin mr-1" />}
-                      {t('newProject.loadMore')}
+                      {'Load more'}
                     </Button>
                   </div>
                 )}
