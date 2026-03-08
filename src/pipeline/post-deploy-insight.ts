@@ -5,7 +5,7 @@
  *   1. Health check status (pass / fail with response time)
  *   2. Stale containers (previous image containers still running)
  *   3. Resource usage (memory > 80%)
- *   4. Build time comparison (2x+ slower than previous)
+ *   4. Build time comparison (vs average of previous successful deploys)
  *
  * Insights are returned as structured objects that the NDJSON stream
  * serializes into `insight` timeline items for the frontend.
@@ -50,9 +50,6 @@ const HEALTHCHECK_POLL_INTERVAL_MS = 2_000;
 
 /** Memory usage threshold that triggers a warning. */
 const MEMORY_WARNING_PERCENT = 80;
-
-/** Build time ratio that triggers a warning (current / previous). */
-const BUILD_TIME_SLOW_RATIO = 2;
 
 // ---------------------------------------------------------------------------
 // Main entry point
@@ -220,31 +217,40 @@ function checkResourceUsage(): Insight | null {
   }
 }
 
-/**
- * Compare the current build duration against the most recent successful deploy.
- * Warns if the current build took 2x+ longer.
- */
 function checkBuildTime(ctx: InsightContext, db: Database): Insight | null {
   try {
-    const logs = db.getDeployLogs(ctx.projectId, 5);
+    const logs = db.getDeployLogs(ctx.projectId, 10);
 
-    // Find the most recent SUCCESSFUL deploy that isn't the current one
-    // (the current deploy log may not be written yet, so filter by duration)
-    const previous = logs.find(
+    const previousSuccessful = logs.filter(
       (l: DeployLogRow) =>
         l.status === 'success' && l.duration_ms != null && l.duration_ms !== ctx.totalDurationMs,
     );
 
-    if (!previous || previous.duration_ms == null) return null;
+    if (previousSuccessful.length === 0) return null;
 
-    const ratio = ctx.totalDurationMs / previous.duration_ms;
+    const totalMs = previousSuccessful.reduce((sum, l) => sum + (l.duration_ms ?? 0), 0);
+    const avgMs = totalMs / previousSuccessful.length;
 
-    if (ratio >= BUILD_TIME_SLOW_RATIO) {
+    if (avgMs === 0) return null;
+
+    const ratio = ctx.totalDurationMs / avgMs;
+    const percentChange = Math.round((ratio - 1) * 100);
+
+    if (percentChange >= 20) {
       const currentSec = Math.round(ctx.totalDurationMs / 1000);
-      const prevSec = Math.round(previous.duration_ms / 1000);
+      const avgSec = Math.round(avgMs / 1000);
       return {
-        title: `📊 빌드 시간 ${String(currentSec)}초 — 저번(${String(prevSec)}초)보다 ${ratio.toFixed(1)}배 느려졌어.`,
+        title: `📊 빌드 시간 ${String(currentSec)}초 — 평균(${String(avgSec)}초)보다 ${String(percentChange)}% 느려졌어.`,
         severity: 'warning',
+        actions: [],
+      };
+    }
+
+    if (percentChange <= -20) {
+      return {
+        title: '📊 빌드 시간 개선!',
+        detail: `평균보다 ${String(Math.abs(percentChange))}% 빨라졌어.`,
+        severity: 'info',
         actions: [],
       };
     }

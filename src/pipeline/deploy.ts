@@ -16,6 +16,8 @@ import { eventBus } from '../events/index.js';
 import { DockerfileNotFoundError, PreflightCheckError } from '../errors.js';
 import { detectFramework, ensureDockerfile, parseDockerfileExposePort } from './dockerfile-gen.js';
 import { preflightCheckOrThrow } from './preflight.js';
+import { detectNewEnvKeys } from './env-inject.js';
+import { scanForSecrets } from './secret-scan.js';
 import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
@@ -274,6 +276,32 @@ export class DeployPipeline {
       });
 
       buildLog += `[clone] ${config.repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
+
+      if (config._projectId) {
+        const storedVars = this.env.getAll(config._projectId);
+        const storedKeys = Object.keys(storedVars);
+        const detection = detectNewEnvKeys(cloneResult.path, storedKeys);
+
+        if (detection) {
+          const project = this.db.getProject(config._projectId);
+          await eventBus.emit('env:new-keys-detected', {
+            projectId: config._projectId,
+            projectName: project?.name ?? config._projectId,
+            newKeys: detection.newKeys,
+            templateFile: detection.templateFile,
+          });
+        }
+      }
+
+      const secretFindings = scanForSecrets(cloneResult.path);
+      if (secretFindings.length > 0) {
+        const project = this.db.getProject(projectId);
+        await eventBus.emit('secret:detected', {
+          projectId,
+          projectName: project?.name ?? projectName,
+          secrets: secretFindings,
+        });
+      }
 
       const composePath = this.composePipeline?.detectComposeFile(cloneResult.path);
       const composeEnvVars = {

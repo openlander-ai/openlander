@@ -4,6 +4,7 @@ import { stream } from 'hono/streaming';
 import type { AppContext } from '../../app.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { getPostmortemInstance } from '../../monitor/postmortem.js';
 import { getProjectUrl } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('api');
@@ -642,6 +643,21 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     ctx.pipeline.closeTunnel(project.id);
     return c.json({ status: 'unexposed', project: project.name });
+  });
+
+  api.get('/projects/:id/postmortem/latest', (c) => {
+    const id = c.req.param('id');
+    const postmortem = getPostmortemInstance();
+    const entry = postmortem?.getLatest(id);
+    if (!entry) {
+      return c.json({ error: 'No postmortem available' }, 404);
+    }
+    return c.json({
+      projectId: entry.projectId,
+      projectName: entry.projectName,
+      markdown: entry.markdown,
+      generatedAt: entry.generatedAt.toISOString(),
+    });
   });
 
   return api;

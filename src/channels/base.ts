@@ -41,6 +41,22 @@ export class ChannelManager {
     this.events = events;
   }
 
+  private getBroadcastChannelId(type: ChannelType): string | null {
+    const configuredId =
+      type === 'slack'
+        ? this.ctx.config.channels.slack.recoveryChannelId
+        : type === 'discord'
+          ? this.ctx.config.channels.discord.recoveryChannelId
+          : this.ctx.config.channels.telegram.recoveryChannelId;
+
+    if (!configuredId) {
+      return null;
+    }
+
+    const trimmed = configuredId.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
   /** Register a channel implementation for a platform type. */
   register(type: ChannelType, channel: Channel): void {
     this.channels.set(type, channel);
@@ -70,6 +86,29 @@ export class ChannelManager {
         log.error({ error, channelType: type }, 'Failed to stop channel');
       }
     }
+  }
+
+  async broadcast(text: string): Promise<void> {
+    for (const [type, channel] of this.channels.entries()) {
+      if (!channel.isConnected()) {
+        continue;
+      }
+
+      const channelId = this.getBroadcastChannelId(type);
+      if (!channelId) {
+        continue;
+      }
+
+      try {
+        await channel.sendMessage(channelId, text);
+      } catch (error) {
+        log.error({ error, channelType: type }, 'Failed to broadcast to channel');
+      }
+    }
+  }
+
+  async sendRecoveryNotification(message: string): Promise<void> {
+    await this.broadcast(message);
   }
 
   /** Get a channel by type if it is registered. */

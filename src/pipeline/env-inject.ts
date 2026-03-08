@@ -247,6 +247,28 @@ export function checkEnvRequirements(
   return { required, provided, missing, optional, templateFile: fileName };
 }
 
+export function detectNewEnvKeys(
+  projectPath: string,
+  storedVarKeys: string[],
+): { newKeys: string[]; templateFile: string } | null {
+  const templatePath = detectEnvFile(projectPath);
+  if (!templatePath) {
+    return null;
+  }
+
+  const templateVars = parseEnvFile(templatePath);
+  const storedSet = new Set(storedVarKeys.map((key) => key.toUpperCase()));
+  const newKeys = Array.from(templateVars.keys()).filter(
+    (key) => !storedSet.has(key.toUpperCase()),
+  );
+
+  if (newKeys.length === 0) {
+    return null;
+  }
+
+  return { newKeys, templateFile: templatePath };
+}
+
 function unquoteEnvValue(rawValue: string): string {
   if (rawValue.length < 2) {
     return rawValue;

@@ -1,4 +1,3 @@
-import { useLanguage } from '@/i18n/context';
 import type { TimelineItem as TItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/time';
@@ -6,8 +5,6 @@ import {
   ExternalLink,
   AlertCircle,
   CheckCircle2,
-  Loader2,
-  Brain,
   Wrench,
   MessageCircle,
   Activity,
@@ -48,7 +45,6 @@ export function TimelineItemCard({
   onSkipQuestion,
   onInsightAction,
 }: TimelineItemProps) {
-  const { t } = useLanguage();
   const isSuccess = item.type === 'success';
   const isError = item.type === 'error';
   const isQuestion = item.type === 'question';
@@ -89,7 +85,8 @@ export function TimelineItemCard({
         isLatest && isAgentEvent && 'bg-agent/5 border-agent/10 glow-agent',
         isSuccess && 'bg-success/5 border-success/10 glow-success',
         isError && 'bg-error/5 border-error/10 glow-error',
-        !isLatest && !isSuccess && !isError && 'hover:bg-bg-subtle/20',
+        !isLatest && !isSuccess && !isError && !isAgentEvent && 'hover:bg-bg-subtle/20',
+        isAgentEvent && !isLatest && 'bg-agent/[0.02]',
       )}
     >
       {/* Icon */}
@@ -106,21 +103,20 @@ export function TimelineItemCard({
           </div>
         )}
         {isAgentThinking && (
-          <div className={cn('p-1.5 rounded-md bg-agent/10 border border-agent/20 relative')}>
-            {isLatest && (
-              <div className="absolute inset-0 rounded-md bg-agent/20 animate-ping opacity-20" />
-            )}
-            <Brain className={cn('h-3.5 w-3.5 text-agent', isLatest && 'animate-pulse')} />
+          <div className="mt-1 flex items-center justify-center w-4 h-4">
+            <div
+              className={cn('w-1.5 h-1.5 rounded-full bg-agent/50', isLatest && 'animate-pulse')}
+            />
           </div>
         )}
         {isAgentToolCall && (
-          <div className="p-1.5 rounded-md bg-agent/10 border border-agent/20">
-            <Wrench className="h-3.5 w-3.5 text-agent" />
+          <div className="mt-1 flex items-center justify-center w-4 h-4">
+            <Wrench className="h-3 w-3 text-agent/50" />
           </div>
         )}
         {isAgentMessage && (
-          <div className="p-1.5 rounded-md bg-agent/10 border border-agent/20">
-            <MessageCircle className="h-3.5 w-3.5 text-agent" />
+          <div className="mt-1 flex items-center justify-center w-4 h-4">
+            <MessageCircle className="h-3 w-3 text-agent/70" />
           </div>
         )}
         {!isSuccess && !isError && !isAgentEvent && (
@@ -139,10 +135,17 @@ export function TimelineItemCard({
               isSuccess && 'text-success font-medium',
               isError && 'text-error font-medium line-clamp-3',
               isAgentEvent && 'text-agent/90',
+              isAgentThinking && 'text-xs italic text-muted-ol tracking-tight',
+              isAgentToolCall && 'text-xs text-agent/70',
+              isAgentMessage && 'text-sm text-primary-ol',
             )}
             title={isError ? item.title : undefined}
           >
-            {isAgentEvent ? cleanMarkdown(item.title) : item.title}
+            {isAgentToolCall
+              ? `▸ ${item.toolName || 'tool'} 실행`
+              : isAgentEvent
+                ? cleanMarkdown(item.title)
+                : item.title}
           </p>
           <span className="text-[10px] font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
             {formatTime(item.timestamp)}
@@ -162,29 +165,7 @@ export function TimelineItemCard({
           </a>
         )}
 
-        {/* Agent tool call arguments */}
-        {isAgentToolCall && item.toolArguments && (
-          <div className="mt-2 text-[11px] font-mono text-muted-ol bg-[#0a0a0a] border border-white/5 rounded-md p-2.5 overflow-hidden relative group">
-            <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-agent/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="flex items-center gap-2 mb-1.5 text-agent/70">
-              <span className="w-1.5 h-1.5 rounded-full bg-agent/50 animate-pulse" />
-              <span>
-                {'Executing:'} {item.toolName || 'tool'}
-              </span>
-            </div>
-            <div className="pl-3.5 border-l border-white/10 space-y-1">
-              {Object.entries(item.toolArguments).map(([key, value]) => (
-                <div key={key} className="truncate">
-                  <span className="text-secondary-ol">{key}</span>
-                  <span className="text-muted-ol mx-1">=</span>
-                  <span className="text-primary-ol">
-                    {typeof value === 'string' ? `"${value}"` : JSON.stringify(value)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Agent tool call arguments (hidden for inline flow) */}
 
         {/* Error build log detail */}
         {isError && item.detail && (
@@ -198,13 +179,7 @@ export function TimelineItemCard({
           </details>
         )}
 
-        {/* Error Status — auto-recovery handles fixes */}
-        {isError && (
-          <div className="mt-3 px-3 py-1.5 rounded-md text-[11px] font-body border bg-warning/10 text-warning border-warning/20 flex items-center gap-1.5">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            {t('timeline.aiWorking')}
-          </div>
-        )}
+        {/* Error Status removed for inline flow */}
       </div>
     </div>
   );

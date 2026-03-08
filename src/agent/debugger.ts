@@ -46,7 +46,7 @@ const systemPrompt = `You are a Docker build error analyst. You receive Docker b
 RULES:
 1. Focus on the ACTUAL error, not warnings
 2. Consider common causes: missing dependencies, wrong base image, permission issues, network errors
-3. Be specific about the fix — mention exact package names, Dockerfile lines, etc.
+3. Be specific about the fix — mention exact package names and reference Dockerfile line numbers from the numbered listing provided.
 4. If the error is in the user's application code (not Docker), say so
 
 RESPONSE FORMAT (you MUST respond in this exact JSON format):
@@ -66,6 +66,13 @@ function truncateBuildLog(buildLog: string): string {
   }
 
   return buildLog.slice(-MAX_BUILD_LOG_CHARS);
+}
+
+function numberLines(text: string): string {
+  return text
+    .split('\n')
+    .map((line, i) => `${String(i + 1).padStart(3)}: ${line}`)
+    .join('\n');
 }
 
 function extractJsonObject(raw: string): string {
@@ -187,8 +194,8 @@ export class BuildDebugger {
 Image: ${context.imageTag}
 Failed Step: ${context.failedStep}
 
---- Dockerfile ---
-${dockerfile}
+--- Dockerfile (with line numbers) ---
+${numberLines(dockerfile)}
 
 --- Build Log (last 3000 chars) ---
 ${buildLog}

@@ -66,7 +66,14 @@ export type EventType =
   | 'question:pending'
   | 'question:answered'
   // v0.2.0: Agent events (deploy UX fix)
-  | 'agent:event';
+  | 'agent:event'
+  | 'recovery:start'
+  | 'recovery:success'
+  | 'recovery:failed'
+  | 'recovery:exhausted'
+  | 'env:new-keys-detected'
+  | 'rollback:suggested'
+  | 'secret:detected';
 
 export interface EventPayload {
   'deploy:start': { projectId: string; repoUrl: string };
@@ -112,6 +119,27 @@ export interface EventPayload {
   'question:pending': { projectId: string; requestId: string; questions: Question[] };
   'question:answered': { projectId: string; requestId: string };
   'agent:event': { projectId: string; event: ChatStreamEvent & { timestamp: string } };
+  'recovery:start': { projectId: string; error: string; attempt: number };
+  'recovery:success': { projectId: string; attempt: number; durationMs: number };
+  'recovery:failed': { projectId: string; error: string; attempt: number };
+  'recovery:exhausted': { projectId: string; totalAttempts: number; lastError: string };
+  'env:new-keys-detected': {
+    projectId: string;
+    projectName: string;
+    newKeys: string[];
+    templateFile: string;
+  };
+  'rollback:suggested': {
+    projectId: string;
+    projectName: string;
+    consecutiveFailures: number;
+    previousImageTag: string;
+  };
+  'secret:detected': {
+    projectId: string;
+    projectName: string;
+    secrets: Array<{ file: string; line: number; pattern: string; type: string }>;
+  };
 }
 
 // --- Event handler type ---

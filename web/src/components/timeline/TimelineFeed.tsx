@@ -70,10 +70,12 @@ export function TimelineFeed({
   const progressItems = items.filter((item) => item.type === 'progress');
   const latestProgress = progressItems.length > 0 ? progressItems[progressItems.length - 1] : null;
   const timelineItems = items;
-  const groupedItems: { type: 'build' | 'ai'; item?: TimelineItem; items?: TimelineItem[] }[] = [];
-  let currentAiGroup: { type: 'ai'; items: TimelineItem[] } | null = null;
+  const processedItems: (TimelineItem | { type: 'ai_divider'; id: string })[] = [];
+  let hasThinking = false;
+  let inAiSection = false;
 
-  for (const item of timelineItems) {
+  for (let i = 0; i < timelineItems.length; i++) {
+    const item = timelineItems[i];
     const isAi = [
       'agent_thinking',
       'agent_tool_call',
@@ -84,14 +86,27 @@ export function TimelineFeed({
     ].includes(item.type);
 
     if (isAi) {
-      if (!currentAiGroup) {
-        currentAiGroup = { type: 'ai', items: [] };
-        groupedItems.push(currentAiGroup);
+      if (!inAiSection) {
+        inAiSection = true;
+        processedItems.push({ type: 'ai_divider', id: `divider-${item.id}` });
       }
-      currentAiGroup.items.push(item);
+
+      if (item.type === 'agent_thinking') {
+        if (!hasThinking) {
+          processedItems.push(item);
+          hasThinking = true;
+        } else {
+          // Replace the last thinking item
+          processedItems[processedItems.length - 1] = item;
+        }
+      } else {
+        processedItems.push(item);
+        hasThinking = false;
+      }
     } else {
-      groupedItems.push({ type: 'build', item });
-      currentAiGroup = null;
+      inAiSection = false;
+      processedItems.push(item);
+      hasThinking = false;
     }
   }
   return (
@@ -140,71 +155,36 @@ export function TimelineFeed({
             </div>
           )}
 
-          {groupedItems.map((group, groupIndex) => {
-            if (group.type === 'build') {
-              const item = group.item!;
+          {processedItems.map((item, index) => {
+            if ('type' in item && item.type === 'ai_divider') {
               return (
-                <TimelineItemCard
-                  key={item.id}
-                  item={item}
-                  isLatest={groupIndex === groupedItems.length - 1 && isStreaming}
-                  onFixWithAI={
-                    item.type === 'error' ? () => onFixWithAI?.(item.title, item.id) : undefined
-                  }
-                  isFixWithAILoading={fixingItemId === item.id}
-                  onSubmitAnswer={onSubmitAnswer}
-                  onSkipQuestion={onSkipQuestion}
-                  onInsightAction={onInsightAction}
-                />
+                <div key={item.id} className="flex items-center gap-3 my-4 px-4 opacity-70">
+                  <div className="h-px bg-border flex-1" />
+                  <div className="text-[10px] font-mono text-muted-ol flex items-center gap-1.5 uppercase tracking-wider">
+                    <Brain className="h-3 w-3" />
+                    {'AI Analysis'}
+                  </div>
+                  <div className="h-px bg-border flex-1" />
+                </div>
               );
             }
 
-            // AI Group
-            const aiItems = group.items!;
-            const collapsedAiItems: TimelineItem[] = [];
-            let hasThinking = false;
-
-            for (const item of aiItems) {
-              if (item.type === 'agent_thinking') {
-                if (!hasThinking) {
-                  collapsedAiItems.push(item);
-                  hasThinking = true;
-                } else {
-                  collapsedAiItems[collapsedAiItems.length - 1] = item;
-                }
-              } else {
-                collapsedAiItems.push(item);
-                hasThinking = false;
-              }
-            }
-
+            const timelineItem = item as TimelineItem;
             return (
-              <div
-                key={`ai-group-${groupIndex}`}
-                className="my-4 rounded-lg border border-agent/20 bg-agent/5 p-3 relative overflow-hidden"
-              >
-                <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-agent/30 to-transparent" />
-                <div className="flex items-center gap-2 mb-3 px-1 text-[10px] font-mono text-agent/80 uppercase tracking-wider">
-                  <Brain className="h-3 w-3" />
-                  AI Analysis
-                </div>
-                <div className="space-y-1">
-                  {collapsedAiItems.map((item, index) => (
-                    <TimelineItemCard
-                      key={item.id}
-                      item={item}
-                      isLatest={
-                        groupIndex === groupedItems.length - 1 &&
-                        index === collapsedAiItems.length - 1 &&
-                        isStreaming
-                      }
-                      onSubmitAnswer={onSubmitAnswer}
-                      onSkipQuestion={onSkipQuestion}
-                      onInsightAction={onInsightAction}
-                    />
-                  ))}
-                </div>
-              </div>
+              <TimelineItemCard
+                key={timelineItem.id}
+                item={timelineItem}
+                isLatest={index === processedItems.length - 1 && isStreaming}
+                onFixWithAI={
+                  timelineItem.type === 'error'
+                    ? () => onFixWithAI?.(timelineItem.title, timelineItem.id)
+                    : undefined
+                }
+                isFixWithAILoading={fixingItemId === timelineItem.id}
+                onSubmitAnswer={onSubmitAnswer}
+                onSkipQuestion={onSkipQuestion}
+                onInsightAction={onInsightAction}
+              />
             );
           })}
           {/* Streaming indicator */}

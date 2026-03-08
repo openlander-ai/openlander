@@ -21,6 +21,9 @@ import { JobManager } from './pipeline/job-manager.js';
 import { ComposePipeline } from './pipeline/compose.js';
 import { AutoDetector } from './pipeline/auto-detect.js';
 import { AlertMonitor } from './monitor/alerts.js';
+import { IncidentReporter } from './monitor/incident-reporter.js';
+import { PostmortemGenerator, setPostmortemInstance } from './monitor/postmortem.js';
+import { RollbackWatcher } from './monitor/rollback-watcher.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
@@ -146,14 +149,67 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
   // Auto-recovery: trigger agent on deploy failure
   if (agent) {
+    function normalizeError(error: string): string {
+      return error
+        .replace(/[0-9a-f]{8,}/gi, '<id>')
+        .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[^\s]*/g, '<timestamp>')
+        .replace(/:\d{4,5}/g, ':<port>')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
     const recoveryAttempts = new Map<string, { count: number; lastError: string }>();
     const MAX_RECOVERY_ATTEMPTS = 3;
+    const RECOVERY_OUTCOME_TIMEOUT_MS = 120_000;
 
-    const handleAutoRecovery = async (projectId: string, error: string) => {
+    const waitForRecoveryOutcome = (projectId: string): Promise<boolean> =>
+      new Promise((resolve) => {
+        let settled = false;
+
+        const finalize = (recovered: boolean): void => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          clearTimeout(timer);
+          unsubscribeSuccess();
+          unsubscribeFailed();
+          resolve(recovered);
+        };
+
+        const unsubscribeSuccess = eventBus.on('deploy:success', (payload) => {
+          if (payload.projectId === projectId) {
+            finalize(true);
+          }
+        });
+
+        const unsubscribeFailed = eventBus.on('deploy:failed', (payload) => {
+          if (payload.projectId === projectId) {
+            finalize(false);
+          }
+        });
+
+        const timer = setTimeout(() => {
+          finalize(false);
+        }, RECOVERY_OUTCOME_TIMEOUT_MS);
+      });
+
+    const handleAutoRecovery = async (
+      projectId: string,
+      error: string,
+      step?: string,
+      buildLog?: string,
+    ) => {
       const attempts = recoveryAttempts.get(projectId) ?? { count: 0, lastError: '' };
 
       // Guard: max retries
       if (attempts.count >= MAX_RECOVERY_ATTEMPTS) {
+        await eventBus.emit('recovery:exhausted', {
+          projectId,
+          totalAttempts: attempts.count,
+          lastError: attempts.lastError,
+        });
         log.info(
           { projectId, attempts: attempts.count },
           'Auto-recovery exhausted, manual intervention needed',
@@ -162,7 +218,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
       }
 
       // Guard: same error repeating (stuck loop)
-      if (attempts.lastError === error && attempts.count > 0) {
+      if (attempts.lastError === normalizeError(error) && attempts.count > 0) {
         log.info({ projectId, error }, 'Same error repeating, stopping auto-recovery');
         return;
       }
@@ -172,19 +228,26 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
         /docker daemon/i,
         /cannot connect to docker/i,
         /permission denied.*docker/i,
-        /disk space/i,
-        /out of memory/i,
       ];
       if (infraPatterns.some((p) => p.test(error))) {
         log.info({ projectId }, 'Infrastructure error detected, skipping auto-recovery');
         return;
       }
 
+      const advisoryPatterns = [/disk space/i, /no space left/i, /out of memory/i, /killed/i];
+      const isAdvisory = advisoryPatterns.some((p) => p.test(error));
+
       attempts.count++;
-      attempts.lastError = error;
+      attempts.lastError = normalizeError(error);
       recoveryAttempts.set(projectId, attempts);
+      const recoveryStartTime = Date.now();
 
       log.info({ projectId, attempt: attempts.count }, 'Starting auto-recovery');
+      await eventBus.emit('recovery:start', {
+        projectId,
+        error,
+        attempt: attempts.count,
+      });
 
       // Re-activate question bridge for this project
       questionBridge.setActiveProject(projectId);
@@ -204,9 +267,37 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
       try {
         const sessionId = nanoid(12);
-        const recoveryMessage = `Deploy of "${projectName}" failed with error:\n\n${error}\n\nAnalyze this error. If you can fix it (e.g., by setting environment variables, fixing configuration), do so and redeploy. Use get_deploy_status to see the full error, ask_user_question if you need information from the user, set_env_vars to configure variables, and deploy_project to redeploy.`;
+        let recoveryMessage = `Deploy of "${projectName}" failed.
+
+## Failure Context
+- Project: ${projectName} (${projectId})
+- Failed Step: ${step ?? 'unknown'}
+- Error: ${error}${
+          buildLog
+            ? `
+
+## Build Log (last 3000 chars)
+${buildLog.slice(-3000)}`
+            : ''
+        }
+
+## Recovery Instructions
+1. If build log is provided above, analyze it directly. Otherwise call debug_build_error("${projectName}") to get the full diagnosis.
+2. Based on the root cause:
+   - Missing env vars → ask_user_question (options: []) for values → set_env_vars → deploy_project
+   - Build/Dockerfile error → call debug_build_error for diagnosis, then deploy_project to retry
+   - Configuration error → use set_env_vars or restart_project as appropriate
+   - Source code / test failure → STOP. Report the root cause and next steps. Do NOT retry.
+3. After fixing, redeploy with deploy_project("${projectName}").
+4. Do NOT just suggest fixes — execute them.`;
+
+        if (isAdvisory) {
+          recoveryMessage +=
+            "\n\n⚠️ This appears to be an infrastructure resource issue. You likely cannot fix this via tools alone. Diagnose the issue, explain it clearly, and suggest manual steps (e.g., docker system prune, increase memory). Do NOT retry the deploy unless you've confirmed the resource issue is resolved.";
+        }
 
         log.info({ projectId, sessionId }, 'Auto-recovery: calling agent.chatStream');
+        agent.clearHistory();
         await agent.chatStream(
           recoveryMessage,
           async (event) => {
@@ -219,15 +310,37 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
           sessionId,
         );
         log.info({ projectId }, 'Auto-recovery: agent.chatStream completed');
+
+        const recovered = await waitForRecoveryOutcome(projectId);
+        const durationMs = Date.now() - recoveryStartTime;
+        if (recovered) {
+          await eventBus.emit('recovery:success', {
+            projectId,
+            attempt: attempts.count,
+            durationMs,
+          });
+          recoveryAttempts.delete(projectId);
+        } else {
+          await eventBus.emit('recovery:failed', {
+            projectId,
+            error,
+            attempt: attempts.count,
+          });
+        }
       } catch (err) {
         log.error({ err, projectId }, 'Auto-recovery agent call failed');
+        await eventBus.emit('recovery:failed', {
+          projectId,
+          error: err instanceof Error ? err.message : error,
+          attempt: attempts.count,
+        });
       }
     };
 
     eventBus.on('deploy:failed', (payload) => {
       // Small delay to let deploy log persist before agent reads it
       setTimeout(() => {
-        void handleAutoRecovery(payload.projectId, payload.error);
+        void handleAutoRecovery(payload.projectId, payload.error, payload.step, payload.buildLog);
       }, 2000);
     });
 
@@ -235,6 +348,37 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
       setTimeout(() => {
         void handleAutoRecovery(payload.projectId, payload.error);
       }, 2000);
+    });
+
+    eventBus.on('env:new-keys-detected', (payload) => {
+      const message = `New environment variables detected in ${payload.projectName}'s .env.example: ${payload.newKeys.join(', ')}. These keys are not set yet. Ask the user for values.`;
+      void agent.chatStream(
+        message,
+        async (event) => {
+          await eventBus.emit('agent:event', {
+            projectId: payload.projectId,
+            event: { ...event, timestamp: new Date().toISOString() },
+          });
+        },
+        `env-detect-${payload.projectId}`,
+      );
+    });
+
+    eventBus.on('secret:detected', (payload) => {
+      const list = payload.secrets
+        .map((s) => `- ${s.file}:${String(s.line)} — ${s.type} (${s.pattern})`)
+        .join('\n');
+      const message = `Hardcoded secrets detected in ${payload.projectName}:\n${list}\nAdvise user to move these to environment variables using set_env_vars.`;
+      void agent.chatStream(
+        message,
+        async (event) => {
+          await eventBus.emit('agent:event', {
+            projectId: payload.projectId,
+            event: { ...event, timestamp: new Date().toISOString() },
+          });
+        },
+        `secret-scan-${payload.projectId}`,
+      );
     });
   }
 
@@ -291,6 +435,33 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   // v0.4: ChannelManager needs AppContext but never self-references channelManager.
   // We cast partialCtx which is structurally complete for ChannelManager's actual usage.
   const channelManager = new ChannelManager(partialCtx as AppContext);
+  const incidentReporter = new IncidentReporter(channelManager, eventBus, db);
+  incidentReporter.start();
+
+  if (agent) {
+    const postmortem = new PostmortemGenerator(eventBus, db, agent);
+    postmortem.start();
+    setPostmortemInstance(postmortem);
+  }
+
+  const rollbackWatcher = new RollbackWatcher(eventBus, db);
+  rollbackWatcher.start();
+
+  eventBus.on('rollback:suggested', (payload) => {
+    if (agent) {
+      const message = `Health checks are failing for ${payload.projectName} after deployment. ${String(payload.consecutiveFailures)} consecutive failures. Previous version available (${payload.previousImageTag}). Ask the user if they want to rollback.`;
+      void agent.chatStream(
+        message,
+        async (event) => {
+          await eventBus.emit('agent:event', {
+            projectId: payload.projectId,
+            event: { ...event, timestamp: new Date().toISOString() },
+          });
+        },
+        `rollback-${payload.projectId}`,
+      );
+    }
+  });
 
   return { ...partialCtx, channelManager };
 }

@@ -109,9 +109,15 @@ export interface MCPConfig {
 }
 
 export interface ChannelConfig {
-  slack: { enabled: boolean; token: string; signingSecret: string };
-  discord: { enabled: boolean; token: string; applicationId: string; publicKey: string };
-  telegram: { enabled: boolean; token: string; webhookSecret: string };
+  slack: { enabled: boolean; token: string; signingSecret: string; recoveryChannelId?: string };
+  discord: {
+    enabled: boolean;
+    token: string;
+    applicationId: string;
+    publicKey: string;
+    recoveryChannelId?: string;
+  };
+  telegram: { enabled: boolean; token: string; webhookSecret: string; recoveryChannelId?: string };
 }
 
 export interface LocalModelConfig {
@@ -187,9 +193,9 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
     transport: 'stdio',
   },
   channels: {
-    slack: { enabled: false, token: '', signingSecret: '' },
-    discord: { enabled: false, token: '', applicationId: '', publicKey: '' },
-    telegram: { enabled: false, token: '', webhookSecret: '' },
+    slack: { enabled: false, token: '', signingSecret: '', recoveryChannelId: '' },
+    discord: { enabled: false, token: '', applicationId: '', publicKey: '', recoveryChannelId: '' },
+    telegram: { enabled: false, token: '', webhookSecret: '', recoveryChannelId: '' },
   },
   gitProviders: {
     github: { token: '', username: '' },
