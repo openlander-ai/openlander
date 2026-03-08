@@ -10,6 +10,21 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  esbuild: {
+    target: 'es2022',
+  },
+  build: {
+    target: 'es2022',
+    chunkSizeWarningLimit: 512,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          ui: ['lucide-react'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
