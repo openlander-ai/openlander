@@ -505,23 +505,24 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.2.4 — Domains & Visibility (P2) 📋
+### v0.2.4 — Domains & Visibility (P2) ✅
 
-**상태**: 미착수 | **관련 파일**: `src/web/api/domain-routes.ts`, `web/src/components/config/DomainsPanel.tsx`
+**상태**: ✅ 구현 완료 | **관련 커밋**: `e1e602f`
 
 > **핵심 가치**: 도메인 매핑 CRUD 웹 UI + 서버 상태 스캔 읽기 전용 UI.
 
-| Phase | 항목               | 내용                                                                                                                              | 상태 |
-| ----- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| 1     | 도메인 매핑 CRUD   | 도메인 추가/삭제 UI. REST API는 `domain-routes.ts`에 이미 구현 (POST/DELETE/GET). Cloudflare DNS CNAME + Tunnel ingress 자동 관리 | 📋   |
-| 2     | 서버 상태 스캔 UI  | 읽기 전용 — 전체 컨테이너, 포트, 프록시 상태 대시보드. 백엔드 `list_all_containers`, `scan_ports` 도구 이미 존재                  | 📋   |
-| 3     | 리소스 모니터링 UI | CPU/메모리 사용량 그래프 대시보드. 현재 에이전트 내부에서만 사용 중 → 웹 UI로 노출                                                | 📋   |
+| Phase | 항목               | 내용                                                                                            | 상태 |
+| ----- | ------------------ | ----------------------------------------------------------------------------------------------- | ---- |
+| 1     | 도메인 매핑 CRUD   | DomainsPanel에 커스텀 도메인 추가/삭제 UI. 백엔드 API는 `domain-routes.ts`에 이미 구현됨        | ✅   |
+| 2     | 서버 상태 스쳪 UI  | Settings에 Server Scan 섹션 — 외부 컨테이너 리스트, 포트, 프록시 상세. `ServerStatus` 타입 확장 | ✅   |
+| 3     | 리소스 모니터링 UI | 기존 System Stats 섹션이 CPU/메모리/디스크 표시 — 추가 구현 불필요                              | ✅   |
 
-**도메인 매핑 아키텍처**:
+**구현 내역**:
 
-- `domain-routes.ts` — POST/DELETE/GET /projects/:id/domains (구현 완료)
-- `cloudflare.ts` CloudflareTunnelManager — CF API로 DNS CNAME 생성 + Tunnel ingress 업데이트
-- `DomainsPanel.tsx` — 현재 도메인 표시만, 추가/삭제 버튼 없음
+- `web/src/components/config/DomainsPanel.tsx` — 커스텀 도메인 섹션 추가 (add/delete + 리스트)
+- `web/src/pages/SettingsPage.tsx` — Server Scan 섹션 추가 (외부 컨테이너 상세)
+- `web/src/lib/api.ts` — `getProjectDomains()`, `addProjectDomain()`, `removeProjectDomain()` + `ServerStatus.externalContainers`
+- `web/src/i18n/en.ts`, `ko.ts` — customDomains, serverScan 관련 i18n 키 추가
 
 ---
 
