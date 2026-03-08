@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ── v0.2.2 📋 ── v0.2.3 📋 ── v0.2.4 📋 ── v0.2.5 📋 ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ── v0.2.2 ✅ ── v0.2.3 ✅ ── v0.2.4 📋 ── v0.2.5 📋 ── 정식릴리즈(TBD)
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ┬ v0.2.2 📋 ── v0.2.3 📋 ── v0.2.4 📋 ── v0.2.5 📋 ── 정식릴리즈(TBD)
+v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ┬ v0.2.2 ✅ ── v0.2.3 ✅ ── v0.2.4 📋 ── v0.2.5 📋 ── 정식릴리즈(TBD)
 
 ```
 
@@ -456,19 +456,19 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
   SettingsPage, Header, DeployDialog, ProjectCard, DomainsPanel, EnvVarsTable, TimelineItem,
   TimelineFeed, InputRequestCard, LogViewer, CommandPalette, OAuthButton, ProviderHelp, event-types.ts
 
-### v0.2.2 — Traefik Cutover + 시간대 수정 (P0) 📋
+### v0.2.2 — Traefik Cutover + 시간대 수정 (P0) ✅
 
-**상태**: 미착수 | **관련 파일**: `src/pipeline/cloudflare.ts`, `web/src/pages/DeploymentDetail.tsx`, `web/src/pages/ProjectsGrid.tsx`, `web/src/pages/ProjectDetail.tsx`
+**상태**: ✅ 구현 완료 | **관련 커밋**: `62dc1f3`, `cf9ff53`
 
 > **핵심 가치**: CF Tunnel → localhost:80 (Traefik 경유) 전환 완료. 시간대 표시 정확성 확보.
 > **선행 조건**: v0.2.1 ✅
 > **후행 조건**: v0.2.3 (블루-그린, 롤백 등 Traefik 경유가 선행되어야 정상 동작)
 
-| Phase | 항목                   | 내용                                                                | 상태 |
-| ----- | ---------------------- | ------------------------------------------------------------------- | ---- |
-| 1     | Traefik 전환 가이드    | CF Tunnel → localhost:80 전환 설정 스니펫 + 복사 가능 체크리스트    | 📋   |
-| 2     | Traefik 경유 상태 확인 | 미전환 시 redeploy 경고 배너, Traefik 경유 여부 헬스체크            | 📋   |
-| 3     | 시간대 버그 수정       | formatRelativeTime() 3곳 중복 → 공통 유틸 추출 + 타임존 처리 정규화 | 📋   |
+| Phase | 항목                   | 내용                                                                 | 상태 |
+| ----- | ---------------------- | -------------------------------------------------------------------- | ---- |
+| 1     | Traefik 전환 가이드    | CF Tunnel → localhost:80 전환 설정 스니펫 + 복사 가능 체크리스트     | ✅   |
+| 2     | Traefik 경유 상태 확인 | Settings 페이지에 Reverse Proxy 상태 섹션 + CF Tunnel 가이드 추가    | ✅   |
+| 3     | 시간대 버그 수정       | formatRelativeTime() 7곳 중복 → `web/src/lib/time.ts` 공통 유틸 추출 | ✅   |
 
 **관련 아키텍처**:
 
@@ -478,26 +478,30 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ━─ v0.0.4 ✅ ── v0.0.6 �
 
 ---
 
-### v0.2.3 — Core Deploy Controls (P1) 📋
+### v0.2.3 — Core Deploy Controls (P1) ✅
 
-**상태**: 미착수 | **관련 파일**: `src/pipeline/deploy.ts`, `src/pipeline/blue-green.ts`, `src/webhook/index.ts`, `web/src/lib/api.ts`
+**상태**: ✅ 구현 완료 | **관련 커밋**: `0062254`, `a1aeeb3`
 
 > **핵심 가치**: 롤백, 블루-그린 무중단 배포, Webhook 자동 재배포, 프로젝트 Start — 백엔드에만 있던 핵심 배포 기능을 웹 UI로 노출.
 > **선행 조건**: v0.2.2 ✅ (Traefik 경유 필수 — 블루-그린이 포트 직연결에서 깨짐)
 
-| Phase | 항목              | 내용                                                                                                     | 상태 |
-| ----- | ----------------- | -------------------------------------------------------------------------------------------------------- | ---- |
-| 1     | 롤백 버튼         | Project → Deployments 히스토리 행에 Rollback 액션 추가. `api.ts` rollbackProject() 이미 존재             | 📋   |
-| 2     | 블루-그린 배포 UI | "Advanced deploy" 패널. `api.ts` blueGreenProject() 이미 존재. `blue-green.ts` 253줄 완전 구현           | 📋   |
-| 3     | Webhook 설정 UI   | 설정 API 신규 (POST/GET /projects/:id/webhooks) + Project → Automation 탭. DB 메서드 존재, REST API 없음 | 📋   |
-| 4     | Start 버튼        | Stop의 역 동작. 현재 Stop만 UI에 노출, Start 버튼 없음                                                   | 📋   |
+| Phase | 항목              | 내용                                                                                                           | 상태 |
+| ----- | ----------------- | -------------------------------------------------------------------------------------------------------------- | ---- |
+| 1     | 롤백 버튼         | ProjectDetail에 Rollback 버튼 + API 클라이언트 + 테스트 3개                                                    | ✅   |
+| 2     | 블루-그린 배포 UI | Blue-Green 버튼 + `blueGreenProject()` API + 테스트 3개. `Zap` 아이콘, running 상태에서만 활성                 | ✅   |
+| 3     | Webhook 설정 UI   | DB 2메서드 추가 + REST API 3개 (GET/POST/DELETE) + Config탭 Webhooks 패널 (URL/시크릿 복사, 토글) + 테스트 5개 | ✅   |
+| 4     | Start 버튼        | Docker `startContainer()` + Pipeline `start()` + REST `POST /start` + 조건부 Start/Stop 버튼 + 테스트 4개      | ✅   |
 
-**백엔드 현황** (이미 구현된 것 / 필요한 것):
+**구현 내역**:
 
-- `rollbackProject()` — api.ts 래퍼 ✅, `deploy.ts` L797 rollback() 메서드 ✅, 호출 컴포넌트 ❌
-- `blueGreenProject()` — api.ts 래퍼 ✅, `blue-green.ts` 253줄 ✅, 호출 컴포넌트 ❌
-- Webhook — `webhook/index.ts` 수신 330줄 ✅, DB CRUD ✅, 설정 REST API ❌, 웹 UI ❌
-- Start — Stop 엔드포인트만 존재, Start 엔드포인트/UI ❌
+- `src/pipeline/docker.ts` — `startContainer()` 신규 메서드
+- `src/pipeline/deploy.ts` — `start()` 신규 메서드 (자식 프로젝트 재귀 지원)
+- `src/db/index.ts` — `getWebhookConfigs()`, `deleteWebhookConfig()` 신규 메서드
+- `src/web/api/routes.ts` — `POST /start`, `GET/POST/DELETE /webhooks` 엔드포인트 6개 추가
+- `web/src/lib/api.ts` — `blueGreenProject()`, `startProject()`, `getProjectWebhooks()`, `setProjectWebhook()`, `deleteProjectWebhook()` 추가
+- `web/src/pages/ProjectDetail.tsx` — Blue-Green/Start 버튼 + WebhookPanel 컴포넌트 + Config Webhooks 탭
+- `web/src/i18n/en.ts`, `ko.ts` — blueGreen, start, webhooks 관련 i18n 키 추가
+- `test/web-routes.test.ts` — 15개 신규 테스트 (668 → 680, rollback 3 + blue-green 3 + webhook 5 + start 4)
 
 ---
 
