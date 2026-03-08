@@ -15,12 +15,15 @@ import {
   getProjectWebhooks,
   setProjectWebhook,
   deleteProjectWebhook,
+  getPostmortem,
   type BuildDiagnosis,
   type WebhookConfig,
+  type PostmortemData,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { TimelineFeed } from '@/components/timeline/TimelineFeed';
+import { PostmortemCard } from '@/components/timeline/PostmortemCard';
 import { LogViewer } from '@/components/logs/LogViewer';
 import { LogPreview } from '@/components/timeline/LogPreview';
 import { EnvVarsTable } from '@/components/config/EnvVarsTable';
@@ -56,7 +59,7 @@ import type { TimelineItem } from '@/lib/event-types';
 import { useNavigate } from 'react-router-dom';
 
 function getStatusConfig(
-  t: (key: string) => string,
+  _t: (key: string) => string,
 ): Record<string, { label: string; color: string; dot: string }> {
   return {
     running: {
@@ -445,6 +448,7 @@ export function ProjectDetail() {
   const [timelineRunKey, setTimelineRunKey] = useState(0);
   const [fixWithAIItems, setFixWithAIItems] = useState<TimelineItem[]>([]);
   const [fixingItemId, setFixingItemId] = useState<string | null>(null);
+  const [postmortem, setPostmortem] = useState<PostmortemData | null>(null);
   const isMobile = useIsMobile();
 
   // Fetch project details
@@ -465,6 +469,22 @@ export function ProjectDetail() {
     const interval = setInterval(fetchProject, 5000);
     return () => clearInterval(interval);
   }, [fetchProject]);
+
+  const fetchPostmortem = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await getPostmortem(id);
+      setPostmortem(data);
+    } catch {
+      // silent
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (project?.status === 'running' || project?.status === 'error') {
+      void fetchPostmortem();
+    }
+  }, [project?.status, fetchPostmortem]);
 
   const { items, isStreaming, submitAnswer, skipQuestion, executeAction } = useTimeline({
     projectId: id,
@@ -852,6 +872,14 @@ export function ProjectDetail() {
 
         <TabsContent value="timeline" className="flex-1 min-h-0 mt-0 overflow-auto p-4">
           <div className="space-y-4">
+            {postmortem && (
+              <PostmortemCard
+                projectId={postmortem.projectId}
+                projectName={postmortem.projectName}
+                markdown={postmortem.markdown}
+                generatedAt={postmortem.generatedAt}
+              />
+            )}
             <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[600px]">
               <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol shrink-0 bg-bg-panel/50">
                 <Activity className="h-3.5 w-3.5" />

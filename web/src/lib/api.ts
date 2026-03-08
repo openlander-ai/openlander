@@ -608,3 +608,16 @@ export async function stopService(id: string): Promise<void> {
   const res = await fetch(`/api/services/${id}/stop`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to stop service');
 }
+
+export interface PostmortemData {
+  projectId: string;
+  projectName: string;
+  markdown: string;
+  generatedAt: string;
+}
+
+export async function getPostmortem(projectId: string): Promise<PostmortemData | null> {
+  const res = await fetch(`/api/projects/${projectId}/postmortem/latest`);
+  if (!res.ok) return null;
+  return res.json();
+}
