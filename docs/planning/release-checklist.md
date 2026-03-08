@@ -12,6 +12,7 @@
 - [ ] `npm test` 전체 통과 확인
 - [ ] Docker 데몬 실행 중 (`docker ps` 응답)
 - [ ] Traefik 컨테이너 실행 중 (`docker ps | grep traefik`)
+- [ ] OpenLander 실행 중 (`npm start` 후 정상 기동 확인)
 - [ ] 웹 UI 접근 가능 (`http://localhost:10003`)
 - [ ] LLM 프로바이더 설정 완료 (Settings 페이지에서 확인)
 
@@ -35,7 +36,7 @@
 
 ## 시나리오 2: Private Repo Deploy (SSH Key)
 
-**사전조건**: SSH 키 설정 완료 (Settings → GitHub SSH Key)
+**사전조건**: 서버에 SSH 키 존재 (`~/.ssh/id_ed25519` — config `sshKeyPath` 기본값)
 
 - [ ] 웹 UI에서 Deploy 클릭
 - [ ] Private GitHub URL 입력 (SSH 형식: `git@github.com:user/private-repo.git`)
@@ -143,7 +144,7 @@
 
 **사전조건**: 시나리오 1의 프로젝트에 Webhook 설정 완료
 
-- [ ] Config 탭 → Webhooks 패널 → Webhook URL 복사
+- [ ] 프로젝트 상세 → Webhooks 탭 → Webhook URL 복사
 - [ ] GitHub 레포 Settings → Webhooks에 URL 등록 (또는 curl로 직접 호출)
 - [ ] git push 이벤트 발생 → 자동 재배포 시작
 - [ ] 재배포 완료 → 최신 코드 반영
@@ -170,7 +171,7 @@
 
 **사전조건**: running 상태의 프로젝트 존재
 
-- [ ] Config 탭 → Domains 패널 → 커스텀 도메인 추가
+- [ ] 프로젝트 상세 → Domains 탭 → 커스텀 도메인 추가
 - [ ] 도메인 목록에 표시
 - [ ] 도메인 삭제 → 목록에서 제거
 
