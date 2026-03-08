@@ -14,6 +14,7 @@ export class RollbackWatcher {
   private readonly events: EventBus;
   private readonly db: Database;
   private readonly watchers = new Map<string, WatcherState>();
+  private unsubscribers: Array<() => void> = [];
   private readonly WATCH_DURATION_MS = 60_000;
   private readonly FAILURE_THRESHOLD = 3;
 
@@ -23,13 +24,25 @@ export class RollbackWatcher {
   }
 
   start(): void {
-    this.events.on('deploy:success', (payload) => {
-      this.startWatching(payload.projectId);
-    });
+    this.unsubscribers.push(
+      this.events.on('deploy:success', (payload) => {
+        this.startWatching(payload.projectId);
+      }),
+      this.events.on('monitor:healthcheck', (payload) => {
+        this.handleHealthCheck(payload.projectId, payload.healthy);
+      }),
+    );
+  }
 
-    this.events.on('monitor:healthcheck', (payload) => {
-      this.handleHealthCheck(payload.projectId, payload.healthy);
-    });
+  stop(): void {
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
+    for (const [, watcher] of this.watchers) {
+      clearTimeout(watcher.timer);
+    }
+    this.watchers.clear();
   }
 
   private startWatching(projectId: string): void {

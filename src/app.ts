@@ -22,7 +22,11 @@ import { ComposePipeline } from './pipeline/compose.js';
 import { AutoDetector } from './pipeline/auto-detect.js';
 import { AlertMonitor } from './monitor/alerts.js';
 import { IncidentReporter } from './monitor/incident-reporter.js';
-import { PostmortemGenerator, setPostmortemInstance } from './monitor/postmortem.js';
+import {
+  PostmortemGenerator,
+  setPostmortemInstance,
+  getPostmortemInstance,
+} from './monitor/postmortem.js';
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
@@ -31,6 +35,9 @@ import { buildContextSnapshot } from './agent/prompts.js';
 import { createModuleLogger } from './lib/logger.js';
 
 const log = createModuleLogger('app');
+
+let activeIncidentReporter: IncidentReporter | null = null;
+let activeRollbackWatcher: RollbackWatcher | null = null;
 
 /**
  * Application context — wires all modules together.
@@ -149,6 +156,19 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
   // Auto-recovery: trigger agent on deploy failure
   if (agent) {
+    let agentChain = Promise.resolve();
+    function enqueueAgentCall(
+      fn: () => Promise<void>,
+      context: { projectId: string; eventType: string },
+    ): void {
+      agentChain = agentChain.then(fn).catch((err: unknown) => {
+        log.error(
+          { err, projectId: context.projectId, eventType: context.eventType },
+          'Agent operation failed in queue',
+        );
+      });
+    }
+
     function normalizeError(error: string): string {
       return error
         .replace(/[0-9a-f]{8,}/gi, '<id>')
@@ -160,7 +180,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
     const recoveryAttempts = new Map<string, { count: number; lastError: string }>();
     const MAX_RECOVERY_ATTEMPTS = 3;
-    const RECOVERY_OUTCOME_TIMEOUT_MS = 120_000;
+    const RECOVERY_OUTCOME_TIMEOUT_MS = 300_000;
 
     const waitForRecoveryOutcome = (projectId: string): Promise<boolean> =>
       new Promise((resolve) => {
@@ -297,7 +317,6 @@ ${buildLog.slice(-3000)}`
         }
 
         log.info({ projectId, sessionId }, 'Auto-recovery: calling agent.chatStream');
-        agent.clearHistory();
         await agent.chatStream(
           recoveryMessage,
           async (event) => {
@@ -318,6 +337,7 @@ ${buildLog.slice(-3000)}`
             projectId,
             attempt: attempts.count,
             durationMs,
+            lastError: attempts.lastError,
           });
           recoveryAttempts.delete(projectId);
         } else {
@@ -340,27 +360,39 @@ ${buildLog.slice(-3000)}`
     eventBus.on('deploy:failed', (payload) => {
       // Small delay to let deploy log persist before agent reads it
       setTimeout(() => {
-        void handleAutoRecovery(payload.projectId, payload.error, payload.step, payload.buildLog);
+        enqueueAgentCall(
+          () =>
+            handleAutoRecovery(payload.projectId, payload.error, payload.step, payload.buildLog),
+          { projectId: payload.projectId, eventType: 'deploy:failed' },
+        );
       }, 2000);
     });
 
     eventBus.on('compose:failed', (payload) => {
       setTimeout(() => {
-        void handleAutoRecovery(payload.projectId, payload.error);
+        enqueueAgentCall(() => handleAutoRecovery(payload.projectId, payload.error), {
+          projectId: payload.projectId,
+          eventType: 'compose:failed',
+        });
       }, 2000);
     });
 
     eventBus.on('env:new-keys-detected', (payload) => {
       const message = `New environment variables detected in ${payload.projectName}'s .env.example: ${payload.newKeys.join(', ')}. These keys are not set yet. Ask the user for values.`;
-      void agent.chatStream(
-        message,
-        async (event) => {
-          await eventBus.emit('agent:event', {
-            projectId: payload.projectId,
-            event: { ...event, timestamp: new Date().toISOString() },
-          });
+      enqueueAgentCall(
+        async () => {
+          await agent.chatStream(
+            message,
+            async (event) => {
+              await eventBus.emit('agent:event', {
+                projectId: payload.projectId,
+                event: { ...event, timestamp: new Date().toISOString() },
+              });
+            },
+            `env-detect-${payload.projectId}`,
+          );
         },
-        `env-detect-${payload.projectId}`,
+        { projectId: payload.projectId, eventType: 'env:new-keys-detected' },
       );
     });
 
@@ -369,15 +401,39 @@ ${buildLog.slice(-3000)}`
         .map((s) => `- ${s.file}:${String(s.line)} — ${s.type} (${s.pattern})`)
         .join('\n');
       const message = `Hardcoded secrets detected in ${payload.projectName}:\n${list}\nAdvise user to move these to environment variables using set_env_vars.`;
-      void agent.chatStream(
-        message,
-        async (event) => {
-          await eventBus.emit('agent:event', {
-            projectId: payload.projectId,
-            event: { ...event, timestamp: new Date().toISOString() },
-          });
+      enqueueAgentCall(
+        async () => {
+          await agent.chatStream(
+            message,
+            async (event) => {
+              await eventBus.emit('agent:event', {
+                projectId: payload.projectId,
+                event: { ...event, timestamp: new Date().toISOString() },
+              });
+            },
+            `secret-scan-${payload.projectId}`,
+          );
         },
-        `secret-scan-${payload.projectId}`,
+        { projectId: payload.projectId, eventType: 'secret:detected' },
+      );
+    });
+
+    eventBus.on('rollback:suggested', (payload) => {
+      const message = `Health checks are failing for ${payload.projectName} after deployment. ${String(payload.consecutiveFailures)} consecutive failures. Previous version available (${payload.previousImageTag}). Ask the user if they want to rollback.`;
+      enqueueAgentCall(
+        async () => {
+          await agent.chatStream(
+            message,
+            async (event) => {
+              await eventBus.emit('agent:event', {
+                projectId: payload.projectId,
+                event: { ...event, timestamp: new Date().toISOString() },
+              });
+            },
+            `rollback-${payload.projectId}`,
+          );
+        },
+        { projectId: payload.projectId, eventType: 'rollback:suggested' },
       );
     });
   }
@@ -437,6 +493,7 @@ ${buildLog.slice(-3000)}`
   const channelManager = new ChannelManager(partialCtx as AppContext);
   const incidentReporter = new IncidentReporter(channelManager, eventBus, db);
   incidentReporter.start();
+  activeIncidentReporter = incidentReporter;
 
   if (agent) {
     const postmortem = new PostmortemGenerator(eventBus, db, agent);
@@ -446,28 +503,18 @@ ${buildLog.slice(-3000)}`
 
   const rollbackWatcher = new RollbackWatcher(eventBus, db);
   rollbackWatcher.start();
-
-  eventBus.on('rollback:suggested', (payload) => {
-    if (agent) {
-      const message = `Health checks are failing for ${payload.projectName} after deployment. ${String(payload.consecutiveFailures)} consecutive failures. Previous version available (${payload.previousImageTag}). Ask the user if they want to rollback.`;
-      void agent.chatStream(
-        message,
-        async (event) => {
-          await eventBus.emit('agent:event', {
-            projectId: payload.projectId,
-            event: { ...event, timestamp: new Date().toISOString() },
-          });
-        },
-        `rollback-${payload.projectId}`,
-      );
-    }
-  });
+  activeRollbackWatcher = rollbackWatcher;
 
   return { ...partialCtx, channelManager };
 }
 
 /** Shutdown the application context. */
 export function shutdownAppContext(ctx: AppContext): void {
+  activeIncidentReporter?.stop();
+  activeRollbackWatcher?.stop();
+  activeIncidentReporter = null;
+  activeRollbackWatcher = null;
+  getPostmortemInstance()?.stop();
   ctx.healthMonitor.stop();
   ctx.alertMonitor.stop();
   void ctx.channelManager.stop();

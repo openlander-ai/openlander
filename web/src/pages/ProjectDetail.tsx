@@ -15,7 +15,6 @@ import {
   getProjectWebhooks,
   setProjectWebhook,
   deleteProjectWebhook,
-  getPostmortem,
   type BuildDiagnosis,
   type WebhookConfig,
   type PostmortemData,
@@ -470,21 +469,38 @@ export function ProjectDetail() {
     return () => clearInterval(interval);
   }, [fetchProject]);
 
-  const fetchPostmortem = useCallback(async () => {
-    if (!id) return;
-    try {
-      const data = await getPostmortem(id);
-      setPostmortem(data);
-    } catch {
-      // silent
-    }
-  }, [id]);
-
   useEffect(() => {
-    if (project?.status === 'running' || project?.status === 'error') {
-      void fetchPostmortem();
+    if (!id || (project?.status !== 'running' && project?.status !== 'error')) {
+      return;
     }
-  }, [project?.status, fetchPostmortem]);
+
+    const controller = new AbortController();
+
+    const fetchPostmortem = async () => {
+      try {
+        const res = await fetch(`/api/projects/${id}/postmortem/latest`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          setPostmortem(null);
+          return;
+        }
+        const data = (await res.json()) as PostmortemData;
+        setPostmortem(data);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+        setPostmortem(null);
+      }
+    };
+
+    void fetchPostmortem();
+
+    return () => {
+      controller.abort();
+    };
+  }, [id, project?.status]);
 
   const { items, isStreaming, submitAnswer, skipQuestion, executeAction } = useTimeline({
     projectId: id,

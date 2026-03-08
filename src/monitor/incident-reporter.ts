@@ -18,6 +18,7 @@ export class IncidentReporter {
   private readonly events: EventBus;
   private readonly db: Database;
   private readonly incidents = new Map<string, IncidentState>();
+  private unsubscribers: Array<() => void> = [];
 
   constructor(channelManager: ChannelManager, events: EventBus, db: Database) {
     this.channelManager = channelManager;
@@ -26,21 +27,28 @@ export class IncidentReporter {
   }
 
   start(): void {
-    this.events.on('recovery:start', (payload) => {
-      this.trackRecoveryStart(payload);
-    });
+    this.unsubscribers.push(
+      this.events.on('recovery:start', (payload) => {
+        this.trackRecoveryStart(payload);
+      }),
+      this.events.on('recovery:failed', (payload) => {
+        this.trackRecoveryFailure(payload);
+      }),
+      this.events.on('recovery:success', (payload) => {
+        void this.reportRecoverySuccess(payload);
+      }),
+      this.events.on('recovery:exhausted', (payload) => {
+        void this.reportRecoveryExhausted(payload);
+      }),
+    );
+  }
 
-    this.events.on('recovery:failed', (payload) => {
-      this.trackRecoveryFailure(payload);
-    });
-
-    this.events.on('recovery:success', (payload) => {
-      void this.reportRecoverySuccess(payload);
-    });
-
-    this.events.on('recovery:exhausted', (payload) => {
-      void this.reportRecoveryExhausted(payload);
-    });
+  stop(): void {
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
+    this.incidents.clear();
   }
 
   private trackRecoveryStart(payload: EventPayload['recovery:start']): void {

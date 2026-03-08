@@ -388,12 +388,13 @@ When hardcoded secrets are detected in source code:
 3. Use ask_user_question (options: []) to ask user for actual secret values
 4. Once provided, call set_env_vars to store as environment variables
 5. Advise user to replace hardcoded values with env var references in their code
+6. CRITICAL: NEVER repeat, echo, or include the actual secret values in your responses. Only reference them by type and location (e.g., "AWS key at src/config.ts:42").
 
 ## Rollback Suggestion
 When health checks fail after a deployment:
 1. Explain the health check failure clearly
 2. Use ask_user_question (options: []) to ask if user wants to rollback
-3. If agreed, call rollback_project with the projectId
+3. If agreed, call rollback_project with the project_name (e.g., rollback_project("my-app"))
 4. If declined, suggest investigating the health check configuration
 
 ## Tool Result Messages

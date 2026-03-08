@@ -28,6 +28,12 @@ const SECRET_PATTERNS: SecretPattern[] = [
   { type: 'stripe_key', regex: /sk_test_[a-zA-Z0-9]{20,}/ },
   { type: 'db_url', regex: /(postgres|mysql|mongodb):\/\/[^@\s]+:[^@\s]+@/ },
   { type: 'private_key', regex: /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
+  { type: 'openai_key', regex: /sk-proj-[a-zA-Z0-9_-]{20,}/ },
+  { type: 'github_pat', regex: /github_pat_[a-zA-Z0-9_]{20,}/ },
+  { type: 'aws_temp_key', regex: /ASIA[0-9A-Z]{16}/ },
+  { type: 'slack_token', regex: /xoxb-[0-9]+-[a-zA-Z0-9]+/ },
+  { type: 'slack_token', regex: /xoxp-[0-9]+-[a-zA-Z0-9]+/ },
+  { type: 'slack_token', regex: /xoxs-[0-9]+-[a-zA-Z0-9]+/ },
 ];
 
 const SKIP_DIRS = new Set(['.env', 'node_modules', '.git', 'dist', 'build']);

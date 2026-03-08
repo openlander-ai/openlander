@@ -120,7 +120,12 @@ export interface EventPayload {
   'question:answered': { projectId: string; requestId: string };
   'agent:event': { projectId: string; event: ChatStreamEvent & { timestamp: string } };
   'recovery:start': { projectId: string; error: string; attempt: number };
-  'recovery:success': { projectId: string; attempt: number; durationMs: number };
+  'recovery:success': {
+    projectId: string;
+    attempt: number;
+    durationMs: number;
+    lastError?: string;
+  };
   'recovery:failed': { projectId: string; error: string; attempt: number };
   'recovery:exhausted': { projectId: string; totalAttempts: number; lastError: string };
   'env:new-keys-detected': {

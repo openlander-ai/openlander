@@ -17,6 +17,7 @@ export class PostmortemGenerator {
   private readonly db: Database;
   private readonly agent: Agent;
   private readonly postmortems = new Map<string, PostmortemEntry>();
+  private unsubscribers: Array<() => void> = [];
 
   constructor(events: EventBus, db: Database, agent: Agent) {
     this.events = events;
@@ -25,17 +26,44 @@ export class PostmortemGenerator {
   }
 
   start(): void {
-    this.events.on('recovery:success', (payload) => {
-      void this.generatePostmortem(payload.projectId, true, payload);
-    });
-
-    this.events.on('recovery:exhausted', (payload) => {
-      void this.generatePostmortem(payload.projectId, false, payload);
-    });
+    this.unsubscribers.push(
+      this.events.on('recovery:success', (payload) => {
+        void this.generatePostmortem(payload.projectId, true, payload);
+      }),
+      this.events.on('recovery:exhausted', (payload) => {
+        void this.generatePostmortem(payload.projectId, false, payload);
+      }),
+    );
   }
 
   getLatest(projectId: string): PostmortemEntry | undefined {
     return this.postmortems.get(projectId);
+  }
+
+  stop(): void {
+    for (const unsub of this.unsubscribers) {
+      unsub();
+    }
+    this.unsubscribers = [];
+  }
+
+  private redactSecrets(text: string): string {
+    const patterns = [
+      /AKIA[0-9A-Z]{16}/g,
+      /ASIA[0-9A-Z]{16}/g,
+      /(gh[ps]_|gho_|ghu_|ghr_|github_pat_)[a-zA-Z0-9_]{20,}/g,
+      /sk-[a-zA-Z0-9_-]{20,}/g,
+      /sk_live_[a-zA-Z0-9]{20,}/g,
+      /sk_test_[a-zA-Z0-9]{20,}/g,
+      /xox[bps]-[0-9]+-[a-zA-Z0-9]+/g,
+      /(postgres|mysql|mongodb):\/\/[^@\s]+:[^@\s]+@/g,
+      /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/g,
+    ];
+    let result = text;
+    for (const pattern of patterns) {
+      result = result.replace(pattern, '[REDACTED]');
+    }
+    return result;
   }
 
   private async generatePostmortem(
@@ -49,8 +77,9 @@ export class PostmortemGenerator {
 
       const logs = this.db.getDeployLogs(projectId, 1);
       const latestLog: DeployLogRow | undefined = logs[0];
-      const buildLogTail = latestLog?.build_log?.slice(-3000) ?? 'No build log available';
-      const errorMessage = 'lastError' in payload ? payload.lastError : 'unknown';
+      const rawBuildLog = latestLog?.build_log?.slice(-3000) ?? 'No build log available';
+      const buildLogTail = this.redactSecrets(rawBuildLog);
+      const errorMessage = ('lastError' in payload ? payload.lastError : undefined) ?? 'unknown';
 
       const attempts =
         'attempt' in payload
