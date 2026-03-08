@@ -178,6 +178,28 @@ export const globalSecrets = sqliteTable(
   (table) => [index('idx_global_secrets_key').on(table.key)],
 );
 
+export const services = sqliteTable(
+  'services',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull().unique(),
+    type: text('type').notNull(),
+    image: text('image').notNull(),
+    status: text('status', { enum: ['running', 'stopped', 'error'] }).default('stopped'),
+    container_id: text('container_id'),
+    container_name: text('container_name').notNull().unique(),
+    port: integer('port').notNull(),
+    env_vars: text('env_vars'),
+    credentials: text('credentials'),
+    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    check('services_status_check', sql`${table.status} IN ('running', 'stopped', 'error')`),
+    index('idx_services_type').on(table.type),
+  ],
+);
+
 export const drizzleSchema = {
   projects,
   envVars,
@@ -187,4 +209,5 @@ export const drizzleSchema = {
   oauthTokens,
   webhookConfigs,
   globalSecrets,
+  services,
 };

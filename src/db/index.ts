@@ -14,6 +14,7 @@ import {
   globalSecrets,
   oauthTokens,
   projects,
+  services,
   webhookConfigs,
 } from './schema.drizzle.js';
 
@@ -93,6 +94,21 @@ export interface WebhookConfigRow {
   created_at: string;
 }
 
+export interface ServiceRow {
+  id: string;
+  name: string;
+  type: string;
+  image: string;
+  status: 'running' | 'stopped' | 'error';
+  container_id: string | null;
+  container_name: string;
+  port: number;
+  env_vars: string | null;
+  credentials: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Database class ---
 
 /**
@@ -170,6 +186,85 @@ export class Database {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
     this.sqlite.exec('CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key)');
+
+    this.sqlite.exec(`CREATE TABLE IF NOT EXISTS services (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL,
+      image TEXT NOT NULL,
+      status TEXT DEFAULT 'stopped' CHECK(status IN ('running', 'stopped', 'error')),
+      container_id TEXT,
+      container_name TEXT NOT NULL UNIQUE,
+      port INTEGER NOT NULL,
+      env_vars TEXT,
+      credentials TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    this.sqlite.exec('CREATE INDEX IF NOT EXISTS idx_services_type ON services(type)');
+
+    const svcTable = this.sqlite
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'services'")
+      .get() as { sql: string | null } | undefined;
+    const svcCols = this.sqlite.prepare("PRAGMA table_info('services')").all() as Array<{
+      name: string;
+    }>;
+    const svcColNames = new Set(svcCols.map((c) => c.name));
+
+    const hasLegacyTypeCheck =
+      typeof svcTable?.sql === 'string' &&
+      svcTable.sql.includes("CHECK(type IN ('postgresql', 'mysql', 'redis', 'mongodb'))");
+
+    if (hasLegacyTypeCheck) {
+      const envVarsSelect = svcColNames.has('env_vars') ? 'env_vars' : 'NULL';
+
+      this.sqlite.exec(`CREATE TABLE services_migrated (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL,
+        image TEXT NOT NULL,
+        status TEXT DEFAULT 'stopped' CHECK(status IN ('running', 'stopped', 'error')),
+        container_id TEXT,
+        container_name TEXT NOT NULL UNIQUE,
+        port INTEGER NOT NULL,
+        env_vars TEXT,
+        credentials TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+      this.sqlite.exec(`INSERT INTO services_migrated (
+        id,
+        name,
+        type,
+        image,
+        status,
+        container_id,
+        container_name,
+        port,
+        env_vars,
+        credentials,
+        created_at,
+        updated_at
+      ) SELECT
+        id,
+        name,
+        type,
+        image,
+        status,
+        container_id,
+        container_name,
+        port,
+        ${envVarsSelect},
+        credentials,
+        created_at,
+        updated_at
+      FROM services`);
+      this.sqlite.exec('DROP TABLE services');
+      this.sqlite.exec('ALTER TABLE services_migrated RENAME TO services');
+      this.sqlite.exec('CREATE INDEX IF NOT EXISTS idx_services_type ON services(type)');
+    } else if (!svcColNames.has('env_vars')) {
+      this.sqlite.exec('ALTER TABLE services ADD COLUMN env_vars TEXT');
+    }
   }
 
   // ===== Projects =====
@@ -459,6 +554,74 @@ export class Database {
     if (!existing) return false;
     this.db.delete(globalSecrets).where(eq(globalSecrets.key, key)).run();
     return true;
+  }
+
+  createService(service: {
+    id: string;
+    name: string;
+    type: string;
+    image: string;
+    containerName: string;
+    port: number;
+    envVars?: string;
+    credentials?: string;
+  }): ServiceRow {
+    this.db
+      .insert(services)
+      .values({
+        id: service.id,
+        name: service.name,
+        type: service.type,
+        image: service.image,
+        container_name: service.containerName,
+        port: service.port,
+        env_vars: service.envVars ?? null,
+        credentials: service.credentials ?? null,
+      })
+      .run();
+
+    const created = this.getService(service.id);
+    if (!created) throw new Error(`Failed to create service ${service.id}`);
+    return created;
+  }
+
+  getService(id: string): ServiceRow | undefined {
+    return this.db.select().from(services).where(eq(services.id, id)).get() as
+      | ServiceRow
+      | undefined;
+  }
+
+  listServices(): ServiceRow[] {
+    return this.db.select().from(services).orderBy(desc(services.updated_at)).all() as ServiceRow[];
+  }
+
+  updateService(
+    id: string,
+    updates: Partial<{
+      status: ServiceRow['status'];
+      containerId: string | null;
+    }>,
+  ): void {
+    const setValues: Partial<typeof services.$inferInsert> = {};
+
+    if (updates.status !== undefined) {
+      setValues.status = updates.status;
+    }
+    if (updates.containerId !== undefined) {
+      setValues.container_id = updates.containerId;
+    }
+
+    if (Object.keys(setValues).length === 0) return;
+
+    this.db
+      .update(services)
+      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(services.id, id))
+      .run();
+  }
+
+  deleteService(id: string): void {
+    this.db.delete(services).where(eq(services.id, id)).run();
   }
 
   // ===== Deploy Logs =====

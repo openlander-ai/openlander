@@ -99,6 +99,21 @@ CREATE TABLE IF NOT EXISTS global_secrets (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS services (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL,
+  image TEXT NOT NULL,
+  status TEXT DEFAULT 'stopped' CHECK(status IN ('running', 'stopped', 'error')),
+  container_id TEXT,
+  container_name TEXT NOT NULL UNIQUE,
+  port INTEGER NOT NULL,
+  env_vars TEXT,
+  credentials TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);
 CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id);
 CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id);
@@ -107,4 +122,5 @@ CREATE INDEX IF NOT EXISTS idx_domain_mappings_project ON domain_mappings(projec
 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens(provider);
 CREATE INDEX IF NOT EXISTS idx_webhook_configs_project_source ON webhook_configs(project_id, source);
 CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key);
+CREATE INDEX IF NOT EXISTS idx_services_type ON services(type);
 `;
