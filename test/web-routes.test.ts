@@ -7,7 +7,6 @@ import { tmpdir } from 'node:os';
 import type { AppContext } from '../src/app.js';
 import { Database } from '../src/db/index.js';
 import { createApiRoutes } from '../src/web/api/routes.js';
-import { ProjectNotFoundError } from '../src/errors.js';
 
 // Mock preflight check to always pass in tests
 vi.mock('../src/pipeline/preflight.js', () => ({
@@ -115,6 +114,29 @@ function createMockHealthMonitor() {
   };
 }
 
+function createMockServiceManager() {
+  return {
+    list: vi.fn().mockResolvedValue([]),
+    create: vi.fn().mockResolvedValue({
+      id: 'svc-1',
+      name: 'shared-pg',
+      type: 'postgresql',
+      image: 'postgres:16-alpine',
+      status: 'running',
+      container_id: 'container-1',
+      container_name: 'ol-svc-shared-pg',
+      port: 5432,
+      env_vars: null,
+      credentials: '{}',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }),
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 function createMockAgent() {
   return {
     chat: vi.fn().mockResolvedValue({ message: 'AI response', toolResults: undefined }),
@@ -159,6 +181,7 @@ function createMockContext(db: Database): AppContext {
     dbProvisioner: {
       provision: vi.fn().mockResolvedValue({ host: 'localhost', port: 5432 }),
     } as unknown as AppContext['dbProvisioner'],
+    serviceManager: createMockServiceManager() as unknown as AppContext['serviceManager'],
     buildDebugger: null,
     previewDeployer: {
       deploy: vi.fn().mockResolvedValue({ success: true, url: 'http://preview' }),
@@ -550,7 +573,132 @@ describe('Web API Routes', () => {
     expect(res.status).toBe(404);
   });
 
-  // ---------------------------------------------------------------------------
+  it('GET /api/services returns shared services list', async () => {
+    const mockServices = [
+      {
+        id: 'svc-1',
+        name: 'shared-redis',
+        type: 'redis',
+        image: 'redis:7-alpine',
+        status: 'running',
+        container_id: 'c1',
+        container_name: 'ol-svc-shared-redis',
+        port: 6379,
+        env_vars: null,
+        credentials: '{}',
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    (ctx.serviceManager.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockServices);
+
+    const res = await app.request('/api/services');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual(mockServices);
+    expect(ctx.serviceManager.list).toHaveBeenCalled();
+  });
+
+  it('POST /api/services creates service', async () => {
+    const res = await app.request('/api/services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'shared-pg', template: 'postgresql' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.create).toHaveBeenCalledWith({
+      name: 'shared-pg',
+      template: 'postgresql',
+      image: undefined,
+      port: undefined,
+      envVars: undefined,
+    });
+  });
+
+  it('POST /api/services creates custom image service', async () => {
+    const customEnv = [{ key: 'DATABASE_URL', value: 'postgres://user:pass@db:5432/app' }];
+
+    const res = await app.request('/api/services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'my-litellm',
+        image: 'ghcr.io/berriai/litellm:latest',
+        port: 4000,
+        env_vars: customEnv,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.create).toHaveBeenCalledWith({
+      name: 'my-litellm',
+      template: undefined,
+      image: 'ghcr.io/berriai/litellm:latest',
+      port: 4000,
+      envVars: customEnv,
+    });
+  });
+
+  it('POST /api/services missing template and image returns 400', async () => {
+    const res = await app.request('/api/services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'shared-db' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(ctx.serviceManager.create).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/services custom image without port returns 400', async () => {
+    const res = await app.request('/api/services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'shared-litellm', image: 'ghcr.io/berriai/litellm:latest' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(ctx.serviceManager.create).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/services/templates returns template list', async () => {
+    const res = await app.request('/api/services/templates');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'postgresql', image: 'postgres:16-alpine', port: 5432 }),
+        expect.objectContaining({ id: 'mysql', image: 'mysql:8', port: 3306 }),
+        expect.objectContaining({ id: 'redis', image: 'redis:7-alpine', port: 6379 }),
+        expect.objectContaining({ id: 'mongodb', image: 'mongo:7', port: 27017 }),
+      ]),
+    );
+  });
+
+  it('DELETE /api/services/:id removes service', async () => {
+    const res = await app.request('/api/services/svc-1', { method: 'DELETE' });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.remove).toHaveBeenCalledWith('svc-1');
+  });
+
+  it('POST /api/services/:id/start starts service', async () => {
+    const res = await app.request('/api/services/svc-1/start', { method: 'POST' });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.start).toHaveBeenCalledWith('svc-1');
+  });
+
+  it('POST /api/services/:id/stop stops service', async () => {
+    const res = await app.request('/api/services/svc-1/stop', { method: 'POST' });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.stop).toHaveBeenCalledWith('svc-1');
+  });
+
   // DELETE /api/projects/:id
   // ---------------------------------------------------------------------------
 

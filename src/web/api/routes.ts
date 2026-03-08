@@ -21,6 +21,7 @@ import { extractProjectName } from '../../pipeline/helpers.js';
 import { preflightCheckOrThrow } from '../../pipeline/preflight.js';
 import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
 import { DeployQueue } from '../../agent/deploy-queue.js';
+import { SERVICE_TEMPLATES } from '../../pipeline/service-manager.js';
 
 const log = createModuleLogger('api');
 // --- Activity Event Buffer ---
@@ -1623,6 +1624,121 @@ export function createApiRoutes(ctx: AppContext): Hono {
         proxy: { type: 'none', status: 'Unknown', version: undefined },
         externalContainers: [],
       });
+    }
+  });
+
+  api.get('/services', async (c) => {
+    try {
+      const services = await ctx.serviceManager.list();
+      return c.json(services);
+    } catch (err) {
+      log.debug({ err }, 'List services failed');
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to list services' }, 500);
+    }
+  });
+
+  api.get('/services/templates', (c) => {
+    return c.json(
+      Object.entries(SERVICE_TEMPLATES).map(([key, template]) => ({
+        id: key,
+        name: key.charAt(0).toUpperCase() + key.slice(1),
+        image: template.image,
+        port: template.port,
+      })),
+    );
+  });
+
+  api.post('/services', async (c) => {
+    try {
+      const body = await c.req.json<{
+        name?: string;
+        template?: string;
+        image?: string;
+        port?: number;
+        env_vars?: Array<{ key: string; value: string }>;
+      }>();
+
+      if (!body.name) {
+        return c.json({ error: 'MISSING_FIELD', message: 'name is required' }, 400);
+      }
+
+      if (!body.template && !body.image) {
+        return c.json(
+          { error: 'MISSING_FIELD', message: 'Either template or image is required' },
+          400,
+        );
+      }
+
+      if (body.template && body.image) {
+        return c.json(
+          { error: 'INVALID_FIELD', message: 'Provide either template or image, not both' },
+          400,
+        );
+      }
+
+      if (body.image && body.port === undefined) {
+        return c.json(
+          { error: 'MISSING_FIELD', message: 'port is required when using custom image' },
+          400,
+        );
+      }
+
+      const service = await ctx.serviceManager.create({
+        name: body.name,
+        template: body.template,
+        image: body.image,
+        port: body.port,
+        envVars: body.env_vars,
+      });
+      return c.json(service);
+    } catch (err) {
+      log.debug({ err }, 'Create service failed');
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create service' }, 500);
+    }
+  });
+
+  api.delete('/services/:id', async (c) => {
+    const id = c.req.param('id');
+    try {
+      await ctx.serviceManager.remove(id);
+      return c.json({ status: 'removed' });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Remove service failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to remove service' }, 500);
+    }
+  });
+
+  api.post('/services/:id/start', async (c) => {
+    const id = c.req.param('id');
+    try {
+      await ctx.serviceManager.start(id);
+      return c.json({ status: 'started' });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Start service failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to start service' }, 500);
+    }
+  });
+
+  api.post('/services/:id/stop', async (c) => {
+    const id = c.req.param('id');
+    try {
+      await ctx.serviceManager.stop(id);
+      return c.json({ status: 'stopped' });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Stop service failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to stop service' }, 500);
     }
   });
 

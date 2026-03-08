@@ -13,6 +13,7 @@ import { WebhookManager } from './webhook/index.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
 import { BlueGreenDeployer } from './pipeline/blue-green.js';
 import { DatabaseProvisioner } from './pipeline/db-provision.js';
+import { ServiceManager } from './pipeline/service-manager.js';
 import { BuildDebugger } from './agent/debugger.js';
 import { ChannelManager } from './channels/base.js';
 import { PreviewDeployer } from './pipeline/preview.js';
@@ -59,6 +60,7 @@ export interface AppContext {
   // v0.5 modules
   alertMonitor: AlertMonitor;
   questionBridge: QuestionBridge;
+  serviceManager: ServiceManager;
 }
 
 /** Create the application context from config. */
@@ -252,6 +254,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
   // v0.3: Database provisioner
   const dbProvisioner = new DatabaseProvisioner(docker, db);
+  const serviceManager = new ServiceManager(docker, db);
 
   // (Build debugger moved above pipeline creation)
 
@@ -301,6 +304,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     autoDetector,
     alertMonitor,
     questionBridge,
+    serviceManager,
   };
 
   // Re-assign the channelManager's context reference (it was created with partial context)
