@@ -109,6 +109,7 @@ export const translations = {
     stop: 'Stop',
     expose: 'Expose',
     unexpose: 'Unexpose',
+    rollback: 'Rollback',
     notFound: 'Project not found',
     deploymentTimeline: 'Deployment timeline',
     buildLogs: 'Build logs',

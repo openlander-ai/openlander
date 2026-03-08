@@ -386,6 +386,41 @@ describe('Web API Routes', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /api/projects/:id/rollback
+  // ---------------------------------------------------------------------------
+
+  it('POST /api/projects/:id/rollback rolls back to previous image', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+
+    const res = await app.request('/api/projects/p1/rollback', { method: 'POST' });
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(ctx.pipeline.rollback).toHaveBeenCalledWith('p1');
+  });
+
+  it('POST /api/projects/:id/rollback returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/rollback', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /api/projects/:id/rollback returns 500 on failure', async () => {
+    db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
+    (ctx.pipeline.rollback as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      success: false,
+      error: 'No previous image',
+    });
+
+    const res = await app.request('/api/projects/p1/rollback', { method: 'POST' });
+    expect(res.status).toBe(500);
+
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.error).toBe('No previous image');
+  });
+
+  // ---------------------------------------------------------------------------
   // DELETE /api/projects/:id
   // ---------------------------------------------------------------------------
 

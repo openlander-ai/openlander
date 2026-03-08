@@ -6,6 +6,7 @@ export interface Project {
   repoUrl: string;
   branch?: string;
   port?: number;
+  previousImageTag?: string | null;
   url?: string;
   publicUrl?: string | null;
   createdAt: string;

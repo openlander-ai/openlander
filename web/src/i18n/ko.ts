@@ -111,6 +111,7 @@ export const translations: TranslationType = {
     stop: '중지',
     expose: '공개',
     unexpose: '비공개',
+    rollback: '롤백',
     notFound: '프로젝트를 찾을 수 없습니다',
     deploymentTimeline: '배포 타임라인',
     buildLogs: '빌드 로그',

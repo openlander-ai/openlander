@@ -49,7 +49,16 @@ export async function listProjects(): Promise<Project[]> {
 
 export async function getProject(id: string): Promise<Project> {
   const res = await fetch(`/api/projects/${id}`);
-  return res.json();
+  const data = (await res.json()) as Project & { previous_image_tag?: string | null };
+
+  if (data.previous_image_tag === undefined) {
+    return data;
+  }
+
+  return {
+    ...data,
+    previousImageTag: data.previous_image_tag,
+  };
 }
 
 export async function getProjectDeployments(id: string, limit = 50): Promise<DeployLogSummary[]> {
@@ -79,7 +88,6 @@ export async function redeployProject(id: string): Promise<void> {
     const error = await res.text();
     throw new Error(error || 'Failed to redeploy project');
   }
-
   // SSE stream is consumed by the server-side build/stream endpoint via eventBus.
   // We don't need to read the SSE here — just fire the request and let the
   // timeline's NDJSON build stream pick up events.
@@ -90,6 +98,16 @@ export async function redeployProject(id: string): Promise<void> {
   }
 }
 
+export async function rollbackProject(id: string): Promise<DeployResult> {
+  const res = await fetch(`/api/projects/${id}/rollback`, { method: 'POST' });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to rollback project');
+  }
+
+  return res.json();
+}
 export async function deleteProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}`, { method: 'DELETE' });
 }

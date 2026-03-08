@@ -7,6 +7,7 @@ import {
   stopProject,
   exposeProject,
   unexposeProject,
+  rollbackProject,
   getProjectDeployments,
   debugBuild,
   type BuildDiagnosis,
@@ -28,7 +29,6 @@ import {
   Loader2,
   GitBranch,
   Activity,
-  Brain,
   ScrollText,
   Settings,
   Globe,
@@ -353,6 +353,32 @@ export function ProjectDetail() {
     }
   };
 
+  const handleRollback = async () => {
+    if (isMobile) {
+      showMobileToast();
+      return;
+    }
+    if (!id || actionLoading) return;
+    if (!project?.previousImageTag) return;
+
+    setActionLoading('rollback');
+    setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+
+    try {
+      await rollbackProject(id);
+      setTimelineRunKey((k) => k + 1);
+    } catch (err) {
+      console.error('Rollback failed:', err);
+      try {
+        const data = await getProject(id);
+        setProject(data);
+      } catch {
+        // silent
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -430,6 +456,20 @@ export function ProjectDetail() {
                 <RotateCw className="h-3 w-3" />
               )}
               {t('projects.redeploy')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
+              onClick={handleRollback}
+              disabled={!project.previousImageTag || !!actionLoading}
+            >
+              {actionLoading === 'rollback' ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <History className="h-3 w-3" />
+              )}
+              {t('projectDetail.rollback')}
             </Button>
             <Button
               variant="outline"

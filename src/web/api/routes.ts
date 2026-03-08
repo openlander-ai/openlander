@@ -1187,7 +1187,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
-    const body = await c.req.json<{ action: string }>();
+    const body = await c.req.json<{ action: string }>().catch(() => ({ action: '' }));
     const { action } = body;
 
     switch (action) {
