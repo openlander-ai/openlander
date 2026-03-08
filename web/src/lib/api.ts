@@ -383,3 +383,14 @@ export async function pollGithubDeviceFlow(
   });
   return res.json();
 }
+
+export interface ServerStatus {
+  containers: { total: number; managed: number; external: number };
+  portsInUse: number;
+  proxy: { type: string; status: string; version?: string };
+}
+
+export async function getServerStatus(): Promise<ServerStatus> {
+  const res = await fetch('/api/server/status');
+  return res.json();
+}

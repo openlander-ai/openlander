@@ -13,6 +13,8 @@ import {
   disconnectGithub,
   startGithubDeviceFlow,
   pollGithubDeviceFlow,
+  getServerStatus,
+  type ServerStatus,
   type GlobalSecret,
   type OAuthStatus,
 } from '@/lib/api';
@@ -38,6 +40,10 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Network,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 export function SettingsPage() {
@@ -68,6 +74,28 @@ export function SettingsPage() {
   } | null>(null);
   const [deviceFlowPolling, setDeviceFlowPolling] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
+  const [serverStatusLoading, setServerStatusLoading] = useState(true);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [copiedServiceUrl, setCopiedServiceUrl] = useState(false);
+
+  useEffect(() => {
+    getServerStatus()
+      .then(setServerStatus)
+      .catch(console.error)
+      .finally(() => setServerStatusLoading(false));
+  }, []);
+
+  const handleCopyServiceUrl = async () => {
+    try {
+      await navigator.clipboard.writeText('http://localhost:80');
+      setCopiedServiceUrl(true);
+      setTimeout(() => setCopiedServiceUrl(false), 2000);
+    } catch {
+      window.prompt('Copy this URL:', 'http://localhost:80');
+    }
+  };
 
   const fetchOAuthStatus = useCallback(async () => {
     try {
@@ -661,6 +689,142 @@ export function SettingsPage() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* Reverse Proxy */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Network className="h-4 w-4 text-secondary-ol" />
+          <h2 className="font-display text-lg font-semibold text-primary-ol">
+            {t('settings.proxy.title')}
+          </h2>
+        </div>
+
+        {serverStatusLoading ? (
+          <p className="text-sm font-body text-muted-ol">{t('settings.proxy.loading')}</p>
+        ) : serverStatus ? (
+          <div className="space-y-4">
+            {serverStatus.proxy.type === 'none' && (
+              <div className="rounded-lg border border-warning/20 bg-warning/5 p-3 flex items-start gap-3">
+                <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                <p className="text-sm font-body text-warning-foreground">
+                  {t('settings.proxy.warning')}
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <StatCard
+                icon={<Network className="h-4 w-4" />}
+                label={t('settings.proxy.type')}
+                value={
+                  serverStatus.proxy.type === 'none'
+                    ? 'None'
+                    : serverStatus.proxy.type.charAt(0).toUpperCase() +
+                      serverStatus.proxy.type.slice(1)
+                }
+                color="text-agent"
+              />
+              <StatCard
+                icon={<CheckCircle2 className="h-4 w-4" />}
+                label={t('settings.proxy.status')}
+                value={serverStatus.proxy.status}
+                color={
+                  serverStatus.proxy.status.toLowerCase() === 'running'
+                    ? 'text-success'
+                    : 'text-warning'
+                }
+              />
+              <StatCard
+                icon={<HardDrive className="h-4 w-4" />}
+                label={t('settings.proxy.containers')}
+                value={`${serverStatus.containers.managed}/${serverStatus.containers.total}`}
+                color="text-secondary-ol"
+              />
+              <StatCard
+                icon={<Network className="h-4 w-4" />}
+                label={t('settings.proxy.ports')}
+                value={serverStatus.portsInUse.toString()}
+                color="text-secondary-ol"
+              />
+            </div>
+
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setGuideOpen(!guideOpen)}
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-bg-subtle/50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-agent" />
+                  <span className="font-display font-medium text-primary-ol">
+                    {t('settings.proxy.tunnelGuide.title')}
+                  </span>
+                </div>
+                {guideOpen ? (
+                  <ChevronUp className="h-4 w-4 text-muted-ol" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-ol" />
+                )}
+              </button>
+
+              {guideOpen && (
+                <div className="p-4 pt-0 space-y-4 border-t border-border/50 mt-2">
+                  <p className="text-sm font-body text-secondary-ol">
+                    {t('settings.proxy.tunnelGuide.description')}
+                  </p>
+
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-agent/10 text-xs font-medium text-agent">
+                        1
+                      </div>
+                      <p className="text-sm font-body text-primary-ol pt-0.5">
+                        {t('settings.proxy.tunnelGuide.step1')}
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-agent/10 text-xs font-medium text-agent">
+                        2
+                      </div>
+                      <div className="space-y-2 flex-1">
+                        <p className="text-sm font-body text-primary-ol pt-0.5">
+                          {t('settings.proxy.tunnelGuide.step2')}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 rounded bg-bg-app px-3 py-2 font-mono text-sm text-primary-ol border border-border">
+                            service: {t('settings.proxy.tunnelGuide.serviceUrl')}
+                          </code>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCopyServiceUrl}
+                            className="shrink-0"
+                          >
+                            {copiedServiceUrl ? (
+                              <Check className="h-4 w-4 text-success" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-agent/10 text-xs font-medium text-agent">
+                        3
+                      </div>
+                      <p className="text-sm font-body text-primary-ol pt-0.5">
+                        {t('settings.proxy.tunnelGuide.step3')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {/* System Stats */}

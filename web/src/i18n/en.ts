@@ -209,6 +209,27 @@ export const translations = {
       connect: 'Connect',
       refresh: 'Refresh',
     },
+    proxy: {
+      title: 'Reverse Proxy',
+      status: 'Status',
+      type: 'Type',
+      version: 'Version',
+      containers: 'Containers',
+      managed: 'Managed',
+      external: 'External',
+      ports: 'Ports in use',
+      tunnelGuide: {
+        title: 'Cloudflare Tunnel Setup',
+        description:
+          "For production domains, point your CF Tunnel to Traefik instead of individual container ports. This ensures redeployments don't break your tunnel.",
+        step1: 'Edit your Cloudflare Tunnel config',
+        step2: 'Set service URL to:',
+        step3: 'Restart cloudflared',
+        serviceUrl: 'http://localhost:80',
+      },
+      warning: 'Traefik not detected — redeployments may break external access',
+      loading: 'Loading proxy status...',
+    },
     system: {
       title: 'System Resources',
       loading: 'Loading system stats...',

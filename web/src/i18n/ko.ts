@@ -214,6 +214,27 @@ export const translations: TranslationType = {
       connect: '연결',
       refresh: '새로고침',
     },
+    proxy: {
+      title: '리버스 프록시',
+      status: '상태',
+      type: '유형',
+      version: '버전',
+      containers: '컨테이너',
+      managed: '관리 대상',
+      external: '외부',
+      ports: '사용 중인 포트',
+      tunnelGuide: {
+        title: 'Cloudflare Tunnel 설정',
+        description:
+          '프로덕션 도메인의 경우, CF Tunnel을 개별 컨테이너 포트 대신 Traefik으로 연결하세요. 재배포 시 터널이 끊기지 않습니다.',
+        step1: 'Cloudflare Tunnel 설정 편집',
+        step2: '서비스 URL을 다음으로 설정:',
+        step3: 'cloudflared 재시작',
+        serviceUrl: 'http://localhost:80',
+      },
+      warning: 'Traefik 미감지 — 재배포 시 외부 접근이 끊길 수 있습니다',
+      loading: '프록시 상태 로딩 중...',
+    },
     system: {
       title: '시스템 리소스',
       loading: '시스템 통계 로딩 중...',
