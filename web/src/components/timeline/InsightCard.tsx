@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { TimelineItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
+import { formatTime } from '@/lib/time';
 import { Info, AlertTriangle, AlertCircle, Loader2 } from 'lucide-react';
 
 interface InsightCardProps {
@@ -37,19 +38,6 @@ const severityConfig = {
     btnBg: 'bg-error/10 hover:bg-error/20 border-error/20 text-error',
   },
 } as const;
-
-function formatTime(timestamp: string): string {
-  try {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-  } catch {
-    return '';
-  }
-}
 
 export function InsightCard({ item, onAction }: InsightCardProps) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null);

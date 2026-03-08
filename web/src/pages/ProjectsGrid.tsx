@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/i18n/context';
 import { useProjects } from '@/hooks/use-projects';
 import { redeployProject } from '@/lib/api';
+import { formatRelativeTime } from '@/lib/time';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Plus, ExternalLink, GitBranch, Clock, RotateCw, Settings, Loader2 } from 'lucide-react';
@@ -31,17 +32,6 @@ function getStatusConfig(
       badge: 'text-error border-error/30 bg-error/10',
     },
   };
-}
-
-function timeAgo(dateStr: string, t: (key: string) => string): string {
-  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-  if (seconds < 60) return t('projects.timeAgo.justNow');
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}${t('projects.timeAgo.minutes')}`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}${t('projects.timeAgo.hours')}`;
-  const days = Math.floor(hours / 24);
-  return `${days}${t('projects.timeAgo.days')}`;
 }
 
 export function ProjectsGrid() {
@@ -172,7 +162,7 @@ export function ProjectsGrid() {
                     )}
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {timeAgo(project.updatedAt, t)}
+                      {formatRelativeTime(project.updatedAt, t)}
                     </span>
                   </div>
                 </div>

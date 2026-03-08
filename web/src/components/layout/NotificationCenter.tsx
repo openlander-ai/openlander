@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { Notification } from '@/hooks/use-notifications';
 import { cn } from '@/lib/utils';
+import { formatTime } from '@/lib/time';
 
 interface NotificationCenterProps {
   notifications: Notification[];
@@ -74,18 +75,6 @@ function getActions(type: Notification['type']): Array<{ label: string; action: 
       return [{ label: 'Clean Up', action: 'cleanup_images' }];
     default:
       return [];
-  }
-}
-
-function formatTime(dateStr: string): string {
-  try {
-    return new Date(dateStr).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-  } catch {
-    return '';
   }
 }
 

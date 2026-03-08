@@ -19,6 +19,7 @@ import { LogViewer } from '@/components/logs/LogViewer';
 import { LogPreview } from '@/components/timeline/LogPreview';
 import { EnvVarsTable } from '@/components/config/EnvVarsTable';
 import { DomainsPanel } from '@/components/config/DomainsPanel';
+import { formatRelativeTime } from '@/lib/time';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Project, DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
@@ -86,21 +87,6 @@ function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) 
   }
 
   return lines.join('\n');
-}
-
-function formatRelativeTime(dateStr: string, t: (key: string) => string) {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-  if (diffInSeconds < 60)
-    return `${diffInSeconds}${t('projects.timeAgo.minutes').replace('m', 's')}`;
-  const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) return `${diffInMinutes}${t('projects.timeAgo.minutes')}`;
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) return `${diffInHours}${t('projects.timeAgo.hours')}`;
-  const diffInDays = Math.floor(diffInHours / 24);
-  return `${diffInDays}${t('projects.timeAgo.days')}`;
 }
 
 function formatDuration(ms: number) {

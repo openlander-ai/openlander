@@ -1,6 +1,7 @@
 import { useLanguage } from '@/i18n/context';
 import type { TimelineItem as TItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
+import { formatTime } from '@/lib/time';
 import {
   ExternalLink,
   AlertCircle,
@@ -23,19 +24,6 @@ interface TimelineItemProps {
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
   onInsightAction?: (projectId: string, action: string) => Promise<void>;
-}
-
-function formatTime(timestamp: string): string {
-  try {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-  } catch {
-    return '';
-  }
 }
 function cleanMarkdown(text: string): string {
   if (!text) return '';

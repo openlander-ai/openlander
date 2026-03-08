@@ -1,22 +1,10 @@
 import type { TimelineItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
+import { formatTime } from '@/lib/time';
 import { Wrench } from 'lucide-react';
 
 interface DockerfileFixedCardProps {
   item: TimelineItem;
-}
-
-function formatTime(timestamp: string): string {
-  try {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
-  } catch {
-    return '';
-  }
 }
 
 export function DockerfileFixedCard({ item }: DockerfileFixedCardProps) {
