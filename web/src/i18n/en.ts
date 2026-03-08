@@ -239,6 +239,17 @@ export const translations = {
       memory: 'Memory',
       disk: 'Disk',
     },
+    serverScan: {
+      title: 'Server Scan',
+      loading: 'Scanning server...',
+      totalContainers: 'Total',
+      managed: 'Managed',
+      external: 'External',
+      portsInUse: 'Ports',
+      externalDescription: 'Containers not managed by OpenLander detected on this server:',
+      allClear: 'All clear',
+      noExternal: 'No external containers detected. All containers are managed by OpenLander.',
+    },
   },
   common: {
     cancel: 'Cancel',
@@ -274,6 +285,10 @@ export const translations = {
     accessibleFrom: 'Accessible from any device on the same network via sslip.io DNS.',
     directAccess: 'Direct Access',
     directPortAccess: 'Direct port access — works with LAN, VPN (Tailscale), or any network route.',
+    customDomains: 'Custom Domains',
+    noCustomDomains: 'No custom domains configured',
+    customDomainsHelp:
+      "Add a custom domain via Cloudflare Tunnel. Point your domain's DNS to the tunnel.",
     publicUrl: 'Public URL',
     remove: 'Remove',
     exposeToInternet: 'Expose to Internet',

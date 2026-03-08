@@ -421,6 +421,7 @@ export interface ServerStatus {
   containers: { total: number; managed: number; external: number };
   portsInUse: number;
   proxy: { type: string; status: string; version?: string };
+  externalContainers: { name: string; image: string; ports: number[] }[];
 }
 
 export async function getServerStatus(): Promise<ServerStatus> {
@@ -461,4 +462,38 @@ export async function setProjectWebhook(
 export async function deleteProjectWebhook(projectId: string, source: string): Promise<void> {
   const res = await fetch(`/api/projects/${projectId}/webhooks/${source}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete webhook');
+}
+
+export interface DomainMapping {
+  domain: string;
+  hostname?: string;
+}
+
+export async function getProjectDomains(projectId: string): Promise<DomainMapping[]> {
+  const res = await fetch(`/api/projects/${projectId}/domains`);
+  if (!res.ok) throw new Error('Failed to fetch domains');
+  const data = await res.json();
+  return data.domains;
+}
+
+export async function addProjectDomain(projectId: string, domain: string): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/domains`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ domain }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ message: 'Failed to add domain' }));
+    throw new Error(data.message || 'Failed to add domain');
+  }
+}
+
+export async function removeProjectDomain(projectId: string, domain: string): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/domains/${encodeURIComponent(domain)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ message: 'Failed to remove domain' }));
+    throw new Error(data.message || 'Failed to remove domain');
+  }
 }

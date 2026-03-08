@@ -242,6 +242,17 @@ export const translations = {
       memory: '메모리',
       disk: '디스크',
     },
+    serverScan: {
+      title: '서버 스캔',
+      loading: '서버 스캔 중...',
+      totalContainers: '전체',
+      managed: '관리 중',
+      external: '외부',
+      portsInUse: '포트',
+      externalDescription: '이 서버에서 OpenLander가 관리하지 않는 컨테이너가 감지되었습니다:',
+      allClear: '문제 없음',
+      noExternal: '외부 컨테이너가 감지되지 않았습니다. 모든 컨테이너가 OpenLander에서 관리됩니다.',
+    },
   },
   common: {
     cancel: '취소',
@@ -278,6 +289,10 @@ export const translations = {
     directAccess: '직접 액세스',
     directPortAccess:
       '직접 포트 액세스 — LAN, VPN (Tailscale) 또는 모든 네트워크 경로에서 작동합니다.',
+    customDomains: '커스텀 도메인',
+    noCustomDomains: '커스텀 도메인이 설정되지 않았습니다',
+    customDomainsHelp:
+      'Cloudflare Tunnel을 통해 커스텀 도메인을 추가하세요. 도메인의 DNS를 터널로 연결하세요.',
     publicUrl: '공개 URL',
     remove: '제거',
     exposeToInternet: '인터넷에 공개',

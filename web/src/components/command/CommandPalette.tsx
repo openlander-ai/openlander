@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProjects } from '@/hooks/use-projects';
 import { redeployProject, stopProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context';
 import { Search, FolderOpen, RotateCw, Square, Settings, Plus, Command } from 'lucide-react';
 
 interface CommandItem {

@@ -1,11 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { translations as enTranslations } from './en';
 import { translations as koTranslations } from './ko';
 import { setLanguage as apiSetLanguage } from '@/lib/api';
 
 type Language = 'en' | 'ko';
 
-type Translations = typeof enTranslations;
+type Translations = any;
 
 interface LanguageContextType {
   language: Language;

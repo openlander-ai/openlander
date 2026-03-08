@@ -1,8 +1,29 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
-import { getProject, exposeProject, unexposeProject, getAllIps, type NetworkIp } from '@/lib/api';
+import {
+  getProject,
+  exposeProject,
+  unexposeProject,
+  getAllIps,
+  type NetworkIp,
+  getProjectDomains,
+  addProjectDomain,
+  removeProjectDomain,
+  type DomainMapping,
+} from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Globe, ExternalLink, Loader2, Copy, Check, Wifi, Monitor } from 'lucide-react';
+import {
+  Globe,
+  ExternalLink,
+  Loader2,
+  Copy,
+  Check,
+  Wifi,
+  Monitor,
+  Trash2,
+  Plus,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface DomainsPanelProps {
   projectId: string;
@@ -18,7 +39,9 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
   const [exposing, setExposing] = useState(false);
   const [unexposing, setUnexposing] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-
+  const [domains, setDomains] = useState<DomainMapping[]>([]);
+  const [newDomain, setNewDomain] = useState('');
+  const [addingDomain, setAddingDomain] = useState(false);
   const fetchProject = useCallback(async () => {
     try {
       const data = await getProject(projectId);
@@ -27,6 +50,8 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
       setAssignedPort(data.port ?? null);
       const ips = await getAllIps();
       setNetworkIps(ips);
+      const domainsList = await getProjectDomains(projectId);
+      setDomains(domainsList);
     } catch {
       // silent
     } finally {
@@ -62,6 +87,29 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
     }
   };
 
+  const handleAddDomain = async () => {
+    if (!newDomain.trim()) return;
+    setAddingDomain(true);
+    try {
+      await addProjectDomain(projectId, newDomain.trim());
+      const updated = await getProjectDomains(projectId);
+      setDomains(updated);
+      setNewDomain('');
+    } catch (err) {
+      console.error('Failed to add domain:', err);
+    } finally {
+      setAddingDomain(false);
+    }
+  };
+
+  const handleRemoveDomain = async (domain: string) => {
+    try {
+      await removeProjectDomain(projectId, domain);
+      setDomains((prev) => prev.filter((d) => d.domain !== domain));
+    } catch (err) {
+      console.error('Failed to remove domain:', err);
+    }
+  };
   const copyToClipboard = async (url: string, label: string) => {
     try {
       await navigator.clipboard.writeText(url);
@@ -162,6 +210,79 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
           <p className="text-[11px] font-body text-muted-ol">{t('domains.directPortAccess')}</p>
         </div>
       )}
+
+      {/* Custom Domains */}
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Globe className="h-3.5 w-3.5 text-muted-ol" />
+            <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
+              {t('domains.customDomains')}
+            </span>
+          </div>
+        </div>
+
+        {/* Domain list */}
+        {domains.length > 0 ? (
+          <div className="space-y-1.5">
+            {domains.map((d) => (
+              <div key={d.domain} className="flex items-center justify-between gap-2 py-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <a
+                    href={`https://${d.domain}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-mono text-agent hover:text-agent/80 transition-colors flex items-center gap-1 truncate"
+                  >
+                    {d.domain}
+                    <ExternalLink className="h-3 w-3 shrink-0" />
+                  </a>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-muted-ol hover:text-error shrink-0"
+                  onClick={() => handleRemoveDomain(d.domain)}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm font-body text-muted-ol">{t('domains.noCustomDomains')}</p>
+        )}
+
+        {/* Add domain form */}
+        <div className="flex items-center gap-2 pt-1">
+          <input
+            type="text"
+            value={newDomain}
+            onChange={(e) => setNewDomain(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleAddDomain();
+            }}
+            placeholder="example.com"
+            className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-sm font-mono text-primary-ol placeholder:text-muted-ol"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-body gap-1.5"
+            onClick={handleAddDomain}
+            disabled={!newDomain.trim() || addingDomain}
+          >
+            {addingDomain ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Plus className="h-3 w-3" />
+            )}
+            {t('domains.addDomain')}
+          </Button>
+        </div>
+
+        <p className="text-[11px] font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
+      </div>
 
       {/* Public URL */}
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">

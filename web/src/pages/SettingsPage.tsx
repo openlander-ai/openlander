@@ -44,6 +44,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Server,
 } from 'lucide-react';
 
 export function SettingsPage() {
@@ -825,6 +826,100 @@ export function SettingsPage() {
             </div>
           </div>
         ) : null}
+      </section>
+
+      {/* Server Scan */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Server className="h-4 w-4 text-agent" />
+          <h2 className="text-sm font-display font-semibold text-primary-ol">
+            {t('settings.serverScan.title')}
+          </h2>
+        </div>
+
+        {!serverStatus ? (
+          <p className="text-sm font-body text-muted-ol">{t('settings.serverScan.loading')}</p>
+        ) : (
+          <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
+            {/* Summary row */}
+            <div className="px-4 py-3 border-b border-[hsl(var(--border))] bg-bg-subtle/30">
+              <div className="flex items-center gap-6 text-xs font-body">
+                <div>
+                  <span className="text-muted-ol">{t('settings.serverScan.totalContainers')}:</span>{' '}
+                  <span className="font-medium text-primary-ol">
+                    {serverStatus.containers.total}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-ol">{t('settings.serverScan.managed')}:</span>{' '}
+                  <span className="font-medium text-success">
+                    {serverStatus.containers.managed}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-ol">{t('settings.serverScan.external')}:</span>{' '}
+                  <span className="font-medium text-warning">
+                    {serverStatus.containers.external}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-ol">{t('settings.serverScan.portsInUse')}:</span>{' '}
+                  <span className="font-medium text-primary-ol">{serverStatus.portsInUse}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* External containers list */}
+            <div className="p-4">
+              {serverStatus.externalContainers && serverStatus.externalContainers.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-body text-muted-ol mb-2">
+                    {t('settings.serverScan.externalDescription')}
+                  </p>
+                  {serverStatus.externalContainers.map((container) => (
+                    <div
+                      key={container.name}
+                      className="flex items-center justify-between py-2 px-3 rounded-md bg-bg-subtle/50 border border-[hsl(var(--border))]"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-2 w-2 rounded-full bg-warning shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-mono text-primary-ol truncate">
+                            {container.name}
+                          </p>
+                          <p className="text-[11px] font-body text-muted-ol truncate">
+                            {container.image}
+                          </p>
+                        </div>
+                      </div>
+                      {container.ports.length > 0 && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          {container.ports.map((port) => (
+                            <span
+                              key={port}
+                              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-secondary-ol"
+                            >
+                              :{port}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm font-body text-success">
+                    {t('settings.serverScan.allClear')}
+                  </p>
+                  <p className="text-[11px] font-body text-muted-ol mt-1">
+                    {t('settings.serverScan.noExternal')}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* System Stats */}
