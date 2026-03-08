@@ -66,7 +66,7 @@ export interface AppContext {
 /** Create the application context from config. */
 export function createAppContext(config: OpenLanderConfig, dbPath: string): AppContext {
   const db = new Database(dbPath);
-  const docker = new Docker(config.docker.socketPath || undefined);
+  const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
   const jobManager = new JobManager();
   const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager);
   const traefik = new TraefikManager(docker);
@@ -258,32 +258,14 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
 
   // (Build debugger moved above pipeline creation)
 
-  // v0.4: Channel manager
-  const channelManager = new ChannelManager({
-    config,
-    db,
-    docker,
-    pipeline,
-    composePipeline,
-    traefik,
-    env,
-    agent,
-    healthMonitor,
-    webhookManager,
-    cloudflare,
-    blueGreen,
-    dbProvisioner,
-    buildDebugger,
-    jobManager,
-  } as AppContext);
-
   // v0.4: Preview deployer
   const previewDeployer = new PreviewDeployer(docker, db);
 
   // v0.5: Alert monitor
   const alertMonitor = new AlertMonitor(docker, db, eventBus);
 
-  const ctx: AppContext = {
+  // Build partial ctx without channelManager, then compose the full AppContext
+  const partialCtx = {
     config,
     db,
     docker,
@@ -298,7 +280,6 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     blueGreen,
     dbProvisioner,
     buildDebugger,
-    channelManager,
     previewDeployer,
     jobManager,
     autoDetector,
@@ -307,10 +288,11 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     serviceManager,
   };
 
-  // Re-assign the channelManager's context reference (it was created with partial context)
-  // ChannelManager already holds the reference, no update needed
+  // v0.4: ChannelManager needs AppContext but never self-references channelManager.
+  // We cast partialCtx which is structurally complete for ChannelManager's actual usage.
+  const channelManager = new ChannelManager(partialCtx as AppContext);
 
-  return ctx;
+  return { ...partialCtx, channelManager };
 }
 
 /** Shutdown the application context. */

@@ -1,0 +1,648 @@
+import { Hono } from 'hono';
+import { stream } from 'hono/streaming';
+
+import type { AppContext } from '../../app.js';
+import { ProjectNotFoundError } from '../../errors.js';
+import { createModuleLogger } from '../../lib/logger.js';
+import { getProjectUrl } from '../../pipeline/traefik.js';
+
+const log = createModuleLogger('api');
+
+export function createProjectRoutes(ctx: AppContext): Hono {
+  const api = new Hono();
+
+  api.get('/projects/:id/stats', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    if (project.container_id && project.status === 'running') {
+      try {
+        const container = ctx.docker.getClient().getContainer(project.container_id);
+        const stats = await container.stats({ stream: false });
+
+        const cpuDelta =
+          stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
+        const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
+        const cpuPercent =
+          systemDelta > 0
+            ? (cpuDelta / systemDelta) * stats.cpu_stats.cpu_usage.percpu_usage.length * 100
+            : 0;
+
+        return c.json({
+          cpu: Math.round(cpuPercent * 10) / 10,
+          memory: stats.memory_stats.usage,
+          memoryLimit: stats.memory_stats.limit,
+          status: project.status,
+        });
+      } catch (err) {
+        log.debug({ err, projectId: project.id }, 'Container stats fetch failed');
+        return c.json({
+          cpu: 0,
+          memory: 0,
+          memoryLimit: 0,
+          status: project.status,
+        });
+      }
+    }
+
+    return c.json({
+      cpu: 0,
+      memory: 0,
+      memoryLimit: 0,
+      status: project.status,
+    });
+  });
+
+  api.get('/projects', (c) => {
+    const status = c.req.query('status') as
+      | 'running'
+      | 'stopped'
+      | 'building'
+      | 'error'
+      | undefined;
+    const projects = ctx.db.listProjects(status);
+
+    return c.json({
+      count: projects.length,
+      projects: projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        status: p.status,
+        visibility: p.visibility,
+        repoUrl: p.repo_url,
+        branch: p.branch,
+        port: p.assigned_port,
+        url: p.assigned_port ? getProjectUrl(p.name) : null,
+        publicUrl: p.public_url,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+        parentProjectId: p.parent_project_id,
+        isCompose: ctx.db.isParentProject(p.id),
+        serviceCount: ctx.db.getChildProjects(p.id).length,
+      })),
+    });
+  });
+
+  api.get('/projects/:id', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const envVars = ctx.env.getAllMasked(project.id);
+    const deployLogs = ctx.db.getDeployLogs(project.id, 5);
+
+    return c.json({
+      ...project,
+      port: project.assigned_port ?? null,
+      url: project.assigned_port ? getProjectUrl(project.name) : null,
+      envVars,
+      recentDeploys: deployLogs,
+    });
+  });
+
+  // --- Deployment History ---
+
+  api.get('/projects/:id/deployments', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const limit = parseInt(c.req.query('limit') ?? '50', 10);
+    const logs = ctx.db.getDeployLogs(project.id, limit);
+
+    return c.json({
+      count: logs.length,
+      deployments: logs.map((log) => ({
+        id: log.id,
+        status: log.status,
+        trigger: log.trigger,
+        commitSha: log.commit_sha,
+        durationMs: log.duration_ms,
+        createdAt: log.created_at,
+      })),
+    });
+  });
+
+  api.get('/projects/:id/deployments/:deployId', (c) => {
+    const id = c.req.param('id');
+    const deployId = c.req.param('deployId');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const log = ctx.db.getDeployLog(deployId);
+    if (!log || log.project_id !== project.id) {
+      return c.json({ error: 'NOT_FOUND', message: 'Deployment not found' }, 404);
+    }
+
+    return c.json({
+      id: log.id,
+      projectId: log.project_id,
+      status: log.status,
+      trigger: log.trigger,
+      commitSha: log.commit_sha,
+      buildLog: log.build_log,
+      durationMs: log.duration_ms,
+      createdAt: log.created_at,
+    });
+  });
+
+  // v0.2.3: Start a stopped project
+  api.post('/projects/:id/start', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    if (project.status === 'running') {
+      return c.json({ status: 'already_running', project: project.name }, 200);
+    }
+    if (!project.container_id) {
+      return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
+    }
+
+    await ctx.pipeline.start(project.id);
+    return c.json({ status: 'started', project: project.name });
+  });
+
+  api.post('/projects/:id/stop', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    await ctx.pipeline.stop(project.id);
+    return c.json({ status: 'stopped', project: project.name });
+  });
+
+  api.post('/projects/:id/redeploy', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    // Mark project as building so build/stream sees fresh state
+    ctx.db.updateProject(project.id, { status: 'building' });
+
+    // Redeploy is deterministic — no LLM needed. Direct pipeline call.
+    try {
+      const result = await ctx.pipeline.redeploy(project.id);
+      return c.json(result, result.success ? 200 : 500);
+    } catch (err) {
+      // Ensure status is reset on unexpected error
+      ctx.db.updateProject(project.id, { status: 'error' });
+      const errMsg = err instanceof Error ? err.message : String(err);
+      return c.json({ success: false, error: errMsg }, 500);
+    }
+  });
+
+  // v0.3: Rollback
+  api.post('/projects/:id/rollback', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const result = await ctx.pipeline.rollback(project.id);
+    return c.json(result, result.success ? 200 : 500);
+  });
+
+  // v0.3: Blue-green deployment
+  api.post('/projects/:id/blue-green', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req
+      .json<{ health_check_path?: string }>()
+      .catch((): { health_check_path?: string } => ({}));
+    const result = await ctx.blueGreen.deploy(project.id, {
+      healthCheckPath: body.health_check_path,
+    });
+    return c.json(result, result.success ? 200 : 500);
+  });
+
+  // v0.2.3: Webhook settings API
+  api.get('/projects/:id/webhooks', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+    const configs = ctx.db.getWebhookConfigs(project.id);
+    return c.json({
+      webhooks: configs.map((cfg) => ({
+        id: cfg.id,
+        source: cfg.source,
+        secret: cfg.secret,
+        branchFilter: cfg.branch_filter,
+        enabled: cfg.enabled === 1,
+        webhookUrl: `/api/webhooks/${project.id}/${cfg.source}`,
+        createdAt: cfg.created_at,
+      })),
+    });
+  });
+
+  api.post('/projects/:id/webhooks', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+    const body = await c.req.json<{ source: string; branch_filter?: string; enabled?: boolean }>();
+    if (!body.source || !['github', 'gitlab', 'bitbucket'].includes(body.source)) {
+      return c.json({ error: 'Invalid source. Must be github, gitlab, or bitbucket.' }, 400);
+    }
+    const source = body.source as 'github' | 'gitlab' | 'bitbucket';
+    const existing = ctx.db.getWebhookConfig(project.id, source);
+    const secret = existing?.secret ?? `${project.id}.${crypto.randomUUID().replace(/-/g, '')}`;
+    const configId = existing?.id ?? crypto.randomUUID();
+    ctx.db.setWebhookConfig({
+      id: configId,
+      projectId: project.id,
+      source,
+      secret,
+      branchFilter: body.branch_filter ?? 'main',
+      enabled: body.enabled !== false,
+    });
+    const config = ctx.db.getWebhookConfig(project.id, source);
+    if (!config) {
+      return c.json({ error: 'Failed to configure webhook' }, 500);
+    }
+    return c.json({
+      id: config.id,
+      source: config.source,
+      secret: config.secret,
+      branchFilter: config.branch_filter,
+      enabled: config.enabled === 1,
+      webhookUrl: `/api/webhooks/${project.id}/${config.source}`,
+    });
+  });
+
+  api.delete('/projects/:id/webhooks/:source', (c) => {
+    const id = c.req.param('id');
+    const source = c.req.param('source');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+    if (!['github', 'gitlab', 'bitbucket'].includes(source)) {
+      return c.json({ error: 'Invalid source' }, 400);
+    }
+    ctx.db.deleteWebhookConfig(project.id, source as 'github' | 'gitlab' | 'bitbucket');
+    return c.json({ status: 'deleted' });
+  });
+
+  // v0.3: Database provisioning
+  api.post('/projects/:id/provision-db', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req
+      .json<{ type?: 'sqlite' | 'postgres'; db_name?: string }>()
+      .catch((): { type?: 'sqlite' | 'postgres'; db_name?: string } => ({}));
+    const result = await ctx.dbProvisioner.provision(project.id, {
+      type: body.type ?? 'postgres',
+      dbName: body.db_name,
+    });
+    return c.json({ status: 'provisioned', project: project.name, ...result });
+  });
+
+  // v0.3: Build error debugging
+  api.post('/projects/:id/debug-build', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    if (!ctx.buildDebugger) {
+      return c.json(
+        { error: 'LLM_NOT_CONFIGURED', message: 'Build debugger requires an LLM provider.' },
+        400,
+      );
+    }
+
+    const lastDeploy = ctx.db.getLastDeployLog(project.id);
+    if (!lastDeploy || lastDeploy.status !== 'failed') {
+      return c.json(
+        { error: 'NO_FAILED_BUILD', message: 'No failed build found for this project.' },
+        404,
+      );
+    }
+
+    const diagnosis = await ctx.buildDebugger.diagnose({
+      buildLog: lastDeploy.build_log ?? 'No build log available',
+      projectName: project.name,
+      imageTag: project.image_tag ?? `openlander/${project.name}:latest`,
+      failedStep: 'build',
+    });
+    return c.json(diagnosis);
+  });
+
+  // v0.4: Preview deployments
+  api.post('/previews/deploy', async (c) => {
+    const body = await c.req.json<{
+      repo_url: string;
+      branch: string;
+      project_id?: string;
+      ttl_ms?: number;
+    }>();
+    if (!body.repo_url || !body.branch) {
+      return c.json({ error: 'MISSING_FIELD', message: 'repo_url and branch are required' }, 400);
+    }
+    const result = await ctx.previewDeployer.deploy({
+      repoUrl: body.repo_url,
+      branch: body.branch,
+      projectId: body.project_id,
+      ttlMs: body.ttl_ms,
+      sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+    });
+    return c.json(result, result.success ? 200 : 500);
+  });
+
+  api.get('/previews', (c) => {
+    const previews = ctx.previewDeployer.list();
+    return c.json({
+      count: previews.length,
+      previews: previews.map((p) => ({
+        branch: p.branch,
+        url: p.url,
+        port: p.port,
+        createdAt: p.createdAt.toISOString(),
+      })),
+    });
+  });
+
+  api.delete('/previews/:id', async (c) => {
+    const previewId = c.req.param('id');
+    await ctx.previewDeployer.cleanup(previewId);
+    return c.json({ status: 'cleaned_up', previewId });
+  });
+
+  // --- v0.0.11: Insight action handlers ---
+
+  api.post('/projects/:id/actions', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req.json<{ action: string }>().catch(() => ({ action: '' }));
+    const { action } = body;
+
+    switch (action) {
+      case 'cleanup_stale': {
+        // Remove old containers for this project (keep the current one)
+        const managed = await ctx.docker.listManagedContainers();
+        const stale = managed.filter(
+          (c) =>
+            c.name.startsWith(project.name) &&
+            c.id !== project.container_id &&
+            c.status === 'running',
+        );
+        const client = ctx.docker.getClient();
+        for (const container of stale) {
+          try {
+            const dockerContainer = client.getContainer(container.id);
+            await dockerContainer.stop();
+            await dockerContainer.remove();
+          } catch (err) {
+            log.warn({ err, containerId: container.id }, 'Failed to remove stale container');
+          }
+        }
+        return c.json({ status: 'ok', action, removed: stale.length });
+      }
+
+      case 'view_logs': {
+        // Return a redirect hint — frontend navigates to logs tab
+        return c.json({ status: 'ok', action, redirect: 'logs' });
+      }
+
+      case 'retry_healthcheck': {
+        const result = await ctx.healthMonitor.checkProject(project.id);
+        return c.json({
+          status: 'ok',
+          action,
+          healthy: result.healthy,
+          responseTimeMs: result.responseTimeMs,
+        });
+      }
+
+      default:
+        return c.json({ status: 'error', message: `Unknown action: ${action}` }, 400);
+    }
+  });
+
+  api.delete('/projects/:id', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    await ctx.pipeline.remove(project.id);
+    return c.json({ status: 'removed', project: project.name });
+  });
+
+  api.get('/projects/:id/logs', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const follow = c.req.query('follow');
+
+    if (follow && project.container_id) {
+      const containerId = project.container_id;
+      return stream(c, async (s) => {
+        c.header('Content-Type', 'application/x-ndjson');
+
+        try {
+          const container = ctx.docker.getClient().getContainer(containerId);
+          const logStream = await container.logs({
+            follow: true,
+            stdout: true,
+            stderr: true,
+            tail: 50,
+          });
+
+          logStream.on('data', (chunk: Buffer) => {
+            const headerSize = 8;
+            const streamType = chunk[0] === 1 ? 'stdout' : 'stderr';
+            const line = chunk.subarray(headerSize).toString('utf8').trim();
+
+            if (line) {
+              const logEntry = {
+                line,
+                stream: streamType,
+                time: new Date().toISOString(),
+              };
+              void s.write(JSON.stringify(logEntry) + '\n');
+            }
+          });
+
+          logStream.on('end', () => {
+            void s.close();
+          });
+
+          logStream.on('error', () => {
+            void s.close();
+          });
+
+          s.onAbort(() => {
+            // Stream will be cleaned up automatically on abort
+          });
+        } catch (err) {
+          log.debug({ err, projectId: project.id }, 'Log streaming failed');
+          void s.write(JSON.stringify({ error: 'Failed to stream logs' }) + '\n');
+          void s.close();
+        }
+      });
+    }
+
+    const lines = parseInt(c.req.query('lines') ?? '50', 10);
+    const logs = await ctx.pipeline.getLogs(project.id, lines);
+    return c.json({ project: project.name, logs });
+  });
+
+  api.get('/projects/:id/env', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const vars = ctx.env.getAllMasked(project.id);
+    return c.json({ project: project.name, envVars: vars });
+  });
+
+  api.post('/projects/:id/env', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req.json<{ variables?: Record<string, string> }>();
+    if (!body.variables) {
+      return c.json({ error: 'MISSING_FIELD', message: 'variables object is required' }, 400);
+    }
+
+    const changed = ctx.env.setBulk(project.id, body.variables);
+    return c.json({
+      status: changed ? 'updated' : 'unchanged',
+      project: project.name,
+      keys: Object.keys(body.variables),
+      needsRedeploy: changed && project.status === 'running',
+    });
+  });
+
+  api.post('/question/reply', async (c) => {
+    const body = await c.req
+      .json<{
+        request_id?: unknown;
+        requestId?: unknown;
+        answers?: Array<{
+          questionIndex?: unknown;
+          selectedLabels?: unknown;
+          customText?: unknown;
+        }>;
+      }>()
+      .catch(() => ({
+        request_id: undefined,
+        requestId: undefined,
+        answers: undefined,
+      }));
+
+    const requestId = body.request_id || body.requestId;
+    if (typeof requestId !== 'string' || requestId.trim() === '') {
+      return c.json({ error: 'MISSING_FIELD', message: 'request_id is required' }, 400);
+    }
+
+    const answers = body.answers;
+
+    if (!Array.isArray(answers)) {
+      return c.json({ error: 'MISSING_FIELD', message: 'answers array is required' }, 400);
+    }
+
+    for (const answer of answers) {
+      if (typeof answer !== 'object') {
+        return c.json({ error: 'INVALID_ANSWER', message: 'Each answer must be an object' }, 400);
+      }
+
+      const normalized = answer as {
+        questionIndex?: unknown;
+        selectedLabels?: unknown;
+        customText?: unknown;
+      };
+
+      const isValidQuestionIndex =
+        typeof normalized.questionIndex === 'number' &&
+        Number.isInteger(normalized.questionIndex) &&
+        normalized.questionIndex >= 0;
+      const isValidSelectedLabels =
+        Array.isArray(normalized.selectedLabels) &&
+        normalized.selectedLabels.every((value) => typeof value === 'string');
+      const isValidCustomText =
+        normalized.customText === undefined || typeof normalized.customText === 'string';
+
+      if (!isValidQuestionIndex || !isValidSelectedLabels || !isValidCustomText) {
+        return c.json(
+          {
+            error: 'INVALID_ANSWER',
+            message:
+              'Each answer must include questionIndex, selectedLabels, and optional customText',
+          },
+          400,
+        );
+      }
+    }
+
+    if (!ctx.questionBridge.hasPending()) {
+      return c.json(
+        { error: 'NO_PENDING_QUESTION', message: 'No pending question to answer' },
+        409,
+      );
+    }
+
+    const normalizedAnswers = answers.map((answer) => {
+      const normalized = answer as {
+        questionIndex: number;
+        selectedLabels: string[];
+        customText?: string;
+      };
+
+      return {
+        questionIndex: normalized.questionIndex,
+        selectedLabels: normalized.selectedLabels,
+        customText: normalized.customText,
+      };
+    });
+
+    ctx.questionBridge.reply(requestId, normalizedAnswers);
+
+    return c.json({ status: 'answered' });
+  });
+
+  api.post('/question/dismiss', async (c) => {
+    await c.req
+      .json<{ request_id?: string; requestId?: string }>()
+      .catch(() => ({ request_id: undefined, requestId: undefined }));
+
+    if (!ctx.questionBridge.hasPending()) {
+      return c.json(
+        { error: 'NO_PENDING_QUESTION', message: 'No pending question to dismiss' },
+        409,
+      );
+    }
+
+    ctx.questionBridge.reject();
+    return c.json({ status: 'dismissed' });
+  });
+
+  api.post('/projects/:id/expose', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    if (!project.assigned_port) {
+      return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
+    }
+
+    const url = await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+    return c.json({ status: 'exposed', project: project.name, publicUrl: url });
+  });
+
+  api.post('/projects/:id/unexpose', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    ctx.pipeline.closeTunnel(project.id);
+    return c.json({ status: 'unexposed', project: project.name });
+  });
+
+  return api;
+}

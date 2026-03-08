@@ -73,8 +73,10 @@ export interface WaitForHealthyResult {
  */
 export class Docker {
   private readonly client: Dockerode;
+  private readonly networkName: string;
 
-  constructor(socketPath?: string) {
+  constructor(socketPath?: string, networkName: string = 'web') {
+    this.networkName = networkName;
     if (socketPath) {
       this.client = new Dockerode({ socketPath });
     } else {
@@ -211,7 +213,7 @@ export class Docker {
         PortBindings: {
           [`${String(cPort)}/tcp`]: [{ HostPort: String(options.port) }],
         },
-        NetworkMode: 'web', // Traefik network
+        NetworkMode: this.networkName, // Traefik network
         RestartPolicy: { Name: 'unless-stopped' },
       },
     });
