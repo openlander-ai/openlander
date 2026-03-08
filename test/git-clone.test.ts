@@ -74,7 +74,7 @@ describe('cloneRepo — GitHub token injection', () => {
     expect(urlArg).not.toContain('x-access-token');
   });
 
-  it('does not inject token when sshKeyPath is provided', async () => {
+  it('converts to SSH URL and does not inject token when sshKeyPath is provided', async () => {
     await cloneRepo({
       repoUrl: 'https://github.com/user/repo',
       sshKeyPath: '/home/user/.ssh/id_rsa',
@@ -83,8 +83,9 @@ describe('cloneRepo — GitHub token injection', () => {
     const cloneCall = mockExecFile.mock.calls[0];
     const args = cloneCall![1] as string[];
 
+    // When sshKeyPath is provided, HTTPS URL is converted to SSH format
     const urlArg = args.find((a: string) => a.includes('github.com'));
-    expect(urlArg).toBe('https://github.com/user/repo');
+    expect(urlArg).toBe('git@github.com:user/repo');
     expect(urlArg).not.toContain('x-access-token');
   });
 
