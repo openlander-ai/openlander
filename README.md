@@ -170,20 +170,16 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 
 ## Roadmap
 
-| Version     | Focus                    | Status | Highlights                                                          |
-| ----------- | ------------------------ | ------ | ------------------------------------------------------------------- |
-| **v0.0.1**  | Repo → URL (MVP)         | Done   | Git clone → Docker → Traefik → URL. REST API.                       |
-| **v0.0.2**  | Daily Operations         | Done   | Auto-redeploy, monitoring, production domains, Ollama               |
-| **v0.0.3**  | Coding Agent Integration | Done   | MCP server (23 tools), rollback, blue-green, DB provisioning        |
-| **v0.0.4**  | Multi-Channel + Advanced | Done   | Slack/Discord/Telegram, auto-Dockerfile, monorepo, parallel deploy  |
-| **v0.0.9**  | Server Awareness         | Done   | Full container scan, OS port scan, proxy detection, preflight check |
-| **v0.1.0**  | Web MVP                  | Done   | React SPA, real-time timeline, NDJSON streaming                     |
-| **v0.0.11** | Agent Proactivity        | Done   | Post-deploy insight, anomaly nudge, smart defaults                  |
-| **v0.0.10** | Env & Secrets            | Done   | Global encrypted secrets, .env.example detection, Web settings UI   |
-| **v0.0.12** | Provider OAuth           | Done   | OAuth login for OpenAI, OpenRouter (no API key needed)              |
-| **v0.0.8**  | AI SDK Migration         | Done   | Vercel AI SDK, multi-provider streaming, unified tool API           |
-| **v0.2.0**  | Dashboard Redesign       | Done   | Light mode, Vercel-inspired UI, deployment history, chat removal    |
-| **v0.2.1**  | i18n + Bugfixes          | Done   | Korean/English i18n, build error reporting, redeploy UI refresh     |
+| Version    | Focus                | Status | Highlights                                                            |
+| ---------- | -------------------- | ------ | --------------------------------------------------------------------- |
+| **v0.1.0** | MVP                  | Done   | Chat-driven deployment, Docker + Traefik, MCP server (23 tools)       |
+| **v0.2.0** | Web Dashboard        | Done   | React SPA, Vercel-inspired UI, real-time timeline, NDJSON streaming   |
+| **v0.2.1** | i18n + Bugfixes      | Done   | Korean/English i18n, build error reporting, OAuth callback fix        |
+| **v0.2.2** | Deploy Controls      | Done   | Blue-green deploy UI, webhook settings, rollback button               |
+| **v0.2.3** | Domains & Visibility | Done   | Domain CRUD UI, server scan dashboard, public URL management          |
+| **v0.2.4** | Services             | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images |
+| **v0.2.5** | Release Preparation  | Done   | Code review fixes, Cloudflare config UI, i18n simplification          |
+| **v1.0.0** | First Stable Release | Next   | npm publish, documentation, dogfooding verification                   |
 
 ## Requirements
 

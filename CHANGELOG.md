@@ -5,58 +5,102 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.6.0] - 2025-02-26
-
-### Added
-
-- OpenCode-inspired dark theme (`#0a0a0a` background, warm accent palette)
-- OpenCode-style centered empty-state prompt that moves to bottom on first message
-- Slash command picker overlay (arrow keys, mouse, Enter, Escape)
-- Model selection overlay (`/model`)
-- Git provider connection overlay (`/connect`) with token validation
-- Repository browser overlay (`/repo`) with IPC deploy trigger
-- Compact/summarize command (`/compact`)
-- 73 unit tests (52 slash-command + 21 slash-picker)
-- OpenCode comparison analysis doc and TUI UX comparison doc
-
-### Changed
-
-- Migrated runtime from Node.js to Bun
-- Migrated TUI framework from Ink to OpenTUI + Solid.js
-- Migrated ORM from raw SQLite to Drizzle ORM
-- Rewrote chat layout with flex panels instead of explicit heights
-- All keyboard handlers now use `KeyEvent.name` (OpenTUI standard)
-- Removed Tier 3 agent-proxy slash commands (LLM bypass principle)
-- Restructured planning docs into `docs/planning/` and `docs/analysis/`
-- Rewrote CONTRIBUTING.md with current tech stack and conventions
-- Cleaned up .gitignore (removed stale entries for moved files)
-
-### Fixed
-
-- Color rendering issues (use `fg=` prop, not `color=` or inline styles)
-- Slash command `/` keystroke was sending as chat message instead of opening picker
-- Arrow key navigation not working in slash picker overlay
-- Focus management: `preventDefault()` to block textarea capturing overlay keys
-
 ## [Unreleased]
 
 ### Added
 
-- Daemon + TUI client architecture (Unix socket IPC)
-- Structured logging with pino
-- CI/CD pipeline (GitHub Actions)
-- CONTRIBUTING.md and GitHub issue/PR templates
-- SECURITY.md for vulnerability reporting
-- CHANGELOG.md
+- Cloudflare Settings configuration form (API token input UI + backend API)
 
 ### Changed
 
-- Replaced monolithic process with daemon + thin TUI client
-- Agent chat sessions are now isolated per-client
+- Removed unused @opentui/core dependency
+- Simplified i18n: removed 224 short keys, hardcoded in English, kept 101 long sentence keys translated
+- Fixed sidebar breakpoint (labels visible at 1024px instead of 1280px)
+- Fixed Services empty-state button handler inconsistency
+- Moved branding to header with SVG logo and version display
+- Changed default port from 10003 to 10114
 
 ### Fixed
 
-- Empty catch blocks now log errors appropriately
+- Addressed Oracle code review findings: Docker network name from config, removed dead pipeline code (5 files), split routes.ts into domain modules
+
+## [0.2.5] - Release Preparation
+
+### Added
+
+- Code review fixes from external audit
+
+### Changed
+
+- Simplified i18n: removed 224 short keys, hardcoded in English, kept 101 long sentence keys translated
+- Fixed sidebar breakpoint (labels visible at 1024px instead of 1280px)
+- Fixed Services empty-state button handler inconsistency
+- Moved branding to header with SVG logo and version display
+- Changed default port from 10003 to 10114
+
+### Fixed
+
+- Docker network name from config
+- Removed dead pipeline code (5 files)
+- Split routes.ts into domain modules
+- Cloudflare Settings configuration form (API token input UI + backend API)
+
+## [0.2.4] - Shared Services
+
+### Added
+
+- Services page with template presets (PostgreSQL, MySQL, Redis)
+- Custom Docker image support for services
+- ServiceManager for Docker container lifecycle
+- Shared services DB schema and REST API
+
+## [0.2.3] - Domains & Visibility
+
+### Added
+
+- Blue-green deploy button and webhook settings UI
+- Start/stop buttons on project detail
+- Rollback button with API
+- Domain CRUD UI for custom domains
+- Server scan dashboard with container/port detection
+- Reverse Proxy status section in Settings with Cloudflare Tunnel guide
+
+## [0.2.2] - Deploy Controls
+
+### Added
+
+- Blue-green deploy button and webhook settings UI
+- Start/stop buttons on project detail
+- Rollback button with API
+
+## [0.2.1] - i18n + Bugfixes
+
+### Added
+
+- Korean/English i18n with language selection during onboarding
+- Build error details in deploy failure timeline events
+- Dynamic OAuth callback URL for remote access
+
+### Fixed
+
+- Docker socket fix for Colima on macOS
+
+## [0.2.0] - Web Dashboard
+
+### Added
+
+- Complete React SPA replacing Terminal UI
+- Vercel-inspired light mode design
+- Real-time deployment timeline with NDJSON streaming
+- Deployment history with build logs
+- Settings management UI (AI model, GitHub, secrets)
+- Deploy dialog with repo URL input
+- Project detail with tabs (Timeline, Deployments, Logs, Config, Env Vars, Domains, Webhooks)
+
+### Changed
+
+- Migrated from Terminal UI to React web dashboard
+- Removed TUI framework (Ink, OpenTUI, SolidJS)
 
 ## [0.1.0] - 2025-02-01
 

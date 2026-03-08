@@ -27,8 +27,7 @@ npm run build
 npm run dev
 ```
 
-The dev command runs `tsup --watch` which compiles TypeScript via esbuild with SolidJS JSX transform.
-
+The dev command runs `tsup --watch` which compiles TypeScript via esbuild.
 To run the application after building:
 
 ```bash
@@ -73,46 +72,37 @@ We use ESLint with `strictTypeChecked` mode and Prettier.
 - No `@ts-ignore` or `@ts-expect-error` comments
 - Follow existing code patterns and formatting
 
-### TUI-specific Conventions
-
-The TUI uses **@opentui/solid** (SolidJS-based terminal rendering):
-
-- JSX elements are lowercase: `<box>`, `<text>`, `<textarea>`
-- Use `fg={color}` for text color (NOT `color=` or `style={{ color }}`)
-- Keyboard events use `evt.name` (NOT `evt.key` or `evt.char`)
-- `useKeyboard((evt) => { ... })` for global key handlers
-- SolidJS signals for state management (`createSignal`, `createMemo`, `createEffect`)
-
 ## Project Structure
 
 ```
 src/
 ├── agent/          # Agent orchestration and LLM tool execution
+├── auth/           # Token store and authentication
 ├── cli/            # CLI entry point (Commander.js)
 ├── config/         # Configuration management (~/.openlander/)
 ├── channels/       # Multi-channel bots (Slack, Discord, Telegram)
 ├── db/             # Database layer (Drizzle ORM + SQLite)
 ├── events/         # Event system
-├── git-providers/  # Git provider integrations (GitHub, GitLab, etc.)
-├── ipc/            # IPC client for TUI ↔ backend communication
+├── git-providers/  # Git provider integrations (GitHub OAuth)
 ├── lib/            # Shared utilities (logger, helpers)
 ├── llm/            # LLM provider abstraction (Gemini, Claude, OpenAI, etc.)
-├── mcp/            # MCP server (23 tools for Claude Code / Cursor)
+├── mcp/            # MCP server for IDE integration
 ├── monitor/        # System stats monitoring (CPU, memory, disk)
 ├── pipeline/       # Deployment pipeline (Docker build, Traefik routing)
 ├── tools/          # Agent tools (deploy, logs, env, expose, etc.)
-├── tui/            # Terminal user interface (~5,700 lines)
-│   ├── components/ # UI components (ChatPanel, Prompt, overlays, etc.)
-│   ├── commands/   # Slash command registry
-│   ├── state/      # State management (mode, focus)
-│   ├── hooks/      # SolidJS hooks (useChat, useProjects, etc.)
-│   ├── onboarding/ # Setup wizard screens
-│   ├── theme.ts    # OpenCode-style dark theme
-│   └── App.tsx     # Main app component
-├── web/            # Hono REST API server
+├── web/            # Hono REST API server (routes, middleware)
 └── webhook/        # Git webhook handlers (auto-redeploy)
 
-test/               # Test files (Vitest)
+web/                # React frontend (Vite + React 19 + Tailwind CSS)
+├── src/
+│   ├── components/ # Reusable UI components (layout, sidebar, timeline, etc.)
+│   ├── hooks/      # Custom React hooks
+│   ├── i18n/       # Internationalization (English + Korean)
+│   ├── lib/        # API client and utilities
+│   └── pages/      # Page components (Projects, Settings, Services, etc.)
+└── dist/           # Built frontend assets
+
+test/               # Test files (Vitest, 703 tests)
 docs/               # Internal documentation
 ```
 
@@ -131,26 +121,24 @@ npm run test:watch
 npm run test:coverage
 ```
 
-### Test Infrastructure
-
 Tests run under Node.js/Vitest with better-sqlite3 as the SQLite driver.
-All 665 tests across 42 suites pass under Node.js.
+All 703 tests across 43 suites pass under Node.js.
 
 Key test files:
 
-- `test/slash-commands.test.ts` — 52 tests (slash command registry, parsing, handlers)
-- `test/slash-picker.test.ts` — 21 tests (autocomplete picker)
-- `test/dashboard-utils.test.ts` — 68 tests (pure utility functions)
+- `test/dashboard-utils.test.ts` — utility functions for the web dashboard
 - `test/db.test.ts` — 23 tests (database CRUD operations)
 - `test/agent.test.ts` — 12 tests (agent orchestration)
+- `test/pipeline.test.ts` — deployment pipeline tests
+- `test/web-routes.test.ts` — REST API route tests
+- `test/config.test.ts` — configuration management tests
 
 Test files are located in the `test/` directory. Follow existing patterns:
 
 - Mock contexts and LLM interactions
 - Keep tests focused and isolated
 - Use descriptive test names
-- Slash command tests: `test/slash-commands.test.ts` (52 tests)
-- Slash picker tests: `test/slash-picker.test.ts` (21 tests)
+- Test files mirror src/ structure
 
 ## Submitting Changes
 
@@ -174,15 +162,15 @@ We use [Conventional Commits](https://www.conventionalcommits.org/) with scope:
 - `docs:` - Documentation changes
 - `chore:` - Maintenance tasks
 
-Common scopes: `tui`, `agent`, `pipeline`, `mcp`, `cli`, `db`
+Common scopes: `web`, `agent`, `pipeline`, `mcp`, `cli`, `db`
 
 Examples:
 
 ```
-feat(tui): add model selection overlay
-fix(tui): use KeyEvent.name for keyboard handlers
-refactor(tui): remove Tier 3 agent proxy commands
-test: update slash command tests for new Tier 1 commands
+feat(web): add Cloudflare Settings form
+fix(web): sidebar breakpoint adjustment
+refactor(pipeline): split routes.ts into domain modules
+test: add coverage for ServiceManager
 ```
 
 ## Code of Conduct
