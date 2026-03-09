@@ -91,6 +91,9 @@ const searchGithubReposSchema = z.object({
   query: z.string().min(1),
 });
 
+const agentExecuteGoalSchema = z.object({
+  goal: z.string().min(1).describe('The goal for the agent to accomplish using available tools'),
+});
 const emptySchema = z.object({}).strict();
 
 function toInputSchema(schema: unknown) {
@@ -98,7 +101,7 @@ function toInputSchema(schema: unknown) {
 }
 
 // ---------------------------------------------------------------------------
-// Tool metadata (all 20 tools — includes redeploy which is MCP-only)
+// Tool metadata (all 27 tools — includes redeploy + agent_execute_goal)
 // ---------------------------------------------------------------------------
 
 const tools = [
@@ -246,6 +249,13 @@ const tools = [
     description:
       'Search GitHub repositories by name or keyword. Resolves project names to deployable repo URLs.',
     inputSchema: toInputSchema(searchGithubReposSchema),
+  },
+  // --- Agent Reasoning ---
+  {
+    name: 'agent_execute_goal',
+    description:
+      'Run the AI agent to accomplish a complex goal. The agent reasons about steps and chains multiple tools (deploy, configure, debug, etc.) automatically. Use this for multi-step tasks instead of calling individual tools.',
+    inputSchema: toInputSchema(agentExecuteGoalSchema),
   },
 ] as const;
 
@@ -568,9 +578,16 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
 
         case 'scan_dockerfiles': {
           const args = parseInput(scanDockerfilesSchema, rawArgs);
-          const agentTools = (await import('../agent/tools.js')).createTools(ctx);
+          const agentTools = (await import('../agent/tools.js')).createTools(
+            ctx,
+            ctx.questionBridge,
+          );
           const scanTool = agentTools['scan_dockerfiles'];
-          const result = await scanTool.execute(
+          if (!scanTool.execute) {
+            throw new McpError(ErrorCode.InternalError, 'scan_dockerfiles tool not available');
+          }
+          const execute = scanTool.execute;
+          const result = await execute(
             { repo_url: args.repo_url, branch: args.branch },
             { toolCallId: 'mcp', messages: [] },
           );
@@ -645,6 +662,25 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
               cloneUrl: r.isPrivate ? searchProvider.getAuthCloneUrl(r.fullName) : r.cloneUrl,
               htmlUrl: r.htmlUrl,
             })),
+          });
+        }
+
+        case 'agent_execute_goal': {
+          const args = parseInput(agentExecuteGoalSchema, rawArgs);
+
+          if (!ctx.agent) {
+            return successResponse({
+              error: 'Agent requires an LLM provider. Configure one in OpenLander settings first.',
+            });
+          }
+
+          const sessionId = `mcp-${String(Date.now())}`;
+          const response = await ctx.agent.chat(args.goal, sessionId);
+
+          return successResponse({
+            message: response.message,
+            toolResults: response.toolResults ?? [],
+            sessionId,
           });
         }
 
