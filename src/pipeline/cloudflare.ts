@@ -224,7 +224,7 @@ export class CloudflareTunnelManager {
     if (first) {
       const updated = await this.cloudflareRequest<CloudflareDnsRecord>(
         `zones/${zoneId}/dns_records/${first.id}`,
-        { method: 'PUT', body },
+        { method: 'PATCH', body },
       );
       return updated.id;
     }
