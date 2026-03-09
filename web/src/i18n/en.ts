@@ -83,7 +83,7 @@ export const translations = {
         saveFailed: 'Failed to save Cloudflare credentials. Check your values and try again.',
         tokenHelpTitle: 'Need a Cloudflare API token?',
         tokenHelpText:
-          'Create a Cloudflare API token in Cloudflare dashboard with these permissions: Zone:Zone (Read), Zone:DNS (Edit), Account:Cloudflare Tunnel (Read, Edit).',
+          'Click the link below to create a token with the right permissions pre-filled. Just confirm and copy the token.',
         tokenPermissions:
           'Zone:Zone (Read); Zone:DNS (Edit); Account:Cloudflare Tunnel (Read, Edit)',
         tokenPermissionsLabel: 'Required token permissions:',

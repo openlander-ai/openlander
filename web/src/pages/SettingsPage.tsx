@@ -863,7 +863,13 @@ export function SettingsPage() {
                     {t('settings.proxy.cloudflare.tokenHelpText')}
                   </p>
                   <a
-                    href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
+                    href={`https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=${encodeURIComponent(
+                      JSON.stringify([
+                        { key: 'dns_records', type: 'edit' },
+                        { key: 'tunnel', type: 'edit' },
+                        { key: 'zone', type: 'read' },
+                      ]),
+                    )}&name=OpenLander`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs font-body text-agent hover:underline"

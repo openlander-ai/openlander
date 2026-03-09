@@ -66,7 +66,7 @@ export class CloudflareTunnelManager {
     }
 
     const zone = await this.findZoneForDomain(normalizedDomain);
-    const recordId = await this.createCnameRecord(zone.id, normalizedDomain);
+    const recordId = await this.upsertCnameRecord(zone.id, normalizedDomain);
     const mappingId = nanoid(12);
 
     this.db.createDomainMapping({
@@ -209,22 +209,31 @@ export class CloudflareTunnelManager {
     throw new Error(`Cloudflare zone not found for domain: ${domain}`);
   }
 
-  private async createCnameRecord(zoneId: string, domain: string): Promise<string> {
-    const record = await this.cloudflareRequest<CloudflareDnsRecord>(
-      `zones/${zoneId}/dns_records`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'CNAME',
-          name: domain,
-          content: `${this.config.tunnelId}.cfargotunnel.com`,
-          proxied: true,
-          ttl: 1,
-        }),
-      },
-    );
+  private async upsertCnameRecord(zoneId: string, domain: string): Promise<string> {
+    const existing = await this.getDnsRecords(zoneId, domain);
+    const tunnelTarget = `${this.config.tunnelId}.cfargotunnel.com`;
+    const body = JSON.stringify({
+      type: 'CNAME',
+      name: domain,
+      content: tunnelTarget,
+      proxied: true,
+      ttl: 1,
+    });
 
-    return record.id;
+    const first = existing[0];
+    if (first) {
+      const updated = await this.cloudflareRequest<CloudflareDnsRecord>(
+        `zones/${zoneId}/dns_records/${first.id}`,
+        { method: 'PUT', body },
+      );
+      return updated.id;
+    }
+
+    const created = await this.cloudflareRequest<CloudflareDnsRecord>(
+      `zones/${zoneId}/dns_records`,
+      { method: 'POST', body },
+    );
+    return created.id;
   }
 
   private async getDnsRecords(zoneId: string, domain: string): Promise<CloudflareDnsRecord[]> {

@@ -83,7 +83,7 @@ export const translations = {
         saveFailed: 'Cloudflare 자격 증명 저장에 실패했습니다. 값을 확인하고 다시 시도하세요.',
         tokenHelpTitle: 'Cloudflare API 토큰이 필요하신가요?',
         tokenHelpText:
-          'Cloudflare 대시보드에서 API 토큰을 생성하세요. 최소한 Zone:Zone(읽기), Zone:DNS(편집), Account:Cloudflare Tunnel(읽기, 편집) 권한이 있어야 합니다.',
+          '아래 링크를 클릭하면 필요한 권한이 미리 채워진 토큰 생성 페이지가 열립니다. 확인만 누르고 토큰을 복사하세요.',
         tokenPermissions:
           'Zone:Zone (읽기); Zone:DNS (편집); Account:Cloudflare Tunnel (읽기, 편집)',
         tokenPermissionsLabel: '필수 권한:',
