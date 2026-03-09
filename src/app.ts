@@ -464,6 +464,49 @@ ${buildLog.slice(-3000)}`
   // v0.5: Alert monitor
   const alertMonitor = new AlertMonitor(docker, db, eventBus);
 
+  // Status sync: update project status when container crashes or health checks fail
+  // AlertMonitor detects crashes but only creates alerts — this bridges alerts to status.
+  const crashFailureCounts = new Map<string, number>();
+  const HEALTH_FAILURE_THRESHOLD = 3;
+
+  eventBus.on('alert:new', ({ alert }) => {
+    if (alert.type === 'container-crash') {
+      const projectId = alert.details['projectId'];
+      if (typeof projectId === 'string') {
+        const project = db.getProject(projectId);
+        if (project && project.status === 'running') {
+          db.updateProject(projectId, { status: 'error' });
+          log.info({ projectId }, 'Project status set to error (container crash detected)');
+        }
+      }
+    }
+  });
+
+  eventBus.on('monitor:healthcheck', ({ projectId, healthy }) => {
+    if (healthy) {
+      crashFailureCounts.delete(projectId);
+      return;
+    }
+    const count = (crashFailureCounts.get(projectId) ?? 0) + 1;
+    crashFailureCounts.set(projectId, count);
+    if (count >= HEALTH_FAILURE_THRESHOLD) {
+      const project = db.getProject(projectId);
+      if (project && project.status === 'running') {
+        db.updateProject(projectId, { status: 'error' });
+        log.info(
+          { projectId, failures: count },
+          'Project status set to error (health check failures)',
+        );
+      }
+      crashFailureCounts.delete(projectId);
+    }
+  });
+
+  // Reset failure counts on successful deploy
+  eventBus.on('deploy:success', (payload) => {
+    crashFailureCounts.delete(payload.projectId);
+  });
+
   // Build partial ctx without channelManager, then compose the full AppContext
   const partialCtx = {
     config,
