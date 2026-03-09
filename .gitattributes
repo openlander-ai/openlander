@@ -1,0 +1,3 @@
+# Lock files — always use upstream version on merge/pull
+package-lock.json merge=ours
+web/package-lock.json merge=ours
