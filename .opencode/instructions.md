@@ -2,6 +2,25 @@
 
 > 이 파일은 매 세션 자동 로드됨. 모든 작업에 적용되는 필수 규칙.
 
+## 0. 위임 라우팅 (MANDATORY)
+
+각 category는 해당 도메인 최적 모델로 라우팅된다.
+
+### 제품 관점
+
+- 기획 시: "유저에게 마법의 순간이 있는가? 제품 정체성과 충돌하지 않는가?"
+- 기술적 검증: "기존 패턴과 일관성 있는가? 사이드 이펙트는 없는가?"
+- 제품 컨텍스트: `docs/planning/context/` 참조
+
+### Category + Skill 조합
+
+| 작업 유형                | category           | load_skills                        |
+| ------------------------ | ------------------ | ---------------------------------- |
+| UI/UX, 프론트엔드        | visual-engineering | ["quality-gate"]                   |
+| 백엔드, 파이프라인, 로직 | deep               | ["codebase-guide", "quality-gate"] |
+| 단순 수정, 타입 수정     | quick              | ["quality-gate"]                   |
+| 5줄 이내 trivial         | 직접               | —                                  |
+
 ## 1. 작업 시작 전 (MANDATORY)
 
 - `docs/planning/version-map.md`를 읽고 현재 버전/진행 상태 파악
@@ -35,7 +54,7 @@
 
 ## 5. 태스크 위임 시
 
-- `load_skills=["quality-gate"]` **필수** (opentui 스킬도 TUI 작업이면 함께)
+- `load_skills=["quality-gate"]` **필수** (백엔드 작업이면 `codebase-guide`도 함께)
 - 프롬프트에 해당 TASK의 **수락기준 전문**을 포함
 - 위임 결과 받으면 수락기준 1:1 검증 후 승인/반려
 
@@ -51,12 +70,12 @@
 5. 포커스 상태(chat/status)에 따른 분기가 맞나?
 ```
 
-## 7. TUI 작업 시 필수 참조
+## 7. TUI 작업 시
 
-- `.opencode/skills/opentui/SKILL.md` — OpenTUI 개발 가이드
-- `.opencode/skills/opentui/references/gotchas.md` — 반드시 코드 작성 전에 읽기
+- TUI는 SolidJS + OpenTUI 기반. `src/tui/` 하위.
 - 유효 요소: `<box>`, `<text>`, `<textarea>`, `<input>`, `<span>` 만 사용
 - `useKeyboard`는 try-catch 필수 (오버레이 컴포넌트 제외)
+- 색상은 `theme.ts`에서 import, hex 형식만
 
 ## 8. 커밋 규칙
 
@@ -90,6 +109,12 @@ docs/planning/
 ├── version-map.md              # SSOT — 전체 버전/스펙/상태 매핑
 ├── dev-lifecycle.md             # 11단계 개발 라이프사이클
 ├── requirements.md              # 전체 요구사항 (v0.0.1~v0.0.8)
+│
+├── context/                    # 제품 컨텍스트 (아키텍처, 경쟁 분석, 의사결정 로그)
+│   ├── product-context.md
+│   ├── architecture.md
+│   ├── competitive.md
+│   └── decision-log.md
 │
 ├── v0.0.6/                      # ✅ 완료
 │   ├── tasks.md

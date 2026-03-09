@@ -222,7 +222,7 @@
 - 남은 3건은 핵심 UX에 영향이 거의 없는 부가 기능
 - 도그푸딩/안정화가 더 시급 — 새 기능보다 기존 기능의 품질이 우선
 - 1인 메인테이너 리소스 제약 — 완벽주의보다 실용적 클로즈가 나음
-**재검토 조건**: 사용자가 해당 기능을 명시적으로 요청할 때
+  **재검토 조건**: 사용자가 해당 기능을 명시적으로 요청할 때
 
 ### DEC-015: 도그푸딩/안정화 우선순위 (새 기능 구현보다 우선)
 
@@ -235,7 +235,8 @@
 - 도그푸딩 첫 사이클에서 이미 blocking 버그 2건 발견 (WEB_DIST 경로, React #310 크래시)
 - 기존 스펙(v0.0.10, v0.0.12)은 TUI 시대 기획 — Web 전환 후 재작성 필요
 - 제품 품질이 신뢰 가능한 수준에 도달해야 다음 기능이 의미가 있음
-**재검토 조건**: 도그푸딩에서 critical/blocking 버그가 없고, 핵심 플로우가 안정적일 때
+  **재검토 조건**: 도그푸딩에서 critical/blocking 버그가 없고, 핵심 플로우가 안정적일 때
+
 ---
 
 ### DEC-016: 도그푸딩 완료 선언 — 다음 버전 진행 가능
@@ -250,7 +251,7 @@
 - minor 버그 5건 해결 (BUG-003~007)
 - 미해결 2건은 minor (BUG-008 미재현, BUG-009 결정대기) — 다음 버전 이관 가능
 - traefik/whoami 실제 배포 성공 확인 (Traefik 라우팅 + 직접 포트 접속 모두 정상)
-**재검토 조건**: 새 버전 개발 중 regression 발견 시 도그푸딩 재개
+  **재검토 조건**: 새 버전 개발 중 regression 발견 시 도그푸딩 재개
 
 ### DEC-017: Web 온보딩 채택, CLI 온보딩 스펙 보류
 
@@ -264,7 +265,7 @@
 - LLM 설정 시 hot-reload 지원 (서버 재시작 불필요) — CLI에는 없는 장점
 - Docker 설치 가이드, GitHub 토큰 검증 등 CLI 스펙의 모든 기능이 Web에 이미 있음
 - 부족했던 부분(자동 리디렉트)은 SetupGuard 컴포넌트로 해결 (~20줄)
-**재검토 조건**: CLI-only 사용자가 실제로 필요해질 때 (npm global 설치 후 브라우저 없는 환경)
+  **재검토 조건**: CLI-only 사용자가 실제로 필요해질 때 (npm global 설치 후 브라우저 없는 환경)
 
 ### DEC-018: v0.0.10 Web UI 적용 (TUI /env 오버레이 → Web Settings Global Secrets)
 
@@ -277,7 +278,7 @@
 - Web Settings 페이지가 이미 AI Model/GitHub/System Stats 섹션 보유 — Global Secrets 추가가 자연스러움
 - TUI는 `tui-last` 태그로 freeze 상태 (v0.1.0 결정)
 - .env.example 감지(`checkEnvRequirements()`)는 함수만 구현, 파이프라인 통합은 향후 진행 — QuestionBridge 통합 또는 Post-Deploy Insight 경고로 제공 가능
-**재검토 조건**: TUI 부활 또는 .env.example 감지의 파이프라인 통합이 필요해질 때
+  **재검토 조건**: TUI 부활 또는 .env.example 감지의 파이프라인 통합이 필요해질 때
 
 ### DEC-019: TUI 시대 문서 전체 아카이브
 
@@ -290,8 +291,8 @@
 - requirements.md는 TUI가 메인 인터페이스로 전제된 문서 — 19건의 TUI 참조 개별 수정 비효율
 - version-map.md가 이미 SSOT 역할을 하고 있어 requirements.md 삭제해도 정보 손실 없음
 - README.md 현행화 완료 (TUI→Web UI, 로드맵 전체 업데이트)
-**아카이브 파일 목록**: archive/v0.0.6/(3), archive/v0.0.7/(3), archive/analysis/(2), archive/onboarding-refactor.md, archive/requirements.md
-**재검토 조건**: TUI 부활 또는 아카이브 문서 삭제 검토 시
+  **아카이브 파일 목록**: archive/v0.0.6/(3), archive/v0.0.7/(3), archive/analysis/(2), archive/onboarding-refactor.md, archive/requirements.md
+  **재검토 조건**: TUI 부활 또는 아카이브 문서 삭제 검토 시
 
 ### DEC-020: v0.0.12 Provider OAuth를 Web 기준으로 전면 재작성
 
@@ -306,7 +307,7 @@
 - 웹은 OAuth의 자연스러운 환경 — 팝업 플로우가 CLI보다 깔끔
 - SSH/원격 fallback 불필요 (웹 = 브라우저 항상 존재)
 - 구현 순서 변경: OpenRouter를 OpenAI보다 먼저 (callback_url 동적 → redirect URI 이슈 없음 → 인프라 검증에 적합)
-**재검토 조건**: 해당 없음 (확정)
+  **재검토 조건**: 해당 없음 (확정)
 
 ### DEC-021: v0.0.8 AI SDK 마이그레이션 착수
 
@@ -320,7 +321,7 @@
 - Zod 스키마 변환으로 31개 도구의 타입 안전성 + 런타임 검증 확보
 - AI SDK `streamText()`로 토큰 레벨 스트리밍 획득 (현재 없음)
 - 새 프로바이더 추가 시 패키지 설치 + 레지스트리 한 줄 → 현재는 ~200줄 보일러플레이트  
-**재검토 조건**: 해당 없음 (실행 단계 진입)
+  **재검토 조건**: 해당 없음 (실행 단계 진입)
 
 ### DEC-022: Web 배포를 에이전트 경유로 변경
 
@@ -368,7 +369,7 @@
 
 - 다크 모드 개선 (Cyber 감성 제거만) — 라이트로 전환이 더 Vercel-like
 - 라이트+다크 토글 — 1인 메인테이너 공수 2배, MVP에서 불필요  
-**이유**:
+  **이유**:
 
 - 현재 디자인(`--bg-app: #050505`, glow, scanline)이 "해커 터미널" 감성 → 프로페셔널 배포 플랫폼과 괴리
 - 라이트 모드가 Vercel의 기본이며 대시보드 가독성에 유리
@@ -521,7 +522,6 @@
 
 **재검토 조건**: 사용자가 "AI 분석을 따로 보고 싶다"는 피드백 반복 시 안 A 재검토
 
-
 ### DEC-035: Quick Share Two-Track 유지 (Traefik 통합 안 함)
 
 **날짜**: 2026-03
@@ -577,6 +577,7 @@
 - Traefik File Provider로 Docker 외 프로세스/정적 파일도 라우팅 가능 — 아키텍처 자연스러운 확장
 
 **Phase 로드맵**:
+
 - Phase 0: Traefik File Provider 활성화 (0.5일)
 - Phase 1: Zero-Container 정적 호스팅 (2-3일)
 - Phase 2: Native Process 호스팅, PM2 스타일 (1-2주)
@@ -586,8 +587,8 @@
 **정체성**: "실패를 스스로 고치는 셀프호스트 배포 플랫폼" — 변경 없음. 추가 포지셔닝: "Docker 강박 없는 초경량 배포"
 **회의록**: `docs/planning/meetings/2026-03-09-architecture-direction.md`
 **재검토 조건**: Phase 1 완료 후 사용자 피드백으로 Phase 2 진행 여부 판단. Phase 3은 출시 후 재평가.
----
 
+---
 
 ## 결정 추가 가이드
 

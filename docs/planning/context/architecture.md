@@ -135,6 +135,7 @@ src/
 - **Native Process**: (Phase 2 계획) OS 프로세스 직접 실행 (PM2 스타일). Traefik File Provider로 라우팅.
 - Docker daemon은 Docker 배포 시에만 필수. 정적/네이티브 배포는 Docker 불필요.
 - Traefik은 모든 배포 방식의 공통 라우팅 레이어 (Docker Provider + File Provider)
+
 ### 싱글 프로세스
 
 - 데몬 1개 + TUI 1개 (IPC 통신)
@@ -157,17 +158,17 @@ src/
 
 ## 확장 포인트 (기능 추가가 쉬운 곳)
 
-| 확장점               | 방법                                 | 예시                      |
-| -------------------- | ------------------------------------ | ------------------------- |
-| 새 도구 추가         | `registry.ts`에 객체 추가            | `get_server_context` 도구 |
-| 새 LLM 프로바이더    | `src/llm/`에 파일 추가               | DeepSeek, Mistral         |
-| 새 봇 채널           | `src/channels/`에 파일 추가          | Line, WhatsApp            |
-| 새 빌드 레시피       | `build-recovery.ts` 배열에 추가      | Ruby, Go 빌드 에러 패턴   |
-| 새 Dockerfile 템플릿 | `dockerfile-gen.ts`에 분기 추가      | Deno, Bun 프레임워크      |
-| Dashboard 섹션       | `DashboardPanel.tsx`에 컴포넌트 추가 | Server 섹션 (v0.0.9)      |
-| 슬래시 명령          | `src/tui/commands/`에 추가           | /stats, /deploy           |
-| DB 테이블            | `schema.ts` + 마이그레이션           | global_secrets (v0.0.10)  |
-| 배포 전략 추가      | `DeployStrategy` 구현체 추가         | StaticStrategy, NativeStrategy (DEC-036) |
+| 확장점               | 방법                                 | 예시                                     |
+| -------------------- | ------------------------------------ | ---------------------------------------- |
+| 새 도구 추가         | `registry.ts`에 객체 추가            | `get_server_context` 도구                |
+| 새 LLM 프로바이더    | `src/llm/`에 파일 추가               | DeepSeek, Mistral                        |
+| 새 봇 채널           | `src/channels/`에 파일 추가          | Line, WhatsApp                           |
+| 새 빌드 레시피       | `build-recovery.ts` 배열에 추가      | Ruby, Go 빌드 에러 패턴                  |
+| 새 Dockerfile 템플릿 | `dockerfile-gen.ts`에 분기 추가      | Deno, Bun 프레임워크                     |
+| Dashboard 섹션       | `DashboardPanel.tsx`에 컴포넌트 추가 | Server 섹션 (v0.0.9)                     |
+| 슬래시 명령          | `src/tui/commands/`에 추가           | /stats, /deploy                          |
+| DB 테이블            | `schema.ts` + 마이그레이션           | global_secrets (v0.0.10)                 |
+| 배포 전략 추가       | `DeployStrategy` 구현체 추가         | StaticStrategy, NativeStrategy (DEC-036) |
 
 ---
 

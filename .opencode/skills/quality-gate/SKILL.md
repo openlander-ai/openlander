@@ -2,10 +2,10 @@
 
 ## When to Load This Skill
 
-모든 구현 태스크 위임 시 `load_skills=["quality-gate"]`로 로드. 특히:
+모든 구현 태스크 위임 시 `load_skills=["quality-gate"]`로 로드.
 
-- TUI 컴포넌트 추가/수정
-- Hook, IPC, 상태 관리 변경
+- 파이프라인/도구/DB 로직 구현
+- UI/프론트엔드 컴포넌트 작업
 - 테스트 작성
 
 ## 완료 판정 프로토콜
@@ -63,22 +63,21 @@
 - `as any`, `@ts-ignore`, `@ts-expect-error` — **절대 금지**
 - 빈 catch 블록 `catch(e) {}` — 최소한 주석 필수
 - 실패하는 테스트 삭제 — **절대 금지** (고쳐야 함)
-- 기존 코드 스타일 무시 — theme.ts 색상, .js 확장자, SolidJS 패턴 준수
+- 기존 코드 스타일 무시 — `.js` 확장자 import, 기존 패턴 준수
 
 ## OpenLander 코드 컨벤션
 
-- **색상**: `theme.ts`에서 import. 하드코딩 금지. hex 형식만.
 - **Import**: `.js` 확장자 필수 (ESM)
-- **상태 관리**: module-level SolidJS signals (`src/tui/state/`)
-- **키보드**: `useKeyboard`에서 `overlayActive()` + `focus()` 가드 필수
-- **컴포넌트**: `<box>`, `<text>`, `<textarea>`, `<input>`, `<span>` 만 유효
-- **Spinner**: `<text>` 안에서 `<Spinner />` 사용 (orphan text 방지)
+- **타입**: strict mode — 타입 단언/무시 절대 금지
+- **함수 추가**: 기존 모듈에 추가 우선, 새 파일은 정말 필요할 때만
+- **함수 시그니처**: 기존 함수 변경 금지 → 새 함수 추가
+- **테스트**: `test/[모듈명]/[파일명].test.ts` 경로
+
+> 상세 패턴은 `codebase-guide` 스킬의 `references/codebase-patterns.md` 참조
 
 ## 참조 문서
 
-| 문서                                             | 용도                           |
-| ------------------------------------------------ | ------------------------------ |
-| `docs/planning/ui-ux-layout.md`                  | UI/UX 스펙 (스펙 라인 참조 시) |
-| `docs/planning/implementation-tasks.md`          | 태스크 목록 + 수락기준         |
-| `.opencode/skills/opentui/SKILL.md`              | OpenTUI 개발 가이드            |
-| `.opencode/skills/opentui/references/gotchas.md` | 주요 함정                      |
+| 문서                           | 용도                |
+| ------------------------------ | ------------------- |
+| `docs/planning/version-map.md` | 현재 버전/상태 파악 |
+| `.opencode/instructions.md`    | 프로젝트 개발 규칙  |

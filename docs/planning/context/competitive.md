@@ -190,6 +190,7 @@ OpenLander와 타겟이 다름 (Rails 전용 vs 범용).
 
 > **NOTE (DEC-023)**: "웹 대시보드 따라가면 안 됨" 항목은 TUI 시대 결정. v0.2.0에서 Vercel-inspired 대시보드로 전환 결정됨 (2026-03).
 > 포지셔닝 변경: "Coolify의 Docker 기반 + Vercel의 깔끔한 UX + AI 자동 수정"
+
 ---
 
 ## 시장 트렌드 (기획 배경)
