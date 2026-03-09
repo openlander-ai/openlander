@@ -39,6 +39,22 @@ export class TraefikManager {
   }
 
   /**
+   * Check if the running Traefik container has up-to-date config.
+   * Returns false if the container is missing File Provider or other required args.
+   */
+  private async hasCurrentConfig(): Promise<boolean> {
+    try {
+      const client = this.docker.getClient();
+      const container = client.getContainer(TRAEFIK_CONTAINER_NAME);
+      const info = await container.inspect();
+      const cmd: string[] = (info.Config.Cmd as string[] | null) ?? [];
+      return cmd.some((arg: string) => arg.includes('providers.file.directory'));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Ensure the Docker network for Traefik exists.
    * All managed containers join this network.
    */
@@ -61,8 +77,11 @@ export class TraefikManager {
    * Configured as Docker provider — reads labels from other containers.
    */
   async start(): Promise<void> {
-    // Skip if already running
-    if (await this.isRunning()) return;
+    // If running, check if config is up-to-date (e.g., File Provider added in v0.2.6)
+    if (await this.isRunning()) {
+      if (await this.hasCurrentConfig()) return;
+      log.info('Traefik config outdated (missing File Provider) — recreating container');
+    }
 
     await this.ensureNetwork();
     mkdirSync(DYNAMIC_CONFIG_DIR, { recursive: true });
