@@ -140,7 +140,27 @@ export class DeployPipeline {
     private readonly composePipeline?: ComposePipeline,
     private readonly autoDetector?: AutoDetector,
     private readonly buildDebugger?: BuildDebugger,
-  ) {}
+  ) {
+    // Cleanup stale quick-share/shared tunnel state from previous process
+    this.cleanupStaleTunnels();
+  }
+
+  /**
+   * On startup, any project with quick-share/shared visibility has a dead tunnel
+   * (the cloudflared child process doesn't survive restarts). Reset to internal.
+   */
+  private cleanupStaleTunnels(): void {
+    const projects = this.db.listProjects();
+    for (const project of projects) {
+      if (project.visibility === 'quick-share' || project.visibility === 'shared') {
+        log.info({ projectId: project.id, name: project.name }, 'Clearing stale tunnel state');
+        this.db.updateProject(project.id, {
+          visibility: 'internal',
+          publicUrl: null,
+        });
+      }
+    }
+  }
 
   /**
    * Start a deployment in the background (non-blocking).
