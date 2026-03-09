@@ -15,48 +15,11 @@ import { Database } from '../../src/db/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import { PreflightCheckError } from '../../src/errors.js';
 import { clearPortScanCache } from '../../src/pipeline/port.js';
-
-type MockContainer = {
-  id: string;
-  name: string;
-  image: string;
-  state: string;
-  status: string;
-  ports: Array<{ PublicPort?: number }>;
-  labels: Record<string, string>;
-  managedByOpenLander: boolean;
-  composeProject: string | null;
-  created: number;
-};
-
-function createMockContainer(
-  name: string,
-  options: {
-    image?: string;
-    state?: string;
-    ports?: Array<{ PublicPort?: number }>;
-    labels?: Record<string, string>;
-  } = {},
-): MockContainer {
-  return {
-    id: `container-${name}`,
-    name,
-    image: options.image ?? 'test-image:latest',
-    state: options.state ?? 'running',
-    status: 'Up 2 hours',
-    ports: options.ports ?? [],
-    labels: options.labels ?? {},
-    managedByOpenLander: options.labels?.['openlander.managed'] === 'true',
-    composeProject: null,
-    created: Date.now(),
-  };
-}
-
-function createMockDocker(containers: MockContainer[] = []): Docker {
-  return {
-    listAllContainers: vi.fn().mockResolvedValue(containers),
-  } as unknown as Docker;
-}
+import {
+  type MockContainer,
+  createMockContainer,
+  createMockDocker,
+} from '../helpers/docker-mocks.js';
 
 describe('preflightCheck', () => {
   let db: Database;
