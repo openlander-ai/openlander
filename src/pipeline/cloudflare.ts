@@ -119,10 +119,9 @@ export class CloudflareTunnelManager {
     } catch (err) {
       log.debug({ err }, 'Domain verification failed — zone not found');
       return false;
-      return false;
     }
 
-    const records = await this.getDnsRecords(zone.id, normalizedDomain);
+    const records = await this.getConflictingRecords(zone.id, normalizedDomain);
     const target = normalizeHost(`${this.config.tunnelId}.cfargotunnel.com`);
 
     return records.some(
@@ -210,9 +209,9 @@ export class CloudflareTunnelManager {
   }
 
   private async upsertCnameRecord(zoneId: string, domain: string): Promise<string> {
-    const existing = await this.getDnsRecords(zoneId, domain);
+    const existing = await this.getConflictingRecords(zoneId, domain);
     const tunnelTarget = `${this.config.tunnelId}.cfargotunnel.com`;
-    const body = JSON.stringify({
+    const cnameBody = JSON.stringify({
       type: 'CNAME',
       name: domain,
       content: tunnelTarget,
@@ -220,25 +219,36 @@ export class CloudflareTunnelManager {
       ttl: 1,
     });
 
-    const first = existing[0];
-    if (first) {
+    // Delete conflicting A/AAAA records, then create CNAME
+    const nonCname = existing.filter((r) => r.type !== 'CNAME');
+    for (const record of nonCname) {
+      await this.deleteDnsRecord(zoneId, record.id);
+    }
+
+    // If existing CNAME found, patch it
+    const cname = existing.find((r) => r.type === 'CNAME');
+    if (cname) {
       const updated = await this.cloudflareRequest<CloudflareDnsRecord>(
-        `zones/${zoneId}/dns_records/${first.id}`,
-        { method: 'PATCH', body },
+        `zones/${zoneId}/dns_records/${cname.id}`,
+        { method: 'PATCH', body: cnameBody },
       );
       return updated.id;
     }
 
+    // No existing record — create new CNAME
     const created = await this.cloudflareRequest<CloudflareDnsRecord>(
       `zones/${zoneId}/dns_records`,
-      { method: 'POST', body },
+      { method: 'POST', body: cnameBody },
     );
     return created.id;
   }
 
-  private async getDnsRecords(zoneId: string, domain: string): Promise<CloudflareDnsRecord[]> {
+  private async getConflictingRecords(
+    zoneId: string,
+    domain: string,
+  ): Promise<CloudflareDnsRecord[]> {
     return this.cloudflareRequest<CloudflareDnsRecord[]>(
-      `zones/${zoneId}/dns_records?type=CNAME&name=${encodeURIComponent(domain)}`,
+      `zones/${zoneId}/dns_records?name=${encodeURIComponent(domain)}`,
     );
   }
 
