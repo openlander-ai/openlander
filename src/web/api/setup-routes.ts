@@ -183,8 +183,9 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         ctx.config.language,
       );
 
-      const tools = createTools(ctx);
+      const tools = createTools(ctx, ctx.questionBridge);
       agent.setTools(tools);
+      agent.setQuestionBridge(ctx.questionBridge);
 
       (ctx as { agent: typeof agent }).agent = agent;
 
@@ -605,8 +606,9 @@ export function createSetupRoutes(ctx: AppContext): Hono {
           lang,
         );
 
-        const tools = createTools(ctx);
+        const tools = createTools(ctx, ctx.questionBridge);
         agent.setTools(tools);
+        agent.setQuestionBridge(ctx.questionBridge);
         (ctx as { agent: typeof agent }).agent = agent;
       } catch {
         // Agent hot-reload failed — language saved but agent uses old locale until restart

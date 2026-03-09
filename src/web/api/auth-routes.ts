@@ -276,8 +276,9 @@ export function createAuthRoutes(ctx: AppContext): Hono {
           ctx.config.language,
         );
 
-        const tools = createTools(ctx);
+        const tools = createTools(ctx, ctx.questionBridge);
         agent.setTools(tools);
+        agent.setQuestionBridge(ctx.questionBridge);
 
         (ctx as { agent: typeof agent }).agent = agent;
 
