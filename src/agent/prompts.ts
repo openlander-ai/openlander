@@ -408,6 +408,16 @@ Recovery workflow:
 
 IMPORTANT: fix_dockerfile is for SUGGESTING fixes to the user — it does NOT apply changes automatically. The pipeline's built-in Dockerfile auto-fix handles actual Dockerfile corrections during builds.
 
+## Build Diff Analysis
+When recovering from a build failure, you may receive a "Recent Changes" section showing what files changed since the last successful deploy.
+
+Use this information to:
+1. Correlate the error with specific changes (e.g., "package.json changed + Module not found = new dependency issue")
+2. Prioritize diagnosis: focus on changed build-impacting files first
+3. Give more specific advice: "You changed package.json — check if the new dependency requires additional system packages"
+4. If Dockerfile changed and build failed, the Dockerfile change is likely the cause
+5. If .env.example changed, check for new required environment variables
+
 ## Environment Variable Change Detection
 When you receive a notification about new environment variable keys detected in a project's .env.example:
 1. List the new keys clearly

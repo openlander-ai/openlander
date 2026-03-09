@@ -17,6 +17,7 @@ import { DockerfileNotFoundError, PreflightCheckError } from '../errors.js';
 import { detectFramework, ensureDockerfile, parseDockerfileExposePort } from './dockerfile-gen.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { detectNewEnvKeys } from './env-inject.js';
+import { analyzeBuildDiff, formatDiffForPrompt } from './diff-analysis.js';
 import { scanForSecrets } from './secret-scan.js';
 import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
@@ -269,6 +270,7 @@ export class DeployPipeline {
 
     let buildLog = '';
     let clonePath = '';
+    let diffContext: string | undefined;
     const imageTag = `openlander/${projectName}:latest`;
 
     try {
@@ -311,6 +313,35 @@ export class DeployPipeline {
       });
 
       buildLog += `[clone] ${config.repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
+
+      const previousDeploy = this.db.getLastDeployLog(projectId);
+      const previousSha = previousDeploy?.commit_sha;
+
+      if (config._projectId && previousSha && previousSha !== cloneResult.commitSha) {
+        const diffAnalysis = await analyzeBuildDiff(cloneResult.path, previousSha);
+        if (diffAnalysis) {
+          diffContext = formatDiffForPrompt(diffAnalysis);
+          buildLog += `[diff] ${diffAnalysis.summary}\n`;
+          log.info(
+            {
+              projectId,
+              totalChanged: diffAnalysis.totalChangedFiles,
+              buildImpact: diffAnalysis.buildImpactFiles.length,
+            },
+            'Pre-build diff analysis complete',
+          );
+          await eventBus.emit('deploy:diff-analyzed', {
+            projectId,
+            previousSha: diffAnalysis.previousSha,
+            currentSha: diffAnalysis.currentSha,
+            totalChanged: diffAnalysis.totalChangedFiles,
+            buildImpactFiles: diffAnalysis.buildImpactFiles,
+            envTemplateChanged: diffAnalysis.envTemplateChanged,
+            dockerChanged: diffAnalysis.dockerChanged,
+            depsChanged: diffAnalysis.depsChanged,
+          });
+        }
+      }
 
       if (config._projectId) {
         const storedVars = this.env.getAll(config._projectId);
@@ -665,6 +696,7 @@ export class DeployPipeline {
         step: failStep,
         error: errorMsg,
         buildLog: buildLogWithError,
+        diffContext,
       });
 
       return {

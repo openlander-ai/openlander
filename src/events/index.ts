@@ -78,7 +78,8 @@ export type EventType =
   | 'recovery:exhausted'
   | 'env:new-keys-detected'
   | 'rollback:suggested'
-  | 'secret:detected';
+  | 'secret:detected'
+  | 'deploy:diff-analyzed';
 
 export interface EventPayload {
   'deploy:start': { projectId: string; repoUrl: string };
@@ -87,7 +88,13 @@ export interface EventPayload {
   'deploy:run': { projectId: string; containerId: string; port: number; url: string };
   'deploy:auto-detect': { projectId: string; framework: string; type: 'dockerfile' | 'compose' };
   'deploy:success': { projectId: string; url: string; totalDurationMs: number };
-  'deploy:failed': { projectId: string; step: string; error: string; buildLog?: string };
+  'deploy:failed': {
+    projectId: string;
+    step: string;
+    error: string;
+    buildLog?: string;
+    diffContext?: string;
+  };
   'deploy:crash': { projectId: string; containerId: string; error?: string; exitCode?: number };
   'deploy:rollback': { projectId: string; fromImage: string; toImage: string };
   'build:autofix': { projectId: string; action: string; category: string };
@@ -183,6 +190,16 @@ export interface EventPayload {
     projectId: string;
     projectName: string;
     secrets: Array<{ file: string; line: number; pattern: string; type: string }>;
+  };
+  'deploy:diff-analyzed': {
+    projectId: string;
+    previousSha: string;
+    currentSha: string;
+    totalChanged: number;
+    buildImpactFiles: string[];
+    envTemplateChanged: boolean;
+    dockerChanged: boolean;
+    depsChanged: boolean;
   };
 }
 

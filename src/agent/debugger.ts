@@ -175,6 +175,7 @@ export class BuildDebugger {
     imageTag: string;
     /** Which step failed: clone, dockerfile, build, run */
     failedStep: string;
+    diffContext?: string;
   }): Promise<BuildDiagnosis> {
     const buildLog = truncateBuildLog(context.buildLog);
 
@@ -193,6 +194,7 @@ export class BuildDebugger {
     const userPrompt = `Project: ${context.projectName}
 Image: ${context.imageTag}
 Failed Step: ${context.failedStep}
+${context.diffContext ? `\n--- Recent Changes ---\n${context.diffContext}\n` : ''}
 
 --- Dockerfile (with line numbers) ---
 ${numberLines(dockerfile)}

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.7] - Pre-build Diff Analysis
+
+### Added
+
+- Pre-build diff analysis: on redeployments, analyze git diff to identify build-impacting file changes (Dockerfile, dependencies, env templates, runtime configs)
+- `deploy:diff-analyzed` event with structured payload (changed files, impact flags, commit range)
+- Build failure diagnosis now includes recent changes context — AI correlates errors with specific file changes
+- Agent prompt section `## Build Diff Analysis` guides AI to use diff context during auto-recovery
+- `formatDiffForPrompt()` formats diff analysis for human-readable agent context injection
+- 14 unit tests for diff-analysis module (BUILD_IMPACT_PATTERNS, analyzeBuildDiff, formatDiffForPrompt)
+
 ## [Unreleased]
 
 ### Added
