@@ -4,6 +4,8 @@ import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { ProjectNotFoundError } from '../errors.js';
 import { cloneRepo } from '../pipeline/git.js';
 import { getProjectUrl } from '../pipeline/traefik.js';
+import { scanUsedPorts } from '../pipeline/port.js';
+import { DeployOrchestrator, type ServiceNode } from '../pipeline/orchestrator.js';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createGitProvider } from '../git-providers/index.js';
@@ -667,6 +669,119 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
       },
     }),
 
+    orchestrate_deploy: tool({
+      description:
+        'Deploy multiple services with dependency ordering and atomic rollback. Use for monorepos or multi-service repos. Internally scans Dockerfiles, reads compose depends_on when available, deploys in topological order, and rolls back all deployed services if any step fails.',
+      inputSchema: z.object({
+        repo_url: z.string().describe('Git repository URL'),
+        branch: z.string().optional().describe('Branch (default: repo default branch)'),
+      }),
+      execute: async ({ repo_url, branch }) => {
+        const cloneResult = await cloneRepo({
+          repoUrl: repo_url,
+          branch,
+          sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+        });
+
+        const dockerfiles = findDockerfiles(cloneResult.path).map((filePath) =>
+          relative(cloneResult.path, filePath),
+        );
+
+        const composePath = ctx.composePipeline.detectComposeFile(cloneResult.path);
+        const composeProject = composePath
+          ? ctx.composePipeline.parseComposeFile(composePath)
+          : null;
+
+        const services = buildServiceNodes(
+          cloneResult.path,
+          dockerfiles,
+          composeProject?.services ?? [],
+        );
+        const orchestrator = new DeployOrchestrator();
+        const topology = orchestrator.buildTopology(
+          services,
+          repo_url,
+          cloneResult.path,
+          cloneResult.commitSha,
+          branch,
+        );
+
+        const usedPorts = (await scanUsedPorts(ctx.db, ctx.docker)).all;
+        const validation = orchestrator.validateTopology(topology, usedPorts);
+        if (!validation.valid) {
+          return {
+            success: false,
+            services: services.map((service) => ({
+              name: service.name,
+              status: 'failed' as const,
+              error: validation.errors.join('; '),
+            })),
+            totalDuration: 0,
+            error: 'TOPOLOGY_VALIDATION_FAILED',
+            validationErrors: validation.errors,
+          };
+        }
+
+        const deploymentCache = new Map<
+          string,
+          { success: boolean; projectId?: string; url?: string; error?: string }
+        >();
+
+        return orchestrator.executeOrdered(topology, {
+          deployService: async (service) => {
+            const cached = deploymentCache.get(service.name);
+            if (cached) {
+              return cached;
+            }
+
+            if (!service.dockerfile) {
+              const failed = {
+                success: false,
+                error: `Service ${service.name} has no Dockerfile path`,
+              };
+              deploymentCache.set(service.name, failed);
+              return failed;
+            }
+
+            const monorepoResult = await ctx.pipeline.deployMonorepo({
+              repoUrl: repo_url,
+              branch,
+              clonePath: cloneResult.path,
+              commitSha: cloneResult.commitSha,
+              dockerfiles: [service.dockerfile],
+              envVars: service.envVars,
+              trigger: 'chat',
+            });
+
+            const childResult = monorepoResult.children[0];
+            if (!childResult) {
+              const failed = {
+                success: false,
+                error: `No deploy result returned for service ${service.name}`,
+              };
+              deploymentCache.set(service.name, failed);
+              return failed;
+            }
+
+            const result = {
+              success: childResult.success,
+              projectId: childResult.projectId,
+              url: childResult.url,
+              error: childResult.error,
+            };
+            deploymentCache.set(service.name, result);
+            return result;
+          },
+          rollbackService: async (service) => {
+            if (!service.projectId) {
+              return;
+            }
+            await ctx.pipeline.rollback(service.projectId);
+          },
+        });
+      },
+    }),
+
     // --- Git Provider Tools ---
     list_github_repos: tool({
       description:
@@ -869,4 +984,115 @@ function findDockerfiles(dir: string, maxDepth = 3): string[] {
   }
   walk(dir, 0);
   return results;
+}
+
+function buildServiceNodes(
+  clonePath: string,
+  dockerfiles: string[],
+  composeServices: Array<{
+    name: string;
+    build?: string | { context: string; dockerfile?: string };
+    dependsOn?: string[];
+    ports?: string[];
+    environment?: Record<string, string> | string[];
+  }>,
+): ServiceNode[] {
+  const composeByName = new Map(composeServices.map((service) => [service.name, service]));
+  const composeByDockerfile = new Map<string, (typeof composeServices)[number]>();
+
+  for (const service of composeServices) {
+    const dockerfilePath = deriveDockerfileFromComposeBuild(service.build);
+    if (!dockerfilePath) {
+      continue;
+    }
+    composeByDockerfile.set(
+      normalizeRelativePath(join(clonePath, dockerfilePath), clonePath),
+      service,
+    );
+  }
+
+  return dockerfiles.map((dockerfilePath) => {
+    const normalizedDockerfile = normalizeRelativePath(join(clonePath, dockerfilePath), clonePath);
+    const serviceName = deriveServiceName(dockerfilePath);
+    const composeService =
+      composeByName.get(serviceName) ?? composeByDockerfile.get(normalizedDockerfile);
+    const envVars = parseComposeEnvVars(composeService?.environment);
+    return {
+      name: composeService?.name ?? serviceName,
+      dockerfile: dockerfilePath,
+      dependsOn: composeService?.dependsOn ?? [],
+      port: parseComposeHostPort(composeService?.ports?.[0]),
+      envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+    };
+  });
+}
+
+function deriveServiceName(dockerfilePath: string): string {
+  const normalized = dockerfilePath.replace(/\\/g, '/');
+  const parts = normalized.split('/').filter((part) => part.length > 0);
+  if (parts.length <= 1) {
+    return 'app';
+  }
+  return parts[parts.length - 2] ?? 'app';
+}
+
+function parseComposeHostPort(portMapping?: string): number | undefined {
+  if (!portMapping) {
+    return undefined;
+  }
+  const cleaned = portMapping.trim().split('/')[0] ?? portMapping;
+  const tokens = cleaned
+    .split(':')
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+  if (tokens.length < 2) {
+    return undefined;
+  }
+  const hostPortToken = tokens[tokens.length - 2];
+  if (!hostPortToken || !/^\d+$/.test(hostPortToken)) {
+    return undefined;
+  }
+  const parsed = Number(hostPortToken);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseComposeEnvVars(
+  environment?: Record<string, string> | string[],
+): Record<string, string> {
+  if (!environment) {
+    return {};
+  }
+  if (!Array.isArray(environment)) {
+    return { ...environment };
+  }
+  const vars: Record<string, string> = {};
+  for (const item of environment) {
+    const separatorIndex = item.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const key = item.slice(0, separatorIndex).trim();
+    const value = item.slice(separatorIndex + 1).trim();
+    if (!key) {
+      continue;
+    }
+    vars[key] = value;
+  }
+  return vars;
+}
+
+function deriveDockerfileFromComposeBuild(
+  build?: string | { context: string; dockerfile?: string },
+): string | null {
+  if (!build) {
+    return null;
+  }
+  if (typeof build === 'string') {
+    return join(build, 'Dockerfile');
+  }
+  return join(build.context, build.dockerfile ?? 'Dockerfile');
+}
+
+function normalizeRelativePath(pathToNormalize: string, root: string): string {
+  return relative(root, pathToNormalize).replace(/\\/g, '/');
 }

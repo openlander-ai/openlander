@@ -29,6 +29,7 @@ const EXPECTED_TOOL_NAMES = [
   'get_deploy_status',
   'scan_dockerfiles',
   'deploy_monorepo',
+  'orchestrate_deploy',
   'list_github_repos',
   'search_github_repos',
   // v0.0.9-5: Server awareness tools
@@ -84,13 +85,13 @@ function getTool(ctx: AppContext, name: string) {
 }
 
 describe('Tool Registry', () => {
-  it('returns all expected tool names (30 tools)', () => {
+  it('returns all expected tool names (31 tools)', () => {
     const { ctx } = createMockContext();
 
     const tools = createToolRegistry(ctx);
     const names = tools.map((tool) => tool.name);
 
-    expect(names).toHaveLength(30);
+    expect(names).toHaveLength(31);
     expect(new Set(names)).toEqual(new Set(EXPECTED_TOOL_NAMES));
   });
 

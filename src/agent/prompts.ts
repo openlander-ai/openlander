@@ -233,6 +233,7 @@ Choose the right tool based on user intent:
 | Check deploy progress          | get_deploy_status    | ALWAYS call after deploy_project/monorepo.   |
 | Scan repo for Dockerfiles      | scan_dockerfiles     | Use before deploy to detect monorepo.    |
 | Deploy monorepo services       | deploy_monorepo      | Returns immediately. Check get_deploy_status.|
+| Orchestrate multi-service deploy | orchestrate_deploy | Dependency-ordered deploy with auto rollback. |
 | Ask user a question            | ask_user_question    | Structured choices UI. Use for confirmations, preferences, disambiguation. |
 ## Deployment Flow (IMPORTANT)
 Deploys are **non-blocking** — deploy_project and deploy_monorepo return immediately while builds run in the background.
@@ -276,6 +277,11 @@ Example — "Deploy a monorepo":
 2. If isMonorepo is true, call deploy_monorepo with the dockerfiles array
 3. Call get_deploy_status to monitor all child builds
 4. Report all service URLs (parent/frontend, parent/backend, etc.)
+
+Example — "Deploy multi-service with dependency order":
+1. Call orchestrate_deploy with repo URL
+2. It deploys in dependency order and rolls back all services on failure
+3. Report per-service status, URLs, and total duration
 
 Example — "Deploy 3 repos at once":
 1. Call deploy_project for each repo (they all start in background)

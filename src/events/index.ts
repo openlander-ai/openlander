@@ -37,6 +37,11 @@ export type EventType =
   | 'compose:up'
   | 'compose:down'
   | 'compose:failed'
+  | 'orchestration:plan'
+  | 'orchestration:service-start'
+  | 'orchestration:service-healthy'
+  | 'orchestration:service-failed'
+  | 'orchestration:complete'
   // Container lifecycle
   | 'container:start'
   | 'container:stop'
@@ -98,6 +103,40 @@ export interface EventPayload {
   'compose:up': { projectId: string; services: string[] };
   'compose:down': { projectId: string };
   'compose:failed': { projectId: string; error: string };
+  'orchestration:plan': {
+    topology: {
+      services: Array<{
+        name: string;
+        dockerfile?: string;
+        composePath?: string;
+        dependsOn: string[];
+        port?: number;
+        envVars?: Record<string, string>;
+      }>;
+      executionOrder: string[][];
+      repoUrl: string;
+      branch?: string;
+      clonePath: string;
+      commitSha: string;
+    };
+  };
+  'orchestration:service-start': { serviceName: string };
+  'orchestration:service-healthy': { serviceName: string };
+  'orchestration:service-failed': { serviceName: string; error: string };
+  'orchestration:complete': {
+    result: {
+      success: boolean;
+      services: Array<{
+        name: string;
+        status: 'deployed' | 'failed' | 'rolled_back' | 'skipped';
+        projectId?: string;
+        url?: string;
+        error?: string;
+        duration?: number;
+      }>;
+      totalDuration: number;
+    };
+  };
   'container:start': { projectId: string; containerId: string };
   'container:stop': { projectId: string; containerId: string };
   'container:remove': { projectId: string; containerId: string };
