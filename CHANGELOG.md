@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [0.2.6] - Shared Mode & PR Preview
+
 ### Added
 
-- AI co-pilot features for v1.0.0 — 7 backend modules + inline frontend integration
+- Traefik File Provider for dynamic routing (Docker labels + file-based YAML configs)
+- Quick Share via Traefik reverse proxy (replaces direct container port exposure)
+- Shared Mode with access codes for authenticated public sharing
+- PR Preview deployments with TTL-based auto-cleanup
+- Production custom domain YAML generation via Traefik File Provider
+- Project status sync: container crash → error status, 3 consecutive health failures → error status
+- UI reactivity: DomainsPanel and DeploymentsList re-fetch on project status change
+- AI co-pilot features — 7 backend modules + inline frontend integration
   - Auto incident report: recovery events → Slack/Discord/Telegram channel broadcast
   - Rollback watcher: 60s post-deploy health monitoring → rollback suggestion on 3 consecutive failures
   - Env var change detection: .env.example scan on redeploy → prompt for new key values
@@ -21,19 +32,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Cloudflare 2-step connect flow (TryCloudflare + Cloudflare Tunnel per-project expose)
 - Cloudflare Settings configuration form (API token input UI + backend API)
 - Comprehensive tests for AI co-pilot modules — 50+ new tests (secret-scan, postmortem, rollback-watcher)
+- Shared test helpers: `test/helpers/docker-mocks.ts`, `test/helpers/web-route-mocks.ts`
 
 ### Changed
 
 - Removed unused @opentui/core dependency
+- Removed redundant @types/bcryptjs — bcryptjs@3.0.3 bundles its own type declarations
 - Simplified i18n: removed 224 short keys, hardcoded in English, kept 101 long sentence keys translated
-- Fixed sidebar breakpoint (labels visible at 1024px instead of 1280px)
-- Fixed Services empty-state button handler inconsistency
-- Moved branding to header with SVG logo and version display
-- Changed default port from 10003 to 10114
+- Renamed "인터넷에 공개" → "Publish" per i18n policy (short labels stay in English)
+- Removed 11 dead TUI/IPC legacy test files (2,451 lines) — TUI is `--tui` legacy mode only
+- Extracted shared mock factories from traefik, preflight, and web-routes tests to reduce duplication
+- Test suite: 48 files (783 tests) → 37 files (535 tests) after dead test removal
 
 ### Fixed
 
-- Agent concurrency: serialize chatStream calls via promise chain queue to prevent cross-project state pollution
+- Cloudflare DNS: use PATCH instead of PUT for record updates (PUT not allowed with API tokens)
+- Cloudflare DNS: handle pre-existing A/AAAA records when adding CNAME domain (upsert pattern)
+- Cloudflare Tunnel: use correct `cfd_tunnel` API path (was using `tunnels/`, causing 405 errors)
+- TryCloudflare: auto-retry quick tunnel on transient 500 errors (3 attempts with exponential backoff)
+- TryCloudflare: show user-friendly error in ShareDialog when service is unavailable
+- Traefik: auto-recreate container when config is outdated (missing File Provider)
+- Traefik: ensure `traefik/dynamic` directory exists before writing YAML configs
+- Stale tunnel cleanup: clear quick-share/shared tunnel state on app restart
+- Added `.gitattributes` with `merge=ours` for package-lock.json (prevent cross-platform conflicts)
+- Agent concurrency: serialize chatStream calls via promise chain queue
 - Recovery timeout increased from 120s to 300s for long builds
 - Removed agent.clearHistory() that poisoned unrelated sessions
 - Added 6 secret scan patterns (sk-proj-, github_pat-, ASIA, xoxb/p/s)
@@ -41,9 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Wrapped all fire-and-forget chatStream calls with .catch() for error handling
 - Secret redaction in postmortem before sending to LLM
 - Resource cleanup: stop() + unsubscribe for RollbackWatcher, IncidentReporter, PostmortemGenerator on shutdown
-- AbortController cleanup for PostmortemCard fetch
-- Blue-Green button label hardcoded per i18n policy (short labels stay in English)
-- Addressed Oracle code review findings: Docker network name from config, removed dead pipeline code (5 files), split routes.ts into domain modules
+- Blue-Green button label hardcoded per i18n policy
+- Addressed Oracle code review findings: Docker network name from config, removed dead pipeline code, split routes.ts into domain modules
+- Removed unused `removeProject` mock from web-routes tests (dead code — actual method is `remove()`)
 
 ## [0.2.5] - Release Preparation
 

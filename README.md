@@ -180,7 +180,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.2.4** | Services              | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images                           |
 | **v0.2.5** | Release Preparation   | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                    |
 | **v0.2.6** | Shared Mode & Preview | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys  |
-| **v1.0.0** | First Stable Release  | Next   | AI co-pilot (7 features), inline AI analysis, secret scanning, postmortem generation, 783 tests |
+| **v1.0.0** | First Stable Release  | Next   | AI co-pilot (7 features), inline AI analysis, secret scanning, postmortem generation, 535 tests |
 
 ## Requirements
 
