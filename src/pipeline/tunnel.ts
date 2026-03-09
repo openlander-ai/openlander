@@ -80,7 +80,11 @@ export class CloudflareTunnel {
         if (!settled && !this._url) {
           settled = true;
           clearTimeout(timeout);
-          reject(new TunnelStartError(`cloudflared exited with code ${String(code)}`));
+          const stderr = stderrBuffer.trim();
+          const detail = stderr
+            ? `cloudflared exited with code ${String(code)}: ${stderr.slice(-500)}`
+            : `cloudflared exited with code ${String(code)}`;
+          reject(new TunnelStartError(detail));
         }
       });
     });

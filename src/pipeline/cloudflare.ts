@@ -183,7 +183,7 @@ export class CloudflareTunnelManager {
     ingress.push({ service: 'http_status:404' });
 
     await this.cloudflareRequest(
-      `accounts/${this.config.accountId}/tunnels/${this.config.tunnelId}/configurations`,
+      `accounts/${this.config.accountId}/cfd_tunnel/${this.config.tunnelId}/configurations`,
       {
         method: 'PUT',
         body: JSON.stringify({ config: { ingress } }),
