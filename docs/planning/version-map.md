@@ -53,8 +53,9 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 | 23     | **v0.2.0 버그 트래커**                 | `v0.2.0/bugs.md`                             | v0.2.0         | 100%   | ✅ BUG-014~017 전부 해결. Deploy UX 아키텍쳐 개선 (project-first 모델).                                                           |
 | 24     | **v0.2.0 Deploy UX 수정 스펙**         | `v0.2.0/deploy-ux-fix.md`                    | v0.2.0         | 100%   | ✅ 3 Phase 구현 완료. SSE→JSON deploy, agent event streaming, log panel.                                                          |
 | 25     | **v0.2.1 i18n + 버그 수정**            | — (커밋 내 독립 파일)                        | v0.2.1         | 100%   | ✅ i18n (한/영) + 빌드 에러 리포팅 + Redeploy UI 갱신 버그 수정.                                                                  |
-| 26     | **v1.0.0 AI Co-pilot**                 | `release/v1.0.0-ai-copilot.md`               | v1.0.0         | 85%    | 🔧 백엔드 7개 기능 ✅, 프론트엔드 핵심 ✅, 테스트 50개 ✅. 디자이너 협업 대상 일부 미구현.                                        |
+| 26     | **v1.0.0 AI Co-pilot**                 | `release/v1.0.0-ai-copilot.md`               | v1.0.0         | 90%    | 🔧 AI co-pilot 7기능 ✅, 에이전트 강화 4건 ✅ (P0-1,P0-2,P1-1,P1-2), P1-3 UI 미구현.                                              |
 | 27     | **v0.2.6 Shared Mode & PR Preview**    | `v0.2.6/shared-mode-pr-preview.md`           | v0.2.6         | 100%   | ✅ 3 Phase 구현 완료. Traefik File Provider + Quick Share + Shared 모드 + PR 프리뷰 + 16 bugfix. 535 tests (dead TUI tests 제거). |
+| 28     | **Agent Enhancement Sprint**           | `.sisyphus/plans/agent-enhancement.md`       | v1.0.0         | 80%    | ✅ P0-1 questionBridge fix, P0-2 채널 스트리밍, P1-1 MCP agent_execute_goal, P1-2 오케스트레이터. P1-3 UI 미구현.                 |
 
 ---
 
@@ -618,19 +619,24 @@ Phase 3 — PR Preview:
 > **핵심 가치**: AI를 에러 시 소방관에서, 배포 전체 라이프사이클의 "조용한 부조종사"로 전환.
 > **관련 결정**: DEC-033 (AI 기능 전체 재설계), DEC-034 (인라인 AI 안 B 채택)
 
-| Phase | 항목                      | 내용                                                                      | 상태 |
-| ----- | ------------------------- | ------------------------------------------------------------------------- | ---- |
-| 1     | F-A: AI 자동 복구         | deploy:failed → agent.chatStream → 복구 시도 (최대 3회) — 기존 기능 강화  | ✅   |
-| 1     | F-B: 자동 장애 리포트     | recovery:success/exhausted → Slack/Discord/Telegram 채널 브로드캐스트     | ✅   |
-| 1     | F-C: 롤백 자동 제안       | 배포 후 60초간 헬스 감시 → 연속 3회 실패 시 rollback:suggested 이벤트     | ✅   |
-| 1     | F-D: 환경변수 변경 감지   | 리디플로이 시 .env.example 스캔 → 새 키 발견 시 agent가 값 요청           | ✅   |
-| 1     | F-E: 포스트모템 자동 생성 | recovery 후 마크다운 포스트모템 자동 생성 (success/exhausted)             | ✅   |
-| 1     | F-F: 시크릿 스캔          | clone 후 하드코딩 API 키/자격증명 감지 (12개 패턴)                        | ✅   |
-| 1     | F-G: 성공 인사이트 강화   | 빌드 시간 20% 임계값 비교, 이전 대비 인사이트 표시                        | ✅   |
-| 2     | F-H: 인라인 AI 표시       | 빌드 실패 후 AI 분석이 같은 타임라인 흐름에서 인라인 렌더링 (안 B)        | ✅   |
-| 2     | PostmortemCard UI         | 포스트모템 마크다운 뷰어 커포넌트 (expand/collapse)                       | ✅   |
-| 3     | Oracle 코드 리뷰 수정     | 보안(동시성 직렬화), 신뢰성(타임아웃 증가), 리소스 정리(stop/unsubscribe) | ✅   |
-| 3     | AI co-pilot 테스트        | secret-scan, postmortem, rollback-watcher — 50+ 신규 테스트               | ✅   |
+| Phase | 항목                         | 내용                                                                      | 상태 |
+| ----- | ---------------------------- | ------------------------------------------------------------------------- | ---- |
+| 1     | F-A: AI 자동 복구            | deploy:failed → agent.chatStream → 복구 시도 (최대 3회) — 기존 기능 강화  | ✅   |
+| 1     | F-B: 자동 장애 리포트        | recovery:success/exhausted → Slack/Discord/Telegram 채널 브로드캐스트     | ✅   |
+| 1     | F-C: 롤백 자동 제안          | 배포 후 60초간 헬스 감시 → 연속 3회 실패 시 rollback:suggested 이벤트     | ✅   |
+| 1     | F-D: 환경변수 변경 감지      | 리디플로이 시 .env.example 스캔 → 새 키 발견 시 agent가 값 요청           | ✅   |
+| 1     | F-E: 포스트모템 자동 생성    | recovery 후 마크다운 포스트모템 자동 생성 (success/exhausted)             | ✅   |
+| 1     | F-F: 시크릿 스캔             | clone 후 하드코딩 API 키/자격증명 감지 (12개 패턴)                        | ✅   |
+| 1     | F-G: 성공 인사이트 강화      | 빌드 시간 20% 임계값 비교, 이전 대비 인사이트 표시                        | ✅   |
+| 2     | F-H: 인라인 AI 표시          | 빌드 실패 후 AI 분석이 같은 타임라인 흐름에서 인라인 렌더링 (안 B)        | ✅   |
+| 2     | PostmortemCard UI            | 포스트모템 마크다운 뷰어 커포넌트 (expand/collapse)                       | ✅   |
+| 3     | Oracle 코드 리뷰 수정        | 보안(동시성 직렬화), 신뢰성(타임아웃 증가), 리소스 정리(stop/unsubscribe) | ✅   |
+| 3     | AI co-pilot 테스트           | secret-scan, postmortem, rollback-watcher — 50+ 신규 테스트               | ✅   |
+| 4     | P0-1: questionBridge fix     | hot-reload 시 createTools()에 questionBridge 누락 수정 (4곳)              | ✅   |
+| 4     | P0-2: 채널 스트리밍          | chatStream() + editMessage + sendInteractive (Slack/Discord/Telegram)     | ✅   |
+| 4     | P1-1: MCP agent_execute_goal | 외부 클라이언트에서 고수준 목표 위임 → 에이전트 추론                      | ✅   |
+| 4     | P1-2: 배포 오케스트레이터    | Kahn's topo sort + atomic rollback + 오케스트레이션 이벤트                | ✅   |
+| 4     | P1-3: UI 도구 결과 카드      | tool_result structured display (백엔드+프론트엔드)                        | ⬜   |
 
 **구현 내역** (18개 파일 신규/변경, 1346행 추가):
 
@@ -645,6 +651,21 @@ Phase 3 — PR Preview:
 - `web/src/components/timeline/TimelineFeed.tsx` — 인라인 AI 분석 렌더링
 - `web/src/components/timeline/TimelineItem.tsx` — AI 인사이트 카드 타입 추가
 - `test/secret-scan.test.ts`, `test/postmortem.test.ts`, `test/rollback-watcher.test.ts` — 50+ 신규 테스트
+
+**에이전트 강화 스프린트** (15개 파일 신규/변경, 2,000+ 행 추가):
+
+- `src/mcp/server.ts` — agent_execute_goal 스키마 + 핸들러, questionBridge 수정
+- `src/channels/base.ts` — chatStream 전환, editMessage, sendInteractive, QuestionBridge 연동
+- `src/channels/slack.ts` — editMessage(chat.update), sendInteractive(blocks), interaction 핸들러
+- `src/channels/discord.ts` — editMessage(PATCH), sendInteractive(ActionRow), MESSAGE_COMPONENT 핸들러
+- `src/channels/telegram.ts` — editMessage(editMessageText), sendInteractive(InlineKeyboard), callback_query
+- `src/pipeline/orchestrator.ts` — 신규: DeployOrchestrator (Kahn's sort, atomic rollback)
+- `src/agent/tools.ts` — orchestrate_deploy 도구 추가
+- `src/agent/prompts.ts` — 오케스트레이터 도구 설명
+- `src/tools/registry.ts` — orchestrate_deploy 등록
+- `src/events/index.ts` — 오케스트레이션 이벤트 타입 추가
+- `test/orchestrator.test.ts` — 신규: 8 테스트 (topo sort, rollback, cycles)
+- `test/channels.test.ts` — 스트리밍/인터랙티브 테스트 추가
 
 ### 정식 릴리즈 (v1.0.0)
 
@@ -776,15 +797,15 @@ v0.2.6까지의 기능을 안정화하고 AI co-pilot 7개 기능 추가 후 정
 
 ## 검증 기준
 
-**2026-03-08 기준 (v1.0.0 AI co-pilot 구현 완료 후)**:
+**2026-03-10 기준 (에이전트 강화 스프린트 완료 후)**:
 
 ```
 ✅ tsup build — 성공
 ✅ vite build — 성공
-✅ vitest — 753/753 pass (46 test files)
+✅ vitest — 531/531 pass (38 test files)
 ✅ lsp_diagnostics — 0 errors
-✅ v1.0.0 — AI co-pilot 7개 기능 + Oracle 코드 리뷰 + 테스트 50개
-✅ 5 commits on main (feat 2 + fix 2 + test 1)
+✅ v1.0.0 — AI co-pilot 7개 기능 + 에이전트 강화 4건 (P0-1, P0-2, P1-1, P1-2)
+✅ 10 commits on main (chore 1 + fix 2 + feat 3 + 기존 4)
 ```
 
 ---

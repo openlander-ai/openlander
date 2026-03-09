@@ -7,7 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+
+- MCP `agent_execute_goal` tool — external clients (Cursor, VS Code) can delegate multi-step goals to the AI agent
+- Channel streaming with real-time message editing (Slack `chat.update`, Discord `PATCH`, Telegram `editMessageText`)
+- Channel interactive components for agent questions (Slack blocks, Discord ActionRow+Button, Telegram InlineKeyboard)
+- QuestionBridge wiring for channels with 5min timeout and rate-limited message editing (1.5s)
+- `DeployOrchestrator` class with Kahn's topological sort for dependency-ordered multi-service deploys
+- Atomic rollback on orchestration failure (tears down completed services)
+- `orchestrate_deploy` agent tool with topology validation (port conflicts, cycle detection)
+- Orchestration events: `orchestration:plan`, `service-start`, `service-healthy`, `service-failed`, `complete`
+- 8 orchestrator tests (topo sort, parallel groups, cycles, port conflicts, rollback)
+
+### Fixed
+
+- questionBridge not passed on hot-reload Agent creation (setup-routes, auth-routes, mcp/server)
+- scanTool.execute type safety in MCP server's scan_dockerfiles handler
+
+### Changed
+
+- Test suite: 37 files (535 tests) → 38 files (531 tests) after channel test restructuring + orchestrator tests
 
 ## [0.2.6] - Shared Mode & PR Preview
 
