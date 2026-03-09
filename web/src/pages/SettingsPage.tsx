@@ -96,6 +96,10 @@ export function SettingsPage() {
   const [cloudflareSaving, setCloudflareSaving] = useState(false);
   const [cloudflareMessage, setCloudflareMessage] = useState('');
   const [cloudflareError, setCloudflareError] = useState('');
+  const cloudflareTokenPermissions = t('settings.proxy.cloudflare.tokenPermissions')
+    .split(';')
+    .map((perm) => perm.trim())
+    .filter(Boolean);
 
   useEffect(() => {
     getServerStatus()
@@ -851,37 +855,64 @@ export function SettingsPage() {
               </div>
 
               {!cloudflareConnected ? (
-                <form onSubmit={handleConnectCloudflare} className="space-y-3">
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-body text-muted-ol">API Token</p>
-                    <div className="flex gap-2">
-                      <Input
-                        type="password"
-                        value={cloudflareApiToken}
-                        onChange={(e) => setCloudflareApiToken(e.target.value)}
-                        className="font-mono text-sm bg-bg-app border-border"
-                        required
-                      />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        disabled={cloudflareConnecting || !cloudflareApiToken.trim()}
-                        className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
-                      >
-                        {cloudflareConnecting ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        )}
-                        Connect
-                      </Button>
-                    </div>
+                <div className="space-y-3 rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-3">
+                  <p className="text-xs font-body text-secondary-ol">
+                    {t('settings.proxy.cloudflare.tokenHelpTitle')}
+                  </p>
+                  <p className="text-xs font-body text-muted-ol">
+                    {t('settings.proxy.cloudflare.tokenHelpText')}
+                  </p>
+                  <a
+                    href="https://developers.cloudflare.com/fundamentals/api/get-started/create-token/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-body text-agent hover:underline"
+                  >
+                    {t('settings.proxy.cloudflare.tokenHelpLink')}{' '}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <div className="space-y-1">
+                    <p className="text-xs font-body text-secondary-ol">
+                      {t('settings.proxy.cloudflare.tokenPermissionsLabel')}
+                    </p>
+                    <ul className="list-disc pl-4 text-xs font-body text-muted-ol">
+                      {cloudflareTokenPermissions.map((perm) => (
+                        <li key={perm}>{perm}</li>
+                      ))}
+                    </ul>
                   </div>
+                  <form onSubmit={handleConnectCloudflare} className="space-y-3">
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-body text-muted-ol">API Token</p>
+                      <div className="flex gap-2">
+                        <Input
+                          type="password"
+                          value={cloudflareApiToken}
+                          onChange={(e) => setCloudflareApiToken(e.target.value)}
+                          className="font-mono text-sm bg-bg-app border-border"
+                          required
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          disabled={cloudflareConnecting || !cloudflareApiToken.trim()}
+                          className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+                        >
+                          {cloudflareConnecting ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          )}
+                          Connect
+                        </Button>
+                      </div>
+                    </div>
 
-                  {cloudflareError && (
-                    <p className="text-xs font-body text-error">{cloudflareError}</p>
-                  )}
-                </form>
+                    {cloudflareError && (
+                      <p className="text-xs font-body text-error">{cloudflareError}</p>
+                    )}
+                  </form>
+                </div>
               ) : (
                 <form onSubmit={handleConfigureCloudflare} className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

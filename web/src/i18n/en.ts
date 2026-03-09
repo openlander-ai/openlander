@@ -81,6 +81,13 @@ export const translations = {
           'Save Cloudflare Tunnel credentials to manage production domain routing from OpenLander.',
         saveSuccess: 'Cloudflare credentials saved successfully.',
         saveFailed: 'Failed to save Cloudflare credentials. Check your values and try again.',
+        tokenHelpTitle: 'Need a Cloudflare API token?',
+        tokenHelpText:
+          'Create a Cloudflare API token in Cloudflare dashboard with these permissions: Zone:Zone (Read), Zone:DNS (Edit), Account:Cloudflare Tunnel (Read, Edit).',
+        tokenPermissions:
+          'Zone:Zone (Read); Zone:DNS (Edit); Account:Cloudflare Tunnel (Read, Edit)',
+        tokenPermissionsLabel: 'Required token permissions:',
+        tokenHelpLink: 'Create API token in Cloudflare',
       },
       tunnelGuide: {
         title: 'Cloudflare Tunnel Setup',
@@ -123,6 +130,8 @@ export const translations = {
     accessibleFrom: 'Accessible from any device on the same network via sslip.io DNS.',
     directPortAccess: 'Direct port access — works with LAN, VPN (Tailscale), or any network route.',
     noCustomDomains: 'No custom domains configured',
+    cloudflareNotConfigured: 'Cloudflare is not configured.',
+    cloudflareGoToSettings: 'Go to Settings → Cloudflare Tunnel',
     customDomainsHelp:
       "Add a custom domain via Cloudflare Tunnel. Point your domain's DNS to the tunnel.",
     exposeToInternet: 'Expose to Internet',
@@ -131,6 +140,22 @@ export const translations = {
     anyoneWithUrl:
       'Anyone with this URL can access your project. Temporary URLs may change on restart.',
     requiresRunning: 'Requires the project to be running.',
+  },
+  share: {
+    title: 'Share Project',
+    accessCode: 'Access Code',
+    accessCodeHint: 'Minimum 4 characters. Anyone with this code can access your project.',
+    generate: 'Generate',
+    shareButton: 'Share with Access Code',
+    stopSharing: 'Stop Sharing',
+    copyInvitation: 'Copy Invitation',
+    copied: 'Copied!',
+    alreadyShared: 'This project is currently shared.',
+    notRunning: 'Project must be running to share.',
+  },
+  prPreviews: {
+    noPreviews: 'No PR previews',
+    description: 'PR previews are created automatically when a pull request is opened.',
   },
   webhooks: {
     noWebhooks: 'No webhooks configured',

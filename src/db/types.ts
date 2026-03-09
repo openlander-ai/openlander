@@ -4,7 +4,7 @@ export interface ProjectRow {
   repo_url: string | null;
   branch: string;
   status: 'running' | 'stopped' | 'building' | 'error';
-  visibility: 'internal' | 'quick-share' | 'production';
+  visibility: 'internal' | 'quick-share' | 'shared' | 'production';
   assigned_port: number | null;
   container_id: string | null;
   image_tag: string | null;
@@ -16,6 +16,8 @@ export interface ProjectRow {
   updated_at: string;
   deploy_lock_session: string | null;
   deploy_lock_at: string | null;
+  access_code: string | null;
+  access_code_iv: string | null;
 }
 
 export interface DeployLogRow {

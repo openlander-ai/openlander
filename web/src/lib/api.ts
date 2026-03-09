@@ -62,6 +62,29 @@ export async function getProject(id: string): Promise<Project> {
   };
 }
 
+export interface PRPreview {
+  id: string;
+  name: string;
+  status: 'running' | 'stopped' | 'building' | 'error';
+  prNumber: number;
+  url: string;
+  publicUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getProjectPreviews(projectId: string): Promise<PRPreview[]> {
+  const res = await fetch(`/api/projects/${projectId}/previews`);
+  if (!res.ok) throw new Error('Failed to fetch previews');
+  const data = await res.json();
+  return data.previews;
+}
+
+export async function deleteProjectPreview(projectId: string, previewId: string): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/previews/${previewId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete preview');
+}
+
 export async function getProjectDeployments(id: string, limit = 50): Promise<DeployLogSummary[]> {
   const res = await fetch(`/api/projects/${id}/deployments?limit=${limit}`);
   if (!res.ok) throw new Error('Failed to fetch deployments');
@@ -226,6 +249,27 @@ export async function exposeProject(id: string): Promise<{ publicUrl: string }> 
 
 export async function unexposeProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}/unexpose`, { method: 'POST' });
+}
+
+export async function shareProject(id: string, accessCode: string): Promise<{ publicUrl: string }> {
+  const res = await fetch(`/api/projects/${id}/share`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accessCode }),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to share project');
+  }
+  return res.json();
+}
+
+export async function unshareProject(id: string): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/share`, { method: 'DELETE' });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to unshare project');
+  }
 }
 
 export interface NetworkIp {

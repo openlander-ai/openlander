@@ -261,9 +261,16 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
 
         {/* Add domain form */}
         {cfConfigured === false ? (
-          <p className="text-xs font-body text-warning">
-            {'Cloudflare not configured. Go to Settings → Cloudflare Tunnel to connect.'}
-          </p>
+          <div className="rounded-md border border-warning/30 bg-warning/10 p-2.5 space-y-1">
+            <p className="text-xs font-body text-warning">{t('domains.cloudflareNotConfigured')}</p>
+            <a
+              href="/settings"
+              className="text-xs font-body font-medium text-warning underline-offset-2 hover:underline flex items-center gap-1"
+            >
+              <span>{t('domains.cloudflareGoToSettings')}</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         ) : (
           <>
             <div className="flex items-center gap-2 pt-1">

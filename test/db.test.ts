@@ -58,6 +58,34 @@ describe('Database', () => {
       expect(updated!.assigned_port).toBe(10001);
     });
 
+    it('stores shared visibility and encrypted access code fields', () => {
+      db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/a' });
+
+      db.updateProject('p1', {
+        visibility: 'shared',
+        accessCode: 'encrypted-value',
+        accessCodeIv: 'iv-value',
+      });
+
+      const updated = db.getProject('p1');
+      expect(updated!.visibility).toBe('shared');
+      expect(updated!.access_code).toBe('encrypted-value');
+      expect(updated!.access_code_iv).toBe('iv-value');
+    });
+
+    it('persists preview flags via updateProject', () => {
+      db.createProject({ id: 'p1', name: 'preview-app', repoUrl: 'https://github.com/test/a' });
+
+      db.updateProject('p1', {
+        isPreview: 1,
+        prNumber: 17,
+      });
+
+      const updated = db.getProject('p1');
+      expect(updated!.is_preview).toBe(1);
+      expect(updated!.pr_number).toBe(17);
+    });
+
     it('lists projects filtered by status', () => {
       db.createProject({ id: 'p1', name: 'app-1', repoUrl: 'https://github.com/test/a' });
       db.updateProject('p1', { status: 'running' });
@@ -300,6 +328,30 @@ describe('Database', () => {
     it('getChildProjects returns empty for non-parent', () => {
       db.createProject({ id: 'p1', name: 'solo', repoUrl: 'https://github.com/test/solo' });
       expect(db.getChildProjects('p1')).toHaveLength(0);
+    });
+
+    it('getPreviewProjects returns preview children only', () => {
+      db.createProject({ id: 'parent', name: 'app', repoUrl: 'https://github.com/test/app' });
+      db.createProject({
+        id: 'preview-1',
+        name: 'app-pr-10',
+        repoUrl: 'https://github.com/test/app',
+        parentProjectId: 'parent',
+      });
+      db.createProject({
+        id: 'child-1',
+        name: 'app-worker',
+        repoUrl: 'https://github.com/test/app',
+        parentProjectId: 'parent',
+      });
+
+      db.updateProject('preview-1', { isPreview: 1, prNumber: 10 });
+
+      const previews = db.getPreviewProjects('parent');
+      expect(previews).toHaveLength(1);
+      expect(previews[0]!.id).toBe('preview-1');
+      expect(previews[0]!.is_preview).toBe(1);
+      expect(previews[0]!.pr_number).toBe(10);
     });
 
     it('updateProject can set parentProjectId and dockerfilePath', () => {

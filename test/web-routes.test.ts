@@ -56,6 +56,11 @@ function createMockDocker() {
 }
 
 function createMockPipeline() {
+  const tunnel = {
+    enableSharedMode: vi.fn(),
+    disableSharedMode: vi.fn(),
+  };
+
   return {
     deploy: vi
       .fn()
@@ -68,6 +73,11 @@ function createMockPipeline() {
     exposeTunnel: vi.fn().mockResolvedValue('https://abc.trycloudflare.com'),
     closeTunnel: vi.fn(),
     rollback: vi.fn().mockResolvedValue({ success: true }),
+    getTunnel: vi.fn().mockReturnValue(tunnel),
+    removeProject: vi.fn().mockResolvedValue(undefined),
+    deployPreview: vi
+      .fn()
+      .mockResolvedValue({ success: true, url: 'http://preview-app.localhost' }),
   };
 }
 
@@ -809,6 +819,138 @@ describe('Web API Routes', () => {
     const body = await res.json();
     expect(body.status).toBe('unexposed');
     expect(ctx.pipeline.closeTunnel).toHaveBeenCalledWith('p1');
+  });
+
+  it('POST /api/projects/:id/share shares a running project with access code', async () => {
+    db.createProject({
+      id: 'share-test',
+      name: 'share-app',
+      repoUrl: 'https://github.com/test/repo',
+    });
+    db.updateProject('share-test', {
+      status: 'running',
+      assignedPort: 10001,
+      visibility: 'quick-share',
+    });
+
+    const res = await app.request('/api/projects/share-test/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessCode: 'test1234' }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.status).toBe('shared');
+
+    const project = db.getProject('share-test');
+    expect(project?.visibility).toBe('shared');
+    expect(project?.access_code).toBeTruthy();
+    expect(project?.access_code_iv).toBeTruthy();
+  });
+
+  it('POST /api/projects/:id/share rejects access code shorter than 4 characters', async () => {
+    db.createProject({
+      id: 'short-code',
+      name: 'short-app',
+      repoUrl: 'https://github.com/test/repo',
+    });
+    db.updateProject('short-code', { status: 'running', assignedPort: 10002 });
+
+    const res = await app.request('/api/projects/short-code/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessCode: 'ab' }),
+    });
+
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe('INVALID_ACCESS_CODE');
+  });
+
+  it('POST /api/projects/:id/share rejects sharing a non-running project without port', async () => {
+    db.createProject({
+      id: 'stopped-share',
+      name: 'stopped-app',
+      repoUrl: 'https://github.com/test/repo',
+    });
+
+    const res = await app.request('/api/projects/stopped-share/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessCode: 'test1234' }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('DELETE /api/projects/:id/share unshares a shared project', async () => {
+    db.createProject({
+      id: 'unshare-test',
+      name: 'unshare-app',
+      repoUrl: 'https://github.com/test/repo',
+    });
+    db.updateProject('unshare-test', {
+      visibility: 'shared',
+      accessCode: 'enc',
+      accessCodeIv: 'iv',
+    });
+
+    const res = await app.request('/api/projects/unshare-test/share', { method: 'DELETE' });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.status).toBe('unshared');
+
+    const project = db.getProject('unshare-test');
+    expect(project?.visibility).toBe('quick-share');
+    expect(project?.access_code).toBeNull();
+    expect(project?.access_code_iv).toBeNull();
+  });
+
+  it('GET /api/projects/:id/previews returns empty previews list', async () => {
+    db.createProject({
+      id: 'prev-parent',
+      name: 'parent-app',
+      repoUrl: 'https://github.com/test/repo',
+    });
+
+    const res = await app.request('/api/projects/prev-parent/previews');
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.previews).toEqual([]);
+  });
+
+  it('GET /api/projects/:id/previews returns preview projects for parent', async () => {
+    db.createProject({ id: 'pp', name: 'parent', repoUrl: 'https://github.com/test/repo' });
+    db.createProject({ id: 'pr1', name: 'parent-pr-42', repoUrl: 'https://github.com/test/repo' });
+    db.updateProject('pr1', { parentProjectId: 'pp', isPreview: 1, prNumber: 42 });
+
+    const res = await app.request('/api/projects/pp/previews');
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.previews).toHaveLength(1);
+    expect(data.previews[0].prNumber).toBe(42);
+  });
+
+  it('DELETE /api/projects/:id/previews/:previewId deletes a preview project', async () => {
+    db.createProject({ id: 'dp', name: 'del-parent', repoUrl: 'https://github.com/test/repo' });
+    db.createProject({
+      id: 'dp-pr1',
+      name: 'del-parent-pr-1',
+      repoUrl: 'https://github.com/test/repo',
+    });
+    db.updateProject('dp-pr1', { parentProjectId: 'dp', isPreview: 1, prNumber: 1 });
+
+    const res = await app.request('/api/projects/dp/previews/dp-pr1', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+  });
+
+  it('DELETE /api/projects/:id/previews/:previewId returns 404 for non-existent preview', async () => {
+    db.createProject({ id: 'dp2', name: 'del-parent-2', repoUrl: 'https://github.com/test/repo' });
+
+    const res = await app.request('/api/projects/dp2/previews/nonexistent', { method: 'DELETE' });
+    expect(res.status).toBe(404);
   });
 
   // ---------------------------------------------------------------------------

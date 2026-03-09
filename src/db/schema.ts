@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS projects (
   repo_url TEXT,
   branch TEXT DEFAULT 'main',
   status TEXT DEFAULT 'stopped' CHECK(status IN ('running', 'stopped', 'building', 'error')),
-  visibility TEXT DEFAULT 'internal' CHECK(visibility IN ('internal', 'quick-share', 'production')),
+  visibility TEXT DEFAULT 'internal' CHECK(visibility IN ('internal', 'quick-share', 'shared', 'production')),
   assigned_port INTEGER UNIQUE,
   container_id TEXT,
   image_tag TEXT,
@@ -21,7 +21,11 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
   deploy_lock_session TEXT,
-  deploy_lock_at TEXT
+  deploy_lock_at TEXT,
+  access_code TEXT,
+  access_code_iv TEXT,
+  is_preview INTEGER DEFAULT 0 CHECK(is_preview IN (0, 1)),
+  pr_number INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS env_vars (

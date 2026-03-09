@@ -2,13 +2,14 @@ export interface Project {
   id: string;
   name: string;
   status: 'running' | 'stopped' | 'building' | 'error';
-  visibility: 'internal' | 'quick-share' | 'production';
+  visibility: 'internal' | 'quick-share' | 'shared' | 'production';
   repoUrl: string;
   branch?: string;
   port?: number;
   previousImageTag?: string | null;
   url?: string;
   publicUrl?: string | null;
+  accessCode?: string | null;
   createdAt: string;
   updatedAt: string;
 }

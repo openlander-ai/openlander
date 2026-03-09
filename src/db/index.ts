@@ -27,7 +27,7 @@ export interface ProjectRow {
   repo_url: string | null;
   branch: string;
   status: 'running' | 'stopped' | 'building' | 'error';
-  visibility: 'internal' | 'quick-share' | 'production';
+  visibility: 'internal' | 'quick-share' | 'shared' | 'production';
   assigned_port: number | null;
   container_id: string | null;
   image_tag: string | null;
@@ -39,6 +39,10 @@ export interface ProjectRow {
   updated_at: string;
   deploy_lock_session: string | null;
   deploy_lock_at: string | null;
+  access_code: string | null;
+  access_code_iv: string | null;
+  is_preview: 0 | 1;
+  pr_number: number | null;
 }
 
 export interface DeployLogRow {
@@ -172,6 +176,18 @@ export class Database {
     }
     if (!colNames.has('deploy_lock_at')) {
       this.sqlite.exec('ALTER TABLE projects ADD COLUMN deploy_lock_at DATETIME DEFAULT NULL');
+    }
+    if (!colNames.has('access_code')) {
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN access_code TEXT');
+    }
+    if (!colNames.has('access_code_iv')) {
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN access_code_iv TEXT');
+    }
+    if (!colNames.has('is_preview')) {
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN is_preview INTEGER DEFAULT 0');
+    }
+    if (!colNames.has('pr_number')) {
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN pr_number INTEGER');
     }
 
     this.sqlite.exec(
@@ -375,6 +391,10 @@ export class Database {
       publicUrl: string | null;
       parentProjectId: string | null;
       dockerfilePath: string;
+      accessCode: string | null;
+      accessCodeIv: string | null;
+      isPreview: 0 | 1;
+      prNumber: number | null;
     }>,
   ): void {
     const setValues: Partial<typeof projects.$inferInsert> = {};
@@ -406,6 +426,18 @@ export class Database {
     if (updates.dockerfilePath !== undefined) {
       setValues.dockerfile_path = updates.dockerfilePath;
     }
+    if (updates.accessCode !== undefined) {
+      setValues.access_code = updates.accessCode;
+    }
+    if (updates.accessCodeIv !== undefined) {
+      setValues.access_code_iv = updates.accessCodeIv;
+    }
+    if (updates.isPreview !== undefined) {
+      setValues.is_preview = updates.isPreview;
+    }
+    if (updates.prNumber !== undefined) {
+      setValues.pr_number = updates.prNumber;
+    }
 
     if (Object.keys(setValues).length === 0) return;
 
@@ -428,6 +460,15 @@ export class Database {
       .from(projects)
       .where(eq(projects.parent_project_id, parentId))
       .orderBy(asc(projects.name))
+      .all() as ProjectRow[];
+  }
+
+  getPreviewProjects(parentProjectId: string): ProjectRow[] {
+    return this.db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.parent_project_id, parentProjectId), eq(projects.is_preview, 1)))
+      .orderBy(desc(projects.updated_at))
       .all() as ProjectRow[];
   }
 

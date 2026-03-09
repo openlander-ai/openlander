@@ -5,6 +5,7 @@ import type { AppContext } from '../../app.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getPostmortemInstance } from '../../monitor/postmortem.js';
+import { encrypt } from '../../env/crypto.js';
 import { getProjectUrl } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('api');
@@ -643,6 +644,121 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     ctx.pipeline.closeTunnel(project.id);
     return c.json({ status: 'unexposed', project: project.name });
+  });
+
+  api.post('/projects/:id/share', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req.json<{ accessCode: string }>();
+    if (!body.accessCode || body.accessCode.length < 4) {
+      return c.json(
+        {
+          error: 'INVALID_ACCESS_CODE',
+          message: 'Access code must be at least 4 characters',
+        },
+        400,
+      );
+    }
+
+    const { encrypted, iv } = encrypt(body.accessCode);
+
+    if (project.visibility !== 'quick-share' && project.visibility !== 'shared') {
+      if (!project.assigned_port) {
+        return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
+      }
+      await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+    }
+
+    let tunnel = ctx.pipeline.getTunnel(project.id);
+    if (!tunnel) {
+      const assignedPort = project.assigned_port;
+      if (assignedPort === null) {
+        return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
+      }
+      await ctx.pipeline.exposeTunnel(project.id, assignedPort);
+      tunnel = ctx.pipeline.getTunnel(project.id);
+    }
+
+    if (!tunnel) {
+      return c.json(
+        {
+          error: 'TUNNEL_UNAVAILABLE',
+          message: 'Failed to initialize quick-share tunnel',
+        },
+        500,
+      );
+    }
+
+    tunnel.enableSharedMode(project.name, body.accessCode);
+
+    ctx.db.updateProject(project.id, {
+      visibility: 'shared',
+      accessCode: encrypted,
+      accessCodeIv: iv,
+    });
+
+    const updatedProject = ctx.db.getProject(project.id);
+    return c.json({
+      status: 'shared',
+      project: project.name,
+      publicUrl: updatedProject?.public_url,
+    });
+  });
+
+  api.delete('/projects/:id/share', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const tunnel = ctx.pipeline.getTunnel(project.id);
+    if (tunnel) {
+      tunnel.disableSharedMode(project.name);
+    }
+
+    ctx.db.updateProject(project.id, {
+      visibility: 'quick-share',
+      accessCode: null,
+      accessCodeIv: null,
+    });
+
+    return c.json({ status: 'unshared', project: project.name });
+  });
+
+  api.get('/projects/:id/previews', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const previews = ctx.db.getPreviewProjects(project.id);
+    return c.json({
+      previews: previews.map((preview) => ({
+        id: preview.id,
+        name: preview.name,
+        status: preview.status,
+        prNumber: preview.pr_number,
+        url: getProjectUrl(preview.name),
+        publicUrl: preview.public_url,
+        createdAt: preview.created_at,
+        updatedAt: preview.updated_at,
+      })),
+    });
+  });
+
+  api.delete('/projects/:id/previews/:previewId', async (c) => {
+    const id = c.req.param('id');
+    const previewId = c.req.param('previewId');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const preview = ctx.db.getProject(previewId);
+    if (!preview || preview.parent_project_id !== project.id) {
+      return c.json({ error: 'PREVIEW_NOT_FOUND', message: 'Preview not found' }, 404);
+    }
+
+    await ctx.pipeline.remove(previewId);
+    return c.json({ status: 'removed', preview: preview.name });
   });
 
   api.get('/projects/:id/postmortem/latest', (c) => {

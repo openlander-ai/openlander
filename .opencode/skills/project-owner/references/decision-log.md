@@ -355,6 +355,9 @@
 
 **DEC-009 UPDATE**: 제품 정체성 "서버 상태를 아는 배포 에이전트" → "실패를 스스로 고치는 셀프호스트 배포 플랫폼"으로 변경. 서버 인식은 여전히 핵심 역량이지만 사용자에게 노출되는 방식이 채팅→대시보드로 전환.  
 **DEC-022 UPDATE**: 에이전트 경유 배포 방식 유지하되, 채팅 UI 없이 백그라운드 동작. Deploy 클릭 → 에이전트 백그라운드 실행 → 빌드 로그 스트리밍 → 실패 시 AI 분석 결과를 배포 상세 페이지에 표시.  
+**DEC-023 UPDATE (2026-03-09)**: 제품 정체성을 "실패를 스스로 고치는 셀프호스트 배포 플랫폼"에서 **"AI와 함께 배포하는 셀프호스트 플랫폼"**으로 재정의한다.  
+현재 위치는 "쉽고 빠르게 배포 + AI 자동 복구", 목표는 "쿨리파이만큼 완벽한 오픈소스"로 명확화한다. AI는 에러 순간에만 등장하는 보조가 아니라, 배포 라이프사이클 전체에 자연스럽게 공존한다.  
+타겟은 MVP/데모 사용자가 빠르게 시작하고, 서비스가 성장하면 운영까지 이어지는 연속 사용자 여정으로 재정의한다. MCP 통합은 코딩 에이전트와 직접 연결되는 핵심 차별점으로 유지한다.  
 **재검토 조건**: 사용자가 채팅 인터페이스를 명시적으로 요청할 때. 또는 AI 어시스트 방식이 충분히 가치를 전달하지 못할 때.
 
 ### DEC-024: UI/UX — 라이트 모드 + 클린 디자인
@@ -518,6 +521,71 @@
 
 **재검토 조건**: 사용자가 "AI 분석을 따로 보고 싶다"는 피드백 반복 시 안 A 재검토
 
+
+### DEC-035: Quick Share Two-Track 유지 (Traefik 통합 안 함)
+
+**날짜**: 2026-03
+**결정**: Quick Share(TryCloudflare)는 Traefik을 경유하지 않고 컨테이너에 직접 연결하는 현재 구조(Two-Track)를 유지한다.
+**거부한 대안**: Quick Share도 Traefik:80을 경유하도록 통합 ("모든 길은 Traefik으로 통한다" 원칙 전면 적용)
+**이유**:
+
+- Quick Share는 "나 혼자 빠르게 코드를 확인하기 위한 날것의 통로" — 프로덕션 경로와 동일할 필요 없음
+- Scale to Zero와 무관: Quick Share 중인 컨테이너는 활성 사용 중이므로 유휴 정지 대상이 아님
+- Traefik 장애 시에도 Quick Share 독립 동작 → 복원력(resilience) 확보
+- Host 헤더 변조로 기술적 통합은 가능하나, 단순한 것의 단순함이 곧 장점
+- 1인 메인테이너 리소스를 더 가치 있는 곳에 투자
+
+**원칙 수정**: "모든 길은 Traefik으로 통한다" → "Production과 Internal의 모든 길은 Traefik으로 통한다. Quick Share는 예외 — 날것의 직통 터널."
+**관련 코드**: `tunnel.ts` L33 (`http://localhost:${port}`), `cloudflare.ts` L180 (`http://127.0.0.1:80`)
+**재검토 조건**: Quick Share 링크를 클라이언트 데모용으로 보내야 하는 use case가 실제로 발생할 때
+
+**DEC-035 UPDATE (2026-03-09)**: 기존 Two-Track 결정을 철회하고, Quick Share를 포함한 **Single-Track(Traefik 통합)** 으로 변경한다.
+
+**변경 이유**:
+
+- TL 기술 검증 완료: Traefik File Provider 기반 동적 라우터 추가 방식으로 구현 가능
+- 예상 공수: 2.5~3일
+- Shared 모드(접근 코드) 구현을 위해 Quick Share도 Traefik 체인 안으로 들어와야 BasicAuth를 자연스럽게 적용 가능
+
+**통합 플로우**:
+
+`cloudflared` → `localhost:80` (Traefik) → File Provider YAML(trycloudflare 호스트 라우팅) → `ol-{name}@docker` 서비스 참조
+
+**수정된 원칙**: **"모든 길은 Traefik으로 통한다"** (예외 없음)
+
+**영향 범위**:
+
+- `tunnel.ts`: Quick Share 터널 타겟을 `localhost:${PORT}`에서 `localhost:80`으로 전환
+- File Provider YAML 생성/삭제 라이프사이클 추가 (Quick Share on/off 연동)
+- Shared 모드 접근 코드(BasicAuth) 설계가 Quick Share 경로에 동일하게 적용됨
+
+**회의 근거 문서**: `docs/planning/meetings/2026-03-09-architecture-direction.md` (TL 기술 검증 반영)
+**재검토 조건**: File Provider 동적 라우팅의 운영 안정성 이슈(지연/누락)가 반복될 때
+
+### DEC-036: Beyond Docker — 비(非) 도커 배포 방식 점진적 도입
+
+**날짜**: 2026-03
+**결정**: Docker 의존을 선택적으로 만들고, 비(非) 도커 배포를 점진적으로 추가한다. Phase 0(Traefik File Provider) → Phase 1(정적 호스팅) → Phase 2(Native Process) → Phase 3(Serverless, 보류).
+**거부한 대안**: Docker-only 유지 (현재 구조)
+**이유**:
+
+- User: "난 애초에 도커로 한정지을 생각은 없었어"
+- Coolify가 무거운 이유 중 하나가 "무조건 도커여야만 한다"는 강박 — OpenLander가 이 제약을 벗으면 독보적 카테고리
+- 정적 사이트(HTML/React dist)에 Nginx Docker 이미지를 쓰는 것은 로컬 환경에서 리소스 낭비
+- Mac(Apple Silicon)에서 Docker Desktop 오버헤드(CPU/RAM/발열) 제거 → Native Process의 핵심 가치
+- AI Smart Routing: auto-detect.ts 확장으로 Dockerfile → Docker, index.html → Static, server.js → Native 자동 선택
+- Traefik File Provider로 Docker 외 프로세스/정적 파일도 라우팅 가능 — 아키텍처 자연스러운 확장
+
+**Phase 로드맵**:
+- Phase 0: Traefik File Provider 활성화 (0.5일)
+- Phase 1: Zero-Container 정적 호스팅 (2-3일)
+- Phase 2: Native Process 호스팅, PM2 스타일 (1-2주)
+- Phase 3: Local Serverless / WASM (보류 — 출시 후 재평가)
+
+**아키텍처 영향**: DeployStrategy 인터페이스 도입, ProcessManager 신규, DB에 deploy_type 컬럼 추가 필요
+**정체성**: "실패를 스스로 고치는 셀프호스트 배포 플랫폼" — 변경 없음. 추가 포지셔닝: "Docker 강박 없는 초경량 배포"
+**회의록**: `docs/planning/meetings/2026-03-09-architecture-direction.md`
+**재검토 조건**: Phase 1 완료 후 사용자 피드백으로 Phase 2 진행 여부 판단. Phase 3은 출시 후 재평가.
 ---
 
 

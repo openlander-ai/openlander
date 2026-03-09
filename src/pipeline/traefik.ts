@@ -1,4 +1,6 @@
-import { networkInterfaces } from 'os';
+import { mkdirSync } from 'node:fs';
+import { homedir, networkInterfaces } from 'node:os';
+import { join } from 'node:path';
 
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('traefik');
@@ -8,6 +10,9 @@ import type { Docker } from './docker.js';
 const TRAEFIK_CONTAINER_NAME = 'openlander-traefik';
 const TRAEFIK_IMAGE = 'traefik:v3.6';
 const TRAEFIK_NETWORK = 'web';
+const TRAEFIK_DYNAMIC_DIR_IN_CONTAINER = '/etc/traefik/dynamic/';
+
+export const DYNAMIC_CONFIG_DIR = join(homedir(), '.openlander', 'traefik', 'dynamic');
 
 /**
  * Traefik reverse proxy management.
@@ -60,6 +65,7 @@ export class TraefikManager {
     if (await this.isRunning()) return;
 
     await this.ensureNetwork();
+    mkdirSync(DYNAMIC_CONFIG_DIR, { recursive: true });
 
     const client = this.docker.getClient();
 
@@ -97,6 +103,8 @@ export class TraefikManager {
         '--providers.docker=true',
         '--providers.docker.exposedbydefault=false',
         `--providers.docker.network=${TRAEFIK_NETWORK}`,
+        `--providers.file.directory=${TRAEFIK_DYNAMIC_DIR_IN_CONTAINER}`,
+        '--providers.file.watch=true',
         '--entrypoints.web.address=:80',
       ],
       ExposedPorts: {
@@ -108,7 +116,10 @@ export class TraefikManager {
           '80/tcp': [{ HostPort: '80' }],
           '8080/tcp': [{ HostPort: '8080' }],
         },
-        Binds: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
+        Binds: [
+          '/var/run/docker.sock:/var/run/docker.sock:ro',
+          `${DYNAMIC_CONFIG_DIR}:${TRAEFIK_DYNAMIC_DIR_IN_CONTAINER}:rw`,
+        ],
         NetworkMode: TRAEFIK_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
       },

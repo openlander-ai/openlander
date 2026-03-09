@@ -19,9 +19,9 @@ export const projects = sqliteTable(
     status: text('status', { enum: ['running', 'stopped', 'building', 'error'] }).default(
       'stopped',
     ),
-    visibility: text('visibility', { enum: ['internal', 'quick-share', 'production'] }).default(
-      'internal',
-    ),
+    visibility: text('visibility', {
+      enum: ['internal', 'quick-share', 'shared', 'production'],
+    }).default('internal'),
     assigned_port: integer('assigned_port').unique(),
     container_id: text('container_id'),
     image_tag: text('image_tag'),
@@ -35,6 +35,10 @@ export const projects = sqliteTable(
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
     deploy_lock_session: text('deploy_lock_session'),
     deploy_lock_at: text('deploy_lock_at'),
+    access_code: text('access_code'),
+    access_code_iv: text('access_code_iv'),
+    is_preview: integer('is_preview').default(0),
+    pr_number: integer('pr_number'),
   },
   (table) => [
     check(
@@ -43,8 +47,9 @@ export const projects = sqliteTable(
     ),
     check(
       'projects_visibility_check',
-      sql`${table.visibility} IN ('internal', 'quick-share', 'production')`,
+      sql`${table.visibility} IN ('internal', 'quick-share', 'shared', 'production')`,
     ),
+    check('projects_is_preview_check', sql`${table.is_preview} IN (0, 1)`),
     index('idx_projects_parent').on(table.parent_project_id),
   ],
 );

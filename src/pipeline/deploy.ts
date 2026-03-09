@@ -37,7 +37,7 @@ export interface ProjectConfig {
   /** Environment variables */
   envVars?: Record<string, string>;
   /** Visibility mode */
-  visibility?: 'internal' | 'quick-share' | 'production';
+  visibility?: 'internal' | 'quick-share' | 'shared' | 'production';
   /** SSH key path for private repos */
   sshKeyPath?: string;
   /** Deployment trigger source */
@@ -72,7 +72,7 @@ export interface MonorepoConfig {
   commitSha: string;
   dockerfiles: string[];
   envVars?: Record<string, string>;
-  visibility?: 'internal' | 'quick-share' | 'production';
+  visibility?: 'internal' | 'quick-share' | 'shared' | 'production';
   trigger?: 'chat' | 'webhook' | 'api';
   /** @internal Pre-allocated parent ID from startMonorepoDeploy(). Do not set manually. */
   _parentId?: string;
@@ -98,6 +98,21 @@ export interface StartMonorepoResult {
   parentProjectId: string;
   parentName: string;
   status: 'building';
+}
+
+interface PreviewDeployOptions {
+  parentProjectId: string;
+  previewName: string;
+  repoUrl: string;
+  branch: string;
+  prNumber: number;
+  commitSha: string;
+}
+
+interface PreviewDeployResult {
+  success: boolean;
+  url?: string;
+  error?: string;
 }
 
 /**
@@ -821,6 +836,49 @@ export class DeployPipeline {
     });
   }
 
+  async deployPreview(options: PreviewDeployOptions): Promise<PreviewDeployResult> {
+    try {
+      const existing = this.db.getProjectByName(options.previewName);
+      if (existing) {
+        this.db.updateProject(existing.id, {
+          parentProjectId: options.parentProjectId,
+          isPreview: 1,
+          prNumber: options.prNumber,
+        });
+
+        const result = await this.redeploy(existing.id);
+        if (!result.success) {
+          return { success: false, error: result.error };
+        }
+        return { success: true, url: getProjectUrl(options.previewName) };
+      }
+
+      const result = await this.deploy({
+        repoUrl: options.repoUrl,
+        branch: options.branch,
+        name: options.previewName,
+        trigger: 'webhook',
+      });
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      if (result.projectId) {
+        this.db.updateProject(result.projectId, {
+          parentProjectId: options.parentProjectId,
+          isPreview: 1,
+          prNumber: options.prNumber,
+        });
+      }
+
+      return { success: true, url: getProjectUrl(options.previewName) };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: msg };
+    }
+  }
+
   /** Rollback a project to its previous image tag. */
   async rollback(projectId: string): Promise<DeployResult> {
     const startTime = Date.now();
@@ -985,9 +1043,14 @@ export class DeployPipeline {
   }
 
   /** Create a TryCloudflare tunnel for a project. */
-  async exposeTunnel(projectId: string, port: number): Promise<string> {
+  async exposeTunnel(projectId: string, _port: number): Promise<string> {
+    const project = this.db.getProject(projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
     const tunnel = new CloudflareTunnel();
-    const url = await tunnel.start(port);
+    const url = await tunnel.start(project.name);
     this.tunnels.set(projectId, tunnel);
 
     this.db.updateProject(projectId, {
@@ -1010,6 +1073,10 @@ export class DeployPipeline {
         publicUrl: null,
       });
     }
+  }
+
+  getTunnel(projectId: string): CloudflareTunnel | undefined {
+    return this.tunnels.get(projectId);
   }
 
   /** Get container logs. */

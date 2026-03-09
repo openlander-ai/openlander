@@ -81,6 +81,13 @@ export const translations = {
           'OpenLander에서 프로덕션 도메인 라우팅을 관리하려면 Cloudflare Tunnel 자격 증명을 저장하세요.',
         saveSuccess: 'Cloudflare 자격 증명이 저장되었습니다.',
         saveFailed: 'Cloudflare 자격 증명 저장에 실패했습니다. 값을 확인하고 다시 시도하세요.',
+        tokenHelpTitle: 'Cloudflare API 토큰이 필요하신가요?',
+        tokenHelpText:
+          'Cloudflare 대시보드에서 API 토큰을 생성하세요. 최소한 Zone:Zone(읽기), Zone:DNS(편집), Account:Cloudflare Tunnel(읽기, 편집) 권한이 있어야 합니다.',
+        tokenPermissions:
+          'Zone:Zone (읽기); Zone:DNS (편집); Account:Cloudflare Tunnel (읽기, 편집)',
+        tokenPermissionsLabel: '필수 권한:',
+        tokenHelpLink: 'Cloudflare에서 토큰 생성하기',
       },
       tunnelGuide: {
         title: 'Cloudflare Tunnel 설정',
@@ -124,6 +131,8 @@ export const translations = {
     directPortAccess:
       '직접 포트 액세스 — LAN, VPN (Tailscale) 또는 모든 네트워크 경로에서 작동합니다.',
     noCustomDomains: '커스텀 도메인이 설정되지 않았습니다',
+    cloudflareNotConfigured: 'Cloudflare가 설정되지 않았습니다.',
+    cloudflareGoToSettings: '설정 페이지에서 Cloudflare Tunnel 구성하기',
     customDomainsHelp:
       'Cloudflare Tunnel을 통해 커스텀 도메인을 추가하세요. 도메인의 DNS를 터널로 연결하세요.',
     exposeToInternet: '인터넷에 공개',
@@ -132,6 +141,22 @@ export const translations = {
     anyoneWithUrl:
       '이 URL을 가진 누구나 프로젝트에 액세스할 수 있습니다. 임시 URL은 재시작 시 변경될 수 있습니다.',
     requiresRunning: '프로젝트가 실행 중이어야 합니다.',
+  },
+  share: {
+    title: '프로젝트 공유',
+    accessCode: '접근 코드',
+    accessCodeHint: '최소 4자. 이 코드가 있으면 누구나 프로젝트에 접근할 수 있습니다.',
+    generate: '생성',
+    shareButton: '접근 코드로 공유',
+    stopSharing: '공유 중지',
+    copyInvitation: '초대 복사',
+    copied: '복사됨!',
+    alreadyShared: '이 프로젝트는 현재 공유 중입니다.',
+    notRunning: '공유하려면 프로젝트가 실행 중이어야 합니다.',
+  },
+  prPreviews: {
+    noPreviews: 'PR 프리뷰 없음',
+    description: 'PR이 열리면 프리뷰가 자동으로 생성됩니다.',
   },
   webhooks: {
     noWebhooks: '웹훅이 설정되지 않았습니다',

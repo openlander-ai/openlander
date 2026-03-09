@@ -128,12 +128,13 @@ src/
 - TUI는 **OpenTUI** (Zig 네이티브, SolidJS 렌더러) — React/Ink 아님
 - ESM only, `.js` 확장자 필수
 
-### Docker 의존
+### 배포 런타임 (DEC-036 반영)
 
-- Docker daemon이 반드시 실행 중이어야 함
-- `dockerode` 라이브러리로 Docker API 호출
-- 컨테이너 ↔ Traefik: Docker 라벨 기반 라우팅
-
+- **Docker**: 주 배포 엔진. dockerode 라이브러리로 Docker API 호출. 컨테이너 ↔ Traefik: Docker 라벨 기반 라우팅.
+- **Static**: (Phase 1 계획) Docker 없이 dist/ 폴더 직접 서빙. Traefik File Provider로 라우팅.
+- **Native Process**: (Phase 2 계획) OS 프로세스 직접 실행 (PM2 스타일). Traefik File Provider로 라우팅.
+- Docker daemon은 Docker 배포 시에만 필수. 정적/네이티브 배포는 Docker 불필요.
+- Traefik은 모든 배포 방식의 공통 라우팅 레이어 (Docker Provider + File Provider)
 ### 싱글 프로세스
 
 - 데몬 1개 + TUI 1개 (IPC 통신)
@@ -166,6 +167,7 @@ src/
 | Dashboard 섹션       | `DashboardPanel.tsx`에 컴포넌트 추가 | Server 섹션 (v0.0.9)      |
 | 슬래시 명령          | `src/tui/commands/`에 추가           | /stats, /deploy           |
 | DB 테이블            | `schema.ts` + 마이그레이션           | global_secrets (v0.0.10)  |
+| 배포 전략 추가      | `DeployStrategy` 구현체 추가         | StaticStrategy, NativeStrategy (DEC-036) |
 
 ---
 
