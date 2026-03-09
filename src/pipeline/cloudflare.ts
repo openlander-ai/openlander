@@ -1,3 +1,6 @@
+import { mkdirSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('cloudflare');
 
@@ -6,7 +9,7 @@ import { nanoid } from 'nanoid';
 import type { CloudflareConfig } from '../config/index.js';
 import type { Database, DomainMappingRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
-import { buildTraefikLabels } from './traefik.js';
+import { buildTraefikLabels, DYNAMIC_CONFIG_DIR } from './traefik.js';
 
 interface CloudflareApiError {
   code?: number;
@@ -133,18 +136,23 @@ export class CloudflareTunnelManager {
     const project = this.db.getProject(projectId);
     if (!project || !project.assigned_port) {
       this.traefikLabels.delete(projectId);
+      this.deleteProductionYaml(project?.name ?? projectId);
       return;
     }
 
     const domains = this.db.getDomainMappings(projectId).map((mapping) => mapping.domain);
     if (domains.length === 0) {
       this.traefikLabels.delete(projectId);
+      this.deleteProductionYaml(project.name);
       this.db.updateProject(projectId, { visibility: 'internal', publicUrl: null });
       return;
     }
 
     const labels = this.buildCustomDomainLabels(project.name, project.assigned_port, domains);
     this.traefikLabels.set(projectId, labels);
+
+    // Write Traefik File Provider YAML so Traefik picks up the custom domain routes
+    this.writeProductionYaml(project.name, domains);
 
     const primaryUrl = `https://${domains[0] ?? 'unknown'}`;
     this.db.updateProject(projectId, { visibility: 'production', publicUrl: primaryUrl });
@@ -167,6 +175,47 @@ export class CloudflareTunnelManager {
       .join(' || ');
 
     return labels;
+  }
+
+  /**
+   * Write a Traefik File Provider YAML config for production custom domains.
+   * Traefik watches DYNAMIC_CONFIG_DIR and picks up changes automatically.
+   */
+  private writeProductionYaml(projectName: string, domains: string[]): void {
+    const routeRule = domains.map((d) => `Host(\`${d}\`)`).join(' || ');
+    const yaml = [
+      'http:',
+      '  routers:',
+      `    prod-${projectName}:`,
+      `      rule: "${routeRule}"`,
+      '      entryPoints:',
+      '        - web',
+      `      service: ol-${projectName}@docker`,
+      '',
+    ].join('\n');
+
+    const filename = `prod-${projectName}.yaml`;
+    const tempPath = join(DYNAMIC_CONFIG_DIR, `.${filename}.tmp`);
+    const targetPath = join(DYNAMIC_CONFIG_DIR, filename);
+
+    mkdirSync(DYNAMIC_CONFIG_DIR, { recursive: true });
+    writeFileSync(tempPath, yaml, 'utf8');
+    renameSync(tempPath, targetPath);
+    log.info({ projectName, domains }, 'Production domain YAML written');
+  }
+
+  /** Remove the Traefik File Provider YAML for production domains. */
+  private deleteProductionYaml(projectName: string): void {
+    const yamlPath = join(DYNAMIC_CONFIG_DIR, `prod-${projectName}.yaml`);
+    try {
+      unlinkSync(yamlPath);
+      log.info({ projectName }, 'Production domain YAML removed');
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        throw error;
+      }
+    }
   }
 
   private async updateTunnelConfig(): Promise<void> {
