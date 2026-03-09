@@ -28,9 +28,11 @@ import { Button } from '@/components/ui/button';
 
 interface DomainsPanelProps {
   projectId: string;
+  /** When this value changes, the panel re-fetches project data. */
+  projectStatus?: string;
 }
 
-export function DomainsPanel({ projectId }: DomainsPanelProps) {
+export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
   const { t } = useLanguage();
   const [internalUrl, setInternalUrl] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export function DomainsPanel({ projectId }: DomainsPanelProps) {
 
   useEffect(() => {
     fetchProject();
-  }, [fetchProject]);
+  }, [fetchProject, projectStatus]);
 
   const handleExpose = async () => {
     setExposing(true);

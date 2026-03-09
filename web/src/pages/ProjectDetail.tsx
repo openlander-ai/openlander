@@ -114,7 +114,13 @@ function formatDuration(ms: number) {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
-function DeploymentsList({ projectId }: { projectId: string }) {
+function DeploymentsList({
+  projectId,
+  projectStatus,
+}: {
+  projectId: string;
+  projectStatus?: string;
+}) {
   const [deployments, setDeployments] = useState<DeployLogSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -132,7 +138,7 @@ function DeploymentsList({ projectId }: { projectId: string }) {
       }
     };
     fetchDeployments();
-  }, [projectId]);
+  }, [projectId, projectStatus]);
 
   if (loading) {
     return (
@@ -926,7 +932,7 @@ export function ProjectDetail() {
             </div>
           </TabsContent>
           <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
-            {id && <DeploymentsList projectId={id} />}
+            {id && <DeploymentsList projectId={id} projectStatus={project?.status} />}
           </TabsContent>
 
           <TabsContent value="previews" className="flex-1 min-h-0 mt-0">
@@ -955,7 +961,7 @@ export function ProjectDetail() {
                   <EnvVarsTable projectId={id} />
                 </TabsContent>
                 <TabsContent value="domains">
-                  <DomainsPanel projectId={id} />
+                  <DomainsPanel projectId={id} projectStatus={project?.status} />
                 </TabsContent>
                 <TabsContent value="webhooks">
                   <WebhookPanel projectId={id} />
