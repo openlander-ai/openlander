@@ -12,6 +12,7 @@ import {
 import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard';
 import { InsightCard } from './InsightCard';
 import { DockerfileFixedCard } from './DockerfileFixedCard';
+import { ToolResultCard } from './ToolResultCard';
 
 interface TimelineItemProps {
   item: TItem;
@@ -52,8 +53,9 @@ export function TimelineItemCard({
   const isDockerfileFix = item.type === 'dockerfile_fixed';
   const isAgentThinking = item.type === 'agent_thinking';
   const isAgentToolCall = item.type === 'agent_tool_call';
+  const isAgentToolResult = item.type === 'agent_tool_result';
   const isAgentMessage = item.type === 'agent_message';
-  const isAgentEvent = isAgentThinking || isAgentToolCall || isAgentMessage;
+  const isAgentEvent = isAgentThinking || isAgentToolCall || isAgentToolResult || isAgentMessage;
 
   // Insight items render via InsightCard
   if (isInsight) {
@@ -63,6 +65,11 @@ export function TimelineItemCard({
   // Dockerfile fix items render via DockerfileFixedCard
   if (isDockerfileFix) {
     return <DockerfileFixedCard item={item} />;
+  }
+
+  // Agent tool result items render via ToolResultCard
+  if (isAgentToolResult) {
+    return <ToolResultCard item={item} />;
   }
 
   // Question items render via InputRequestCard

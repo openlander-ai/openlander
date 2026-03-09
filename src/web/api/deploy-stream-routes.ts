@@ -618,10 +618,14 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
             case 'tool_result':
               emitTimelineEvent({
                 ...base,
-                type: ev.success ? 'status' : 'error',
+                type: 'agent_tool_result',
                 message: ev.success
                   ? `${ev.toolName} completed`
                   : `${ev.toolName} failed: ${ev.error ?? 'unknown'}`,
+                toolName: ev.toolName,
+                toolResult: ev.result ?? null,
+                toolSuccess: ev.success,
+                toolError: ev.error ?? null,
               });
               break;
             case 'message':

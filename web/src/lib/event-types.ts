@@ -30,6 +30,7 @@ export interface BuildStreamEvent {
     | 'dockerfile_fixed'
     | 'agent_thinking'
     | 'agent_tool_call'
+    | 'agent_tool_result'
     | 'agent_message';
   message: string;
   projectId: string;
@@ -48,6 +49,10 @@ export interface BuildStreamEvent {
   toolName?: string;
   toolArguments?: Record<string, unknown>;
   content?: string;
+  /** Present only for agent_tool_result events */
+  toolResult?: unknown;
+  toolSuccess?: boolean;
+  toolError?: string | null;
 }
 
 /** Action button for insight/anomaly timeline items */
@@ -72,6 +77,7 @@ export interface TimelineItem {
     | 'dockerfile_fixed'
     | 'agent_thinking'
     | 'agent_tool_call'
+    | 'agent_tool_result'
     | 'agent_message';
   timestamp: string;
   title: string;
@@ -91,6 +97,10 @@ export interface TimelineItem {
   /** Present only for agent_tool_call items */
   toolName?: string;
   toolArguments?: Record<string, unknown>;
+  /** Present only for agent_tool_result items */
+  toolResult?: unknown;
+  toolSuccess?: boolean;
+  toolError?: string | null;
 }
 
 /** Message pattern → progress percentage mapping */
@@ -191,6 +201,18 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         toolName: event.toolName,
         toolArguments: event.toolArguments ? sanitizeToolArguments(event.toolArguments) : undefined,
+      };
+    case 'agent_tool_result':
+      return {
+        id,
+        type: 'agent_tool_result',
+        timestamp: event.timestamp,
+        title: event.message,
+        percent: -1,
+        toolName: event.toolName,
+        toolResult: event.toolResult,
+        toolSuccess: event.toolSuccess,
+        toolError: event.toolError,
       };
     case 'agent_message':
       return {
@@ -299,12 +321,16 @@ export function agentEventToTimelineItem(
     case 'tool_result':
       return {
         id,
-        type: event.success ? 'success' : 'error',
+        type: 'agent_tool_result',
         timestamp: ts,
         title: event.success
           ? `${event.toolName} completed`
           : `${event.toolName} failed: ${event.error ?? 'unknown error'}`,
-        percent: event.success ? 50 : -1,
+        percent: -1,
+        toolName: event.toolName,
+        toolResult: event.result,
+        toolSuccess: event.success,
+        toolError: event.error,
       };
     case 'error':
       return {
