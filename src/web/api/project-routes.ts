@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 
 import type { AppContext } from '../../app.js';
-import { ProjectNotFoundError } from '../../errors.js';
+import { ProjectNotFoundError, TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getPostmortemInstance } from '../../monitor/postmortem.js';
 import { encrypt } from '../../env/crypto.js';
@@ -633,8 +633,21 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
     }
 
-    const url = await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
-    return c.json({ status: 'exposed', project: project.name, publicUrl: url });
+    try {
+      const url = await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+      return c.json({ status: 'exposed', project: project.name, publicUrl: url });
+    } catch (error) {
+      if (error instanceof TunnelStartError) {
+        return c.json(
+          {
+            error: 'TUNNEL_START_FAILED',
+            message: 'Cloudflare service is temporarily unavailable. Please try again.',
+          },
+          503,
+        );
+      }
+      throw error;
+    }
   });
 
   api.post('/projects/:id/unexpose', (c) => {
@@ -668,7 +681,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       if (!project.assigned_port) {
         return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
       }
-      await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+      try {
+        await ctx.pipeline.exposeTunnel(project.id, project.assigned_port);
+      } catch (error) {
+        if (error instanceof TunnelStartError) {
+          return c.json(
+            {
+              error: 'TUNNEL_START_FAILED',
+              message: 'Cloudflare service is temporarily unavailable. Please try again.',
+            },
+            503,
+          );
+        }
+        throw error;
+      }
     }
 
     let tunnel = ctx.pipeline.getTunnel(project.id);
@@ -677,7 +703,20 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       if (assignedPort === null) {
         return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
       }
-      await ctx.pipeline.exposeTunnel(project.id, assignedPort);
+      try {
+        await ctx.pipeline.exposeTunnel(project.id, assignedPort);
+      } catch (error) {
+        if (error instanceof TunnelStartError) {
+          return c.json(
+            {
+              error: 'TUNNEL_START_FAILED',
+              message: 'Cloudflare service is temporarily unavailable. Please try again.',
+            },
+            503,
+          );
+        }
+        throw error;
+      }
       tunnel = ctx.pipeline.getTunnel(project.id);
     }
 

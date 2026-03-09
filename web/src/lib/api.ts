@@ -242,7 +242,21 @@ export async function updateProjectEnv(id: string, env: Record<string, string>):
 export async function exposeProject(id: string): Promise<{ publicUrl: string }> {
   const res = await fetch(`/api/projects/${id}/expose`, { method: 'POST' });
   if (!res.ok) {
-    throw new Error('Failed to expose project');
+    const text = await res.text();
+    let message = 'Failed to expose project';
+    try {
+      const payload = JSON.parse(text);
+      if (typeof payload.message === 'string') {
+        message = payload.message;
+      } else if (typeof payload.error === 'string') {
+        message = payload.error;
+      }
+    } catch {
+      if (text.trim()) {
+        message = text;
+      }
+    }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -258,8 +272,21 @@ export async function shareProject(id: string, accessCode: string): Promise<{ pu
     body: JSON.stringify({ accessCode }),
   });
   if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to share project');
+    const text = await res.text();
+    let message = 'Failed to share project';
+    try {
+      const payload = JSON.parse(text);
+      if (typeof payload.message === 'string') {
+        message = payload.message;
+      } else if (typeof payload.error === 'string') {
+        message = payload.error;
+      }
+    } catch {
+      if (text.trim()) {
+        message = text;
+      }
+    }
+    throw new Error(message);
   }
   return res.json();
 }

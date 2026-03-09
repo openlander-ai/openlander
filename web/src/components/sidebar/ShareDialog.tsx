@@ -8,7 +8,18 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Share2, RefreshCw, Copy, Check, Eye, EyeOff, Globe, Lock, X } from 'lucide-react';
+import {
+  Share2,
+  RefreshCw,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  Globe,
+  Lock,
+  X,
+  AlertTriangle,
+} from 'lucide-react';
 import { shareProject, unshareProject } from '@/lib/api';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
@@ -49,12 +60,16 @@ export function ShareDialog({
   const [loading, setLoading] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isShared = visibility === 'shared';
 
   useEffect(() => {
     if (open && !isShared && !accessCode) {
       setAccessCode(generateAccessCode());
+    }
+    if (!open) {
+      setError(null);
     }
   }, [open, isShared, accessCode]);
 
@@ -65,11 +80,13 @@ export function ShareDialog({
   const handleShare = async () => {
     if (!accessCode || accessCode.length < 4) return;
     setLoading(true);
+    setError(null);
     try {
       await shareProject(projectId, accessCode);
       onShareChange();
-    } catch (error) {
-      console.error('Failed to share project:', error);
+    } catch (err) {
+      console.error('Failed to share project:', err);
+      setError(err instanceof Error ? err.message : 'Failed to share project');
     } finally {
       setLoading(false);
     }
@@ -206,18 +223,49 @@ export function ShareDialog({
                 </div>
 
                 {!isShared ? (
-                  <Button
-                    className="w-full font-body"
-                    onClick={handleShare}
-                    disabled={loading || accessCode.length < 4}
-                  >
-                    {loading ? (
-                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <Share2 className="h-4 w-4 mr-2" />
+                  <div className="space-y-4">
+                    <Button
+                      className="w-full font-body"
+                      onClick={handleShare}
+                      disabled={loading || accessCode.length < 4}
+                    >
+                      {loading ? (
+                        <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <Share2 className="h-4 w-4 mr-2" />
+                      )}
+                      {t('share.shareButton')}
+                    </Button>
+
+                    {error && (
+                      <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/5 space-y-3">
+                        <div className="flex items-start gap-2 text-destructive">
+                          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium font-display">{error}</p>
+                            <p className="text-xs text-muted-foreground font-body">
+                              TryCloudflare is temporarily unavailable. You can also share via
+                              Settings → Domains.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs font-body border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                            onClick={handleShare}
+                            disabled={loading}
+                          >
+                            <RefreshCw
+                              className={cn('h-3 w-3 mr-1.5', loading && 'animate-spin')}
+                            />
+                            Retry
+                          </Button>
+                        </div>
+                      </div>
                     )}
-                    {t('share.shareButton')}
-                  </Button>
+                  </div>
                 ) : (
                   <div className="space-y-4 pt-4 border-t border-border/40">
                     <div className="space-y-2">
