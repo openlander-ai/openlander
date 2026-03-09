@@ -132,6 +132,7 @@ function createApp(ctx: AppContext): Hono {
       token: ctx.config.channels.slack.token,
       signingSecret: ctx.config.channels.slack.signingSecret,
       channelManager: ctx.channelManager,
+      questionBridge: ctx.questionBridge,
     });
     ctx.channelManager.register('slack', slackChannel);
     app.post('/webhooks/slack', createSlackWebhookHandler(slackChannel));
@@ -143,6 +144,7 @@ function createApp(ctx: AppContext): Hono {
       publicKey: ctx.config.channels.discord.publicKey,
       token: ctx.config.channels.discord.token,
       channelManager: ctx.channelManager,
+      questionBridge: ctx.questionBridge,
     });
     ctx.channelManager.register('discord', discordChannel);
     app.post('/webhooks/discord', createDiscordInteractionHandler(discordChannel));
@@ -153,6 +155,7 @@ function createApp(ctx: AppContext): Hono {
       token: ctx.config.channels.telegram.token,
       channelManager: ctx.channelManager,
       webhookSecret: ctx.config.channels.telegram.webhookSecret || undefined,
+      questionBridge: ctx.questionBridge,
     });
     ctx.channelManager.register('telegram', telegramChannel);
     app.post('/webhooks/telegram', createTelegramWebhookHandler(telegramChannel));

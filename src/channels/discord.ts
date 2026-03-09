@@ -1,6 +1,13 @@
 import { createPublicKey, verify } from 'node:crypto';
 import type { Context } from 'hono';
-import type { Channel, ChannelManager, ChannelMessage } from './base.js';
+import type { QuestionBridge } from '../agent/question-bridge.js';
+import {
+  decodeQuestionComponentValue,
+  type Channel,
+  type ChannelComponent,
+  type ChannelManager,
+  type ChannelMessage,
+} from './base.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('discord');
@@ -25,6 +32,7 @@ const InteractionResponseType = {
   PONG: 1,
   CHANNEL_MESSAGE: 4,
   DEFERRED: 5,
+  UPDATE_MESSAGE: 7,
 } as const;
 
 type DiscordUser = {
@@ -43,6 +51,10 @@ type DiscordInteractionData = {
   options?: DiscordCommandOption[];
   custom_id?: string;
   values?: string[];
+};
+
+type DiscordMessageResponse = {
+  id?: string;
 };
 
 type DiscordInteraction = {
@@ -97,6 +109,7 @@ export class DiscordChannel implements Channel {
   private readonly publicKey: string;
   private readonly token: string;
   private readonly channelManager: ChannelManager;
+  private readonly questionBridge?: QuestionBridge;
   private connected = false;
 
   constructor(params: {
@@ -104,11 +117,13 @@ export class DiscordChannel implements Channel {
     publicKey: string;
     token: string;
     channelManager: ChannelManager;
+    questionBridge?: QuestionBridge;
   }) {
     this.applicationId = params.applicationId;
     this.publicKey = params.publicKey;
     this.token = params.token;
     this.channelManager = params.channelManager;
+    this.questionBridge = params.questionBridge;
   }
 
   start(): Promise<void> {
@@ -128,7 +143,7 @@ export class DiscordChannel implements Channel {
   /**
    * Sends a channel message with bot token authentication.
    */
-  async sendMessage(channelId: string, text: string): Promise<void> {
+  async sendMessage(channelId: string, text: string): Promise<string> {
     const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
       method: 'POST',
       headers: {
@@ -144,6 +159,102 @@ export class DiscordChannel implements Channel {
         `Failed to send Discord message (${String(response.status)} ${response.statusText}): ${errorBody}`,
       );
     }
+
+    const payload = (await response.json()) as DiscordMessageResponse;
+    if (!payload.id) {
+      throw new Error('Failed to send Discord message: missing_message_id');
+    }
+
+    return payload.id;
+  }
+
+  async editMessage(channelId: string, messageId: string, text: string): Promise<void> {
+    const response = await fetch(
+      `${DISCORD_API_BASE}/channels/${channelId}/messages/${messageId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bot ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ content: text }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(
+        `Failed to edit Discord message (${String(response.status)} ${response.statusText}): ${errorBody}`,
+      );
+    }
+  }
+
+  async sendInteractive(
+    channelId: string,
+    text: string,
+    components: ChannelComponent[],
+  ): Promise<string> {
+    const buttonComponents: Array<{
+      type: number;
+      style: number;
+      label: string;
+      custom_id: string;
+    }> = [];
+
+    for (const component of components) {
+      if (component.type === 'button') {
+        buttonComponents.push({
+          type: 2,
+          style: component.style === 'primary' ? 1 : component.style === 'danger' ? 4 : 2,
+          label: component.label.slice(0, 80),
+          custom_id: component.value.slice(0, 100),
+        });
+        continue;
+      }
+
+      for (const option of component.options) {
+        buttonComponents.push({
+          type: 2,
+          style: 2,
+          label: option.label.slice(0, 80),
+          custom_id: option.value.slice(0, 100),
+        });
+      }
+    }
+
+    const rows: Array<{ type: number; components: typeof buttonComponents }> = [];
+    for (let index = 0; index < buttonComponents.length; index += 5) {
+      rows.push({
+        type: 1,
+        components: buttonComponents.slice(index, index + 5),
+      });
+    }
+
+    const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bot ${this.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        content: text,
+        components: rows,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(
+        `Failed to send Discord message (${String(response.status)} ${response.statusText}): ${errorBody}`,
+      );
+    }
+
+    const payload = (await response.json()) as DiscordMessageResponse;
+    if (!payload.id) {
+      throw new Error('Failed to send Discord message: missing_message_id');
+    }
+
+    return payload.id;
   }
 
   /**
@@ -181,6 +292,22 @@ export class DiscordChannel implements Channel {
    */
   async handleIncomingMessage(message: ChannelMessage): Promise<void> {
     await this.channelManager.handleIncomingMessage(message);
+  }
+
+  handleQuestionReply(rawValue: string): string | null {
+    const decoded = decodeQuestionComponentValue(rawValue);
+    if (!decoded || !this.questionBridge) {
+      return null;
+    }
+
+    this.questionBridge.reply(decoded.requestId, [
+      {
+        questionIndex: decoded.questionIndex,
+        selectedLabels: [decoded.value],
+      },
+    ]);
+
+    return decoded.value;
   }
 }
 
@@ -282,6 +409,19 @@ export function createDiscordInteractionHandler(
     }
 
     if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
+      const selectedValue = interaction.data?.values?.[0] ?? interaction.data?.custom_id ?? '';
+      const selectedLabel = channel.handleQuestionReply(selectedValue);
+
+      if (selectedLabel) {
+        return c.json({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: {
+            content: `✅ Selected: ${selectedLabel}`,
+            components: [],
+          },
+        });
+      }
+
       const customId = interaction.data?.custom_id ?? 'unknown-component';
       const selectedValues = interaction.data?.values?.join(',');
       const content = selectedValues
