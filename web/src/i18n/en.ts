@@ -134,9 +134,8 @@ export const translations = {
     cloudflareGoToSettings: 'Go to Settings → Cloudflare Tunnel',
     customDomainsHelp:
       "Add a custom domain via Cloudflare Tunnel. Point your domain's DNS to the tunnel.",
-    exposeToInternet: 'Expose to Internet',
-    notExposed:
-      'Not exposed. Click "Expose to Internet" to generate a public URL via Cloudflare Tunnel.',
+    exposeToInternet: 'Publish',
+    notExposed: 'Not published. Click "Publish" to generate a public URL via Cloudflare Tunnel.',
     anyoneWithUrl:
       'Anyone with this URL can access your project. Temporary URLs may change on restart.',
     requiresRunning: 'Requires the project to be running.',

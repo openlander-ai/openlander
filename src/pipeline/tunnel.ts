@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { hashSync } from 'bcryptjs';
 
@@ -134,6 +134,7 @@ function writeYamlConfig(projectName: string, yaml: string): void {
   const tempPath = join(DYNAMIC_CONFIG_DIR, `.${filename}.tmp`);
   const targetPath = join(DYNAMIC_CONFIG_DIR, filename);
 
+  mkdirSync(DYNAMIC_CONFIG_DIR, { recursive: true });
   writeFileSync(tempPath, yaml, 'utf8');
   renameSync(tempPath, targetPath);
 }

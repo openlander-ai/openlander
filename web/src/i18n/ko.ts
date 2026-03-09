@@ -135,9 +135,8 @@ export const translations = {
     cloudflareGoToSettings: '설정 페이지에서 Cloudflare Tunnel 구성하기',
     customDomainsHelp:
       'Cloudflare Tunnel을 통해 커스텀 도메인을 추가하세요. 도메인의 DNS를 터널로 연결하세요.',
-    exposeToInternet: '인터넷에 공개',
-    notExposed:
-      '공개되지 않았습니다. "인터넷에 공개"를 클릭하여 Cloudflare Tunnel을 통해 공개 URL을 생성하세요.',
+    exposeToInternet: 'Publish',
+    notExposed: 'Publish를 클릭하여 Cloudflare Tunnel을 통해 공개 URL을 생성하세요.',
     anyoneWithUrl:
       '이 URL을 가진 누구나 프로젝트에 액세스할 수 있습니다. 임시 URL은 재시작 시 변경될 수 있습니다.',
     requiresRunning: '프로젝트가 실행 중이어야 합니다.',
