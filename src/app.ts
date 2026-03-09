@@ -28,6 +28,7 @@ import {
   getPostmortemInstance,
 } from './monitor/postmortem.js';
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
+import { McpClientManager } from './mcp/client-manager.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
@@ -71,6 +72,8 @@ export interface AppContext {
   alertMonitor: AlertMonitor;
   questionBridge: QuestionBridge;
   serviceManager: ServiceManager;
+  // v1.0 modules
+  mcpClientManager: McpClientManager;
 }
 
 /** Create the application context from config. */
@@ -507,6 +510,10 @@ ${buildLog.slice(-3000)}`
     crashFailureCounts.delete(payload.projectId);
   });
 
+  // v1.0: MCP client manager (connects to external MCP servers)
+  // Connection and tool merging handled by callers (cli/index.ts, setup-routes.ts)
+  const mcpClientManager = new McpClientManager();
+
   // Build partial ctx without channelManager, then compose the full AppContext
   const partialCtx = {
     config,
@@ -529,6 +536,7 @@ ${buildLog.slice(-3000)}`
     alertMonitor,
     questionBridge,
     serviceManager,
+    mcpClientManager,
   };
 
   // v0.4: ChannelManager needs AppContext but never self-references channelManager.
@@ -563,4 +571,5 @@ export function shutdownAppContext(ctx: AppContext): void {
   void ctx.channelManager.stop();
   void ctx.previewDeployer.cleanupAll();
   ctx.db.close();
+  void ctx.mcpClientManager.disconnectAll();
 }

@@ -5,8 +5,9 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
 import { loadDecryptedToken } from '../../auth/token-store.js';
-import type { OpenLanderConfig } from '../../config/index.js';
+import type { OpenLanderConfig, McpServerEntry } from '../../config/index.js';
 import { createGitProvider } from '../../git-providers/index.js';
+import type { ToolSet } from 'ai';
 
 /**
  * Setup / onboarding API routes.
@@ -166,6 +167,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       const { createModel } = await import('../../llm/index.js');
       const { Agent } = await import('../../agent/index.js');
       const { createTools } = await import('../../agent/tools.js');
+      const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
       const { buildContextSnapshot } = await import('../../agent/prompts.js');
 
       const llmModel = createModel({
@@ -183,7 +185,10 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         ctx.config.language,
       );
 
-      const tools = createTools(ctx, ctx.questionBridge);
+      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+      if (ctx.config.mcp.enabled && ctx.mcpClientManager.connectedCount > 0) {
+        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+      }
       agent.setTools(tools);
       agent.setQuestionBridge(ctx.questionBridge);
 
@@ -606,7 +611,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
           lang,
         );
 
-        const tools = createTools(ctx, ctx.questionBridge);
+        let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+        if (ctx.config.mcp.enabled && ctx.mcpClientManager.connectedCount > 0) {
+          const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
+          tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+        }
         agent.setTools(tools);
         agent.setQuestionBridge(ctx.questionBridge);
         (ctx as { agent: typeof agent }).agent = agent;
@@ -622,6 +631,178 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const config = loadConfig();
     saveConfig(config);
     return c.json({ status: 'complete', message: 'Setup marked as complete.' });
+  });
+
+  // ── MCP Server Management ───────────────────────────────────────────────
+
+  /**
+   * GET /setup/mcp/servers
+   *
+   * List configured MCP servers.
+   */
+  api.get('/setup/mcp/servers', (c) => {
+    const config = loadConfig();
+    return c.json({
+      enabled: config.mcp.enabled,
+      servers: config.mcp.servers,
+      connectedCount: ctx.mcpClientManager.connectedCount,
+    });
+  });
+
+  /**
+   * POST /setup/mcp/servers
+   *
+   * Add a new MCP server.
+   * Body: McpServerEntry (without id — auto-generated)
+   */
+  api.post('/setup/mcp/servers', async (c) => {
+    const body = await c.req.json<{
+      name: string;
+      transport: 'stdio' | 'sse' | 'http';
+      url?: string;
+      command?: string;
+      args?: string[];
+      headers?: Record<string, string>;
+      env?: Record<string, string>;
+      enabled?: boolean;
+    }>();
+
+    if (!body.name || !body.name.trim()) {
+      return c.json({ error: 'MISSING_FIELD', message: 'name is required' }, 400);
+    }
+    if (!['stdio', 'sse', 'http'].includes(body.transport)) {
+      return c.json(
+        { error: 'INVALID_TRANSPORT', message: 'transport must be stdio, sse, or http' },
+        400,
+      );
+    }
+    if (body.transport === 'stdio' && !body.command?.trim()) {
+      return c.json(
+        { error: 'MISSING_FIELD', message: 'command is required for stdio transport' },
+        400,
+      );
+    }
+    if ((body.transport === 'sse' || body.transport === 'http') && !body.url?.trim()) {
+      return c.json(
+        { error: 'MISSING_FIELD', message: 'url is required for sse/http transport' },
+        400,
+      );
+    }
+
+    const { nanoid } = await import('nanoid');
+    const config = loadConfig();
+    const server: McpServerEntry = {
+      id: nanoid(12),
+      name: body.name.trim(),
+      transport: body.transport,
+      url: body.url?.trim(),
+      command: body.command?.trim(),
+      args: body.args,
+      headers: body.headers,
+      env: body.env,
+      enabled: body.enabled !== false,
+    };
+
+    config.mcp.servers.push(server);
+    config.mcp.enabled = true;
+    saveConfig(config);
+    ctx.config.mcp = config.mcp;
+
+    return c.json({ status: 'created', server });
+  });
+
+  /**
+   * DELETE /setup/mcp/servers/:id
+   *
+   * Remove an MCP server by ID.
+   */
+  api.delete('/setup/mcp/servers/:id', (c) => {
+    const id = c.req.param('id');
+    const config = loadConfig();
+    const idx = config.mcp.servers.findIndex((s) => s.id === id);
+
+    if (idx === -1) {
+      return c.json({ error: 'NOT_FOUND', message: 'Server not found' }, 404);
+    }
+
+    config.mcp.servers.splice(idx, 1);
+    if (config.mcp.servers.length === 0) {
+      config.mcp.enabled = false;
+    }
+    saveConfig(config);
+    ctx.config.mcp = config.mcp;
+
+    return c.json({ status: 'deleted' });
+  });
+
+  /**
+   * POST /setup/mcp/servers/:id/test
+   *
+   * Test connection to an MCP server.
+   * Uses the server config from the request body (allows testing before saving).
+   */
+  api.post('/setup/mcp/servers/:id/test', async (c) => {
+    const id = c.req.param('id');
+    const config = loadConfig();
+    const server = config.mcp.servers.find((s) => s.id === id);
+
+    if (!server) {
+      return c.json({ error: 'NOT_FOUND', message: 'Server not found' }, 404);
+    }
+
+    try {
+      const result = await ctx.mcpClientManager.testConnection(server);
+      return c.json({ status: 'ok', tools: result.tools });
+    } catch (error) {
+      return c.json(
+        {
+          status: 'failed',
+          message: error instanceof Error ? error.message : 'Connection failed',
+        },
+        500,
+      );
+    }
+  });
+
+  /**
+   * POST /setup/mcp/reconnect
+   *
+   * Disconnect all MCP clients and reconnect.
+   * Also re-merges tools with the agent.
+   */
+  api.post('/setup/mcp/reconnect', async (c) => {
+    const config = loadConfig();
+    ctx.config.mcp = config.mcp;
+
+    await ctx.mcpClientManager.disconnectAll();
+
+    if (!config.mcp.enabled || config.mcp.servers.length === 0) {
+      // Re-set tools without MCP
+      if (ctx.agent) {
+        const { createTools } = await import('../../agent/tools.js');
+        ctx.agent.setTools(createTools(ctx, ctx.questionBridge));
+      }
+      return c.json({ status: 'disconnected', connected: 0 });
+    }
+
+    const enabled = config.mcp.servers.filter((s) => s.enabled);
+    await ctx.mcpClientManager.connectAll(enabled);
+
+    // Re-merge tools
+    if (ctx.agent) {
+      const { createTools } = await import('../../agent/tools.js');
+      const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
+      const tools = await mergeWithMcpTools(
+        createTools(ctx, ctx.questionBridge),
+        ctx.mcpClientManager,
+      );
+      ctx.agent.setTools(tools);
+    }
+
+    return c.json({
+      status: 'connected',
+      connected: ctx.mcpClientManager.connectedCount,
+    });
   });
 
   return api;

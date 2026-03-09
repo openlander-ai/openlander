@@ -5,6 +5,7 @@ import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { createModuleLogger } from '../lib/logger.js';
 import { VERSION } from '../version.js';
 import { getProjectUrl, getLanIp } from '../pipeline/traefik.js';
+import type { ToolSet } from 'ai';
 
 const log = createModuleLogger('cli');
 
@@ -40,10 +41,15 @@ program
     const { createAppContext } = await import('../app.js');
     const ctx = createAppContext(config, getDbPath());
 
-    // Register tools with agent
+    // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
-      const tools = createTools(ctx, ctx.questionBridge);
+      const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
+      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+      if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
+        await ctx.mcpClientManager.connectAll(ctx.config.mcp.servers);
+        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+      }
       ctx.agent.setTools(tools);
     }
 
@@ -125,10 +131,15 @@ program
     const { createAppContext } = await import('../app.js');
     const ctx = createAppContext(config, getDbPath());
 
-    // Register tools with agent
+    // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
-      const tools = createTools(ctx, ctx.questionBridge);
+      const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
+      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+      if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
+        await ctx.mcpClientManager.connectAll(ctx.config.mcp.servers);
+        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+      }
       ctx.agent.setTools(tools);
     }
 
@@ -250,7 +261,12 @@ program
 
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
-      const tools = createTools(ctx, ctx.questionBridge);
+      const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
+      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+      if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
+        await ctx.mcpClientManager.connectAll(ctx.config.mcp.servers);
+        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+      }
       ctx.agent.setTools(tools);
     }
 
@@ -410,7 +426,12 @@ program
 
     if (ctx.agent) {
       const { createTools } = await import('../agent/tools.js');
-      const tools = createTools(ctx, ctx.questionBridge);
+      const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
+      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+      if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
+        await ctx.mcpClientManager.connectAll(ctx.config.mcp.servers);
+        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+      }
       ctx.agent.setTools(tools);
     }
 

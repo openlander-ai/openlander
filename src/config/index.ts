@@ -101,11 +101,34 @@ export interface MonitoringConfig {
   inactivityThresholdDays: number;
 }
 
+export interface McpServerEntry {
+  /** Unique server identifier */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Transport type */
+  transport: 'stdio' | 'sse' | 'http';
+  /** Server URL (for sse/http transports) */
+  url?: string;
+  /** Command to run (for stdio transport) */
+  command?: string;
+  /** Command arguments (for stdio transport) */
+  args?: string[];
+  /** HTTP headers (for sse/http transports) */
+  headers?: Record<string, string>;
+  /** Environment variables (for stdio transport) */
+  env?: Record<string, string>;
+  /** Whether this server is enabled */
+  enabled: boolean;
+}
+
 export interface MCPConfig {
   /** Whether MCP server is enabled */
   enabled: boolean;
   /** MCP transport: stdio or sse */
   transport: 'stdio' | 'sse';
+  /** External MCP servers the agent can consume tools from */
+  servers: McpServerEntry[];
 }
 
 export interface ChannelConfig {
@@ -191,6 +214,7 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
   mcp: {
     enabled: false,
     transport: 'stdio',
+    servers: [],
   },
   channels: {
     slack: { enabled: false, token: '', signingSecret: '', recoveryChannelId: '' },
