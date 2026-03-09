@@ -26,10 +26,32 @@ export class CloudflareTunnel {
   }
 
   /**
-   * Start a TryCloudflare quick tunnel.
+   * Start a TryCloudflare quick tunnel with automatic retry.
+   * TryCloudflare can return transient 500 errors, so we retry up to 3 times.
    * Returns the public URL (e.g., https://shy-tiger-abc123.trycloudflare.com).
    */
   async start(projectName: string, timeoutMs = 30_000): Promise<string> {
+    const maxRetries = 3;
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.tryStart(projectName, timeoutMs);
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        const isRetryable =
+          !(err instanceof CloudflaredNotFoundError) &&
+          lastError.message.includes('exited with code');
+        if (!isRetryable || attempt === maxRetries) throw lastError;
+        // Wait before retry (2s, 4s)
+        await new Promise((r) => setTimeout(r, attempt * 2000));
+      }
+    }
+
+    throw lastError as Error;
+  }
+
+  private tryStart(projectName: string, timeoutMs: number): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.stop();
