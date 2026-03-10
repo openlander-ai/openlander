@@ -14,6 +14,9 @@ import type { AssistantItem } from '@/hooks/use-assistant';
 import type { TimelineItem } from '@/lib/event-types';
 import type { PostmortemData } from '@/lib/api';
 import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCard';
+import { SummaryDashboard } from '@/components/project/SummaryDashboard';
+import { getProject } from '@/lib/api';
+import type { Project } from '@/types';
 
 interface OverviewTabProps {
   projectId: string;
@@ -121,6 +124,19 @@ export function OverviewTab({
   const { language } = useLanguage();
   const bottomRef = useRef<HTMLDivElement>(null);
   const [dismissedActions, setDismissedActions] = useState<Set<string>>(new Set());
+  const [project, setProject] = useState<Project | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getProject(projectId)
+      .then((data) => {
+        if (mounted) setProject(data);
+      })
+      .catch((err) => console.error('Failed to fetch project:', err));
+    return () => {
+      mounted = false;
+    };
+  }, [projectId]);
 
   // Auto-scroll assistant to bottom on new messages
   useEffect(() => {
@@ -135,6 +151,8 @@ export function OverviewTab({
     });
   };
 
+  const showTimeline = projectStatus === 'building' || projectStatus === 'error';
+
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0">
       {/* Left pane: Timeline + Log Preview */}
@@ -147,22 +165,34 @@ export function OverviewTab({
             generatedAt={postmortem.generatedAt}
           />
         )}
-        <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[500px]">
-          <TimelineFeed
-            items={timelineItems}
-            isStreaming={isTimelineStreaming}
-            projectStatus={projectStatus}
-            onSubmitAnswer={onSubmitAnswer}
-            onSkipQuestion={onSkipQuestion}
-            onInsightAction={onInsightAction}
-            onFixWithAI={onFixWithAI}
-            fixingItemId={fixingItemId}
-          />
-        </section>
+        {showTimeline ? (
+          <>
+            <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[500px]">
+              <TimelineFeed
+                items={timelineItems}
+                isStreaming={isTimelineStreaming}
+                projectStatus={projectStatus}
+                onSubmitAnswer={onSubmitAnswer}
+                onSkipQuestion={onSkipQuestion}
+                onInsightAction={onInsightAction}
+                onFixWithAI={onFixWithAI}
+                fixingItemId={fixingItemId}
+              />
+            </section>
 
-        {projectId && (
-          <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
-            <LogPreview projectId={projectId} status={projectStatus} onOpenLogs={onOpenLogs} />
+            {projectId && (
+              <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
+                <LogPreview projectId={projectId} status={projectStatus} onOpenLogs={onOpenLogs} />
+              </section>
+            )}
+          </>
+        ) : (
+          <section className="flex flex-col">
+            <SummaryDashboard
+              projectId={projectId}
+              project={project || { status: projectStatus }}
+              recentEvents={timelineItems}
+            />
           </section>
         )}
       </div>
