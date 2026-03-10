@@ -100,13 +100,24 @@ export class CloudflareTunnelManager {
       return;
     }
 
+    // DNS record deletion — best-effort (may already be deleted externally)
     if (mapping.cloudflare_zone_id && mapping.cloudflare_dns_record_id) {
       await this.deleteDnsRecord(mapping.cloudflare_zone_id, mapping.cloudflare_dns_record_id);
     }
 
+    // DB cleanup must always succeed regardless of API failures above
     this.db.deleteDomainMapping(mapping.id);
-    await this.updateTunnelConfig();
-    await this.syncProjectRouting(projectId);
+
+    // Tunnel config + routing — best-effort (tunnel may have been deleted externally)
+    try {
+      await this.updateTunnelConfig();
+      await this.syncProjectRouting(projectId);
+    } catch (error) {
+      log.warn(
+        { err: error, projectId, domain },
+        'Post-delete config sync failed — tunnel or routing may need manual cleanup',
+      );
+    }
   }
 
   listDomains(projectId: string): DomainMappingRow[] {
@@ -231,13 +242,22 @@ export class CloudflareTunnelManager {
 
     ingress.push({ service: 'http_status:404' });
 
-    await this.cloudflareRequest(
-      `accounts/${this.config.accountId}/cfd_tunnel/${this.config.tunnelId}/configurations`,
-      {
-        method: 'PUT',
-        body: JSON.stringify({ config: { ingress } }),
-      },
-    );
+    try {
+      await this.cloudflareRequest(
+        `accounts/${this.config.accountId}/cfd_tunnel/${this.config.tunnelId}/configurations`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ config: { ingress } }),
+        },
+      );
+    } catch (error) {
+      // Tunnel may have been deleted externally via Cloudflare dashboard
+      if (error instanceof Error && error.message.includes('(404)')) {
+        log.warn('Tunnel config update failed (404) — tunnel may have been deleted externally');
+        return;
+      }
+      throw error;
+    }
   }
 
   private async findZoneForDomain(domain: string): Promise<CloudflareZone> {
@@ -274,14 +294,25 @@ export class CloudflareTunnelManager {
       await this.deleteDnsRecord(zoneId, record.id);
     }
 
-    // If existing CNAME found, patch it
+    // If existing CNAME found, try to patch it — fall through to POST if deleted externally
     const cname = existing.find((r) => r.type === 'CNAME');
     if (cname) {
-      const updated = await this.cloudflareRequest<CloudflareDnsRecord>(
-        `zones/${zoneId}/dns_records/${cname.id}`,
-        { method: 'PATCH', body: cnameBody },
-      );
-      return updated.id;
+      try {
+        const updated = await this.cloudflareRequest<CloudflareDnsRecord>(
+          `zones/${zoneId}/dns_records/${cname.id}`,
+          { method: 'PATCH', body: cnameBody },
+        );
+        return updated.id;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('(404)')) {
+          log.debug(
+            { zoneId, recordId: cname.id },
+            'CNAME record deleted externally — creating new one',
+          );
+        } else {
+          throw error;
+        }
+      }
     }
 
     // No existing record — create new CNAME
@@ -296,13 +327,31 @@ export class CloudflareTunnelManager {
     zoneId: string,
     domain: string,
   ): Promise<CloudflareDnsRecord[]> {
-    return this.cloudflareRequest<CloudflareDnsRecord[]>(
-      `zones/${zoneId}/dns_records?name=${encodeURIComponent(domain)}`,
-    );
+    try {
+      return await this.cloudflareRequest<CloudflareDnsRecord[]>(
+        `zones/${zoneId}/dns_records?name=${encodeURIComponent(domain)}`,
+      );
+    } catch (error) {
+      // Zone may have been deleted externally
+      if (error instanceof Error && error.message.includes('(404)')) {
+        log.debug({ zoneId, domain }, 'Zone not found when fetching DNS records — returning empty');
+        return [];
+      }
+      throw error;
+    }
   }
 
   private async deleteDnsRecord(zoneId: string, recordId: string): Promise<void> {
-    await this.cloudflareRequest(`zones/${zoneId}/dns_records/${recordId}`, { method: 'DELETE' });
+    try {
+      await this.cloudflareRequest(`zones/${zoneId}/dns_records/${recordId}`, { method: 'DELETE' });
+    } catch (error) {
+      // Record already deleted externally (e.g. via Cloudflare dashboard) — safe to ignore
+      if (error instanceof Error && error.message.includes('(404)')) {
+        log.debug({ zoneId, recordId }, 'DNS record already deleted — skipping');
+        return;
+      }
+      throw error;
+    }
   }
 
   private async cloudflareRequest<T>(path: string, init?: RequestInit): Promise<T> {

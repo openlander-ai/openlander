@@ -178,7 +178,7 @@ export function createToolRegistry(
       execute: async (args) => {
         const projectName = args['project_name'] as string;
         const project = getProjectByName(ctx, projectName);
-        await ctx.pipeline.remove(project.id);
+        await ctx.pipeline.remove(project.id, ctx.cloudflare);
         return { status: 'removed', project: projectName };
       },
     },

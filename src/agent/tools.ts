@@ -194,7 +194,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
         const project = ctx.db.getProjectByName(project_name);
         if (!project) throw new ProjectNotFoundError(project_name);
 
-        await ctx.pipeline.remove(project.id);
+        await ctx.pipeline.remove(project.id, ctx.cloudflare);
         return { status: 'removed', project: project_name };
       },
     }),

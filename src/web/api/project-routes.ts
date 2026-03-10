@@ -429,7 +429,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
-    await ctx.pipeline.remove(project.id);
+    await ctx.pipeline.remove(project.id, ctx.cloudflare);
     return c.json({ status: 'removed', project: project.name });
   });
 
@@ -796,7 +796,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'PREVIEW_NOT_FOUND', message: 'Preview not found' }, 404);
     }
 
-    await ctx.pipeline.remove(previewId);
+    await ctx.pipeline.remove(previewId, ctx.cloudflare);
     return c.json({ status: 'removed', preview: preview.name });
   });
 

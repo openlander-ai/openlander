@@ -353,7 +353,7 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
         case 'remove_project': {
           const args = parseInput(projectNameSchema, rawArgs);
           const projectId = getProjectIdByName(ctx, args.project_name);
-          await ctx.pipeline.remove(projectId);
+          await ctx.pipeline.remove(projectId, ctx.cloudflare);
           return successResponse({ status: 'removed', project: args.project_name });
         }
 

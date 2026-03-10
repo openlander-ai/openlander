@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import type { Docker } from './docker.js';
+import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
 import { allocatePort } from './port.js';
 import { buildTraefikLabels, getProjectUrl } from './traefik.js';
@@ -13,7 +14,7 @@ import { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery, type BuildContext } from './build-recovery.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
-import { DockerfileNotFoundError, PreflightCheckError } from '../errors.js';
+import { ContainerNotFoundError, DockerfileNotFoundError, PreflightCheckError } from '../errors.js';
 import { detectFramework, ensureDockerfile, parseDockerfileExposePort } from './dockerfile-gen.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { detectNewEnvKeys } from './env-inject.js';
@@ -1047,7 +1048,18 @@ export class DeployPipeline {
     const project = this.db.getProject(projectId);
     if (!project?.container_id) return;
 
-    await this.docker.stopContainer(project.container_id);
+    try {
+      await this.docker.stopContainer(project.container_id);
+    } catch (err) {
+      if (err instanceof ContainerNotFoundError) {
+        log.debug(
+          { projectId },
+          'Container not found during stop — may have been removed externally',
+        );
+      } else {
+        throw err;
+      }
+    }
     this.db.updateProject(projectId, { status: 'stopped' });
     this.closeTunnel(projectId);
     await eventBus.emit('container:stop', { projectId, containerId: project.container_id });
@@ -1065,16 +1077,28 @@ export class DeployPipeline {
     const project = this.db.getProject(projectId);
     if (!project?.container_id) return;
 
-    await this.docker.startContainer(project.container_id);
+    try {
+      await this.docker.startContainer(project.container_id);
+    } catch (err) {
+      if (err instanceof ContainerNotFoundError) {
+        log.warn(
+          { projectId },
+          'Container not found during start — may have been removed externally',
+        );
+        this.db.updateProject(projectId, { status: 'error' });
+        throw new Error(`Container for project ${project.name} no longer exists. Please redeploy.`);
+      }
+      throw err;
+    }
     this.db.updateProject(projectId, { status: 'running' });
     await eventBus.emit('container:start', { projectId, containerId: project.container_id });
   }
 
   /** Remove a project entirely. */
-  async remove(projectId: string): Promise<void> {
+  async remove(projectId: string, cloudflare?: CloudflareTunnelManager): Promise<void> {
     const children = this.db.getChildProjects(projectId);
     if (children.length > 0) {
-      await Promise.all(children.map((c) => this.remove(c.id)));
+      await Promise.all(children.map((c) => this.remove(c.id, cloudflare)));
     }
 
     const project = this.db.getProject(projectId);
@@ -1085,7 +1109,21 @@ export class DeployPipeline {
         await this.docker.removeContainer(project.container_id);
       } catch (err) {
         log.debug({ err }, 'Container removal during project delete failed — may not exist');
-        // Container might not exist
+      }
+    }
+
+    // Clean up Cloudflare DNS records and tunnel routes for production domains
+    if (cloudflare) {
+      const domains = this.db.getDomainMappings(projectId);
+      for (const mapping of domains) {
+        try {
+          await cloudflare.removeTunnel(projectId, mapping.domain);
+        } catch (err) {
+          log.debug(
+            { err, domain: mapping.domain },
+            'Domain cleanup during project delete failed — may already be removed',
+          );
+        }
       }
     }
 
