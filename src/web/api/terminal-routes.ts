@@ -108,29 +108,55 @@ export function createTerminalRoutes(
                 return;
               }
 
-              let stream: Duplex;
-              let exec: TerminalExec;
-              try {
-                const bashExec = await container.exec({
-                  Cmd: ['/bin/bash'],
-                  AttachStdin: true,
-                  AttachStdout: true,
-                  AttachStderr: true,
-                  Tty: true,
-                });
-                exec = bashExec;
-                stream = await bashExec.start({ hijack: true, stdin: true });
-              } catch {
-                const fallbackExec = await container.exec({
-                  Cmd: ['/bin/sh'],
-                  AttachStdin: true,
-                  AttachStdout: true,
-                  AttachStderr: true,
-                  Tty: true,
-                });
-                exec = fallbackExec;
-                stream = await fallbackExec.start({ hijack: true, stdin: true });
+              const probeShell = async (shell: string): Promise<boolean> => {
+                try {
+                  const probeExec = await container.exec({
+                    Cmd: [shell, '-c', 'exit 0'],
+                    AttachStdin: false,
+                    AttachStdout: true,
+                    AttachStderr: true,
+                    Tty: false,
+                  });
+                  const probeStream = await probeExec.start({ hijack: false, stdin: false });
+
+                  await new Promise<void>((resolve) => {
+                    probeStream.on('data', () => {});
+                    probeStream.on('end', resolve);
+                    probeStream.on('error', () => {
+                      resolve();
+                    });
+                  });
+
+                  const info = await probeExec.inspect();
+                  return info.ExitCode === 0;
+                } catch {
+                  return false;
+                }
+              };
+
+              const shellCmd = (await probeShell('/bin/bash'))
+                ? '/bin/bash'
+                : (await probeShell('/bin/sh'))
+                  ? '/bin/sh'
+                  : null;
+
+              if (!shellCmd) {
+                closeWithError(
+                  ws,
+                  'No shell available (/bin/bash and /bin/sh not found). This container may be a distroless image.',
+                );
+                return;
               }
+
+              const shellExec = await container.exec({
+                Cmd: [shellCmd],
+                AttachStdin: true,
+                AttachStdout: true,
+                AttachStderr: true,
+                Tty: true,
+              });
+              const exec = shellExec as TerminalExec;
+              const stream = await shellExec.start({ hijack: true, stdin: true });
 
               const idleTimer = setTimeout(() => {
                 ws.send(JSON.stringify({ type: 'error', message: 'Terminal idle timeout (30m)' }));
