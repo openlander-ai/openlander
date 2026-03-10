@@ -1,4 +1,7 @@
 import { Hono } from 'hono';
+import { rm } from 'node:fs/promises';
+import { cloneRepo } from '../../pipeline/git.js';
+import { scanForEnvUsage } from '../../pipeline/env-scan.js';
 import { stream } from 'hono/streaming';
 import { nanoid } from 'nanoid';
 
@@ -763,6 +766,60 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         /* never resolves — closed by event handlers or abort */
       });
     });
+  });
+
+  // POST /api/env/scan — scan a repo for env var usage (initial deploy)
+  api.post('/env/scan', async (c) => {
+    const body = await c.req.json<{ repo_url: string; branch?: string }>();
+    if (!body.repo_url) {
+      return c.json({ error: 'repo_url is required' }, 400);
+    }
+
+    let clonePath: string | null = null;
+    try {
+      const cloneResult = await cloneRepo({ repoUrl: body.repo_url, branch: body.branch });
+      clonePath = cloneResult.path;
+      const result = scanForEnvUsage(clonePath);
+      return c.json(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: msg }, 400);
+    } finally {
+      if (clonePath) await rm(clonePath, { recursive: true, force: true }).catch(() => undefined);
+    }
+  });
+
+  // POST /api/projects/:id/env/scan — scan existing project repo (redeploy)
+  api.post('/projects/:id/env/scan', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+    if (!project.repo_url) return c.json({ error: 'Project has no repo URL' }, 400);
+
+    let clonePath: string | null = null;
+    try {
+      const cloneResult = await cloneRepo({ repoUrl: project.repo_url, branch: project.branch });
+      clonePath = cloneResult.path;
+      const result = scanForEnvUsage(clonePath);
+
+      // Compare against already-stored env vars to identify new ones
+      const stored = ctx.env.getAll(project.id);
+      const storedKeys = new Set(Object.keys(stored));
+      const newVars = result.vars.filter((v) => !storedKeys.has(v.key));
+      const existingVars = result.vars.filter((v) => storedKeys.has(v.key)).map((v) => v.key);
+
+      return c.json({
+        vars: result.vars,
+        newVars,
+        existingVars,
+        hasEnvExample: result.hasEnvExample,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: msg }, 400);
+    } finally {
+      if (clonePath) await rm(clonePath, { recursive: true, force: true }).catch(() => undefined);
+    }
   });
 
   return api;

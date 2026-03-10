@@ -751,3 +751,46 @@ export async function chatWithAgent(
     }
   }
 }
+
+export interface EnvVarInfo {
+  key: string;
+  files: Array<{ path: string; line: number }>;
+}
+
+export interface EnvScanResult {
+  vars: EnvVarInfo[];
+  hasEnvExample: boolean;
+  language: string;
+}
+
+export interface ProjectEnvScanResult {
+  vars: EnvVarInfo[];
+  newVars: EnvVarInfo[];
+  existingVars: string[];
+  hasEnvExample: boolean;
+}
+
+export async function scanEnvVars(repoUrl: string, branch?: string): Promise<EnvScanResult> {
+  const res = await fetch('/api/env/scan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo_url: repoUrl, branch }),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to scan env vars');
+  }
+  return res.json();
+}
+
+export async function scanProjectEnvVars(projectId: string): Promise<ProjectEnvScanResult> {
+  const res = await fetch(`/api/projects/${projectId}/env/scan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to scan project env vars');
+  }
+  return res.json();
+}

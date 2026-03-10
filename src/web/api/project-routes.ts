@@ -180,6 +180,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
+    // If caller provides env_vars, persist them before redeploying
+    const body = await c.req
+      .json<{ env_vars?: Record<string, string> }>()
+      .catch(() => ({ env_vars: undefined }));
+    if (body.env_vars && typeof body.env_vars === 'object') {
+      ctx.env.setBulk(project.id, body.env_vars);
+    }
+
     // Mark project as building so build/stream sees fresh state
     ctx.db.updateProject(project.id, { status: 'building' });
 
