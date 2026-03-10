@@ -9,6 +9,21 @@ import { Database } from '../src/db/index.js';
 import { createApiRoutes } from '../src/web/api/routes.js';
 import { createMockContext } from './helpers/web-route-mocks.js';
 // Mock preflight check to always pass in tests
+vi.mock('../src/pipeline/git.js', () => ({
+  cloneRepo: vi.fn().mockResolvedValue({ path: '/tmp/fake-clone' }),
+}));
+vi.mock('../src/pipeline/env-scan.js', () => ({
+  scanForEnvUsage: vi.fn().mockReturnValue({
+    vars: [{ key: 'DATABASE_URL', files: [{ path: 'app.ts', line: 1 }] }],
+    hasEnvExample: false,
+    language: 'node',
+  }),
+}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...actual, rm: vi.fn().mockResolvedValue(undefined) };
+});
+
 vi.mock('../src/pipeline/preflight.js', () => ({
   preflightCheckOrThrow: vi.fn().mockResolvedValue({
     pass: true,
@@ -780,5 +795,48 @@ describe('Web API Routes', () => {
 
     const body = await res.json();
     expect(body).toHaveProperty('sessions');
+  });
+  // ---------------------------------------------------------------------------
+  // POST /api/env/scan
+  // ---------------------------------------------------------------------------
+
+  it('POST /api/env/scan returns 400 when repo_url missing', async () => {
+    const res = await app.request('/api/env/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/env/scan returns scan result for valid repo_url', async () => {
+    const res = await app.request('/api/env/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_url: 'https://github.com/test/repo' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('vars');
+    expect(body.vars[0].key).toBe('DATABASE_URL');
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/projects/:id/env/scan
+  // ---------------------------------------------------------------------------
+
+  it('POST /api/projects/:id/env/scan returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/env/scan', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /api/projects/:id/env/scan returns newVars for project with no stored env', async () => {
+    db.createProject({ id: 'scan-p1', name: 'scan-app', repoUrl: 'https://github.com/test/repo' });
+    const res = await app.request('/api/projects/scan-p1/env/scan', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('newVars');
+    expect(body.newVars[0].key).toBe('DATABASE_URL');
+    expect(body.existingVars).toEqual([]);
   });
 });

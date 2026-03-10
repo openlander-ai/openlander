@@ -11,8 +11,10 @@ import {
   rollbackProject,
   blueGreenProject,
   debugBuild,
+  scanProjectEnvVars,
   type BuildDiagnosis,
   type PostmortemData,
+  type EnvVarInfo,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
@@ -29,6 +31,9 @@ import { DeploymentsTab } from '@/components/project/DeploymentsTab';
 import { ConsoleTab } from '@/components/project/ConsoleTab';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import { ProjectHeader } from '@/components/project/ProjectHeader';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) => string): string {
   const lines = ['Root cause:' + '\n' + diagnosis.rootCause, ''];
@@ -63,6 +68,9 @@ export function ProjectDetail() {
   const [postmortem, setPostmortem] = useState<PostmortemData | null>(null);
   const isMobile = useIsMobile();
   const [shareOpen, setShareOpen] = useState(false);
+  const [redeploySheet, setRedeploySheet] = useState(false);
+  const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
+  const [redeployValues, setRedeployValues] = useState<Record<string, string>>({});
   const assistant = useAssistant(id);
 
   // Fetch project details
@@ -180,9 +188,22 @@ export function ProjectDetail() {
     if (!id || actionLoading) return;
     setActionLoading('redeploy');
 
-    // Optimistic UI: immediately show building state + reset timeline
-    setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+    try {
+      const scan = await scanProjectEnvVars(id);
+      if (scan.newVars.length > 0) {
+        setRedeployVars(scan.newVars);
+        const initial: Record<string, string> = {};
+        for (const v of scan.newVars) initial[v.key] = '';
+        setRedeployValues(initial);
+        setRedeploySheet(true);
+        setActionLoading(null);
+        return;
+      }
+    } catch {
+      // scan failed, proceed without env vars
+    }
 
+    setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
       await redeployProject(id);
       setTimelineRunKey((k) => k + 1);
@@ -429,6 +450,59 @@ export function ProjectDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Sheet open={redeploySheet} onOpenChange={setRedeploySheet}>
+        <SheetContent side="left" className="w-[400px] sm:w-[540px]">
+          <SheetHeader>
+            <SheetTitle>{'New Environment Variables'}</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 py-4">
+            <div className="text-sm text-muted-foreground">
+              {`Found ${String(redeployVars.length)} new environment variable${redeployVars.length !== 1 ? 's' : ''}.`}
+            </div>
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+              {redeployVars.map((v) => (
+                <div key={v.key} className="space-y-1">
+                  <label className="text-sm font-medium font-mono">{v.key}</label>
+                  <Input
+                    placeholder={`Value for ${v.key}`}
+                    value={redeployValues[v.key] ?? ''}
+                    onChange={(e) =>
+                      setRedeployValues((prev) => ({ ...prev, [v.key]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setRedeploySheet(false)}>
+              {'Cancel'}
+            </Button>
+            <Button
+              className="bg-foreground text-background hover:bg-foreground/90"
+              onClick={async () => {
+                setRedeploySheet(false);
+                setActionLoading('redeploy');
+                setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+                try {
+                  await redeployProject(id!, redeployValues);
+                  setTimelineRunKey((k) => k + 1);
+                  toast.success('Project redeploying');
+                } catch (err) {
+                  toast.error(
+                    'Redeploy failed: ' + (err instanceof Error ? err.message : String(err)),
+                  );
+                } finally {
+                  setActionLoading(null);
+                }
+              }}
+            >
+              {'Redeploy'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <ShareDialog
         projectId={id!}

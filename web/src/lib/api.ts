@@ -24,11 +24,12 @@ export async function deployProject(
   repoUrl: string,
   branch?: string,
   name?: string,
+  envVars?: Record<string, string>,
 ): Promise<DeployResult> {
   const res = await fetch('/api/projects/deploy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repo_url: repoUrl, branch, name }),
+    body: JSON.stringify({ repo_url: repoUrl, branch, name, env_vars: envVars }),
   });
 
   if (!res.ok) {
@@ -122,17 +123,17 @@ export async function startProject(id: string): Promise<void> {
   }
 }
 
-export async function redeployProject(id: string): Promise<void> {
-  const res = await fetch(`/api/projects/${id}/redeploy`, { method: 'POST' });
+export async function redeployProject(id: string, envVars?: Record<string, string>): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/redeploy`, {
+    method: 'POST',
+    headers: envVars ? { 'Content-Type': 'application/json' } : undefined,
+    body: envVars ? JSON.stringify({ env_vars: envVars }) : undefined,
+  });
 
   if (!res.ok) {
     const error = await res.text();
     throw new Error(error || 'Failed to redeploy project');
   }
-  // SSE stream is consumed by the server-side build/stream endpoint via eventBus.
-  // We don't need to read the SSE here — just fire the request and let the
-  // timeline's NDJSON build stream pick up events.
-  // Close the response body to avoid leaking connections.
   if (res.body) {
     const reader = res.body.getReader();
     void reader.cancel();

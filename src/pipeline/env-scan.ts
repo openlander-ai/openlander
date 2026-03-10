@@ -140,7 +140,7 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
         NODE_DESTRUCTURE.lastIndex = 0;
         let match: RegExpExecArray | null;
         while ((match = NODE_DESTRUCTURE.exec(content)) !== null) {
-          const raw = match[1];
+          const raw = match[1] ?? '';
           const line = content.slice(0, match.index).split('\n').length;
           for (const part of raw.split(',')) {
             const key = part.trim().split(':')[0]?.trim();
