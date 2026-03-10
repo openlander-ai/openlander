@@ -36,7 +36,8 @@
     "test:coverage": "vitest run --coverage",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
