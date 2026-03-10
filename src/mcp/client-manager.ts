@@ -2,7 +2,6 @@ import { createMCPClient } from '@ai-sdk/mcp';
 import type { MCPClient } from '@ai-sdk/mcp';
 import type { ToolSet } from 'ai';
 import type { McpServerEntry } from '../config/index.js';
-import type { AppContext } from '../app.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('mcp-client');
@@ -203,61 +202,4 @@ function sanitizePrefix(name: string): string {
     .replace(/[^a-z0-9]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
-}
-
-/**
- * High-level helper: initialize MCP tools for the agent.
- *
- * Handles the full lifecycle:
- * 1. Auto-enable GitHub preset if PAT exists
- * 2. Start SearXNG Docker container (if preset enabled)
- * 3. Resolve presets → McpServerEntry[]
- * 4. Combine with user-configured mcp.servers
- * 5. Connect all via McpClientManager
- * 6. Merge MCP tools with built-in agent tools
- *
- * @returns Merged ToolSet ready for agent.setTools()
- */
-export async function initializeMcpTools(ctx: AppContext, builtinTools: ToolSet): Promise<ToolSet> {
-  const { resolvePresets, shouldAutoEnableGithub } = await import('./presets.js');
-
-  const config = ctx.config;
-
-  // Auto-enable GitHub preset if PAT is configured
-  if (shouldAutoEnableGithub(config)) {
-    if (!config.mcp.presets) {
-      config.mcp.presets = { searxng: { enabled: true }, github: { enabled: false } };
-    }
-    config.mcp.presets.github.enabled = true;
-    log.info('GitHub MCP auto-enabled (PAT detected)');
-  }
-
-  // Start SearXNG container if preset is enabled
-  const presets = config.mcp.presets ?? { searxng: { enabled: true }, github: { enabled: false } };
-  let searxngUrl: string | undefined;
-  if (presets.searxng.enabled) {
-    try {
-      await ctx.searxngManager.start();
-      searxngUrl = ctx.searxngManager.getUrl();
-    } catch (err) {
-      log.warn({ err }, 'SearXNG start failed \u2014 preset will use default URL');
-    }
-  }
-
-  // Resolve presets into McpServerEntry[]
-  const presetServers = resolvePresets(config, searxngUrl);
-
-  // Combine with user-configured servers
-  const userServers = config.mcp.servers;
-  const allServers = [...presetServers, ...userServers];
-
-  if (allServers.length === 0) {
-    return builtinTools;
-  }
-
-  // Connect all servers
-  await ctx.mcpClientManager.connectAll(allServers);
-
-  // Merge MCP tools with built-in tools
-  return mergeWithMcpTools(builtinTools, ctx.mcpClientManager);
 }

@@ -129,11 +129,6 @@ export interface MCPConfig {
   transport: 'stdio' | 'sse';
   /** External MCP servers the agent can consume tools from */
   servers: McpServerEntry[];
-  /** Built-in MCP presets (SearXNG, GitHub) */
-  presets?: {
-    searxng: { enabled: boolean };
-    github: { enabled: boolean };
-  };
 }
 
 export interface ChannelConfig {
@@ -220,10 +215,6 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
     enabled: false,
     transport: 'stdio',
     servers: [],
-    presets: {
-      searxng: { enabled: true },
-      github: { enabled: false },
-    },
   },
   channels: {
     slack: { enabled: false, token: '', signingSecret: '', recoveryChannelId: '' },

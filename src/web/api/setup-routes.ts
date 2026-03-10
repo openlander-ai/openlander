@@ -7,6 +7,7 @@ import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
 import { loadDecryptedToken } from '../../auth/token-store.js';
 import type { OpenLanderConfig, McpServerEntry } from '../../config/index.js';
 import { createGitProvider } from '../../git-providers/index.js';
+import type { ToolSet } from 'ai';
 
 /**
  * Setup / onboarding API routes.
@@ -166,7 +167,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       const { createModel } = await import('../../llm/index.js');
       const { Agent } = await import('../../agent/index.js');
       const { createTools } = await import('../../agent/tools.js');
-      const { initializeMcpTools } = await import('../../mcp/client-manager.js');
+      const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
       const { buildContextSnapshot } = await import('../../agent/prompts.js');
 
       const llmModel = createModel({
@@ -184,8 +185,10 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         ctx.config.language,
       );
 
-      const builtinTools = createTools(ctx, ctx.questionBridge);
-      const tools = await initializeMcpTools(ctx, builtinTools);
+      let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+      if (ctx.config.mcp.enabled && ctx.mcpClientManager.connectedCount > 0) {
+        tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+      }
       agent.setTools(tools);
       agent.setQuestionBridge(ctx.questionBridge);
 
@@ -608,9 +611,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
           lang,
         );
 
-        const builtinTools = createTools(ctx, ctx.questionBridge);
-        const { initializeMcpTools } = await import('../../mcp/client-manager.js');
-        const tools = await initializeMcpTools(ctx, builtinTools);
+        let tools: ToolSet = createTools(ctx, ctx.questionBridge);
+        if (ctx.config.mcp.enabled && ctx.mcpClientManager.connectedCount > 0) {
+          const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
+          tools = await mergeWithMcpTools(tools, ctx.mcpClientManager);
+        }
         agent.setTools(tools);
         agent.setQuestionBridge(ctx.questionBridge);
         (ctx as { agent: typeof agent }).agent = agent;
@@ -640,7 +645,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     return c.json({
       enabled: config.mcp.enabled,
       servers: config.mcp.servers,
-      presets: config.mcp.presets ?? { searxng: { enabled: true }, github: { enabled: false } },
       connectedCount: ctx.mcpClientManager.connectedCount,
     });
   });
@@ -799,38 +803,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       status: 'connected',
       connected: ctx.mcpClientManager.connectedCount,
     });
-  });
-
-  /**
-   * PATCH /setup/mcp/presets
-   *
-   * Update MCP preset toggles (searxng, github).
-   * Body: { searxng?: { enabled: boolean }, github?: { enabled: boolean } }
-   */
-  api.patch('/setup/mcp/presets', async (c) => {
-    const body = await c.req.json<{
-      searxng?: { enabled: boolean };
-      github?: { enabled: boolean };
-    }>();
-
-    const config = loadConfig();
-    const presets = config.mcp.presets ?? {
-      searxng: { enabled: true },
-      github: { enabled: false },
-    };
-
-    if (body.searxng !== undefined) {
-      presets.searxng.enabled = body.searxng.enabled;
-    }
-    if (body.github !== undefined) {
-      presets.github.enabled = body.github.enabled;
-    }
-
-    config.mcp.presets = presets;
-    saveConfig(config);
-    ctx.config.mcp = config.mcp;
-
-    return c.json({ status: 'updated', presets });
   });
 
   return api;
