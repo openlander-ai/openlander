@@ -4,7 +4,14 @@ import { basename } from 'node:path';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('diff-analysis');
-const exec = promisify(execFile);
+
+type ExecFn = (
+  cmd: string,
+  args: string[],
+  opts?: { cwd?: string; timeout?: number },
+) => Promise<{ stdout: string; stderr: string }>;
+
+const defaultExec: ExecFn = promisify(execFile) as ExecFn;
 
 export interface DiffAnalysis {
   changedFiles: string[];
@@ -90,11 +97,12 @@ const IMPACT_SET = new Set(BUILD_IMPACT_PATTERNS);
 export async function analyzeBuildDiff(
   clonePath: string,
   previousCommitSha: string,
+  execFn: ExecFn = defaultExec,
 ): Promise<DiffAnalysis | null> {
   let currentSha: string;
 
   try {
-    const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { cwd: clonePath });
+    const { stdout } = await execFn('git', ['rev-parse', 'HEAD'], { cwd: clonePath });
     currentSha = stdout.trim();
   } catch (error) {
     log.debug({ error, clonePath }, 'Failed to resolve current HEAD sha');
@@ -109,12 +117,12 @@ export async function analyzeBuildDiff(
   const diffArgs = ['diff', '--name-only', `${previousCommitSha}..HEAD`];
 
   try {
-    const { stdout } = await exec('git', diffArgs, { cwd: clonePath });
+    const { stdout } = await execFn('git', diffArgs, { cwd: clonePath });
     diffStdout = stdout;
   } catch {
     try {
-      await exec('git', ['fetch', '--depth=50', 'origin'], { cwd: clonePath, timeout: 30_000 });
-      const { stdout } = await exec('git', diffArgs, { cwd: clonePath });
+      await execFn('git', ['fetch', '--depth=50', 'origin'], { cwd: clonePath, timeout: 30_000 });
+      const { stdout } = await execFn('git', diffArgs, { cwd: clonePath });
       diffStdout = stdout;
     } catch (error) {
       log.debug({ error, previousCommitSha, currentSha }, 'Diff analysis skipped in shallow clone');

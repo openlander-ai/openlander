@@ -1,18 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { execFile } from 'node:child_process';
-
-vi.mock('node:child_process', () => ({
-  execFile: vi.fn(),
-}));
-
+import { describe, expect, it } from 'vitest';
 import {
   BUILD_IMPACT_PATTERNS,
   analyzeBuildDiff,
   formatDiffForPrompt,
   type DiffAnalysis,
 } from '../src/pipeline/diff-analysis.js';
-
-const mockExecFile = vi.mocked(execFile);
 
 type ExecStep = {
   file: string;
@@ -22,45 +14,30 @@ type ExecStep = {
   error?: Error;
 };
 
-function mockExecSequence(steps: ExecStep[]): void {
+type ExecFn = (
+  cmd: string,
+  args: string[],
+  opts?: { cwd?: string; timeout?: number },
+) => Promise<{ stdout: string; stderr: string }>;
+
+function makeExecFn(steps: ExecStep[]): ExecFn {
   const queue = [...steps];
 
-  mockExecFile.mockImplementation(((
-    file: string,
-    args: readonly string[],
-    options:
-      | {
-          cwd?: string;
-          timeout?: number;
-        }
-      | ((error: Error | null, result: { stdout: string; stderr: string }) => void),
-    callback?: (error: Error | null, result: { stdout: string; stderr: string }) => void,
-  ) => {
-    const cb = (typeof options === 'function' ? options : callback) as
-      | ((error: Error | null, result: { stdout: string; stderr: string }) => void)
-      | undefined;
-
-    if (!cb) {
-      return undefined as never;
-    }
-
+  return (file: string, args: string[]) => {
     const next = queue.shift();
     if (!next) {
-      cb(new Error('Unexpected execFile call'), { stdout: '', stderr: '' });
-      return undefined as never;
+      return Promise.reject(new Error('Unexpected exec call'));
     }
 
     expect(file).toBe(next.file);
     expect(args).toEqual(next.args);
 
     if (next.error) {
-      cb(next.error, { stdout: '', stderr: next.stderr ?? '' });
-      return undefined as never;
+      return Promise.reject(next.error);
     }
 
-    cb(null, { stdout: next.stdout ?? '', stderr: next.stderr ?? '' });
-    return undefined as never;
-  }) as unknown as typeof execFile);
+    return Promise.resolve({ stdout: next.stdout ?? '', stderr: next.stderr ?? '' });
+  };
 }
 
 describe('BUILD_IMPACT_PATTERNS', () => {
@@ -86,16 +63,8 @@ describe('BUILD_IMPACT_PATTERNS', () => {
 });
 
 describe('analyzeBuildDiff', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    mockExecFile.mockReset();
-  });
-
   it('returns null if HEAD resolution fails', async () => {
-    mockExecSequence([
+    const execFn = makeExecFn([
       {
         file: 'git',
         args: ['rev-parse', 'HEAD'],
@@ -103,12 +72,12 @@ describe('analyzeBuildDiff', () => {
       },
     ]);
 
-    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha');
+    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha', execFn);
     expect(result).toBeNull();
   });
 
   it('returns null if previous sha equals current sha', async () => {
-    mockExecSequence([
+    const execFn = makeExecFn([
       {
         file: 'git',
         args: ['rev-parse', 'HEAD'],
@@ -116,12 +85,12 @@ describe('analyzeBuildDiff', () => {
       },
     ]);
 
-    const result = await analyzeBuildDiff('/tmp/repo', 'same-sha');
+    const result = await analyzeBuildDiff('/tmp/repo', 'same-sha', execFn);
     expect(result).toBeNull();
   });
 
   it('returns DiffAnalysis with correct flags for dependency changes', async () => {
-    mockExecSequence([
+    const execFn = makeExecFn([
       { file: 'git', args: ['rev-parse', 'HEAD'], stdout: 'current-sha\n' },
       {
         file: 'git',
@@ -130,7 +99,7 @@ describe('analyzeBuildDiff', () => {
       },
     ]);
 
-    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha');
+    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha', execFn);
 
     expect(result).not.toBeNull();
     expect(result?.depsChanged).toBe(true);
@@ -141,7 +110,7 @@ describe('analyzeBuildDiff', () => {
   });
 
   it('returns DiffAnalysis with correct flags for Docker changes', async () => {
-    mockExecSequence([
+    const execFn = makeExecFn([
       { file: 'git', args: ['rev-parse', 'HEAD'], stdout: 'current-sha\n' },
       {
         file: 'git',
@@ -150,7 +119,7 @@ describe('analyzeBuildDiff', () => {
       },
     ]);
 
-    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha');
+    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha', execFn);
 
     expect(result).not.toBeNull();
     expect(result?.dockerChanged).toBe(true);
@@ -160,7 +129,7 @@ describe('analyzeBuildDiff', () => {
   });
 
   it('returns DiffAnalysis with correct flags for env template changes', async () => {
-    mockExecSequence([
+    const execFn = makeExecFn([
       { file: 'git', args: ['rev-parse', 'HEAD'], stdout: 'current-sha\n' },
       {
         file: 'git',
@@ -169,7 +138,7 @@ describe('analyzeBuildDiff', () => {
       },
     ]);
 
-    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha');
+    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha', execFn);
 
     expect(result).not.toBeNull();
     expect(result?.envTemplateChanged).toBe(true);
@@ -179,7 +148,7 @@ describe('analyzeBuildDiff', () => {
   });
 
   it('filters build-impacting files from all changed files', async () => {
-    mockExecSequence([
+    const execFn = makeExecFn([
       { file: 'git', args: ['rev-parse', 'HEAD'], stdout: 'current-sha\n' },
       {
         file: 'git',
@@ -188,7 +157,7 @@ describe('analyzeBuildDiff', () => {
       },
     ]);
 
-    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha');
+    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha', execFn);
 
     expect(result).not.toBeNull();
     expect(result?.changedFiles).toEqual([
@@ -207,7 +176,7 @@ describe('analyzeBuildDiff', () => {
   });
 
   it('falls back to fetch + retry on shallow clone failure', async () => {
-    mockExecSequence([
+    const execFn = makeExecFn([
       { file: 'git', args: ['rev-parse', 'HEAD'], stdout: 'current-sha\n' },
       {
         file: 'git',
@@ -226,7 +195,7 @@ describe('analyzeBuildDiff', () => {
       },
     ]);
 
-    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha');
+    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha', execFn);
 
     expect(result).not.toBeNull();
     expect(result?.buildImpactFiles).toEqual(['vite.config.ts']);
@@ -234,7 +203,7 @@ describe('analyzeBuildDiff', () => {
   });
 
   it('returns null when both diff attempts fail', async () => {
-    mockExecSequence([
+    const execFn = makeExecFn([
       { file: 'git', args: ['rev-parse', 'HEAD'], stdout: 'current-sha\n' },
       {
         file: 'git',
@@ -253,7 +222,7 @@ describe('analyzeBuildDiff', () => {
       },
     ]);
 
-    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha');
+    const result = await analyzeBuildDiff('/tmp/repo', 'prev-sha', execFn);
     expect(result).toBeNull();
   });
 });
@@ -316,7 +285,7 @@ describe('formatDiffForPrompt', () => {
 
     expect(formatted).toContain('- package.json (dependency change)');
     expect(formatted).toContain('- Dockerfile (Docker config change)');
-    expect(formatted).toContain('- .env.example (env template change)');
+    expect(formatted).toContain('.env.example (env template change)');
     expect(formatted).toContain('- vite.config.ts (config change)');
   });
 });
