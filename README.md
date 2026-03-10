@@ -82,6 +82,8 @@ openlander
 - **Project overview** — Status, deployment history, domains, environment variables at a glance
 - **Deployment history** — Every deploy with commit SHA, duration, status, and build logs
 - **Build log streaming** — Real-time build output as it happens
+- **Web terminal** — xterm.js terminal for exec'ing into running containers directly from the browser
+- **ANSI color rendering** — Docker build output and runtime logs render with proper colors
 - **AI analysis on failure** — When a build fails or container crashes, AI analysis appears inline
 - **Settings management** — AI provider, GitHub connection, global secrets
 - **Multilingual (i18n)** — Korean and English. Language selection during onboarding, applies to all UI and AI responses
@@ -180,6 +182,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.2.4** | Services              | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images                                             |
 | **v0.2.5** | Release Preparation   | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                                      |
 | **v0.2.6** | Shared Mode & Preview | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys                    |
+| **v0.3.0** | Developer Experience  | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure       |
 | **v1.0.0** | First Stable Release  | Next   | AI co-pilot (7 features), agent enhancement (MCP agentic tool, channel streaming, deploy orchestrator), 531 tests |
 
 ## Requirements

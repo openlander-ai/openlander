@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - Developer Experience
+
+### Added
+
+- Real-time Docker build output streaming via SSE (`build:output` event with 50ms throttle)
+- ANSI escape sequence rendering as colored HTML in LogViewer, LogPreview, and DeploymentDetail
+- Web terminal (xterm.js) with WebSocket connection to Docker exec for container shell access
+- Terminal security: origin validation, rate limiting (100 msg/s), 30-minute idle timeout
+- WebSocket infrastructure via `@hono/node-ws` with `createNodeWebSocket`
+- Full Docker build output stored in `deploy_logs.build_log` (previously only 4 summary lines)
+- Terminal tab in ProjectDetail with connection state management and reconnect button
+- ANSI utility module (`web/src/lib/ansi.ts`) with `parseAnsiLine()` and `stripAnsi()`
+- 19 new backend tests: terminal message routing, idle timeout, rate limiting, build event streaming
+
 ## [0.2.7] - Pre-build Diff Analysis
 
 ### Added
