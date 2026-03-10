@@ -18,6 +18,7 @@ import { ContainerNotFoundError, DockerfileNotFoundError, PreflightCheckError } 
 import { detectFramework, ensureDockerfile, parseDockerfileExposePort } from './dockerfile-gen.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { detectNewEnvKeys } from './env-inject.js';
+import { filterBuildTimeVars, injectBuildArgs } from './build-args.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from './diff-analysis.js';
 import { scanForSecrets } from './secret-scan.js';
 import type { JobManager } from './job-manager.js';
@@ -431,6 +432,18 @@ export class DeployPipeline {
         buildLog += '[dockerfile] Found Dockerfile\n';
       }
 
+      // Inject build-time ARGs into Dockerfile before building
+      const allEnvVarsForBuild = { ...config.envVars, ...this.env.getMergedForDeploy(projectId) };
+      const buildTimeVars = filterBuildTimeVars(allEnvVarsForBuild);
+      if (Object.keys(buildTimeVars).length > 0) {
+        const dfContent = readFileSync(dockerfilePath, 'utf8');
+        writeFileSync(
+          dockerfilePath,
+          injectBuildArgs(dfContent, Object.keys(buildTimeVars)),
+          'utf8',
+        );
+      }
+
       // Step 3: docker build
       const buildStart = Date.now();
       let lastBuildOutputEmit = 0;
@@ -438,6 +451,7 @@ export class DeployPipeline {
       this.jobManager?.updatePhase(projectId, 'building');
       await this.docker.buildImage(cloneResult.path, imageTag, {
         noCache: config._noCacheBuild === true,
+        buildArgs: buildTimeVars,
         onProgress: (event) => {
           const line = event.stream?.trim() ?? event.error ?? '';
           if (!line) return;
@@ -771,13 +785,23 @@ export class DeployPipeline {
         try {
           this.jobManager?.updatePhase(childId, 'building');
           const contextPath = join(config.clonePath, dirname(dockerfilePath));
-          await this.docker.buildImage(contextPath, imageTag);
+          const envVars = { ...config.envVars, ...this.env.getMergedForDeploy(childId) };
+          const buildTimeVarsForChild = filterBuildTimeVars(envVars);
+          if (Object.keys(buildTimeVarsForChild).length > 0) {
+            const childDfPath = join(config.clonePath, dockerfilePath);
+            const dfContent = readFileSync(childDfPath, 'utf8');
+            writeFileSync(
+              childDfPath,
+              injectBuildArgs(dfContent, Object.keys(buildTimeVarsForChild)),
+              'utf8',
+            );
+          }
+          await this.docker.buildImage(contextPath, imageTag, { buildArgs: buildTimeVarsForChild });
 
           this.jobManager?.updatePhase(childId, 'starting');
           const port = await allocatePort(this.db, this.docker);
           const childDockerfilePath = join(config.clonePath, dockerfilePath);
           const childContainerPort = parseDockerfileExposePort(childDockerfilePath) ?? port;
-          const envVars = { ...config.envVars, ...this.env.getMergedForDeploy(childId) };
           const traefikLabels = buildTraefikLabels(childName.replace('/', '-'), childContainerPort);
 
           const containerId = await this.docker.runContainer({
