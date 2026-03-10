@@ -2,10 +2,12 @@ import { Hono } from 'hono';
 
 import type { Database } from '../../db/index.js';
 import type { CloudflareTunnelManager } from '../../pipeline/cloudflare.js';
+import type { TraefikManager } from '../../pipeline/traefik.js';
 
 interface DomainRouteContext {
   db: Database;
   cloudflare: CloudflareTunnelManager;
+  traefik: TraefikManager;
 }
 
 export function createDomainRoutes(ctx: DomainRouteContext): Hono {
@@ -24,6 +26,13 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
     }
 
     const domain = normalizeDomainParam(body.domain);
+
+    // Ensure Traefik has File Provider before adding domain routes
+    try {
+      await ctx.traefik.start();
+    } catch {
+      /* startup handles errors */
+    }
 
     try {
       await ctx.cloudflare.createTunnel(project.id, domain);

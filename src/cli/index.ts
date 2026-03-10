@@ -53,16 +53,12 @@ program
       ctx.agent.setTools(tools);
     }
 
-    // Step 3: Traefik (auto-start, non-blocking)
-    const traefikOk = await ctx.traefik.isRunning();
-    if (!traefikOk) {
-      try {
-        await ctx.traefik.start();
-        console.log(pc.green('  ✓ Traefik started'));
-      } catch (err) {
-        log.debug({ err }, 'Traefik start failed');
-        console.log(pc.yellow('  ⚠ Traefik could not start'));
-      }
+    // Step 3: Traefik (auto-start or upgrade if config is outdated)
+    try {
+      await ctx.traefik.start();
+    } catch (err) {
+      log.debug({ err }, 'Traefik start failed');
+      console.log(pc.yellow('  ⚠ Traefik could not start'));
     }
 
     if (options.tui) {

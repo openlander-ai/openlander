@@ -367,16 +367,26 @@ export class CloudflareTunnelManager {
     if (!response.ok) {
       let detail = response.statusText;
       try {
-        const errorBody = (await response.json()) as CloudflareApiResponse<unknown>;
-        if (errorBody.errors.length > 0) {
-          detail = errorBody.errors
-            .map((e) => `${e.message} (code: ${String(e.code ?? 'unknown')})`)
-            .join('; ');
+        const text = await response.text();
+        try {
+          const errorBody = JSON.parse(text) as CloudflareApiResponse<unknown>;
+          if (Array.isArray(errorBody.errors) && errorBody.errors.length > 0) {
+            detail = errorBody.errors
+              .map((e) => `${e.message} (code: ${String(e.code ?? 'unknown')})`)
+              .join('; ');
+          } else if (text.length < 500) {
+            detail = text;
+          }
+        } catch {
+          if (text.length < 500) detail = text;
         }
       } catch {
-        // response body not JSON
+        // Could not read response body
       }
-      log.error({ status: response.status, detail, path }, 'Cloudflare API request failed');
+      log.error(
+        { status: response.status, detail, path, method: init?.method ?? 'GET' },
+        'Cloudflare API request failed',
+      );
       throw new Error(`Cloudflare API request failed (${String(response.status)}): ${detail}`);
     }
 
