@@ -680,6 +680,13 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         }),
       );
 
+      unsubscribers.push(
+        eventBus.on('build:output', (payload) => {
+          if (payload.projectId !== project.id) return;
+          write({ type: 'log', message: payload.line, projectId: project.id });
+        }),
+      );
+
       // Auto-close stream after 5 min timeout (safety net for auto-recovery)
       const streamTimeout = setTimeout(
         () => {

@@ -56,6 +56,7 @@ export interface AllContainerInfo {
 
 export interface BuildImageOptions {
   noCache?: boolean;
+  onProgress?: (event: { stream?: string; error?: string }) => void;
 }
 
 /** Health check result from post-deploy container monitoring. */
@@ -187,6 +188,7 @@ export class Docker {
             buildError += event.error + '\n';
             buildLog += `ERROR: ${event.error}\n`;
           }
+          options?.onProgress?.(event);
         },
       );
     });

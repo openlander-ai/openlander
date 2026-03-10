@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Terminal, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
-import { useLogStream } from '@/hooks/use-log-stream';
+import { useTimeline } from '@/hooks/use-timeline';
 import { cn } from '@/lib/utils';
+import { parseAnsiLine } from '@/lib/ansi';
 
 interface LogPreviewProps {
   projectId: string;
@@ -11,9 +12,8 @@ interface LogPreviewProps {
 
 export function LogPreview({ projectId, status, onOpenLogs }: LogPreviewProps) {
   const [isOpen, setIsOpen] = useState(true);
-  const { entries } = useLogStream({
+  const { items } = useTimeline({
     projectId,
-    follow: true,
     enabled: isOpen || status === 'building',
   });
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -30,11 +30,19 @@ export function LogPreview({ projectId, status, onOpenLogs }: LogPreviewProps) {
     if (scrollRef.current && isOpen) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [entries, isOpen]);
+  }, [items, isOpen]);
+
+  // Filter to only show log and status entries
+  const logItems = items.filter(
+    (item) =>
+      item.type === 'log' ||
+      item.type === 'progress' ||
+      item.type === 'error' ||
+      item.type === 'success',
+  );
 
   // Get last 20 entries
-  const displayEntries = entries.slice(-20);
-
+  const displayEntries = logItems.slice(-20);
   return (
     <div className="border-t border-[hsl(var(--border))] bg-bg-panel flex flex-col shrink-0">
       <div
@@ -85,10 +93,14 @@ export function LogPreview({ projectId, status, onOpenLogs }: LogPreviewProps) {
                 key={entry.id}
                 className={cn(
                   'break-all whitespace-pre-wrap',
-                  entry.stream === 'stderr' ? 'text-error' : 'text-secondary-ol',
+                  entry.type === 'error' ? 'text-error' : 'text-secondary-ol',
                 )}
               >
-                {entry.line}
+                {entry.type === 'log' ? (
+                  <span dangerouslySetInnerHTML={{ __html: parseAnsiLine(entry.title) }} />
+                ) : (
+                  entry.title
+                )}
               </div>
             ))
           )}

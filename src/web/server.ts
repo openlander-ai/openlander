@@ -1,4 +1,5 @@
-import { serve, createAdaptorServer } from '@hono/node-server';
+import { createAdaptorServer } from '@hono/node-server';
+import { createNodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -12,10 +13,12 @@ import { createDomainRoutes } from './api/domain-routes.js';
 import { createSetupRoutes } from './api/setup-routes.js';
 import { createAuthRoutes } from './api/auth-routes.js';
 import { createChatRoutes } from './api/chat-routes.js';
+import { createTerminalRoutes } from './api/terminal-routes.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
 import type { AppContext } from '../app.js';
+import type { NodeWebSocket } from '@hono/node-ws';
 const log = createModuleLogger('web');
 
 import { createModuleLogger } from '../lib/logger.js';
@@ -67,8 +70,15 @@ export interface ServerOptions {
  * Build the Hono application with all routes and middleware.
  * Shared by both TCP createServer and Unix socket startDaemon.
  */
-function createApp(ctx: AppContext): Hono {
-  const app = new Hono();
+interface CreateAppOptions {
+  app?: Hono;
+  upgradeWebSocket?: UpgradeWebSocketHandler;
+}
+
+export type UpgradeWebSocketHandler = NodeWebSocket['upgradeWebSocket'];
+
+function createApp(ctx: AppContext, options: CreateAppOptions = {}): Hono {
+  const app = options.app ?? new Hono();
 
   // Middleware — suppress HTTP request logs when TUI is active
   if (!process.env['OPENLANDER_TUI']) {
@@ -125,6 +135,9 @@ function createApp(ctx: AppContext): Hono {
 
   const chatRoutes = createChatRoutes(ctx);
   app.route('/api', chatRoutes);
+
+  const terminalRoutes = createTerminalRoutes(ctx, options.upgradeWebSocket);
+  app.route('/api', terminalRoutes);
 
   // v0.2: Domain management routes
   const domainRoutes = createDomainRoutes(ctx);
@@ -244,14 +257,18 @@ function createApp(ctx: AppContext): Hono {
  */
 export function createServer(options: ServerOptions, ctx: AppContext): void {
   serverStartTime = Date.now();
-  const app = createApp(ctx);
+  const app = new Hono();
+  const wsAdapter = createNodeWebSocket({ app });
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const { injectWebSocket, upgradeWebSocket } = wsAdapter;
+  createApp(ctx, { app, upgradeWebSocket });
 
-  // Start server
-  serve({
-    fetch: app.fetch,
-    port: options.port,
-    hostname: options.host,
+  const server = createAdaptorServer(app);
+
+  server.listen(options.port, options.host, () => {
+    log.info({ port: options.port }, 'Server listening');
   });
+  injectWebSocket(server);
 
   // v0.2: Start health monitoring
   ctx.healthMonitor.start();

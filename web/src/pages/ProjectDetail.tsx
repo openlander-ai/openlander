@@ -31,6 +31,7 @@ import { DomainsPanel } from '@/components/config/DomainsPanel';
 import { PRPreviewsList } from '@/components/timeline/PRPreviewsList';
 import { ShareDialog } from '@/components/sidebar/ShareDialog';
 import { AssistantPanel } from '@/components/assistant/AssistantPanel';
+import { TerminalPanel } from '@/components/terminal/TerminalPanel';
 import { formatRelativeTime } from '@/lib/time';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Project, DeployLogSummary } from '@/types';
@@ -60,6 +61,7 @@ import {
   Trash2,
   Plus,
   Brain,
+  SquareTerminal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/lib/event-types';
@@ -970,6 +972,13 @@ export function ProjectDetail() {
                 {'Logs'}
               </TabsTrigger>
               <TabsTrigger
+                value="terminal"
+                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+              >
+                <SquareTerminal className="h-3.5 w-3.5" />
+                {'Terminal'}
+              </TabsTrigger>
+              <TabsTrigger
                 value="config"
                 className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
               >
@@ -1032,6 +1041,12 @@ export function ProjectDetail() {
 
             <TabsContent value="logs" className="flex-1 min-h-0 mt-0 relative">
               {id && <LogViewer projectId={id} />}
+            </TabsContent>
+
+            <TabsContent value="terminal" className="flex-1 min-h-0 mt-0 p-4">
+              {id && activeTab === 'terminal' && (
+                <TerminalPanel projectId={id} isActive={project.status === 'running'} />
+              )}
             </TabsContent>
 
             <TabsContent value="config" className="flex-1 min-h-0 mt-0 overflow-auto">

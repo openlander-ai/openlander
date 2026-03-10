@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
+import { parseAnsiLine } from '@/lib/ansi';
 
 function formatDuration(ms: number) {
   const seconds = Math.floor(ms / 1000);
@@ -188,16 +189,18 @@ export function DeploymentDetail() {
           </div>
         )}
 
-        <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] bg-gray-900 overflow-hidden">
+        <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] bg-[#0a0a0a] overflow-hidden">
           <div className="flex items-center px-4 py-2 border-b border-gray-800 bg-gray-950">
             <span className="text-xs font-mono text-gray-400">{'build_log'}</span>
           </div>
           <div className="flex-1 overflow-auto p-4">
             {deployment.buildLog ? (
-              <pre className="text-[13px] font-mono text-gray-300 whitespace-pre-wrap break-all">
-                {deployment.buildLog}
+              <div className="text-[13px] font-mono text-gray-300 whitespace-pre-wrap break-all">
+                {deployment.buildLog.split('\n').map((line, i) => (
+                  <div key={i} dangerouslySetInnerHTML={{ __html: parseAnsiLine(line) }} />
+                ))}
                 <div ref={logEndRef} />
-              </pre>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-full text-sm font-mono text-gray-500">
                 {t('deploy.noBuildLog')}

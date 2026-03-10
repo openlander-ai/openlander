@@ -4,6 +4,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLogStream, type LogEntry } from '@/hooks/use-log-stream';
 import { cn } from '@/lib/utils';
 import { Search, ArrowDown, Trash2, Radio } from 'lucide-react';
+import { parseAnsiLine, stripAnsi } from '@/lib/ansi';
 
 interface LogViewerProps {
   projectId: string;
@@ -11,7 +12,7 @@ interface LogViewerProps {
 
 /** Detect log level from line content */
 function detectLevel(line: string): 'error' | 'warn' | 'info' | 'debug' | 'plain' {
-  const lower = line.toLowerCase();
+  const lower = stripAnsi(line).toLowerCase();
   if (/\berror\b|\bfatal\b|\bpanic\b/.test(lower)) return 'error';
   if (/\bwarn(ing)?\b/.test(lower)) return 'warn';
   if (/\binfo\b/.test(lower)) return 'info';
@@ -47,15 +48,24 @@ export function LogViewer({ projectId }: LogViewerProps) {
     try {
       if (isRegex) {
         const regex = new RegExp(searchQuery, 'i');
-        return entries.filter((e) => regex.test(e.line));
+        return entries.filter((e) => regex.test(stripAnsi(e.line)));
       }
       const lower = searchQuery.toLowerCase();
-      return entries.filter((e) => e.line.toLowerCase().includes(lower));
+      return entries.filter((e) => stripAnsi(e.line).toLowerCase().includes(lower));
     } catch {
       // Invalid regex — show all
       return entries;
     }
   }, [entries, searchQuery, isRegex]);
+
+  // Memoize parsed ANSI HTML
+  const parsedLines = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of filteredEntries) {
+      map.set(entry.id, parseAnsiLine(entry.line));
+    }
+    return map;
+  }, [filteredEntries]);
 
   // Virtual list
   const virtualizer = useVirtualizer({
@@ -209,9 +219,10 @@ export function LogViewer({ projectId }: LogViewerProps) {
                     {virtualItem.index + 1}
                   </span>
                   {/* Content */}
-                  <span className={cn('flex-1 whitespace-pre', levelColors[level])}>
-                    {entry.line}
-                  </span>
+                  <span
+                    className={cn('flex-1 whitespace-pre', levelColors[level])}
+                    dangerouslySetInnerHTML={{ __html: parsedLines.get(entry.id) || '' }}
+                  />
                 </div>
               );
             })}

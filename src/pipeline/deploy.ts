@@ -433,10 +433,31 @@ export class DeployPipeline {
 
       // Step 3: docker build
       const buildStart = Date.now();
+      let lastBuildOutputEmit = 0;
+      let dockerBuildOutput = '';
       this.jobManager?.updatePhase(projectId, 'building');
       await this.docker.buildImage(cloneResult.path, imageTag, {
         noCache: config._noCacheBuild === true,
+        onProgress: (event) => {
+          const line = event.stream?.trim() ?? event.error ?? '';
+          if (!line) return;
+
+          dockerBuildOutput += line + '\n';
+
+          const now = Date.now();
+          if (now - lastBuildOutputEmit <= 50) return;
+          lastBuildOutputEmit = now;
+
+          void eventBus.emit('build:output', {
+            projectId,
+            line,
+            stream: event.error ? 'error' : 'stdout',
+          });
+        },
       });
+      if (dockerBuildOutput) {
+        buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
+      }
       const buildDuration = Date.now() - buildStart;
 
       await eventBus.emit('deploy:build', {

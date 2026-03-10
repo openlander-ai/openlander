@@ -23,6 +23,7 @@ export interface BuildStreamEvent {
   id?: string;
   type:
     | 'status'
+    | 'log'
     | 'complete'
     | 'error'
     | 'question_pending'
@@ -74,6 +75,7 @@ export interface TimelineItem {
   id: string;
   type:
     | 'progress'
+    | 'log'
     | 'success'
     | 'error'
     | 'question'
@@ -140,6 +142,14 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
   const progressPercent = event.percent ?? estimatePercent(event.message);
 
   switch (event.type) {
+    case 'log':
+      return {
+        id,
+        type: 'log',
+        timestamp: event.timestamp,
+        title: event.message,
+        percent: -1,
+      };
     case 'complete':
       return {
         id,

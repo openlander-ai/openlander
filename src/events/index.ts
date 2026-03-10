@@ -34,6 +34,7 @@ export type EventType =
   | 'build:suggest'
   | 'build:inform'
   | 'build:dockerfile-fixed'
+  | 'build:output'
   | 'compose:start'
   | 'compose:up'
   | 'compose:down'
@@ -114,6 +115,7 @@ export interface EventPayload {
     explanation: string;
     retryCount: number;
   };
+  'build:output': { projectId: string; line: string; stream: 'stdout' | 'error' };
   'compose:start': { projectId: string; composePath: string; serviceCount: number };
   'compose:up': { projectId: string; services: string[] };
   'compose:down': { projectId: string };
