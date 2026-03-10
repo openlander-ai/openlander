@@ -813,7 +813,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const postmortem = getPostmortemInstance();
     const entry = postmortem?.getLatest(id);
     if (!entry) {
-      return c.json({ error: 'No postmortem available' }, 404);
+      return c.body(null, 204);
     }
     return c.json({
       projectId: entry.projectId,

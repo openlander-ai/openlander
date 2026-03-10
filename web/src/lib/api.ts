@@ -700,6 +700,7 @@ export interface PostmortemData {
 
 export async function getPostmortem(projectId: string): Promise<PostmortemData | null> {
   const res = await fetch(`/api/projects/${projectId}/postmortem/latest`);
+  if (res.status === 204) return null;
   if (!res.ok) return null;
   return res.json();
 }

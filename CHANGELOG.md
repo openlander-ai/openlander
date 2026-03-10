@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - UI Polish & Terminal Fallback
+
+### Added
+
+- Terminal shell fallback regression tests covering bash success, sh fallback, and distroless no-shell handling
+
+### Changed
+
+- Overview now shows summary dashboard cards for stable states and reserves timeline/log preview for `building` and `error` states
+- Console now prioritizes logs with terminal hidden behind an explicit toggle by default
+
+### Fixed
+
+- Terminal shell detection now probes `/bin/bash` and `/bin/sh` before opening an interactive exec session, preventing garbled OCI errors on Alpine/slim images
+- Missing postmortem responses now return `204 No Content`, removing noisy browser console 404s when no report exists
+
 ## [0.3.0] - Developer Experience
 
 ### Added

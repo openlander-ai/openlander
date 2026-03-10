@@ -104,6 +104,10 @@ export function ProjectDetail() {
         const res = await fetch(`/api/projects/${id}/postmortem/latest`, {
           signal: controller.signal,
         });
+        if (res.status === 204) {
+          setPostmortem(null);
+          return;
+        }
         if (!res.ok) {
           setPostmortem(null);
           return;

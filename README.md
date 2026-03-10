@@ -183,6 +183,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.2.5** | Release Preparation   | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                                      |
 | **v0.2.6** | Shared Mode & Preview | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys                    |
 | **v0.3.0** | Developer Experience  | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure       |
+| **v0.3.1** | UI Polish & Stability | Done   | Terminal shell probing for Alpine/slim images, log-first console layout, overview summary dashboard, v0.3.1 ship  |
 | **v1.0.0** | First Stable Release  | Next   | AI co-pilot (7 features), agent enhancement (MCP agentic tool, channel streaming, deploy orchestrator), 531 tests |
 
 ## Requirements
