@@ -101,6 +101,50 @@ export function detectFramework(projectPath: string): FrameworkDetection {
       };
     }
 
+    if (hasKey(deps, '@nestjs/core')) {
+      return { framework: 'nestjs', language: 'node', startCommand: 'npm start', port: 3000 };
+    }
+
+    if (hasKey(deps, '@remix-run/node') || hasKey(deps, '@remix-run/react')) {
+      return {
+        framework: 'remix',
+        language: 'node',
+        buildCommand: 'npm run build',
+        startCommand: 'npm start',
+        port: 3000,
+      };
+    }
+
+    if (hasKey(deps, 'astro') || hasKey(devDeps, 'astro')) {
+      return {
+        framework: 'astro',
+        language: 'node',
+        buildCommand: 'npm run build',
+        startCommand: 'nginx -g "daemon off;"',
+        port: 3000,
+      };
+    }
+
+    if (hasKey(deps, 'nuxt') || hasKey(devDeps, 'nuxt')) {
+      return {
+        framework: 'nuxt',
+        language: 'node',
+        buildCommand: 'npm run build',
+        startCommand: 'npm start',
+        port: 3000,
+      };
+    }
+
+    if (hasKey(deps, '@sveltejs/kit') || hasKey(devDeps, '@sveltejs/kit')) {
+      return {
+        framework: 'sveltekit',
+        language: 'node',
+        buildCommand: 'npm run build',
+        startCommand: 'npm start',
+        port: 3000,
+      };
+    }
+
     if (hasKey(deps, 'express')) {
       return {
         framework: 'express',
@@ -133,6 +177,19 @@ export function detectFramework(projectPath: string): FrameworkDetection {
     const requirementsContent = readTextIfExists(requirementsPath);
     const pyprojectContent = readTextIfExists(pyprojectPath);
     const pythonSpec = `${requirementsContent}\n${pyprojectContent}`.toLowerCase();
+
+    if (pythonSpec.includes('gradio')) {
+      return { framework: 'gradio', language: 'python', startCommand: 'python app.py', port: 7860 };
+    }
+
+    if (pythonSpec.includes('streamlit')) {
+      return {
+        framework: 'streamlit',
+        language: 'python',
+        startCommand: 'streamlit run app.py --server.address=0.0.0.0 --server.port=8501',
+        port: 8501,
+      };
+    }
 
     if (pythonSpec.includes('fastapi')) {
       return {
@@ -427,6 +484,96 @@ USER app
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:80/ || exit 1
 CMD ["nginx", "-g", "daemon off;"]
+`;
+
+    case 'nestjs':
+      return `FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build && npm prune --omit=dev
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder --chown=node:node /app ./
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node -e "require('http').get('http://127.0.0.1:3000', (res) => process.exit(res.statusCode >= 500 ? 1 : 0)).on('error', () => process.exit(1))"
+CMD ["node", "dist/main.js"]
+`;
+
+    case 'remix':
+    case 'nuxt':
+    case 'sveltekit':
+      return `FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build && npm prune --omit=dev
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder --chown=node:node /app ./
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD node -e "require('http').get('http://127.0.0.1:3000', (res) => process.exit(res.statusCode >= 500 ? 1 : 0)).on('error', () => process.exit(1))"
+CMD ["npm", "start"]
+`;
+
+    case 'astro':
+      return `FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:1.27.4-alpine AS runner
+RUN addgroup -S app && adduser -S app -G app \
+  && sed -i 's|pid.*nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+  && rm -f /etc/nginx/conf.d/default.conf \
+  && printf 'server {\\n  listen 3000;\\n  server_name _;\\n  root /usr/share/nginx/html;\\n  index index.html;\\n  location / {\\n    try_files $uri $uri/ /index.html;\\n  }\\n}\\n' > /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+RUN chown -R app:app /usr/share/nginx/html /var/cache/nginx /var/run /var/log/nginx
+USER app
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1
+CMD ["nginx", "-g", "daemon off;"]
+`;
+
+    case 'gradio':
+      return `FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 7860
+ENV GRADIO_SERVER_NAME=0.0.0.0
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860')"
+CMD ["python", "app.py"]
+`;
+
+    case 'streamlit':
+      return `FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8501
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501')"
+CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
 `;
 
     default:

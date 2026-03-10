@@ -537,7 +537,7 @@ describe('Web API Routes', () => {
 
     const body = await res.json();
     expect(body.status).toBe('removed');
-    expect(ctx.pipeline.remove).toHaveBeenCalledWith('p1');
+    expect(ctx.pipeline.remove).toHaveBeenCalledWith('p1', ctx.cloudflare);
   });
 
   // ---------------------------------------------------------------------------
