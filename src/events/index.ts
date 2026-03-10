@@ -27,6 +27,7 @@ export type EventType =
   | 'deploy:auto-detect'
   | 'deploy:success'
   | 'deploy:failed'
+  | 'deploy:needs-user-action'
   | 'deploy:crash'
   | 'deploy:rollback'
   | 'build:autofix'
@@ -94,6 +95,13 @@ export interface EventPayload {
     error: string;
     buildLog?: string;
     diffContext?: string;
+  };
+  'deploy:needs-user-action': {
+    projectId: string;
+    category: string;
+    title: string;
+    description: string;
+    userSteps: Array<{ label: string; actionUrl?: string }>;
   };
   'deploy:crash': { projectId: string; containerId: string; error?: string; exitCode?: number };
   'deploy:rollback': { projectId: string; fromImage: string; toImage: string };

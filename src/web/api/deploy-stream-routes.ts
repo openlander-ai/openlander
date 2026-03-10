@@ -75,6 +75,22 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         }),
       );
 
+      unsubscribers.push(
+        eventBus.on('deploy:needs-user-action', (payload) => {
+          if (payload.projectId !== project.id) return;
+          void s.write(
+            JSON.stringify({
+              percent: -1,
+              step: 'User action required',
+              error: payload.title,
+              detail: payload.description,
+              userSteps: payload.userSteps,
+            }) + '\n',
+          );
+          void s.close();
+        }),
+      );
+
       s.onAbort(() => {
         for (const unsub of unsubscribers) {
           unsub();
@@ -550,6 +566,18 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           emitTimelineEvent({
             type: 'status',
             message: `Dockerfile fixed (attempt ${String(payload.retryCount)}/3): ${payload.changes.join(', ')}`,
+            projectId: project.id,
+          });
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('deploy:needs-user-action', (payload) => {
+          if (payload.projectId !== project.id) return;
+          emitTimelineEvent({
+            type: 'error',
+            message: payload.title,
+            detail: payload.description,
             projectId: project.id,
           });
         }),

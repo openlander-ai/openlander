@@ -20,6 +20,7 @@ import { PreviewDeployer } from './pipeline/preview.js';
 import { JobManager } from './pipeline/job-manager.js';
 import { ComposePipeline } from './pipeline/compose.js';
 import { AutoDetector } from './pipeline/auto-detect.js';
+import { dispatchRecovery, type RecoveryPlan } from './pipeline/recovery-dispatch.js';
 import { AlertMonitor } from './monitor/alerts.js';
 import { IncidentReporter } from './monitor/incident-reporter.js';
 import {
@@ -260,6 +261,28 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
       const advisoryPatterns = [/disk space/i, /no space left/i, /out of memory/i, /killed/i];
       const isAdvisory = advisoryPatterns.some((p) => p.test(error));
 
+      const plan: RecoveryPlan = dispatchRecovery(
+        step ?? 'unknown',
+        error,
+        buildLog,
+        config.language,
+      );
+
+      if (plan.fixability === 'user' || plan.fixability === 'report') {
+        await eventBus.emit('deploy:needs-user-action', {
+          projectId,
+          category: plan.category,
+          title: plan.title,
+          description: plan.description,
+          userSteps: plan.userSteps,
+        });
+        log.info(
+          { projectId, category: plan.category, fixability: plan.fixability },
+          'Recovery dispatch: user action required, skipping agent',
+        );
+        return;
+      }
+
       attempts.count++;
       attempts.lastError = normalizeError(error);
       recoveryAttempts.set(projectId, attempts);
@@ -304,15 +327,12 @@ ${buildLog.slice(-3000)}`
             : ''
         }
 
-## Recovery Instructions
-1. If build log is provided above, analyze it directly. Otherwise call debug_build_error("${projectName}") to get the full diagnosis.
-2. Based on the root cause:
-   - Missing env vars → ask_user_question (options: []) for values → set_env_vars → deploy_project
-   - Build/Dockerfile error → call debug_build_error for diagnosis, then deploy_project to retry
-   - Configuration error → use set_env_vars or restart_project as appropriate
-   - Source code / test failure → STOP. Report the root cause and next steps. Do NOT retry.
-3. After fixing, redeploy with deploy_project("${projectName}").
-4. Do NOT just suggest fixes — execute them.`;
+${plan.agentGuidance}
+
+## General Recovery Rules
+1. If build log is provided above, analyze it directly. Otherwise call debug_build_error("${projectName}").
+2. After fixing, redeploy with deploy_project("${projectName}").
+3. Do NOT just suggest fixes — execute them.`;
 
         if (isAdvisory) {
           recoveryMessage +=
