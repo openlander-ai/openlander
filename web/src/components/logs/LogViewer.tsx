@@ -60,7 +60,7 @@ export function LogViewer({ projectId }: LogViewerProps) {
 
   // Memoize parsed ANSI HTML
   const parsedLines = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<number, string>();
     for (const entry of filteredEntries) {
       map.set(entry.id, parseAnsiLine(entry.line));
     }
