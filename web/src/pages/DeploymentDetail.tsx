@@ -6,7 +6,6 @@ import { formatRelativeTime } from '@/lib/time';
 import type { DeployLogDetail } from '@/types';
 import {
   ArrowLeft,
-  Loader2,
   GitCommit,
   Clock,
   AlertTriangle,

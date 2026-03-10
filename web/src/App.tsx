@@ -77,18 +77,6 @@ function App() {
           toastOptions={{
             className: 'bg-bg-panel border-border text-primary-ol font-body',
             descriptionClassName: 'text-muted-ol',
-            success: {
-              iconTheme: {
-                primary: 'var(--color-success)',
-                secondary: 'var(--bg-panel)',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: 'var(--color-error)',
-                secondary: 'var(--bg-panel)',
-              },
-            },
           }}
         />
         <BrowserRouter>

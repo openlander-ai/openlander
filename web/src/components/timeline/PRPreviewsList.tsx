@@ -5,7 +5,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { getProjectPreviews, deleteProjectPreview, type PRPreview } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { GitPullRequest, ExternalLink, Loader2, Trash2, Clock, Copy, Check } from 'lucide-react';
+import { GitPullRequest, ExternalLink, Trash2, Clock, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface PRPreviewsListProps {

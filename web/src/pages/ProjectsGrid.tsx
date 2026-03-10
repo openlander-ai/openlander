@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
-import { Plus, ExternalLink, GitBranch, Clock, RotateCw, Settings, Loader2 } from 'lucide-react';
+import { Plus, ExternalLink, GitBranch, Clock, RotateCw, Settings } from 'lucide-react';
 
 function getStatusConfig(): Record<string, { label: string; dot: string; badge: string }> {
   return {

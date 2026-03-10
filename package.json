@@ -69,6 +69,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.26.0",
+    "@playwright/test": "^1.58.2",
     "@types/better-sqlite3": "^7.6.12",
     "@types/dockerode": "^3.3.34",
     "@types/node": "^25.3.0",
