@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
+import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 import { getProjectEnv, updateProjectEnv } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Eye, EyeOff, Plus, Trash2, ClipboardPaste, Save, Loader2 } from 'lucide-react';
@@ -57,8 +59,10 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       }
       await updateProjectEnv(projectId, envMap);
       setDirty(false);
+      toast.success('Environment variables saved');
     } catch (err) {
       console.error('Failed to save env vars:', err);
+      toast.error('Failed to save environment variables');
     } finally {
       setSaving(false);
     }
@@ -121,8 +125,28 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-agent" />
+      <div className="space-y-4 p-4">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-4 w-24" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-7 w-24" />
+            <Skeleton className="h-7 w-16" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 px-2 pb-1">
+            <Skeleton className="h-3 w-12" />
+            <Skeleton className="h-3 w-12" />
+          </div>
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 items-center">
+              <Skeleton className="h-8 w-full rounded-md" />
+              <Skeleton className="h-8 w-full rounded-md" />
+              <Skeleton className="h-6 w-6 rounded" />
+              <Skeleton className="h-6 w-6 rounded" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

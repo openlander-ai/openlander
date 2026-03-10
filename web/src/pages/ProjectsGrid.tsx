@@ -5,6 +5,9 @@ import { redeployProject } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { Plus, ExternalLink, GitBranch, Clock, RotateCw, Settings, Loader2 } from 'lucide-react';
 
 function getStatusConfig(): Record<string, { label: string; dot: string; badge: string }> {
@@ -38,6 +41,7 @@ export function ProjectsGrid() {
   const { projects, loading, refetch } = useProjects();
   const { t } = useLanguage();
   const statusConfig = getStatusConfig();
+  const [redeployingId, setRedeployingId] = useState<string | null>(null);
 
   const handleRedeploy = async (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();
@@ -45,18 +49,50 @@ export function ProjectsGrid() {
       showMobileToast();
       return;
     }
+    setRedeployingId(projectId);
     try {
       await redeployProject(projectId);
       refetch();
     } catch (err) {
       console.error('Redeploy failed:', err);
+    } finally {
+      setRedeployingId(null);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-agent" />
+      <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <Skeleton className="h-7 w-32 mb-2" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <Skeleton className="h-8 w-28" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 h-[104px] flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Skeleton className="h-2.5 w-2.5 rounded-full" />
+                  <Skeleton className="h-5 w-32" />
+                </div>
+                <Skeleton className="h-5 w-16 rounded" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-48" />
+                <div className="flex gap-3">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -168,9 +204,14 @@ export function ProjectsGrid() {
                 <div className="absolute bottom-0 left-0 right-0 flex items-center justify-end gap-1 p-2 bg-gradient-to-t from-bg-panel via-bg-panel/95 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                   <button
                     onClick={(e) => handleRedeploy(e, project.id)}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-body text-secondary-ol hover:text-agent hover:bg-agent/10 transition-colors"
+                    disabled={redeployingId === project.id}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-body text-secondary-ol hover:text-agent hover:bg-agent/10 transition-colors disabled:opacity-50"
                   >
-                    <RotateCw className="h-3 w-3" />
+                    {redeployingId === project.id ? (
+                      <Spinner className="h-3 w-3" />
+                    ) : (
+                      <RotateCw className="h-3 w-3" />
+                    )}
                     {'Redeploy'}
                   </button>
                   <button

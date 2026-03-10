@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '@/i18n/context';
 import { useParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import {
   getProject,
   redeployProject,
@@ -142,8 +145,27 @@ function DeploymentsList({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-agent" />
+      <div className="p-4 space-y-2 h-full">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel"
+          >
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-2.5 w-2.5 rounded-full" />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -293,12 +315,31 @@ function WebhookPanel({ projectId }: { projectId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-agent" />
+      <div className="space-y-4">
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
+            <div key={i} className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <div className="flex items-center gap-1">
+                  <Skeleton className="h-7 w-16" />
+                  <Skeleton className="h-7 w-8" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <Skeleton className="h-6 w-full" />
+                <Skeleton className="h-6 w-full" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
-
   return (
     <div className="space-y-4">
       {webhooks.length === 0 ? (
@@ -577,13 +618,12 @@ export function ProjectDetail() {
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
 
     try {
-      // Fire redeploy (server immediately sets DB status to 'building')
       await redeployProject(id);
-      // Reset timeline to reconnect build stream (DB is now 'building')
       setTimelineRunKey((k) => k + 1);
+      toast.success('Project redeploying');
     } catch (err) {
       console.error('Redeploy failed:', err);
-      // Rollback: fetch actual project state on failure
+      toast.error('Redeploy failed: ' + (err instanceof Error ? err.message : String(err)));
       try {
         const data = await getProject(id);
         setProject(data);
@@ -604,8 +644,10 @@ export function ProjectDetail() {
     setActionLoading('stop');
     try {
       await stopProject(id);
+      toast.success('Project stopped');
     } catch (err) {
       console.error('Stop failed:', err);
+      toast.error('Stop failed: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(null);
     }
@@ -621,8 +663,10 @@ export function ProjectDetail() {
     try {
       await startProject(id);
       await fetchProject();
+      toast.success('Project started');
     } catch (err) {
       console.error('Start failed:', err);
+      toast.error('Start failed: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setActionLoading(null);
     }
@@ -642,8 +686,10 @@ export function ProjectDetail() {
     try {
       await rollbackProject(id);
       setTimelineRunKey((k) => k + 1);
+      toast.success('Project rolling back');
     } catch (err) {
       console.error('Rollback failed:', err);
+      toast.error('Rollback failed: ' + (err instanceof Error ? err.message : String(err)));
       try {
         const data = await getProject(id);
         setProject(data);
@@ -666,8 +712,12 @@ export function ProjectDetail() {
     try {
       await blueGreenProject(id);
       setTimelineRunKey((k) => k + 1);
+      toast.success('Blue-green deploy started');
     } catch (err) {
       console.error('Blue-green deploy failed:', err);
+      toast.error(
+        'Blue-green deploy failed: ' + (err instanceof Error ? err.message : String(err)),
+      );
       try {
         const data = await getProject(id);
         setProject(data);
@@ -680,8 +730,31 @@ export function ProjectDetail() {
   };
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-agent" />
+      <div className="flex flex-col h-full">
+        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-3 w-3 rounded-full" />
+              <div>
+                <Skeleton className="h-6 w-48 mb-2" />
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-7 w-24" />
+              <Skeleton className="h-7 w-24" />
+              <Skeleton className="h-7 w-24" />
+              <Skeleton className="h-7 w-20" />
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 p-4">
+          <Skeleton className="h-10 w-full max-w-md mb-4" />
+          <Skeleton className="h-[600px] w-full rounded-lg" />
+        </div>
       </div>
     );
   }
@@ -751,7 +824,7 @@ export function ProjectDetail() {
                 disabled={!!actionLoading}
               >
                 {actionLoading === 'redeploy' ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Spinner className="h-3 w-3" />
                 ) : (
                   <RotateCw className="h-3 w-3" />
                 )}
@@ -765,7 +838,7 @@ export function ProjectDetail() {
                 disabled={!project.previousImageTag || !!actionLoading}
               >
                 {actionLoading === 'rollback' ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Spinner className="h-3 w-3" />
                 ) : (
                   <History className="h-3 w-3" />
                 )}
@@ -779,7 +852,7 @@ export function ProjectDetail() {
                 disabled={project.status !== 'running' || !!actionLoading}
               >
                 {actionLoading === 'bluegreen' ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Spinner className="h-3 w-3" />
                 ) : (
                   <Zap className="h-3 w-3" />
                 )}
@@ -794,7 +867,7 @@ export function ProjectDetail() {
                   disabled={!!actionLoading}
                 >
                   {actionLoading === 'start' ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <Spinner className="h-3 w-3" />
                   ) : (
                     <Play className="h-3 w-3" />
                   )}
@@ -809,7 +882,7 @@ export function ProjectDetail() {
                   disabled={!!actionLoading}
                 >
                   {actionLoading === 'stop' ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <Spinner className="h-3 w-3" />
                   ) : (
                     <Square className="h-3 w-3" />
                   )}

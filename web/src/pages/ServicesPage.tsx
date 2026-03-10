@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/i18n/context';
+import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   getServices,
   getServiceTemplates,
@@ -95,8 +97,10 @@ export function ServicesPage() {
       setSelectedTemplate(null);
 
       await fetchServices();
+      toast.success('Service created successfully');
     } catch (err: any) {
       setCreateError(err.message || 'Failed to create service');
+      toast.error(err.message || 'Failed to create service');
     } finally {
       setCreating(false);
     }
@@ -109,14 +113,21 @@ export function ServicesPage() {
 
     setActionLoading((prev) => ({ ...prev, [`${id}-${action}`]: true }));
     try {
-      if (action === 'start') await startService(id);
-      else if (action === 'stop') await stopService(id);
-      else if (action === 'remove') await removeService(id);
+      if (action === 'start') {
+        await startService(id);
+        toast.success('Service started');
+      } else if (action === 'stop') {
+        await stopService(id);
+        toast.success('Service stopped');
+      } else if (action === 'remove') {
+        await removeService(id);
+        toast.success('Service removed');
+      }
 
       await fetchServices();
     } catch (err) {
       console.error(`Failed to ${action} service:`, err);
-      alert(`Failed to ${action} service`);
+      toast.error(`Failed to ${action} service`);
     } finally {
       setActionLoading((prev) => ({ ...prev, [`${id}-${action}`]: false }));
     }
@@ -165,8 +176,41 @@ export function ServicesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-secondary-ol" />
+      <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-32 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-4">
+                <Skeleton className="h-3 w-3 rounded-full" />
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-8 w-20" />
+                <Skeleton className="h-8 w-8" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

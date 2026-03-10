@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/context';
 import type { Project } from '@/types';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
@@ -23,8 +24,10 @@ export function ProjectCard({ project, onUpdate }: ProjectCardProps) {
     try {
       await stopProject(project.id);
       onUpdate();
+      toast.success('Project stopped');
     } catch (error) {
       console.error('Failed to stop project:', error);
+      toast.error('Failed to stop project');
     } finally {
       setLoadingAction(null);
     }
@@ -37,8 +40,10 @@ export function ProjectCard({ project, onUpdate }: ProjectCardProps) {
     try {
       await deleteProject(project.id);
       onUpdate();
+      toast.success('Project deleted');
     } catch (error) {
       console.error('Failed to delete project:', error);
+      toast.error('Failed to delete project');
     } finally {
       setLoadingAction(null);
     }
@@ -50,12 +55,15 @@ export function ProjectCard({ project, onUpdate }: ProjectCardProps) {
     try {
       if (project.publicUrl) {
         await unexposeProject(project.id);
+        toast.success('Project unexposed');
       } else {
         await exposeProject(project.id);
+        toast.success('Project exposed');
       }
       onUpdate();
     } catch (error) {
       console.error('Failed to toggle exposure:', error);
+      toast.error('Failed to toggle exposure');
     } finally {
       setLoadingAction(null);
     }

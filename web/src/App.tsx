@@ -11,6 +11,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
 import './App.css';
 import { getSetupStatus } from '@/lib/api';
+import { Toaster } from 'sonner';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -72,6 +73,24 @@ function App() {
   return (
     <LanguageProvider>
       <ErrorBoundary>
+        <Toaster
+          toastOptions={{
+            className: 'bg-bg-panel border-border text-primary-ol font-body',
+            descriptionClassName: 'text-muted-ol',
+            success: {
+              iconTheme: {
+                primary: 'var(--color-success)',
+                secondary: 'var(--bg-panel)',
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: 'var(--color-error)',
+                secondary: 'var(--bg-panel)',
+              },
+            },
+          }}
+        />
         <BrowserRouter>
           <Routes>
             <Route

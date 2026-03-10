@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
+import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import {
   getProject,
   exposeProject,
@@ -45,6 +48,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
   const [domains, setDomains] = useState<DomainMapping[]>([]);
   const [newDomain, setNewDomain] = useState('');
   const [addingDomain, setAddingDomain] = useState(false);
+  const [removingDomain, setRemovingDomain] = useState<string | null>(null);
   const [cfConfigured, setCfConfigured] = useState<boolean | null>(null);
   const fetchProject = useCallback(async () => {
     try {
@@ -76,8 +80,10 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
     try {
       const result = await exposeProject(projectId);
       setPublicUrl(result.publicUrl);
+      toast.success('Project exposed');
     } catch (err) {
       console.error('Expose failed:', err);
+      toast.error('Failed to expose project');
     } finally {
       setExposing(false);
     }
@@ -88,8 +94,10 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
     try {
       await unexposeProject(projectId);
       setPublicUrl(null);
+      toast.success('Project unexposed');
     } catch (err) {
       console.error('Unexpose failed:', err);
+      toast.error('Failed to unexpose project');
     } finally {
       setUnexposing(false);
     }
@@ -103,19 +111,26 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
       const updated = await getProjectDomains(projectId);
       setDomains(updated);
       setNewDomain('');
+      toast.success('Domain added');
     } catch (err) {
       console.error('Failed to add domain:', err);
+      toast.error('Failed to add domain');
     } finally {
       setAddingDomain(false);
     }
   };
 
   const handleRemoveDomain = async (domain: string) => {
+    setRemovingDomain(domain);
     try {
       await removeProjectDomain(projectId, domain);
       setDomains((prev) => prev.filter((d) => d.domain !== domain));
+      toast.success('Domain removed');
     } catch (err) {
       console.error('Failed to remove domain:', err);
+      toast.error('Failed to remove domain');
+    } finally {
+      setRemovingDomain(null);
     }
   };
   const copyToClipboard = async (url: string, label: string) => {
@@ -130,8 +145,20 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-agent" />
+      <div className="space-y-4 p-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3"
+          >
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-3.5 w-3.5" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <Skeleton className="h-5 w-64" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -251,8 +278,13 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                   size="sm"
                   className="h-6 w-6 p-0 text-muted-ol hover:text-error shrink-0"
                   onClick={() => handleRemoveDomain(d.domain)}
+                  disabled={removingDomain === d.domain}
                 >
-                  <Trash2 className="h-3 w-3" />
+                  {removingDomain === d.domain ? (
+                    <Spinner className="h-3 w-3" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
                 </Button>
               </div>
             ))}

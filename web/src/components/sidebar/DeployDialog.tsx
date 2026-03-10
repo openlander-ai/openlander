@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/context';
 import {
   Sheet,
@@ -40,8 +41,11 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
       setName('');
       onDeploySuccess();
       onOpenChange(false);
+      toast.success('Project deployed');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('deploy.dialog.failed'));
+      const msg = err instanceof Error ? err.message : t('deploy.dialog.failed');
+      setError(msg);
+      toast.error('Deploy failed: ' + msg);
     } finally {
       setLoading(false);
     }

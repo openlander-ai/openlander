@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { getProjectPreviews, deleteProjectPreview, type PRPreview } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -60,8 +62,32 @@ export function PRPreviewsList({ projectId }: PRPreviewsListProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-agent" />
+      <div className="p-4 space-y-2 h-full">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel"
+          >
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-2.5 w-2.5 rounded-full" />
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-12" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Skeleton className="h-7 w-7 rounded-md" />
+              <Skeleton className="h-7 w-7 rounded-md" />
+              <Skeleton className="h-7 w-7 rounded-md" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -140,7 +166,7 @@ export function PRPreviewsList({ projectId }: PRPreviewsListProps) {
                 disabled={deletingId === preview.id}
               >
                 {deletingId === preview.id ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <Spinner className="h-3 w-3" />
                 ) : (
                   <Trash2 className="h-3 w-3" />
                 )}

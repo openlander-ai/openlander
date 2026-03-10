@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDeploymentDetail } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
@@ -56,8 +57,27 @@ export function DeploymentDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-agent" />
+      <div className="flex flex-col h-full bg-bg-app">
+        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-4 w-32" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-3 w-3 rounded-full" />
+                <div>
+                  <Skeleton className="h-6 w-48 mb-2" />
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 p-6 space-y-6">
+          <Skeleton className="h-[400px] w-full rounded-lg" />
+        </div>
       </div>
     );
   }
