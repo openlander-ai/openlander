@@ -3,7 +3,6 @@ import { useLanguage } from '@/i18n/context';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
 import {
   getProject,
   redeployProject,
@@ -17,69 +16,19 @@ import {
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
-import { TimelineFeed } from '@/components/timeline/TimelineFeed';
-import { PostmortemCard } from '@/components/timeline/PostmortemCard';
-import { LogViewer } from '@/components/logs/LogViewer';
-import { LogPreview } from '@/components/timeline/LogPreview';
-import { EnvVarsTable } from '@/components/config/EnvVarsTable';
-import { DomainsPanel } from '@/components/config/DomainsPanel';
-import { WebhookPanel } from '@/components/config/WebhookPanel';
-import { DeploymentsList } from '@/components/project/DeploymentsList';
-import { PRPreviewsList } from '@/components/timeline/PRPreviewsList';
 import { ShareDialog } from '@/components/sidebar/ShareDialog';
-import { AssistantPanel } from '@/components/assistant/AssistantPanel';
-import { TerminalPanel } from '@/components/terminal/TerminalPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Project } from '@/types';
-import { cn } from '@/lib/utils';
 import { useAssistant } from '@/hooks/use-assistant';
-import {
-  ExternalLink,
-  RotateCw,
-  Play,
-  Square,
-  GitBranch,
-  Activity,
-  ScrollText,
-  Settings,
-  Globe,
-  Share2,
-  GlobeLock,
-  GitPullRequest,
-  History,
-  Zap,
-  Brain,
-  SquareTerminal,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Activity, History, SquareTerminal, Settings } from 'lucide-react';
 import type { TimelineItem } from '@/lib/event-types';
 
-function getStatusConfig(
-  _t: (key: string) => string,
-): Record<string, { label: string; color: string; dot: string }> {
-  return {
-    running: {
-      label: 'Live',
-      color: 'text-success',
-      dot: 'bg-success',
-    },
-    stopped: {
-      label: 'Stopped',
-      color: 'text-muted-ol',
-      dot: 'bg-[var(--text-muted)]',
-    },
-    building: {
-      label: 'Deploying',
-      color: 'text-warning',
-      dot: 'bg-warning animate-pulse',
-    },
-    error: {
-      label: 'Failed',
-      color: 'text-error',
-      dot: 'bg-error',
-    },
-  };
-}
+// Wave 2 tab components
+import { OverviewTab } from '@/components/project/OverviewTab';
+import { DeploymentsTab } from '@/components/project/DeploymentsTab';
+import { ConsoleTab } from '@/components/project/ConsoleTab';
+import { SettingsTab } from '@/components/project/SettingsTab';
+import { ProjectHeader } from '@/components/project/ProjectHeader';
 
 function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) => string): string {
   const lines = ['Root cause:' + '\n' + diagnosis.rootCause, ''];
@@ -104,11 +53,10 @@ function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) 
 export function ProjectDetail() {
   const { id } = useParams();
   const { t } = useLanguage();
-  const statusConfig = getStatusConfig(t);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [activeTab, setActiveTab] = useState('overview');
   const [timelineRunKey, setTimelineRunKey] = useState(0);
   const [fixWithAIItems, setFixWithAIItems] = useState<TimelineItem[]>([]);
   const [fixingItemId, setFixingItemId] = useState<string | null>(null);
@@ -346,6 +294,7 @@ export function ProjectDetail() {
       setActionLoading(null);
     }
   };
+
   if (loading) {
     return (
       <div className="flex flex-col h-full">
@@ -364,8 +313,7 @@ export function ProjectDetail() {
             <div className="flex items-center gap-2">
               <Skeleton className="h-7 w-24" />
               <Skeleton className="h-7 w-24" />
-              <Skeleton className="h-7 w-24" />
-              <Skeleton className="h-7 w-20" />
+              <Skeleton className="h-7 w-7" />
             </div>
           </div>
         </div>
@@ -385,320 +333,103 @@ export function ProjectDetail() {
     );
   }
 
-  const status = statusConfig[project.status] ?? statusConfig.stopped;
-
   return (
     <>
-      <div className="flex flex-row h-full">
-        <div className="flex flex-col flex-1 min-w-0 h-full">
-          {/* Project Header */}
-          <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
-                <div className="min-w-0">
-                  <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
-                    {project.name}
-                  </h1>
-                  <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
-                    <span className={status.color}>{status.label}</span>
-                    {project.branch && (
-                      <span className="flex items-center gap-1 text-muted-ol">
-                        <GitBranch className="h-3 w-3" />
-                        {project.branch}
-                      </span>
-                    )}
-                    {project.url && (
-                      <a
-                        href={project.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-agent hover:text-agent/80 transition-colors"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        {project.url.replace(/^https?:\/\//, '')}
-                      </a>
-                    )}
-                  </div>
-                  {project.publicUrl && (
-                    <a
-                      href={project.publicUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-success hover:text-success/80 transition-colors"
-                    >
-                      <Globe className="h-3 w-3" />
-                      {project.publicUrl.replace(/^https?:\/\//, '')}
-                    </a>
-                  )}
-                </div>
-              </div>
+      <div className="flex flex-col h-full">
+        {/* Project Header with contextual actions */}
+        <ProjectHeader
+          project={project}
+          actionLoading={actionLoading}
+          onRedeploy={handleRedeploy}
+          onStop={handleStop}
+          onStart={handleStart}
+          onRollback={handleRollback}
+          onBlueGreen={handleBlueGreen}
+          onShare={() => setShareOpen(true)}
+        />
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px] font-body gap-1.5"
-                  onClick={handleRedeploy}
-                  disabled={!!actionLoading}
-                >
-                  {actionLoading === 'redeploy' ? (
-                    <Spinner className="h-3 w-3" />
-                  ) : (
-                    <RotateCw className="h-3 w-3" />
-                  )}
-                  {'Redeploy'}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px] font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
-                  onClick={handleRollback}
-                  disabled={!project.previousImageTag || !!actionLoading}
-                >
-                  {actionLoading === 'rollback' ? (
-                    <Spinner className="h-3 w-3" />
-                  ) : (
-                    <History className="h-3 w-3" />
-                  )}
-                  {'Rollback'}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
-                  onClick={handleBlueGreen}
-                  disabled={project.status !== 'running' || !!actionLoading}
-                >
-                  {actionLoading === 'bluegreen' ? (
-                    <Spinner className="h-3 w-3" />
-                  ) : (
-                    <Zap className="h-3 w-3" />
-                  )}
-                  Blue-Green
-                </Button>
-                {project.status === 'stopped' ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
-                    onClick={handleStart}
-                    disabled={!!actionLoading}
-                  >
-                    {actionLoading === 'start' ? (
-                      <Spinner className="h-3 w-3" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                    {'Start'}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
-                    onClick={handleStop}
-                    disabled={!!actionLoading}
-                  >
-                    {actionLoading === 'stop' ? (
-                      <Spinner className="h-3 w-3" />
-                    ) : (
-                      <Square className="h-3 w-3" />
-                    )}
-                    {'Stop'}
-                  </Button>
-                )}
-                <Button
-                  variant={assistant.isOpen ? 'default' : 'outline'}
-                  size="sm"
-                  className={cn(
-                    'h-7 text-[11px] font-body gap-1.5',
-                    assistant.isOpen && 'bg-agent text-bg-app hover:bg-agent/90',
-                  )}
-                  onClick={assistant.togglePanel}
-                >
-                  <Brain className="h-3 w-3" />
-                  {'AI Assistant'}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    'h-7 text-[11px] font-body gap-1.5',
-                    project.visibility === 'shared' || project.visibility === 'quick-share'
-                      ? 'text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30'
-                      : '',
-                  )}
-                  onClick={() => setShareOpen(true)}
-                  disabled={project.status !== 'running' || !!actionLoading}
-                >
-                  {project.visibility === 'shared' || project.visibility === 'quick-share' ? (
-                    <GlobeLock className="h-3 w-3" />
-                  ) : (
-                    <Share2 className="h-3 w-3" />
-                  )}
-                  {project.visibility === 'shared'
-                    ? 'Shared'
-                    : project.visibility === 'quick-share'
-                      ? 'Exposed'
-                      : 'Share'}
-                </Button>
-              </div>
-            </div>
-          </div>
+        {/* 4-tab navigation */}
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex-1 flex flex-col min-h-0"
+        >
+          <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
+            <TabsTrigger
+              value="overview"
+              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+            >
+              <Activity className="h-3.5 w-3.5" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="deployments"
+              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+            >
+              <History className="h-3.5 w-3.5" />
+              Deployments
+            </TabsTrigger>
+            <TabsTrigger
+              value="console"
+              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+            >
+              <SquareTerminal className="h-3.5 w-3.5" />
+              Console
+            </TabsTrigger>
+            <TabsTrigger
+              value="settings"
+              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Settings
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Tabs: Timeline / Logs / Config */}
-          <Tabs
-            value={activeTab}
-            onValueChange={setActiveTab}
-            className="flex-1 flex flex-col min-h-0"
-          >
-            <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
-              <TabsTrigger
-                value="timeline"
-                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-              >
-                <Activity className="h-3.5 w-3.5" />
-                {'Timeline'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="deployments"
-                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-              >
-                <History className="h-3.5 w-3.5" />
-                {'Deployments'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="previews"
-                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-              >
-                <GitPullRequest className="h-3.5 w-3.5" />
-                {'Previews'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="logs"
-                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-              >
-                <ScrollText className="h-3.5 w-3.5" />
-                {'Logs'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="terminal"
-                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-              >
-                <SquareTerminal className="h-3.5 w-3.5" />
-                {'Terminal'}
-              </TabsTrigger>
-              <TabsTrigger
-                value="config"
-                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-              >
-                <Settings className="h-3.5 w-3.5" />
-                {'Configuration'}
-              </TabsTrigger>
-            </TabsList>
+          {/* Overview: Timeline (left) + AI Assistant (right) */}
+          <TabsContent value="overview" className="flex-1 min-h-0 mt-0">
+            {id && (
+              <OverviewTab
+                projectId={id}
+                projectStatus={project.status}
+                timelineItems={allTimelineItems}
+                isTimelineStreaming={isStreaming}
+                postmortem={postmortem}
+                fixingItemId={fixingItemId}
+                onSubmitAnswer={submitAnswer}
+                onSkipQuestion={skipQuestion}
+                onInsightAction={executeAction}
+                onFixWithAI={handleFixWithAI}
+                onOpenLogs={() => setActiveTab('console')}
+                assistantItems={assistant.items}
+                isAssistantStreaming={assistant.isStreaming}
+                onSendMessage={assistant.sendMessage}
+              />
+            )}
+          </TabsContent>
 
-            <TabsContent value="timeline" className="flex-1 min-h-0 mt-0 overflow-auto p-4">
-              <div className="space-y-4">
-                {postmortem && (
-                  <PostmortemCard
-                    projectId={postmortem.projectId}
-                    projectName={postmortem.projectName}
-                    markdown={postmortem.markdown}
-                    generatedAt={postmortem.generatedAt}
-                  />
-                )}
-                <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[600px]">
-                  <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol shrink-0 bg-bg-panel/50">
-                    <Activity className="h-3.5 w-3.5" />
-                    {'Deployment timeline'}
-                  </div>
-                  <div className="flex-1 min-h-0">
-                    <TimelineFeed
-                      items={allTimelineItems}
-                      isStreaming={isStreaming}
-                      projectStatus={project.status}
-                      onSubmitAnswer={submitAnswer}
-                      onSkipQuestion={skipQuestion}
-                      onInsightAction={executeAction}
-                      onFixWithAI={handleFixWithAI}
-                      fixingItemId={fixingItemId}
-                    />
-                  </div>
-                </section>
+          {/* Deployments: list + PR previews filter */}
+          <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
+            {id && <DeploymentsTab projectId={id} projectStatus={project?.status} />}
+          </TabsContent>
 
-                {id && project && (
-                  <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
-                    <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol">
-                      <ScrollText className="h-3.5 w-3.5" />
-                      {'Build logs'}
-                    </div>
-                    <LogPreview
-                      projectId={id}
-                      status={project.status}
-                      onOpenLogs={() => setActiveTab('logs')}
-                    />
-                  </section>
-                )}
-              </div>
-            </TabsContent>
-            <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
-              {id && <DeploymentsList projectId={id} projectStatus={project?.status} />}
-            </TabsContent>
+          {/* Console: Logs (left) + Terminal (right) */}
+          <TabsContent value="console" className="flex-1 min-h-0 mt-0">
+            {id && (
+              <ConsoleTab
+                projectId={id}
+                isActive={activeTab === 'console'}
+                projectStatus={project.status}
+              />
+            )}
+          </TabsContent>
 
-            <TabsContent value="previews" className="flex-1 min-h-0 mt-0">
-              {id && <PRPreviewsList projectId={id} />}
-            </TabsContent>
-
-            <TabsContent value="logs" className="flex-1 min-h-0 mt-0 relative">
-              {id && <LogViewer projectId={id} />}
-            </TabsContent>
-
-            <TabsContent value="terminal" className="flex-1 min-h-0 mt-0 p-4">
-              {id && activeTab === 'terminal' && (
-                <TerminalPanel projectId={id} isActive={project.status === 'running'} />
-              )}
-            </TabsContent>
-
-            <TabsContent value="config" className="flex-1 min-h-0 mt-0 overflow-auto">
-              {id && (
-                <Tabs defaultValue="env" className="p-4">
-                  <TabsList className="bg-bg-subtle">
-                    <TabsTrigger value="env" className="text-xs font-body">
-                      {'Environment Variables'}
-                    </TabsTrigger>
-                    <TabsTrigger value="domains" className="text-xs font-body">
-                      {'Domains'}
-                    </TabsTrigger>
-                    <TabsTrigger value="webhooks" className="text-xs font-body">
-                      {'Webhooks'}
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="env">
-                    <EnvVarsTable projectId={id} />
-                  </TabsContent>
-                  <TabsContent value="domains">
-                    <DomainsPanel projectId={id} projectStatus={project?.status} />
-                  </TabsContent>
-                  <TabsContent value="webhooks">
-                    <WebhookPanel projectId={id} />
-                  </TabsContent>
-                </Tabs>
-              )}
-            </TabsContent>
-          </Tabs>
-        </div>
-        {id && (
-          <AssistantPanel
-            projectId={id}
-            isOpen={assistant.isOpen}
-            onToggle={assistant.togglePanel}
-            items={assistant.items}
-            isStreaming={assistant.isStreaming}
-            onSendMessage={assistant.sendMessage}
-          />
-        )}
+          {/* Settings: nav (left) + form (right) */}
+          <TabsContent value="settings" className="flex-1 min-h-0 mt-0">
+            {id && <SettingsTab projectId={id} projectStatus={project?.status} />}
+          </TabsContent>
+        </Tabs>
       </div>
+
       <ShareDialog
         projectId={id!}
         projectName={project.name}
