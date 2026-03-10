@@ -29,6 +29,7 @@ import {
 } from './monitor/postmortem.js';
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
 import { McpClientManager } from './mcp/client-manager.js';
+import { SearxngManager } from './mcp/searxng.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
@@ -74,6 +75,7 @@ export interface AppContext {
   serviceManager: ServiceManager;
   // v1.0 modules
   mcpClientManager: McpClientManager;
+  searxngManager: SearxngManager;
 }
 
 /** Create the application context from config. */
@@ -513,6 +515,7 @@ ${buildLog.slice(-3000)}`
   // v1.0: MCP client manager (connects to external MCP servers)
   // Connection and tool merging handled by callers (cli/index.ts, setup-routes.ts)
   const mcpClientManager = new McpClientManager();
+  const searxngManager = new SearxngManager(docker);
 
   // Build partial ctx without channelManager, then compose the full AppContext
   const partialCtx = {
@@ -537,6 +540,7 @@ ${buildLog.slice(-3000)}`
     questionBridge,
     serviceManager,
     mcpClientManager,
+    searxngManager,
   };
 
   // v0.4: ChannelManager needs AppContext but never self-references channelManager.
@@ -572,4 +576,5 @@ export function shutdownAppContext(ctx: AppContext): void {
   void ctx.previewDeployer.cleanupAll();
   ctx.db.close();
   void ctx.mcpClientManager.disconnectAll();
+  void ctx.searxngManager.stop();
 }
