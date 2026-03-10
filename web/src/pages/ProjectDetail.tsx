@@ -11,13 +11,8 @@ import {
   stopProject,
   rollbackProject,
   blueGreenProject,
-  getProjectDeployments,
   debugBuild,
-  getProjectWebhooks,
-  setProjectWebhook,
-  deleteProjectWebhook,
   type BuildDiagnosis,
-  type WebhookConfig,
   type PostmortemData,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
@@ -28,13 +23,14 @@ import { LogViewer } from '@/components/logs/LogViewer';
 import { LogPreview } from '@/components/timeline/LogPreview';
 import { EnvVarsTable } from '@/components/config/EnvVarsTable';
 import { DomainsPanel } from '@/components/config/DomainsPanel';
+import { WebhookPanel } from '@/components/config/WebhookPanel';
+import { DeploymentsList } from '@/components/project/DeploymentsList';
 import { PRPreviewsList } from '@/components/timeline/PRPreviewsList';
 import { ShareDialog } from '@/components/sidebar/ShareDialog';
 import { AssistantPanel } from '@/components/assistant/AssistantPanel';
 import { TerminalPanel } from '@/components/terminal/TerminalPanel';
-import { formatRelativeTime } from '@/lib/time';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Project, DeployLogSummary } from '@/types';
+import type { Project } from '@/types';
 import { cn } from '@/lib/utils';
 import { useAssistant } from '@/hooks/use-assistant';
 import {
@@ -42,7 +38,6 @@ import {
   RotateCw,
   Play,
   Square,
-  Loader2,
   GitBranch,
   Activity,
   ScrollText,
@@ -52,20 +47,12 @@ import {
   GlobeLock,
   GitPullRequest,
   History,
-  Clock,
-  GitCommit,
   Zap,
-  Webhook,
-  Copy,
-  Check,
-  Trash2,
-  Plus,
   Brain,
   SquareTerminal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/lib/event-types';
-import { useNavigate } from 'react-router-dom';
 
 function getStatusConfig(
   _t: (key: string) => string,
@@ -112,382 +99,6 @@ function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) 
   }
 
   return lines.join('\n');
-}
-
-function formatDuration(ms: number) {
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
-}
-
-function DeploymentsList({
-  projectId,
-  projectStatus,
-}: {
-  projectId: string;
-  projectStatus?: string;
-}) {
-  const [deployments, setDeployments] = useState<DeployLogSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-  const { t } = useLanguage();
-
-  useEffect(() => {
-    const fetchDeployments = async () => {
-      try {
-        const data = await getProjectDeployments(projectId);
-        setDeployments(data);
-      } catch (err) {
-        console.error('Failed to fetch deployments:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchDeployments();
-  }, [projectId, projectStatus]);
-
-  if (loading) {
-    return (
-      <div className="p-4 space-y-2 h-full">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel"
-          >
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-2.5 w-2.5 rounded-full" />
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-4 w-16" />
-                </div>
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-3 w-16" />
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (deployments.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-secondary-ol">
-        <History className="h-8 w-8 mb-3 text-muted-ol" />
-        <p className="text-sm font-body">{t('projectDetail.noDeployments')}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-4 space-y-2 overflow-auto h-full">
-      {deployments.map((deploy) => {
-        const statusColor =
-          deploy.status === 'success'
-            ? 'bg-success'
-            : deploy.status === 'failed'
-              ? 'bg-error'
-              : 'bg-[var(--text-muted)]';
-
-        return (
-          <div
-            key={deploy.id}
-            onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
-            className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel hover:border-agent/30 cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', statusColor)} />
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-display font-medium text-primary-ol capitalize">
-                    {deploy.trigger} {'Deployment'}
-                  </span>
-                  {deploy.commitSha && (
-                    <span className="flex items-center gap-1 text-xs font-mono text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
-                      <GitCommit className="h-3 w-3" />
-                      {deploy.commitSha.substring(0, 7)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 mt-1 text-xs font-body text-secondary-ol">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatRelativeTime(deploy.createdAt, t)}
-                  </span>
-                  {deploy.durationMs && (
-                    <span className="flex items-center gap-1">
-                      <Activity className="h-3 w-3" />
-                      {formatDuration(deploy.durationMs)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function WebhookPanel({ projectId }: { projectId: string }) {
-  const { t } = useLanguage();
-  const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [selectedSource, setSelectedSource] = useState<string>('github');
-  const [branchFilter, setBranchFilter] = useState('main');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const fetchWebhooks = useCallback(async () => {
-    try {
-      const data = await getProjectWebhooks(projectId);
-      setWebhooks(data);
-    } catch (err) {
-      console.error('Failed to fetch webhooks:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void fetchWebhooks();
-  }, [fetchWebhooks]);
-
-  const handleAdd = async () => {
-    try {
-      setAdding(true);
-      await setProjectWebhook(projectId, {
-        source: selectedSource,
-        branch_filter: branchFilter,
-        enabled: true,
-      });
-      await fetchWebhooks();
-      setBranchFilter('main');
-    } catch (err) {
-      console.error('Failed to add webhook:', err);
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const handleToggle = async (webhook: WebhookConfig) => {
-    try {
-      await setProjectWebhook(projectId, {
-        source: webhook.source,
-        branch_filter: webhook.branchFilter,
-        enabled: !webhook.enabled,
-      });
-      await fetchWebhooks();
-    } catch (err) {
-      console.error('Failed to toggle webhook:', err);
-    }
-  };
-
-  const handleDelete = async (source: string) => {
-    try {
-      await deleteProjectWebhook(projectId, source);
-      await fetchWebhooks();
-    } catch (err) {
-      console.error('Failed to delete webhook:', err);
-    }
-  };
-
-  const handleCopy = (text: string, id: string) => {
-    void navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const configuredSources = new Set(webhooks.map((w) => w.source));
-  const availableSources = (['github', 'gitlab', 'bitbucket'] as const).filter(
-    (s) => !configuredSources.has(s),
-  );
-
-  useEffect(() => {
-    if (
-      availableSources.length > 0 &&
-      !availableSources.includes(selectedSource as (typeof availableSources)[number])
-    ) {
-      setSelectedSource(availableSources[0]);
-    }
-  }, [availableSources, selectedSource]);
-
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <div className="space-y-3">
-          {[1, 2].map((i) => (
-            <div key={i} className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-5 w-20" />
-                  <Skeleton className="h-4 w-16" />
-                </div>
-                <div className="flex items-center gap-1">
-                  <Skeleton className="h-7 w-16" />
-                  <Skeleton className="h-7 w-8" />
-                </div>
-              </div>
-              <div className="space-y-3">
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-4 w-48" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-4">
-      {webhooks.length === 0 ? (
-        <div className="text-center py-8 text-secondary-ol text-sm font-body">
-          <Webhook className="h-8 w-8 mx-auto mb-3 text-muted-ol" />
-          <p>{t('webhooks.noWebhooks')}</p>
-          <p className="text-xs text-muted-ol mt-1">{t('webhooks.description')}</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {webhooks.map((webhook) => {
-            const fullUrl = `${window.location.origin}${webhook.webhookUrl}`;
-            return (
-              <div
-                key={webhook.id}
-                className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-display font-medium text-primary-ol capitalize">
-                      {webhook.source}
-                    </span>
-                    <span
-                      className={cn(
-                        'text-[10px] px-1.5 py-0.5 rounded font-body',
-                        webhook.enabled
-                          ? 'bg-success/10 text-success'
-                          : 'bg-[var(--bg-subtle)] text-muted-ol',
-                      )}
-                    >
-                      {webhook.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-[11px] font-body"
-                      onClick={() => handleToggle(webhook)}
-                    >
-                      {webhook.enabled ? 'Disable' : 'Enable'}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-[11px] font-body text-error hover:text-error"
-                      onClick={() => handleDelete(webhook.source)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-xs font-body">
-                  <div>
-                    <span className="text-muted-ol">{'Webhook URL'}:</span>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
-                        {fullUrl}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 shrink-0"
-                        onClick={() => handleCopy(fullUrl, `url-${webhook.id}`)}
-                      >
-                        {copiedId === `url-${webhook.id}` ? (
-                          <Check className="h-3 w-3 text-success" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-muted-ol">{'Secret'}:</span>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
-                        {webhook.secret}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 shrink-0"
-                        onClick={() => handleCopy(webhook.secret, `secret-${webhook.id}`)}
-                      >
-                        {copiedId === `secret-${webhook.id}` ? (
-                          <Check className="h-3 w-3 text-success" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-muted-ol">
-                    <span>{'Branch filter'}:</span>
-                    <span className="text-secondary-ol">{webhook.branchFilter}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {availableSources.length > 0 && (
-        <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-4">
-          <div className="flex items-center gap-3">
-            <select
-              value={selectedSource}
-              onChange={(e) => setSelectedSource(e.target.value)}
-              className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol capitalize"
-            >
-              {availableSources.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-              placeholder="main"
-              className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol w-24"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs font-body gap-1.5"
-              onClick={handleAdd}
-              disabled={adding}
-            >
-              {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-              {'Add Webhook'}
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function ProjectDetail() {
