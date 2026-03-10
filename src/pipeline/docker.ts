@@ -56,6 +56,7 @@ export interface AllContainerInfo {
 
 export interface BuildImageOptions {
   noCache?: boolean;
+  buildArgs?: Record<string, string>;
   onProgress?: (event: { stream?: string; error?: string }) => void;
 }
 
@@ -161,7 +162,7 @@ export class Docker {
     try {
       stream = await this.client.buildImage(
         { context: contextPath, src: ['.'] },
-        { t: tag, nocache: options?.noCache === true },
+        { t: tag, nocache: options?.noCache === true, buildargs: options?.buildArgs },
       );
     } catch (error) {
       throw new DockerBuildError(tag, error instanceof Error ? error.message : String(error));
