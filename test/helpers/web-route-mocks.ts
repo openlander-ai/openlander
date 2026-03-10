@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
+import { DeployQueue } from '../../src/agent/deploy-queue.js';
 
 // ---------------------------------------------------------------------------
 // Shared mock factories for web-routes.test.ts
@@ -157,6 +158,7 @@ export function createMockContext(db: Database): AppContext {
     channelManager: createMockChannelManager() as unknown as AppContext['channelManager'],
     healthMonitor: createMockHealthMonitor() as unknown as AppContext['healthMonitor'],
     agent: createMockAgent() as unknown as AppContext['agent'],
+    deployQueue: new DeployQueue(),
     blueGreen: {
       deploy: vi.fn().mockResolvedValue({ success: true }),
     } as unknown as AppContext['blueGreen'],
@@ -181,5 +183,8 @@ export function createMockContext(db: Database): AppContext {
       triggerWebhook: vi.fn(),
     } as unknown as AppContext['webhookManager'],
     cloudflare: {} as unknown as AppContext['cloudflare'],
+    mcpClientManager: {
+      disconnectAll: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AppContext['mcpClientManager'],
   };
 }

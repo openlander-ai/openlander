@@ -26,6 +26,7 @@ export type ChatStreamEvent =
   | { type: 'thinking' }
   | { type: 'tool_call'; toolName: string; arguments: Record<string, unknown> }
   | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
+  | { type: 'text_delta'; text: string }
   | { type: 'message'; content: string }
   | { type: 'done'; toolResults?: ToolResult[] }
   | { type: 'error'; error: string }

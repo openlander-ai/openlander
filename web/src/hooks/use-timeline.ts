@@ -10,6 +10,7 @@ interface UseTimelineOptions {
   runKey?: number;
   /** Called when the build stream completes or errors — use to refetch project data */
   onSettled?: () => void;
+  onRawEvent?: (event: BuildStreamEvent) => void;
 }
 
 interface UseTimelineReturn {
@@ -30,6 +31,7 @@ export function useTimeline({
   enabled = true,
   runKey = 0,
   onSettled,
+  onRawEvent,
 }: UseTimelineOptions): UseTimelineReturn {
   const [items, setItems] = useState<TimelineItem[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -39,7 +41,9 @@ export function useTimeline({
   const abortRef = useRef<AbortController | null>(null);
   const seenEventKeysRef = useRef<Set<string>>(new Set());
   const onSettledRef = useRef(onSettled);
+  const onRawEventRef = useRef(onRawEvent);
   onSettledRef.current = onSettled;
+  onRawEventRef.current = onRawEvent;
 
   const getEventKey = useCallback((event: BuildStreamEvent): string => {
     if (event.id) return event.id;
@@ -53,6 +57,8 @@ export function useTimeline({
         return;
       }
       seenEventKeysRef.current.add(key);
+
+      onRawEventRef.current?.(event);
 
       const item = toTimelineItem(event);
       setItems((prev) => {

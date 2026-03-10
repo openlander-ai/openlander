@@ -9,15 +9,11 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { extractProjectName } from '../../pipeline/helpers.js';
 import { preflightCheckOrThrow } from '../../pipeline/preflight.js';
 import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
-import { DeployQueue } from '../../agent/deploy-queue.js';
 
 const log = createModuleLogger('api');
 
 export function createDeployStreamRoutes(ctx: AppContext): Hono {
   const api = new Hono();
-
-  // --- Deploy Queue (sequential agent-mediated deploys) ---
-  const deployQueue = new DeployQueue();
 
   api.get('/builds/:id/progress', (c) => {
     const id = c.req.param('id');
@@ -179,7 +175,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         content: 'Acquiring deploy slot...',
         timestamp: new Date().toISOString(),
       });
-      const release = await deployQueue.acquire();
+      const release = await ctx.deployQueue.acquire();
       await emitAgentEvent({
         type: 'message',
         content: 'Analyzing project and preparing deployment...',

@@ -31,7 +31,8 @@ export interface BuildStreamEvent {
     | 'agent_thinking'
     | 'agent_tool_call'
     | 'agent_tool_result'
-    | 'agent_message';
+    | 'agent_message'
+    | 'needs_user_action';
   message: string;
   projectId: string;
   timestamp: string;
@@ -53,6 +54,9 @@ export interface BuildStreamEvent {
   toolResult?: unknown;
   toolSuccess?: boolean;
   toolError?: string | null;
+  category?: string;
+  userMessage?: string;
+  userDetail?: string;
 }
 
 /** Action button for insight/anomaly timeline items */
@@ -78,7 +82,8 @@ export interface TimelineItem {
     | 'agent_thinking'
     | 'agent_tool_call'
     | 'agent_tool_result'
-    | 'agent_message';
+    | 'agent_message'
+    | 'needs_user_action';
   timestamp: string;
   title: string;
   detail?: string;
@@ -101,6 +106,7 @@ export interface TimelineItem {
   toolResult?: unknown;
   toolSuccess?: boolean;
   toolError?: string | null;
+  category?: string;
 }
 
 /** Message pattern → progress percentage mapping */
@@ -222,6 +228,16 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         title: event.content ?? event.message,
         percent: -1,
       };
+    case 'needs_user_action':
+      return {
+        id,
+        type: 'needs_user_action',
+        timestamp: event.timestamp,
+        title: event.message,
+        percent: -1,
+        category: event.category,
+        detail: event.userDetail ?? event.detail ?? undefined,
+      };
     default:
       return {
         id,
@@ -282,6 +298,7 @@ export function sanitizeToolArguments(args: Record<string, unknown>): Record<str
 // ---------------------------------------------------------------------------
 
 import type { ChatStreamEvent } from '../types';
+export type { ChatStreamEvent };
 
 /** Convert agent SSE event to a timeline item for Phase A display */
 export function agentEventToTimelineItem(

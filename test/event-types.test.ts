@@ -50,4 +50,37 @@ describe('toTimelineItem', () => {
     expect(item.type).toBe('agent_message');
     expect(item.title).toBe('tool call done');
   });
+
+  it('maps needs_user_action event with category and detail', () => {
+    const item = toTimelineItem({
+      type: 'needs_user_action',
+      message: 'Invalid credentials',
+      projectId: 'project-1',
+      timestamp: '2026-01-01T00:00:00.000Z',
+      category: 'CLONE_AUTH_FAILURE',
+      userDetail: 'SSH key not found for this repository',
+    });
+
+    expect(item.type).toBe('needs_user_action');
+    expect(item.title).toBe('Invalid credentials');
+    expect(item.percent).toBe(-1);
+    expect(item.category).toBe('CLONE_AUTH_FAILURE');
+    expect(item.detail).toBe('SSH key not found for this repository');
+  });
+
+  it('maps needs_user_action event falling back to detail field', () => {
+    const item = toTimelineItem({
+      type: 'needs_user_action',
+      message: 'Docker build failed',
+      projectId: 'project-1',
+      timestamp: '2026-01-01T00:00:00.000Z',
+      category: 'DOCKERFILE_SYNTAX',
+      detail: 'Syntax error on line 5',
+    });
+
+    expect(item.type).toBe('needs_user_action');
+    expect(item.title).toBe('Docker build failed');
+    expect(item.category).toBe('DOCKERFILE_SYNTAX');
+    expect(item.detail).toBe('Syntax error on line 5');
+  });
 });

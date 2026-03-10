@@ -30,10 +30,12 @@ import { EnvVarsTable } from '@/components/config/EnvVarsTable';
 import { DomainsPanel } from '@/components/config/DomainsPanel';
 import { PRPreviewsList } from '@/components/timeline/PRPreviewsList';
 import { ShareDialog } from '@/components/sidebar/ShareDialog';
+import { AssistantPanel } from '@/components/assistant/AssistantPanel';
 import { formatRelativeTime } from '@/lib/time';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Project, DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
+import { useAssistant } from '@/hooks/use-assistant';
 import {
   ExternalLink,
   RotateCw,
@@ -57,6 +59,7 @@ import {
   Check,
   Trash2,
   Plus,
+  Brain,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/lib/event-types';
@@ -499,6 +502,7 @@ export function ProjectDetail() {
   const [postmortem, setPostmortem] = useState<PostmortemData | null>(null);
   const isMobile = useIsMobile();
   const [shareOpen, setShareOpen] = useState(false);
+  const assistant = useAssistant(id);
 
   // Fetch project details
   const fetchProject = useCallback(async () => {
@@ -557,6 +561,7 @@ export function ProjectDetail() {
     enabled: !!id,
     runKey: timelineRunKey,
     onSettled: fetchProject,
+    onRawEvent: assistant.addDeployEvent,
   });
 
   const allTimelineItems = useMemo(() => [...items, ...fixWithAIItems], [items, fixWithAIItems]);
@@ -771,278 +776,302 @@ export function ProjectDetail() {
 
   return (
     <>
-      <div className="flex flex-col h-full">
-        {/* Project Header */}
-        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
-              <div className="min-w-0">
-                <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
-                  {project.name}
-                </h1>
-                <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
-                  <span className={status.color}>{status.label}</span>
-                  {project.branch && (
-                    <span className="flex items-center gap-1 text-muted-ol">
-                      <GitBranch className="h-3 w-3" />
-                      {project.branch}
-                    </span>
-                  )}
-                  {project.url && (
+      <div className="flex flex-row h-full">
+        <div className="flex flex-col flex-1 min-w-0 h-full">
+          {/* Project Header */}
+          <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
+                <div className="min-w-0">
+                  <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
+                    {project.name}
+                  </h1>
+                  <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
+                    <span className={status.color}>{status.label}</span>
+                    {project.branch && (
+                      <span className="flex items-center gap-1 text-muted-ol">
+                        <GitBranch className="h-3 w-3" />
+                        {project.branch}
+                      </span>
+                    )}
+                    {project.url && (
+                      <a
+                        href={project.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-agent hover:text-agent/80 transition-colors"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {project.url.replace(/^https?:\/\//, '')}
+                      </a>
+                    )}
+                  </div>
+                  {project.publicUrl && (
                     <a
-                      href={project.url}
+                      href={project.publicUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-agent hover:text-agent/80 transition-colors"
+                      className="flex items-center gap-1 text-success hover:text-success/80 transition-colors"
                     >
-                      <ExternalLink className="h-3 w-3" />
-                      {project.url.replace(/^https?:\/\//, '')}
+                      <Globe className="h-3 w-3" />
+                      {project.publicUrl.replace(/^https?:\/\//, '')}
                     </a>
                   )}
                 </div>
-                {project.publicUrl && (
-                  <a
-                    href={project.publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-success hover:text-success/80 transition-colors"
-                  >
-                    <Globe className="h-3 w-3" />
-                    {project.publicUrl.replace(/^https?:\/\//, '')}
-                  </a>
-                )}
               </div>
-            </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px] font-body gap-1.5"
-                onClick={handleRedeploy}
-                disabled={!!actionLoading}
-              >
-                {actionLoading === 'redeploy' ? (
-                  <Spinner className="h-3 w-3" />
-                ) : (
-                  <RotateCw className="h-3 w-3" />
-                )}
-                {'Redeploy'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px] font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
-                onClick={handleRollback}
-                disabled={!project.previousImageTag || !!actionLoading}
-              >
-                {actionLoading === 'rollback' ? (
-                  <Spinner className="h-3 w-3" />
-                ) : (
-                  <History className="h-3 w-3" />
-                )}
-                {'Rollback'}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
-                onClick={handleBlueGreen}
-                disabled={project.status !== 'running' || !!actionLoading}
-              >
-                {actionLoading === 'bluegreen' ? (
-                  <Spinner className="h-3 w-3" />
-                ) : (
-                  <Zap className="h-3 w-3" />
-                )}
-                Blue-Green
-              </Button>
-              {project.status === 'stopped' ? (
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] font-body gap-1.5"
+                  onClick={handleRedeploy}
+                  disabled={!!actionLoading}
+                >
+                  {actionLoading === 'redeploy' ? (
+                    <Spinner className="h-3 w-3" />
+                  ) : (
+                    <RotateCw className="h-3 w-3" />
+                  )}
+                  {'Redeploy'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
+                  onClick={handleRollback}
+                  disabled={!project.previousImageTag || !!actionLoading}
+                >
+                  {actionLoading === 'rollback' ? (
+                    <Spinner className="h-3 w-3" />
+                  ) : (
+                    <History className="h-3 w-3" />
+                  )}
+                  {'Rollback'}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
-                  onClick={handleStart}
-                  disabled={!!actionLoading}
+                  onClick={handleBlueGreen}
+                  disabled={project.status !== 'running' || !!actionLoading}
                 >
-                  {actionLoading === 'start' ? (
+                  {actionLoading === 'bluegreen' ? (
                     <Spinner className="h-3 w-3" />
                   ) : (
-                    <Play className="h-3 w-3" />
+                    <Zap className="h-3 w-3" />
                   )}
-                  {'Start'}
+                  Blue-Green
                 </Button>
-              ) : (
+                {project.status === 'stopped' ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
+                    onClick={handleStart}
+                    disabled={!!actionLoading}
+                  >
+                    {actionLoading === 'start' ? (
+                      <Spinner className="h-3 w-3" />
+                    ) : (
+                      <Play className="h-3 w-3" />
+                    )}
+                    {'Start'}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
+                    onClick={handleStop}
+                    disabled={!!actionLoading}
+                  >
+                    {actionLoading === 'stop' ? (
+                      <Spinner className="h-3 w-3" />
+                    ) : (
+                      <Square className="h-3 w-3" />
+                    )}
+                    {'Stop'}
+                  </Button>
+                )}
+                <Button
+                  variant={assistant.isOpen ? 'default' : 'outline'}
+                  size="sm"
+                  className={cn(
+                    'h-7 text-[11px] font-body gap-1.5',
+                    assistant.isOpen && 'bg-agent text-bg-app hover:bg-agent/90',
+                  )}
+                  onClick={assistant.togglePanel}
+                >
+                  <Brain className="h-3 w-3" />
+                  {'AI Assistant'}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 text-[11px] font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
-                  onClick={handleStop}
-                  disabled={!!actionLoading}
-                >
-                  {actionLoading === 'stop' ? (
-                    <Spinner className="h-3 w-3" />
-                  ) : (
-                    <Square className="h-3 w-3" />
+                  className={cn(
+                    'h-7 text-[11px] font-body gap-1.5',
+                    project.visibility === 'shared' || project.visibility === 'quick-share'
+                      ? 'text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30'
+                      : '',
                   )}
-                  {'Stop'}
+                  onClick={() => setShareOpen(true)}
+                  disabled={project.status !== 'running' || !!actionLoading}
+                >
+                  {project.visibility === 'shared' || project.visibility === 'quick-share' ? (
+                    <GlobeLock className="h-3 w-3" />
+                  ) : (
+                    <Share2 className="h-3 w-3" />
+                  )}
+                  {project.visibility === 'shared'
+                    ? 'Shared'
+                    : project.visibility === 'quick-share'
+                      ? 'Exposed'
+                      : 'Share'}
                 </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn(
-                  'h-7 text-[11px] font-body gap-1.5',
-                  project.visibility === 'shared' || project.visibility === 'quick-share'
-                    ? 'text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30'
-                    : '',
-                )}
-                onClick={() => setShareOpen(true)}
-                disabled={project.status !== 'running' || !!actionLoading}
-              >
-                {project.visibility === 'shared' || project.visibility === 'quick-share' ? (
-                  <GlobeLock className="h-3 w-3" />
-                ) : (
-                  <Share2 className="h-3 w-3" />
-                )}
-                {project.visibility === 'shared'
-                  ? 'Shared'
-                  : project.visibility === 'quick-share'
-                    ? 'Exposed'
-                    : 'Share'}
-              </Button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Tabs: Timeline / Logs / Config */}
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="flex-1 flex flex-col min-h-0"
-        >
-          <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
-            <TabsTrigger
-              value="timeline"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <Activity className="h-3.5 w-3.5" />
-              {'Timeline'}
-            </TabsTrigger>
-            <TabsTrigger
-              value="deployments"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <History className="h-3.5 w-3.5" />
-              {'Deployments'}
-            </TabsTrigger>
-            <TabsTrigger
-              value="previews"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <GitPullRequest className="h-3.5 w-3.5" />
-              {'Previews'}
-            </TabsTrigger>
-            <TabsTrigger
-              value="logs"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <ScrollText className="h-3.5 w-3.5" />
-              {'Logs'}
-            </TabsTrigger>
-            <TabsTrigger
-              value="config"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <Settings className="h-3.5 w-3.5" />
-              {'Configuration'}
-            </TabsTrigger>
-          </TabsList>
+          {/* Tabs: Timeline / Logs / Config */}
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="flex-1 flex flex-col min-h-0"
+          >
+            <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
+              <TabsTrigger
+                value="timeline"
+                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+              >
+                <Activity className="h-3.5 w-3.5" />
+                {'Timeline'}
+              </TabsTrigger>
+              <TabsTrigger
+                value="deployments"
+                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+              >
+                <History className="h-3.5 w-3.5" />
+                {'Deployments'}
+              </TabsTrigger>
+              <TabsTrigger
+                value="previews"
+                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+              >
+                <GitPullRequest className="h-3.5 w-3.5" />
+                {'Previews'}
+              </TabsTrigger>
+              <TabsTrigger
+                value="logs"
+                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+              >
+                <ScrollText className="h-3.5 w-3.5" />
+                {'Logs'}
+              </TabsTrigger>
+              <TabsTrigger
+                value="config"
+                className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+              >
+                <Settings className="h-3.5 w-3.5" />
+                {'Configuration'}
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="timeline" className="flex-1 min-h-0 mt-0 overflow-auto p-4">
-            <div className="space-y-4">
-              {postmortem && (
-                <PostmortemCard
-                  projectId={postmortem.projectId}
-                  projectName={postmortem.projectName}
-                  markdown={postmortem.markdown}
-                  generatedAt={postmortem.generatedAt}
-                />
-              )}
-              <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[600px]">
-                <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol shrink-0 bg-bg-panel/50">
-                  <Activity className="h-3.5 w-3.5" />
-                  {'Deployment timeline'}
-                </div>
-                <div className="flex-1 min-h-0">
-                  <TimelineFeed
-                    items={allTimelineItems}
-                    isStreaming={isStreaming}
-                    projectStatus={project.status}
-                    onSubmitAnswer={submitAnswer}
-                    onSkipQuestion={skipQuestion}
-                    onInsightAction={executeAction}
-                    onFixWithAI={handleFixWithAI}
-                    fixingItemId={fixingItemId}
+            <TabsContent value="timeline" className="flex-1 min-h-0 mt-0 overflow-auto p-4">
+              <div className="space-y-4">
+                {postmortem && (
+                  <PostmortemCard
+                    projectId={postmortem.projectId}
+                    projectName={postmortem.projectName}
+                    markdown={postmortem.markdown}
+                    generatedAt={postmortem.generatedAt}
                   />
-                </div>
-              </section>
-
-              {id && project && (
-                <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol">
-                    <ScrollText className="h-3.5 w-3.5" />
-                    {'Build logs'}
+                )}
+                <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[600px]">
+                  <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol shrink-0 bg-bg-panel/50">
+                    <Activity className="h-3.5 w-3.5" />
+                    {'Deployment timeline'}
                   </div>
-                  <LogPreview
-                    projectId={id}
-                    status={project.status}
-                    onOpenLogs={() => setActiveTab('logs')}
-                  />
+                  <div className="flex-1 min-h-0">
+                    <TimelineFeed
+                      items={allTimelineItems}
+                      isStreaming={isStreaming}
+                      projectStatus={project.status}
+                      onSubmitAnswer={submitAnswer}
+                      onSkipQuestion={skipQuestion}
+                      onInsightAction={executeAction}
+                      onFixWithAI={handleFixWithAI}
+                      fixingItemId={fixingItemId}
+                    />
+                  </div>
                 </section>
+
+                {id && project && (
+                  <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
+                    <div className="px-4 py-3 border-b border-[hsl(var(--border))] flex items-center gap-2 text-xs font-body text-primary-ol">
+                      <ScrollText className="h-3.5 w-3.5" />
+                      {'Build logs'}
+                    </div>
+                    <LogPreview
+                      projectId={id}
+                      status={project.status}
+                      onOpenLogs={() => setActiveTab('logs')}
+                    />
+                  </section>
+                )}
+              </div>
+            </TabsContent>
+            <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
+              {id && <DeploymentsList projectId={id} projectStatus={project?.status} />}
+            </TabsContent>
+
+            <TabsContent value="previews" className="flex-1 min-h-0 mt-0">
+              {id && <PRPreviewsList projectId={id} />}
+            </TabsContent>
+
+            <TabsContent value="logs" className="flex-1 min-h-0 mt-0 relative">
+              {id && <LogViewer projectId={id} />}
+            </TabsContent>
+
+            <TabsContent value="config" className="flex-1 min-h-0 mt-0 overflow-auto">
+              {id && (
+                <Tabs defaultValue="env" className="p-4">
+                  <TabsList className="bg-bg-subtle">
+                    <TabsTrigger value="env" className="text-xs font-body">
+                      {'Environment Variables'}
+                    </TabsTrigger>
+                    <TabsTrigger value="domains" className="text-xs font-body">
+                      {'Domains'}
+                    </TabsTrigger>
+                    <TabsTrigger value="webhooks" className="text-xs font-body">
+                      {'Webhooks'}
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="env">
+                    <EnvVarsTable projectId={id} />
+                  </TabsContent>
+                  <TabsContent value="domains">
+                    <DomainsPanel projectId={id} projectStatus={project?.status} />
+                  </TabsContent>
+                  <TabsContent value="webhooks">
+                    <WebhookPanel projectId={id} />
+                  </TabsContent>
+                </Tabs>
               )}
-            </div>
-          </TabsContent>
-          <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
-            {id && <DeploymentsList projectId={id} projectStatus={project?.status} />}
-          </TabsContent>
-
-          <TabsContent value="previews" className="flex-1 min-h-0 mt-0">
-            {id && <PRPreviewsList projectId={id} />}
-          </TabsContent>
-
-          <TabsContent value="logs" className="flex-1 min-h-0 mt-0 relative">
-            {id && <LogViewer projectId={id} />}
-          </TabsContent>
-
-          <TabsContent value="config" className="flex-1 min-h-0 mt-0 overflow-auto">
-            {id && (
-              <Tabs defaultValue="env" className="p-4">
-                <TabsList className="bg-bg-subtle">
-                  <TabsTrigger value="env" className="text-xs font-body">
-                    {'Environment Variables'}
-                  </TabsTrigger>
-                  <TabsTrigger value="domains" className="text-xs font-body">
-                    {'Domains'}
-                  </TabsTrigger>
-                  <TabsTrigger value="webhooks" className="text-xs font-body">
-                    {'Webhooks'}
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="env">
-                  <EnvVarsTable projectId={id} />
-                </TabsContent>
-                <TabsContent value="domains">
-                  <DomainsPanel projectId={id} projectStatus={project?.status} />
-                </TabsContent>
-                <TabsContent value="webhooks">
-                  <WebhookPanel projectId={id} />
-                </TabsContent>
-              </Tabs>
-            )}
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        </div>
+        {id && (
+          <AssistantPanel
+            projectId={id}
+            isOpen={assistant.isOpen}
+            onToggle={assistant.togglePanel}
+            items={assistant.items}
+            isStreaming={assistant.isStreaming}
+            onSendMessage={assistant.sendMessage}
+          />
+        )}
       </div>
       <ShareDialog
         projectId={id!}

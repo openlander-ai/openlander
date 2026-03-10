@@ -6,6 +6,7 @@ import { DeployPipeline } from './pipeline/deploy.js';
 import { TraefikManager } from './pipeline/traefik.js';
 import { EnvManager } from './pipeline/env.js';
 import { Agent } from './agent/index.js';
+import { DeployQueue } from './agent/deploy-queue.js';
 import { QuestionBridge } from './agent/question-bridge.js';
 import { createModel } from './llm/index.js';
 import { HealthMonitor } from './monitor/health.js';
@@ -56,6 +57,7 @@ export interface AppContext {
   traefik: TraefikManager;
   env: EnvManager;
   agent: Agent | null;
+  deployQueue: DeployQueue;
   // v0.2 modules
   healthMonitor: HealthMonitor;
   webhookManager: WebhookManager;
@@ -146,6 +148,8 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   if (agent) {
     agent.setQuestionBridge(questionBridge);
   }
+
+  const deployQueue = new DeployQueue();
 
   // Track active project for question events
   eventBus.on('deploy:start', (payload) => {
@@ -544,6 +548,7 @@ ${plan.agentGuidance}
     traefik,
     env,
     agent,
+    deployQueue,
     healthMonitor,
     webhookManager,
     cloudflare,
