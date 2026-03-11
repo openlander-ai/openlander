@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 
 import type { AppContext } from '../src/app.js';
 import { Database } from '../src/db/index.js';
+import { eventBus } from '../src/events/index.js';
 import { createApiRoutes } from '../src/web/api/routes.js';
 import { createMockContext } from './helpers/web-route-mocks.js';
 // Mock preflight check to always pass in tests
@@ -236,6 +237,70 @@ describe('Web API Routes', () => {
 
     // Verify agent.chatStream was called (fire-and-forget)
     expect(ctx.agent?.chatStream).toHaveBeenCalled();
+  });
+
+  it('GET /api/projects/:id/build/stream masks sensitive data in agent tool results', async () => {
+    db.createProject({
+      id: 'stream-p1',
+      name: 'stream-app',
+      repoUrl: 'https://github.com/user/stream-app',
+    });
+    db.updateProject('stream-p1', { status: 'building' });
+
+    const res = await app.request('/api/projects/stream-p1/build/stream');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/x-ndjson');
+
+    await eventBus.emit('agent:event', {
+      projectId: 'stream-p1',
+      event: {
+        type: 'tool_result',
+        toolName: 'deploy_project',
+        success: true,
+        result: {
+          env_vars: {
+            DATABASE_URL: 'postgres://user:pw@db:5432/app',
+            OPENAI_API_KEY: 'sk-test-value',
+          },
+          apiKey: 'key-123',
+          nested: {
+            client_secret: 'secret-value',
+            deployStatus: 'running',
+            url: 'http://localhost:10001',
+          },
+          services: [{ name: 'web', status: 'running' }],
+        },
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    await eventBus.emit('compose:up', {
+      projectId: 'stream-p1',
+      services: ['web'],
+    });
+
+    const body = await res.text();
+    const events = body
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    const toolResultEvent = events.find((event) => event.type === 'agent_tool_result');
+    expect(toolResultEvent).toBeDefined();
+    expect(toolResultEvent).toHaveProperty('toolResult');
+
+    const toolResult = toolResultEvent?.toolResult as Record<string, unknown>;
+    expect(toolResult.env_vars).toEqual({
+      DATABASE_URL: '***',
+      OPENAI_API_KEY: '***',
+    });
+    expect(toolResult.apiKey).toBe('[redacted]');
+    expect(toolResult.nested).toEqual({
+      client_secret: '[redacted]',
+      deployStatus: 'running',
+      url: 'http://localhost:10001',
+    });
+    expect(toolResult.services).toEqual([{ name: 'web', status: 'running' }]);
   });
 
   // ---------------------------------------------------------------------------

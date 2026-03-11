@@ -15,6 +15,60 @@ import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.j
 
 const log = createModuleLogger('api');
 
+const ENV_STYLE_KEYS = new Set(['envvars', 'environmentvariables']);
+const SECRET_FIELD_PATTERN =
+  /(password|secret|token|credential|api[_-]?key|private[_-]?key|ssh[_-]?key|access[_-]?key|auth[_-]?token)/i;
+
+function normalizeSecretKeyName(key: string): string {
+  return key.toLowerCase().replace(/[\s_-]/g, '');
+}
+
+function isEnvStyleKey(key: string): boolean {
+  return ENV_STYLE_KEYS.has(normalizeSecretKeyName(key));
+}
+
+function isSecretLikeKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return SECRET_FIELD_PATTERN.test(normalized);
+}
+
+function sanitizeToolResultForStream(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeToolResultForStream(item));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const source = value as Record<string, unknown>;
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, nestedValue] of Object.entries(source)) {
+    if (isEnvStyleKey(key)) {
+      if (nestedValue && typeof nestedValue === 'object' && !Array.isArray(nestedValue)) {
+        const maskedEnv: Record<string, string> = {};
+        for (const envKey of Object.keys(nestedValue as Record<string, unknown>)) {
+          maskedEnv[envKey] = '***';
+        }
+        sanitized[key] = maskedEnv;
+      } else {
+        sanitized[key] = '***';
+      }
+      continue;
+    }
+
+    if (isSecretLikeKey(key)) {
+      sanitized[key] = '[redacted]';
+      continue;
+    }
+
+    sanitized[key] = sanitizeToolResultForStream(nestedValue);
+  }
+
+  return sanitized;
+}
+
 export function createDeployStreamRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -650,7 +704,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
                   ? `${ev.toolName} completed`
                   : `${ev.toolName} failed: ${ev.error ?? 'unknown'}`,
                 toolName: ev.toolName,
-                toolResult: ev.result ?? null,
+                toolResult: ev.result === undefined ? null : sanitizeToolResultForStream(ev.result),
                 toolSuccess: ev.success,
                 toolError: ev.error ?? null,
               });
