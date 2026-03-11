@@ -311,7 +311,7 @@ function errorResponse(error: unknown): {
 export async function startMcpServer(ctx: AppContext): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(
-    { name: 'openlander', version: '0.4.0' },
+    { name: 'openlander', version: '0.4.1' },
     { capabilities: { tools: {} } },
   );
 
