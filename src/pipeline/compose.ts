@@ -6,6 +6,7 @@ import { join, dirname } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { nanoid } from 'nanoid';
 import { allocatePort } from './port.js';
+import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
@@ -401,16 +402,190 @@ export class ComposePipeline {
         log.info({ conflicts: conflicts.length }, 'Generated port conflict override');
       }
 
-      const upResult = await this.execCompose(config.composePath, ['up', '-d', '--build']);
-      buildLog += `[compose up]\n${upResult.stdout}${upResult.stderr}`;
-      if (upResult.exitCode !== 0) {
-        throw new Error(`docker compose failed: ${upResult.stderr || upResult.stdout}`);
+      const conflictedPortsByService = new Map<string, Set<number>>();
+      for (const conflict of conflicts) {
+        const ports = conflictedPortsByService.get(conflict.service) ?? new Set<number>();
+        ports.add(conflict.requestedPort);
+        conflictedPortsByService.set(conflict.service, ports);
       }
 
-      this.jobManager?.updatePhase(parentProjectId, 'starting');
-      const statuses = await this.getServiceStatuses(parentProjectId);
+      const services: ServiceNode[] = composeProject.services.map((service) => {
+        const requestedPort = (service.ports ?? [])
+          .map((mapping) => parseComposePortMapping(mapping))
+          .find((parsed) => parsed?.hostPort !== null && parsed?.hostPort !== undefined)?.hostPort;
+        const hasConflictedRequestedPort =
+          requestedPort !== undefined &&
+          requestedPort !== null &&
+          (conflictedPortsByService.get(service.name)?.has(requestedPort) ?? false);
 
+        return {
+          name: service.name,
+          composePath: config.composePath,
+          dependsOn: service.dependsOn ?? [],
+          port:
+            requestedPort !== undefined && requestedPort !== null && !hasConflictedRequestedPort
+              ? requestedPort
+              : undefined,
+          envVars,
+        };
+      });
+
+      const orchestrator = new DeployOrchestrator(this.events);
+      const topology = orchestrator.buildTopology(
+        services,
+        config.repoUrl,
+        config.clonePath,
+        'compose',
+        config.branch,
+      );
+      const topologyValidation = orchestrator.validateTopology(topology, []);
+      if (!topologyValidation.valid) {
+        throw new Error(
+          `Compose topology validation failed: ${topologyValidation.errors.join('; ')}`,
+        );
+      }
+
+      const servicesWithDependents = new Set<string>();
+      for (const service of topology.services) {
+        for (const dependency of service.dependsOn) {
+          servicesWithDependents.add(dependency);
+        }
+      }
+
+      const serviceStatusByName = new Map<string, ComposeServiceStatus>();
+      const orchestration = await orchestrator.executeOrdered(topology, {
+        deployService: async (service) => {
+          this.jobManager?.updatePhase(parentProjectId, 'starting');
+
+          const upResult = await this.execCompose(config.composePath, [
+            'up',
+            '-d',
+            '--build',
+            '--no-deps',
+            service.name,
+          ]);
+          buildLog += `[compose up ${service.name}]\n${upResult.stdout}${upResult.stderr}`;
+
+          if (upResult.exitCode !== 0) {
+            const childId = childrenByService.get(service.name);
+            if (childId) {
+              this.db.updateProject(childId, { status: 'error' });
+              this.jobManager?.updatePhase(
+                childId,
+                'failed',
+                upResult.stderr || upResult.stdout || `docker compose failed for ${service.name}`,
+              );
+            }
+            return {
+              success: false,
+              projectId: childId,
+              error: `docker compose up failed for ${service.name}: ${upResult.stderr || upResult.stdout}`,
+            };
+          }
+
+          return {
+            success: true,
+            projectId: childrenByService.get(service.name),
+          };
+        },
+        waitForHealthy: async (service) => {
+          const statuses = await this.getServiceStatuses(parentProjectId);
+          for (const status of statuses) {
+            serviceStatusByName.set(status.name, status);
+          }
+          const status = statuses.find((entry) => entry.name === service.name);
+          if (!status) {
+            return {
+              healthy: false,
+              error: `Service ${service.name} status not found after compose up`,
+            };
+          }
+
+          if (status.status === 'running') {
+            return { healthy: true };
+          }
+
+          if (status.status === 'error') {
+            return {
+              healthy: false,
+              error: `Service ${service.name} reported error state`,
+            };
+          }
+
+          if (servicesWithDependents.has(service.name)) {
+            return {
+              healthy: false,
+              error: `Service ${service.name} is ${status.status} and required by dependent services`,
+            };
+          }
+
+          return { healthy: true };
+        },
+        rollbackService: async (service) => {
+          const stopResult = await this.execCompose(config.composePath, ['stop', service.name]);
+          buildLog += `[compose rollback stop ${service.name}]\n${stopResult.stdout}${stopResult.stderr}`;
+
+          const rmResult = await this.execCompose(config.composePath, ['rm', '-f', service.name]);
+          buildLog += `[compose rollback rm ${service.name}]\n${rmResult.stdout}${rmResult.stderr}`;
+
+          const childId = childrenByService.get(service.name);
+          if (childId) {
+            this.db.updateProject(childId, {
+              status: 'error',
+              containerId: null,
+              assignedPort: null,
+            });
+            this.jobManager?.updatePhase(
+              childId,
+              'failed',
+              'Rolled back due to compose dependency deployment failure',
+            );
+          }
+        },
+      });
+
+      const statuses = await this.getServiceStatuses(parentProjectId);
       for (const status of statuses) {
+        serviceStatusByName.set(status.name, status);
+      }
+
+      const orchestrationByService = new Map(
+        orchestration.services.map((service) => [service.name, service]),
+      );
+      const reconciledStatuses = composeProject.services.map((service) => {
+        const status = serviceStatusByName.get(service.name);
+        const orchestrationStatus = orchestrationByService.get(service.name)?.status;
+
+        if (!status) {
+          return {
+            name: service.name,
+            status:
+              orchestrationStatus === 'failed' ||
+              orchestrationStatus === 'rolled_back' ||
+              orchestrationStatus === 'skipped'
+                ? ('error' as const)
+                : ('stopped' as const),
+          };
+        }
+
+        if (orchestrationStatus === 'rolled_back' || orchestrationStatus === 'failed') {
+          return {
+            ...status,
+            status: 'error' as const,
+          };
+        }
+
+        if (orchestrationStatus === 'skipped') {
+          return {
+            ...status,
+            status: 'stopped' as const,
+          };
+        }
+
+        return status;
+      });
+
+      for (const status of reconciledStatuses) {
         const childId = childrenByService.get(status.name);
         if (!childId) continue;
         this.db.updateProject(childId, {
@@ -423,9 +598,30 @@ export class ComposePipeline {
           containerId: status.containerId ?? null,
           assignedPort: status.ports?.[0] ? parseHostPort(status.ports[0]) : null,
         });
+
+        if (status.status === 'running') {
+          this.jobManager?.updatePhase(childId, 'done');
+        } else if (status.status === 'stopped') {
+          this.jobManager?.updatePhase(childId, 'failed', 'Service stopped after compose deploy');
+        } else {
+          this.jobManager?.updatePhase(childId, 'failed', 'Service failed during compose deploy');
+        }
       }
 
-      const hasError = statuses.some((status) => status.status === 'error');
+      const failedOrchestration = orchestration.services
+        .filter((service) => service.status === 'failed')
+        .map((service) => `${service.name}: ${service.error ?? 'unknown error'}`);
+      const hasError =
+        !orchestration.success ||
+        reconciledStatuses.some((status) => status.status === 'error') ||
+        failedOrchestration.length > 0;
+      const errorMessage =
+        failedOrchestration.length > 0
+          ? `One or more services failed to start (${failedOrchestration.join('; ')})`
+          : hasError
+            ? 'One or more services failed to start'
+            : undefined;
+
       this.db.updateProject(parentProjectId, {
         status: hasError ? 'error' : 'running',
       });
@@ -442,12 +638,12 @@ export class ComposePipeline {
       if (hasError) {
         await this.events.emit('compose:failed', {
           projectId: parentProjectId,
-          error: 'One or more services failed to start',
+          error: errorMessage ?? 'One or more services failed to start',
         });
       } else {
         await this.events.emit('compose:up', {
           projectId: parentProjectId,
-          services: statuses.map((status) => status.name),
+          services: reconciledStatuses.map((status) => status.name),
         });
       }
 
@@ -457,9 +653,9 @@ export class ComposePipeline {
         success: !hasError,
         parentProjectId,
         parentName,
-        services: statuses,
+        services: reconciledStatuses,
         buildDurationMs: Date.now() - startTime,
-        error: hasError ? 'One or more services failed to start' : undefined,
+        error: hasError ? (errorMessage ?? 'One or more services failed to start') : undefined,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);

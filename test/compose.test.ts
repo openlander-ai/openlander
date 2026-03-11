@@ -37,11 +37,18 @@ let mockSpawnImplementation: (cmd: string, args: string[]) => ChildProcess = () 
   throw new Error('spawn mock not set up');
 };
 
-vi.mock('node:child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:child_process')>();
+vi.mock(import('node:child_process'), async (importOriginal) => {
+  const actual = await importOriginal();
+  const mockedSpawn = ((
+    command: string,
+    argsOrOptions?: readonly string[] | import('node:child_process').SpawnOptions,
+  ) => {
+    const args = Array.isArray(argsOrOptions) ? [...argsOrOptions] : [];
+    return mockSpawnImplementation(command, args) as unknown as ReturnType<typeof actual.spawn>;
+  }) as typeof actual.spawn;
   return {
     ...actual,
-    spawn: (cmd: string, args: string[]): ChildProcess => mockSpawnImplementation(cmd, args),
+    spawn: mockedSpawn,
   };
 });
 describe('ComposePipeline', () => {
@@ -152,11 +159,14 @@ describe('ComposePipeline', () => {
       'utf8',
     );
 
-    let callCount = 0;
+    const composeCommands: string[] = [];
     mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      callCount++;
       const argText = args.join(' ');
-      if (argText.includes(' up ')) {
+      composeCommands.push(argText);
+      if (argText.includes(' up ') && argText.includes(' web')) {
+        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
+      }
+      if (argText.includes(' up ') && argText.includes(' db')) {
         return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
       }
       if (argText.includes(' ps ')) {
@@ -208,7 +218,159 @@ describe('ComposePipeline', () => {
     const children = db.getChildProjects(result.parentProjectId);
     expect(children).toHaveLength(2);
     expect(children.map((child) => child.status).sort()).toEqual(['running', 'stopped']);
-    expect(callCount).toBe(2);
+    expect(composeCommands.filter((cmd) => cmd.includes(' up '))).toHaveLength(2);
+    expect(
+      composeCommands.every((cmd) => {
+        if (!cmd.includes(' up ')) {
+          return true;
+        }
+        return cmd.includes('--no-deps');
+      }),
+    ).toBe(true);
+  });
+
+  it('rolls back previously started compose services when a dependency-ordered service fails', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  db:\n    image: postgres\n  api:\n    image: nginx\n    depends_on:\n      - db\n`,
+      'utf8',
+    );
+
+    const composeCommands: string[] = [];
+    let psCallCount = 0;
+    mockSpawnImplementation = (_cmd: string, args: string[]) => {
+      const argText = args.join(' ');
+      composeCommands.push(argText);
+
+      if (argText.includes(' up ') && argText.includes(' db')) {
+        return createMockProcess('db started\n', '', 0) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' up ') && argText.includes(' api')) {
+        return createMockProcess('', 'api failed to start', 1) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' ps ')) {
+        psCallCount += 1;
+        if (psCallCount === 1) {
+          return createMockProcess(
+            JSON.stringify([
+              {
+                Service: 'db',
+                State: 'running',
+                ID: 'db-container',
+                Publishers: [],
+              },
+            ]),
+            '',
+            0,
+          ) as unknown as ChildProcess;
+        }
+        return createMockProcess('[]', '', 0) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' stop db')) {
+        return createMockProcess('db stopped\n', '', 0) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' rm -f db')) {
+        return createMockProcess('db removed\n', '', 0) as unknown as ChildProcess;
+      }
+
+      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
+    };
+
+    const result = await pipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('api');
+
+    const parent = db.getProject(result.parentProjectId);
+    expect(parent?.status).toBe('error');
+
+    const children = db.getChildProjects(result.parentProjectId);
+    expect(children).toHaveLength(2);
+    expect(children.map((child) => child.status).sort()).toEqual(['error', 'error']);
+
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps api'));
+    expect(composeCommands).toContainEqual(expect.stringContaining('stop db'));
+    expect(composeCommands).toContainEqual(expect.stringContaining('rm -f db'));
+  });
+
+  it('blocks dependent service start when dependency is stopped', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  db:\n    image: postgres\n  api:\n    image: nginx\n    depends_on:\n      - db\n`,
+      'utf8',
+    );
+
+    const composeCommands: string[] = [];
+    let psCallCount = 0;
+    mockSpawnImplementation = (_cmd: string, args: string[]) => {
+      const argText = args.join(' ');
+      composeCommands.push(argText);
+
+      if (argText.includes(' up ') && argText.includes(' db')) {
+        return createMockProcess('db started\n', '', 0) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' ps ')) {
+        psCallCount += 1;
+        if (psCallCount === 1) {
+          return createMockProcess(
+            JSON.stringify([
+              {
+                Service: 'db',
+                State: 'exited',
+                ID: 'db-container',
+                Publishers: [],
+              },
+            ]),
+            '',
+            0,
+          ) as unknown as ChildProcess;
+        }
+
+        return createMockProcess(
+          JSON.stringify([
+            {
+              Service: 'db',
+              State: 'exited',
+              ID: 'db-container',
+              Publishers: [],
+            },
+          ]),
+          '',
+          0,
+        ) as unknown as ChildProcess;
+      }
+
+      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
+    };
+
+    const result = await pipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('db is stopped');
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
+    expect(composeCommands).not.toContainEqual(
+      expect.stringContaining('up -d --build --no-deps api'),
+    );
   });
 
   it('parses service status output from compose ps json lines', async () => {
