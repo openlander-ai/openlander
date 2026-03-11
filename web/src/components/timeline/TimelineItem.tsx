@@ -174,7 +174,17 @@ export function TimelineItemCard({
           </a>
         )}
 
-        {/* Agent tool call arguments (hidden for inline flow) */}
+        {/* Agent tool call arguments */}
+        {isAgentToolCall && item.toolArguments && Object.keys(item.toolArguments).length > 0 && (
+          <details className="mt-2 group/args">
+            <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
+              Arguments ▾
+            </summary>
+            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+              {JSON.stringify(item.toolArguments, null, 2)}
+            </pre>
+          </details>
+        )}
 
         {/* Error build log detail */}
         {isError && item.detail && (
