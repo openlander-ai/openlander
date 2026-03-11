@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - Agent Enhancement & Pipeline Orchestration
+
+### Added
+
+- `DeployOrchestrator` integration for `deployMonorepo()` with topology-ordered execution and automatic rollback on child failure
+- `DeployOrchestrator` integration for `deployCompose()` with per-service `--no-deps` deployment, strict health gating for dependents, and rollback via `compose stop/rm`
+- Backend stream-boundary sanitizer that recursively masks env-style objects and secret-like fields in `agent_tool_result` NDJSON payloads before they reach the browser
+- Collapsible tool-call arguments display in timeline items, reusing the existing `sanitizeToolArguments` pipeline
+- Structured tool-result card renderers (`ToolResultCard`) for `deploy_project`, `list_projects`, `get_logs`, `get_system_stats`, `set_env_vars`, and a JSON fallback viewer
+- HTTP-level regression test proving masked tool-result output in the deploy stream
+- Timeline item rendering tests for collapsed/expanded argument blocks
+
+### Changed
+
+- `deployMonorepo()` now enforces dependency ordering and rollback semantics through the orchestrator instead of raw `Promise.all`
+- `deployCompose()` now routes service startup through orchestrator topology with health-gate progression instead of a single `docker compose up -d --build`
+- Compose health checks now treat `stopped` dependencies as blockers only when they have dependents, preserving backward compatibility for leaf/one-shot services
+
+## [0.4.1] - Console Log Readability
+
+### Added
+
+- Shared console state contract with typed `ConsoleStreamState` model
+- Console fixture builders for deterministic testing
+- Terminal availability state machine for clearer show/hide/unavailable states
+
+### Changed
+
+- Console tab now defaults to log-first view with an explicit terminal toggle
+- Console log viewer UX improved with localized state copy and expanded stream model
+- ANSI text handling normalized across console components
+
 ## [0.4.0] - Deployments UX & Time Normalization
 
 ### Added
