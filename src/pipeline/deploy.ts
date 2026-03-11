@@ -8,10 +8,11 @@ import { nanoid } from 'nanoid';
 import type { Docker } from './docker.js';
 import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
-import { allocatePort } from './port.js';
+import { allocatePort, scanUsedPorts } from './port.js';
 import { buildTraefikLabels, getProjectUrl } from './traefik.js';
 import { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery, type BuildContext } from './build-recovery.js';
+import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { ContainerNotFoundError, DockerfileNotFoundError, PreflightCheckError } from '../errors.js';
@@ -764,12 +765,78 @@ export class DeployPipeline {
       this.jobManager?.trackJob(parentId, parentName);
     }
 
-    const childResults = await Promise.all(
-      config.dockerfiles.map(async (dockerfilePath): Promise<DeployResult> => {
-        const serviceName = deriveServiceName(dockerfilePath);
-        const childName = `${parentName}/${serviceName}`;
+    const serviceNameCounts = new Map<string, number>();
+    const services: ServiceNode[] = config.dockerfiles.map((dockerfilePath) => {
+      const baseName = deriveServiceName(dockerfilePath);
+      const count = (serviceNameCounts.get(baseName) ?? 0) + 1;
+      serviceNameCounts.set(baseName, count);
+      const serviceName = count === 1 ? baseName : `${baseName}-${String(count)}`;
+      return {
+        name: serviceName,
+        dockerfile: dockerfilePath,
+        dependsOn: [],
+      };
+    });
+
+    const orchestrator = new DeployOrchestrator();
+    let topology;
+    try {
+      topology = orchestrator.buildTopology(
+        services,
+        config.repoUrl,
+        config.clonePath,
+        config.commitSha,
+        config.branch,
+      );
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.db.updateProject(parentId, { status: 'error' });
+      this.jobManager?.updatePhase(parentId, 'failed', errorMsg);
+      return {
+        success: false,
+        parentProjectId: parentId,
+        parentName,
+        children: services.map((service) => ({
+          success: false,
+          projectId: '',
+          projectName: `${parentName}/${service.name}`,
+          error: `Topology build failed: ${errorMsg}`,
+          buildDurationMs: Date.now() - startTime,
+        })),
+        buildDurationMs: Date.now() - startTime,
+      };
+    }
+
+    const usedPorts = (await scanUsedPorts(this.db, this.docker)).all;
+    const validation = orchestrator.validateTopology(topology, usedPorts);
+    if (!validation.valid) {
+      const validationError = validation.errors.join('; ');
+      this.db.updateProject(parentId, { status: 'error' });
+      this.jobManager?.updatePhase(parentId, 'failed', validationError);
+      return {
+        success: false,
+        parentProjectId: parentId,
+        parentName,
+        children: services.map((service) => ({
+          success: false,
+          projectId: '',
+          projectName: `${parentName}/${service.name}`,
+          error: `Topology validation failed: ${validationError}`,
+          buildDurationMs: Date.now() - startTime,
+        })),
+        buildDurationMs: Date.now() - startTime,
+      };
+    }
+
+    const resultByService = new Map<string, DeployResult>();
+
+    const orchestration = await orchestrator.executeOrdered(topology, {
+      deployService: async (service) => {
+        const dockerfilePath = service.dockerfile;
+        const childName = `${parentName}/${service.name}`;
         const childId = nanoid(12);
         const imageTag = `openlander/${childName.replace('/', '-')}:latest`;
+        const childStartTime = Date.now();
 
         this.db.createProject({
           id: childId,
@@ -782,10 +849,30 @@ export class DeployPipeline {
         this.db.updateProject(childId, { status: 'building' });
         this.jobManager?.trackJob(childId, childName);
 
+        if (!dockerfilePath) {
+          const failed: DeployResult = {
+            success: false,
+            projectId: childId,
+            projectName: childName,
+            error: `Service ${service.name} has no Dockerfile path`,
+            buildDurationMs: Date.now() - childStartTime,
+          };
+          resultByService.set(service.name, failed);
+          return {
+            success: false,
+            projectId: childId,
+            error: failed.error,
+          };
+        }
+
         try {
           this.jobManager?.updatePhase(childId, 'building');
           const contextPath = join(config.clonePath, dirname(dockerfilePath));
-          const envVars = { ...config.envVars, ...this.env.getMergedForDeploy(childId) };
+          const envVars = {
+            ...config.envVars,
+            ...service.envVars,
+            ...this.env.getMergedForDeploy(childId),
+          };
           const buildTimeVarsForChild = filterBuildTimeVars(envVars);
           if (Object.keys(buildTimeVarsForChild).length > 0) {
             const childDfPath = join(config.clonePath, dockerfilePath);
@@ -830,12 +917,12 @@ export class DeployPipeline {
             trigger,
             commitSha: config.commitSha,
             buildLog: `[monorepo] ${dockerfilePath} → ${imageTag}\n`,
-            durationMs: Date.now() - startTime,
+            durationMs: Date.now() - childStartTime,
           });
 
           this.jobManager?.updatePhase(childId, 'done');
 
-          return {
+          const successResult: DeployResult = {
             success: true,
             projectId: childId,
             projectName: childName,
@@ -843,7 +930,13 @@ export class DeployPipeline {
             url: internalUrl,
             port,
             commitSha: config.commitSha,
-            buildDurationMs: Date.now() - startTime,
+            buildDurationMs: Date.now() - childStartTime,
+          };
+          resultByService.set(service.name, successResult);
+          return {
+            success: true,
+            projectId: childId,
+            url: internalUrl,
           };
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error);
@@ -856,21 +949,107 @@ export class DeployPipeline {
             status: 'failed',
             trigger,
             buildLog: `[monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`,
-            durationMs: Date.now() - startTime,
+            durationMs: Date.now() - childStartTime,
           });
 
-          return {
+          const failedResult: DeployResult = {
             success: false,
             projectId: childId,
             projectName: childName,
             error: errorMsg,
-            buildDurationMs: Date.now() - startTime,
+            buildDurationMs: Date.now() - childStartTime,
+          };
+          resultByService.set(service.name, failedResult);
+
+          return {
+            success: false,
+            projectId: childId,
+            error: errorMsg,
           };
         }
-      }),
-    );
+      },
+      rollbackService: async (service) => {
+        if (!service.projectId) {
+          return;
+        }
+        const project = this.db.getProject(service.projectId);
+        if (!project) {
+          return;
+        }
 
-    const allSuccess = childResults.every((r) => r.success);
+        if (project.container_id) {
+          try {
+            await this.docker.stopContainer(project.container_id);
+            await this.docker.removeContainer(project.container_id);
+          } catch (error) {
+            log.warn(
+              { err: error, service: service.name },
+              'Monorepo rollback container cleanup failed',
+            );
+          }
+        }
+
+        this.db.updateProject(service.projectId, {
+          status: 'error',
+          containerId: null,
+          assignedPort: null,
+        });
+
+        this.jobManager?.updatePhase(
+          service.projectId,
+          'failed',
+          'Rolled back due to dependency deployment failure',
+        );
+
+        this.db.createDeployLog({
+          id: nanoid(12),
+          projectId: service.projectId,
+          status: 'failed',
+          trigger,
+          buildLog: `[monorepo] ${service.name} ROLLED_BACK: dependency deployment failure\n`,
+          durationMs: Date.now() - startTime,
+        });
+      },
+    });
+
+    const orchestrationByService = new Map(
+      orchestration.services.map((service) => [service.name, service]),
+    );
+    const childResults = services.map((service) => {
+      const result = resultByService.get(service.name);
+      const orchestrationStatus = orchestrationByService.get(service.name);
+      const projectName = `${parentName}/${service.name}`;
+
+      if (!result) {
+        return {
+          success: false,
+          projectId: '',
+          projectName,
+          error: orchestrationStatus?.error ?? 'Service did not produce a deploy result',
+          buildDurationMs: Date.now() - startTime,
+        };
+      }
+
+      if (orchestrationStatus?.status === 'rolled_back') {
+        return {
+          ...result,
+          success: false,
+          error: result.error ?? 'Rolled back due to dependency deployment failure',
+        };
+      }
+
+      if (orchestrationStatus?.status === 'skipped') {
+        return {
+          ...result,
+          success: false,
+          error: result.error ?? 'Skipped due to dependency deployment failure',
+        };
+      }
+
+      return result;
+    });
+
+    const allSuccess = orchestration.success && childResults.every((r) => r.success);
     this.db.updateProject(parentId, { status: allSuccess ? 'running' : 'error' });
     this.jobManager?.updatePhase(parentId, allSuccess ? 'done' : 'failed');
 

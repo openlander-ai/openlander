@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
 import { JobManager } from '../src/pipeline/job-manager.js';
 import type { Docker } from '../src/pipeline/docker.js';
+import { clearPortScanCache } from '../src/pipeline/port.js';
 
 // Minimal Docker mock — just enough to not crash
 function createMockDocker(): Docker {
@@ -44,6 +45,7 @@ describe('DeployPipeline — non-blocking deploy', () => {
   });
 
   afterEach(() => {
+    clearPortScanCache();
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -210,6 +212,56 @@ describe('DeployPipeline — non-blocking deploy', () => {
 
       expect(result).not.toBeInstanceOf(Promise);
       expect(result.status).toBe('building');
+    });
+  });
+
+  describe('deployMonorepo', () => {
+    it('uses orchestration rollback path when a child service fails', async () => {
+      const clonePath = join(tmpDir, 'mono');
+      mkdirSync(join(clonePath, 'frontend'), { recursive: true });
+      mkdirSync(join(clonePath, 'backend'), { recursive: true });
+      writeFileSync(
+        join(clonePath, 'frontend', 'Dockerfile'),
+        'FROM node:20\nEXPOSE 3000\n',
+        'utf8',
+      );
+      writeFileSync(
+        join(clonePath, 'backend', 'Dockerfile'),
+        'FROM node:20\nEXPOSE 4000\n',
+        'utf8',
+      );
+
+      const docker = createMockDocker();
+      vi.mocked(docker.buildImage).mockImplementation(async (contextPath: string) => {
+        if (contextPath.endsWith('/backend')) {
+          throw new Error('backend build failed');
+        }
+        return undefined;
+      });
+
+      pipeline = new DeployPipeline(
+        docker,
+        db,
+        {
+          getEnvVars: vi.fn().mockReturnValue({}),
+          getMergedForDeploy: vi.fn().mockReturnValue({}),
+        } as never,
+        jobManager,
+      );
+
+      const result = await pipeline.deployMonorepo({
+        repoUrl: 'https://github.com/user/mono',
+        branch: 'main',
+        clonePath,
+        commitSha: 'abc123',
+        dockerfiles: ['frontend/Dockerfile', 'backend/Dockerfile'],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.children).toHaveLength(2);
+      expect(result.children.some((child) => child.error?.includes('Rolled back'))).toBe(true);
+      expect(docker.stopContainer).toHaveBeenCalled();
+      expect(docker.removeContainer).toHaveBeenCalled();
     });
   });
 });
