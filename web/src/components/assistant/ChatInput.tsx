@@ -42,7 +42,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
   };
 
   return (
-    <div className="relative flex items-end gap-2 p-3 bg-bg-panel border-t border-[hsl(var(--border))]">
+    <div className="relative flex items-end gap-2 p-3 bg-bg-panel border-t border-[hsl(var(--border))] shadow-[0_-1px_3px_rgba(0,0,0,0.04)]">
       <textarea
         ref={textareaRef}
         value={message}
@@ -51,10 +51,10 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         disabled={disabled}
         placeholder={placeholder || t('assistant.placeholder')}
         className={cn(
-          'flex-1 min-h-[40px] max-h-[120px] resize-none rounded-lg px-3 py-2.5',
+          'flex-1 min-h-[40px] max-h-[120px] resize-none rounded-xl px-3.5 py-2.5',
           'bg-bg-app border border-[hsl(var(--border))] text-sm font-body text-primary-ol',
-          'placeholder:text-muted-ol focus:outline-none focus:ring-1 focus:ring-agent/40 focus:border-agent/30',
-          'transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+          'placeholder:text-muted-ol focus:outline-none focus:ring-2 focus:ring-agent/30 focus:border-agent/40',
+          'transition-all disabled:opacity-50 disabled:cursor-not-allowed',
           'scrollbar-thin scrollbar-thumb-[hsl(var(--border))] scrollbar-track-transparent',
         )}
         rows={1}
@@ -63,9 +63,10 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
         onClick={handleSend}
         disabled={!message.trim() || disabled}
         className={cn(
-          'shrink-0 flex items-center justify-center h-10 w-10 rounded-lg',
-          'bg-agent text-bg-app hover:bg-agent/90 transition-colors',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
+          'shrink-0 flex items-center justify-center h-10 w-10 rounded-xl',
+          'bg-agent text-bg-app transition-all',
+          'hover:bg-agent/90 hover:scale-105 active:scale-95',
+          'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100',
         )}
       >
         <Send className="h-4 w-4" />
