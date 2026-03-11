@@ -95,6 +95,19 @@ describe('Web API Routes', () => {
     expect(body.projects[0]).toHaveProperty('visibility');
   });
 
+  it('GET /api/projects normalizes project timestamps to ISO UTC', async () => {
+    db.createProject({ id: 'p1', name: 'time-app', repoUrl: 'https://github.com/user/time-app' });
+
+    const res = await app.request('/api/projects');
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.projects[0].createdAt).toMatch(/T/);
+    expect(body.projects[0].createdAt).toMatch(/Z$/);
+    expect(body.projects[0].updatedAt).toMatch(/T/);
+    expect(body.projects[0].updatedAt).toMatch(/Z$/);
+  });
+
   it('GET /api/projects?status=running filters by status', async () => {
     db.createProject({ id: 'p1', name: 'running-app', repoUrl: 'https://github.com/user/app1' });
     db.createProject({ id: 'p2', name: 'stopped-app', repoUrl: 'https://github.com/user/app2' });
@@ -105,6 +118,31 @@ describe('Web API Routes', () => {
 
     expect(body.count).toBe(1);
     expect(body.projects[0].name).toBe('running-app');
+  });
+
+  it('GET /api/projects/:id/deployments includes normalized timestamps and failure summary', async () => {
+    db.createProject({
+      id: 'p1',
+      name: 'deploy-app',
+      repoUrl: 'https://github.com/user/deploy-app',
+    });
+    db.createDeployLog({
+      id: 'd1',
+      projectId: 'p1',
+      status: 'failed',
+      trigger: 'chat',
+      commitSha: 'abcdef1234567890',
+      durationMs: 42000,
+      buildLog: 'step 1\n[error] Docker build failed for test-image',
+    });
+
+    const res = await app.request('/api/projects/p1/deployments');
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.deployments[0].createdAt).toMatch(/T/);
+    expect(body.deployments[0].createdAt).toMatch(/Z$/);
+    expect(body.deployments[0].failureSummary).toContain('Docker build failed');
   });
 
   // ---------------------------------------------------------------------------

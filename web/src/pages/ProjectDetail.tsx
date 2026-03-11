@@ -434,7 +434,13 @@ export function ProjectDetail() {
 
           {/* Deployments: list + PR previews filter */}
           <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
-            {id && <DeploymentsTab projectId={id} projectStatus={project?.status} />}
+            {id && (
+              <DeploymentsTab
+                projectId={id}
+                projectStatus={project?.status}
+                projectBranch={project?.branch}
+              />
+            )}
           </TabsContent>
 
           {/* Console: Logs (left) + Terminal (right) */}

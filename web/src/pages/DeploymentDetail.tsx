@@ -2,7 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDeploymentDetail } from '@/lib/api';
-import { formatRelativeTime } from '@/lib/time';
+import {
+  formatDeploymentDuration,
+  getDeploymentStatusMeta,
+  getDeploymentTriggerMetaLabel,
+  getShortCommitSha,
+} from '@/lib/deployments';
+import { formatDateTime, formatRelativeTime } from '@/lib/time';
 import type { DeployLogDetail } from '@/types';
 import {
   ArrowLeft,
@@ -17,14 +23,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
 import { parseAnsiLine } from '@/lib/ansi';
-
-function formatDuration(ms: number) {
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}m ${remainingSeconds}s`;
-}
 
 export function DeploymentDetail() {
   const { id, deployId } = useParams();
@@ -96,19 +94,8 @@ export function DeploymentDetail() {
     );
   }
 
-  const statusColor =
-    deployment.status === 'success'
-      ? 'text-success'
-      : deployment.status === 'failed'
-        ? 'text-error'
-        : 'text-muted-ol';
-
-  const statusBg =
-    deployment.status === 'success'
-      ? 'bg-success'
-      : deployment.status === 'failed'
-        ? 'bg-error'
-        : 'bg-[var(--text-muted)]';
+  const statusMeta = getDeploymentStatusMeta(deployment.status);
+  const shortCommitSha = getShortCommitSha(deployment.commitSha);
 
   const StatusIcon =
     deployment.status === 'success'
@@ -131,28 +118,24 @@ export function DeploymentDetail() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
-              <div className={cn('h-3 w-3 rounded-full shrink-0', statusBg)} />
+              <div className={cn('h-3 w-3 rounded-full shrink-0', statusMeta.dotClass)} />
               <div className="min-w-0">
                 <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate flex items-center gap-2">
                   {'Deployment'}
-                  {deployment.commitSha && (
+                  {shortCommitSha && (
                     <span className="flex items-center gap-1 text-sm font-mono font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
                       <GitCommit className="h-3.5 w-3.5" />
-                      {deployment.commitSha.substring(0, 7)}
+                      {shortCommitSha}
                     </span>
                   )}
                 </h1>
                 <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
-                  <span className={cn('flex items-center gap-1', statusColor)}>
+                  <span className={cn('flex items-center gap-1', statusMeta.textClass)}>
                     <StatusIcon className="h-3 w-3" />
-                    {deployment.status === 'success'
-                      ? 'Production'
-                      : deployment.status === 'failed'
-                        ? 'Failed'
-                        : 'Cancelled'}
+                    {statusMeta.label}
                   </span>
                   <span className="capitalize">
-                    {deployment.trigger} {'trigger'}
+                    {getDeploymentTriggerMetaLabel(deployment.trigger)}
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
@@ -161,10 +144,45 @@ export function DeploymentDetail() {
                   {deployment.durationMs && (
                     <span className="flex items-center gap-1">
                       <Activity className="h-3 w-3" />
-                      {formatDuration(deployment.durationMs)}
+                      {formatDeploymentDuration(deployment.durationMs)}
                     </span>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
+              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+                {'Status'}
+              </div>
+              <div className={cn('mt-1 text-sm font-display font-medium', statusMeta.textClass)}>
+                {statusMeta.label}
+              </div>
+            </div>
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
+              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+                {'Trigger'}
+              </div>
+              <div className="mt-1 text-sm font-body text-primary-ol capitalize">
+                {getDeploymentTriggerMetaLabel(deployment.trigger)}
+              </div>
+            </div>
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
+              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+                {'Started'}
+              </div>
+              <div className="mt-1 text-sm font-body text-primary-ol">
+                {formatDateTime(deployment.createdAt) || 'Unknown'}
+              </div>
+            </div>
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
+              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+                {'Duration'}
+              </div>
+              <div className="mt-1 text-sm font-body text-primary-ol">
+                {formatDeploymentDuration(deployment.durationMs)}
               </div>
             </div>
           </div>

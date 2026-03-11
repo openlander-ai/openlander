@@ -172,19 +172,20 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 
 ## Roadmap
 
-| Version    | Focus                 | Status | Highlights                                                                                                        |
-| ---------- | --------------------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
-| **v0.1.0** | MVP                   | Done   | Chat-driven deployment, Docker + Traefik, MCP server (23 tools)                                                   |
-| **v0.2.0** | Web Dashboard         | Done   | React SPA, Vercel-inspired UI, real-time timeline, NDJSON streaming                                               |
-| **v0.2.1** | i18n + Bugfixes       | Done   | Korean/English i18n, build error reporting, OAuth callback fix                                                    |
-| **v0.2.2** | Deploy Controls       | Done   | Blue-green deploy UI, webhook settings, rollback button                                                           |
-| **v0.2.3** | Domains & Visibility  | Done   | Domain CRUD UI, server scan dashboard, public URL management                                                      |
-| **v0.2.4** | Services              | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images                                             |
-| **v0.2.5** | Release Preparation   | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                                      |
-| **v0.2.6** | Shared Mode & Preview | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys                    |
-| **v0.3.0** | Developer Experience  | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure       |
-| **v0.3.1** | UI Polish & Stability | Done   | Terminal shell probing for Alpine/slim images, log-first console layout, overview summary dashboard, v0.3.1 ship  |
-| **v1.0.0** | First Stable Release  | Next   | AI co-pilot (7 features), agent enhancement (MCP agentic tool, channel streaming, deploy orchestrator), 531 tests |
+| Version    | Focus                 | Status | Highlights                                                                                                         |
+| ---------- | --------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| **v0.1.0** | MVP                   | Done   | Chat-driven deployment, Docker + Traefik, MCP server (23 tools)                                                    |
+| **v0.2.0** | Web Dashboard         | Done   | React SPA, Vercel-inspired UI, real-time timeline, NDJSON streaming                                                |
+| **v0.2.1** | i18n + Bugfixes       | Done   | Korean/English i18n, build error reporting, OAuth callback fix                                                     |
+| **v0.2.2** | Deploy Controls       | Done   | Blue-green deploy UI, webhook settings, rollback button                                                            |
+| **v0.2.3** | Domains & Visibility  | Done   | Domain CRUD UI, server scan dashboard, public URL management                                                       |
+| **v0.2.4** | Services              | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images                                              |
+| **v0.2.5** | Release Preparation   | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                                       |
+| **v0.2.6** | Shared Mode & Preview | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys                     |
+| **v0.3.0** | Developer Experience  | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure        |
+| **v0.3.1** | UI Polish & Stability | Done   | Terminal shell probing for Alpine/slim images, log-first console layout, overview summary dashboard, v0.3.1 ship   |
+| **v0.4.0** | Deployments UX        | Done   | Deployments filters, richer history rows, detail metadata cards, API UTC normalization, safer browser time parsing |
+| **v1.0.0** | First Stable Release  | Next   | AI co-pilot (7 features), agent enhancement (MCP agentic tool, channel streaming, deploy orchestrator), 531 tests  |
 
 ## Requirements
 

@@ -68,9 +68,17 @@ export interface DeployLogSummary {
   commitSha: string | null;
   durationMs: number | null;
   createdAt: string;
+  failureSummary?: string | null;
 }
 
 export interface DeployLogDetail extends DeployLogSummary {
   projectId: string;
   buildLog: string | null;
+}
+
+export type DeploymentHistoryFilter = 'all' | 'failed' | 'success' | 'in_progress';
+
+export interface DeploymentViewModel extends DeployLogSummary {
+  failureSummary?: string | null;
+  isInProgress?: boolean;
 }

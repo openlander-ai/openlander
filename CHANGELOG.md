@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - Deployments UX & Time Normalization
+
+### Added
+
+- Deployments status filters for `all`, `failed`, `success`, and `in_progress`
+- Shared deployments helper layer and polling hook for row/detail formatting and tab data loading
+- Regression coverage for normalized timestamp handling in both frontend utilities and web API routes
+
+### Changed
+
+- Deployments list now surfaces richer metadata including status pills, branch fallback, duration, and inline failure summaries
+- Deployment detail now shows stronger top-level metadata with precise absolute time context
+- Browser-side time formatting now safely parses normalized API timestamps and legacy SQLite-style values
+
+### Fixed
+
+- Project and deployment API responses now normalize exposed timestamps to ISO UTC strings at the API boundary
+- Deployments loading failures now present a recoverable retry state instead of a dead-end empty view
+
 ## [0.3.1] - UI Polish & Terminal Fallback
 
 ### Added

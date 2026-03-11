@@ -10,6 +10,47 @@ import { getProjectUrl } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('api');
 
+function normalizeTimestamp(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value !== 'string') {
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const sqliteLike = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/;
+  const normalizedInput = sqliteLike.test(trimmed) ? trimmed.replace(' ', 'T') + 'Z' : trimmed;
+  const parsed = new Date(normalizedInput);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return trimmed;
+  }
+
+  return parsed.toISOString();
+}
+
+function extractFailureSummary(buildLog: string | null): string | null {
+  if (!buildLog) return null;
+
+  const lines = buildLog
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const errorLine = lines.find((line) => /error|failed|exception/i.test(line));
+  return errorLine ?? lines.at(-1) ?? null;
+}
+
 export function createProjectRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -77,8 +118,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         port: p.assigned_port,
         url: p.assigned_port ? getProjectUrl(p.name) : null,
         publicUrl: p.public_url,
-        createdAt: p.created_at,
-        updatedAt: p.updated_at,
+        createdAt: normalizeTimestamp(p.created_at),
+        updatedAt: normalizeTimestamp(p.updated_at),
         parentProjectId: p.parent_project_id,
         isCompose: ctx.db.isParentProject(p.id),
         serviceCount: ctx.db.getChildProjects(p.id).length,
@@ -98,6 +139,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       ...project,
       port: project.assigned_port ?? null,
       url: project.assigned_port ? getProjectUrl(project.name) : null,
+      created_at: normalizeTimestamp(project.created_at),
+      updated_at: normalizeTimestamp(project.updated_at),
       envVars,
       recentDeploys: deployLogs,
     });
@@ -121,7 +164,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         trigger: log.trigger,
         commitSha: log.commit_sha,
         durationMs: log.duration_ms,
-        createdAt: log.created_at,
+        createdAt: normalizeTimestamp(log.created_at),
+        failureSummary: log.status === 'failed' ? extractFailureSummary(log.build_log) : null,
       })),
     });
   });
@@ -145,7 +189,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       commitSha: log.commit_sha,
       buildLog: log.build_log,
       durationMs: log.duration_ms,
-      createdAt: log.created_at,
+      createdAt: normalizeTimestamp(log.created_at),
     });
   });
 
@@ -242,7 +286,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         branchFilter: cfg.branch_filter,
         enabled: cfg.enabled === 1,
         webhookUrl: `/api/webhooks/${project.id}/${cfg.source}`,
-        createdAt: cfg.created_at,
+        createdAt: normalizeTimestamp(cfg.created_at),
       })),
     });
   });
@@ -787,8 +831,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         prNumber: preview.pr_number,
         url: getProjectUrl(preview.name),
         publicUrl: preview.public_url,
-        createdAt: preview.created_at,
-        updatedAt: preview.updated_at,
+        createdAt: normalizeTimestamp(preview.created_at),
+        updatedAt: normalizeTimestamp(preview.updated_at),
       })),
     });
   });
