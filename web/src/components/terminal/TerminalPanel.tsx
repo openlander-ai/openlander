@@ -3,17 +3,21 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { RefreshCw } from 'lucide-react';
+import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
+import { getTerminalAvailabilityState } from './terminalAvailability';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalPanelProps {
   projectId: string;
-  isActive: boolean;
+  isConsoleActive: boolean;
+  projectStatus: string;
 }
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
-export function TerminalPanel({ projectId, isActive }: TerminalPanelProps) {
+export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: TerminalPanelProps) {
+  const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -21,9 +25,10 @@ export function TerminalPanel({ projectId, isActive }: TerminalPanelProps) {
 
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [reconnectKey, setReconnectKey] = useState(0);
+  const availability = getTerminalAvailabilityState(projectStatus, isConsoleActive, t);
 
   useEffect(() => {
-    if (!isActive || !containerRef.current) return;
+    if (!availability.canConnect || !containerRef.current) return;
 
     setConnectionState('connecting');
 
@@ -110,12 +115,22 @@ export function TerminalPanel({ projectId, isActive }: TerminalPanelProps) {
       wsRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [projectId, isActive, reconnectKey]);
+  }, [availability.canConnect, projectId, reconnectKey]);
 
-  if (!isActive) {
+  if (!availability.canConnect) {
     return (
-      <div className="h-full bg-[#0a0a0a] rounded-lg overflow-hidden flex items-center justify-center">
-        <div className="text-muted-ol font-mono text-sm">Container not running</div>
+      <div className="h-full min-h-[14rem] bg-[#0a0a0a] rounded-lg overflow-hidden border border-[hsl(var(--border))]">
+        <div className="flex h-full flex-col justify-center gap-3 px-5 py-6 text-sm">
+          <span className="inline-flex w-fit rounded-full border border-[hsl(var(--border))] bg-bg-panel/60 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-ol">
+            {availability.badge}
+          </span>
+          <div className="space-y-1.5">
+            <p className="font-body text-primary-ol">{availability.title}</p>
+            <p className="max-w-sm font-body text-xs leading-5 text-muted-ol">
+              {availability.detail}
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -138,35 +153,76 @@ export function TerminalPanel({ projectId, isActive }: TerminalPanelProps) {
   const getStatusText = () => {
     switch (connectionState) {
       case 'connected':
-        return 'Connected';
+        return t('logs.terminalConnected');
       case 'connecting':
-        return 'Connecting...';
+        return t('logs.terminalConnecting');
       case 'error':
-        return 'Error';
+        return t('logs.terminalError');
       case 'disconnected':
-        return 'Disconnected';
+        return t('logs.terminalDisconnected');
       default:
-        return 'Unknown';
+        return t('logs.terminalDisconnected');
+    }
+  };
+
+  const getStatusBody = () => {
+    switch (connectionState) {
+      case 'connecting':
+        return t('logs.terminalConnectingBody');
+      case 'error':
+        return t('logs.terminalErrorBody');
+      case 'disconnected':
+        return t('logs.terminalDisconnectedBody');
+      default:
+        return availability.detail;
     }
   };
 
   return (
     <div className="h-full bg-[#0a0a0a] rounded-lg overflow-hidden relative">
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-2 bg-bg-panel/80 backdrop-blur-sm border border-[hsl(var(--border))] rounded-md px-2 py-1 text-xs font-mono text-secondary-ol">
-        <span className={cn('w-2 h-2 rounded-full', getStatusColor())} />
-        <span>{getStatusText()}</span>
-        {(connectionState === 'disconnected' || connectionState === 'error') && (
-          <button
-            onClick={() => setReconnectKey((k) => k + 1)}
-            className="ml-1 p-1 hover:bg-bg-subtle rounded text-muted-ol hover:text-primary-ol transition-colors"
-            title="Reconnect"
-          >
-            <RefreshCw className="w-3 h-3" />
-          </button>
-        )}
+      <div className="absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-3 rounded-md border border-[hsl(var(--border))] bg-bg-panel/80 px-3 py-2 backdrop-blur-sm">
+        <div className="min-w-0">
+          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-ol">
+            {availability.badge}
+          </p>
+          <p className="text-xs font-body text-primary-ol">{availability.detail}</p>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs font-mono text-secondary-ol">
+          <span className={cn('w-2 h-2 rounded-full', getStatusColor())} />
+          <span>{getStatusText()}</span>
+          {(connectionState === 'disconnected' || connectionState === 'error') && (
+            <button
+              onClick={() => setReconnectKey((k) => k + 1)}
+              className="ml-1 p-1 hover:bg-bg-subtle rounded text-muted-ol hover:text-primary-ol transition-colors"
+              title={t('logs.terminalReconnect')}
+            >
+              <RefreshCw className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div ref={containerRef} className="h-full p-2" />
+      {connectionState !== 'connected' && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
+          <div className="pointer-events-auto w-full max-w-sm rounded-lg border border-[hsl(var(--border))] bg-bg-panel/85 p-4 text-center shadow-lg backdrop-blur-sm">
+            <p className="text-sm font-mono text-secondary-ol">{getStatusText()}</p>
+            <p className="mt-2 text-xs font-body text-muted-ol">{getStatusBody()}</p>
+            {(connectionState === 'disconnected' || connectionState === 'error') && (
+              <button
+                type="button"
+                onClick={() => setReconnectKey((k) => k + 1)}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-primary-ol transition-colors hover:bg-bg-subtle/80"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                {t('logs.terminalReconnect')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div ref={containerRef} className="h-full px-2 pb-2 pt-14" />
     </div>
   );
 }
