@@ -3,16 +3,25 @@ import { useLanguage } from '@/i18n/context';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLogStream, type LogEntry } from '@/hooks/use-log-stream';
 import { cn } from '@/lib/utils';
-import { Search, ArrowDown, Trash2, Radio } from 'lucide-react';
-import { parseAnsiLine, stripAnsi } from '@/lib/ansi';
+import { Search, ArrowDown, Trash2, Radio, RefreshCw } from 'lucide-react';
+import { normalizeLogText, parseAnsiLine } from '@/lib/ansi';
+import {
+  CONSOLE_LABELS,
+  DEFAULT_CONSOLE_FILTER_STATE,
+  getConsoleSurfaceState,
+  type ConsoleFilterState,
+  type ConsoleLogLevel,
+  type ConsoleLogLevelFilter,
+} from '@/types';
 
 interface LogViewerProps {
   projectId: string;
+  toolbarActions?: React.ReactNode;
 }
 
 /** Detect log level from line content */
-function detectLevel(line: string): 'error' | 'warn' | 'info' | 'debug' | 'plain' {
-  const lower = stripAnsi(line).toLowerCase();
+function detectLevel(line: string): ConsoleLogLevel {
+  const lower = normalizeLogText(line).toLowerCase();
   if (/\berror\b|\bfatal\b|\bpanic\b/.test(lower)) return 'error';
   if (/\bwarn(ing)?\b/.test(lower)) return 'warn';
   if (/\binfo\b/.test(lower)) return 'info';
@@ -20,7 +29,7 @@ function detectLevel(line: string): 'error' | 'warn' | 'info' | 'debug' | 'plain
   return 'plain';
 }
 
-const levelColors: Record<string, string> = {
+const levelColors: Record<ConsoleLogLevel, string> = {
   error: 'text-error',
   warn: 'text-warning',
   info: 'text-agent',
@@ -28,35 +37,65 @@ const levelColors: Record<string, string> = {
   plain: 'text-secondary-ol',
 };
 
-export function LogViewer({ projectId }: LogViewerProps) {
+export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
   const { t } = useLanguage();
-  const [follow, setFollow] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isRegex, setIsRegex] = useState(false);
+  const [filters, setFilters] = useState<
+    Pick<ConsoleFilterState, 'searchMode' | 'searchQuery' | 'logLevel'>
+  >({
+    searchMode: DEFAULT_CONSOLE_FILTER_STATE.searchMode,
+    searchQuery: DEFAULT_CONSOLE_FILTER_STATE.searchQuery,
+    logLevel: DEFAULT_CONSOLE_FILTER_STATE.logLevel,
+  });
   const parentRef = useRef<HTMLDivElement>(null);
+  const isRegex = filters.searchMode === 'regex';
 
-  const { entries, isConnected, error, clear } = useLogStream({
+  const {
+    entries,
+    followMode,
+    isConnected,
+    isInitialLoading,
+    isDisconnected,
+    error,
+    unseenCount,
+    isLoadingOlder,
+    canLoadOlder,
+    canJumpToLatest,
+    clear,
+    pauseFollowing,
+    jumpToLatest,
+    loadOlder,
+  } = useLogStream({
     projectId,
-    follow,
     enabled: true,
   });
+  const isFollowing = followMode === 'follow';
+  const hasActiveFilters = filters.searchQuery.trim().length > 0 || filters.logLevel !== 'all';
 
-  // Filter entries by search
+  // Filter entries by search and level
   const filteredEntries = useMemo(() => {
-    if (!searchQuery.trim()) return entries;
+    let result = entries;
+
+    if (filters.logLevel !== 'all') {
+      result = result.filter((e) => {
+        const level = e.stream === 'stderr' ? 'error' : detectLevel(e.line);
+        return level === filters.logLevel;
+      });
+    }
+
+    if (!filters.searchQuery.trim()) return result;
 
     try {
       if (isRegex) {
-        const regex = new RegExp(searchQuery, 'i');
-        return entries.filter((e) => regex.test(stripAnsi(e.line)));
+        const regex = new RegExp(filters.searchQuery, 'i');
+        return result.filter((e) => regex.test(normalizeLogText(e.line)));
       }
-      const lower = searchQuery.toLowerCase();
-      return entries.filter((e) => stripAnsi(e.line).toLowerCase().includes(lower));
+      const lower = filters.searchQuery.toLowerCase();
+      return result.filter((e) => normalizeLogText(e.line).toLowerCase().includes(lower));
     } catch {
       // Invalid regex — show all
-      return entries;
+      return result;
     }
-  }, [entries, searchQuery, isRegex]);
+  }, [entries, filters.searchQuery, filters.logLevel, isRegex]);
 
   // Memoize parsed ANSI HTML
   const parsedLines = useMemo(() => {
@@ -67,56 +106,100 @@ export function LogViewer({ projectId }: LogViewerProps) {
     return map;
   }, [filteredEntries]);
 
+  const surfaceState = getConsoleSurfaceState({
+    hasEntries: entries.length > 0,
+    hasFilteredEntries: filteredEntries.length > 0,
+    isInitialLoading,
+    isDisconnected,
+    hasError: Boolean(error),
+  });
+  const showRecoveryBanner = (Boolean(error) || isDisconnected) && filteredEntries.length > 0;
+
+  const resetFilters = useCallback(() => {
+    setFilters((current) => ({
+      ...current,
+      searchQuery: DEFAULT_CONSOLE_FILTER_STATE.searchQuery,
+      logLevel: DEFAULT_CONSOLE_FILTER_STATE.logLevel,
+    }));
+  }, []);
+
   // Virtual list
   const virtualizer = useVirtualizer({
     count: filteredEntries.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 20,
+    estimateSize: () => 24,
     overscan: 30,
   });
 
   // Auto-scroll when following
   useEffect(() => {
-    if (!follow || filteredEntries.length === 0) return;
+    if (!isFollowing || filteredEntries.length === 0) return;
     virtualizer.scrollToIndex(filteredEntries.length - 1, { align: 'end' });
-  }, [filteredEntries.length, follow, virtualizer]);
+  }, [filteredEntries.length, isFollowing, virtualizer]);
 
   // Detect scroll up → disable follow
   const handleScroll = useCallback(() => {
     const el = parentRef.current;
     if (!el) return;
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-    if (!isNearBottom && follow) {
-      setFollow(false);
+    if (!isNearBottom && isFollowing) {
+      pauseFollowing();
     }
-  }, [follow]);
+  }, [isFollowing, pauseFollowing]);
 
   const scrollToBottom = useCallback(() => {
-    setFollow(true);
+    jumpToLatest();
     if (filteredEntries.length > 0) {
       virtualizer.scrollToIndex(filteredEntries.length - 1, { align: 'end' });
     }
-  }, [filteredEntries.length, virtualizer]);
+  }, [filteredEntries.length, jumpToLatest, virtualizer]);
+
+  const loadOlderWithScrollAnchor = useCallback(async () => {
+    const el = parentRef.current;
+    const previousScrollHeight = el?.scrollHeight ?? 0;
+    const previousScrollTop = el?.scrollTop ?? 0;
+
+    await loadOlder();
+
+    if (!el) return;
+
+    requestAnimationFrame(() => {
+      const nextScrollHeight = el.scrollHeight;
+      el.scrollTop = previousScrollTop + (nextScrollHeight - previousScrollHeight);
+    });
+  }, [loadOlder]);
 
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel/50">
-        {/* Search */}
-        <div className="flex items-center gap-1.5 flex-1 max-w-sm">
+      <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel/50">
+        {/* Left: Search */}
+        <div className="flex items-center gap-1.5 flex-1 max-w-md">
           <Search className="h-3.5 w-3.5 text-muted-ol shrink-0" />
           <input
             type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={'Search logs...'}
+            value={filters.searchQuery}
+            onChange={(e) =>
+              setFilters((current) => ({
+                ...current,
+                searchQuery: e.target.value,
+              }))
+            }
+            placeholder={CONSOLE_LABELS.searchPlaceholder}
             className={cn(
               'flex-1 bg-transparent text-xs font-mono text-primary-ol',
               'placeholder:text-muted-ol focus:outline-none',
             )}
           />
           <button
-            onClick={() => setIsRegex(!isRegex)}
+            type="button"
+            title={CONSOLE_LABELS.searchMode[filters.searchMode]}
+            onClick={() =>
+              setFilters((current) => ({
+                ...current,
+                searchMode: current.searchMode === 'regex' ? 'text' : 'regex',
+              }))
+            }
             className={cn(
               'px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors',
               isRegex
@@ -126,53 +209,94 @@ export function LogViewer({ projectId }: LogViewerProps) {
           >
             .*
           </button>
+          <div className="w-px h-3.5 bg-[hsl(var(--border))] mx-1" />
+          <select
+            value={filters.logLevel}
+            onChange={(e) =>
+              setFilters((current) => ({
+                ...current,
+                logLevel: e.target.value as ConsoleLogLevelFilter,
+              }))
+            }
+            className="bg-transparent text-xs font-mono text-muted-ol focus:outline-none border-none cursor-pointer hover:text-primary-ol appearance-none pr-2"
+          >
+            {Object.entries(CONSOLE_LABELS.logLevel).map(([value, label]) => (
+              <option key={value} value={value} className="bg-bg-panel text-primary-ol">
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div className="flex items-center gap-1">
-          {/* Follow toggle */}
-          <button
-            onClick={() => (follow ? setFollow(false) : scrollToBottom())}
-            className={cn(
-              'inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-body transition-colors',
-              follow
-                ? 'bg-agent/15 text-agent border border-agent/30'
-                : 'text-muted-ol hover:text-secondary-ol border border-transparent hover:border-border',
+        {/* Right: Controls & Status */}
+        <div className="flex items-center gap-3">
+          {/* Status Indicators */}
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            {isConnected && (
+              <span className="flex items-center gap-1.5 text-success">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+                </span>
+                {CONSOLE_LABELS.live}
+              </span>
             )}
-          >
-            <Radio className="h-3 w-3" />
-            {'Follow'}
-          </button>
-
-          {/* Clear */}
-          <button
-            onClick={clear}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-body text-muted-ol hover:text-secondary-ol transition-colors"
-          >
-            <Trash2 className="h-3 w-3" />
-            {'Clear'}
-          </button>
-        </div>
-
-        {/* Status */}
-        <div className="flex items-center gap-1.5 ml-auto">
-          {isConnected && (
-            <span className="flex items-center gap-1 text-[10px] font-mono text-success">
-              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-              Live
+            {isInitialLoading && !isConnected && (
+              <span className="text-muted-ol">{CONSOLE_LABELS.connecting}</span>
+            )}
+            {isDisconnected && <span className="text-warning">{CONSOLE_LABELS.disconnected}</span>}
+            <span className="text-muted-ol border-l border-[hsl(var(--border))] pl-2">
+              {hasActiveFilters ? (
+                <>
+                  <span className="text-primary-ol font-medium">
+                    {filteredEntries.length.toLocaleString()}
+                  </span>{' '}
+                  / {entries.length.toLocaleString()} {CONSOLE_LABELS.lines}
+                </>
+              ) : (
+                <>
+                  {entries.length.toLocaleString()} {CONSOLE_LABELS.lines}
+                </>
+              )}
             </span>
+          </div>
+
+          <div className="w-px h-4 bg-[hsl(var(--border))]" />
+
+          {/* Log Actions */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => (isFollowing ? pauseFollowing() : scrollToBottom())}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-body transition-colors',
+                isFollowing
+                  ? 'bg-success/10 text-success hover:bg-success/20'
+                  : 'bg-warning/10 text-warning hover:bg-warning/20',
+              )}
+            >
+              <Radio className={cn('h-3.5 w-3.5', isFollowing && 'animate-pulse')} />
+              {isFollowing ? CONSOLE_LABELS.followMode.follow : CONSOLE_LABELS.followMode.paused}
+            </button>
+
+            <button
+              type="button"
+              onClick={clear}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-body text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle/50 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {CONSOLE_LABELS.clear}
+            </button>
+          </div>
+
+          {toolbarActions && (
+            <>
+              <div className="w-px h-4 bg-[hsl(var(--border))]" />
+              {toolbarActions}
+            </>
           )}
-          <span className="text-[10px] font-mono text-muted-ol">
-            {filteredEntries.length.toLocaleString()} {'lines'}
-          </span>
         </div>
       </div>
-
-      {/* Error banner */}
-      {error && (
-        <div className="shrink-0 px-4 py-2 text-xs font-body text-error bg-error/5 border-b border-error/10">
-          {error}
-        </div>
-      )}
 
       {/* Log content — virtualized */}
       <div
@@ -180,11 +304,83 @@ export function LogViewer({ projectId }: LogViewerProps) {
         onScroll={handleScroll}
         className="flex-1 overflow-auto font-mono text-xs leading-5 bg-bg-app"
       >
-        {filteredEntries.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-sm font-body text-muted-ol">
-              {entries.length === 0 ? t('logs.noLogs') : t('logs.noMatching')}
-            </p>
+        {showRecoveryBanner && (
+          <div className="sticky top-0 z-10 border-b border-[hsl(var(--border))] bg-bg-panel/95 px-4 py-2 backdrop-blur-sm">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <p className={cn('text-sm font-body', error ? 'text-error' : 'text-warning')}>
+                  {error ? t('logs.errorTitle') : t('logs.disconnectedTitle')}
+                </p>
+                <p className="text-xs font-body text-muted-ol">
+                  {error ? error : t('logs.disconnectedInlineBody')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                className="inline-flex items-center gap-1.5 self-start rounded-md border border-[hsl(var(--border))] px-3 py-1.5 text-xs font-body text-secondary-ol transition-colors hover:bg-bg-subtle hover:text-primary-ol"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                {t('logs.retryStream')}
+              </button>
+            </div>
+          </div>
+        )}
+        {!isFollowing && (canLoadOlder || isLoadingOlder) && (
+          <div className="sticky top-0 z-10 flex justify-center px-4 py-2 bg-bg-app/95 backdrop-blur-sm">
+            <button
+              type="button"
+              onClick={() => void loadOlderWithScrollAnchor()}
+              disabled={isLoadingOlder}
+              className={cn(
+                'rounded-full border border-[hsl(var(--border))] px-3 py-1 text-[11px] font-body transition-colors',
+                isLoadingOlder
+                  ? 'text-muted-ol bg-bg-panel/60 cursor-wait'
+                  : 'text-secondary-ol bg-bg-panel hover:text-primary-ol',
+              )}
+            >
+              {isLoadingOlder ? CONSOLE_LABELS.loadingOlder : CONSOLE_LABELS.loadOlder}
+            </button>
+          </div>
+        )}
+        {surfaceState !== 'ready' ? (
+          <div className="flex h-full items-center justify-center p-6">
+            <div className="w-full max-w-md rounded-xl border border-[hsl(var(--border))] bg-bg-panel/60 p-5 text-center shadow-sm">
+              <p className="text-sm font-body font-medium text-primary-ol">
+                {surfaceState === 'loading' && t('logs.loadingTitle')}
+                {surfaceState === 'empty' && t('logs.emptyTitle')}
+                {surfaceState === 'error' && t('logs.errorTitle')}
+                {surfaceState === 'disconnected' && t('logs.disconnectedTitle')}
+                {surfaceState === 'noMatch' && t('logs.noMatchingTitle')}
+              </p>
+              <p className="mt-2 text-sm font-body text-muted-ol">
+                {surfaceState === 'loading' && t('logs.loadingBody')}
+                {surfaceState === 'empty' && t('logs.emptyBody')}
+                {surfaceState === 'error' && (error ?? t('logs.errorBody'))}
+                {surfaceState === 'disconnected' && t('logs.disconnectedBody')}
+                {surfaceState === 'noMatch' && t('logs.noMatchingBody')}
+              </p>
+              {(surfaceState === 'error' || surfaceState === 'disconnected') && (
+                <button
+                  type="button"
+                  onClick={scrollToBottom}
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-primary-ol transition-colors hover:bg-bg-subtle/80"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {t('logs.retryStream')}
+                </button>
+              )}
+              {surfaceState === 'noMatch' && hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-bg-subtle px-3 py-1.5 text-xs font-body text-primary-ol transition-colors hover:bg-bg-subtle/80"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {t('logs.clearFilters')}
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div
@@ -210,12 +406,24 @@ export function LogViewer({ projectId }: LogViewerProps) {
                     transform: `translateY(${virtualItem.start}px)`,
                   }}
                   className={cn(
-                    'flex items-start px-4 hover:bg-bg-subtle/30',
+                    'flex items-start px-4 py-0.5 hover:bg-bg-subtle/50 group border-b border-transparent hover:border-[hsl(var(--border))]/30 transition-colors',
                     entry.stream === 'stderr' && 'bg-error/[0.03]',
+                    virtualItem.index % 2 === 0 && 'bg-bg-subtle/20',
                   )}
                 >
+                  <div
+                    className={cn(
+                      'absolute left-0 top-0 bottom-0 w-0.5',
+                      level === 'error'
+                        ? 'bg-error/70'
+                        : level === 'warn'
+                          ? 'bg-warning/70'
+                          : 'bg-transparent group-hover:bg-[hsl(var(--border))]',
+                    )}
+                  />
+
                   {/* Line number */}
-                  <span className="shrink-0 w-12 text-right pr-3 text-muted-ol select-none tabular-nums">
+                  <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-[10px] leading-5">
                     {virtualItem.index + 1}
                   </span>
                   {/* Content */}
@@ -231,19 +439,26 @@ export function LogViewer({ projectId }: LogViewerProps) {
       </div>
 
       {/* Scroll-to-bottom button */}
-      {!follow && filteredEntries.length > 0 && (
-        <button
-          onClick={scrollToBottom}
-          className={cn(
-            'absolute bottom-4 right-4 z-10',
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-full',
-            'bg-bg-panel border border-[hsl(var(--border))] shadow-lg',
-            'text-[11px] font-body text-secondary-ol hover:text-primary-ol transition-colors',
-          )}
-        >
-          <ArrowDown className="h-3 w-3" />
-          {'Bottom'}
-        </button>
+      {canJumpToLatest && filteredEntries.length > 0 && (
+        <div className="absolute bottom-6 right-6 z-10 flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-all duration-200',
+              unseenCount > 0
+                ? 'bg-primary-ol text-bg-app font-medium hover:scale-105 hover:shadow-xl'
+                : 'bg-bg-panel border border-[hsl(var(--border))] text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle',
+            )}
+          >
+            <ArrowDown className={cn('h-4 w-4', unseenCount > 0 && 'animate-bounce')} />
+            <span className="text-sm">
+              {unseenCount > 0
+                ? `${CONSOLE_LABELS.jumpToLatest} (${unseenCount})`
+                : CONSOLE_LABELS.jumpToLatest}
+            </span>
+          </button>
+        </div>
       )}
     </div>
   );
