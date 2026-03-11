@@ -82,3 +82,5 @@ export interface DeploymentViewModel extends DeployLogSummary {
   failureSummary?: string | null;
   isInProgress?: boolean;
 }
+
+export * from './console';
