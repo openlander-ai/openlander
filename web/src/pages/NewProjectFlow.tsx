@@ -7,6 +7,13 @@ import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Search, GitBranch, Star, Lock, Loader2, Rocket, ArrowLeft, Globe } from 'lucide-react';
 
 interface GitRepo {
@@ -53,6 +60,17 @@ export function NewProjectFlow() {
   const [error, setError] = useState<string | null>(null);
   const [ghError, setGhError] = useState<string | null>(null);
   const [deployStatus, setDeployStatus] = useState<string | null>(null);
+
+  const [selectedRepo, setSelectedRepo] = useState<GitRepo | null>(null);
+  const [environment, setEnvironment] = useState<string>('production');
+  const [branch, setBranch] = useState<string>('main');
+
+  const handleEnvironmentChange = (value: string) => {
+    setEnvironment(value);
+    if (value === 'production') setBranch('main');
+    else if (value === 'staging') setBranch('develop');
+    else if (value === 'development') setBranch('dev');
+  };
 
   const fetchRepos = useCallback(async (pageNum: number) => {
     setLoading(true);
@@ -104,16 +122,29 @@ export function NewProjectFlow() {
     return () => clearTimeout(timer);
   }, [searchQuery, tab]);
 
-  const handleDeploy = async (repo: GitRepo) => {
+  const handleDeployClick = (repo: GitRepo) => {
     if (isMobile) {
       showMobileToast();
       return;
     }
+    setSelectedRepo(repo);
+    setEnvironment('production');
+    setBranch(repo.defaultBranch || 'main');
+  };
+
+  const handleConfirmDeploy = async () => {
+    if (!selectedRepo) return;
     setDeploying(true);
     setError(null);
     setDeployStatus('Starting deployment...');
     try {
-      const result = await deployProject(repo.cloneUrl, repo.defaultBranch, repo.name);
+      const result = await deployProject(
+        selectedRepo.cloneUrl,
+        branch,
+        selectedRepo.name,
+        undefined,
+        environment,
+      );
       if (result.success && result.projectId) {
         navigate(`/projects/${result.projectId}`);
       } else {
@@ -211,7 +242,7 @@ export function NewProjectFlow() {
       )}
 
       {/* Repo List */}
-      {!deploying && (
+      {!deploying && !selectedRepo && (
         <ScrollArea className="flex-1">
           <div className="p-6 space-y-1">
             {(loading && repos.length === 0) || (searching && searchResults.length === 0) ? (
@@ -276,7 +307,7 @@ export function NewProjectFlow() {
                     <Button
                       size="sm"
                       className="h-7 px-3 text-[11px] font-body gap-1.5 bg-foreground text-background hover:bg-foreground/90 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                      onClick={() => handleDeploy(repo)}
+                      onClick={() => handleDeployClick(repo)}
                       disabled={deploying}
                     >
                       <Rocket className="h-3 w-3" />
@@ -308,6 +339,62 @@ export function NewProjectFlow() {
             )}
           </div>
         </ScrollArea>
+      )}
+
+      {/* Configure Deployment */}
+      {!deploying && selectedRepo && (
+        <div className="flex-1 p-6 flex flex-col">
+          <div className="max-w-xl mx-auto w-full bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-6 space-y-6">
+            <div>
+              <h2 className="text-base font-display font-bold text-primary-ol flex items-center gap-2">
+                <Rocket className="h-4 w-4" />
+                Deploy {selectedRepo.name}
+              </h2>
+              <p className="text-xs text-secondary-ol font-body mt-1">{selectedRepo.fullName}</p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-primary-ol">Environment</label>
+                <Select value={environment} onValueChange={handleEnvironmentChange}>
+                  <SelectTrigger className="h-8 text-xs bg-bg-subtle border-[hsl(var(--border))]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="production">Production</SelectItem>
+                    <SelectItem value="staging">Staging</SelectItem>
+                    <SelectItem value="development">Development</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-primary-ol">Branch</label>
+                <Input
+                  value={branch}
+                  onChange={(e) => setBranch(e.target.value)}
+                  className="h-8 text-xs bg-bg-subtle border-[hsl(var(--border))]"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedRepo(null)}
+                className="flex-1 h-8 text-xs font-body"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmDeploy}
+                className="flex-1 h-8 text-xs font-body bg-foreground text-background hover:bg-foreground/90"
+              >
+                Deploy Project
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

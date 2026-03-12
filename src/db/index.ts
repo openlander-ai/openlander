@@ -334,10 +334,10 @@ export class Database {
       this.sqlite.exec(
         'ALTER TABLE deploy_logs ADD COLUMN environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE',
       );
-      this.sqlite.exec(
-        'CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id)',
-      );
     }
+    this.sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id)',
+    );
 
     // global_secrets table (v0.0.10)
     this.sqlite.exec(`CREATE TABLE IF NOT EXISTS global_secrets (

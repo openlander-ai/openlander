@@ -80,9 +80,32 @@ export class Docker {
 
   constructor(socketPath?: string, networkName: string = 'web') {
     const require = createRequire(import.meta.url);
-    const DockerodeClass = (
-      require('dockerode') as { default: new (options?: unknown) => Dockerode }
-    ).default;
+
+    // docker-modem eagerly requires its SSH transport, which pulls in ssh2's
+    // native crypto addon at startup. On this runtime that addon can segfault
+    // during module load even though OpenLander uses Unix socket transport.
+    // Stub the SSH transport module so dockerode startup stays on the socket path.
+    const dockerSshModulePath = require.resolve('docker-modem/lib/ssh.js');
+    if (!require.cache[dockerSshModulePath]) {
+      const dockerSshStub = {
+        id: dockerSshModulePath,
+        filename: dockerSshModulePath,
+        loaded: true,
+        exports: () => {
+          throw new Error('Docker SSH transport is unavailable in this runtime');
+        },
+      } as unknown as NodeJS.Module;
+      require.cache[dockerSshModulePath] = dockerSshStub;
+    }
+
+    const dockerodeModule = require('dockerode') as
+      | { default?: new (options?: unknown) => Dockerode }
+      | (new (options?: unknown) => Dockerode);
+    const DockerodeClass =
+      typeof dockerodeModule === 'function' ? dockerodeModule : dockerodeModule.default;
+    if (!DockerodeClass) {
+      throw new Error('Failed to load dockerode constructor');
+    }
 
     this.networkName = networkName;
     if (socketPath) {

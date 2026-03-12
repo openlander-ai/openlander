@@ -207,8 +207,6 @@ export function ProjectsGrid() {
                       ? project.environments
                       : [{ type: 'production', status: project.status }, ...project.environments];
 
-                    if (allEnvs.length <= 1) return null;
-
                     return (
                       <div className="flex items-center gap-1.5 pt-1 flex-wrap">
                         {allEnvs.map((env) => {

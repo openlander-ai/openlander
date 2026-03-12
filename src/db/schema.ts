@@ -153,7 +153,6 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id);
 CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id);
 CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id);
-CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_project ON timeline_events(project_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id);
 CREATE INDEX IF NOT EXISTS idx_domain_mappings_project ON domain_mappings(project_id);

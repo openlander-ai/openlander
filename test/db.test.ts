@@ -2,9 +2,30 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 
 import { Database } from '../src/db/index.js';
 import { ProjectAlreadyExistsError } from '../src/errors.js';
+
+type LegacySqlite = {
+  exec: (sql: string) => unknown;
+  close: () => void;
+};
+
+function createLegacySqlite(dbPath: string): LegacySqlite {
+  const require = createRequire(import.meta.url);
+  const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+
+  if (isBunRuntime) {
+    const BunSqlite = require('bun:sqlite') as {
+      Database: new (path: string) => LegacySqlite;
+    };
+    return new BunSqlite.Database(dbPath);
+  }
+
+  const BetterSqlite3 = require('better-sqlite3') as new (path: string) => LegacySqlite;
+  return new BetterSqlite3(dbPath);
+}
 
 describe('Database', () => {
   let db: Database;
@@ -201,6 +222,44 @@ describe('Database', () => {
       const last = db.getLastDeployLog('p1');
       expect(last).toBeDefined();
       expect(last!.id).toBe('dl2');
+    });
+
+    it('initializes and migrates legacy deploy_logs without environment_id', () => {
+      const dbPath = join(tmpDir, 'test.db');
+      db.close();
+
+      const legacy = createLegacySqlite(dbPath);
+      legacy.exec('DROP TABLE IF EXISTS deploy_logs');
+      legacy.exec(`CREATE TABLE deploy_logs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        status TEXT,
+        trigger_source TEXT,
+        commit_sha TEXT,
+        build_log TEXT,
+        duration_ms INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+      legacy.close();
+
+      db = new Database(dbPath);
+
+      db.createProject({
+        id: 'legacy-p1',
+        name: 'legacy-app',
+        repoUrl: 'https://github.com/test/legacy',
+      });
+      db.createDeployLog({
+        id: 'legacy-dl1',
+        projectId: 'legacy-p1',
+        environmentId: 'legacy-p1-production',
+        status: 'success',
+        trigger: 'api',
+      });
+
+      const scopedLogs = db.getDeployLogs('legacy-p1', 20, 'legacy-p1-production');
+      expect(scopedLogs).toHaveLength(1);
+      expect(scopedLogs[0]!.id).toBe('legacy-dl1');
     });
   });
 
