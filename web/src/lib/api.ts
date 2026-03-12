@@ -360,6 +360,26 @@ export async function getProjectEnv(id: string): Promise<Record<string, string>>
   return data as Record<string, string>;
 }
 
+export async function generateEnvExample(id: string, environment?: string): Promise<string> {
+  const url = new URL(`/api/projects/${id}/env-example`, window.location.origin);
+  if (environment) {
+    url.searchParams.set('environment', environment);
+  }
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const error = await res.text();
+    let message = 'Failed to generate .env.example';
+    try {
+      const payload = JSON.parse(error);
+      if (payload.message) message = payload.message;
+    } catch {
+      if (error.trim()) message = error;
+    }
+    throw new Error(message);
+  }
+  return res.text();
+}
+
 export async function debugBuild(id: string): Promise<BuildDiagnosis> {
   const res = await fetch(`/api/projects/${id}/debug-build`, {
     method: 'POST',
