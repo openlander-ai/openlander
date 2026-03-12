@@ -518,6 +518,7 @@ export function ProjectDetail() {
                 projectId={id}
                 projectStatus={displayProject.status}
                 projectBranch={displayProject.branch}
+                environmentId={selectedEnv?.id}
               />
             )}
           </TabsContent>

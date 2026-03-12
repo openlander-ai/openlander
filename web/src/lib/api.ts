@@ -219,8 +219,16 @@ export async function deleteProjectPreview(projectId: string, previewId: string)
   if (!res.ok) throw new Error('Failed to delete preview');
 }
 
-export async function getProjectDeployments(id: string, limit = 50): Promise<DeployLogSummary[]> {
-  const res = await fetch(`/api/projects/${id}/deployments?limit=${limit}`);
+export async function getProjectDeployments(
+  id: string,
+  limit = 50,
+  environmentId?: string,
+): Promise<DeployLogSummary[]> {
+  const query = new URLSearchParams({ limit: limit.toString() });
+  if (environmentId) {
+    query.set('environmentId', environmentId);
+  }
+  const res = await fetch(`/api/projects/${id}/deployments?${query.toString()}`);
   if (!res.ok) throw new Error('Failed to fetch deployments');
   const data = await res.json();
   return data.deployments;

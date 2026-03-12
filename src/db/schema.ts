@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS env_vars (
 CREATE TABLE IF NOT EXISTS deploy_logs (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE,
   status TEXT CHECK(status IN ('success', 'failed', 'cancelled')),
   trigger_source TEXT CHECK(trigger_source IN ('chat', 'webhook', 'api')),
   commit_sha TEXT,
@@ -152,6 +153,7 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id);
 CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id);
 CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id);
+CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_project ON timeline_events(project_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id);
 CREATE INDEX IF NOT EXISTS idx_domain_mappings_project ON domain_mappings(project_id);

@@ -65,6 +65,7 @@ export interface EnvironmentRow {
 export interface DeployLogRow {
   id: string;
   project_id: string;
+  environment_id: string | null;
   status: 'success' | 'failed' | 'cancelled';
   trigger: 'chat' | 'webhook' | 'api';
   commit_sha: string | null;
@@ -327,6 +328,14 @@ export class Database {
     if (!dlColNames.has('trigger_source')) {
       this.sqlite.exec(
         "ALTER TABLE deploy_logs ADD COLUMN trigger_source TEXT CHECK(trigger_source IN ('chat', 'webhook', 'api'))",
+      );
+    }
+    if (!dlColNames.has('environment_id')) {
+      this.sqlite.exec(
+        'ALTER TABLE deploy_logs ADD COLUMN environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE',
+      );
+      this.sqlite.exec(
+        'CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id)',
       );
     }
 
@@ -957,6 +966,7 @@ export class Database {
   createDeployLog(log: {
     id: string;
     projectId: string;
+    environmentId?: string;
     status: DeployLogRow['status'];
     trigger: DeployLogRow['trigger'];
     commitSha?: string;
@@ -968,6 +978,7 @@ export class Database {
       .values({
         id: log.id,
         project_id: log.projectId,
+        environment_id: log.environmentId ?? null,
         status: log.status,
         trigger: log.trigger,
         commit_sha: log.commitSha ?? null,
@@ -978,22 +989,30 @@ export class Database {
   }
 
   /** Get deploy logs for a project, most recent first. */
-  getDeployLogs(projectId: string, limit = 20): DeployLogRow[] {
+  getDeployLogs(projectId: string, limit = 20, environmentId?: string): DeployLogRow[] {
+    const whereClause = environmentId
+      ? and(eq(deployLogs.project_id, projectId), eq(deployLogs.environment_id, environmentId))
+      : eq(deployLogs.project_id, projectId);
+
     return this.db
       .select()
       .from(deployLogs)
-      .where(eq(deployLogs.project_id, projectId))
+      .where(whereClause)
       .orderBy(desc(sql`rowid`))
       .limit(limit)
       .all() as DeployLogRow[];
   }
 
   /** Get the most recent deploy log for a project. */
-  getLastDeployLog(projectId: string): DeployLogRow | undefined {
+  getLastDeployLog(projectId: string, environmentId?: string): DeployLogRow | undefined {
+    const whereClause = environmentId
+      ? and(eq(deployLogs.project_id, projectId), eq(deployLogs.environment_id, environmentId))
+      : eq(deployLogs.project_id, projectId);
+
     return this.db
       .select()
       .from(deployLogs)
-      .where(eq(deployLogs.project_id, projectId))
+      .where(whereClause)
       .orderBy(desc(sql`rowid`))
       .limit(1)
       .get() as DeployLogRow | undefined;

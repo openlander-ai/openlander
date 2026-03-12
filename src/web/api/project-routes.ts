@@ -325,7 +325,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     if (!project) throw new ProjectNotFoundError(id);
 
     const limit = parseInt(c.req.query('limit') ?? '50', 10);
-    const logs = ctx.db.getDeployLogs(project.id, limit);
+    const environmentId = c.req.query('environmentId');
+    const logs = ctx.db.getDeployLogs(project.id, limit, environmentId);
 
     return c.json({
       count: logs.length,
