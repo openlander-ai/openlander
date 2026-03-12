@@ -1,15 +1,15 @@
-import type BetterSqlite3 from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { and, asc, count, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ProjectAlreadyExistsError } from '../errors.js';
 
-import { createDrizzleDatabase, type DrizzleClient } from './drizzle.js';
+import { createDrizzleDatabase, type DrizzleClient, type SqliteDatabase } from './drizzle.js';
 import { SCHEMA } from './schema.js';
 import {
   chatHistory,
   deployLogs,
   domainMappings,
+  environments,
   envVars,
   globalSecrets,
   oauthTokens,
@@ -20,6 +20,8 @@ import {
 } from './schema.drizzle.js';
 
 // --- Row types (match DB schema) ---
+
+export type EnvironmentType = 'production' | 'staging' | 'development';
 
 export interface ProjectRow {
   id: string;
@@ -43,6 +45,21 @@ export interface ProjectRow {
   access_code_iv: string | null;
   is_preview: 0 | 1;
   pr_number: number | null;
+}
+
+export interface EnvironmentRow {
+  id: string;
+  project_id: string;
+  type: EnvironmentType;
+  branch: string;
+  status: 'running' | 'stopped' | 'building' | 'error' | 'idle';
+  assigned_port: number | null;
+  container_id: string | null;
+  image_tag: string | null;
+  previous_image_tag: string | null;
+  public_url: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DeployLogRow {
@@ -137,7 +154,7 @@ export interface ServiceRow {
  * Uses WAL mode for better concurrent read performance.
  */
 export class Database {
-  private sqlite: BetterSqlite3.Database;
+  private sqlite: SqliteDatabase;
   private db: DrizzleClient;
 
   constructor(dbPath: string) {
@@ -193,6 +210,113 @@ export class Database {
     this.sqlite.exec(
       'CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)',
     );
+
+    this.sqlite.exec(`CREATE TABLE IF NOT EXISTS environments (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK(type IN ('production', 'staging', 'development')),
+      branch TEXT NOT NULL DEFAULT 'main',
+      status TEXT DEFAULT 'idle' CHECK(status IN ('running', 'stopped', 'building', 'error', 'idle')),
+      assigned_port INTEGER UNIQUE,
+      container_id TEXT,
+      image_tag TEXT,
+      previous_image_tag TEXT,
+      public_url TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(project_id, type)
+    )`);
+    this.sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id)',
+    );
+
+    const envVarColumns = this.sqlite.prepare("PRAGMA table_info('env_vars')").all() as Array<{
+      name: string;
+    }>;
+    const envVarColumnNames = new Set(envVarColumns.map((c) => c.name));
+    const envVarTable = this.sqlite
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'env_vars'")
+      .get() as { sql: string | null } | undefined;
+    const hasLegacyProjectKeyUnique =
+      typeof envVarTable?.sql === 'string' && envVarTable.sql.includes('UNIQUE(project_id, key)');
+
+    if (hasLegacyProjectKeyUnique) {
+      const environmentIdSelect = envVarColumnNames.has('environment_id')
+        ? 'environment_id'
+        : 'NULL AS environment_id';
+
+      this.sqlite.exec(`CREATE TABLE env_vars_migrated (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+      this.sqlite.exec(`INSERT INTO env_vars_migrated (
+        id,
+        project_id,
+        environment_id,
+        key,
+        value,
+        created_at
+      ) SELECT
+        id,
+        project_id,
+        ${environmentIdSelect},
+        key,
+        value,
+        created_at
+      FROM env_vars`);
+      this.sqlite.exec('DROP TABLE env_vars');
+      this.sqlite.exec('ALTER TABLE env_vars_migrated RENAME TO env_vars');
+    } else if (!envVarColumnNames.has('environment_id')) {
+      this.sqlite.exec(
+        'ALTER TABLE env_vars ADD COLUMN environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE',
+      );
+    }
+
+    this.sqlite.exec('DROP INDEX IF EXISTS idx_env_vars_project');
+    this.sqlite.exec('DROP INDEX IF EXISTS idx_env_vars_environment');
+    this.sqlite.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS env_vars_project_key_global_unique ON env_vars(project_id, key) WHERE environment_id IS NULL',
+    );
+    this.sqlite.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS env_vars_project_environment_key_unique ON env_vars(project_id, environment_id, key) WHERE environment_id IS NOT NULL',
+    );
+    this.sqlite.exec('CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id)');
+    this.sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_env_vars_environment ON env_vars(environment_id)',
+    );
+
+    this.sqlite.exec(`INSERT INTO environments (
+      id,
+      project_id,
+      type,
+      branch,
+      status,
+      assigned_port,
+      container_id,
+      image_tag,
+      previous_image_tag,
+      public_url
+    )
+    SELECT
+      lower(hex(randomblob(8))),
+      p.id,
+      'production',
+      COALESCE(p.branch, 'main'),
+      COALESCE(p.status, 'idle'),
+      p.assigned_port,
+      p.container_id,
+      p.image_tag,
+      p.previous_image_tag,
+      p.public_url
+    FROM projects p
+    WHERE NOT EXISTS (
+      SELECT 1 FROM environments e
+      WHERE e.project_id = p.id AND e.type = 'production'
+    )`);
 
     // deploy_logs migrations
     const dlCols = this.sqlite.prepare("PRAGMA table_info('deploy_logs')").all() as Array<{
@@ -346,6 +470,13 @@ export class Database {
       throw error;
     }
 
+    this.createEnvironment({
+      id: `${project.id}-production`,
+      projectId: project.id,
+      type: 'production',
+      branch: project.branch ?? 'main',
+    });
+
     const created = this.getProject(project.id);
     if (!created) throw new Error(`Failed to create project ${project.id}`);
     return created;
@@ -482,6 +613,103 @@ export class Database {
     return (row?.cnt ?? 0) > 0;
   }
 
+  createEnvironment(environment: {
+    id: string;
+    projectId: string;
+    type: EnvironmentRow['type'];
+    branch: string;
+    status?: EnvironmentRow['status'];
+    assignedPort?: number | null;
+    containerId?: string | null;
+    imageTag?: string | null;
+    previousImageTag?: string | null;
+    publicUrl?: string | null;
+  }): EnvironmentRow {
+    this.db
+      .insert(environments)
+      .values({
+        id: environment.id,
+        project_id: environment.projectId,
+        type: environment.type,
+        branch: environment.branch,
+        status: environment.status ?? 'idle',
+        assigned_port: environment.assignedPort ?? null,
+        container_id: environment.containerId ?? null,
+        image_tag: environment.imageTag ?? null,
+        previous_image_tag: environment.previousImageTag ?? null,
+        public_url: environment.publicUrl ?? null,
+      })
+      .run();
+
+    const created = this.getEnvironment(environment.id);
+    if (!created) throw new Error(`Failed to create environment ${environment.id}`);
+    return created;
+  }
+
+  getEnvironment(id: string): EnvironmentRow | undefined {
+    return this.db.select().from(environments).where(eq(environments.id, id)).get() as
+      | EnvironmentRow
+      | undefined;
+  }
+
+  getEnvironmentsByProject(projectId: string): EnvironmentRow[] {
+    return this.db
+      .select()
+      .from(environments)
+      .where(eq(environments.project_id, projectId))
+      .orderBy(asc(environments.created_at))
+      .all() as EnvironmentRow[];
+  }
+
+  updateEnvironment(
+    id: string,
+    updates: Partial<{
+      branch: string;
+      status: EnvironmentRow['status'];
+      assignedPort: number | null;
+      containerId: string | null;
+      imageTag: string | null;
+      previousImageTag: string | null;
+      publicUrl: string | null;
+    }>,
+  ): void {
+    const setValues: Partial<typeof environments.$inferInsert> = {};
+
+    if (updates.branch !== undefined) {
+      setValues.branch = updates.branch;
+    }
+    if (updates.status !== undefined) {
+      setValues.status = updates.status;
+    }
+    if (updates.assignedPort !== undefined) {
+      setValues.assigned_port = updates.assignedPort;
+    }
+    if (updates.containerId !== undefined) {
+      setValues.container_id = updates.containerId;
+    }
+    if (updates.imageTag !== undefined) {
+      setValues.image_tag = updates.imageTag;
+    }
+    if (updates.previousImageTag !== undefined) {
+      setValues.previous_image_tag = updates.previousImageTag;
+    }
+    if (updates.publicUrl !== undefined) {
+      setValues.public_url = updates.publicUrl;
+    }
+
+    if (Object.keys(setValues).length === 0) return;
+
+    this.db
+      .update(environments)
+      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(environments.id, id))
+      .run();
+  }
+
+  deleteEnvironment(id: string): void {
+    this.db.delete(environments).where(eq(environments.id, id)).run();
+  }
+
   // ===== Ports =====
 
   /** Get all ports currently assigned to projects. */
@@ -491,17 +719,23 @@ export class Database {
       .from(projects)
       .where(isNotNull(projects.assigned_port))
       .all();
-    return rows.flatMap((r) => (r.assigned_port === null ? [] : [r.assigned_port]));
+    return rows.flatMap((r: { assigned_port: number | null }) =>
+      r.assigned_port === null ? [] : [r.assigned_port],
+    );
   }
 
   // ===== Environment Variables =====
 
-  /** Get environment variables for a project. */
-  getEnvVars(projectId: string): Record<string, string> {
+  getEnvVars(projectId: string, environmentId?: string): Record<string, string> {
+    const whereClause =
+      environmentId === undefined
+        ? and(eq(envVars.project_id, projectId), isNull(envVars.environment_id))
+        : and(eq(envVars.project_id, projectId), eq(envVars.environment_id, environmentId));
+
     const rows = this.db
       .select({ key: envVars.key, value: envVars.value })
       .from(envVars)
-      .where(eq(envVars.project_id, projectId))
+      .where(whereClause)
       .all();
 
     const result: Record<string, string> = {};
@@ -511,52 +745,72 @@ export class Database {
     return result;
   }
 
-  /** Set an environment variable for a project (upsert). */
-  setEnvVar(projectId: string, key: string, value: string): void {
+  setEnvVar(projectId: string, key: string, value: string, environmentId?: string): void {
+    const whereClause =
+      environmentId === undefined
+        ? and(
+            eq(envVars.project_id, projectId),
+            isNull(envVars.environment_id),
+            eq(envVars.key, key),
+          )
+        : and(
+            eq(envVars.project_id, projectId),
+            eq(envVars.environment_id, environmentId),
+            eq(envVars.key, key),
+          );
+
+    const existing = this.db.select({ id: envVars.id }).from(envVars).where(whereClause).get() as
+      | { id: string }
+      | undefined;
+
+    if (existing) {
+      this.db.update(envVars).set({ value }).where(eq(envVars.id, existing.id)).run();
+      return;
+    }
+
     this.db
       .insert(envVars)
       .values({
         id: sql<string>`lower(hex(randomblob(8)))`,
         project_id: projectId,
+        environment_id: environmentId ?? null,
         key,
         value,
-      })
-      .onConflictDoUpdate({
-        target: [envVars.project_id, envVars.key],
-        set: { value },
       })
       .run();
   }
 
-  /** Set multiple env vars at once (transactional). */
-  setEnvVarsBulk(projectId: string, vars: Record<string, string>): void {
+  setEnvVarsBulk(projectId: string, vars: Record<string, string>, environmentId?: string): void {
     const transaction = this.sqlite.transaction(() => {
+      const existing = this.getEnvVars(projectId, environmentId);
+      for (const key of Object.keys(existing)) {
+        if (!(key in vars)) {
+          this.deleteEnvVar(projectId, key, environmentId);
+        }
+      }
       for (const [key, value] of Object.entries(vars)) {
-        this.db
-          .insert(envVars)
-          .values({
-            id: sql<string>`lower(hex(randomblob(8)))`,
-            project_id: projectId,
-            key,
-            value,
-          })
-          .onConflictDoUpdate({
-            target: [envVars.project_id, envVars.key],
-            set: { value },
-          })
-          .run();
+        this.setEnvVar(projectId, key, value, environmentId);
       }
     });
 
     transaction();
   }
 
-  /** Delete an environment variable. */
-  deleteEnvVar(projectId: string, key: string): void {
-    this.db
-      .delete(envVars)
-      .where(and(eq(envVars.project_id, projectId), eq(envVars.key, key)))
-      .run();
+  deleteEnvVar(projectId: string, key: string, environmentId?: string): void {
+    const whereClause =
+      environmentId === undefined
+        ? and(
+            eq(envVars.project_id, projectId),
+            isNull(envVars.environment_id),
+            eq(envVars.key, key),
+          )
+        : and(
+            eq(envVars.project_id, projectId),
+            eq(envVars.environment_id, environmentId),
+            eq(envVars.key, key),
+          );
+
+    this.db.delete(envVars).where(whereClause).run();
   }
 
   /** Find all projects that have a specific env var key. */

@@ -28,9 +28,26 @@ CREATE TABLE IF NOT EXISTS projects (
   pr_number INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS environments (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK(type IN ('production', 'staging', 'development')),
+  branch TEXT NOT NULL DEFAULT 'main',
+  status TEXT DEFAULT 'idle' CHECK(status IN ('running', 'stopped', 'building', 'error', 'idle')),
+  assigned_port INTEGER UNIQUE,
+  container_id TEXT,
+  image_tag TEXT,
+  previous_image_tag TEXT,
+  public_url TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(project_id, type)
+);
+
 CREATE TABLE IF NOT EXISTS env_vars (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE,
   key TEXT NOT NULL,
   value TEXT NOT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -132,8 +149,8 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id);
 CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id);
+CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id);
 CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_project ON timeline_events(project_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id);

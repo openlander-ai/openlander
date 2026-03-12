@@ -54,6 +54,40 @@ export const projects = sqliteTable(
   ],
 );
 
+export const environments = sqliteTable(
+  'environments',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    type: text('type', { enum: ['production', 'staging', 'development'] }).notNull(),
+    branch: text('branch').notNull().default('main'),
+    status: text('status', { enum: ['running', 'stopped', 'building', 'error', 'idle'] }).default(
+      'idle',
+    ),
+    assigned_port: integer('assigned_port').unique(),
+    container_id: text('container_id'),
+    image_tag: text('image_tag'),
+    previous_image_tag: text('previous_image_tag'),
+    public_url: text('public_url'),
+    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    check(
+      'environments_type_check',
+      sql`${table.type} IN ('production', 'staging', 'development')`,
+    ),
+    check(
+      'environments_status_check',
+      sql`${table.status} IN ('running', 'stopped', 'building', 'error', 'idle')`,
+    ),
+    uniqueIndex('environments_project_type_unique').on(table.project_id, table.type),
+    index('idx_environments_project').on(table.project_id),
+  ],
+);
+
 export const envVars = sqliteTable(
   'env_vars',
   {
@@ -61,6 +95,9 @@ export const envVars = sqliteTable(
     project_id: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
+    environment_id: text('environment_id').references(() => environments.id, {
+      onDelete: 'cascade',
+    }),
     key: text('key').notNull(),
     value: text('value').notNull(),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
@@ -68,6 +105,7 @@ export const envVars = sqliteTable(
   (table) => [
     uniqueIndex('env_vars_project_key_unique').on(table.project_id, table.key),
     index('idx_env_vars_project').on(table.project_id),
+    index('idx_env_vars_environment').on(table.environment_id),
   ],
 );
 
@@ -227,6 +265,7 @@ export const services = sqliteTable(
 
 export const drizzleSchema = {
   projects,
+  environments,
   envVars,
   deployLogs,
   timelineEvents,
