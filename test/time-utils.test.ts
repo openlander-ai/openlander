@@ -8,15 +8,13 @@ describe('time utils', () => {
   });
 
   it('formats relative time from normalized ISO timestamps', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-03-11T12:00:00.000Z'));
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-11T12:00:00.000Z').getTime());
 
     expect(formatRelativeTime('2026-03-11T11:00:00.000Z')).toBe('1h ago');
   });
 
   it('accepts legacy sqlite timestamps as UTC', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-03-11T12:00:00.000Z'));
+    vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-03-11T12:00:00.000Z').getTime());
 
     expect(formatRelativeTime('2026-03-11 11:30:00')).toBe('30m ago');
     expect(formatTime('2026-03-11 11:30:00')).not.toBe('');

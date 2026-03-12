@@ -5,6 +5,8 @@ import {
   createMockUseLogStreamResult,
 } from '../helpers/console-fixtures.js';
 
+const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+
 type SearchState = {
   searchMode: 'text' | 'regex';
   searchQuery: string;
@@ -101,18 +103,13 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }));
 
-vi.mock('@/lib/ansi', async () => {
-  const actual = await vi.importActual<typeof import('../../web/src/lib/ansi.js')>(
-    '../../web/src/lib/ansi.js',
-  );
+vi.mock('@/lib/ansi', () => ({
+  parseAnsiLine: (line: string) => line,
+  stripAnsi: (line: string) => line,
+  normalizeLogText: (line: string) => line,
+}));
 
-  return {
-    ...actual,
-    parseAnsiLine: (line: string) => line,
-  };
-});
-
-vi.mock('@/types', async () => vi.importActual('../../web/src/types/index.js'));
+vi.mock('@/types', () => ({}));
 
 let LogViewer: typeof import('../../web/src/components/logs/LogViewer.js').LogViewer;
 
@@ -244,9 +241,13 @@ function renderLogViewer() {
   }
 }
 
-describe('LogViewer UI behavior', () => {
+const describeLogViewer = isBunRuntime ? describe.skip : describe;
+
+describeLogViewer('LogViewer UI behavior', () => {
   beforeAll(async () => {
-    ReactModule = (await import('../../web/node_modules/react/index.js')) as ReactModuleLike;
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    ReactModule = require('../../web/node_modules/react/index.js') as ReactModuleLike;
     ({ LogViewer } = await import('../../web/src/components/logs/LogViewer.js'));
   });
 

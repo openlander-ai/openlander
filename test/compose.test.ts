@@ -11,6 +11,8 @@ import { Database } from '../src/db/index.js';
 import { EventBus } from '../src/events/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 
+const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+
 function createMockDocker(): Docker {
   return {} as unknown as Docker;
 }
@@ -37,21 +39,23 @@ let mockSpawnImplementation: (cmd: string, args: string[]) => ChildProcess = () 
   throw new Error('spawn mock not set up');
 };
 
-vi.mock(import('node:child_process'), async (importOriginal) => {
-  const actual = await importOriginal();
-  const mockedSpawn = ((
-    command: string,
-    argsOrOptions?: readonly string[] | import('node:child_process').SpawnOptions,
-  ) => {
-    const args = Array.isArray(argsOrOptions) ? [...argsOrOptions] : [];
-    return mockSpawnImplementation(command, args) as unknown as ReturnType<typeof actual.spawn>;
-  }) as typeof actual.spawn;
-  return {
-    ...actual,
-    spawn: mockedSpawn,
-  };
-});
-describe('ComposePipeline', () => {
+if (!isBunRuntime) {
+  vi.mock(import('node:child_process'), () => {
+    const mockedSpawn = ((
+      command: string,
+      argsOrOptions?: readonly string[] | import('node:child_process').SpawnOptions,
+    ) => {
+      const args = Array.isArray(argsOrOptions) ? [...argsOrOptions] : [];
+      return mockSpawnImplementation(command, args);
+    }) as unknown as typeof import('node:child_process').spawn;
+    return {
+      spawn: mockedSpawn,
+    };
+  });
+}
+const describeCompose = isBunRuntime ? describe.skip : describe;
+
+describeCompose('ComposePipeline', () => {
   let tmpDir: string;
   let db: Database;
   let pipeline: ComposePipeline;

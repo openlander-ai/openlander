@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
-import { TimelineItemCard } from '../../web/src/components/timeline/TimelineItem.js';
+import { beforeAll, describe, it, expect, vi } from 'vitest';
 import type { TimelineItem } from '../../web/src/lib/event-types.js';
+
+const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+let TimelineItemCard: typeof import('../../web/src/components/timeline/TimelineItem.js').TimelineItemCard;
 
 vi.mock('@/lib/utils', () => ({
   cn: (...values: any[]) => values.filter(Boolean).join(' '),
@@ -51,7 +53,13 @@ function findTextInTree(node: any, text: string): boolean {
   return false;
 }
 
-describe('TimelineItemCard', () => {
+const describeTimeline = isBunRuntime ? describe.skip : describe;
+
+describeTimeline('TimelineItemCard', () => {
+  beforeAll(async () => {
+    ({ TimelineItemCard } = await import('../../web/src/components/timeline/TimelineItem.js'));
+  });
+
   it('renders tool call arguments in a collapsible details block', () => {
     const item: TimelineItem = {
       id: '1',

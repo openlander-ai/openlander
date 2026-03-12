@@ -149,7 +149,6 @@ describe('ChannelManager', () => {
 
   it('applies edit throttling at 1.5s minimum interval', async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
 
     mockCtx.agent = {
       chatStream: vi

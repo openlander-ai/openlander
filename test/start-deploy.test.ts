@@ -232,12 +232,14 @@ describe('DeployPipeline — non-blocking deploy', () => {
       );
 
       const docker = createMockDocker();
-      vi.mocked(docker.buildImage).mockImplementation(async (contextPath: string) => {
-        if (contextPath.endsWith('/backend')) {
-          throw new Error('backend build failed');
-        }
-        return undefined;
-      });
+      (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementation(
+        async (contextPath: string) => {
+          if (contextPath.endsWith('/backend')) {
+            throw new Error('backend build failed');
+          }
+          return undefined;
+        },
+      );
 
       pipeline = new DeployPipeline(
         docker,

@@ -1,11 +1,85 @@
-import { describe, expect, it } from 'vitest';
+import { createHmac } from 'node:crypto';
+
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  WebhookManager,
   isPREvent,
   parseBitbucketPRPayload,
   parseGitHubPRPayload,
   parseGitLabPRPayload,
 } from '../src/webhook/index.js';
+
+function githubPushBody(branch: string): string {
+  return JSON.stringify({
+    ref: `refs/heads/${branch}`,
+    after: 'abc123def456',
+    repository: {
+      clone_url: 'https://github.com/example/repo.git',
+    },
+  });
+}
+
+function githubSignature(body: string, secret: string): string {
+  return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+}
+
+function createPushWebhookManager(options: {
+  branchFilter?: string;
+  environments: Array<{
+    id: string;
+    type: 'production' | 'staging' | 'development';
+    branch: string;
+  }>;
+}) {
+  const branchFilter = options.branchFilter ?? 'main';
+  const deployEnvironment = vi.fn(async () => ({ success: true }));
+  const redeploy = vi.fn(async () => ({ success: true }));
+  const emit = vi.fn(async () => undefined);
+
+  const db = {
+    getProject: vi.fn(() => ({
+      id: 'project-1',
+      name: 'demo',
+      repo_url: 'https://github.com/example/repo.git',
+    })),
+    getWebhookConfig: vi.fn(() => ({
+      enabled: 1,
+      secret: 'test-secret',
+      branch_filter: branchFilter,
+    })),
+    getEnvironmentsByProject: vi.fn(() =>
+      options.environments.map((environment) => ({
+        ...environment,
+        project_id: 'project-1',
+        status: 'idle',
+        assigned_port: null,
+        container_id: null,
+        image_tag: null,
+        previous_image_tag: null,
+        public_url: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })),
+    ),
+    getPreviewProjects: vi.fn(() => []),
+  };
+
+  const pipeline = {
+    deployEnvironment,
+    redeploy,
+    deployPreview: vi.fn(),
+    remove: vi.fn(),
+  };
+
+  const manager = new WebhookManager(
+    pipeline as unknown as ConstructorParameters<typeof WebhookManager>[0],
+    db as unknown as ConstructorParameters<typeof WebhookManager>[1],
+    { emit } as unknown as ConstructorParameters<typeof WebhookManager>[2],
+  );
+
+  return { manager, deployEnvironment, redeploy, emit };
+}
 
 describe('webhook PR helpers', () => {
   it('parseGitHubPRPayload parses opened pull request event', () => {
@@ -223,5 +297,165 @@ describe('webhook PR helpers', () => {
     expect(isPREvent('bitbucket', { 'x-event-key': 'pullrequest:created' })).toBe(true);
     expect(isPREvent('bitbucket', { 'x-event-key': 'pullrequest:updated' })).toBe(true);
     expect(isPREvent('bitbucket', { 'x-event-key': 'repo:push' })).toBe(false);
+  });
+});
+
+describe('webhook push environment routing', () => {
+  it('routes main branch push to production environment', async () => {
+    const { manager, deployEnvironment, redeploy } = createPushWebhookManager({
+      environments: [
+        { id: 'env-prod', type: 'production', branch: 'main' },
+        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-dev', type: 'development', branch: 'feature/cool' },
+      ],
+    });
+    const body = githubPushBody('main');
+
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(deployEnvironment).toHaveBeenCalledWith('project-1', 'env-prod', { trigger: 'webhook' });
+    expect(redeploy).not.toHaveBeenCalled();
+  });
+
+  it('routes develop branch push to staging environment', async () => {
+    const { manager, deployEnvironment, redeploy } = createPushWebhookManager({
+      branchFilter: 'develop',
+      environments: [
+        { id: 'env-prod', type: 'production', branch: 'main' },
+        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-dev', type: 'development', branch: 'feature/cool' },
+      ],
+    });
+    const body = githubPushBody('develop');
+
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(deployEnvironment).toHaveBeenCalledWith('project-1', 'env-staging', {
+      trigger: 'webhook',
+    });
+    expect(redeploy).not.toHaveBeenCalled();
+  });
+
+  it('allows environment auto-match even when branch filter differs', async () => {
+    const { manager, deployEnvironment, redeploy } = createPushWebhookManager({
+      branchFilter: 'main',
+      environments: [
+        { id: 'env-prod', type: 'production', branch: 'main' },
+        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-dev', type: 'development', branch: 'feature/cool' },
+      ],
+    });
+    const body = githubPushBody('develop');
+
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(deployEnvironment).toHaveBeenCalledWith('project-1', 'env-staging', {
+      trigger: 'webhook',
+    });
+    expect(redeploy).not.toHaveBeenCalled();
+  });
+
+  it('routes feature branch push to matching development environment', async () => {
+    const { manager, deployEnvironment, redeploy } = createPushWebhookManager({
+      branchFilter: 'feature/cool',
+      environments: [
+        { id: 'env-prod', type: 'production', branch: 'main' },
+        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-dev', type: 'development', branch: 'feature/cool' },
+      ],
+    });
+    const body = githubPushBody('feature/cool');
+
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(deployEnvironment).toHaveBeenCalledWith('project-1', 'env-dev', { trigger: 'webhook' });
+    expect(redeploy).not.toHaveBeenCalled();
+  });
+
+  it('falls back to project redeploy when no environment matches branch', async () => {
+    const { manager, deployEnvironment, redeploy } = createPushWebhookManager({
+      branchFilter: 'feature/missing',
+      environments: [
+        { id: 'env-prod', type: 'production', branch: 'main' },
+        { id: 'env-staging', type: 'staging', branch: 'develop' },
+      ],
+    });
+    const body = githubPushBody('feature/missing');
+
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(deployEnvironment).not.toHaveBeenCalled();
+    expect(redeploy).toHaveBeenCalledWith('project-1');
+  });
+
+  it('preserves branch filter behavior when no environment matches', async () => {
+    const { manager, deployEnvironment, redeploy } = createPushWebhookManager({
+      branchFilter: 'main',
+      environments: [{ id: 'env-prod', type: 'production', branch: 'main' }],
+    });
+    const body = githubPushBody('develop');
+
+    const result = await manager.handleWebhook(
+      'github',
+      {
+        'x-openlander-project-id': 'project-1',
+        'x-github-event': 'push',
+        'x-hub-signature-256': githubSignature(body, 'test-secret'),
+      },
+      body,
+    );
+
+    expect(result).toEqual({
+      accepted: false,
+      projectId: 'project-1',
+      message: "Ignored push to 'develop' (filter 'main').",
+    });
+    expect(deployEnvironment).not.toHaveBeenCalled();
+    expect(redeploy).not.toHaveBeenCalled();
   });
 });

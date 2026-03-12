@@ -13,6 +13,27 @@ type RedactSecretsAccessor = {
   redactSecrets: (text: string) => string;
 };
 
+async function waitForAssertion(assertion: () => void, timeoutMs = 500): Promise<void> {
+  const startedAt = Date.now();
+  let lastError: unknown;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+
+  throw new Error('Timed out while waiting for assertion to pass.');
+}
+
 describe('PostmortemGenerator - redactSecrets', () => {
   let generator: PostmortemGenerator;
 
@@ -116,7 +137,7 @@ describe('PostmortemGenerator - lifecycle and generation', () => {
       lastError: 'build failed',
     });
 
-    await vi.waitFor(() => {
+    await waitForAssertion(() => {
       expect(chat).toHaveBeenCalledOnce();
     });
 
@@ -134,7 +155,7 @@ describe('PostmortemGenerator - lifecycle and generation', () => {
       lastError: 'still failing',
     });
 
-    await vi.waitFor(() => {
+    await waitForAssertion(() => {
       expect(generator.getLatest('project-1')).toBeDefined();
     });
 

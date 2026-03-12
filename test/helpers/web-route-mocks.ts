@@ -39,6 +39,7 @@ export function createMockPipeline() {
     deploy: vi
       .fn()
       .mockResolvedValue({ success: true, projectId: 'p1', url: 'http://localhost:10001' }),
+    deployEnvironment: vi.fn().mockResolvedValue({ success: true, url: 'http://localhost:10002' }),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     redeploy: vi.fn().mockResolvedValue({ success: true }),

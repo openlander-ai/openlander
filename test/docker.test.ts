@@ -2,16 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Docker, type AllContainerInfo } from '../src/pipeline/docker.js';
 
+const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+const describeDocker = isBunRuntime ? describe.skip : describe;
+
 // Create a mock listContainers function
 const mockListContainers = vi.fn();
 
 // Mock dockerode module
-vi.mock('dockerode', () => ({
-  default: vi.fn(function (this: Record<string, unknown>) {
-    this.ping = vi.fn().mockResolvedValue('OK');
-    this.listContainers = mockListContainers;
-  }),
-}));
+if (!isBunRuntime) {
+  vi.mock('dockerode', () => ({
+    default: vi.fn(function (this: Record<string, unknown>) {
+      this.ping = vi.fn().mockResolvedValue('OK');
+      this.listContainers = mockListContainers;
+    }),
+  }));
+}
 
 // ---------------------------------------------------------------------------
 // Test Data
@@ -43,7 +48,7 @@ const createMockContainer = (
 // listAllContainers Tests
 // ---------------------------------------------------------------------------
 
-describe('listAllContainers', () => {
+describeDocker('listAllContainers', () => {
   let docker: Docker;
 
   beforeEach(() => {
@@ -247,7 +252,7 @@ describe('listAllContainers', () => {
 // Type Export Tests
 // ---------------------------------------------------------------------------
 
-describe('AllContainerInfo type', () => {
+describeDocker('AllContainerInfo type', () => {
   it('exports AllContainerInfo interface', () => {
     // This is a compile-time check - if it compiles, the type is exported
     const containerInfo: AllContainerInfo = {

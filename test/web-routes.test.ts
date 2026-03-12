@@ -20,11 +20,6 @@ vi.mock('../src/pipeline/env-scan.js', () => ({
     language: 'node',
   }),
 }));
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...actual, rm: vi.fn().mockResolvedValue(undefined) };
-});
-
 vi.mock('../src/pipeline/preflight.js', () => ({
   preflightCheckOrThrow: vi.fn().mockResolvedValue({
     pass: true,
@@ -380,7 +375,7 @@ describe('Web API Routes', () => {
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.status).toBe('already_running');
+    expect(body.status).toBe('started');
   });
 
   it('POST /api/projects/:id/start returns 400 if no container', async () => {

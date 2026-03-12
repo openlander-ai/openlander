@@ -4,16 +4,12 @@ import { BuildDebugger } from '../src/agent/debugger.js';
 import type { LanguageModel } from 'ai';
 
 // Mock generateText from 'ai' module
-vi.mock('ai', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('ai')>();
-  return {
-    ...actual,
-    generateText: vi.fn(),
-  };
-});
+vi.mock('ai', () => ({
+  generateText: vi.fn(),
+}));
 
 import { generateText } from 'ai';
-const mockGenerateText = vi.mocked(generateText);
+const mockGenerateText = generateText as unknown as ReturnType<typeof vi.fn>;
 
 /**
  * Create a mock LanguageModel that satisfies the AI SDK interface.

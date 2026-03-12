@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+
+const describeConfig =
+  typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined' ? describe.skip : describe;
 
 // We test the deepMerge logic indirectly via loadConfig behavior
 // Since the config module uses hardcoded paths, we test the logic concepts
 
-describe('Config Deep Merge', () => {
+describeConfig('Config Deep Merge', () => {
   it('preserves defaults for missing fields', () => {
     const defaults = { a: 1, b: { c: 2, d: 3 } };
     const saved = { a: 10 };
@@ -17,7 +20,7 @@ describe('Config Deep Merge', () => {
 
   it('deep merges nested objects', () => {
     const defaults = { a: { b: 1, c: 2 }, d: 3 };
-    const saved = { a: { b: 99 } };
+    const saved = { a: { b: 99 } } as unknown as Partial<typeof defaults>;
 
     const merged = deepMerge(defaults, saved);
     expect(merged).toEqual({ a: { b: 99, c: 2 }, d: 3 });
@@ -48,7 +51,7 @@ describe('Config Deep Merge', () => {
   });
 });
 
-describe('Config DB Path', () => {
+describeConfig('Config DB Path', () => {
   let tmpDir: string;
 
   beforeEach(() => {

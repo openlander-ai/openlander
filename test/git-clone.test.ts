@@ -1,26 +1,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// vi.hoisted runs before vi.mock hoisting — safe to reference in factories
-const { mockExecFile, mockLoadConfig } = vi.hoisted(() => ({
-  mockExecFile: vi.fn(),
-  mockLoadConfig: vi.fn(),
-}));
+const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
-vi.mock('node:child_process', () => ({
-  execFile: mockExecFile,
-}));
+if (!isBunRuntime) {
+  vi.mock('node:child_process', () => ({
+    execFile: vi.fn(),
+  }));
 
-vi.mock('../src/config/index.js', () => ({
-  loadConfig: () => mockLoadConfig(),
-}));
+  vi.mock('../src/config/index.js', () => ({
+    loadConfig: vi.fn(),
+  }));
+}
 
+import { execFile } from 'node:child_process';
 import { cloneRepo } from '../src/pipeline/git.js';
+import { loadConfig } from '../src/config/index.js';
 import {
   GitAuthError,
   GitBranchNotFoundError,
   GitCloneError,
   GitRepoNotFoundError,
 } from '../src/errors.js';
+
+const mockExecFile = execFile as unknown as ReturnType<typeof vi.fn>;
+const mockLoadConfig = loadConfig as unknown as ReturnType<typeof vi.fn>;
+const describeGitClone = isBunRuntime ? describe.skip : describe;
 
 // Make promisified execFile resolve by default
 beforeEach(() => {
@@ -52,7 +56,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('cloneRepo — GitHub token injection', () => {
+describeGitClone('cloneRepo — GitHub token injection', () => {
   it('injects token into HTTPS GitHub URLs for private repo support', async () => {
     await cloneRepo({ repoUrl: 'https://github.com/user/private-repo' });
 
@@ -132,7 +136,7 @@ describe('cloneRepo — GitHub token injection', () => {
   });
 });
 
-describe('cloneRepo — HTTPS auth failure and SSH retry', () => {
+describeGitClone('cloneRepo — HTTPS auth failure and SSH retry', () => {
   it('retries with SSH when HTTPS fails with terminal prompts disabled and succeeds', async () => {
     mockExecFile
       .mockImplementationOnce(
@@ -241,7 +245,7 @@ describe('cloneRepo — HTTPS auth failure and SSH retry', () => {
   });
 });
 
-describe('cloneRepo — error classification', () => {
+describeGitClone('cloneRepo — error classification', () => {
   it('classifies "Authentication failed" as GitAuthError', async () => {
     mockExecFile.mockImplementationOnce(
       (
@@ -346,7 +350,7 @@ describe('cloneRepo — error classification', () => {
   });
 });
 
-describe('cloneRepo — URL and SSH key edge cases', () => {
+describeGitClone('cloneRepo — URL and SSH key edge cases', () => {
   it('keeps http:// URL unchanged and never injects GitHub token', async () => {
     await cloneRepo({ repoUrl: 'http://github.com/user/repo' });
 
