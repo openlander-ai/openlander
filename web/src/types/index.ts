@@ -18,7 +18,7 @@ export interface Environment {
 export interface Project {
   id: string;
   name: string;
-  status: 'running' | 'stopped' | 'building' | 'error';
+  status: 'running' | 'stopped' | 'building' | 'error' | 'idle';
   visibility: 'internal' | 'quick-share' | 'shared' | 'production';
   repoUrl: string;
   branch?: string;
