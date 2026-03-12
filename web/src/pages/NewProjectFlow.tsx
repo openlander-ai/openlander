@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
 import { useNavigate } from 'react-router-dom';
-import { deployProject } from '@/lib/api';
+import { createProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { Input } from '@/components/ui/input';
@@ -49,7 +49,7 @@ export function NewProjectFlow() {
   const [searching, setSearching] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [deploying, setDeploying] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ghError, setGhError] = useState<string | null>(null);
   const [deployStatus, setDeployStatus] = useState<string | null>(null);
@@ -104,26 +104,20 @@ export function NewProjectFlow() {
     return () => clearTimeout(timer);
   }, [searchQuery, tab]);
 
-  const handleDeploy = async (repo: GitRepo) => {
+  const handleCreateProject = async (repo: GitRepo) => {
     if (isMobile) {
       showMobileToast();
       return;
     }
-    setDeploying(true);
+    setCreating(true);
     setError(null);
-    setDeployStatus('Starting deployment...');
+    setDeployStatus('Creating project...');
     try {
-      const result = await deployProject(repo.cloneUrl, repo.defaultBranch, repo.name);
-      if (result.success && result.projectId) {
-        navigate(`/projects/${result.projectId}`);
-      } else {
-        setError(result.error ?? 'Deploy failed');
-        setDeploying(false);
-        setDeployStatus(null);
-      }
+      const result = await createProject(repo.cloneUrl, repo.defaultBranch, repo.name);
+      navigate(`/projects/${result.project.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Deploy failed');
-      setDeploying(false);
+      setError(err instanceof Error ? err.message : 'Failed to create project');
+      setCreating(false);
       setDeployStatus(null);
     }
   };
@@ -198,20 +192,19 @@ export function NewProjectFlow() {
         </div>
       )}
 
-      {/* Deploying Overlay */}
-      {deploying && (
+      {creating && (
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-agent" />
             <p className="text-sm font-body text-secondary-ol">
-              {deployStatus ?? 'Starting deployment...'}
+              {deployStatus ?? 'Creating project...'}
             </p>
           </div>
         </div>
       )}
 
       {/* Repo List */}
-      {!deploying && (
+      {!creating && (
         <ScrollArea className="flex-1">
           <div className="p-6 space-y-1">
             {(loading && repos.length === 0) || (searching && searchResults.length === 0) ? (
@@ -276,11 +269,11 @@ export function NewProjectFlow() {
                     <Button
                       size="sm"
                       className="h-7 px-3 text-[11px] font-body gap-1.5 bg-foreground text-background hover:bg-foreground/90 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                      onClick={() => handleDeploy(repo)}
-                      disabled={deploying}
+                      onClick={() => handleCreateProject(repo)}
+                      disabled={creating}
                     >
                       <Rocket className="h-3 w-3" />
-                      {'Deploy'}
+                      {'Add Project'}
                     </Button>
                   </div>
                 ))}

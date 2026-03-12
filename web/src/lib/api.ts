@@ -88,6 +88,25 @@ export async function deployProject(
   return res.json();
 }
 
+export async function createProject(
+  repoUrl: string,
+  branch?: string,
+  name?: string,
+): Promise<{ project: { id: string; name: string; status: Project['status'] } }> {
+  const res = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo_url: repoUrl, branch, name }),
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to create project');
+  }
+
+  return res.json();
+}
+
 export async function listProjects(): Promise<ProjectWithOptionalEnvironments[]> {
   const res = await fetch('/api/projects');
   if (!res.ok) {
