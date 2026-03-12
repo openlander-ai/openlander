@@ -15,12 +15,6 @@ import type { EnvironmentRow, EnvironmentType } from '../../db/index.js';
 
 const log = createModuleLogger('api');
 
-const DEFAULT_ENVIRONMENT_BRANCHES: Record<EnvironmentType, string> = {
-  production: 'main',
-  staging: 'develop',
-  development: 'dev',
-};
-
 function isEnvironmentType(value: unknown): value is EnvironmentType {
   return value === 'production' || value === 'staging' || value === 'development';
 }
@@ -76,6 +70,56 @@ function extractFailureSummary(buildLog: string | null): string | null {
 
 export function createProjectRoutes(ctx: AppContext): Hono {
   const api = new Hono();
+
+  api.post('/projects', async (c) => {
+    const body = await c.req
+      .json<{ repo_url?: string; branch?: string; name?: string }>()
+      .catch(() => ({ repo_url: undefined, branch: undefined, name: undefined }));
+
+    if (!body.repo_url) {
+      return c.json({ error: 'MISSING_FIELD', message: 'repo_url is required' }, 400);
+    }
+
+    const projectName =
+      (body.name && body.name.trim()) ||
+      body.repo_url
+        .split('/')
+        .pop()
+        ?.replace(/\.git$/, '');
+    if (!projectName) {
+      return c.json(
+        { error: 'INVALID_PROJECT_NAME', message: 'Could not determine project name' },
+        400,
+      );
+    }
+
+    const existing = ctx.db.getProjectByName(projectName);
+    if (existing) {
+      return c.json(
+        {
+          error: 'PROJECT_ALREADY_EXISTS',
+          message: `Project "${projectName}" already exists`,
+          projectId: existing.id,
+        },
+        409,
+      );
+    }
+
+    const created = ctx.db.createProject({
+      id: crypto.randomUUID(),
+      name: projectName,
+      repoUrl: body.repo_url,
+      branch: body.branch,
+    });
+
+    return c.json({
+      project: {
+        id: created.id,
+        name: created.name,
+        status: created.status,
+      },
+    });
+  });
 
   api.get('/projects/:id/stats', async (c) => {
     const id = c.req.param('id');
@@ -210,7 +254,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const branch =
       typeof body.branch === 'string' && body.branch.trim().length > 0
         ? body.branch.trim()
-        : DEFAULT_ENVIRONMENT_BRANCHES[body.type];
+        : project.branch;
 
     const created = ctx.db.createEnvironment({
       id: crypto.randomUUID(),

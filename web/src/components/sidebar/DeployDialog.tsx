@@ -52,9 +52,6 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
 
   const handleEnvironmentChange = (value: string) => {
     setEnvironment(value);
-    if (value === 'production') setBranch('main');
-    else if (value === 'staging') setBranch('develop');
-    else if (value === 'development') setBranch('dev');
   };
 
   const handleClose = (open: boolean) => {
