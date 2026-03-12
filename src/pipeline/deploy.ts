@@ -395,7 +395,7 @@ export class DeployPipeline {
 
       buildLog += `[clone] ${repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
 
-      const previousDeploy = this.db.getLastDeployLog(projectId);
+      const previousDeploy = this.db.getLastDeployLog(projectId, environmentId);
       const previousSha = previousDeploy?.commit_sha;
 
       if (previousSha && previousSha !== cloneResult.commitSha) {
@@ -676,6 +676,7 @@ export class DeployPipeline {
       this.db.createDeployLog({
         id: nanoid(12),
         projectId,
+        environmentId,
         status: 'success',
         trigger,
         commitSha: cloneResult.commitSha,
@@ -833,6 +834,7 @@ export class DeployPipeline {
       this.db.createDeployLog({
         id: nanoid(12),
         projectId,
+        environmentId,
         status: 'failed',
         trigger,
         buildLog: buildLogWithError,
@@ -1422,6 +1424,7 @@ export class DeployPipeline {
       this.db.createDeployLog({
         id: nanoid(12),
         projectId,
+        environmentId,
         status: 'success',
         trigger: 'api',
         buildLog: `[rollback] ${currentImageTag} → ${rollbackImageTag}\n`,

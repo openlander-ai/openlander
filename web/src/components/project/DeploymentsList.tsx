@@ -19,6 +19,7 @@ interface DeploymentsListProps {
   projectStatus?: string;
   projectBranch?: string;
   statusFilter?: DeploymentHistoryFilter;
+  environmentId?: string;
 }
 
 export function DeploymentsList({
@@ -26,10 +27,15 @@ export function DeploymentsList({
   projectStatus,
   projectBranch,
   statusFilter = 'all',
+  environmentId,
 }: DeploymentsListProps) {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { deployments, loading, error, refetch } = useDeployments(projectId, projectStatus);
+  const { deployments, loading, error, refetch } = useDeployments(
+    projectId,
+    projectStatus,
+    environmentId,
+  );
   const filteredDeployments = deployments.filter((deploy) => {
     if (statusFilter === 'all') return true;
     if (statusFilter === 'in_progress') return false;

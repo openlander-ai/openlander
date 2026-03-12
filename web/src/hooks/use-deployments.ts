@@ -13,14 +13,18 @@ export interface UseDeploymentsReturn {
   refetch: () => void;
 }
 
-export function useDeployments(projectId: string, projectStatus?: string): UseDeploymentsReturn {
+export function useDeployments(
+  projectId: string,
+  projectStatus?: string,
+  environmentId?: string,
+): UseDeploymentsReturn {
   const [deployments, setDeployments] = useState<DeployLogSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchDeployments = useCallback(async () => {
     try {
-      const data = await getProjectDeployments(projectId);
+      const data = await getProjectDeployments(projectId, 50, environmentId);
       setDeployments(data);
       setError(null);
     } catch (err) {
@@ -28,7 +32,7 @@ export function useDeployments(projectId: string, projectStatus?: string): UseDe
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, environmentId]);
 
   useEffect(() => {
     void fetchDeployments();

@@ -116,6 +116,9 @@ export const deployLogs = sqliteTable(
     project_id: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
+    environment_id: text('environment_id').references(() => environments.id, {
+      onDelete: 'cascade',
+    }),
     status: text('status', { enum: ['success', 'failed', 'cancelled'] }),
     trigger: text('trigger_source', { enum: ['chat', 'webhook', 'api'] }),
     commit_sha: text('commit_sha'),
@@ -127,6 +130,7 @@ export const deployLogs = sqliteTable(
     check('deploy_logs_status_check', sql`${table.status} IN ('success', 'failed', 'cancelled')`),
     check('deploy_logs_trigger_check', sql`${table.trigger} IN ('chat', 'webhook', 'api')`),
     index('idx_deploy_logs_project').on(table.project_id),
+    index('idx_deploy_logs_environment').on(table.environment_id),
   ],
 );
 
