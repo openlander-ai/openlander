@@ -161,6 +161,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       name?: string;
       env_vars?: Record<string, string>;
       visibility?: 'internal' | 'quick-share';
+      environment?: string;
     }>();
 
     if (!body.repo_url) {
@@ -177,6 +178,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         visibility: body.visibility,
         sshKeyPath: ctx.config.git.sshKeyPath || undefined,
         trigger: 'api',
+        environment: body.environment,
       });
       return c.json(result, result.success ? 200 : 500);
     }
@@ -258,6 +260,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
             visibility: body.visibility,
             sshKeyPath: ctx.config.git.sshKeyPath || undefined,
             trigger: 'api',
+            environment: body.environment,
             _projectId: projectId,
           });
         } catch (err) {
@@ -334,18 +337,20 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       repo_url: string;
       branch?: string;
       name?: string;
+      environment?: string;
     }>();
 
     if (!body.repo_url) {
       return c.json({ error: 'MISSING_FIELD', message: 'repo_url is required' }, 400);
     }
 
-    const result = ctx.pipeline.startDeploy({
+    const result = await ctx.pipeline.startDeploy({
       repoUrl: body.repo_url,
       branch: body.branch,
       name: body.name,
       sshKeyPath: ctx.config.git.sshKeyPath || undefined,
       trigger: 'api',
+      environment: body.environment,
     });
 
     return c.json(result, 200);

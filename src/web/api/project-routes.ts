@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
+import { rm } from 'node:fs/promises';
 
 import type { AppContext } from '../../app.js';
 import { ProjectNotFoundError, TunnelStartError } from '../../errors.js';
@@ -7,8 +8,30 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { getPostmortemInstance } from '../../monitor/postmortem.js';
 import { encrypt } from '../../env/crypto.js';
 import { getProjectUrl } from '../../pipeline/traefik.js';
+import { cloneRepo } from '../../pipeline/git.js';
+import { scanForEnvUsage } from '../../pipeline/env-scan.js';
+import { generateEnvExample } from '../../pipeline/env-inject.js';
+import type { EnvironmentRow, EnvironmentType } from '../../db/index.js';
 
 const log = createModuleLogger('api');
+
+const DEFAULT_ENVIRONMENT_BRANCHES: Record<EnvironmentType, string> = {
+  production: 'main',
+  staging: 'develop',
+  development: 'dev',
+};
+
+function isEnvironmentType(value: unknown): value is EnvironmentType {
+  return value === 'production' || value === 'staging' || value === 'development';
+}
+
+function mapEnvironment(environment: EnvironmentRow) {
+  return {
+    ...environment,
+    created_at: normalizeTimestamp(environment.created_at),
+    updated_at: normalizeTimestamp(environment.updated_at),
+  };
+}
 
 function normalizeTimestamp(value: unknown): string {
   if (value instanceof Date) {
@@ -108,22 +131,26 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     return c.json({
       count: projects.length,
-      projects: projects.map((p) => ({
-        id: p.id,
-        name: p.name,
-        status: p.status,
-        visibility: p.visibility,
-        repoUrl: p.repo_url,
-        branch: p.branch,
-        port: p.assigned_port,
-        url: p.assigned_port ? getProjectUrl(p.name) : null,
-        publicUrl: p.public_url,
-        createdAt: normalizeTimestamp(p.created_at),
-        updatedAt: normalizeTimestamp(p.updated_at),
-        parentProjectId: p.parent_project_id,
-        isCompose: ctx.db.isParentProject(p.id),
-        serviceCount: ctx.db.getChildProjects(p.id).length,
-      })),
+      projects: projects.map((p) => {
+        const environments = ctx.db.getEnvironmentsByProject(p.id);
+        return {
+          id: p.id,
+          name: p.name,
+          status: p.status,
+          visibility: p.visibility,
+          repoUrl: p.repo_url,
+          branch: p.branch,
+          port: p.assigned_port,
+          url: p.assigned_port ? getProjectUrl(p.name) : null,
+          publicUrl: p.public_url,
+          createdAt: normalizeTimestamp(p.created_at),
+          updatedAt: normalizeTimestamp(p.updated_at),
+          parentProjectId: p.parent_project_id,
+          isCompose: ctx.db.isParentProject(p.id),
+          serviceCount: ctx.db.getChildProjects(p.id).length,
+          environments: environments.map(mapEnvironment),
+        };
+      }),
     });
   });
 
@@ -133,6 +160,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     if (!project) throw new ProjectNotFoundError(id);
 
     const envVars = ctx.env.getAllMasked(project.id);
+    const environments = ctx.db.getEnvironmentsByProject(project.id);
     const deployLogs = ctx.db.getDeployLogs(project.id, 5);
 
     return c.json({
@@ -141,8 +169,151 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       url: project.assigned_port ? getProjectUrl(project.name) : null,
       created_at: normalizeTimestamp(project.created_at),
       updated_at: normalizeTimestamp(project.updated_at),
+      environments: environments.map(mapEnvironment),
       envVars,
       recentDeploys: deployLogs,
+    });
+  });
+
+  api.post('/projects/:id/environments', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const body = await c.req
+      .json<{ type?: unknown; branch?: unknown }>()
+      .catch(() => ({ type: undefined, branch: undefined }));
+
+    if (!isEnvironmentType(body.type)) {
+      return c.json(
+        {
+          error: 'INVALID_ENVIRONMENT_TYPE',
+          message: 'type must be one of: production, staging, development',
+        },
+        400,
+      );
+    }
+
+    const existing = ctx.db
+      .getEnvironmentsByProject(project.id)
+      .find((environment) => environment.type === body.type);
+    if (existing) {
+      return c.json(
+        {
+          error: 'ENVIRONMENT_ALREADY_EXISTS',
+          message: `${body.type} environment already exists for project`,
+        },
+        409,
+      );
+    }
+
+    const branch =
+      typeof body.branch === 'string' && body.branch.trim().length > 0
+        ? body.branch.trim()
+        : DEFAULT_ENVIRONMENT_BRANCHES[body.type];
+
+    const created = ctx.db.createEnvironment({
+      id: crypto.randomUUID(),
+      projectId: project.id,
+      type: body.type,
+      branch,
+    });
+
+    return c.json({ environment: mapEnvironment(created) });
+  });
+
+  api.get('/projects/:id/environments', (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const environments = ctx.db.getEnvironmentsByProject(project.id);
+    return c.json({ environments: environments.map(mapEnvironment) });
+  });
+
+  api.get('/projects/:id/environments/:envId', (c) => {
+    const id = c.req.param('id');
+    const envId = c.req.param('envId');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const environment = ctx.db.getEnvironment(envId);
+    if (!environment || environment.project_id !== project.id) {
+      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    }
+
+    return c.json({ environment: mapEnvironment(environment) });
+  });
+
+  api.delete('/projects/:id/environments/:envId', (c) => {
+    const id = c.req.param('id');
+    const envId = c.req.param('envId');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const environment = ctx.db.getEnvironment(envId);
+    if (!environment || environment.project_id !== project.id) {
+      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    }
+
+    if (environment.type === 'production') {
+      return c.json(
+        {
+          error: 'PRODUCTION_ENVIRONMENT_PROTECTED',
+          message: 'Production environment cannot be deleted',
+        },
+        400,
+      );
+    }
+
+    ctx.db.deleteEnvironment(environment.id);
+    return c.json({ status: 'deleted', environmentId: environment.id });
+  });
+
+  api.get('/projects/:id/environments/:envId/env', (c) => {
+    const id = c.req.param('id');
+    const envId = c.req.param('envId');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const environment = ctx.db.getEnvironment(envId);
+    if (!environment || environment.project_id !== project.id) {
+      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    }
+
+    const envVars = ctx.env.getAllWithInheritance(project.id, environment.id);
+    const inheritance = ctx.env.getInheritanceInfo(project.id, environment.id);
+
+    return c.json({
+      environment: mapEnvironment(environment),
+      envVars,
+      inheritance,
+    });
+  });
+
+  api.post('/projects/:id/environments/:envId/env', async (c) => {
+    const id = c.req.param('id');
+    const envId = c.req.param('envId');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+
+    const environment = ctx.db.getEnvironment(envId);
+    if (!environment || environment.project_id !== project.id) {
+      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    }
+
+    const body = await c.req.json<{ variables?: Record<string, string> }>();
+    if (!body.variables) {
+      return c.json({ error: 'MISSING_FIELD', message: 'variables object is required' }, 400);
+    }
+
+    const changed = ctx.env.setBulk(project.id, body.variables, environment.id);
+    return c.json({
+      status: changed ? 'updated' : 'unchanged',
+      project: project.name,
+      environment: environment.type,
+      keys: Object.keys(body.variables),
+      needsRedeploy: changed && environment.status === 'running',
     });
   });
 
@@ -199,14 +370,33 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
-    if (project.status === 'running') {
-      return c.json({ status: 'already_running', project: project.name }, 200);
-    }
-    if (!project.container_id) {
-      return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
+    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
+    const environments = ctx.db.getEnvironmentsByProject(project.id);
+    const environmentRow = environments.find(
+      (environment) => environment.type === requestedEnvironment,
+    );
+
+    if (requestedEnvironment !== 'production' && !environmentRow) {
+      return c.json(
+        {
+          error: 'ENVIRONMENT_NOT_FOUND',
+          message: `${requestedEnvironment} environment not found for project`,
+        },
+        404,
+      );
     }
 
-    await ctx.pipeline.start(project.id);
+    if (requestedEnvironment === 'production') {
+      if (!project.container_id) {
+        return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
+      }
+      await ctx.pipeline.start(project.id);
+    } else if (environmentRow) {
+      if (!environmentRow.container_id) {
+        return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
+      }
+      await ctx.pipeline.start(project.id, environmentRow.id);
+    }
     return c.json({ status: 'started', project: project.name });
   });
 
@@ -215,7 +405,27 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
-    await ctx.pipeline.stop(project.id);
+    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
+    const environments = ctx.db.getEnvironmentsByProject(project.id);
+    const environmentRow = environments.find(
+      (environment) => environment.type === requestedEnvironment,
+    );
+
+    if (requestedEnvironment !== 'production' && !environmentRow) {
+      return c.json(
+        {
+          error: 'ENVIRONMENT_NOT_FOUND',
+          message: `${requestedEnvironment} environment not found for project`,
+        },
+        404,
+      );
+    }
+
+    if (requestedEnvironment === 'production') {
+      await ctx.pipeline.stop(project.id);
+    } else if (environmentRow) {
+      await ctx.pipeline.stop(project.id, environmentRow.id);
+    }
     return c.json({ status: 'stopped', project: project.name });
   });
 
@@ -224,24 +434,53 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
+    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
+    const environments = ctx.db.getEnvironmentsByProject(project.id);
+    const environmentRow = environments.find(
+      (environment) => environment.type === requestedEnvironment,
+    );
+
+    if (requestedEnvironment !== 'production' && !environmentRow) {
+      return c.json(
+        {
+          error: 'ENVIRONMENT_NOT_FOUND',
+          message: `${requestedEnvironment} environment not found for project`,
+        },
+        404,
+      );
+    }
+
     // If caller provides env_vars, persist them before redeploying
     const body = await c.req
       .json<{ env_vars?: Record<string, string> }>()
       .catch(() => ({ env_vars: undefined }));
     if (body.env_vars && typeof body.env_vars === 'object') {
-      ctx.env.setBulk(project.id, body.env_vars);
+      if (requestedEnvironment === 'production') {
+        ctx.env.setBulk(project.id, body.env_vars);
+      } else if (environmentRow) {
+        ctx.env.setBulk(project.id, body.env_vars, environmentRow.id);
+      }
     }
 
-    // Mark project as building so build/stream sees fresh state
-    ctx.db.updateProject(project.id, { status: 'building' });
-
-    // Redeploy is deterministic — no LLM needed. Direct pipeline call.
     try {
-      const result = await ctx.pipeline.redeploy(project.id);
-      return c.json(result, result.success ? 200 : 500);
+      if (requestedEnvironment === 'production') {
+        ctx.db.updateProject(project.id, { status: 'building' });
+        const result = await ctx.pipeline.redeploy(project.id);
+        return c.json(result, result.success ? 200 : 500);
+      } else if (environmentRow) {
+        ctx.db.updateEnvironment(environmentRow.id, { status: 'building' });
+        const result = await ctx.pipeline.deployEnvironment(project.id, environmentRow.id, {
+          trigger: 'api',
+        });
+        return c.json(result, result.success ? 200 : 500);
+      }
+      return c.json({ success: false, error: 'Unknown environment' }, 500);
     } catch (err) {
-      // Ensure status is reset on unexpected error
-      ctx.db.updateProject(project.id, { status: 'error' });
+      if (requestedEnvironment === 'production') {
+        ctx.db.updateProject(project.id, { status: 'error' });
+      } else if (environmentRow) {
+        ctx.db.updateEnvironment(environmentRow.id, { status: 'error' });
+      }
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
     }
@@ -253,7 +492,30 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
-    const result = await ctx.pipeline.rollback(project.id);
+    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
+    const environments = ctx.db.getEnvironmentsByProject(project.id);
+    const environmentRow = environments.find(
+      (environment) => environment.type === requestedEnvironment,
+    );
+
+    if (requestedEnvironment !== 'production' && !environmentRow) {
+      return c.json(
+        {
+          error: 'ENVIRONMENT_NOT_FOUND',
+          message: `${requestedEnvironment} environment not found for project`,
+        },
+        404,
+      );
+    }
+
+    let result;
+    if (requestedEnvironment === 'production') {
+      result = await ctx.pipeline.rollback(project.id);
+    } else if (environmentRow) {
+      result = await ctx.pipeline.rollback(project.id, environmentRow.id);
+    } else {
+      return c.json({ success: false, error: 'Unknown environment' }, 500);
+    }
     return c.json(result, result.success ? 200 : 500);
   });
 
@@ -262,6 +524,18 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const id = c.req.param('id');
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
+
+    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
+    if (requestedEnvironment !== 'production') {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Blue-green deployment is currently only supported for the production environment.',
+        },
+        400,
+      );
+    }
 
     const body = await c.req
       .json<{ health_check_path?: string }>()
@@ -552,6 +826,63 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     const vars = ctx.env.getAllMasked(project.id);
     return c.json({ project: project.name, envVars: vars });
+  });
+
+  api.get('/projects/:id/env-example', async (c) => {
+    const id = c.req.param('id');
+    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
+    if (!project) throw new ProjectNotFoundError(id);
+    if (!project.repo_url) {
+      return c.json({ error: 'MISSING_REPO_URL', message: 'Project has no repository URL' }, 400);
+    }
+
+    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
+    const allowedEnvironments = new Set(['production', 'staging', 'development']);
+    if (!allowedEnvironments.has(requestedEnvironment)) {
+      return c.json(
+        {
+          error: 'INVALID_ENVIRONMENT',
+          message: 'environment must be one of: production, staging, development',
+        },
+        400,
+      );
+    }
+
+    const environments = ctx.db.getEnvironmentsByProject(project.id);
+    const environmentRow = environments.find(
+      (environment) => environment.type === requestedEnvironment,
+    );
+    if (environments.length > 0 && !environmentRow) {
+      return c.json(
+        {
+          error: 'ENVIRONMENT_NOT_FOUND',
+          message: `${requestedEnvironment} environment not found for project`,
+        },
+        404,
+      );
+    }
+
+    let clonePath: string | null = null;
+    try {
+      const cloneResult = await cloneRepo({
+        repoUrl: project.repo_url,
+        branch: environmentRow?.branch ?? project.branch,
+      });
+      clonePath = cloneResult.path;
+      const scanResult = scanForEnvUsage(clonePath);
+      const existingVars = environmentRow
+        ? ctx.env.getAllWithInheritance(project.id, environmentRow.id)
+        : ctx.env.getAll(project.id);
+      const envExample = generateEnvExample(scanResult, existingVars);
+      return c.text(envExample);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: 'ENV_EXAMPLE_GENERATION_FAILED', message }, 500);
+    } finally {
+      if (clonePath) {
+        await rm(clonePath, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
   });
 
   api.post('/projects/:id/env', async (c) => {
