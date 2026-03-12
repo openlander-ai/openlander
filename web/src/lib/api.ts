@@ -38,7 +38,8 @@ interface BackendEnvironment {
 
 export interface EnvironmentEnvVarMeta {
   value: string;
-  source: 'global' | 'project' | 'environment';
+  source: 'global' | 'project' | 'production' | 'environment';
+  isOverride?: boolean;
 }
 
 export interface EnvironmentEnvVarsResponse {
