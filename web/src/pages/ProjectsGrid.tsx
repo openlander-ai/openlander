@@ -173,7 +173,7 @@ export function ProjectsGrid() {
                 </div>
 
                 {/* Card Body */}
-                <div className="px-4 pb-3 space-y-1.5">
+                <div className="px-4 pb-3 space-y-2">
                   {project.url && (
                     <a
                       href={project.url}
@@ -198,6 +198,48 @@ export function ProjectsGrid() {
                       {formatRelativeTime(project.updatedAt, t)}
                     </span>
                   </div>
+
+                  {(() => {
+                    if (!project.environments || project.environments.length === 0) return null;
+
+                    const hasProd = project.environments.some((e) => e.type === 'production');
+                    const allEnvs = hasProd
+                      ? project.environments
+                      : [{ type: 'production', status: project.status }, ...project.environments];
+
+                    if (allEnvs.length <= 1) return null;
+
+                    return (
+                      <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                        {allEnvs.map((env) => {
+                          const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
+                          return (
+                            <button
+                              key={env.type}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/projects/${project.id}?env=${env.type}`);
+                              }}
+                              className="flex items-center gap-1.5 px-1.5 py-0.5 rounded border border-[hsl(var(--border))] hover:border-agent/30 bg-bg-subtle hover:bg-bg-panel transition-colors group/env"
+                              title={`${env.type} - ${envStatus.label}`}
+                            >
+                              <div className={cn('h-1.5 w-1.5 rounded-full', envStatus.dot)} />
+                              <span className="text-[9px] font-mono text-secondary-ol group-hover/env:text-primary-ol transition-colors uppercase">
+                                {env.type === 'production'
+                                  ? 'prod'
+                                  : env.type === 'development'
+                                    ? 'dev'
+                                    : env.type.substring(0, 4)}
+                              </span>
+                              <span className="text-[9px] font-mono text-muted-ol ml-0.5">
+                                {envStatus.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Hover Actions */}

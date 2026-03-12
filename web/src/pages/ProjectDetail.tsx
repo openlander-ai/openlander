@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '@/i18n/context';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -12,15 +12,19 @@ import {
   blueGreenProject,
   debugBuild,
   scanProjectEnvVars,
+  deleteProject,
+  deleteEnvironment,
+  createEnvironment,
   type BuildDiagnosis,
   type PostmortemData,
   type EnvVarInfo,
+  type ProjectWithOptionalEnvironments,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/sidebar/ShareDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { Project } from '@/types';
+import type { EnvironmentType } from '@/types';
 import { useAssistant } from '@/hooks/use-assistant';
 import { Activity, History, SquareTerminal, Settings } from 'lucide-react';
 import type { TimelineItem } from '@/lib/event-types';
@@ -57,8 +61,9 @@ function formatBuildDiagnosisDetail(diagnosis: BuildDiagnosis, t: (key: string) 
 
 export function ProjectDetail() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useLanguage();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<ProjectWithOptionalEnvironments | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -72,6 +77,35 @@ export function ProjectDetail() {
   const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
   const [redeployValues, setRedeployValues] = useState<Record<string, string>>({});
   const assistant = useAssistant(id);
+
+  const validEnvs: EnvironmentType[] = ['production', 'staging', 'development'];
+  const envParam = searchParams.get('env') as EnvironmentType;
+  const currentEnvType = validEnvs.includes(envParam) ? envParam : 'production';
+
+  const environments = project?.environments;
+  const selectedEnv = environments?.find((e) => e.type === currentEnvType);
+
+  const handleEnvChange = (env: EnvironmentType) => {
+    setSearchParams({ env });
+  };
+
+  const handleAddEnv = async (env: EnvironmentType) => {
+    if (!id || actionLoading) return;
+    setActionLoading('add-env');
+    try {
+      await createEnvironment(id, env);
+      await fetchProject();
+      toast.success(`Created ${env} environment`);
+      setSearchParams({ env });
+    } catch (err) {
+      console.error('Failed to create environment:', err);
+      toast.error(
+        'Failed to create environment: ' + (err instanceof Error ? err.message : String(err)),
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   // Fetch project details
   const fetchProject = useCallback(async () => {
@@ -209,7 +243,7 @@ export function ProjectDetail() {
 
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id);
+      await redeployProject(id, undefined, currentEnvType);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project redeploying');
     } catch (err) {
@@ -234,7 +268,7 @@ export function ProjectDetail() {
     if (!id || actionLoading) return;
     setActionLoading('stop');
     try {
-      await stopProject(id);
+      await stopProject(id, currentEnvType);
       toast.success('Project stopped');
     } catch (err) {
       console.error('Stop failed:', err);
@@ -252,7 +286,7 @@ export function ProjectDetail() {
     if (!id || actionLoading) return;
     setActionLoading('start');
     try {
-      await startProject(id);
+      await startProject(id, currentEnvType);
       await fetchProject();
       toast.success('Project started');
     } catch (err) {
@@ -275,7 +309,7 @@ export function ProjectDetail() {
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
 
     try {
-      await rollbackProject(id);
+      await rollbackProject(id, currentEnvType);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project rolling back');
     } catch (err) {
@@ -301,7 +335,7 @@ export function ProjectDetail() {
     setActionLoading('bluegreen');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await blueGreenProject(id);
+      await blueGreenProject(id, undefined, currentEnvType);
       setTimelineRunKey((k) => k + 1);
       toast.success('Blue-green deploy started');
     } catch (err) {
@@ -319,6 +353,49 @@ export function ProjectDetail() {
       setActionLoading(null);
     }
   };
+
+  const handleDelete = async () => {
+    if (!id || actionLoading) return;
+    if (currentEnvType === 'production') {
+      if (!confirm('Are you sure you want to delete this project?')) return;
+      setActionLoading('delete');
+      try {
+        await deleteProject(id);
+        window.location.href = '/projects';
+      } catch (err) {
+        toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
+      } finally {
+        setActionLoading(null);
+      }
+    } else {
+      if (!selectedEnv) return;
+      if (!confirm(`Are you sure you want to delete the ${currentEnvType} environment?`)) return;
+      setActionLoading('delete');
+      try {
+        await deleteEnvironment(id, selectedEnv.id);
+        toast.success('Environment deleted');
+        handleEnvChange('production');
+        await fetchProject();
+      } catch (err) {
+        toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
+      } finally {
+        setActionLoading(null);
+      }
+    }
+  };
+
+  const displayProject = useMemo(() => {
+    if (!project) return null;
+    if (!selectedEnv) return project;
+    return {
+      ...project,
+      status: selectedEnv.status,
+      branch: selectedEnv.branch,
+      publicUrl: selectedEnv.publicUrl,
+      port: selectedEnv.assignedPort ?? project.port,
+      url: currentEnvType === 'production' ? project.url : undefined,
+    };
+  }, [project, selectedEnv, currentEnvType]);
 
   if (loading) {
     return (
@@ -361,9 +438,12 @@ export function ProjectDetail() {
   return (
     <>
       <div className="flex flex-col h-full">
-        {/* Project Header with contextual actions */}
         <ProjectHeader
           project={project}
+          environments={environments}
+          currentEnvType={currentEnvType}
+          onEnvChange={handleEnvChange}
+          onAddEnv={handleAddEnv}
           actionLoading={actionLoading}
           onRedeploy={handleRedeploy}
           onStop={handleStop}
@@ -371,9 +451,9 @@ export function ProjectDetail() {
           onRollback={handleRollback}
           onBlueGreen={handleBlueGreen}
           onShare={() => setShareOpen(true)}
+          onDelete={handleDelete}
         />
 
-        {/* 4-tab navigation */}
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
@@ -410,12 +490,12 @@ export function ProjectDetail() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Overview: Timeline (left) + AI Assistant (right) */}
           <TabsContent value="overview" className="flex-1 min-h-0 mt-0">
-            {id && (
+            {id && displayProject && (
               <OverviewTab
                 projectId={id}
-                projectStatus={project.status}
+                projectStatus={displayProject.status}
+                displayProject={displayProject}
                 timelineItems={allTimelineItems}
                 isTimelineStreaming={isStreaming}
                 postmortem={postmortem}
@@ -432,31 +512,30 @@ export function ProjectDetail() {
             )}
           </TabsContent>
 
-          {/* Deployments: list + PR previews filter */}
           <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
-            {id && (
+            {id && displayProject && (
               <DeploymentsTab
                 projectId={id}
-                projectStatus={project?.status}
-                projectBranch={project?.branch}
+                projectStatus={displayProject.status}
+                projectBranch={displayProject.branch}
               />
             )}
           </TabsContent>
 
-          {/* Console: Logs (left) + Terminal (right) */}
           <TabsContent value="console" className="flex-1 min-h-0 mt-0">
-            {id && (
+            {id && displayProject && (
               <ConsoleTab
                 projectId={id}
                 isActive={activeTab === 'console'}
-                projectStatus={project.status}
+                projectStatus={displayProject.status}
               />
             )}
           </TabsContent>
 
-          {/* Settings: nav (left) + form (right) */}
           <TabsContent value="settings" className="flex-1 min-h-0 mt-0">
-            {id && <SettingsTab projectId={id} projectStatus={project?.status} />}
+            {id && displayProject && (
+              <SettingsTab projectId={id} projectStatus={displayProject.status} />
+            )}
           </TabsContent>
         </Tabs>
       </div>
@@ -496,7 +575,7 @@ export function ProjectDetail() {
                 setActionLoading('redeploy');
                 setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
                 try {
-                  await redeployProject(id!, redeployValues);
+                  await redeployProject(id!, redeployValues, currentEnvType);
                   setTimelineRunKey((k) => k + 1);
                   toast.success('Project redeploying');
                 } catch (err) {

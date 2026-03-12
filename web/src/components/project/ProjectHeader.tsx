@@ -19,12 +19,19 @@ import {
   History,
   Zap,
   MoreHorizontal,
+  ChevronDown,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Project } from '@/types';
+import type { Project, Environment, EnvironmentType } from '@/types';
 
 interface ProjectHeaderProps {
   project: Project;
+  environments?: Environment[];
+  currentEnvType?: EnvironmentType;
+  onEnvChange?: (env: EnvironmentType) => void;
+  onAddEnv?: (env: EnvironmentType) => void;
   actionLoading: string | null;
   onRedeploy: () => void;
   onStop: () => void;
@@ -32,6 +39,7 @@ interface ProjectHeaderProps {
   onRollback: () => void;
   onBlueGreen: () => void;
   onShare: () => void;
+  onDelete: () => void;
 }
 
 type StatusConfig = { label: string; color: string; dot: string };
@@ -42,11 +50,16 @@ function getStatusConfig(): Record<string, StatusConfig> {
     stopped: { label: 'Stopped', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
     building: { label: 'Deploying', color: 'text-warning', dot: 'bg-warning animate-pulse' },
     error: { label: 'Failed', color: 'text-error', dot: 'bg-error' },
+    idle: { label: 'Idle', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
   };
 }
 
 export function ProjectHeader({
   project,
+  environments = [],
+  currentEnvType = 'production',
+  onEnvChange,
+  onAddEnv,
   actionLoading,
   onRedeploy,
   onStop,
@@ -54,12 +67,32 @@ export function ProjectHeader({
   onRollback,
   onBlueGreen,
   onShare,
+  onDelete,
 }: ProjectHeaderProps) {
   const statusConfig = getStatusConfig();
-  const status = statusConfig[project.status] ?? statusConfig.stopped;
-  const isBuilding = project.status === 'building';
-  const isRunning = project.status === 'running';
-  const isStopped = project.status === 'stopped';
+
+  const selectedEnv = environments.find((e) => e.type === currentEnvType);
+  const displayStatus = selectedEnv ? selectedEnv.status : project.status;
+  const displayBranch = selectedEnv ? selectedEnv.branch : project.branch;
+  const displayPublicUrl = selectedEnv ? selectedEnv.publicUrl : project.publicUrl;
+  const displayUrl = currentEnvType === 'production' ? project.url : undefined;
+
+  const status = statusConfig[displayStatus] ?? statusConfig.stopped;
+  const isBuilding = displayStatus === 'building';
+  const isRunning = displayStatus === 'running';
+  const isStopped = displayStatus === 'stopped' || displayStatus === 'idle';
+
+  const envColors: Record<EnvironmentType, string> = {
+    production: 'bg-success/10 text-success border-success/20',
+    staging: 'bg-warning/10 text-warning border-warning/20',
+    development: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+  };
+
+  const envLabels: Record<EnvironmentType, string> = {
+    production: 'Production',
+    staging: 'Staging',
+    development: 'Development',
+  };
 
   // Determine primary action
   const renderPrimaryAction = () => {
@@ -113,48 +146,91 @@ export function ProjectHeader({
   return (
     <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
       <div className="flex items-center justify-between">
-        {/* Project info */}
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
           <div className="min-w-0">
-            <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
-              {project.name}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
+                {project.name}
+              </h1>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-6 px-2 text-[11px] font-body gap-1 border',
+                      envColors[currentEnvType],
+                    )}
+                  >
+                    {envLabels[currentEnvType]}
+                    <ChevronDown className="h-3 w-3 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-40">
+                  {(['production', 'staging', 'development'] as EnvironmentType[]).map((env) => {
+                    const exists = env === 'production' || environments.some((e) => e.type === env);
+                    return (
+                      <DropdownMenuItem
+                        key={env}
+                        onClick={() => {
+                          if (exists) {
+                            onEnvChange?.(env);
+                          } else {
+                            onAddEnv?.(env);
+                          }
+                        }}
+                        className="flex items-center justify-between"
+                      >
+                        <span className={cn('text-xs', env === currentEnvType && 'font-medium')}>
+                          {envLabels[env]}
+                        </span>
+                        {!exists && (
+                          <span className="flex items-center gap-1 text-[10px] text-muted-ol">
+                            <Plus className="h-3 w-3" />
+                            Add
+                          </span>
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
               <span className={status.color}>{status.label}</span>
-              {project.branch && (
+              {displayBranch && (
                 <span className="flex items-center gap-1 text-muted-ol">
                   <GitBranch className="h-3 w-3" />
-                  {project.branch}
+                  {displayBranch}
                 </span>
               )}
-              {project.url && (
+              {displayUrl && (
                 <a
-                  href={project.url}
+                  href={displayUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 text-agent hover:text-agent/80 transition-colors"
                 >
                   <ExternalLink className="h-3 w-3" />
-                  {project.url.replace(/^https?:\/\//, '')}
+                  {displayUrl.replace(/^https?:\/\//, '')}
                 </a>
               )}
             </div>
-            {project.publicUrl && (
+            {displayPublicUrl && (
               <a
-                href={project.publicUrl}
+                href={displayPublicUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-success hover:text-success/80 transition-colors text-[11px] font-body mt-0.5"
               >
                 <Globe className="h-3 w-3" />
-                {project.publicUrl.replace(/^https?:\/\//, '')}
+                {displayPublicUrl.replace(/^https?:\/\//, '')}
               </a>
             )}
           </div>
         </div>
 
-        {/* Action area */}
         <div className="flex items-center gap-2 shrink-0">
           {/* Primary action */}
           {renderPrimaryAction()}
@@ -228,10 +304,12 @@ export function ProjectHeader({
               </DropdownMenuItem>
 
               {/* Blue-Green */}
-              <DropdownMenuItem onClick={onBlueGreen} disabled={!isRunning || !!actionLoading}>
-                <Zap className="h-3.5 w-3.5 mr-2" />
-                Blue-Green Deploy
-              </DropdownMenuItem>
+              {currentEnvType === 'production' && (
+                <DropdownMenuItem onClick={onBlueGreen} disabled={!isRunning || !!actionLoading}>
+                  <Zap className="h-3.5 w-3.5 mr-2" />
+                  Blue-Green Deploy
+                </DropdownMenuItem>
+              )}
 
               <DropdownMenuSeparator />
 
@@ -251,6 +329,18 @@ export function ProjectHeader({
                   Start
                 </DropdownMenuItem>
               )}
+
+              <DropdownMenuSeparator />
+
+              {/* Delete */}
+              <DropdownMenuItem
+                onClick={onDelete}
+                disabled={!!actionLoading}
+                className="text-error focus:text-error"
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-2" />
+                Delete {currentEnvType === 'production' ? 'Project' : 'Environment'}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

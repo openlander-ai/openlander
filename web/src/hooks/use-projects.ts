@@ -1,19 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Project } from '../types';
-import { listProjects } from '../lib/api';
+import { listProjects, type ProjectWithOptionalEnvironments } from '../lib/api';
 
 const IDLE_POLL_MS = 10_000;
 const ACTIVE_POLL_MS = 3_000;
 
 export interface UseProjectsReturn {
-  projects: Project[];
+  projects: ProjectWithOptionalEnvironments[];
   loading: boolean;
   error: string | null;
   refetch: () => void;
 }
 
 export function useProjects(): UseProjectsReturn {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectWithOptionalEnvironments[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

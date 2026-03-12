@@ -147,8 +147,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
     setVars((prev) =>
       prev.map((v, i) => {
         if (i === index) {
-          const newSource = selectedEnvId && v.source !== 'environment' ? 'environment' : v.source;
-          return { ...v, [field]: val, source: newSource };
+          return { ...v, [field]: val };
         }
         return v;
       }),
@@ -191,6 +190,12 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
         // Merge: update existing keys, add new ones
         const existing = new Map(prev.map((v) => [v.key, v]));
         for (const p of parsed) {
+          const existingVar = existing.get(p.key);
+          if (existingVar && selectedEnvId) {
+            if (existingVar.source !== 'environment' || existingVar.isOverride) {
+              p.isOverride = true;
+            }
+          }
           existing.set(p.key, p);
         }
         return Array.from(existing.values());

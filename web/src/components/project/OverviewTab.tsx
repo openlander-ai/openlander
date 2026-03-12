@@ -14,6 +14,7 @@ import type { Project } from '@/types';
 interface OverviewTabProps {
   projectId: string;
   projectStatus: string;
+  displayProject?: Project;
   // Timeline props
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
@@ -33,6 +34,7 @@ interface OverviewTabProps {
 export function OverviewTab({
   projectId,
   projectStatus,
+  displayProject,
   timelineItems,
   isTimelineStreaming,
   postmortem,
@@ -64,7 +66,6 @@ export function OverviewTab({
 
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0">
-      {/* Left pane: Timeline + Log Preview */}
       <div className="flex-1 min-w-0 min-h-0 overflow-auto p-4 space-y-4 border-b md:border-b-0 md:border-r border-[hsl(var(--border))]">
         {postmortem && (
           <PostmortemCard
@@ -99,14 +100,17 @@ export function OverviewTab({
           <section className="flex flex-col">
             <SummaryDashboard
               projectId={projectId}
-              project={project || { status: projectStatus }}
+              project={
+                displayProject || project
+                  ? { ...(displayProject || project), status: projectStatus }
+                  : { status: projectStatus }
+              }
               recentEvents={timelineItems}
             />
           </section>
         )}
       </div>
 
-      {/* Right pane: AI Assistant */}
       <ChatMessageList
         assistantItems={assistantItems}
         isStreaming={isAssistantStreaming}

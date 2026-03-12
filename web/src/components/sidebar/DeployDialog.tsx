@@ -11,6 +11,13 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { deployProject, scanEnvVars, type EnvVarInfo } from '@/lib/api';
 
 interface DeployDialogProps {
@@ -23,7 +30,8 @@ type Step = 'form' | 'scanning' | 'env-review' | 'deploying';
 
 export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDialogProps) {
   const [repoUrl, setRepoUrl] = useState('');
-  const [branch, setBranch] = useState('');
+  const [environment, setEnvironment] = useState<string>('production');
+  const [branch, setBranch] = useState('main');
   const [name, setName] = useState('');
   const [step, setStep] = useState<Step>('form');
   const [error, setError] = useState<string | null>(null);
@@ -33,12 +41,20 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
 
   const reset = () => {
     setRepoUrl('');
-    setBranch('');
+    setEnvironment('production');
+    setBranch('main');
     setName('');
     setStep('form');
     setError(null);
     setEnvVars([]);
     setEnvValues({});
+  };
+
+  const handleEnvironmentChange = (value: string) => {
+    setEnvironment(value);
+    if (value === 'production') setBranch('main');
+    else if (value === 'staging') setBranch('develop');
+    else if (value === 'development') setBranch('dev');
   };
 
   const handleClose = (open: boolean) => {
@@ -83,7 +99,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
     }
 
     try {
-      await deployProject(repoUrl, branch || undefined, name || undefined, filtered);
+      await deployProject(repoUrl, branch || undefined, name || undefined, filtered, environment);
       reset();
       onDeploySuccess();
       onOpenChange(false);
@@ -121,6 +137,24 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
                 onChange={(e) => setRepoUrl(e.target.value)}
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <label
+                htmlFor="environment"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                {'Environment'}
+              </label>
+              <Select value={environment} onValueChange={handleEnvironmentChange}>
+                <SelectTrigger id="environment">
+                  <SelectValue placeholder="Select environment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="production">Production</SelectItem>
+                  <SelectItem value="staging">Staging</SelectItem>
+                  <SelectItem value="development">Development</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <label
