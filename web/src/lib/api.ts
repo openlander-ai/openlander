@@ -71,11 +71,12 @@ export async function deployProject(
   branch?: string,
   name?: string,
   envVars?: Record<string, string>,
+  environment?: string,
 ): Promise<DeployResult> {
   const res = await fetch('/api/projects/deploy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repo_url: repoUrl, branch, name, env_vars: envVars }),
+    body: JSON.stringify({ repo_url: repoUrl, branch, name, env_vars: envVars, environment }),
   });
 
   if (!res.ok) {
