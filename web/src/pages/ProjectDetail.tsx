@@ -26,7 +26,8 @@ import { ShareDialog } from '@/components/sidebar/ShareDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { EnvironmentType } from '@/types';
 import { useAssistant } from '@/hooks/use-assistant';
-import { Activity, History, SquareTerminal, Settings } from 'lucide-react';
+import { Activity, History, SquareTerminal, Settings, GitBranch } from 'lucide-react';
+import { SheetDescription } from '@/components/ui/sheet';
 import type { TimelineItem } from '@/lib/event-types';
 
 // Wave 2 tab components
@@ -77,6 +78,11 @@ export function ProjectDetail() {
   const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
   const [redeployValues, setRedeployValues] = useState<Record<string, string>>({});
   const assistant = useAssistant(id);
+  const [addEnvSheet, setAddEnvSheet] = useState<{ open: boolean; type: EnvironmentType | null }>({
+    open: false,
+    type: null,
+  });
+  const [addEnvBranch, setAddEnvBranch] = useState('');
 
   const validEnvs: EnvironmentType[] = ['production', 'staging', 'development'];
   const envParam = searchParams.get('env') as EnvironmentType;
@@ -89,14 +95,21 @@ export function ProjectDetail() {
     setSearchParams({ env });
   };
 
-  const handleAddEnv = async (env: EnvironmentType) => {
-    if (!id || actionLoading) return;
+  const handleAddEnv = (env: EnvironmentType) => {
+    setAddEnvBranch(project?.branch ?? 'main');
+    setAddEnvSheet({ open: true, type: env });
+  };
+
+  const confirmAddEnv = async () => {
+    const envType = addEnvSheet.type;
+    if (!id || !envType || actionLoading) return;
     setActionLoading('add-env');
     try {
-      await createEnvironment(id, env);
+      await createEnvironment(id, envType, addEnvBranch.trim() || undefined);
       await fetchProject();
-      toast.success(`Created ${env} environment`);
-      setSearchParams({ env });
+      toast.success(`Created ${envType} environment`);
+      setSearchParams({ env: envType });
+      setAddEnvSheet({ open: false, type: null });
     } catch (err) {
       console.error('Failed to create environment:', err);
       toast.error(
@@ -588,6 +601,65 @@ export function ProjectDetail() {
               }}
             >
               {'Redeploy'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet
+        open={addEnvSheet.open}
+        onOpenChange={(open) => setAddEnvSheet((prev) => ({ ...prev, open }))}
+      >
+        <SheetContent side="left" className="w-[400px] sm:w-[440px]">
+          <SheetHeader>
+            <SheetTitle>
+              {addEnvSheet.type
+                ? addEnvSheet.type.charAt(0).toUpperCase() +
+                  addEnvSheet.type.slice(1) +
+                  ' Environment'
+                : 'Add Environment'}
+            </SheetTitle>
+            <SheetDescription>
+              {'Choose which branch this environment should track.'}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label
+                htmlFor="env-branch"
+                className="text-sm font-medium leading-none flex items-center gap-1.5"
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+                {'Branch'}
+              </label>
+              <Input
+                id="env-branch"
+                placeholder={project?.branch ?? 'main'}
+                value={addEnvBranch}
+                onChange={(e) => setAddEnvBranch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void confirmAddEnv();
+                  }
+                }}
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-ol">
+                {`Current project branch: ${project?.branch ?? 'main'}`}
+              </p>
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="outline" onClick={() => setAddEnvSheet({ open: false, type: null })}>
+              {'Cancel'}
+            </Button>
+            <Button
+              className="bg-foreground text-background hover:bg-foreground/90"
+              disabled={actionLoading === 'add-env'}
+              onClick={() => void confirmAddEnv()}
+            >
+              {'Create Environment'}
             </Button>
           </SheetFooter>
         </SheetContent>
