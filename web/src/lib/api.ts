@@ -361,11 +361,8 @@ export async function getProjectEnv(id: string): Promise<Record<string, string>>
 }
 
 export async function generateEnvExample(id: string, environment?: string): Promise<string> {
-  const url = new URL(`/api/projects/${id}/env-example`, window.location.origin);
-  if (environment) {
-    url.searchParams.set('environment', environment);
-  }
-  const res = await fetch(url.toString());
+  const query = environment ? `?environment=${encodeURIComponent(environment)}` : '';
+  const res = await fetch(`/api/projects/${id}/env-example${query}`);
   if (!res.ok) {
     const error = await res.text();
     let message = 'Failed to generate .env.example';

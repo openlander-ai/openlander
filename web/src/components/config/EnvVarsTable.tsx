@@ -8,10 +8,21 @@ import {
   getEnvironments,
   getEnvironmentEnvVars,
   updateEnvironmentEnvVars,
+  generateEnvExample,
 } from '@/lib/api';
 import type { Environment } from '@/types';
 import { cn } from '@/lib/utils';
-import { Eye, EyeOff, Plus, Trash2, ClipboardPaste, Save, Loader2 } from 'lucide-react';
+import {
+  Eye,
+  EyeOff,
+  Plus,
+  Trash2,
+  ClipboardPaste,
+  Save,
+  Loader2,
+  FileText,
+  Download,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface EnvVarsTableProps {
@@ -35,6 +46,9 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   const [dirty, setDirty] = useState(false);
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteText, setPasteText] = useState('');
+  const [envExampleMode, setEnvExampleMode] = useState(false);
+  const [envExampleText, setEnvExampleText] = useState('');
+  const [generatingExample, setGeneratingExample] = useState(false);
 
   const fetchEnvironments = useCallback(async () => {
     try {
@@ -185,6 +199,35 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
     setPasteText('');
   };
 
+  const handleGenerateExample = async () => {
+    setGeneratingExample(true);
+    try {
+      const envType = selectedEnvId
+        ? environments.find((e) => e.id === selectedEnvId)?.type
+        : undefined;
+      const text = await generateEnvExample(projectId, envType);
+      setEnvExampleText(text);
+      setEnvExampleMode(true);
+    } catch (err) {
+      console.error('Failed to generate .env.example:', err);
+      toast.error('Failed to generate .env.example');
+    } finally {
+      setGeneratingExample(false);
+    }
+  };
+
+  const handleDownloadExample = () => {
+    const blob = new Blob([envExampleText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '.env.example';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   if (loading && vars.length === 0) {
     return (
       <div className="space-y-4 p-4">
@@ -235,6 +278,20 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-[11px] font-body gap-1.5"
+            onClick={handleGenerateExample}
+            disabled={generatingExample}
+          >
+            {generatingExample ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <FileText className="h-3 w-3" />
+            )}
+            {'Generate .env.example'}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -302,6 +359,48 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
               disabled={!pasteText.trim()}
             >
               {'Parse & Import'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Generate .env.example modal */}
+      {envExampleMode && (
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-body text-secondary-ol">
+              Generated .env.example based on your repository and current environment variables.
+            </p>
+          </div>
+          <textarea
+            value={envExampleText}
+            readOnly
+            rows={8}
+            className={cn(
+              'w-full rounded-md px-3 py-2 text-xs font-mono',
+              'bg-bg-app border border-border text-primary-ol',
+              'resize-none focus:outline-none',
+            )}
+          />
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px]"
+              onClick={() => {
+                setEnvExampleMode(false);
+                setEnvExampleText('');
+              }}
+            >
+              {'Close'}
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-[11px] bg-agent text-bg-app hover:bg-agent/90 gap-1.5"
+              onClick={handleDownloadExample}
+            >
+              <Download className="h-3 w-3" />
+              {'Download'}
             </Button>
           </div>
         </div>
