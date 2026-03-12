@@ -21,6 +21,12 @@ interface ParsedPushEvent {
   repoUrl: string;
 }
 
+interface EnvironmentBranchTarget {
+  id: string;
+  type: 'production' | 'staging' | 'development';
+  branch: string;
+}
+
 export interface ParsedPREvent {
   action: 'opened' | 'synchronize' | 'closed';
   prNumber: number;
@@ -129,19 +135,41 @@ export class WebhookManager {
       return { accepted: false, projectId, message: 'Invalid push payload.' };
     }
 
-    const expectedBranch = config.branch_filter || 'main';
-    if (parsed.branch !== expectedBranch) {
-      return {
-        accepted: false,
-        projectId,
-        message: `Ignored push to '${parsed.branch}' (filter '${expectedBranch}').`,
-      };
+    const targetEnvironment = this.resolvePushEnvironment(projectId, parsed.branch);
+    if (!targetEnvironment) {
+      const expectedBranch = config.branch_filter || 'main';
+      if (parsed.branch !== expectedBranch) {
+        return {
+          accepted: false,
+          projectId,
+          message: `Ignored push to '${parsed.branch}' (filter '${expectedBranch}').`,
+        };
+      }
     }
 
     await this.events.emit('deploy:start', {
       projectId,
       repoUrl: parsed.repoUrl || project.repo_url || '',
     });
+
+    if (targetEnvironment) {
+      const deployResult = await this.pipeline.deployEnvironment(projectId, targetEnvironment.id, {
+        trigger: 'webhook',
+      });
+      if (!deployResult.success) {
+        return {
+          accepted: false,
+          projectId,
+          message: deployResult.error ?? 'Environment deploy failed.',
+        };
+      }
+
+      return {
+        accepted: true,
+        projectId,
+        message: `Deploy triggered for ${targetEnvironment.type} environment (${parsed.branch}@${parsed.commitSha}).`,
+      };
+    }
 
     const redeploy = await this.pipeline.redeploy(projectId);
     if (!redeploy.success) {
@@ -157,6 +185,43 @@ export class WebhookManager {
       projectId,
       message: `Redeploy triggered for ${parsed.branch}@${parsed.commitSha}.`,
     };
+  }
+
+  private resolvePushEnvironment(
+    projectId: string,
+    branch: string,
+  ): EnvironmentBranchTarget | null {
+    const environments = this.db.getEnvironmentsByProject(projectId).map((environment) => ({
+      id: environment.id,
+      type: environment.type,
+      branch: environment.branch,
+    }));
+
+    const branchMatches = environments.filter((environment) => environment.branch === branch);
+    if (branchMatches.length === 0) {
+      return null;
+    }
+
+    if (branch === 'main') {
+      const production = branchMatches.find((environment) => environment.type === 'production');
+      if (production) {
+        return production;
+      }
+    }
+
+    if (branch === 'develop') {
+      const staging = branchMatches.find((environment) => environment.type === 'staging');
+      if (staging) {
+        return staging;
+      }
+    }
+
+    const development = branchMatches.find((environment) => environment.type === 'development');
+    if (development) {
+      return development;
+    }
+
+    return branchMatches[0] ?? null;
   }
 
   private async cleanupPreview(parentProjectId: string, prNumber: number): Promise<void> {
