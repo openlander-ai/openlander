@@ -27,8 +27,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { EnvironmentType } from '@/types';
 import { useAssistant } from '@/hooks/use-assistant';
 import { Activity, History, SquareTerminal, Settings, GitBranch } from 'lucide-react';
-import { SheetDescription } from '@/components/ui/sheet';
 import type { TimelineItem } from '@/lib/event-types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 // Wave 2 tab components
 import { OverviewTab } from '@/components/project/OverviewTab';
@@ -606,64 +613,61 @@ export function ProjectDetail() {
         </SheetContent>
       </Sheet>
 
-      <Sheet
+      <Dialog
         open={addEnvSheet.open}
         onOpenChange={(open) => setAddEnvSheet((prev) => ({ ...prev, open }))}
       >
-        <SheetContent side="left" className="w-[400px] sm:w-[440px]">
-          <SheetHeader>
-            <SheetTitle>
-              {addEnvSheet.type
-                ? addEnvSheet.type.charAt(0).toUpperCase() +
-                  addEnvSheet.type.slice(1) +
-                  ' Environment'
-                : 'Add Environment'}
-            </SheetTitle>
-            <SheetDescription>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {addEnvSheet.type ? `Create ${addEnvSheet.type} environment` : 'Create environment'}
+            </DialogTitle>
+            <DialogDescription>
               {'Choose which branch this environment should track.'}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label
-                htmlFor="env-branch"
-                className="text-sm font-medium leading-none flex items-center gap-1.5"
-              >
-                <GitBranch className="h-3.5 w-3.5" />
-                {'Branch'}
-              </label>
-              <Input
-                id="env-branch"
-                placeholder={project?.branch ?? 'main'}
-                value={addEnvBranch}
-                onChange={(e) => setAddEnvBranch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void confirmAddEnv();
-                  }
-                }}
-                autoFocus
-              />
-              <p className="text-[11px] text-muted-ol">
-                {`Current project branch: ${project?.branch ?? 'main'}`}
-              </p>
-            </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 pt-2">
+            <label
+              htmlFor="env-branch"
+              className="text-xs font-medium leading-none flex items-center gap-1.5 text-secondary-ol"
+            >
+              <GitBranch className="h-3 w-3" />
+              {'Branch'}
+            </label>
+            <Input
+              id="env-branch"
+              placeholder={project?.branch ?? 'main'}
+              value={addEnvBranch}
+              onChange={(e) => setAddEnvBranch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void confirmAddEnv();
+                }
+              }}
+              className="h-8 text-sm"
+              autoFocus
+            />
           </div>
-          <SheetFooter>
-            <Button variant="outline" onClick={() => setAddEnvSheet({ open: false, type: null })}>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAddEnvSheet({ open: false, type: null })}
+            >
               {'Cancel'}
             </Button>
             <Button
+              size="sm"
               className="bg-foreground text-background hover:bg-foreground/90"
               disabled={actionLoading === 'add-env'}
               onClick={() => void confirmAddEnv()}
             >
-              {'Create Environment'}
+              {'Create'}
             </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ShareDialog
         projectId={id!}
