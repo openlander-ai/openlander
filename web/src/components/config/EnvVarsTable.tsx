@@ -33,7 +33,8 @@ interface EnvVar {
   key: string;
   value: string;
   revealed: boolean;
-  source?: 'global' | 'project' | 'environment';
+  source?: 'global' | 'project' | 'production' | 'environment';
+  isOverride?: boolean;
 }
 
 export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
@@ -80,6 +81,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             value,
             revealed: false,
             source: data.inheritance[key]?.source || 'environment',
+            isOverride: data.inheritance[key]?.isOverride,
           })),
         );
       }
@@ -415,7 +417,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       ) : (
         <div className="space-y-1">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_1fr_60px_36px_36px] gap-2 px-2 pb-1 text-[10px] font-mono text-muted-ol uppercase tracking-wider">
+          <div className="grid grid-cols-[1fr_1fr_140px_36px_36px] gap-2 px-2 pb-1 text-[10px] font-mono text-muted-ol uppercase tracking-wider">
             <span>{'Key'}</span>
             <span>{'Value'}</span>
             <span>{'Source'}</span>
@@ -428,19 +430,20 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             return (
               <div
                 key={index}
-                className="grid grid-cols-[1fr_1fr_60px_36px_36px] gap-2 items-center group"
+                className="grid grid-cols-[1fr_1fr_140px_36px_36px] gap-2 items-center group"
               >
                 <input
                   type="text"
                   value={v.key}
                   onChange={(e) => updateVar(index, 'key', e.target.value)}
                   placeholder={'KEY'}
+                  readOnly={!!isInherited}
                   className={cn(
                     'px-2 py-1.5 rounded-md text-xs font-mono',
                     'bg-bg-app border border-border text-primary-ol',
                     'placeholder:text-muted-ol',
                     'focus:outline-none focus:ring-1 focus:ring-agent/40',
-                    isInherited && 'text-muted-ol bg-bg-subtle',
+                    isInherited && 'text-muted-ol bg-bg-subtle cursor-not-allowed',
                   )}
                 />
                 <input
@@ -448,25 +451,40 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                   value={v.value}
                   onChange={(e) => updateVar(index, 'value', e.target.value)}
                   placeholder={'value'}
+                  readOnly={!!isInherited}
                   className={cn(
                     'px-2 py-1.5 rounded-md text-xs font-mono',
                     'bg-bg-app border border-border text-primary-ol',
                     'placeholder:text-muted-ol',
                     'focus:outline-none focus:ring-1 focus:ring-agent/40',
-                    isInherited && 'text-muted-ol bg-bg-subtle',
+                    isInherited && 'text-muted-ol bg-bg-subtle cursor-not-allowed',
                   )}
                 />
                 <div className="flex items-center">
                   {selectedEnvId && (
                     <span
                       className={cn(
-                        'text-[10px] px-1.5 py-0.5 rounded font-body capitalize',
+                        'text-[10px] px-1.5 py-0.5 rounded font-body whitespace-nowrap',
                         v.source === 'global' && 'bg-purple-500/10 text-purple-500',
                         v.source === 'project' && 'bg-blue-500/10 text-blue-500',
-                        v.source === 'environment' && 'bg-green-500/10 text-green-500',
+                        v.source === 'production' && 'bg-orange-500/10 text-orange-500',
+                        v.source === 'environment' &&
+                          !v.isOverride &&
+                          'bg-green-500/10 text-green-500 capitalize',
+                        v.source === 'environment' &&
+                          v.isOverride &&
+                          'bg-yellow-500/10 text-yellow-500',
                       )}
                     >
-                      {v.source}
+                      {v.source === 'environment' && v.isOverride
+                        ? 'Override'
+                        : v.source === 'production'
+                          ? 'Inherited from Production'
+                          : v.source === 'project'
+                            ? 'Inherited from Project'
+                            : v.source === 'global'
+                              ? 'Inherited from Global'
+                              : v.source}
                     </span>
                   )}
                 </div>
@@ -480,12 +498,29 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                     <Eye className="h-3.5 w-3.5" />
                   )}
                 </button>
-                <button
-                  onClick={() => removeVar(index)}
-                  className="p-1.5 rounded text-muted-ol hover:text-error transition-colors opacity-0 group-hover:opacity-100"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                {isInherited ? (
+                  <button
+                    onClick={() => {
+                      setVars((prev) =>
+                        prev.map((item, i) =>
+                          i === index ? { ...item, source: 'environment', isOverride: true } : item,
+                        ),
+                      );
+                      setDirty(true);
+                    }}
+                    className="p-1.5 rounded text-muted-ol hover:text-agent transition-colors opacity-0 group-hover:opacity-100"
+                    title="Override this variable"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => removeVar(index)}
+                    className="p-1.5 rounded text-muted-ol hover:text-error transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             );
           })}
