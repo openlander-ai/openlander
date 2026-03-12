@@ -28,9 +28,17 @@ const CUSTOM_OPTION_INDEX = -1;
 
 /** All-space border chars — spread as base for pipe borders (matches Prompt.tsx). */
 const EmptyBorder = {
-  topLeft: ' ', topRight: ' ', bottomLeft: ' ', bottomRight: ' ',
-  horizontal: ' ', vertical: ' ',
-  topT: ' ', bottomT: ' ', leftT: ' ', rightT: ' ', cross: ' ',
+  topLeft: ' ',
+  topRight: ' ',
+  bottomLeft: ' ',
+  bottomRight: ' ',
+  horizontal: ' ',
+  vertical: ' ',
+  topT: ' ',
+  bottomT: ' ',
+  leftT: ' ',
+  rightT: ' ',
+  cross: ' ',
 };
 
 // ---------------------------------------------------------------------------
@@ -59,9 +67,14 @@ export function QuestionDock(props: QuestionDockProps): JSX.Element {
   // --- Multi-question navigation ---
   const [currentQuestionIndex, setCurrentQuestionIndex] = createSignal(0);
 
-  const currentQuestion = createMemo(
-    (): Question => props.request.questions[currentQuestionIndex()] ?? props.request.questions[0]!,
-  );
+  const currentQuestion = createMemo((): Question => {
+    const idx = currentQuestionIndex();
+    const q = props.request.questions[idx];
+    if (q) return q;
+    const first = props.request.questions[0];
+    if (!first) throw new Error('No questions available');
+    return first;
+  });
   const totalQuestions = () => props.request.questions.length;
   const isLastQuestion = () => currentQuestionIndex() >= totalQuestions() - 1;
   const isFirstQuestion = () => currentQuestionIndex() === 0;
@@ -139,7 +152,8 @@ export function QuestionDock(props: QuestionDockProps): JSX.Element {
     const questions = props.request.questions;
 
     for (let qi = 0; qi < questions.length; qi++) {
-      const q = questions[qi]!;
+      const q = questions[qi];
+      if (!q) continue;
       const selected = answersMap().get(qi) ?? new Set();
       const custom = customTexts().get(qi) ?? '';
 
@@ -347,12 +361,16 @@ export function QuestionDock(props: QuestionDockProps): JSX.Element {
                       {` ${badge()} `}
                     </text>
                     <Show when={isMultiple()}>
-                      <text fg={isSelected() ? theme.primary : theme.textMuted}>
-                        {checkbox()}
-                      </text>
+                      <text fg={isSelected() ? theme.primary : theme.textMuted}>{checkbox()}</text>
                     </Show>
                     <text
-                      fg={isSelected() ? theme.primary : isHighlighted() ? theme.text : theme.textMuted}
+                      fg={
+                        isSelected()
+                          ? theme.primary
+                          : isHighlighted()
+                            ? theme.text
+                            : theme.textMuted
+                      }
                       bold={isSelected()}
                     >
                       {option.label}
@@ -389,7 +407,13 @@ export function QuestionDock(props: QuestionDockProps): JSX.Element {
                 {' * '}
               </text>
               <text
-                fg={isCustomSelected() ? theme.primary : isCustomHighlighted() ? theme.text : theme.textMuted}
+                fg={
+                  isCustomSelected()
+                    ? theme.primary
+                    : isCustomHighlighted()
+                      ? theme.text
+                      : theme.textMuted
+                }
                 bold={isCustomSelected()}
               >
                 Type your own answer...
@@ -412,21 +436,48 @@ export function QuestionDock(props: QuestionDockProps): JSX.Element {
 
           {/* Footer: StatusBar-style key hints */}
           <box flexDirection="row" gap={2} marginTop={1}>
-            <box flexDirection="row" gap={0} onMouseDown={() => props.onDismiss()}>
-              <text backgroundColor={theme.backgroundElement} fg={theme.text}> Esc </text>
+            <box
+              flexDirection="row"
+              gap={0}
+              onMouseDown={() => {
+                props.onDismiss();
+              }}
+            >
+              <text backgroundColor={theme.backgroundElement} fg={theme.text}>
+                {' '}
+                Esc{' '}
+              </text>
               <text fg={theme.textMuted}> Cancel</text>
             </box>
             <Show when={!isFirstQuestion()}>
-              <box flexDirection="row" gap={0} onMouseDown={() => goBack()}>
-                <text backgroundColor={theme.backgroundElement} fg={theme.text}> ⇧Tab </text>
+              <box
+                flexDirection="row"
+                gap={0}
+                onMouseDown={() => {
+                  goBack();
+                }}
+              >
+                <text backgroundColor={theme.backgroundElement} fg={theme.text}>
+                  {' '}
+                  ⇧Tab{' '}
+                </text>
                 <text fg={theme.textMuted}> Back</text>
               </box>
             </Show>
             <box flexDirection="row" gap={0}>
-              <text backgroundColor={theme.backgroundElement} fg={theme.text}> 1-9 </text>
+              <text backgroundColor={theme.backgroundElement} fg={theme.text}>
+                {' '}
+                1-9{' '}
+              </text>
               <text fg={theme.textMuted}> Select</text>
             </box>
-            <box flexDirection="row" gap={0} onMouseDown={() => goNext()}>
+            <box
+              flexDirection="row"
+              gap={0}
+              onMouseDown={() => {
+                goNext();
+              }}
+            >
               <text backgroundColor={theme.primary} fg={theme.background} bold={true}>
                 {isLastQuestion() ? ' Submit ' : ' Next '}
               </text>

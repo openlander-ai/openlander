@@ -16,7 +16,9 @@ export interface ExitProviderProps extends ParentProps {
 
 export function ExitProvider(props: ExitProviderProps) {
   const value: ExitContextValue = {
-    exit: () => props.onExit(),
+    exit: () => {
+      props.onExit();
+    },
   };
 
   return <ExitContext.Provider value={value}>{props.children}</ExitContext.Provider>;

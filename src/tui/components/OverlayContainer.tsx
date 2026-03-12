@@ -33,9 +33,15 @@ export function OverlayContainer(props: OverlayContainerProps): JSX.Element {
       justifyContent="center"
       alignItems="center"
       backgroundColor={theme.background}
-      onMouseDown={() => console.log('[DEBUG] OverlayContainer outer box onMouseDown')}
-      onMouseUp={() => console.log('[DEBUG] OverlayContainer outer box onMouseUp')}
-      onMouseOver={() => console.log('[DEBUG] OverlayContainer outer box onMouseOver')}
+      onMouseDown={() => {
+        console.log('[DEBUG] OverlayContainer outer box onMouseDown');
+      }}
+      onMouseUp={() => {
+        console.log('[DEBUG] OverlayContainer outer box onMouseUp');
+      }}
+      onMouseOver={() => {
+        console.log('[DEBUG] OverlayContainer outer box onMouseOver');
+      }}
     >
       <box
         flexDirection="column"
@@ -45,9 +51,15 @@ export function OverlayContainer(props: OverlayContainerProps): JSX.Element {
         paddingY={1}
         width={contentWidth()}
         backgroundColor={theme.backgroundMenu}
-        onMouseDown={() => console.log('[DEBUG] OverlayContainer inner box onMouseDown')}
-        onMouseUp={() => console.log('[DEBUG] OverlayContainer inner box onMouseUp')}
-        onMouseOver={() => console.log('[DEBUG] OverlayContainer inner box onMouseOver')}
+        onMouseDown={() => {
+          console.log('[DEBUG] OverlayContainer inner box onMouseDown');
+        }}
+        onMouseUp={() => {
+          console.log('[DEBUG] OverlayContainer inner box onMouseUp');
+        }}
+        onMouseOver={() => {
+          console.log('[DEBUG] OverlayContainer inner box onMouseOver');
+        }}
       >
         {/* Header */}
         <box marginBottom={1} justifyContent="center">
