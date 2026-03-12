@@ -1,3 +1,20 @@
+export type EnvironmentType = 'production' | 'staging' | 'development';
+
+export interface Environment {
+  id: string;
+  projectId: string;
+  type: EnvironmentType;
+  branch: string;
+  status: 'running' | 'stopped' | 'building' | 'error' | 'idle';
+  assignedPort: number | null;
+  containerId: string | null;
+  imageTag: string | null;
+  previousImageTag: string | null;
+  publicUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -12,6 +29,10 @@ export interface Project {
   accessCode?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectWithEnvironments extends Project {
+  environments: Environment[];
 }
 
 export interface ToolResult {
