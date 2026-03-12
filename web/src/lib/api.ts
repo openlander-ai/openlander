@@ -87,13 +87,16 @@ export async function deployProject(
   return res.json();
 }
 
-export async function listProjects(): Promise<Project[]> {
+export async function listProjects(): Promise<ProjectWithOptionalEnvironments[]> {
   const res = await fetch('/api/projects');
   if (!res.ok) {
     throw new Error('Failed to fetch projects');
   }
   const data = await res.json();
-  return data.projects;
+  return data.projects.map((p: any) => ({
+    ...p,
+    environments: Array.isArray(p.environments) ? p.environments.map(mapEnvironment) : undefined,
+  }));
 }
 
 export async function getProject(id: string): Promise<ProjectWithOptionalEnvironments> {
