@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- MCP `agent_execute_goal` tool — external clients (Cursor, VS Code) can delegate multi-step goals to the AI agent
+- Channel streaming with real-time message editing (Slack `chat.update`, Discord `PATCH`, Telegram `editMessageText`)
+- Channel interactive components for agent questions (Slack blocks, Discord ActionRow+Button, Telegram InlineKeyboard)
+- QuestionBridge wiring for channels with 5min timeout and rate-limited message editing (1.5s)
+
+### Fixed
+
+- questionBridge not passed on hot-reload Agent creation (setup-routes, auth-routes, mcp/server)
+- scanTool.execute type safety in MCP server's scan_dockerfiles handler
+
+## [0.5.2] - Bugfix
+
+### Fixed
+
+- Dockerode CJS/ESM import crash — `require('dockerode').default` was `undefined`, causing `TypeError: DockerodeClass is not a constructor` on startup
+
+### Added
+
+- Release automation with `release-it` and `@release-it/keep-a-changelog`
+- Git tags for all historical releases (v0.1.0 through v0.5.1)
+
+### Changed
+
+- Synced `web/package.json` version with root package
+- Restructured CHANGELOG.md: moved `[Unreleased]` section to top, added missing `[0.5.1]` section
+
+## [0.5.1] - Multi-Environment Support
+
+### Added
+
+- Environment schema and multi-environment database support
+- Environment injection and scanning in deploy pipeline
+- Environment-aware deploy orchestration integration
+- Environment management REST API routes
+- Environment support in webhook processing
+- Web UI: environment selector, inheritance display, select component
+- TUI: environment context and UI updates
+- E2E and unit tests for environment support
+
 ## [0.5.0] - Agent Enhancement & Pipeline Orchestration
 
 ### Added
@@ -96,29 +139,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Agent prompt section `## Build Diff Analysis` guides AI to use diff context during auto-recovery
 - `formatDiffForPrompt()` formats diff analysis for human-readable agent context injection
 - 14 unit tests for diff-analysis module (BUILD_IMPACT_PATTERNS, analyzeBuildDiff, formatDiffForPrompt)
-
-## [Unreleased]
-
-### Added
-
-- MCP `agent_execute_goal` tool — external clients (Cursor, VS Code) can delegate multi-step goals to the AI agent
-- Channel streaming with real-time message editing (Slack `chat.update`, Discord `PATCH`, Telegram `editMessageText`)
-- Channel interactive components for agent questions (Slack blocks, Discord ActionRow+Button, Telegram InlineKeyboard)
-- QuestionBridge wiring for channels with 5min timeout and rate-limited message editing (1.5s)
-- `DeployOrchestrator` class with Kahn's topological sort for dependency-ordered multi-service deploys
-- Atomic rollback on orchestration failure (tears down completed services)
-- `orchestrate_deploy` agent tool with topology validation (port conflicts, cycle detection)
-- Orchestration events: `orchestration:plan`, `service-start`, `service-healthy`, `service-failed`, `complete`
-- 8 orchestrator tests (topo sort, parallel groups, cycles, port conflicts, rollback)
-
-### Fixed
-
-- questionBridge not passed on hot-reload Agent creation (setup-routes, auth-routes, mcp/server)
-- scanTool.execute type safety in MCP server's scan_dockerfiles handler
-
-### Changed
-
-- Test suite: 37 files (535 tests) → 38 files (531 tests) after channel test restructuring + orchestrator tests
 
 ## [0.2.6] - Shared Mode & PR Preview
 
