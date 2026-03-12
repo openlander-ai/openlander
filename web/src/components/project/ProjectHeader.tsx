@@ -81,6 +81,7 @@ export function ProjectHeader({
   const isBuilding = displayStatus === 'building';
   const isRunning = displayStatus === 'running';
   const isStopped = displayStatus === 'stopped' || displayStatus === 'idle';
+  const hasContainer = selectedEnv ? !!selectedEnv.containerId : !!project.port;
 
   const envColors: Record<EnvironmentType, string> = {
     production: 'bg-success/10 text-success border-success/20',
@@ -101,6 +102,24 @@ export function ProjectHeader({
         <Button variant="outline" size="sm" className="h-7 text-[11px] font-body gap-1.5" disabled>
           <Spinner className="h-3 w-3" />
           Deploying...
+        </Button>
+      );
+    }
+    if (isStopped && !hasContainer) {
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-[11px] font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
+          onClick={onRedeploy}
+          disabled={!!actionLoading}
+        >
+          {actionLoading === 'redeploy' ? (
+            <Spinner className="h-3 w-3" />
+          ) : (
+            <Zap className="h-3 w-3" />
+          )}
+          Deploy
         </Button>
       );
     }
@@ -183,14 +202,9 @@ export function ProjectHeader({
                         className="flex items-center justify-between"
                       >
                         <span className={cn('text-xs', env === currentEnvType && 'font-medium')}>
-                          {envLabels[env]}
+                          {exists ? envLabels[env] : `Create ${envLabels[env].toLowerCase()}…`}
                         </span>
-                        {!exists && (
-                          <span className="flex items-center gap-1 text-[10px] text-muted-ol">
-                            <Plus className="h-3 w-3" />
-                            Add
-                          </span>
-                        )}
+                        {!exists && <Plus className="h-3 w-3 text-muted-ol" />}
                       </DropdownMenuItem>
                     );
                   })}
