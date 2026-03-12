@@ -14,6 +14,7 @@ export interface EnvScanResult {
   vars: EnvVarUsage[];
   hasEnvExample: boolean;
   language: string;
+  serviceHints: string[];
 }
 
 const SKIP_DIRS = new Set([
@@ -54,6 +55,22 @@ const SYSTEM_VARS = new Set([
 
 const NODE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 const PYTHON_EXTENSIONS = new Set(['.py']);
+const COMPOSE_FILENAMES = [
+  'docker-compose.yml',
+  'docker-compose.yaml',
+  'compose.yml',
+  'compose.yaml',
+];
+const KNOWN_SERVICE_HINTS = [
+  'postgres',
+  'postgresql',
+  'mysql',
+  'mariadb',
+  'redis',
+  'mongo',
+  'mongodb',
+  'rabbitmq',
+];
 
 // Node.js: process.env.KEY, process.env['KEY']
 const NODE_PATTERNS = [
@@ -180,5 +197,29 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
     vars,
     hasEnvExample: detectEnvFile(projectPath) !== null,
     language,
+    serviceHints: detectServiceHints(projectPath),
   };
+}
+
+function detectServiceHints(projectPath: string): string[] {
+  const detected = new Set<string>();
+
+  for (const fileName of COMPOSE_FILENAMES) {
+    const composePath = join(projectPath, fileName);
+    let content: string;
+    try {
+      content = readFileSync(composePath, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const normalized = content.toLowerCase();
+    for (const service of KNOWN_SERVICE_HINTS) {
+      if (normalized.includes(service)) {
+        detected.add(service);
+      }
+    }
+  }
+
+  return Array.from(detected).sort((a, b) => a.localeCompare(b));
 }

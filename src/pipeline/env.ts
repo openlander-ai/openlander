@@ -13,16 +13,23 @@ import { encrypt, decrypt } from '../env/crypto.js';
 export class EnvManager {
   constructor(private readonly db: Database) {}
 
+  private getProductionEnvironmentId(projectId: string): string | undefined {
+    const production = this.db
+      .getEnvironmentsByProject(projectId)
+      .find((environment) => environment.type === 'production');
+    return production?.id;
+  }
+
   // ===== Project Env Vars (existing) =====
 
   /** Get all env vars for a project (values are raw, not masked). */
-  getAll(projectId: string): Record<string, string> {
-    return this.db.getEnvVars(projectId);
+  getAll(projectId: string, environmentId?: string): Record<string, string> {
+    return this.db.getEnvVars(projectId, environmentId);
   }
 
   /** Get all env vars for a project with masked values. */
-  getAllMasked(projectId: string): Record<string, string> {
-    const vars = this.db.getEnvVars(projectId);
+  getAllMasked(projectId: string, environmentId?: string): Record<string, string> {
+    const vars = this.db.getEnvVars(projectId, environmentId);
     const masked: Record<string, string> = {};
     for (const [key, value] of Object.entries(vars)) {
       masked[key] = EnvManager.mask(value);
@@ -31,18 +38,18 @@ export class EnvManager {
   }
 
   /** Set a single env var. Returns true if container needs restart. */
-  set(projectId: string, key: string, value: string): boolean {
-    const existing = this.db.getEnvVars(projectId);
+  set(projectId: string, key: string, value: string, environmentId?: string): boolean {
+    const existing = this.db.getEnvVars(projectId, environmentId);
     const changed = existing[key] !== value;
     if (changed) {
-      this.db.setEnvVar(projectId, key, value);
+      this.db.setEnvVar(projectId, key, value, environmentId);
     }
     return changed;
   }
 
   /** Set multiple env vars at once. Returns true if any changed. */
-  setBulk(projectId: string, vars: Record<string, string>): boolean {
-    const existing = this.db.getEnvVars(projectId);
+  setBulk(projectId: string, vars: Record<string, string>, environmentId?: string): boolean {
+    const existing = this.db.getEnvVars(projectId, environmentId);
     let changed = false;
 
     for (const [key, value] of Object.entries(vars)) {
@@ -52,20 +59,90 @@ export class EnvManager {
       }
     }
 
+    for (const key of Object.keys(existing)) {
+      if (!(key in vars)) {
+        changed = true;
+        break;
+      }
+    }
+
     if (changed) {
-      this.db.setEnvVarsBulk(projectId, vars);
+      this.db.setEnvVarsBulk(projectId, vars, environmentId);
     }
     return changed;
   }
 
   /** Delete an env var. Returns true if container needs restart. */
-  delete(projectId: string, key: string): boolean {
-    const existing = this.db.getEnvVars(projectId);
+  delete(projectId: string, key: string, environmentId?: string): boolean {
+    const existing = this.db.getEnvVars(projectId, environmentId);
     if (key in existing) {
-      this.db.deleteEnvVar(projectId, key);
+      this.db.deleteEnvVar(projectId, key, environmentId);
       return true;
     }
     return false;
+  }
+
+  getAllWithInheritance(projectId: string, environmentId: string): Record<string, string> {
+    const projectVars = this.db.getEnvVars(projectId);
+    const productionEnvironmentId = this.getProductionEnvironmentId(projectId);
+    const productionVars =
+      productionEnvironmentId === undefined
+        ? {}
+        : this.db.getEnvVars(projectId, productionEnvironmentId);
+
+    if (productionEnvironmentId === environmentId) {
+      return { ...projectVars, ...productionVars };
+    }
+
+    const environmentVars = this.db.getEnvVars(projectId, environmentId);
+    return { ...projectVars, ...productionVars, ...environmentVars };
+  }
+
+  getInheritanceInfo(
+    projectId: string,
+    environmentId: string,
+  ): Record<
+    string,
+    {
+      value: string;
+      source: 'global' | 'project' | 'production' | 'environment';
+      isOverride?: boolean;
+    }
+  > {
+    const globalVars = this.getGlobalSecrets();
+    const projectVars = this.db.getEnvVars(projectId);
+    const productionEnvironmentId = this.getProductionEnvironmentId(projectId);
+    const productionVars =
+      productionEnvironmentId === undefined
+        ? {}
+        : this.db.getEnvVars(projectId, productionEnvironmentId);
+    const environmentVars =
+      productionEnvironmentId === environmentId ? {} : this.db.getEnvVars(projectId, environmentId);
+
+    const inherited: Record<
+      string,
+      {
+        value: string;
+        source: 'global' | 'project' | 'production' | 'environment';
+        isOverride?: boolean;
+      }
+    > = {};
+
+    for (const [key, value] of Object.entries(globalVars)) {
+      inherited[key] = { value, source: 'global' };
+    }
+    for (const [key, value] of Object.entries(projectVars)) {
+      inherited[key] = { value, source: 'project' };
+    }
+    for (const [key, value] of Object.entries(productionVars)) {
+      inherited[key] = { value, source: 'production' };
+    }
+    for (const [key, value] of Object.entries(environmentVars)) {
+      const isOverride = key in inherited;
+      inherited[key] = { value, source: 'environment', isOverride };
+    }
+
+    return inherited;
   }
 
   /** Find all projects using a specific env var key. */
@@ -117,9 +194,12 @@ export class EnvManager {
    * Get merged env vars for deployment.
    * Global secrets form the base, project-level env vars override.
    */
-  getMergedForDeploy(projectId: string): Record<string, string> {
+  getMergedForDeploy(projectId: string, environmentId?: string): Record<string, string> {
     const globalVars = this.getGlobalSecrets();
-    const projectVars = this.db.getEnvVars(projectId);
+    const projectVars =
+      environmentId === undefined
+        ? this.db.getEnvVars(projectId)
+        : this.getAllWithInheritance(projectId, environmentId);
     return { ...globalVars, ...projectVars };
   }
 
