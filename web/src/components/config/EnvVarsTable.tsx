@@ -2,7 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getProjectEnv, updateProjectEnv } from '@/lib/api';
+import {
+  getProjectEnv,
+  updateProjectEnv,
+  getEnvironments,
+  getEnvironmentEnvVars,
+  updateEnvironmentEnvVars,
+} from '@/lib/api';
+import type { Environment } from '@/types';
 import { cn } from '@/lib/utils';
 import { Eye, EyeOff, Plus, Trash2, ClipboardPaste, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,10 +22,13 @@ interface EnvVar {
   key: string;
   value: string;
   revealed: boolean;
+  source?: 'global' | 'project' | 'environment';
 }
 
 export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   const { t } = useLanguage();
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [selectedEnvId, setSelectedEnvId] = useState<string>('');
   const [vars, setVars] = useState<EnvVar[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,23 +36,50 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   const [pasteMode, setPasteMode] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
-  // Fetch env vars
-  const fetchEnv = useCallback(async () => {
+  const fetchEnvironments = useCallback(async () => {
     try {
-      const data = await getProjectEnv(projectId);
-      setVars(
-        Object.entries(data).map(([key, value]) => ({
-          key,
-          value,
-          revealed: false,
-        })),
-      );
+      const envs = await getEnvironments(projectId);
+      setEnvironments(envs);
+    } catch (err) {
+      console.error('Failed to fetch environments:', err);
+    }
+  }, [projectId]);
+
+  const fetchEnv = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (!selectedEnvId) {
+        const data = await getProjectEnv(projectId);
+        setVars(
+          Object.entries(data).map(([key, value]) => ({
+            key,
+            value,
+            revealed: false,
+            source: 'project',
+          })),
+        );
+      } else {
+        const data = await getEnvironmentEnvVars(projectId, selectedEnvId);
+        setVars(
+          Object.entries(data.envVars).map(([key, value]) => ({
+            key,
+            value,
+            revealed: false,
+            source: data.inheritance[key]?.source || 'environment',
+          })),
+        );
+      }
+      setDirty(false);
     } catch {
       // silent
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, selectedEnvId]);
+
+  useEffect(() => {
+    fetchEnvironments();
+  }, [fetchEnvironments]);
 
   useEffect(() => {
     fetchEnv();
@@ -54,12 +91,21 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       const envMap: Record<string, string> = {};
       for (const v of vars) {
         if (v.key.trim()) {
-          envMap[v.key.trim()] = v.value;
+          if (!selectedEnvId || v.source === 'environment' || !v.source) {
+            envMap[v.key.trim()] = v.value;
+          }
         }
       }
-      await updateProjectEnv(projectId, envMap);
+
+      if (!selectedEnvId) {
+        await updateProjectEnv(projectId, envMap);
+      } else {
+        await updateEnvironmentEnvVars(projectId, selectedEnvId, envMap);
+      }
+
       setDirty(false);
       toast.success('Environment variables saved');
+      fetchEnv();
     } catch (err) {
       console.error('Failed to save env vars:', err);
       toast.error('Failed to save environment variables');
@@ -69,7 +115,10 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   };
 
   const addVar = () => {
-    setVars((prev) => [...prev, { key: '', value: '', revealed: true }]);
+    setVars((prev) => [
+      ...prev,
+      { key: '', value: '', revealed: true, source: selectedEnvId ? 'environment' : 'project' },
+    ]);
     setDirty(true);
   };
 
@@ -79,7 +128,15 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   };
 
   const updateVar = (index: number, field: 'key' | 'value', val: string) => {
-    setVars((prev) => prev.map((v, i) => (i === index ? { ...v, [field]: val } : v)));
+    setVars((prev) =>
+      prev.map((v, i) => {
+        if (i === index) {
+          const newSource = selectedEnvId && v.source !== 'environment' ? 'environment' : v.source;
+          return { ...v, [field]: val, source: newSource };
+        }
+        return v;
+      }),
+    );
     setDirty(true);
   };
 
@@ -105,7 +162,12 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
         value = value.slice(1, -1);
       }
       if (key) {
-        parsed.push({ key, value, revealed: false });
+        parsed.push({
+          key,
+          value,
+          revealed: false,
+          source: selectedEnvId ? 'environment' : 'project',
+        });
       }
     }
     if (parsed.length > 0) {
@@ -123,7 +185,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
     setPasteText('');
   };
 
-  if (loading) {
+  if (loading && vars.length === 0) {
     return (
       <div className="space-y-4 p-4">
         <div className="flex items-center justify-between">
@@ -154,10 +216,24 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   return (
     <div className="space-y-4 p-4">
       {/* Toolbar */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-body text-muted-ol">
-          {vars.length} {vars.length !== 1 ? 'variables' : 'variable'}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedEnvId}
+            onChange={(e) => setSelectedEnvId(e.target.value)}
+            className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol capitalize"
+          >
+            <option value="">Project Defaults</option>
+            {environments.map((env) => (
+              <option key={env.id} value={env.id}>
+                {env.type} ({env.branch})
+              </option>
+            ))}
+          </select>
+          <p className="text-xs font-body text-muted-ol">
+            {vars.length} {vars.length !== 1 ? 'variables' : 'variable'}
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -240,56 +316,80 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       ) : (
         <div className="space-y-1">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 px-2 pb-1 text-[10px] font-mono text-muted-ol uppercase tracking-wider">
+          <div className="grid grid-cols-[1fr_1fr_60px_36px_36px] gap-2 px-2 pb-1 text-[10px] font-mono text-muted-ol uppercase tracking-wider">
             <span>{'Key'}</span>
             <span>{'Value'}</span>
+            <span>{'Source'}</span>
             <span />
             <span />
           </div>
           {/* Rows */}
-          {vars.map((v, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 items-center group"
-            >
-              <input
-                type="text"
-                value={v.key}
-                onChange={(e) => updateVar(index, 'key', e.target.value)}
-                placeholder={'KEY'}
-                className={cn(
-                  'px-2 py-1.5 rounded-md text-xs font-mono',
-                  'bg-bg-app border border-border text-primary-ol',
-                  'placeholder:text-muted-ol',
-                  'focus:outline-none focus:ring-1 focus:ring-agent/40',
-                )}
-              />
-              <input
-                type={v.revealed ? 'text' : 'password'}
-                value={v.value}
-                onChange={(e) => updateVar(index, 'value', e.target.value)}
-                placeholder={'value'}
-                className={cn(
-                  'px-2 py-1.5 rounded-md text-xs font-mono',
-                  'bg-bg-app border border-border text-primary-ol',
-                  'placeholder:text-muted-ol',
-                  'focus:outline-none focus:ring-1 focus:ring-agent/40',
-                )}
-              />
-              <button
-                onClick={() => toggleReveal(index)}
-                className="p-1.5 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+          {vars.map((v, index) => {
+            const isInherited = selectedEnvId && v.source !== 'environment';
+            return (
+              <div
+                key={index}
+                className="grid grid-cols-[1fr_1fr_60px_36px_36px] gap-2 items-center group"
               >
-                {v.revealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              </button>
-              <button
-                onClick={() => removeVar(index)}
-                className="p-1.5 rounded text-muted-ol hover:text-error transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
+                <input
+                  type="text"
+                  value={v.key}
+                  onChange={(e) => updateVar(index, 'key', e.target.value)}
+                  placeholder={'KEY'}
+                  className={cn(
+                    'px-2 py-1.5 rounded-md text-xs font-mono',
+                    'bg-bg-app border border-border text-primary-ol',
+                    'placeholder:text-muted-ol',
+                    'focus:outline-none focus:ring-1 focus:ring-agent/40',
+                    isInherited && 'text-muted-ol bg-bg-subtle',
+                  )}
+                />
+                <input
+                  type={v.revealed ? 'text' : 'password'}
+                  value={v.value}
+                  onChange={(e) => updateVar(index, 'value', e.target.value)}
+                  placeholder={'value'}
+                  className={cn(
+                    'px-2 py-1.5 rounded-md text-xs font-mono',
+                    'bg-bg-app border border-border text-primary-ol',
+                    'placeholder:text-muted-ol',
+                    'focus:outline-none focus:ring-1 focus:ring-agent/40',
+                    isInherited && 'text-muted-ol bg-bg-subtle',
+                  )}
+                />
+                <div className="flex items-center">
+                  {selectedEnvId && (
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded font-body capitalize',
+                        v.source === 'global' && 'bg-purple-500/10 text-purple-500',
+                        v.source === 'project' && 'bg-blue-500/10 text-blue-500',
+                        v.source === 'environment' && 'bg-green-500/10 text-green-500',
+                      )}
+                    >
+                      {v.source}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => toggleReveal(index)}
+                  className="p-1.5 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                >
+                  {v.revealed ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                <button
+                  onClick={() => removeVar(index)}
+                  className="p-1.5 rounded text-muted-ol hover:text-error transition-colors opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
