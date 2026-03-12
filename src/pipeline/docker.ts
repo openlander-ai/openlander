@@ -80,9 +80,8 @@ export class Docker {
 
   constructor(socketPath?: string, networkName: string = 'web') {
     const require = createRequire(import.meta.url);
-    const DockerodeClass = (
-      require('dockerode') as { default: new (options?: unknown) => Dockerode }
-    ).default;
+    // dockerode is CJS — require() returns the constructor directly (no .default)
+    const DockerodeClass = require('dockerode') as new (options?: unknown) => Dockerode;
 
     this.networkName = networkName;
     if (socketPath) {
