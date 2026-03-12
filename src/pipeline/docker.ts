@@ -3,8 +3,9 @@ const log = createModuleLogger('docker');
 
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import Dockerode from 'dockerode';
+import type Dockerode from 'dockerode';
 
 import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
 
@@ -78,12 +79,17 @@ export class Docker {
   private readonly networkName: string;
 
   constructor(socketPath?: string, networkName: string = 'web') {
+    const require = createRequire(import.meta.url);
+    const DockerodeClass = (
+      require('dockerode') as { default: new (options?: unknown) => Dockerode }
+    ).default;
+
     this.networkName = networkName;
     if (socketPath) {
-      this.client = new Dockerode({ socketPath });
+      this.client = new DockerodeClass({ socketPath });
     } else {
       const resolved = resolveDockerSocket();
-      this.client = resolved ? new Dockerode({ socketPath: resolved }) : new Dockerode();
+      this.client = resolved ? new DockerodeClass({ socketPath: resolved }) : new DockerodeClass();
     }
   }
 

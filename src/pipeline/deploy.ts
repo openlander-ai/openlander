@@ -9,7 +9,7 @@ import type { Docker } from './docker.js';
 import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
 import { allocatePort, scanUsedPorts } from './port.js';
-import { buildTraefikLabels, getProjectUrl } from './traefik.js';
+import { buildTraefikLabels, getEnvironmentProjectHostname, getProjectUrl } from './traefik.js';
 import { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery, type BuildContext } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
@@ -46,6 +46,8 @@ export interface ProjectConfig {
   sshKeyPath?: string;
   /** Deployment trigger source */
   trigger?: 'chat' | 'webhook' | 'api';
+  /** Target environment (e.g., production, staging, development) */
+  environment?: string;
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
   _retryCount?: number;
@@ -249,7 +251,6 @@ export class DeployPipeline {
   }
 
   async deploy(config: ProjectConfig): Promise<DeployResult> {
-    const startTime = Date.now();
     const projectName = config.name ?? extractProjectName(config.repoUrl);
     const trigger = config.trigger ?? 'chat';
 
@@ -269,42 +270,119 @@ export class DeployPipeline {
       this.jobManager?.trackJob(projectId, projectName);
     }
 
-    await eventBus.emit('deploy:start', { projectId, repoUrl: config.repoUrl });
+    // Preflight check - skip if already called from startDeploy()
+    let preflightWarnings: string[] | undefined;
+    if (!config._projectId) {
+      try {
+        const preflightResult = await preflightCheckOrThrow(this.db, this.docker, projectName);
+        preflightWarnings =
+          preflightResult.warnings.length > 0 ? preflightResult.warnings : undefined;
+      } catch (error) {
+        if (error instanceof PreflightCheckError) {
+          this.db.updateProject(projectId, { status: 'error' });
+          this.jobManager?.updatePhase(projectId, 'failed', error.message);
+          return {
+            success: false,
+            projectId,
+            projectName,
+            error: error.message,
+            preflightWarnings: error.result.warnings,
+            buildDurationMs: 0,
+          };
+        }
+        throw error;
+      }
+    }
+
+    const targetEnvironment = this.db
+      .getEnvironmentsByProject(projectId)
+      .find((env) => env.type === (config.environment || 'production'));
+
+    if (!targetEnvironment) {
+      this.db.updateProject(projectId, { status: 'error' });
+      const error = `${config.environment || 'Production'} environment not found`;
+      this.jobManager?.updatePhase(projectId, 'failed', error);
+      return {
+        success: false,
+        projectId,
+        projectName,
+        error,
+        buildDurationMs: 0,
+      };
+    }
+
+    const result = await this.deployEnvironment(projectId, targetEnvironment.id, {
+      ...config,
+      _projectId: projectId,
+      name: projectName,
+      trigger,
+    });
+    if (preflightWarnings && result.preflightWarnings === undefined) {
+      return { ...result, preflightWarnings };
+    }
+    return result;
+  }
+
+  async deployEnvironment(
+    projectId: string,
+    environmentId: string,
+    config: Partial<ProjectConfig> = {},
+  ): Promise<DeployResult> {
+    const startTime = Date.now();
+    const project = this.db.getProject(projectId);
+    if (!project) {
+      return {
+        success: false,
+        projectId,
+        projectName: 'unknown',
+        error: `Project not found: ${projectId}`,
+        buildDurationMs: Date.now() - startTime,
+      };
+    }
+
+    const environment = this.db.getEnvironment(environmentId);
+    if (!environment || environment.project_id !== projectId) {
+      return {
+        success: false,
+        projectId,
+        projectName: project.name,
+        error: `Environment not found: ${environmentId}`,
+        buildDurationMs: Date.now() - startTime,
+      };
+    }
+
+    const projectName = config.name ?? project.name;
+    const trigger = config.trigger ?? 'chat';
+    const repoUrl = config.repoUrl ?? project.repo_url ?? '';
+    if (!repoUrl) {
+      return {
+        success: false,
+        projectId,
+        projectName,
+        error: `Missing repo URL for project: ${projectId}`,
+        buildDurationMs: Date.now() - startTime,
+      };
+    }
+
+    const routeName = getRouteName(projectName, environment.type);
+    const shouldSyncProjectState = environment.type === 'production';
+
+    await eventBus.emit('deploy:start', { projectId, repoUrl });
+
+    this.db.updateEnvironment(environmentId, { status: 'building' });
+    if (shouldSyncProjectState) {
+      this.db.updateProject(projectId, { status: 'building' });
+    }
 
     let buildLog = '';
     let clonePath = '';
     let diffContext: string | undefined;
-    const imageTag = `openlander/${projectName}:latest`;
+    const imageTag = `openlander/${routeName}:latest`;
 
     try {
-      // Preflight check - skip if already called from startDeploy()
-      let preflightWarnings: string[] | undefined;
-      if (!config._projectId) {
-        try {
-          const preflightResult = await preflightCheckOrThrow(this.db, this.docker, projectName);
-          preflightWarnings =
-            preflightResult.warnings.length > 0 ? preflightResult.warnings : undefined;
-        } catch (error) {
-          if (error instanceof PreflightCheckError) {
-            this.db.updateProject(projectId, { status: 'error' });
-            this.jobManager?.updatePhase(projectId, 'failed', error.message);
-            return {
-              success: false,
-              projectId,
-              projectName,
-              error: error.message,
-              preflightWarnings: error.result.warnings,
-              buildDurationMs: Date.now() - startTime,
-            };
-          }
-          throw error;
-        }
-      }
-
-      // Step 1: git clone
       const cloneResult = await cloneRepo({
-        repoUrl: config.repoUrl,
-        branch: config.branch,
+        repoUrl,
+        branch: environment.branch,
         sshKeyPath: config.sshKeyPath,
       });
       clonePath = cloneResult.path;
@@ -315,12 +393,12 @@ export class DeployPipeline {
         commitSha: cloneResult.commitSha,
       });
 
-      buildLog += `[clone] ${config.repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
+      buildLog += `[clone] ${repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
 
       const previousDeploy = this.db.getLastDeployLog(projectId);
       const previousSha = previousDeploy?.commit_sha;
 
-      if (config._projectId && previousSha && previousSha !== cloneResult.commitSha) {
+      if (previousSha && previousSha !== cloneResult.commitSha) {
         const diffAnalysis = await analyzeBuildDiff(cloneResult.path, previousSha);
         if (diffAnalysis) {
           diffContext = formatDiffForPrompt(diffAnalysis);
@@ -346,28 +424,24 @@ export class DeployPipeline {
         }
       }
 
-      if (config._projectId) {
-        const storedVars = this.env.getAll(config._projectId);
-        const storedKeys = Object.keys(storedVars);
-        const detection = detectNewEnvKeys(cloneResult.path, storedKeys);
+      const storedVars = this.env.getAll(projectId, environmentId);
+      const storedKeys = Object.keys(storedVars);
+      const detection = detectNewEnvKeys(cloneResult.path, storedKeys);
 
-        if (detection) {
-          const project = this.db.getProject(config._projectId);
-          await eventBus.emit('env:new-keys-detected', {
-            projectId: config._projectId,
-            projectName: project?.name ?? config._projectId,
-            newKeys: detection.newKeys,
-            templateFile: detection.templateFile,
-          });
-        }
+      if (detection) {
+        await eventBus.emit('env:new-keys-detected', {
+          projectId,
+          projectName,
+          newKeys: detection.newKeys,
+          templateFile: detection.templateFile,
+        });
       }
 
       const secretFindings = scanForSecrets(cloneResult.path);
       if (secretFindings.length > 0) {
-        const project = this.db.getProject(projectId);
         await eventBus.emit('secret:detected', {
           projectId,
-          projectName: project?.name ?? projectName,
+          projectName,
           secrets: secretFindings,
         });
       }
@@ -375,19 +449,19 @@ export class DeployPipeline {
       const composePath = this.composePipeline?.detectComposeFile(cloneResult.path);
       const composeEnvVars = {
         ...(config.envVars ?? {}),
-        ...this.env.getMergedForDeploy(projectId),
+        ...this.env.getMergedForDeploy(projectId, environmentId),
       };
       if (composePath && this.composePipeline) {
         log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
         const result = await this.composePipeline.deployCompose({
-          repoUrl: config.repoUrl,
-          branch: config.branch,
+          repoUrl,
+          branch: environment.branch,
           clonePath: cloneResult.path,
           composePath,
-          name: projectName,
-          trigger: config.trigger,
+          name: routeName,
+          trigger,
           envVars: composeEnvVars,
-          _parentId: config._projectId,
+          _parentId: projectId,
         });
 
         return {
@@ -434,7 +508,10 @@ export class DeployPipeline {
       }
 
       // Inject build-time ARGs into Dockerfile before building
-      const allEnvVarsForBuild = { ...config.envVars, ...this.env.getMergedForDeploy(projectId) };
+      const allEnvVarsForBuild = {
+        ...config.envVars,
+        ...this.env.getMergedForDeploy(projectId, environmentId),
+      };
       const buildTimeVars = filterBuildTimeVars(allEnvVarsForBuild);
       if (Object.keys(buildTimeVars).length > 0) {
         const dfContent = readFileSync(dockerfilePath, 'utf8');
@@ -486,20 +563,28 @@ export class DeployPipeline {
       // Step 4: docker run
       const port = await allocatePort(this.db, this.docker);
       const containerPort = parseDockerfileExposePort(dockerfilePath) ?? port;
-      const envVars = { ...config.envVars, ...this.env.getMergedForDeploy(projectId) };
-      const traefikLabels = buildTraefikLabels(projectName, containerPort);
+      const envVars = {
+        ...config.envVars,
+        ...this.env.getMergedForDeploy(projectId, environmentId),
+      };
+      const traefikLabels = buildTraefikLabels(
+        projectName,
+        containerPort,
+        undefined,
+        environment.type,
+      );
 
       this.jobManager?.updatePhase(projectId, 'starting');
       const containerId = await this.docker.runContainer({
         imageTag,
-        name: `ol-${projectName}`,
+        name: `ol-${routeName}`,
         port,
         containerPort,
         envVars,
         traefikLabels,
       });
 
-      const internalUrl = getProjectUrl(projectName);
+      const internalUrl = `http://${getEnvironmentProjectHostname(projectName, environment.type)}`;
 
       await eventBus.emit('deploy:run', {
         projectId,
@@ -521,14 +606,22 @@ export class DeployPipeline {
           'Container crashed after deploy',
         );
 
-        // Update DB to reflect actual error state
-        this.db.updateProject(projectId, {
+        this.db.updateEnvironment(environmentId, {
           status: 'error',
           assignedPort: port,
           containerId,
           imageTag,
-          visibility: config.visibility ?? 'internal',
         });
+
+        if (shouldSyncProjectState) {
+          this.db.updateProject(projectId, {
+            status: 'error',
+            assignedPort: port,
+            containerId,
+            imageTag,
+            visibility: config.visibility ?? 'internal',
+          });
+        }
 
         await eventBus.emit('deploy:crash', {
           projectId,
@@ -542,23 +635,37 @@ export class DeployPipeline {
         );
       }
 
-      // Container is healthy — update project in DB
-      this.db.updateProject(projectId, {
+      this.db.updateEnvironment(environmentId, {
         status: 'running',
         assignedPort: port,
         containerId,
         imageTag,
-        visibility: config.visibility ?? 'internal',
+        previousImageTag: environment.image_tag,
       });
+
+      if (shouldSyncProjectState) {
+        this.db.updateProject(projectId, {
+          status: 'running',
+          assignedPort: port,
+          containerId,
+          imageTag,
+          previousImageTag: project.image_tag,
+          visibility: config.visibility ?? 'internal',
+        });
+      }
 
       // Set env vars in DB
       if (config.envVars) {
-        this.db.setEnvVarsBulk(projectId, config.envVars);
+        if (shouldSyncProjectState) {
+          this.db.setEnvVarsBulk(projectId, config.envVars);
+        } else {
+          this.db.setEnvVarsBulk(projectId, config.envVars, environmentId);
+        }
       }
 
       // Step 5: Expose publicly if requested
       let publicUrl: string | undefined;
-      if (config.visibility === 'quick-share') {
+      if (config.visibility === 'quick-share' && shouldSyncProjectState) {
         publicUrl = await this.exposeTunnel(projectId, port);
         buildLog += `[tunnel] ${publicUrl}\n`;
       }
@@ -593,7 +700,6 @@ export class DeployPipeline {
         port,
         commitSha: cloneResult.commitSha,
         buildDurationMs: totalDuration,
-        preflightWarnings,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -631,6 +737,7 @@ export class DeployPipeline {
             const nextRetryCount = retryCount + 1;
             const retryConfig: ProjectConfig = {
               ...config,
+              repoUrl,
               name: projectName,
               _projectId: projectId,
               _retryCount: nextRetryCount,
@@ -641,7 +748,7 @@ export class DeployPipeline {
             }
 
             buildLog += `[recovery] Tier 1 auto-fix: ${fixResult.action}\n`;
-            return await this.deploy(retryConfig);
+            return await this.deployEnvironment(projectId, environmentId, retryConfig);
           }
         }
 
@@ -685,13 +792,14 @@ export class DeployPipeline {
             const nextRetryCount = retryCount + 1;
             const retryConfig: ProjectConfig = {
               ...config,
+              repoUrl,
               name: projectName,
               _projectId: projectId,
               _retryCount: nextRetryCount,
               _noCacheBuild: true,
             };
 
-            return await this.deploy(retryConfig);
+            return await this.deployEnvironment(projectId, environmentId, retryConfig);
           }
         }
 
@@ -717,7 +825,10 @@ export class DeployPipeline {
         );
       }
 
-      this.db.updateProject(projectId, { status: 'error' });
+      this.db.updateEnvironment(environmentId, { status: 'error' });
+      if (shouldSyncProjectState) {
+        this.db.updateProject(projectId, { status: 'error' });
+      }
 
       this.db.createDeployLog({
         id: nanoid(12),
@@ -1157,7 +1268,7 @@ export class DeployPipeline {
   }
 
   /** Rollback a project to its previous image tag. */
-  async rollback(projectId: string): Promise<DeployResult> {
+  async rollback(projectId: string, environmentId?: string): Promise<DeployResult> {
     const startTime = Date.now();
     const project = this.db.getProject(projectId);
     if (!project) {
@@ -1167,6 +1278,87 @@ export class DeployPipeline {
         projectName: 'unknown',
         error: `Project not found: ${projectId}`,
       };
+    }
+
+    if (environmentId) {
+      const environment = this.db.getEnvironment(environmentId);
+      if (!environment) {
+        return {
+          success: false,
+          projectId,
+          projectName: project.name,
+          error: `Environment not found: ${environmentId}`,
+        };
+      }
+
+      if (!environment.previous_image_tag) {
+        return {
+          success: false,
+          projectId,
+          projectName: project.name,
+          error: 'No previous image available for rollback',
+        };
+      }
+
+      const rollbackImageTag = environment.previous_image_tag;
+      const currentImageTag = environment.image_tag ?? '';
+
+      try {
+        // Stop and remove current container
+        if (environment.container_id && environment.status === 'running') {
+          try {
+            await this.docker.stopContainer(environment.container_id);
+            await this.docker.removeContainer(environment.container_id);
+          } catch (err) {
+            log.warn({ err }, 'Container cleanup during rollback failed');
+          }
+        }
+
+        // Start previous container
+        const routeName = getRouteName(project.name, environment.type);
+        const port = environment.assigned_port ?? (await allocatePort(this.db, this.docker));
+        const envVars = this.env.getMergedForDeploy(projectId, environmentId);
+        const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
+
+        const containerId = await this.docker.runContainer({
+          imageTag: rollbackImageTag,
+          name: `ol-${routeName}-${String(Date.now())}`,
+          port,
+          containerPort,
+          envVars,
+          traefikLabels: buildTraefikLabels(
+            project.name,
+            containerPort,
+            undefined,
+            environment.type,
+          ),
+        });
+
+        this.db.updateEnvironment(environmentId, {
+          status: 'running',
+          containerId,
+          imageTag: rollbackImageTag,
+          previousImageTag: currentImageTag,
+          assignedPort: port,
+        });
+
+        return {
+          success: true,
+          projectId,
+          projectName: project.name,
+          buildDurationMs: Date.now() - startTime,
+        };
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        this.db.updateEnvironment(environmentId, { status: 'error' });
+        return {
+          success: false,
+          projectId,
+          projectName: project.name,
+          error: errorMsg,
+          buildDurationMs: Date.now() - startTime,
+        };
+      }
     }
 
     if (!project.previous_image_tag) {
@@ -1261,7 +1453,28 @@ export class DeployPipeline {
   }
 
   /** Stop a project's container. */
-  async stop(projectId: string): Promise<void> {
+  async stop(projectId: string, environmentId?: string): Promise<void> {
+    if (environmentId) {
+      const environment = this.db.getEnvironment(environmentId);
+      if (!environment?.container_id) return;
+
+      try {
+        await this.docker.stopContainer(environment.container_id);
+      } catch (err) {
+        if (err instanceof ContainerNotFoundError) {
+          log.debug(
+            { projectId, environmentId },
+            'Container not found during stop — may have been removed externally',
+          );
+        } else {
+          throw err;
+        }
+      }
+      this.db.updateEnvironment(environmentId, { status: 'stopped' });
+      await eventBus.emit('container:stop', { projectId, containerId: environment.container_id });
+      return;
+    }
+
     const children = this.db.getChildProjects(projectId);
     if (children.length > 0) {
       await Promise.all(children.map((c) => this.stop(c.id)));
@@ -1290,7 +1503,28 @@ export class DeployPipeline {
   }
 
   /** Start a stopped project's container. */
-  async start(projectId: string): Promise<void> {
+  async start(projectId: string, environmentId?: string): Promise<void> {
+    if (environmentId) {
+      const environment = this.db.getEnvironment(environmentId);
+      if (!environment?.container_id) return;
+
+      try {
+        await this.docker.startContainer(environment.container_id);
+      } catch (err) {
+        if (err instanceof ContainerNotFoundError) {
+          log.debug(
+            { projectId, environmentId },
+            'Container not found during start — may have been removed externally',
+          );
+        } else {
+          throw err;
+        }
+      }
+      this.db.updateEnvironment(environmentId, { status: 'running' });
+      await eventBus.emit('container:start', { projectId, containerId: environment.container_id });
+      return;
+    }
+
     const children = this.db.getChildProjects(projectId);
     if (children.length > 0) {
       await Promise.all(children.map((c) => this.start(c.id)));
@@ -1431,4 +1665,14 @@ function deriveServiceName(dockerfilePath: string): string {
   const dir = dirname(dockerfilePath);
   if (dir === '.' || dir === '') return 'main';
   return dir.split('/')[0] ?? 'service';
+}
+
+function getRouteName(projectName: string, environmentType: string): string {
+  if (environmentType === 'production') {
+    return projectName;
+  }
+  if (environmentType === 'development') {
+    return `${projectName}-dev`;
+  }
+  return `${projectName}-${environmentType}`;
 }

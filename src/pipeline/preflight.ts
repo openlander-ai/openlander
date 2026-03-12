@@ -96,8 +96,8 @@ export async function preflightCheck(
 
     // Resource status check (warning only)
     const resourceWarnings: string[] = [];
-    const diskFreeGB = systemStats?.disk.freeGB ?? 999;
-    const memoryUsagePercent = systemStats?.memory.usagePercent ?? 0;
+    const diskFreeGB = systemStats?.disk ? systemStats.disk.freeGB : 999;
+    const memoryUsagePercent = systemStats?.memory ? systemStats.memory.usagePercent : 0;
 
     if (diskFreeGB < DISK_WARNING_THRESHOLD_GB) {
       resourceWarnings.push(`Disk space low: ${diskFreeGB.toFixed(1)}GB free (builds may fail)`);

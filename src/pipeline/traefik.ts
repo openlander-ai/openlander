@@ -14,6 +14,8 @@ const TRAEFIK_DYNAMIC_DIR_IN_CONTAINER = '/etc/traefik/dynamic/';
 
 export const DYNAMIC_CONFIG_DIR = join(homedir(), '.openlander', 'traefik', 'dynamic');
 
+export type TraefikEnvironment = 'production' | 'staging' | 'development';
+
 /**
  * Traefik reverse proxy management.
  *
@@ -174,11 +176,36 @@ export function getProjectHostname(projectName: string, lanIp?: string): string 
   return `${projectName}.localhost`;
 }
 
+export function getEnvironmentProjectHostname(
+  projectName: string,
+  environment: TraefikEnvironment,
+  lanIp?: string,
+): string {
+  const envProjectName = getEnvironmentProjectName(projectName, environment);
+  const ip = lanIp ?? getLanIp();
+  if (ip) {
+    return `${envProjectName}.${ip}.sslip.io`;
+  }
+  return `${envProjectName}.localhost`;
+}
+
 /**
  * Get the full internal URL for a project.
  */
 export function getProjectUrl(projectName: string, lanIp?: string): string {
   return `http://${getProjectHostname(projectName, lanIp)}`;
+}
+
+function getEnvironmentProjectName(projectName: string, environment: TraefikEnvironment): string {
+  if (environment === 'staging') {
+    return `staging-${projectName}`;
+  }
+
+  if (environment === 'development') {
+    return `dev-${projectName}`;
+  }
+
+  return projectName;
 }
 
 /**
@@ -243,9 +270,10 @@ export function buildTraefikLabels(
   projectName: string,
   containerPort: number,
   hostname?: string,
+  environment: TraefikEnvironment = 'production',
 ): Record<string, string> {
   const routerName = `ol-${projectName}`;
-  const host = hostname ?? getProjectHostname(projectName);
+  const host = hostname ?? getEnvironmentProjectHostname(projectName, environment);
 
   return {
     'traefik.enable': 'true',
