@@ -226,7 +226,11 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     };
 
     void (async () => {
-      const deployState = { toolCalled: false, fallbackTriggered: false };
+      const deployState = {
+        agentStarted: false,
+        deployToolCalled: false,
+        fallbackTriggered: false,
+      };
 
       // Emit progress so user sees activity before agent responds
       await emitAgentEvent({
@@ -276,7 +280,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
       try {
         fallbackTimer = setTimeout(() => {
-          if (!deployState.toolCalled && !deployState.fallbackTriggered) {
+          if (!deployState.agentStarted && !deployState.fallbackTriggered) {
             deployState.fallbackTriggered = true;
             void runFallbackDeploy('timeout');
           }
@@ -296,8 +300,16 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         await agent.chatStream(
           message,
           async (event) => {
+            if (
+              event.type === 'tool_call' ||
+              event.type === 'question' ||
+              event.type === 'message'
+            ) {
+              deployState.agentStarted = true;
+            }
+
             if (event.type === 'tool_call' && event.toolName === 'deploy_project') {
-              deployState.toolCalled = true;
+              deployState.deployToolCalled = true;
             }
 
             await emitAgentEvent({
@@ -308,7 +320,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           sessionId,
         );
 
-        if (!deployState.toolCalled && !deployState.fallbackTriggered) {
+        if (!deployState.deployToolCalled && !deployState.fallbackTriggered) {
           deployState.fallbackTriggered = true;
           await runFallbackDeploy('agent_completed_without_deploy_project');
         }
