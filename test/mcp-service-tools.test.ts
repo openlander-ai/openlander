@@ -160,6 +160,75 @@ describe('MCP service tools (Task 8)', () => {
     expect(failed).toEqual({ error: 'Unsupported service template: bad' });
   });
 
+  it('create_service works for mysql template', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+
+    serviceManager.create.mockResolvedValueOnce(
+      createServiceRow({
+        id: 'svc-mysql',
+        name: 'shared-mysql',
+        type: 'mysql',
+        port: 3306,
+        credentials:
+          '{"host":"ol-svc-shared-mysql","port":3306,"user":"openlander","password":"mysqlpw"}',
+      }),
+    );
+
+    const result = await tool.execute(
+      { name: 'shared-mysql', template: 'mysql' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toEqual({
+      id: 'svc-mysql',
+      name: 'shared-mysql',
+      type: 'mysql',
+      status: 'running',
+      credentials: {
+        host: 'ol-svc-shared-mysql',
+        port: 3306,
+        user: 'openlander',
+        password: 'mysqlpw',
+      },
+    });
+    expect(serviceManager.create).toHaveBeenCalledWith({ name: 'shared-mysql', template: 'mysql' });
+  });
+
+  it('create_service works for redis template', async () => {
+    const { ctx, serviceManager } = createMockContext();
+    const tool = getTool(ctx, 'create_service');
+
+    serviceManager.create.mockResolvedValueOnce(
+      createServiceRow({
+        id: 'svc-redis',
+        name: 'shared-redis',
+        type: 'redis',
+        port: 6379,
+        credentials:
+          '{"host":"ol-svc-shared-redis","port":6379,"connectionString":"redis://ol-svc-shared-redis:6379"}',
+      }),
+    );
+
+    const result = await tool.execute(
+      { name: 'shared-redis', template: 'redis' },
+      { target: 'mcp' },
+    );
+
+    expect(result).toEqual({
+      id: 'svc-redis',
+      name: 'shared-redis',
+      type: 'redis',
+      status: 'running',
+      credentials: {
+        host: 'ol-svc-shared-redis',
+        port: 6379,
+        connectionString: 'redis://ol-svc-shared-redis:6379',
+      },
+    });
+    expect(serviceManager.create).toHaveBeenCalledWith({ name: 'shared-redis', template: 'redis' });
+  });
+
   it('list_services returns services and handles failures', async () => {
     const services = [
       createServiceRow({ id: 'svc-pg', name: 'shared-pg' }),

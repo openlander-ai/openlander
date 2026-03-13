@@ -60,6 +60,7 @@ export function createMockEnvManager() {
     getAll: vi.fn().mockReturnValue({}),
     getAllMasked: vi.fn().mockReturnValue({ API_KEY: 'sk-***' }),
     setBulk: vi.fn().mockReturnValue(true),
+    getGlobalSecrets: vi.fn().mockReturnValue({}),
   };
 }
 
