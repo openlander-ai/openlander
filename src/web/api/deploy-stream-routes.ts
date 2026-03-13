@@ -218,6 +218,14 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     ctx.jobManager.trackJob(projectId, projectName);
     ctx.questionBridge.setActiveProject(projectId);
 
+    if (body.env_vars && typeof body.env_vars === 'object') {
+      for (const [key, value] of Object.entries(body.env_vars)) {
+        if (typeof value === 'string' && value.trim()) {
+          ctx.env.set(projectId, key, value.trim());
+        }
+      }
+    }
+
     const message = `Deploy ${body.repo_url}${body.branch ? ` branch ${body.branch}` : ''}${body.name ? ` as ${body.name}` : ''}`;
     const sessionId = nanoid(12);
 
