@@ -17,7 +17,6 @@ export default defineConfig({
     target: 'es2022',
     chunkSizeWarningLimit: 512,
     rollupOptions: {
-      external: [/^highlight\.js\//],
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
