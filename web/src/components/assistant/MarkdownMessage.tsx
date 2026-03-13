@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
-import 'highlight.js/styles/atom-one-dark.min.css';
 
 const rehypePlugins = [rehypeHighlight] as Parameters<typeof ReactMarkdown>[0]['rehypePlugins'];
 const remarkPlugins = [remarkGfm] as Parameters<typeof ReactMarkdown>[0]['remarkPlugins'];
