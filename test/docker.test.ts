@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createRequire } from 'node:module';
 
 import { Docker, type AllContainerInfo } from '../src/pipeline/docker.js';
 
@@ -8,14 +9,25 @@ const describeDocker = isBunRuntime ? describe.skip : describe;
 // Create a mock listContainers function
 const mockListContainers = vi.fn();
 
-// Mock dockerode module
+// Mock dockerode module by injecting into require.cache
 if (!isBunRuntime) {
-  vi.mock('dockerode', () => ({
-    default: vi.fn(function (this: Record<string, unknown>) {
-      this.ping = vi.fn().mockResolvedValue('OK');
-      this.listContainers = mockListContainers;
-    }),
-  }));
+  const require = createRequire(import.meta.url);
+  const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
+    this.ping = vi.fn().mockResolvedValue('OK');
+    this.listContainers = mockListContainers;
+    this.modem = {
+      followProgress: vi.fn(),
+    };
+  });
+
+  // Inject mock into require.cache before Docker class is instantiated
+  const dockerodePath = require.resolve('dockerode');
+  require.cache[dockerodePath] = {
+    id: dockerodePath,
+    filename: dockerodePath,
+    loaded: true,
+    exports: mockDockerodeClass,
+  } as unknown as NodeJS.Module;
 }
 
 // ---------------------------------------------------------------------------

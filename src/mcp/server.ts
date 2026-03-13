@@ -16,6 +16,9 @@ import { getProjectUrl } from '../pipeline/traefik.js';
 const log = createModuleLogger('mcp');
 
 import { createModuleLogger } from '../lib/logger.js';
+import { analyzeInfrastructure } from '../lib/infra-analyzer.js';
+import { webSearch } from '../lib/web-search.js';
+import { cloneRepo } from '../pipeline/git.js';
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -25,6 +28,16 @@ const deployProjectSchema = z.object({
   repo_url: z.string().min(1),
   branch: z.string().optional(),
   name: z.string().optional(),
+});
+
+const analyzeInfrastructureSchema = z.object({
+  repo_url: z.string().min(1),
+  branch: z.string().optional(),
+});
+
+const webSearchSchema = z.object({
+  query: z.string().min(1),
+  max_results: z.number().int().positive().optional(),
 });
 
 const projectNameSchema = z.object({
@@ -94,6 +107,31 @@ const searchGithubReposSchema = z.object({
 const agentExecuteGoalSchema = z.object({
   goal: z.string().min(1).describe('The goal for the agent to accomplish using available tools'),
 });
+
+// --- Service Management (v0.5) ---
+const createServiceSchema = z.object({
+  name: z.string().min(1),
+  template: z.string().optional(),
+  image: z.string().optional(),
+  port: z.number().int().positive().optional(),
+});
+
+const serviceNameSchema = z.object({
+  service_name: z.string().min(1),
+});
+
+const createServiceDatabaseSchema = z.object({
+  service_name: z.string().min(1),
+  database_name: z.string().min(1),
+});
+
+const createServiceUserSchema = z.object({
+  service_name: z.string().min(1),
+  username: z.string().min(1),
+  password: z.string().optional(),
+  database: z.string().optional(),
+});
+
 const emptySchema = z.object({}).strict();
 
 function toInputSchema(schema: unknown) {
@@ -257,6 +295,67 @@ const tools = [
       'Run the AI agent to accomplish a complex goal. The agent reasons about steps and chains multiple tools (deploy, configure, debug, etc.) automatically. Use this for multi-step tasks instead of calling individual tools.',
     inputSchema: toInputSchema(agentExecuteGoalSchema),
   },
+  // --- Service Management (v0.5) ---
+  {
+    name: 'create_service',
+    description:
+      'Create a new service (database, cache, etc.) from a template or custom image. Returns service credentials and connection details.',
+    inputSchema: toInputSchema(createServiceSchema),
+  },
+  {
+    name: 'list_services',
+    description: 'List all services with their status, type, and connection details.',
+    inputSchema: toInputSchema(emptySchema),
+  },
+  {
+    name: 'get_service_status',
+    description: 'Get detailed status and information for a specific service by name.',
+    inputSchema: toInputSchema(serviceNameSchema),
+  },
+  {
+    name: 'start_service',
+    description: 'Start a stopped service.',
+    inputSchema: toInputSchema(serviceNameSchema),
+  },
+  {
+    name: 'stop_service',
+    description: 'Stop a running service.',
+    inputSchema: toInputSchema(serviceNameSchema),
+  },
+  {
+    name: 'remove_service',
+    description: 'Remove a service and its data volume.',
+    inputSchema: toInputSchema(serviceNameSchema),
+  },
+  {
+    name: 'get_service_credentials',
+    description: 'Get connection credentials and connection string for a service.',
+    inputSchema: toInputSchema(serviceNameSchema),
+  },
+  {
+    name: 'create_service_database',
+    description: 'Create a new database in a PostgreSQL or MySQL service.',
+    inputSchema: toInputSchema(createServiceDatabaseSchema),
+  },
+  {
+    name: 'create_service_user',
+    description:
+      'Create a new user in a PostgreSQL or MySQL service with optional database grants.',
+    inputSchema: toInputSchema(createServiceUserSchema),
+  },
+  // --- Infrastructure Analysis (v0.5) ---
+  {
+    name: 'analyze_infrastructure',
+    description:
+      'Analyze a repository to detect infrastructure needs (databases, caches, etc.) based on dependencies and environment variables. Returns detected needs, available services, and missing services.',
+    inputSchema: toInputSchema(analyzeInfrastructureSchema),
+  },
+  {
+    name: 'web_search',
+    description:
+      'Search the web using DuckDuckGo. Returns search results with title, URL, and snippet.',
+    inputSchema: toInputSchema(webSearchSchema),
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -285,6 +384,15 @@ function getProjectByName(ctx: AppContext, name: string) {
     throw new McpError(ErrorCode.InvalidParams, `Project not found: ${name}`);
   }
   return project;
+}
+
+async function getServiceByName(ctx: AppContext, name: string) {
+  const services = await ctx.serviceManager.list();
+  const service = services.find((s) => s.name === name);
+  if (!service) {
+    throw new McpError(ErrorCode.InvalidParams, `Service not found: ${name}`);
+  }
+  return service;
 }
 
 function successResponse(result: unknown): { content: Array<{ type: 'text'; text: string }> } {
@@ -682,6 +790,166 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
             toolResults: response.toolResults ?? [],
             sessionId,
           });
+        }
+
+        // --- Service Management (v0.5) ---
+        case 'create_service': {
+          const args = parseInput(createServiceSchema, rawArgs);
+          const result = await ctx.serviceManager.create({
+            name: args.name,
+            template: args.template,
+            image: args.image,
+            port: args.port,
+          });
+          const parsedCredentials = result.credentials
+            ? (JSON.parse(result.credentials) as Record<string, unknown>)
+            : null;
+          return successResponse({
+            status: 'created',
+            service: {
+              id: result.id,
+              name: result.name,
+              type: result.type,
+              status: result.status,
+              port: result.port,
+              credentials: parsedCredentials,
+            },
+          });
+        }
+
+        case 'list_services': {
+          parseInput(emptySchema, rawArgs);
+          const services = await ctx.serviceManager.list();
+          return successResponse({
+            count: services.length,
+            services: services.map((s) => ({
+              id: s.id,
+              name: s.name,
+              type: s.type,
+              status: s.status,
+              port: s.port,
+              image: s.image,
+              createdAt: s.created_at,
+            })),
+          });
+        }
+
+        case 'get_service_status': {
+          const args = parseInput(serviceNameSchema, rawArgs);
+          const service = await getServiceByName(ctx, args.service_name);
+          return successResponse({
+            id: service.id,
+            name: service.name,
+            type: service.type,
+            status: service.status,
+            port: service.port,
+            image: service.image,
+            containerName: service.container_name,
+            containerId: service.container_id,
+            createdAt: service.created_at,
+            updatedAt: service.updated_at,
+          });
+        }
+
+        case 'start_service': {
+          const args = parseInput(serviceNameSchema, rawArgs);
+          const service = await getServiceByName(ctx, args.service_name);
+          await ctx.serviceManager.start(service.id);
+          return successResponse({
+            status: 'started',
+            service: args.service_name,
+          });
+        }
+
+        case 'stop_service': {
+          const args = parseInput(serviceNameSchema, rawArgs);
+          const service = await getServiceByName(ctx, args.service_name);
+          await ctx.serviceManager.stop(service.id);
+          return successResponse({
+            status: 'stopped',
+            service: args.service_name,
+          });
+        }
+
+        case 'remove_service': {
+          const args = parseInput(serviceNameSchema, rawArgs);
+          const service = await getServiceByName(ctx, args.service_name);
+          await ctx.serviceManager.remove(service.id);
+          return successResponse({
+            status: 'removed',
+            service: args.service_name,
+          });
+        }
+
+        case 'get_service_credentials': {
+          const args = parseInput(serviceNameSchema, rawArgs);
+          const service = await getServiceByName(ctx, args.service_name);
+          const credentials = service.credentials
+            ? (JSON.parse(service.credentials) as Record<string, unknown>)
+            : null;
+          return successResponse({
+            service: args.service_name,
+            type: service.type,
+            credentials,
+            connectionString: (credentials?.connectionString as string | undefined) || null,
+            host: (credentials?.host as string | undefined) || null,
+            port: (credentials?.port as number | undefined) || service.port,
+            user: (credentials?.user as string | undefined) || null,
+            password: (credentials?.password as string | undefined) || null,
+            database: (credentials?.database as string | undefined) || null,
+          });
+        }
+
+        case 'create_service_database': {
+          const args = parseInput(createServiceDatabaseSchema, rawArgs);
+          const service = await getServiceByName(ctx, args.service_name);
+          const result = await ctx.serviceManager.createDatabase(service.id, args.database_name);
+          return successResponse({
+            status: 'created',
+            service: args.service_name,
+            database: result.database,
+            user: result.user,
+            password: result.password,
+            connectionString: result.connectionString,
+          });
+        }
+
+        case 'create_service_user': {
+          const args = parseInput(createServiceUserSchema, rawArgs);
+          const service = await getServiceByName(ctx, args.service_name);
+          const result = await ctx.serviceManager.createUser(
+            service.id,
+            args.username,
+            args.password,
+            args.database ? { database: args.database } : undefined,
+          );
+          return successResponse({
+            status: 'created',
+            service: args.service_name,
+            user: result.user,
+            password: result.password,
+            database: result.database,
+            connectionString: result.connectionString,
+          });
+        }
+
+        // --- Infrastructure Analysis (v0.5) ---
+        case 'analyze_infrastructure': {
+          const args = parseInput(analyzeInfrastructureSchema, rawArgs);
+          const cloneResult = await cloneRepo({
+            repoUrl: args.repo_url,
+            branch: args.branch,
+            sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+          });
+          const existingServices = await ctx.serviceManager.list();
+          const analysis = analyzeInfrastructure(cloneResult.path, existingServices);
+          return successResponse(analysis);
+        }
+
+        case 'web_search': {
+          const args = parseInput(webSearchSchema, rawArgs);
+          const result = await webSearch(args.query, { maxResults: args.max_results });
+          return successResponse(result);
         }
 
         default:

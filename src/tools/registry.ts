@@ -12,6 +12,8 @@ import { getProjectUrl } from '../pipeline/traefik.js';
 import { DeployOrchestrator, type ServiceNode } from '../pipeline/orchestrator.js';
 import type { ToolSpec, ToolTarget } from './types.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { analyzeInfrastructure } from '../lib/infra-analyzer.js';
+import { webSearch } from '../lib/web-search.js';
 
 const log = createModuleLogger('tools');
 
@@ -99,6 +101,41 @@ const listAllContainersSchema = z.object({
 
 const getContainerStatsSchema = z.object({
   container: z.string().min(1),
+});
+
+const createServiceSchema = z.object({
+  name: z.string().min(1),
+  template: z.string().optional(),
+  image: z.string().optional(),
+  port: z.number().int().positive().optional(),
+});
+
+const serviceNameSchema = z.object({
+  service_name: z.string().min(1),
+});
+
+const createServiceDatabaseSchema = z.object({
+  service_name: z.string().min(1),
+  database_name: z.string().min(1),
+});
+
+const createServiceUserSchema = z.object({
+  service_name: z.string().min(1),
+  username: z.string().min(1),
+  password: z.string().optional(),
+  database: z.string().optional(),
+});
+
+const listServicesSchema = z.object({}).strict();
+
+const analyzeInfrastructureSchema = z.object({
+  repo_url: z.string().min(1),
+  branch: z.string().optional(),
+});
+
+const webSearchSchema = z.object({
+  query: z.string().min(1),
+  max_results: z.number().int().positive().optional(),
 });
 
 export interface CreateToolRegistryOptions {
@@ -1151,6 +1188,417 @@ export function createToolRegistry(
           return { error: `Failed to get stats: ${msg}` };
         }
       },
+    },
+    {
+      name: 'create_service',
+      description:
+        'Create a new service (database, cache, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb) or custom image with port. Returns { id, name, type, status, credentials } with connection details. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      parameters: {
+        name: {
+          type: 'string',
+          description: 'Service name (e.g., "my-postgres", "redis-cache")',
+          required: true,
+        },
+        template: {
+          type: 'string',
+          description: 'Built-in template: "postgresql", "mysql", "redis", or "mongodb"',
+          required: false,
+        },
+        image: {
+          type: 'string',
+          description: 'Custom Docker image (e.g., "postgres:15", "redis:7-alpine")',
+          required: false,
+        },
+        port: {
+          type: 'number',
+          description: 'Port number for custom image (required if image is provided)',
+          required: false,
+        },
+      },
+      inputSchema: createServiceSchema,
+      execute: async (args) => {
+        const name = args['name'] as string;
+        const template = args['template'] as string | undefined;
+        const image = args['image'] as string | undefined;
+        const port = args['port'] as number | undefined;
+
+        try {
+          const service = await ctx.serviceManager.create({
+            name,
+            template,
+            image,
+            port,
+          });
+          return {
+            id: service.id,
+            name: service.name,
+            type: service.type,
+            status: service.status,
+            credentials: service.credentials
+              ? (JSON.parse(service.credentials) as Record<string, unknown>)
+              : null,
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'list_services',
+      description:
+        'List all services (databases, caches, custom containers) with status, type, and connection details. Use to see what services are available and their current state. Returns { count, services[] } with id, name, type, status, port, and credentials.',
+      parameters: {},
+      inputSchema: listServicesSchema,
+      execute: async () => {
+        try {
+          const services = await ctx.serviceManager.list();
+          return {
+            count: services.length,
+            services: services.map((service) => ({
+              id: service.id,
+              name: service.name,
+              type: service.type,
+              status: service.status,
+              port: service.port,
+              credentials: service.credentials
+                ? (JSON.parse(service.credentials) as Record<string, unknown>)
+                : null,
+            })),
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'get_service_status',
+      description:
+        'Get the current status of a specific service. Returns { id, name, status, type, port, credentials }. Errors: SERVICE_NOT_FOUND if the service name is invalid.',
+      parameters: {
+        service_name: {
+          type: 'string',
+          description: 'Service name',
+          required: true,
+        },
+      },
+      inputSchema: serviceNameSchema,
+      execute: async (args) => {
+        const serviceName = args['service_name'] as string;
+        try {
+          const services = await ctx.serviceManager.list();
+          const service = services.find((s) => s.name === serviceName);
+          if (!service) {
+            return { error: `Service not found: ${serviceName}` };
+          }
+          return {
+            id: service.id,
+            name: service.name,
+            status: service.status,
+            type: service.type,
+            port: service.port,
+            credentials: service.credentials
+              ? (JSON.parse(service.credentials) as Record<string, unknown>)
+              : null,
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'start_service',
+      description:
+        'Start a stopped service. Use when a service is stopped and needs to be running. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+      parameters: {
+        service_name: {
+          type: 'string',
+          description: 'Service name',
+          required: true,
+        },
+      },
+      inputSchema: serviceNameSchema,
+      execute: async (args) => {
+        const serviceName = args['service_name'] as string;
+        try {
+          const services = await ctx.serviceManager.list();
+          const service = services.find((s) => s.name === serviceName);
+          if (!service) {
+            return { error: `Service not found: ${serviceName}` };
+          }
+          await ctx.serviceManager.start(service.id);
+          return { status: 'started', id: service.id, name: service.name };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'stop_service',
+      description:
+        'Stop a running service gracefully. Use when a service needs to be paused without deletion. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+      parameters: {
+        service_name: {
+          type: 'string',
+          description: 'Service name',
+          required: true,
+        },
+      },
+      inputSchema: serviceNameSchema,
+      execute: async (args) => {
+        const serviceName = args['service_name'] as string;
+        try {
+          const services = await ctx.serviceManager.list();
+          const service = services.find((s) => s.name === serviceName);
+          if (!service) {
+            return { error: `Service not found: ${serviceName}` };
+          }
+          await ctx.serviceManager.stop(service.id);
+          return { status: 'stopped', id: service.id, name: service.name };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'remove_service',
+      description:
+        'Permanently remove a service — deletes the container, volume, and database record. DESTRUCTIVE — cannot be undone. Use only when user explicitly wants to delete a service. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+      parameters: {
+        service_name: {
+          type: 'string',
+          description: 'Service name',
+          required: true,
+        },
+      },
+      inputSchema: serviceNameSchema,
+      execute: async (args) => {
+        const serviceName = args['service_name'] as string;
+        try {
+          const services = await ctx.serviceManager.list();
+          const service = services.find((s) => s.name === serviceName);
+          if (!service) {
+            return { error: `Service not found: ${serviceName}` };
+          }
+          await ctx.serviceManager.remove(service.id);
+          return { status: 'removed', id: service.id, name: service.name };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'get_service_credentials',
+      description:
+        'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { id, name, credentials } with full connection details. Errors: SERVICE_NOT_FOUND.',
+      parameters: {
+        service_name: {
+          type: 'string',
+          description: 'Service name',
+          required: true,
+        },
+      },
+      inputSchema: serviceNameSchema,
+      execute: async (args) => {
+        const serviceName = args['service_name'] as string;
+        try {
+          const services = await ctx.serviceManager.list();
+          const service = services.find((s) => s.name === serviceName);
+          if (!service) {
+            return { error: `Service not found: ${serviceName}` };
+          }
+          return {
+            id: service.id,
+            name: service.name,
+            credentials: service.credentials
+              ? (JSON.parse(service.credentials) as Record<string, unknown>)
+              : null,
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'create_service_database',
+      description:
+        'Create a new database in a PostgreSQL or MySQL service. Use when a project needs a dedicated database. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
+      parameters: {
+        service_name: {
+          type: 'string',
+          description: 'Service name',
+          required: true,
+        },
+        database_name: {
+          type: 'string',
+          description: 'Name of the database to create',
+          required: true,
+        },
+      },
+      inputSchema: createServiceDatabaseSchema,
+      execute: async (args) => {
+        const serviceName = args['service_name'] as string;
+        const databaseName = args['database_name'] as string;
+        try {
+          const services = await ctx.serviceManager.list();
+          const service = services.find((s) => s.name === serviceName);
+          if (!service) {
+            return { error: `Service not found: ${serviceName}` };
+          }
+          const result = await ctx.serviceManager.createDatabase(service.id, databaseName);
+          return {
+            status: 'created',
+            service: serviceName,
+            database: result.database,
+            user: result.user,
+            password: result.password,
+            connectionString: result.connectionString,
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'create_service_user',
+      description:
+        'Create a new user in a PostgreSQL or MySQL service with optional database grants. Use when a project needs a dedicated database user. Returns { status, service, user, password, database, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
+      parameters: {
+        service_name: {
+          type: 'string',
+          description: 'Service name',
+          required: true,
+        },
+        username: {
+          type: 'string',
+          description: 'Username to create',
+          required: true,
+        },
+        password: {
+          type: 'string',
+          description: 'Password for the user (auto-generated if not provided)',
+          required: false,
+        },
+        database: {
+          type: 'string',
+          description: 'Database to grant privileges on (optional)',
+          required: false,
+        },
+      },
+      inputSchema: createServiceUserSchema,
+      execute: async (args) => {
+        const serviceName = args['service_name'] as string;
+        const username = args['username'] as string;
+        const password = (args['password'] as string | undefined) ?? undefined;
+        const database = (args['database'] as string | undefined) ?? undefined;
+        try {
+          const services = await ctx.serviceManager.list();
+          const service = services.find((s) => s.name === serviceName);
+          if (!service) {
+            return { error: `Service not found: ${serviceName}` };
+          }
+          const result = await ctx.serviceManager.createUser(
+            service.id,
+            username,
+            password,
+            database ? { database } : undefined,
+          );
+          return {
+            status: 'created',
+            service: serviceName,
+            user: result.user,
+            password: result.password,
+            database: result.database,
+            connectionString: result.connectionString,
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    // --- Infrastructure Analysis (v0.5) ---
+    {
+      name: 'analyze_infrastructure',
+      description:
+        'Analyze a repository to detect infrastructure needs (databases, caches, etc.) based on dependencies and environment variables. Clones the repo, scans package.json and .env files, and cross-references with existing services. Returns { needs, available, missing } where needs is detected infrastructure, available is already-provisioned services, and missing is what should be created.',
+      parameters: {
+        repo_url: {
+          type: 'string',
+          description: 'Git repository URL to analyze',
+          required: true,
+        },
+        branch: {
+          type: 'string',
+          description: 'Branch to analyze (default: main)',
+          required: false,
+        },
+      },
+      inputSchema: analyzeInfrastructureSchema,
+      execute: async (args) => {
+        const repoUrl = args['repo_url'] as string;
+        const branch = (args['branch'] as string | undefined) ?? undefined;
+        try {
+          const cloneResult = await cloneRepo({
+            repoUrl,
+            branch,
+            sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+          });
+          const existingServices = await ctx.serviceManager.list();
+          const analysis = analyzeInfrastructure(cloneResult.path, existingServices);
+          return analysis;
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
+    },
+    {
+      name: 'web_search',
+      description:
+        'Search the web using DuckDuckGo. Returns search results with title, URL, and snippet. No API key required. Use when you need to find information online.',
+      parameters: {
+        query: {
+          type: 'string',
+          description: 'Search query',
+          required: true,
+        },
+        max_results: {
+          type: 'number',
+          description: 'Maximum number of results to return (default: 10)',
+          required: false,
+        },
+      },
+      inputSchema: webSearchSchema,
+      execute: async (args) => {
+        const query = args['query'] as string;
+        const maxResults = (args['max_results'] as number | undefined) ?? undefined;
+        try {
+          const result = await webSearch(query, { maxResults });
+          return result;
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+      targets: ['mcp'],
     },
   ];
 

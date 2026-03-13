@@ -1,21 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as fs from 'node:fs';
 
 import { scanForSecrets } from '../src/pipeline/secret-scan.js';
 
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-const readdirMock = vi.spyOn(fs, 'readdirSync');
-const readFileMock = vi.spyOn(fs, 'readFileSync');
-const statMock = vi.spyOn(fs, 'statSync');
 const describeSecretScan = isBunRuntime ? describe.skip : describe;
 
+// Mock the fs module at the module level
+vi.mock('node:fs', () => ({
+  readdirSync: vi.fn(),
+  readFileSync: vi.fn(),
+  statSync: vi.fn(),
+}));
+
+// Import mocked functions after mocking
+import * as fs from 'node:fs';
+
+const readdirMock = fs.readdirSync as ReturnType<typeof vi.fn>;
+const readFileMock = fs.readFileSync as ReturnType<typeof vi.fn>;
+const statMock = fs.statSync as ReturnType<typeof vi.fn>;
+
 function setupSingleFile(fileName: string, content: string): void {
-  readdirMock.mockReturnValue([fileName] as unknown as ReturnType<typeof fs.readdirSync>);
+  readdirMock.mockReturnValue([fileName]);
   statMock.mockReturnValue({
     isDirectory: () => false,
     isFile: () => true,
     size: 100,
-  } as ReturnType<typeof fs.statSync>);
+  });
   readFileMock.mockReturnValue(content);
 }
 
@@ -207,42 +217,36 @@ describeSecretScan('scanForSecrets', () => {
   // --- File skip behavior ---
 
   it('skips .env files for openai_key pattern but detects other secrets', () => {
-    // For .env files, openai_key (sk-) is skipped, but other patterns still match
-    readdirMock.mockReturnValue(['.env.local'] as unknown as ReturnType<typeof fs.readdirSync>);
+    readdirMock.mockReturnValue(['.env.local']);
     statMock.mockReturnValue({
       isDirectory: () => false,
       isFile: () => true,
       size: 100,
-    } as ReturnType<typeof fs.statSync>);
-    // This file has openai key — should be skipped since it's an .env file
-    // Note: .env files are actually skipped entirely by shouldSkipFile
+    });
     readFileMock.mockReturnValue('OPENAI_KEY=sk-abcdefghijklmnopqrstuvwxyz1234');
     const findings = scanForSecrets('/project');
-    // .env files are skipped by shouldSkipFile (base.startsWith('.env') returns true)
     expect(findings).toHaveLength(0);
   });
 
   it('skips binary file extensions', () => {
-    readdirMock.mockReturnValue(['image.png'] as unknown as ReturnType<typeof fs.readdirSync>);
+    readdirMock.mockReturnValue(['image.png']);
     statMock.mockReturnValue({
       isDirectory: () => false,
       isFile: () => true,
       size: 100,
-    } as ReturnType<typeof fs.statSync>);
+    });
     readFileMock.mockReturnValue('AKIAIOSFODNN7EXAMPLE');
     const findings = scanForSecrets('/project');
     expect(findings).toHaveLength(0);
   });
 
   it('skips .lock files', () => {
-    readdirMock.mockReturnValue(['package-lock.json.lock'] as unknown as ReturnType<
-      typeof fs.readdirSync
-    >);
+    readdirMock.mockReturnValue(['package-lock.json.lock']);
     statMock.mockReturnValue({
       isDirectory: () => false,
       isFile: () => true,
       size: 100,
-    } as ReturnType<typeof fs.statSync>);
+    });
     readFileMock.mockReturnValue('AKIAIOSFODNN7EXAMPLE');
     const findings = scanForSecrets('/project');
     expect(findings).toHaveLength(0);
@@ -251,23 +255,23 @@ describeSecretScan('scanForSecrets', () => {
   // --- Directory skip behavior ---
 
   it('skips node_modules directory', () => {
-    readdirMock.mockReturnValue(['node_modules'] as unknown as ReturnType<typeof fs.readdirSync>);
+    readdirMock.mockReturnValue(['node_modules']);
     statMock.mockReturnValue({
       isDirectory: () => true,
       isFile: () => false,
       size: 0,
-    } as ReturnType<typeof fs.statSync>);
+    });
     const findings = scanForSecrets('/project');
     expect(findings).toHaveLength(0);
   });
 
   it('skips .git directory', () => {
-    readdirMock.mockReturnValue(['.git'] as unknown as ReturnType<typeof fs.readdirSync>);
+    readdirMock.mockReturnValue(['.git']);
     statMock.mockReturnValue({
       isDirectory: () => true,
       isFile: () => false,
       size: 0,
-    } as ReturnType<typeof fs.statSync>);
+    });
     const findings = scanForSecrets('/project');
     expect(findings).toHaveLength(0);
   });
@@ -301,7 +305,7 @@ describeSecretScan('scanForSecrets', () => {
   });
 
   it('returns empty array for empty directory', () => {
-    readdirMock.mockReturnValue([] as unknown as ReturnType<typeof fs.readdirSync>);
+    readdirMock.mockReturnValue([]);
     const findings = scanForSecrets('/project');
     expect(findings).toHaveLength(0);
   });

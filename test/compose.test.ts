@@ -48,8 +48,12 @@ if (!isBunRuntime) {
       const args = Array.isArray(argsOrOptions) ? [...argsOrOptions] : [];
       return mockSpawnImplementation(command, args);
     }) as unknown as typeof import('node:child_process').spawn;
+    const mockedExec = (() => {
+      // exec is imported by port.ts but not directly tested here
+    }) as unknown as typeof import('node:child_process').exec;
     return {
       spawn: mockedSpawn,
+      exec: mockedExec,
     };
   });
 }
