@@ -71,7 +71,7 @@ describe('multi-environment flow integration', () => {
     const createStagingRes = await app.request('/api/projects/flow-p1/environments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'staging' }),
+      body: JSON.stringify({ type: 'staging', branch: 'develop' }),
     });
     expect(createStagingRes.status).toBe(200);
 

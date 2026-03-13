@@ -43,7 +43,7 @@ describe('Environment API routes', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.environment.type).toBe('staging');
-    expect(body.environment.branch).toBe('develop');
+    expect(body.environment.branch).toBe('main');
 
     const projectRes = await app.request('/api/projects/p1');
     const projectBody = await projectRes.json();
