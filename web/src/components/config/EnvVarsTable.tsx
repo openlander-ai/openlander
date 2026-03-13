@@ -12,6 +12,7 @@ import {
 } from '@/lib/api';
 import type { Environment } from '@/types';
 import { cn } from '@/lib/utils';
+import { parseEnvContent } from '@/lib/parse-env';
 import {
   Eye,
   EyeOff,
@@ -160,31 +161,13 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   };
 
   const handlePaste = () => {
-    const lines = pasteText.split('\n');
-    const parsed: EnvVar[] = [];
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIndex = trimmed.indexOf('=');
-      if (eqIndex === -1) continue;
-      const key = trimmed.slice(0, eqIndex).trim();
-      let value = trimmed.slice(eqIndex + 1).trim();
-      // Strip surrounding quotes
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value.slice(1, -1);
-      }
-      if (key) {
-        parsed.push({
-          key,
-          value,
-          revealed: false,
-          source: selectedEnvId ? 'environment' : 'project',
-        });
-      }
-    }
+    const rawParsed = parseEnvContent(pasteText);
+    const parsed: EnvVar[] = rawParsed.map((p) => ({
+      key: p.key,
+      value: p.value,
+      revealed: false,
+      source: selectedEnvId ? 'environment' : 'project',
+    }));
     if (parsed.length > 0) {
       setVars((prev) => {
         // Merge: update existing keys, add new ones
