@@ -40,7 +40,7 @@ describe('Environment API routes', () => {
       body: JSON.stringify({ type: 'staging' }),
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.environment.type).toBe('staging');
     expect(body.environment.branch).toBe('main');

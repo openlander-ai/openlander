@@ -263,7 +263,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       branch,
     });
 
-    return c.json({ environment: mapEnvironment(created) });
+    return c.json({ environment: mapEnvironment(created) }, 201);
   });
 
   api.get('/projects/:id/environments', (c) => {

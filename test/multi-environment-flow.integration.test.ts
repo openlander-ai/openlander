@@ -73,7 +73,7 @@ describe('multi-environment flow integration', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'staging', branch: 'develop' }),
     });
-    expect(createStagingRes.status).toBe(200);
+    expect(createStagingRes.status).toBe(201);
 
     const createStagingBody = await createStagingRes.json();
     const stagingEnvironmentId = createStagingBody.environment.id as string;
