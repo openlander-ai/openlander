@@ -44,7 +44,6 @@ import { DeploymentsTab } from '@/components/project/DeploymentsTab';
 import { ConsoleTab } from '@/components/project/ConsoleTab';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import { ProjectHeader } from '@/components/project/ProjectHeader';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -560,15 +559,15 @@ export function ProjectDetail() {
         </Tabs>
       </div>
 
-      <Sheet open={redeploySheet} onOpenChange={setRedeploySheet}>
-        <SheetContent side="left" className="w-[400px] sm:w-[540px]">
-          <SheetHeader>
-            <SheetTitle>{'Environment Variables'}</SheetTitle>
-          </SheetHeader>
-          <div className="space-y-4 py-4">
-            <div className="text-sm text-muted-foreground">
+      <Dialog open={redeploySheet} onOpenChange={setRedeploySheet}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{'Environment Variables'}</DialogTitle>
+            <DialogDescription>
               {`Found ${String(redeployVars.length)} new environment variable${redeployVars.length !== 1 ? 's' : ''}. Paste your .env file below.`}
-            </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
             <textarea
               className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-border text-primary-ol placeholder:text-muted-ol resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
               rows={10}
@@ -577,7 +576,7 @@ export function ProjectDetail() {
               onChange={(e) => setRedeployPasteText(e.target.value)}
             />
           </div>
-          <SheetFooter>
+          <DialogFooter>
             <Button variant="outline" onClick={() => setRedeploySheet(false)}>
               {'Cancel'}
             </Button>
@@ -633,9 +632,9 @@ export function ProjectDetail() {
             >
               {'Deploy'}
             </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={addEnvSheet.open}
