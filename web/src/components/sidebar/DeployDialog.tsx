@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { useLanguage } from '@/i18n/context';
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from '@/components/ui/sheet';
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { deployProject, scanEnvVars, type EnvVarInfo } from '@/lib/api';
+import { parseEnvContent } from '@/lib/parse-env';
 
 interface DeployDialogProps {
   open: boolean;
@@ -27,6 +28,18 @@ interface DeployDialogProps {
 }
 
 type Step = 'form' | 'scanning' | 'env-review' | 'deploying';
+type EnvPhase = 'paste' | 'summary';
+
+interface MatchedVar {
+  key: string;
+  value: string;
+  files: Array<{ path: string; line: number }>;
+}
+
+interface ExtraVar {
+  key: string;
+  value: string;
+}
 
 export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDialogProps) {
   const [repoUrl, setRepoUrl] = useState('');
@@ -36,8 +49,16 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
   const [step, setStep] = useState<Step>('form');
   const [error, setError] = useState<string | null>(null);
   const [envVars, setEnvVars] = useState<EnvVarInfo[]>([]);
-  const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const { t } = useLanguage();
+
+  // Paste-first flow state
+  const [envPhase, setEnvPhase] = useState<EnvPhase>('paste');
+  const [pasteText, setPasteText] = useState('');
+  const [matchedVars, setMatchedVars] = useState<MatchedVar[]>([]);
+  const [missingVars, setMissingVars] = useState<EnvVarInfo[]>([]);
+  const [extraVars, setExtraVars] = useState<ExtraVar[]>([]);
+  const [missingValues, setMissingValues] = useState<Record<string, string>>({});
+  const [editedValues, setEditedValues] = useState<Record<string, string>>({});
 
   const reset = () => {
     setRepoUrl('');
@@ -47,7 +68,13 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
     setStep('form');
     setError(null);
     setEnvVars([]);
-    setEnvValues({});
+    setEnvPhase('paste');
+    setPasteText('');
+    setMatchedVars([]);
+    setMissingVars([]);
+    setExtraVars([]);
+    setMissingValues({});
+    setEditedValues({});
   };
 
   const handleEnvironmentChange = (value: string) => {
@@ -71,9 +98,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
         await doDeploy({});
       } else {
         setEnvVars(result.vars);
-        const initial: Record<string, string> = {};
-        for (const v of result.vars) initial[v.key] = '';
-        setEnvValues(initial);
+        setEnvPhase('paste');
         setStep('env-review');
       }
     } catch {
@@ -81,9 +106,57 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
     }
   };
 
-  const handleDeploy = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await doDeploy(envValues);
+  const handleParseAndMap = () => {
+    if (!pasteText.trim()) {
+      // Empty paste = skip
+      void doDeploy({});
+      return;
+    }
+
+    const parsed = parseEnvContent(pasteText);
+    if (parsed.length === 0) {
+      toast.error(t('deploy.dialog.noValidPairs'));
+      return;
+    }
+
+    const parsedMap = new Map(parsed.map((p) => [p.key, p.value]));
+    const scannedKeys = new Set(envVars.map((v) => v.key));
+
+    setMatchedVars(
+      envVars
+        .filter((v) => parsedMap.has(v.key))
+        .map((v) => ({ ...v, value: parsedMap.get(v.key)! })),
+    );
+    setMissingVars(envVars.filter((v) => !parsedMap.has(v.key)));
+    setExtraVars(parsed.filter((p) => !scannedKeys.has(p.key)));
+    setEditedValues({});
+    setMissingValues({});
+    setEnvPhase('summary');
+  };
+
+  const handleRemoveExtra = (key: string) => {
+    setExtraVars((prev) => prev.filter((v) => v.key !== key));
+  };
+
+  const handleDeployFromSummary = async () => {
+    const vars: Record<string, string> = {};
+
+    // Matched vars (with possible edits)
+    for (const v of matchedVars) {
+      vars[v.key] = editedValues[v.key] ?? v.value;
+    }
+    // Missing vars (user-entered)
+    for (const v of missingVars) {
+      if (missingValues[v.key]) {
+        vars[v.key] = missingValues[v.key];
+      }
+    }
+    // Extra vars (not removed)
+    for (const v of extraVars) {
+      vars[v.key] = v.value;
+    }
+
+    await doDeploy(vars);
   };
 
   const doDeploy = async (vars: Record<string, string>) => {
@@ -106,20 +179,29 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
       setError(msg);
       toast.error('Deploy failed: ' + msg);
       setStep('env-review');
+      setEnvPhase('summary');
     }
   };
 
   return (
-    <Sheet open={open} onOpenChange={handleClose}>
-      <SheetContent side="left" className="w-[400px] sm:w-[540px]">
-        <SheetHeader>
-          <SheetTitle>{t('deploy.dialog.title')}</SheetTitle>
-          <SheetDescription>{t('deploy.dialog.description')}</SheetDescription>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {step === 'env-review' && envPhase === 'paste'
+              ? t('deploy.dialog.pasteEnvTitle')
+              : t('deploy.dialog.title')}
+          </DialogTitle>
+          <DialogDescription>
+            {step === 'env-review' && envPhase === 'paste'
+              ? t('deploy.dialog.pasteEnvDescription')
+              : t('deploy.dialog.description')}
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Step: form */}
         {step === 'form' && (
-          <form onSubmit={handleScan} className="space-y-4 py-4">
+          <form onSubmit={handleScan} className="space-y-4 py-2">
             <div className="space-y-2">
               <label
                 htmlFor="repo-url"
@@ -182,7 +264,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
               />
             </div>
             {error && <div className="text-sm text-red-500">{error}</div>}
-            <SheetFooter>
+            <DialogFooter>
               <Button type="button" variant="outline" onClick={() => handleClose(false)}>
                 {'Cancel'}
               </Button>
@@ -192,7 +274,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
               >
                 {'Deploy'}
               </Button>
-            </SheetFooter>
+            </DialogFooter>
           </form>
         )}
 
@@ -205,37 +287,145 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
           </div>
         )}
 
-        {/* Step: env-review */}
-        {step === 'env-review' && (
-          <form onSubmit={handleDeploy} className="space-y-4 py-4">
-            <div className="text-sm text-muted-foreground">
+        {/* Step: env-review — paste phase */}
+        {step === 'env-review' && envPhase === 'paste' && (
+          <div className="space-y-4 py-2">
+            <div className="text-xs text-muted-foreground">
               {`Found ${String(envVars.length)} environment variable${envVars.length !== 1 ? 's' : ''} used in this project.`}
             </div>
-            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-              {envVars.map((v) => (
-                <div key={v.key} className="space-y-1">
-                  <label className="text-sm font-medium font-mono">{v.key}</label>
-                  <Input
-                    placeholder={`Value for ${v.key}`}
-                    value={envValues[v.key] ?? ''}
-                    onChange={(e) => setEnvValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
-                  />
+            <textarea
+              className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-border text-primary-ol placeholder:text-muted-ol resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
+              rows={8}
+              placeholder={t('deploy.dialog.pasteEnvPlaceholder')}
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+            />
+            <DialogFooter className="flex items-center justify-between">
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-primary-ol transition-colors"
+                onClick={() => void doDeploy({})}
+              >
+                {t('deploy.dialog.skipEnvVars')}
+              </button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => setStep('form')}>
+                  {'Back'}
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-foreground text-background hover:bg-foreground/90"
+                  onClick={handleParseAndMap}
+                >
+                  {t('deploy.dialog.parseAndMap')}
+                </Button>
+              </div>
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* Step: env-review — summary phase */}
+        {step === 'env-review' && envPhase === 'summary' && (
+          <div className="space-y-3 py-2">
+            <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+              {/* Matched section */}
+              {matchedVars.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-green-500">
+                    <span>{'✓'}</span>
+                    <span>
+                      {matchedVars.length} {t('deploy.dialog.varsMatched')}
+                    </span>
+                  </div>
+                  {matchedVars.map((v) => (
+                    <div key={v.key} className="flex items-center gap-2">
+                      <label className="text-xs font-mono text-muted-foreground min-w-0 shrink-0 max-w-[140px] truncate">
+                        {v.key}
+                      </label>
+                      <Input
+                        className="h-7 text-xs font-mono flex-1"
+                        value={editedValues[v.key] ?? v.value}
+                        onChange={(e) =>
+                          setEditedValues((prev) => ({ ...prev, [v.key]: e.target.value }))
+                        }
+                      />
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {/* Missing section */}
+              {missingVars.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-amber-500">
+                    <span>{'⚠'}</span>
+                    <span>
+                      {missingVars.length} {t('deploy.dialog.varsMissing')}
+                    </span>
+                  </div>
+                  {missingVars.map((v) => (
+                    <div key={v.key} className="flex items-center gap-2">
+                      <label className="text-xs font-mono text-muted-foreground min-w-0 shrink-0 max-w-[140px] truncate">
+                        {v.key}
+                      </label>
+                      <Input
+                        className="h-7 text-xs font-mono flex-1"
+                        placeholder={`Value for ${v.key}`}
+                        value={missingValues[v.key] ?? ''}
+                        onChange={(e) =>
+                          setMissingValues((prev) => ({ ...prev, [v.key]: e.target.value }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Extra section */}
+              {extraVars.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <span>{'+'}</span>
+                    <span>
+                      {extraVars.length} {t('deploy.dialog.varsExtra')}
+                    </span>
+                  </div>
+                  {extraVars.map((v) => (
+                    <div key={v.key} className="flex items-center gap-2">
+                      <label className="text-xs font-mono text-muted-foreground min-w-0 shrink-0 max-w-[140px] truncate">
+                        {v.key}
+                      </label>
+                      <span className="text-xs font-mono text-muted-foreground truncate flex-1">
+                        {v.value || '(empty)'}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+                        onClick={() => handleRemoveExtra(v.key)}
+                      >
+                        {'✕'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+
             {error && <div className="text-sm text-red-500">{error}</div>}
-            <SheetFooter>
-              <Button type="button" variant="outline" onClick={() => setStep('form')}>
-                {'Back'}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEnvPhase('paste')}>
+                {t('deploy.dialog.rePaste')}
               </Button>
               <Button
-                type="submit"
+                type="button"
                 className="bg-foreground text-background hover:bg-foreground/90"
+                onClick={() => void handleDeployFromSummary()}
               >
                 {'Deploy'}
               </Button>
-            </SheetFooter>
-          </form>
+            </DialogFooter>
+          </div>
         )}
 
         {/* Step: deploying */}
@@ -244,7 +434,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
             <div className="text-sm text-muted-foreground">{'Starting deployment...'}</div>
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
