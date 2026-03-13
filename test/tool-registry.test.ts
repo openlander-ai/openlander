@@ -39,6 +39,17 @@ const EXPECTED_TOOL_NAMES = [
   'list_all_containers',
   'scan_ports',
   'get_container_stats',
+  'create_service',
+  'list_services',
+  'get_service_status',
+  'start_service',
+  'stop_service',
+  'remove_service',
+  'get_service_credentials',
+  'create_service_database',
+  'create_service_user',
+  'analyze_infrastructure',
+  'web_search',
 ];
 
 function createMockContext(opts?: {
@@ -85,13 +96,13 @@ function getTool(ctx: AppContext, name: string) {
 }
 
 describe('Tool Registry', () => {
-  it('returns all expected tool names (31 tools)', () => {
+  it('returns all expected tool names', () => {
     const { ctx } = createMockContext();
 
     const tools = createToolRegistry(ctx);
     const names = tools.map((tool) => tool.name);
 
-    expect(names).toHaveLength(31);
+    expect(names).toHaveLength(EXPECTED_TOOL_NAMES.length);
     expect(new Set(names)).toEqual(new Set(EXPECTED_TOOL_NAMES));
   });
 
