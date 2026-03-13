@@ -25,6 +25,7 @@ import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/sidebar/ShareDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { EnvironmentType } from '@/types';
+import { parseEnvContent } from '@/lib/parse-env';
 import { useAssistant } from '@/hooks/use-assistant';
 import { Activity, History, SquareTerminal, Settings, GitBranch } from 'lucide-react';
 import type { TimelineItem } from '@/lib/event-types';
@@ -83,7 +84,7 @@ export function ProjectDetail() {
   const [shareOpen, setShareOpen] = useState(false);
   const [redeploySheet, setRedeploySheet] = useState(false);
   const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
-  const [redeployValues, setRedeployValues] = useState<Record<string, string>>({});
+  const [redeployPasteText, setRedeployPasteText] = useState('');
   const assistant = useAssistant(id);
   const [addEnvSheet, setAddEnvSheet] = useState<{ open: boolean; type: EnvironmentType | null }>({
     open: false,
@@ -250,9 +251,7 @@ export function ProjectDetail() {
       const scan = await scanProjectEnvVars(id, currentEnvType);
       if (scan.newVars.length > 0) {
         setRedeployVars(scan.newVars);
-        const initial: Record<string, string> = {};
-        for (const v of scan.newVars) initial[v.key] = '';
-        setRedeployValues(initial);
+        setRedeployPasteText('');
         setRedeploySheet(true);
         setActionLoading(null);
         return;
@@ -564,26 +563,19 @@ export function ProjectDetail() {
       <Sheet open={redeploySheet} onOpenChange={setRedeploySheet}>
         <SheetContent side="left" className="w-[400px] sm:w-[540px]">
           <SheetHeader>
-            <SheetTitle>{'New Environment Variables'}</SheetTitle>
+            <SheetTitle>{'Environment Variables'}</SheetTitle>
           </SheetHeader>
           <div className="space-y-4 py-4">
             <div className="text-sm text-muted-foreground">
-              {`Found ${String(redeployVars.length)} new environment variable${redeployVars.length !== 1 ? 's' : ''}.`}
+              {`Found ${String(redeployVars.length)} new environment variable${redeployVars.length !== 1 ? 's' : ''}. Paste your .env file below.`}
             </div>
-            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-              {redeployVars.map((v) => (
-                <div key={v.key} className="space-y-1">
-                  <label className="text-sm font-medium font-mono">{v.key}</label>
-                  <Input
-                    placeholder={`Value for ${v.key}`}
-                    value={redeployValues[v.key] ?? ''}
-                    onChange={(e) =>
-                      setRedeployValues((prev) => ({ ...prev, [v.key]: e.target.value }))
-                    }
-                  />
-                </div>
-              ))}
-            </div>
+            <textarea
+              className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-border text-primary-ol placeholder:text-muted-ol resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
+              rows={10}
+              placeholder={redeployVars.map((v) => v.key + '=').join('\n')}
+              value={redeployPasteText}
+              onChange={(e) => setRedeployPasteText(e.target.value)}
+            />
           </div>
           <SheetFooter>
             <Button variant="outline" onClick={() => setRedeploySheet(false)}>
@@ -614,23 +606,32 @@ export function ProjectDetail() {
             <Button
               className="bg-foreground text-background hover:bg-foreground/90"
               onClick={async () => {
+                const parsed = parseEnvContent(redeployPasteText);
+                const vars: Record<string, string> = {};
+                for (const { key, value } of parsed) {
+                  if (value.trim()) vars[key] = value.trim();
+                }
                 setRedeploySheet(false);
                 setActionLoading('redeploy');
                 setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
                 try {
-                  await redeployProject(id!, redeployValues, currentEnvType);
+                  await redeployProject(
+                    id!,
+                    Object.keys(vars).length > 0 ? vars : undefined,
+                    currentEnvType,
+                  );
                   setTimelineRunKey((k) => k + 1);
-                  toast.success('Project redeploying');
+                  toast.success('Project deploying');
                 } catch (err) {
                   toast.error(
-                    'Redeploy failed: ' + (err instanceof Error ? err.message : String(err)),
+                    'Deploy failed: ' + (err instanceof Error ? err.message : String(err)),
                   );
                 } finally {
                   setActionLoading(null);
                 }
               }}
             >
-              {'Redeploy'}
+              {'Deploy'}
             </Button>
           </SheetFooter>
         </SheetContent>
