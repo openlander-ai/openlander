@@ -247,7 +247,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
 
     try {
-      const scan = await scanProjectEnvVars(id);
+      const scan = await scanProjectEnvVars(id, currentEnvType);
       if (scan.newVars.length > 0) {
         setRedeployVars(scan.newVars);
         const initial: Record<string, string> = {};

@@ -495,15 +495,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    // If caller provides env_vars, persist them before redeploying
+    // If caller provides env_vars, merge them into existing vars before redeploying
     const body = await c.req
       .json<{ env_vars?: Record<string, string> }>()
       .catch(() => ({ env_vars: undefined }));
     if (body.env_vars && typeof body.env_vars === 'object') {
-      if (requestedEnvironment === 'production') {
-        ctx.env.setBulk(project.id, body.env_vars);
-      } else if (environmentRow) {
-        ctx.env.setBulk(project.id, body.env_vars, environmentRow.id);
+      const envId = requestedEnvironment === 'production' ? undefined : environmentRow?.id;
+      for (const [key, value] of Object.entries(body.env_vars)) {
+        if (value.trim()) {
+          ctx.env.set(project.id, key, value.trim(), envId);
+        }
       }
     }
 

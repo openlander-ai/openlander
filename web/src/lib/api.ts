@@ -990,10 +990,14 @@ export async function scanEnvVars(repoUrl: string, branch?: string): Promise<Env
   return res.json();
 }
 
-export async function scanProjectEnvVars(projectId: string): Promise<ProjectEnvScanResult> {
+export async function scanProjectEnvVars(
+  projectId: string,
+  environment?: string,
+): Promise<ProjectEnvScanResult> {
   const res = await fetch(`/api/projects/${projectId}/env/scan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ environment }),
   });
   if (!res.ok) {
     const error = await res.text();
