@@ -875,25 +875,18 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     if (!project) return c.json({ error: 'Project not found' }, 404);
     if (!project.repo_url) return c.json({ error: 'Project has no repo URL' }, 400);
 
-    const body = await c.req
-      .json<{ environment?: string }>()
-      .catch(() => ({ environment: undefined }));
-    const requestedEnv = (body.environment ?? 'production').toLowerCase();
-
     let clonePath: string | null = null;
     try {
       const cloneResult = await cloneRepo({ repoUrl: project.repo_url, branch: project.branch });
       clonePath = cloneResult.path;
       const result = scanForEnvUsage(clonePath);
 
-      // Compare against already-stored env vars (including environment-scoped) to identify new ones
-      const environments = ctx.db.getEnvironmentsByProject(project.id);
-      const targetEnv = environments.find((e) => e.type === requestedEnv);
-      const stored = targetEnv
-        ? ctx.env.getAllWithInheritance(project.id, targetEnv.id)
-        : ctx.env.getAll(project.id);
-      const globalSecrets = ctx.env.getGlobalSecrets();
-      const allStoredKeys = new Set([...Object.keys(stored), ...Object.keys(globalSecrets)]);
+      const allStoredKeys = new Set<string>();
+      for (const key of Object.keys(ctx.env.getAll(project.id))) allStoredKeys.add(key);
+      for (const key of Object.keys(ctx.env.getGlobalSecrets())) allStoredKeys.add(key);
+      for (const env of ctx.db.getEnvironmentsByProject(project.id)) {
+        for (const key of Object.keys(ctx.env.getAll(project.id, env.id))) allStoredKeys.add(key);
+      }
       const newVars = result.vars.filter((v) => !allStoredKeys.has(v.key));
       const existingVars = result.vars.filter((v) => allStoredKeys.has(v.key)).map((v) => v.key);
 
