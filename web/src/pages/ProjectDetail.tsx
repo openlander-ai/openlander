@@ -589,6 +589,28 @@ export function ProjectDetail() {
             <Button variant="outline" onClick={() => setRedeploySheet(false)}>
               {'Cancel'}
             </Button>
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-primary-ol transition-colors"
+              onClick={async () => {
+                setRedeploySheet(false);
+                setActionLoading('redeploy');
+                setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+                try {
+                  await redeployProject(id!, undefined, currentEnvType);
+                  setTimelineRunKey((k) => k + 1);
+                  toast.success('Project redeploying');
+                } catch (err) {
+                  toast.error(
+                    'Redeploy failed: ' + (err instanceof Error ? err.message : String(err)),
+                  );
+                } finally {
+                  setActionLoading(null);
+                }
+              }}
+            >
+              {'Skip'}
+            </button>
             <Button
               className="bg-foreground text-background hover:bg-foreground/90"
               onClick={async () => {
