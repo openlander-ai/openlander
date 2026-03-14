@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import * as portModule from '../../src/pipeline/port.js';
@@ -237,6 +237,113 @@ describe('preflightCheck', () => {
       });
     });
 
+    describe('Scenario 5: Env var completeness warning - does NOT block deployment', () => {
+      it('warns when .env.example keys are missing from configured project env vars', async () => {
+        const projectPath = join(tmpDir, 'repo-env-missing');
+        mkdirSync(projectPath, { recursive: true });
+        writeFileSync(
+          join(projectPath, '.env.example'),
+          'OPENLANDER_PREFLIGHT_TEST_MISSING_KEY=\nOPTIONAL_TIMEOUT=30\n',
+          'utf8',
+        );
+
+        db.createProject({
+          id: 'env-project-missing',
+          name: 'env-project',
+          repoUrl: 'https://github.com/test/test',
+        });
+        db.setEnvVar('env-project-missing', 'OPTIONAL_TIMEOUT', '10');
+
+        const result = await preflightCheck(db, docker, 'env-project', undefined, { projectPath });
+
+        expect(result.pass).toBe(true);
+        expect(result.checks.envConfigured.pass).toBe(true);
+        expect(result.checks.envConfigured.detail).toContain('missing required keys');
+        expect(
+          result.warnings.some((warning) =>
+            warning.includes('OPENLANDER_PREFLIGHT_TEST_MISSING_KEY'),
+          ),
+        ).toBe(true);
+      });
+
+      it('passes env completeness check when required keys are configured', async () => {
+        const projectPath = join(tmpDir, 'repo-env-complete');
+        mkdirSync(projectPath, { recursive: true });
+        writeFileSync(
+          join(projectPath, '.env.example'),
+          'OPENLANDER_PREFLIGHT_TEST_SET_A=\nOPENLANDER_PREFLIGHT_TEST_SET_B=\n',
+          'utf8',
+        );
+
+        db.createProject({
+          id: 'env-project-complete',
+          name: 'env-project-complete',
+          repoUrl: 'https://github.com/test/test',
+        });
+        db.setEnvVar('env-project-complete', 'OPENLANDER_PREFLIGHT_TEST_SET_A', 'value-a');
+        db.setEnvVar('env-project-complete', 'OPENLANDER_PREFLIGHT_TEST_SET_B', 'value-b');
+
+        const result = await preflightCheck(db, docker, 'env-project-complete', undefined, {
+          projectPath,
+        });
+
+        expect(result.checks.envConfigured.pass).toBe(true);
+        expect(result.checks.envConfigured.detail).toContain('all required keys configured');
+        expect(result.warnings.some((warning) => warning.includes('.env.example'))).toBe(false);
+      });
+    });
+
+    describe('Scenario 6: Dockerfile syntax sanity warning - does NOT block deployment', () => {
+      it('warns when Dockerfile is missing FROM and CMD/ENTRYPOINT', async () => {
+        writeFileSync(join(tmpDir, 'Dockerfile'), 'RUN npm ci\n', 'utf8');
+
+        const result = await preflightCheck(db, docker, 'my-project', undefined, {
+          projectPath: tmpDir,
+        });
+
+        expect(result.pass).toBe(true);
+        expect(result.checks.dockerfileSyntax.pass).toBe(true);
+        expect(result.checks.dockerfileSyntax.detail).toContain('missing FROM instruction');
+        expect(result.checks.dockerfileSyntax.detail).toContain('missing CMD or ENTRYPOINT');
+        expect(
+          result.warnings.some((warning) => warning.includes('missing FROM instruction')),
+        ).toBe(true);
+      });
+
+      it('warns when Dockerfile uses FROM scratch without COPY', async () => {
+        writeFileSync(join(tmpDir, 'Dockerfile'), 'FROM scratch\nCMD ["/app"]\n', 'utf8');
+
+        const result = await preflightCheck(db, docker, 'my-project', undefined, {
+          projectPath: tmpDir,
+        });
+
+        expect(result.pass).toBe(true);
+        expect(result.checks.dockerfileSyntax.pass).toBe(true);
+        expect(result.checks.dockerfileSyntax.detail).toContain('FROM scratch');
+        expect(result.warnings.some((warning) => warning.includes('FROM scratch'))).toBe(true);
+      });
+
+      it('passes syntax sanity check for valid minimal Dockerfile', async () => {
+        writeFileSync(
+          join(tmpDir, 'Dockerfile'),
+          'FROM node:22-alpine\nCOPY package.json ./\nCMD ["node", "index.js"]\n',
+          'utf8',
+        );
+
+        const result = await preflightCheck(db, docker, 'my-project', undefined, {
+          projectPath: tmpDir,
+        });
+
+        expect(result.checks.dockerfileSyntax.pass).toBe(true);
+        expect(result.checks.dockerfileSyntax.detail).toContain('passed');
+        expect(
+          result.warnings.some((warning) =>
+            warning.includes('Dockerfile is missing FROM instruction'),
+          ),
+        ).toBe(false);
+      });
+    });
+
     describe('Error handling', () => {
       it('returns failed result when Docker API throws error', async () => {
         const failingDocker = {
@@ -319,6 +426,11 @@ describe('preflightCheck', () => {
           nameAvailable: { pass: true, detail: 'Name "ol-test" is available' },
           resourceOk: { pass: true, detail: 'Disk: 50GB free, Memory: 50% used' },
           proxyReady: { pass: true, detail: 'Traefik v3.3 [managed mode]' },
+          envConfigured: {
+            pass: true,
+            detail: '.env.example: all required keys configured (2/2)',
+          },
+          dockerfileSyntax: { pass: true, detail: 'Dockerfile syntax sanity check passed' },
         },
         warnings: [],
       };
@@ -328,6 +440,8 @@ describe('preflightCheck', () => {
       expect(formatted).toContain('Preflight check:');
       expect(formatted).toContain('✅');
       expect(formatted).toContain('Port 10001 is available');
+      expect(formatted).toContain('all required keys configured');
+      expect(formatted).toContain('Dockerfile syntax sanity check passed');
       expect(formatted).toContain('All clear');
     });
 
@@ -339,6 +453,8 @@ describe('preflightCheck', () => {
           nameAvailable: { pass: true, detail: 'Name available' },
           resourceOk: { pass: true, detail: 'Disk low' },
           proxyReady: { pass: true, detail: 'Proxy ready' },
+          envConfigured: { pass: true, detail: 'Missing .env keys: API_KEY' },
+          dockerfileSyntax: { pass: true, detail: 'Dockerfile is missing CMD or ENTRYPOINT' },
         },
         warnings: ['Memory usage is high'],
       };
@@ -359,6 +475,8 @@ describe('preflightCheck', () => {
           nameAvailable: { pass: false, detail: 'Container already exists' },
           resourceOk: { pass: true, detail: 'OK' },
           proxyReady: { pass: true, detail: 'OK' },
+          envConfigured: { pass: true, detail: 'OK' },
+          dockerfileSyntax: { pass: true, detail: 'OK' },
         },
         warnings: [],
       };
