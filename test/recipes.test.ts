@@ -72,6 +72,76 @@ describe('matchRecipe', () => {
     expect(recipe!.title).toContain('Python');
   });
 
+  it('matches .NET SDK/framework mismatch errors', () => {
+    const log =
+      'error NETSDK1045: The current .NET SDK does not support targeting .NET 9.0. Target framework: net9.0';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('.NET SDK');
+  });
+
+  it('matches .NET restore/dependency resolution errors', () => {
+    const log =
+      'error NU1301: Unable to load the service index for source https://api.nuget.org/v3/index.json\ndotnet restore failed';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('.NET restore');
+  });
+
+  it('matches Maven dependency resolution errors', () => {
+    const log =
+      '[ERROR] Failed to execute goal on project demo: Could not resolve dependencies for project com.example:demo';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('Maven');
+  });
+
+  it('matches Gradle/JDK mismatch errors', () => {
+    const log = 'Execution failed for task :compileJava. Unsupported class file major version 65';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('Gradle/JDK');
+  });
+
+  it('matches Bundler dependency resolution errors', () => {
+    const log =
+      'Bundler::GemNotFound: Could not find gem pg in any of the gem sources listed in your Gemfile.';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('Bundler');
+  });
+
+  it('matches Ruby native extension build errors', () => {
+    const log =
+      'Gem::Ext::BuildError: ERROR: Failed to build gem native extension. extconf.rb failed';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('native extension');
+  });
+
+  it('matches Rails asset precompile errors', () => {
+    const log = 'bundle exec rails assets:precompile\nSprockets::Rails::Helper::AssetNotFound';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('asset precompile');
+  });
+
+  it('matches Composer dependency resolution errors', () => {
+    const log =
+      'Your requirements could not be resolved to an installable set of packages. Problem 1 - Root composer.json requires laravel/framework ^11.0';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('Composer dependency');
+  });
+
+  it('matches PHP extension/platform requirement errors', () => {
+    const log =
+      'composer detected issues in your platform: Your Composer dependencies require a PHP extension ext-intl * but it is missing from your system.';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('PHP extension/platform');
+  });
+
   it('matches port conflict errors', () => {
     const log = 'Error: listen EADDRINUSE: address already in use :::3000';
     const recipe = matchRecipe(log);
@@ -112,8 +182,8 @@ describe('matchAllRecipes', () => {
 });
 
 describe('BUILD_RECIPES', () => {
-  it('has 10 recipes', () => {
-    expect(BUILD_RECIPES).toHaveLength(10);
+  it('has 19 recipes', () => {
+    expect(BUILD_RECIPES).toHaveLength(19);
   });
 
   it('all recipes have required fields', () => {

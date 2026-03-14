@@ -137,6 +137,144 @@ describe('detectFramework', () => {
     expect(result.language).toBe('python');
   });
 
+  it('detects Laravel project from composer.json and artisan', () => {
+    writeFileSync(
+      join(tmpDir, 'composer.json'),
+      JSON.stringify({ require: { laravel: '^11.0' } }),
+      'utf8',
+    );
+    writeFileSync(join(tmpDir, 'artisan'), '#!/usr/bin/env php', 'utf8');
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('laravel');
+    expect(result.language).toBe('php');
+    expect(result.port).toBe(8000);
+    expect(result.startCommand).toContain('artisan serve');
+  });
+
+  it('detects generic PHP project from composer.json alone', () => {
+    writeFileSync(
+      join(tmpDir, 'composer.json'),
+      JSON.stringify({ require: { monolog: '^3.0' } }),
+      'utf8',
+    );
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('php');
+    expect(result.language).toBe('php');
+    expect(result.port).toBe(8000);
+    expect(result.startCommand).toBe('php -S 0.0.0.0:8000 -t public');
+  });
+
+  it('detects Rails project from Gemfile and config/routes.rb', () => {
+    mkdirSync(join(tmpDir, 'config'), { recursive: true });
+    writeFileSync(join(tmpDir, 'Gemfile'), "source 'https://rubygems.org'\ngem 'rails'", 'utf8');
+    writeFileSync(
+      join(tmpDir, 'config', 'routes.rb'),
+      'Rails.application.routes.draw do\nend',
+      'utf8',
+    );
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('rails');
+    expect(result.language).toBe('ruby');
+    expect(result.port).toBe(3000);
+    expect(result.startCommand).toContain('rails server');
+  });
+
+  it('detects generic Ruby project from Gemfile when routes file is absent', () => {
+    writeFileSync(join(tmpDir, 'Gemfile'), "source 'https://rubygems.org'\ngem 'sinatra'", 'utf8');
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('ruby');
+    expect(result.language).toBe('ruby');
+    expect(result.port).toBe(3000);
+    expect(result.startCommand).toBe('ruby app.rb');
+  });
+
+  it('detects Spring Boot from pom.xml and src/main/java', () => {
+    mkdirSync(join(tmpDir, 'src', 'main', 'java'), { recursive: true });
+    writeFileSync(join(tmpDir, 'pom.xml'), '<project></project>', 'utf8');
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('spring-boot');
+    expect(result.language).toBe('java');
+    expect(result.port).toBe(8080);
+  });
+
+  it('detects Spring Boot from build.gradle and src/main/java', () => {
+    mkdirSync(join(tmpDir, 'src', 'main', 'java'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'build.gradle'),
+      'plugins { id "org.springframework.boot" }',
+      'utf8',
+    );
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('spring-boot');
+    expect(result.language).toBe('java');
+    expect(result.port).toBe(8080);
+  });
+
+  it('detects generic Java Maven project from pom.xml alone', () => {
+    writeFileSync(join(tmpDir, 'pom.xml'), '<project></project>', 'utf8');
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('java-maven');
+    expect(result.language).toBe('java');
+    expect(result.port).toBe(8080);
+  });
+
+  it('detects generic Java Gradle project from build.gradle.kts alone', () => {
+    writeFileSync(join(tmpDir, 'build.gradle.kts'), 'plugins { java }', 'utf8');
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('java-gradle');
+    expect(result.language).toBe('java');
+    expect(result.port).toBe(8080);
+  });
+
+  it('detects ASP.NET project from csproj and Program.cs', () => {
+    writeFileSync(
+      join(tmpDir, 'WebApp.csproj'),
+      '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>',
+      'utf8',
+    );
+    writeFileSync(
+      join(tmpDir, 'Program.cs'),
+      'var builder = WebApplication.CreateBuilder(args);',
+      'utf8',
+    );
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('aspnet');
+    expect(result.language).toBe('dotnet');
+    expect(result.port).toBe(8080);
+  });
+
+  it('detects generic .NET project from csproj alone', () => {
+    writeFileSync(
+      join(tmpDir, 'Worker.csproj'),
+      '<Project Sdk="Microsoft.NET.Sdk"></Project>',
+      'utf8',
+    );
+
+    const result = detectFramework(tmpDir);
+
+    expect(result.framework).toBe('dotnet');
+    expect(result.language).toBe('dotnet');
+    expect(result.port).toBe(8080);
+  });
+
   it('detects Go project from go.mod', () => {
     writeFileSync(join(tmpDir, 'go.mod'), 'module example.com/myapp\ngo 1.21', 'utf8');
 
@@ -275,6 +413,49 @@ describe('generateDockerfile', () => {
     expect(dockerfile).toContain('EXPOSE 5000');
   });
 
+  it('generates Laravel Dockerfile with composer install and non-root runtime', () => {
+    const detection: FrameworkDetection = {
+      framework: 'laravel',
+      language: 'php',
+      buildCommand: 'composer install --no-dev --optimize-autoloader',
+      startCommand: 'php artisan serve --host=0.0.0.0 --port=8000',
+      port: 8000,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM php:8.3.15-cli-alpine3.21 AS runner');
+    expect(dockerfile).toContain(
+      'composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader',
+    );
+    expect(dockerfile).toContain('USER app');
+    expect(dockerfile).toContain('EXPOSE 8000');
+    expect(dockerfile).toContain('HEALTHCHECK');
+    expect(dockerfile).toContain(
+      'CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]',
+    );
+  });
+
+  it('generates generic PHP Dockerfile with php built-in server command', () => {
+    const detection: FrameworkDetection = {
+      framework: 'php',
+      language: 'php',
+      startCommand: 'php -S 0.0.0.0:8000 -t public',
+      port: 8000,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM php:8.3.15-cli-alpine3.21');
+    expect(dockerfile).toContain(
+      'composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader',
+    );
+    expect(dockerfile).toContain('USER app');
+    expect(dockerfile).toContain('EXPOSE 8000');
+    expect(dockerfile).toContain('HEALTHCHECK');
+    expect(dockerfile).toContain('CMD ["php", "-S", "0.0.0.0:8000", "-t", "public"]');
+  });
+
   it('generates Go Dockerfile', () => {
     const detection: FrameworkDetection = {
       framework: 'go',
@@ -322,6 +503,43 @@ describe('generateDockerfile', () => {
     expect(dockerfile).toContain('/usr/share/nginx/html');
   });
 
+  it('generates Rails Dockerfile with production build and non-root runtime', () => {
+    const detection: FrameworkDetection = {
+      framework: 'rails',
+      language: 'ruby',
+      buildCommand: 'bundle install && bundle exec rails assets:precompile',
+      startCommand: 'bundle exec rails server -b 0.0.0.0 -p 3000',
+      port: 3000,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM ruby:3.3.6-slim AS builder');
+    expect(dockerfile).toContain('bundle install');
+    expect(dockerfile).toContain('rails assets:precompile');
+    expect(dockerfile).toContain('groupadd --system app');
+    expect(dockerfile).toContain('USER app');
+    expect(dockerfile).toContain('EXPOSE 3000');
+    expect(dockerfile).toContain('HEALTHCHECK');
+  });
+
+  it('generates generic Ruby Dockerfile with app.rb default command', () => {
+    const detection: FrameworkDetection = {
+      framework: 'ruby',
+      language: 'ruby',
+      startCommand: 'ruby app.rb',
+      port: 3000,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM ruby:3.3.6-slim');
+    expect(dockerfile).toContain('bundle install');
+    expect(dockerfile).toContain('CMD ["ruby", "app.rb"]');
+    expect(dockerfile).toContain('EXPOSE 3000');
+    expect(dockerfile).toContain('HEALTHCHECK');
+  });
+
   it('generates fallback Dockerfile for unknown frameworks', () => {
     const detection: FrameworkDetection = {
       framework: 'unknown',
@@ -346,6 +564,105 @@ describe('generateDockerfile', () => {
     const dockerfile = generateDockerfile(detection);
 
     expect(dockerfile).toContain('EXPOSE 9000');
+  });
+
+  it('generates Spring Boot Dockerfile with Temurin multi-stage and runtime hardening', () => {
+    const detection: FrameworkDetection = {
+      framework: 'spring-boot',
+      language: 'java',
+      buildCommand: './mvnw -DskipTests clean package || mvn -DskipTests clean package',
+      startCommand: 'java -jar app.jar',
+      port: 8080,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM eclipse-temurin:21-jdk-jammy AS builder');
+    expect(dockerfile).toContain('FROM eclipse-temurin:21-jre-jammy AS runner');
+    expect(dockerfile).toContain('if [ -f mvnw ]');
+    expect(dockerfile).toContain('if [ -f gradlew ]');
+    expect(dockerfile).toContain('USER app');
+    expect(dockerfile).toContain('EXPOSE 8080');
+    expect(dockerfile).toContain('HEALTHCHECK');
+    expect(dockerfile).toContain('CMD ["java", "-jar", "/app/app.jar"]');
+  });
+
+  it('generates Java Maven Dockerfile with wrapper-aware build command', () => {
+    const detection: FrameworkDetection = {
+      framework: 'java-maven',
+      language: 'java',
+      buildCommand: './mvnw -DskipTests clean package || mvn -DskipTests clean package',
+      startCommand: 'java -jar app.jar',
+      port: 8080,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM eclipse-temurin:21-jdk-jammy AS builder');
+    expect(dockerfile).toContain('if [ -f mvnw ]');
+    expect(dockerfile).toContain('mvn -DskipTests clean package');
+    expect(dockerfile).toContain('FROM eclipse-temurin:21-jre-jammy AS runner');
+    expect(dockerfile).toContain('EXPOSE 8080');
+    expect(dockerfile).toContain('HEALTHCHECK');
+  });
+
+  it('generates Java Gradle Dockerfile with wrapper-aware build command', () => {
+    const detection: FrameworkDetection = {
+      framework: 'java-gradle',
+      language: 'java',
+      buildCommand: './gradlew build -x test || gradle build -x test',
+      startCommand: 'java -jar app.jar',
+      port: 8080,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM eclipse-temurin:21-jdk-jammy AS builder');
+    expect(dockerfile).toContain('if [ -f gradlew ]');
+    expect(dockerfile).toContain('./gradlew build -x test');
+    expect(dockerfile).toContain('FROM eclipse-temurin:21-jre-jammy AS runner');
+    expect(dockerfile).toContain('EXPOSE 8080');
+    expect(dockerfile).toContain('HEALTHCHECK');
+  });
+
+  it('generates ASP.NET Dockerfile with sdk-to-aspnet multi-stage runtime hardening', () => {
+    const detection: FrameworkDetection = {
+      framework: 'aspnet',
+      language: 'dotnet',
+      buildCommand: 'dotnet publish -c Release -o /app/publish',
+      startCommand: 'dotnet app.dll',
+      port: 8080,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM mcr.microsoft.com/dotnet/sdk:8.0 AS builder');
+    expect(dockerfile).toContain('dotnet restore "$PROJECT_FILE"');
+    expect(dockerfile).toContain('dotnet publish "$PROJECT_FILE" -c Release -o /app/publish');
+    expect(dockerfile).toContain('FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runner');
+    expect(dockerfile).toContain('ENV ASPNETCORE_URLS=http://+:8080');
+    expect(dockerfile).toContain('USER app');
+    expect(dockerfile).toContain('EXPOSE 8080');
+    expect(dockerfile).toContain('HEALTHCHECK');
+  });
+
+  it('generates generic .NET Dockerfile with runtime image and runnable default command', () => {
+    const detection: FrameworkDetection = {
+      framework: 'dotnet',
+      language: 'dotnet',
+      buildCommand: 'dotnet publish -c Release -o /app/publish',
+      startCommand: 'dotnet app.dll',
+      port: 8080,
+    };
+
+    const dockerfile = generateDockerfile(detection);
+
+    expect(dockerfile).toContain('FROM mcr.microsoft.com/dotnet/sdk:8.0 AS builder');
+    expect(dockerfile).toContain('FROM mcr.microsoft.com/dotnet/runtime:8.0 AS runner');
+    expect(dockerfile).toContain('dotnet publish "$PROJECT_FILE" -c Release -o /app/publish');
+    expect(dockerfile).toContain('CMD ["sh", "-c", "set -e; APP_DLL=');
+    expect(dockerfile).toContain('EXPOSE 8080');
+    expect(dockerfile).toContain('HEALTHCHECK');
   });
 });
 
