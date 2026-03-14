@@ -3,7 +3,7 @@
  *
  * Defines a common interface for repository hosting services.
  * GitHub is the first implementation. GitLab, Bitbucket, Gitea can follow
- * the same interface without changing agent tools or TUI code.
+ * the same interface without changing agent tools or web/CLI code.
  */
 
 // --- Repository ---
@@ -94,7 +94,7 @@ export type GitProviderType = 'github' | 'gitlab' | 'bitbucket' | 'gitea';
  * Common interface for all git hosting providers.
  *
  * Each provider (GitHub, GitLab, Bitbucket, Gitea) implements this interface.
- * Agent tools and TUI code interact with this — never with provider-specific APIs.
+ * Agent tools and web/CLI code interact with this — never with provider-specific APIs.
  */
 export interface GitProvider {
   /** Provider identifier */

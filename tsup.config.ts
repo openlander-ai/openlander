@@ -1,18 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'tsup';
-import { solidPlugin } from 'esbuild-plugin-solid';
 
 // Read version from package.json — single source of truth
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: string };
-const solid = solidPlugin({
-  solid: {
-    moduleName: '@opentui/solid',
-    generate: 'universal',
-  },
-});
 
 // Runtime modules — resolved at runtime, not bundled
-const externals = ['better-sqlite3', '@opentui/solid', 'solid-js'];
+const externals = ['better-sqlite3'];
 
 export default defineConfig([
   // CLI entry — needs shebang for `npx openlander`
@@ -29,7 +22,6 @@ export default defineConfig([
     banner: {
       js: '#!/usr/bin/env node',
     },
-    esbuildPlugins: [solid],
     external: externals,
     define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   },
@@ -43,7 +35,6 @@ export default defineConfig([
     sourcemap: true,
     splitting: true,
     shims: false,
-    esbuildPlugins: [solid],
     external: externals,
     define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   },

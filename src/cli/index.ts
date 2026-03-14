@@ -19,9 +19,8 @@ program
   .version(VERSION)
   .option('-p, --port <port>', 'Port to listen on', '10114')
   .option('--host <host>', 'Host to bind to', '0.0.0.0')
-  .option('--tui', 'Launch legacy TUI mode instead of web UI')
   .option('--no-open', 'Do not open browser automatically')
-  .action(async (options: { port: string; host: string; tui?: boolean; open?: boolean }) => {
+  .action(async (options: { port: string; host: string; open?: boolean }) => {
     const port = parseInt(options.port, 10);
 
     // Step 1: Ensure Docker is ready
@@ -32,7 +31,7 @@ program
     // CLI no longer runs LLM/Git setup — just start the server
 
     // Step 3: Load config & create app context
-    const { loadConfig, getDbPath, getDataDir } = await import('../config/index.js');
+    const { loadConfig, getDbPath } = await import('../config/index.js');
 
     const config = loadConfig();
     config.server.port = port;
@@ -61,47 +60,35 @@ program
       console.log(pc.yellow('  ⚠ Traefik could not start'));
     }
 
-    if (options.tui) {
-      // ── Legacy TUI mode ──
-      process.env['OPENLANDER_TUI'] = '1';
+    // ── Web mode (default) ──
+    const { createServer } = await import('../web/server.js');
+    createServer({ port, host: options.host }, ctx);
 
-      const { startDaemon } = await import('../web/server.js');
-      const socketPath = join(getDataDir(), 'openlander.sock');
-      await startDaemon({ socketPath }, ctx);
+    const lanIp = getLanIp();
+    const localUrl = `http://localhost:${String(port)}`;
+    const networkUrl = lanIp ? `http://${lanIp}:${String(port)}` : null;
 
-      const { startTUI } = await import('../tui/index.js');
-      startTUI(ctx);
-    } else {
-      // ── Web mode (default) ──
-      const { createServer } = await import('../web/server.js');
-      createServer({ port, host: options.host }, ctx);
+    console.log();
+    console.log(pc.bold(pc.cyan('  🛬 OpenLander')));
+    console.log();
+    console.log(pc.dim('  Local:   ') + pc.cyan(localUrl));
+    if (networkUrl) {
+      console.log(pc.dim('  Network: ') + pc.cyan(networkUrl));
+    }
+    console.log();
 
-      const lanIp = getLanIp();
-      const localUrl = `http://localhost:${String(port)}`;
-      const networkUrl = lanIp ? `http://${lanIp}:${String(port)}` : null;
-
-      console.log();
-      console.log(pc.bold(pc.cyan('  🛬 OpenLander')));
-      console.log();
-      console.log(pc.dim('  Local:   ') + pc.cyan(localUrl));
-      if (networkUrl) {
-        console.log(pc.dim('  Network: ') + pc.cyan(networkUrl));
-      }
-      console.log();
-
-      // Open browser (unless --no-open)
-      if (options.open !== false) {
-        const { exec } = await import('node:child_process');
-        const openCmd =
-          process.platform === 'darwin'
-            ? 'open'
-            : process.platform === 'win32'
-              ? 'start'
-              : 'xdg-open';
-        exec(`${openCmd} ${localUrl}`, (err) => {
-          if (err) log.debug({ err }, 'Failed to open browser');
-        });
-      }
+    // Open browser (unless --no-open)
+    if (options.open !== false) {
+      const { exec } = await import('node:child_process');
+      const openCmd =
+        process.platform === 'darwin'
+          ? 'open'
+          : process.platform === 'win32'
+            ? 'start'
+            : 'xdg-open';
+      exec(`${openCmd} ${localUrl}`, (err) => {
+        if (err) log.debug({ err }, 'Failed to open browser');
+      });
     }
 
     // Graceful shutdown
@@ -119,7 +106,7 @@ program
 
 program
   .command('start')
-  .description('Start daemon only (no TUI, background)')
+  .description('Start daemon only (background)')
   .action(async () => {
     const { loadConfig, getDbPath, getDataDir } = await import('../config/index.js');
     const config = loadConfig();
@@ -469,9 +456,9 @@ program
       console.log(pc.green(`  ✓ Project created: ${data.project?.name ?? name}`));
       console.log(pc.dim(`    ID: ${data.project?.id ?? '—'}`));
       console.log(pc.dim(`    Web: ${base}/projects/${data.project?.id ?? ''}`));
-    } catch {
-      console.error(pc.red('  Could not connect to OpenLander daemon.'));
-      console.error(pc.dim('  Make sure `openlander` is running.'));
+    } catch (err) {
+      log.error({ err }, pc.red('  Could not connect to OpenLander daemon.'));
+      log.error(pc.dim('  Make sure `openlander` is running.'));
       process.exit(1);
     }
   });
@@ -505,8 +492,8 @@ program
       } else {
         console.log(pc.dim('  No logs available.'));
       }
-    } catch {
-      console.error(pc.red('  Could not connect to OpenLander daemon.'));
+    } catch (err) {
+      log.error({ err }, pc.red('  Could not connect to OpenLander daemon.'));
       process.exit(1);
     }
   });
@@ -546,8 +533,8 @@ program
       exec(`${openCmd} ${url}`, (err) => {
         if (err) console.error(pc.yellow('  Could not open browser.'));
       });
-    } catch {
-      console.error(pc.red('  Could not connect to OpenLander daemon.'));
+    } catch (err) {
+      log.error({ err }, pc.red('  Could not connect to OpenLander daemon.'));
       process.exit(1);
     }
   });
@@ -590,9 +577,9 @@ projectsCmd
         console.log(`  ${icon} ${pc.bold(p.name)}  ${pc.dim(p.status)}  ${pc.cyan(url)}`);
       }
       console.log();
-    } catch {
-      console.error(pc.red('  Could not connect to OpenLander daemon.'));
-      console.error(pc.dim('  Make sure `openlander` is running.'));
+    } catch (err) {
+      log.error({ err }, pc.red('  Could not connect to OpenLander daemon.'));
+      log.error(pc.dim('  Make sure `openlander` is running.'));
       process.exit(1);
     }
   });
@@ -609,7 +596,8 @@ async function resolveProjectId(base: string, nameOrId: string): Promise<string 
       projects.find((p) => p.id === nameOrId) ??
       projects.find((p) => p.name.toLowerCase() === nameOrId.toLowerCase());
     return match?.id ?? null;
-  } catch {
+  } catch (err) {
+    log.debug({ err, base, nameOrId }, 'Failed to resolve project');
     return null;
   }
 }
