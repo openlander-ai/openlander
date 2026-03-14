@@ -7,15 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - First Stable Release
+
 ### Added
 
+- Auto-Dockerfile templates for Ruby on Rails (multi-stage, non-root, guarded asset precompile)
+- Auto-Dockerfile templates for Spring Boot and plain Java (Maven and Gradle, Temurin JDK/JRE multi-stage)
+- Auto-Dockerfile templates for Laravel and plain PHP (Composer, non-root, socket-based healthcheck)
+- Auto-Dockerfile templates for ASP.NET and plain .NET (SDK/runtime multi-stage, first-sorted csproj)
+- Build failure recipes for Ruby/Rails (Bundler resolution, native extension compile, asset precompile)
+- Build failure recipes for Java/Spring (Maven/Gradle dependency resolution, unsupported class file version)
+- Build failure recipes for PHP/Laravel (Composer platform requirements, missing extensions, package conflicts)
+- Build failure recipes for .NET (SDK version mismatch, NuGet restore failure)
+- Preflight warning check for `.env.example` completeness — surfaces unconfigured keys before deploy
+- Preflight warning check for Dockerfile syntax sanity (`FROM`, `CMD`/`ENTRYPOINT`, scratch-copy guard)
+- `PreflightOptions` (`projectPath`, `dockerfilePath`, `configuredEnvVars`) for deterministic preflight testing
+- Vitest coverage configuration with `v8` provider and per-metric thresholds (lines 60%, branches 55%, functions 55%)
+- `npm run test:coverage` script for CI coverage gate enforcement
 - MCP `agent_execute_goal` tool — external clients (Cursor, VS Code) can delegate multi-step goals to the AI agent
 - Channel streaming with real-time message editing (Slack `chat.update`, Discord `PATCH`, Telegram `editMessageText`)
 - Channel interactive components for agent questions (Slack blocks, Discord ActionRow+Button, Telegram InlineKeyboard)
 - QuestionBridge wiring for channels with 5min timeout and rate-limited message editing (1.5s)
 
+### Changed
+
+- Removed TUI runtime entirely (`src/tui/`, `--tui` CLI flag, `OPENLANDER_TUI` env var, SolidJS/OpenTUI build plugins)
+- Removed TUI-only ESLint override and dead TUI/IPC legacy test files (2,451 lines)
+- Preflight warning checks are advisory-only (`pass: true`) and do not block deployment
+- Module loggers added to `service-manager`, `orchestrator`, `setup-routes`, and `domain-routes` for consistent diagnostics
+
 ### Fixed
 
+- Bare catch blocks across pipeline and web modules now log at `debug` level instead of silently swallowing errors
+- CLI commands standardized to use project logger instead of `console.error`
+- Duplicate unreachable `return` statements removed from `readPackageJson` and `readTextIfExists` catch blocks in `dockerfile-gen.ts`
 - questionBridge not passed on hot-reload Agent creation (setup-routes, auth-routes, mcp/server)
 - scanTool.execute type safety in MCP server's scan_dockerfiles handler
 
