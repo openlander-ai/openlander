@@ -3,7 +3,7 @@
  *
  * When the LLM calls `ask_user_question`, the tool creates a Promise via this bridge.
  * The agentic loop pauses on `await bridge.ask(...)`.
- * The UI (TUI or web) renders the question and calls `bridge.reply(answers)` when the user responds.
+ * The UI (web or CLI) renders the question and calls `bridge.reply(answers)` when the user responds.
  * The Promise resolves and the tool returns the answers to the LLM.
  *
  * Data flow:
@@ -71,7 +71,7 @@ export class QuestionBridge {
   }
 
   /**
-   * Register the TUI/UI handler that will render questions.
+   * Register the UI handler that will render questions.
    * Called once at startup when wiring UI ↔ agent.
    */
   setQuestionHandler(handler: (request: QuestionRequest) => void): void {

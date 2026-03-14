@@ -87,11 +87,11 @@ function walkDir(dir: string, basePath: string): string[] {
             files.push(fullPath);
           }
         }
-      } catch {
+      } catch (_err) {
         continue;
       }
     }
-  } catch {
+  } catch (_err) {
     return files;
   }
 
@@ -127,7 +127,7 @@ export function scanForSecrets(projectPath: string): SecretFinding[] {
           }
         }
       }
-    } catch {
+    } catch (_err) {
       continue;
     }
   }

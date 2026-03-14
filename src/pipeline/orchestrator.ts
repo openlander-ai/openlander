@@ -1,4 +1,7 @@
 import { eventBus, type EventBus } from '../events/index.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('orchestrator');
 
 export interface ServiceNode {
   name: string;
@@ -312,7 +315,8 @@ export class DeployOrchestrator {
       for (const service of [...executed].reverse()) {
         try {
           await pipeline.rollbackService(service);
-        } catch {
+        } catch (err) {
+          log.debug({ err, serviceName: service.name }, 'Service rollback failed');
           const existing = statuses.find((entry) => entry.name === service.name);
           if (existing) {
             existing.error = existing.error

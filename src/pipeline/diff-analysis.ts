@@ -119,7 +119,8 @@ export async function analyzeBuildDiff(
   try {
     const { stdout } = await execFn('git', diffArgs, { cwd: clonePath });
     diffStdout = stdout;
-  } catch {
+  } catch (err) {
+    log.debug({ err, previousCommitSha, currentSha }, 'Git diff failed');
     try {
       await execFn('git', ['fetch', '--depth=50', 'origin'], { cwd: clonePath, timeout: 30_000 });
       const { stdout } = await execFn('git', diffArgs, { cwd: clonePath });

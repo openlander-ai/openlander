@@ -266,7 +266,7 @@ export class Docker {
       if (!portStr) return undefined;
       const port = parseInt(portStr, 10);
       return isNaN(port) ? undefined : port;
-    } catch {
+    } catch (_err) {
       return undefined;
     }
   }
@@ -407,7 +407,7 @@ export class Docker {
         exitCode: info.State.ExitCode,
         error: info.State.Running ? undefined : 'Container did not become healthy within timeout',
       };
-    } catch {
+    } catch (_err) {
       return { healthy: false, error: 'Container check timed out' };
     }
   }
@@ -512,7 +512,7 @@ export function resolveDockerSocket(): string | undefined {
       // but docker CLI confirmed it — trust it.
       return sockPath;
     }
-  } catch {
+  } catch (_err) {
     // docker CLI not available or context not configured
   }
 

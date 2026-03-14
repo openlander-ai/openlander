@@ -150,7 +150,7 @@ async function checkHealth(ctx: InsightContext, db: Database, locale: Locale): P
           actions: [],
         };
       }
-    } catch {
+    } catch (_err) {
       // Not ready yet — retry
     }
 

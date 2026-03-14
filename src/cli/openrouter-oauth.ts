@@ -1,7 +1,7 @@
 /**
  * OpenRouter OAuth PKCE Flow client.
  *
- * Implements PKCE (Proof Key for Code Exchange) OAuth flow for CLI/TUI applications.
+ * Implements PKCE (Proof Key for Code Exchange) OAuth flow for CLI applications.
  * Starts a local HTTP server to receive the OAuth callback.
  */
 

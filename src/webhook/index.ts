@@ -301,7 +301,8 @@ function parsePRPayload(source: WebhookSource, body: string): ParsedPREvent | nu
   let payload: unknown;
   try {
     payload = JSON.parse(body);
-  } catch {
+  } catch (err) {
+    log.debug({ err }, 'Failed to parse webhook payload');
     return null;
   }
 

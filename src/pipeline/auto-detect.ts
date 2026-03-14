@@ -154,7 +154,7 @@ export class AutoDetector {
       let dirents: Array<{ name: string; isDirectory(): boolean }>;
       try {
         dirents = readdirSync(current.absPath, { withFileTypes: true });
-      } catch {
+      } catch (_err) {
         continue;
       }
 
@@ -230,7 +230,7 @@ export class AutoDetector {
       let dirents: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
       try {
         dirents = readdirSync(current.absPath, { withFileTypes: true });
-      } catch {
+      } catch (_err) {
         continue;
       }
 

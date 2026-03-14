@@ -1,8 +1,11 @@
 import { Hono } from 'hono';
 
 import type { Database } from '../../db/index.js';
+import { createModuleLogger } from '../../lib/logger.js';
 import type { CloudflareTunnelManager } from '../../pipeline/cloudflare.js';
 import type { TraefikManager } from '../../pipeline/traefik.js';
+
+const log = createModuleLogger('domain-routes');
 
 interface DomainRouteContext {
   db: Database;
@@ -30,7 +33,8 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
     // Ensure Traefik has File Provider before adding domain routes
     try {
       await ctx.traefik.start();
-    } catch {
+    } catch (err) {
+      log.debug({ err, projectId: project.id, domain }, 'Traefik startup failed');
       /* startup handles errors */
     }
 

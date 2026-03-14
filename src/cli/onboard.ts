@@ -42,7 +42,8 @@ export async function ensureDocker(): Promise<void> {
       try {
         execSync(cmd, { stdio: 'inherit' });
         process.exit(0);
-      } catch {
+      } catch (err) {
+        log.debug({ err }, 'Docker group re-exec failed');
         // sg failed, fall through to normal error handling
       }
     }

@@ -165,7 +165,7 @@ export class GitHubProvider implements GitProvider {
       const res = await this.request('/user/orgs?per_page=100');
       const orgs = res.data as Array<{ login: string }>;
       this.orgCache = orgs.map((o) => o.login);
-    } catch {
+    } catch (_err) {
       log.debug('Failed to fetch user orgs — falling back to user-only search');
       this.orgCache = [];
     }
