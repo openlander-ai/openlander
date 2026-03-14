@@ -20,7 +20,7 @@ export interface Recipe {
 
 /**
  * Top build error patterns, ordered by frequency.
- * Sources: common Docker build failures from Node.js, Python, and Go projects.
+ * Sources: common Docker build failures from Node.js, Python, Java, .NET, Go, Ruby/Rails, and PHP/Laravel projects.
  */
 export const BUILD_RECIPES: Recipe[] = [
   {
@@ -82,6 +82,77 @@ export const BUILD_RECIPES: Recipe[] = [
     diagnosis:
       'A Python package failed to install — either missing system dependencies or incompatible Python version.',
     fix: 'Use `python:3.12-bookworm-slim` (not Alpine). For Alpine, add: `RUN apk add --no-cache gcc musl-dev libffi-dev`. Check Python version compatibility.',
+  },
+  {
+    pattern:
+      /NETSDK1\d{3}|The current \.NET SDK does not support targeting|It was not possible to find any installed \.NET SDKs/i,
+    title: '.NET SDK/target framework mismatch',
+    diagnosis:
+      'The project target framework does not match the SDK version available in the build image, or no SDK is installed.',
+    fix: 'Use an SDK base image aligned with the target framework (`mcr.microsoft.com/dotnet/sdk:8.0` for `net8.0`, `sdk:9.0` for `net9.0`) and ensure `global.json` does not pin an unavailable SDK version.',
+  },
+  {
+    pattern:
+      /NU1101|NU1301|error NU\d{4}|Unable to load the service index for source|dotnet restore.*failed/i,
+    title: '.NET restore/dependency resolution failure',
+    diagnosis:
+      '`dotnet restore` could not resolve packages due to invalid package source settings, private feed credentials, or unavailable NuGet endpoints.',
+    fix: 'Verify NuGet sources and credentials (`NuGet.config`), ensure private feed auth is passed in build args/secrets, and rerun restore with diagnostics: `dotnet restore --verbosity detailed`.',
+  },
+  {
+    pattern:
+      /Could not resolve dependencies|Could not find artifact|Non-resolvable parent POM|Failed to execute goal/i,
+    title: 'Maven dependency resolution failure',
+    diagnosis:
+      'Maven could not resolve one or more dependencies or plugins. Typical causes are stale local metadata, private repository credentials, or an invalid parent POM reference.',
+    fix: 'Verify repository access in `settings.xml` (if private), confirm dependency coordinates/versions, and rebuild with `./mvnw -U -DskipTests clean package` (or `mvn ...`) to refresh metadata.',
+  },
+  {
+    pattern:
+      /Could not determine java version|Unsupported class file major version|invalid source release|No matching toolchains found/i,
+    title: 'Gradle/JDK version mismatch',
+    diagnosis:
+      'The Gradle build is running with a JDK version that does not match the project toolchain or compiled class target.',
+    fix: 'Use a compatible JDK base image (for example Temurin 17 or 21), set Gradle toolchain/sourceCompatibility consistently, and rebuild via `./gradlew build -x test` (or `gradle ...`).',
+  },
+  {
+    pattern:
+      /Could not find gem|Bundler::GemNotFound|Gemfile\.lock.*(missing|not found)|bundle install.*failed/i,
+    title: 'Bundler dependency resolution failure',
+    diagnosis:
+      'Bundler could not resolve or install gems. Usually caused by missing Gemfile.lock, mismatched Ruby/Bundler versions, or stale lockfile entries.',
+    fix: 'Commit `Gemfile.lock`, use a compatible Ruby version in the Docker base image, and run `bundle install` locally to refresh lockfile metadata before rebuilding.',
+  },
+  {
+    pattern: /native extension|extconf\.rb failed|mkmf\.log|pg_config.*not found|nokogiri.*failed/i,
+    title: 'Ruby native extension build failure',
+    diagnosis:
+      'A gem with native extensions (for example `pg` or `nokogiri`) failed to compile because system build tools or headers are missing.',
+    fix: 'Install required OS packages before `bundle install` (for Debian: `build-essential`, `libpq-dev`, `pkg-config`; for Alpine: `build-base`, `postgresql-dev`, `linux-headers`).',
+  },
+  {
+    pattern:
+      /assets:precompile|Sprockets::|Webpacker::Manifest::MissingEntryError|Propshaft::MissingAssetError/i,
+    title: 'Rails asset precompile failure',
+    diagnosis:
+      'Rails failed during production asset build. Common causes are missing JS/CSS toolchain dependencies, missing `SECRET_KEY_BASE`, or invalid asset references.',
+    fix: 'Precompile with `RAILS_ENV=production SECRET_KEY_BASE=dummy bundle exec rails assets:precompile`, ensure required frontend build tools are installed, and fix missing asset references.',
+  },
+  {
+    pattern:
+      /Your lock file does not contain a compatible set of packages|Your requirements could not be resolved to an installable set of packages/i,
+    title: 'Composer dependency resolution failure',
+    diagnosis:
+      'Composer could not resolve dependency constraints from `composer.json`/`composer.lock`. This is usually caused by conflicting version ranges or stale lockfile metadata.',
+    fix: 'Regenerate lockfile with `composer update` in a clean environment, commit `composer.lock`, and ensure dependency constraints are compatible before rebuilding.',
+  },
+  {
+    pattern:
+      /requires ext-[a-z0-9_]+ \* -> it is missing from your system|composer detected issues in your platform/i,
+    title: 'PHP extension/platform requirement missing',
+    diagnosis:
+      'Composer detected missing PHP platform requirements (extension or PHP version mismatch), so package installation cannot proceed.',
+    fix: 'Install required PHP extensions in Dockerfile (for example `docker-php-ext-install pdo pdo_mysql`) and align base image PHP version with `composer.json` platform constraints.',
   },
   {
     pattern: /EXPOSE.*port|listen.*EADDRINUSE|address already in use/i,

@@ -71,7 +71,7 @@ export function decodeQuestionComponentValue(raw: string): DecodedQuestionCompon
       questionIndex: parsedIndex,
       value: Buffer.from(parts[3] ?? '', 'base64url').toString('utf8'),
     };
-  } catch {
+  } catch (_err) {
     return null;
   }
 }

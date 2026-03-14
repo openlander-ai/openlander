@@ -80,7 +80,7 @@ export function createTerminalRoutes(
                 let originHost: string;
                 try {
                   originHost = new URL(originHeader).host.toLowerCase();
-                } catch {
+                } catch (_err) {
                   closeWithError(ws, 'Forbidden');
                   return;
                 }
@@ -129,7 +129,7 @@ export function createTerminalRoutes(
 
                   const info = await probeExec.inspect();
                   return info.ExitCode === 0;
-                } catch {
+                } catch (_err) {
                   return false;
                 }
               };
@@ -188,7 +188,8 @@ export function createTerminalRoutes(
               stream.on('close', () => {
                 ws.close();
               });
-            } catch {
+            } catch (err) {
+              log.debug({ err, projectId: id }, 'Failed to open terminal session');
               closeWithError(ws, 'Failed to open terminal session');
             }
           })();
@@ -229,7 +230,8 @@ export function createTerminalRoutes(
               if (typeof input === 'string') session.stream.write(input);
               return;
             }
-          } catch {
+          } catch (err) {
+            log.debug({ err, projectId: session.projectId }, 'Failed to parse WebSocket message');
             session.stream.write(payload);
             return;
           }

@@ -377,10 +377,10 @@ export class CloudflareTunnelManager {
           } else if (text.length < 500) {
             detail = text;
           }
-        } catch {
+        } catch (_err) {
           if (text.length < 500) detail = text;
         }
-      } catch {
+      } catch (_err) {
         // Could not read response body
       }
       log.error(

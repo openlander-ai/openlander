@@ -12,7 +12,7 @@ const log = createModuleLogger('ipc');
  * OpenLander IPC Client.
  *
  * Thin client that talks to the daemon over a Unix socket.
- * Used by the TUI and any other client that needs to interact with OpenLander.
+ * Used by the CLI and any other client that needs to interact with OpenLander.
  *
  * All methods map 1:1 to the existing Hono API routes —
  * the only difference is transport (Unix socket instead of TCP).

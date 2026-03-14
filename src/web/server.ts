@@ -80,10 +80,7 @@ export type UpgradeWebSocketHandler = NodeWebSocket['upgradeWebSocket'];
 function createApp(ctx: AppContext, options: CreateAppOptions = {}): Hono {
   const app = options.app ?? new Hono();
 
-  // Middleware — suppress HTTP request logs when TUI is active
-  if (!process.env['OPENLANDER_TUI']) {
-    app.use('*', logger());
-  }
+  app.use('*', logger());
   app.use(
     '/api/*',
     cors({
@@ -288,7 +285,7 @@ export interface DaemonOptions {
  * Start the OpenLander daemon, listening on a Unix socket.
  *
  * Used by `openlander start` for the daemon/client architecture.
- * TUI clients connect via the Unix socket to interact with the daemon.
+ * CLI and local clients connect via the Unix socket to interact with the daemon.
  */
 export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<void> {
   serverStartTime = Date.now();

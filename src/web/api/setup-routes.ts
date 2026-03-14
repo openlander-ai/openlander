@@ -7,7 +7,10 @@ import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
 import { loadDecryptedToken } from '../../auth/token-store.js';
 import type { OpenLanderConfig, McpServerEntry } from '../../config/index.js';
 import { createGitProvider } from '../../git-providers/index.js';
+import { createModuleLogger } from '../../lib/logger.js';
 import type { ToolSet } from 'ai';
+
+const log = createModuleLogger('setup-routes');
 
 /**
  * Setup / onboarding API routes.
@@ -619,7 +622,8 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         agent.setTools(tools);
         agent.setQuestionBridge(ctx.questionBridge);
         (ctx as { agent: typeof agent }).agent = agent;
-      } catch {
+      } catch (err) {
+        log.debug({ err, language: lang }, 'Agent hot-reload failed');
         // Agent hot-reload failed — language saved but agent uses old locale until restart
       }
     }

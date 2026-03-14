@@ -4,7 +4,10 @@ import { PassThrough } from 'node:stream';
 import { nanoid } from 'nanoid';
 
 import type { Database, ServiceRow } from '../db/index.js';
+import { createModuleLogger } from '../lib/logger.js';
 import type { Docker } from './docker.js';
+
+const log = createModuleLogger('service-manager');
 
 const WEB_NETWORK = 'web';
 type BuiltInServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb';
@@ -291,7 +294,11 @@ export class ServiceManager {
         if (status !== service.status || containerIdFromDocker !== service.container_id) {
           this.db.updateService(service.id, { status, containerId: containerIdFromDocker });
         }
-      } catch {
+      } catch (err) {
+        log.debug(
+          { err, serviceId: service.id, containerId },
+          'Failed to inspect service container',
+        );
         if (service.status !== 'error') {
           this.db.updateService(service.id, { status: 'error' });
         }
@@ -627,7 +634,7 @@ export class ServiceManager {
     let parsed: unknown;
     try {
       parsed = JSON.parse(service.credentials);
-    } catch {
+    } catch (_err) {
       throw new Error(`Invalid service credentials: ${service.id}`);
     }
 

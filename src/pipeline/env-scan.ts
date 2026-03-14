@@ -102,7 +102,7 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
     let entries: string[];
     try {
       entries = readdirSync(dir);
-    } catch {
+    } catch (_err) {
       return;
     }
 
@@ -113,7 +113,7 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
       let isDir = false;
       try {
         isDir = statSync(fullPath).isDirectory();
-      } catch {
+      } catch (_err) {
         continue;
       }
 
@@ -135,7 +135,8 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
       let content: string;
       try {
         content = readFileSync(fullPath, 'utf8');
-      } catch {
+      } catch (err) {
+        log.debug({ err, path: fullPath }, 'Failed to scan directory');
         continue;
       }
 
@@ -209,7 +210,7 @@ function detectServiceHints(projectPath: string): string[] {
     let content: string;
     try {
       content = readFileSync(composePath, 'utf8');
-    } catch {
+    } catch (_err) {
       continue;
     }
 

@@ -51,7 +51,7 @@ export class TraefikManager {
       const info = await container.inspect();
       const cmd: string[] = (info.Config.Cmd as string[] | null) ?? [];
       return cmd.some((arg: string) => arg.includes('providers.file.directory'));
-    } catch {
+    } catch (_err) {
       return false;
     }
   }
@@ -95,7 +95,7 @@ export class TraefikManager {
       const existing = client.getContainer(TRAEFIK_CONTAINER_NAME);
       await existing.remove({ force: true });
       log.debug('Removed existing Traefik container before recreation');
-    } catch {
+    } catch (_err) {
       // Container doesn't exist — expected on first run
     }
 

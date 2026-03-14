@@ -1,7 +1,7 @@
 /**
  * GitHub OAuth Device Flow client.
  *
- * Implements the Device Authorization Grant flow for CLI/TUI applications.
+ * Implements the Device Authorization Grant flow for CLI applications.
  * https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#device-flow
  */
 

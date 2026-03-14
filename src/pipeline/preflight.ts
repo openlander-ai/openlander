@@ -1,10 +1,13 @@
 import { createModuleLogger } from '../lib/logger.js';
 import type { Database } from '../db/index.js';
 import type { Docker } from './docker.js';
+import { checkEnvRequirements } from './env-inject.js';
 import { scanUsedPorts, clearPortScanCache } from './port.js';
 import { detectReverseProxy, getProxyStatus } from './traefik.js';
 import { getSystemStats } from '../monitor/stats.js';
 import { PreflightCheckError } from '../errors.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const log = createModuleLogger('preflight');
 
@@ -20,18 +23,125 @@ export interface PreflightResult {
     nameAvailable: PreflightCheck;
     resourceOk: PreflightCheck;
     proxyReady: PreflightCheck;
+    envConfigured: PreflightCheck;
+    dockerfileSyntax: PreflightCheck;
   };
   warnings: string[];
 }
 
+export interface PreflightOptions {
+  projectPath?: string;
+  dockerfilePath?: string;
+  configuredEnvVars?: Record<string, string>;
+}
+
 const DISK_WARNING_THRESHOLD_GB = 1;
 const MEMORY_WARNING_THRESHOLD_PERCENT = 90;
+
+function runEnvVarCompletenessCheck(
+  db: Database,
+  projectName: string,
+  options: PreflightOptions,
+  warnings: string[],
+): PreflightCheck {
+  const configuredEnvVars = options.configuredEnvVars ?? getProjectEnvVarsByName(db, projectName);
+  const envCheckResult = checkEnvRequirements(
+    options.projectPath ?? process.cwd(),
+    configuredEnvVars,
+  );
+
+  if (envCheckResult.templateFile === null) {
+    return {
+      pass: true,
+      detail: '.env.example not found (env completeness check skipped)',
+    };
+  }
+
+  if (envCheckResult.required.length === 0) {
+    return {
+      pass: true,
+      detail: '.env.example present but contains no env keys',
+    };
+  }
+
+  if (envCheckResult.missing.length > 0) {
+    warnings.push(
+      `Missing env vars from ${envCheckResult.templateFile}: ${envCheckResult.missing.join(', ')}`,
+    );
+    return {
+      pass: true,
+      detail: `${envCheckResult.templateFile} missing required keys: ${envCheckResult.missing.join(', ')}`,
+    };
+  }
+
+  return {
+    pass: true,
+    detail: `${envCheckResult.templateFile}: all required keys configured (${String(envCheckResult.provided.length)}/${String(envCheckResult.required.length)})`,
+  };
+}
+
+function getProjectEnvVarsByName(db: Database, projectName: string): Record<string, string> {
+  const project = db.getProjectByName(projectName);
+  if (!project) {
+    return {};
+  }
+  return db.getEnvVars(project.id);
+}
+
+function runDockerfileSyntaxSanityCheck(
+  options: PreflightOptions,
+  warnings: string[],
+): PreflightCheck {
+  const dockerfilePath = join(
+    options.projectPath ?? process.cwd(),
+    options.dockerfilePath ?? 'Dockerfile',
+  );
+  if (!existsSync(dockerfilePath)) {
+    return {
+      pass: true,
+      detail: 'Dockerfile not found (syntax sanity check skipped)',
+    };
+  }
+
+  const dockerfile = readFileSync(dockerfilePath, 'utf8');
+  const syntaxWarnings: string[] = [];
+
+  const hasFrom = /^\s*FROM\b/im.test(dockerfile);
+  if (!hasFrom) {
+    syntaxWarnings.push('Dockerfile is missing FROM instruction');
+  }
+
+  const hasCmdOrEntrypoint = /^\s*(CMD|ENTRYPOINT)\b/im.test(dockerfile);
+  if (!hasCmdOrEntrypoint) {
+    syntaxWarnings.push('Dockerfile is missing CMD or ENTRYPOINT');
+  }
+
+  const hasFromScratch = /^\s*FROM\s+scratch(?:\s+AS\s+\S+)?\s*$/im.test(dockerfile);
+  const hasCopyOrAdd = /^\s*(COPY|ADD)\b/im.test(dockerfile);
+  if (hasFromScratch && !hasCopyOrAdd) {
+    syntaxWarnings.push('Dockerfile uses FROM scratch but has no COPY/ADD instruction');
+  }
+
+  if (syntaxWarnings.length > 0) {
+    warnings.push(...syntaxWarnings);
+    return {
+      pass: true,
+      detail: syntaxWarnings.join('; '),
+    };
+  }
+
+  return {
+    pass: true,
+    detail: 'Dockerfile syntax sanity check passed',
+  };
+}
 
 export async function preflightCheck(
   db: Database,
   docker: Docker,
   projectName: string,
   targetPort?: number,
+  options: PreflightOptions = {},
 ): Promise<PreflightResult> {
   log.info({ projectName, targetPort }, 'Running preflight check');
 
@@ -118,6 +228,9 @@ export async function preflightCheck(
 
     warnings.push(...resourceWarnings);
 
+    const envVarCheck = runEnvVarCompletenessCheck(db, projectName, options, warnings);
+    const dockerfileCheck = runDockerfileSyntaxSanityCheck(options, warnings);
+
     // Proxy ready check
     let proxyCheck: PreflightCheck;
     const traefikMode = 'managed';
@@ -163,6 +276,8 @@ export async function preflightCheck(
         nameAvailable: nameCheck,
         resourceOk: resourceCheck,
         proxyReady: proxyCheck,
+        envConfigured: envVarCheck,
+        dockerfileSyntax: dockerfileCheck,
       },
       warnings,
     };
@@ -190,6 +305,8 @@ export async function preflightCheck(
         nameAvailable: { pass: false, detail: `Preflight error: ${errorMsg}` },
         resourceOk: { pass: false, detail: `Preflight error: ${errorMsg}` },
         proxyReady: { pass: false, detail: `Preflight error: ${errorMsg}` },
+        envConfigured: { pass: false, detail: `Preflight error: ${errorMsg}` },
+        dockerfileSyntax: { pass: false, detail: `Preflight error: ${errorMsg}` },
       },
       warnings: [`Preflight check failed: ${errorMsg}`],
     };
@@ -201,8 +318,9 @@ export async function preflightCheckOrThrow(
   docker: Docker,
   projectName: string,
   targetPort?: number,
+  options: PreflightOptions = {},
 ): Promise<PreflightResult> {
-  const result = await preflightCheck(db, docker, projectName, targetPort);
+  const result = await preflightCheck(db, docker, projectName, targetPort, options);
 
   if (!result.pass) {
     throw new PreflightCheckError(result);
@@ -225,6 +343,12 @@ export function formatPreflightResult(result: PreflightResult): string {
   );
   lines.push(`  ${checkIcons(result.checks.resourceOk.pass)} ${result.checks.resourceOk.detail}`);
   lines.push(`  ${checkIcons(result.checks.proxyReady.pass)} ${result.checks.proxyReady.detail}`);
+  lines.push(
+    `  ${checkIcons(result.checks.envConfigured.pass)} ${result.checks.envConfigured.detail}`,
+  );
+  lines.push(
+    `  ${checkIcons(result.checks.dockerfileSyntax.pass)} ${result.checks.dockerfileSyntax.detail}`,
+  );
 
   if (result.warnings.length > 0) {
     lines.push('');

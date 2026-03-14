@@ -169,7 +169,8 @@ export function analyzeInfrastructure(
           detectedTypes.set(serviceType, envKey);
         }
       }
-    } catch {
+    } catch (err) {
+      log.debug({ err, envFileName }, 'Failed to read env file');
       // File doesn't exist or can't be read, continue
     }
   }

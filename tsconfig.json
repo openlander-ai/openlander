@@ -6,7 +6,6 @@
     "lib": ["ES2023"],
     "types": ["node"],
     "jsx": "preserve",
-    "jsxImportSource": "@opentui/solid",
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,

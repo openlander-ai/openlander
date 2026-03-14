@@ -1199,7 +1199,8 @@ export class DeployPipeline {
     // Also try removing by convention name to catch orphans
     try {
       await this.docker.removeContainer(`ol-${project.name}`);
-    } catch {
+    } catch (err) {
+      log.debug({ err, projectName: project.name }, 'Container cleanup by convention name failed');
       // Container may not exist — that's fine
     }
 
