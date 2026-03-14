@@ -6,17 +6,26 @@ import { Docker, type AllContainerInfo } from '../src/pipeline/docker.js';
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 const describeDocker = isBunRuntime ? describe.skip : describe;
 
-// Create a mock listContainers function
+const mockPing = vi.fn();
 const mockListContainers = vi.fn();
+const mockBuildImage = vi.fn();
+const mockCreateContainer = vi.fn();
+const mockGetImage = vi.fn();
+const mockGetContainer = vi.fn();
+const mockFollowProgress = vi.fn();
 
 // Mock dockerode module by injecting into require.cache
 if (!isBunRuntime) {
   const require = createRequire(import.meta.url);
   const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
-    this.ping = vi.fn().mockResolvedValue('OK');
+    this.ping = mockPing;
     this.listContainers = mockListContainers;
+    this.buildImage = mockBuildImage;
+    this.createContainer = mockCreateContainer;
+    this.getImage = mockGetImage;
+    this.getContainer = mockGetContainer;
     this.modem = {
-      followProgress: vi.fn(),
+      followProgress: mockFollowProgress,
     };
   });
 
@@ -54,6 +63,421 @@ const createMockContainer = (
   Ports: options.ports ?? [],
   Labels: options.labels ?? {},
   Created: options.created ?? Date.now(),
+});
+
+const resetDockerodeMocks = () => {
+  mockPing.mockReset().mockResolvedValue('OK');
+  mockListContainers.mockReset().mockResolvedValue([]);
+  mockBuildImage.mockReset();
+  mockCreateContainer.mockReset();
+  mockGetImage.mockReset();
+  mockGetContainer.mockReset();
+  mockFollowProgress.mockReset();
+};
+
+type MockContainerHandleOptions = {
+  id?: string;
+  startError?: Error;
+  stopError?: Error;
+  removeError?: Error;
+  logsError?: Error;
+  logsOutput?: string;
+  inspectResponses?: Array<{
+    State: {
+      Running: boolean;
+      Restarting?: boolean;
+      ExitCode: number;
+      Health?: { Status?: string };
+    };
+  }>;
+};
+
+const createDockerContainerHandle = (options: MockContainerHandleOptions = {}) => {
+  const inspectResponses = options.inspectResponses ?? [];
+  let inspectIndex = 0;
+
+  return {
+    id: options.id ?? 'container-123',
+    start: vi.fn(async () => {
+      if (options.startError) throw options.startError;
+    }),
+    stop: vi.fn(async () => {
+      if (options.stopError) throw options.stopError;
+    }),
+    remove: vi.fn(async () => {
+      if (options.removeError) throw options.removeError;
+    }),
+    logs: vi.fn(async () => {
+      if (options.logsError) throw options.logsError;
+      return Buffer.from(options.logsOutput ?? 'container-log-line');
+    }),
+    inspect: vi.fn(async () => {
+      const next = inspectResponses[inspectIndex] ??
+        inspectResponses[inspectResponses.length - 1] ?? {
+          State: { Running: true, Restarting: false, ExitCode: 0 },
+        };
+      inspectIndex += 1;
+      return next;
+    }),
+  };
+};
+
+describeDocker('Docker core operations', () => {
+  beforeEach(() => {
+    resetDockerodeMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('returns true from ping when dockerode ping succeeds', async () => {
+    mockPing.mockResolvedValueOnce('OK');
+    const docker = new Docker();
+
+    await expect(docker.ping()).resolves.toBe(true);
+  });
+
+  it('returns false from ping when dockerode ping fails', async () => {
+    mockPing.mockRejectedValueOnce(new Error('socket unavailable'));
+    const docker = new Docker();
+
+    await expect(docker.ping()).resolves.toBe(false);
+  });
+
+  it('throws on ensureRunning when daemon is unreachable', async () => {
+    mockPing.mockRejectedValueOnce(new Error('daemon down'));
+    const docker = new Docker();
+
+    await expect(docker.ensureRunning()).rejects.toMatchObject({ name: 'DockerNotRunningError' });
+  });
+
+  it('builds image and forwards build events to onProgress', async () => {
+    const stream = { stream: true } as unknown as NodeJS.ReadableStream;
+    const onProgress = vi.fn();
+
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (
+        _stream: NodeJS.ReadableStream,
+        done: (err: Error | null) => void,
+        onEvent: (event: { stream?: string; error?: string }) => void,
+      ) => {
+        onEvent({ stream: 'Step 1/3' });
+        onEvent({ stream: 'Step 2/3' });
+        done(null);
+      },
+    );
+
+    const docker = new Docker();
+    await expect(
+      docker.buildImage('/tmp/app', 'my-image:latest', {
+        noCache: true,
+        buildArgs: { NODE_ENV: 'production' },
+        onProgress,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mockBuildImage).toHaveBeenCalledWith(
+      { context: '/tmp/app', src: ['.'] },
+      { t: 'my-image:latest', nocache: true, buildargs: { NODE_ENV: 'production' } },
+    );
+    expect(onProgress).toHaveBeenCalledTimes(2);
+  });
+
+  it('wraps buildImage startup errors as DockerBuildError', async () => {
+    mockBuildImage.mockRejectedValueOnce(new Error('invalid Dockerfile'));
+    const docker = new Docker();
+
+    const error = await docker.buildImage('/tmp/app', 'broken:latest').catch((err: unknown) => err);
+
+    expect(error).toMatchObject({ name: 'DockerBuildError' });
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('Docker build failed for broken:latest');
+    expect((error as { details?: { buildLog?: string } }).details?.buildLog).toContain(
+      'invalid Dockerfile',
+    );
+  });
+
+  it('treats streamed build error events as DockerBuildError', async () => {
+    const stream = { stream: true } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (
+        _stream: NodeJS.ReadableStream,
+        done: (err: Error | null) => void,
+        onEvent: (event: { stream?: string; error?: string }) => void,
+      ) => {
+        onEvent({ stream: 'Step 1/3' });
+        onEvent({ error: 'failed to solve: missing package' });
+        done(null);
+      },
+    );
+
+    const docker = new Docker();
+    const error = await docker.buildImage('/tmp/app', 'broken:latest').catch((err: unknown) => err);
+
+    expect(error).toMatchObject({ name: 'DockerBuildError' });
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain('Docker build failed for broken:latest');
+    expect((error as { details?: { buildLog?: string } }).details?.buildLog).toContain(
+      'missing package',
+    );
+  });
+
+  it('creates and starts a container with expected config', async () => {
+    const container = createDockerContainerHandle({ id: 'container-run-id' });
+    mockCreateContainer.mockResolvedValueOnce(container);
+
+    const docker = new Docker('/var/run/docker.sock', 'traefik-web');
+    const id = await docker.runContainer({
+      imageTag: 'example:v1',
+      name: 'ol-demo',
+      port: 18080,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production', API_KEY: 'abc' },
+      traefikLabels: { 'traefik.enable': 'true' },
+    });
+
+    expect(id).toBe('container-run-id');
+    expect(container.start).toHaveBeenCalledTimes(1);
+    expect(mockCreateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Image: 'example:v1',
+        name: 'ol-demo',
+        Env: expect.arrayContaining(['NODE_ENV=production', 'API_KEY=abc']),
+        Labels: expect.objectContaining({
+          'openlander.managed': 'true',
+          'openlander.project': 'demo',
+          'traefik.enable': 'true',
+        }),
+        ExposedPorts: { '3000/tcp': {} },
+        HostConfig: expect.objectContaining({
+          PortBindings: { '3000/tcp': [{ HostPort: '18080' }] },
+          NetworkMode: 'traefik-web',
+        }),
+      }),
+    );
+  });
+
+  it('reads first exposed image port and handles invalid/missing values', async () => {
+    const imageA = {
+      inspect: vi
+        .fn()
+        .mockResolvedValue({ Config: { ExposedPorts: { '8080/tcp': {}, '80/tcp': {} } } }),
+    };
+    const imageB = {
+      inspect: vi.fn().mockResolvedValue({ Config: { ExposedPorts: { 'abc/tcp': {} } } }),
+    };
+    const imageC = { inspect: vi.fn().mockRejectedValue(new Error('not found')) };
+    mockGetImage
+      .mockReturnValueOnce(imageA)
+      .mockReturnValueOnce(imageB)
+      .mockReturnValueOnce(imageC)
+      .mockReturnValueOnce({
+        inspect: vi.fn().mockResolvedValue({ Config: { ExposedPorts: {} } }),
+      });
+
+    const docker = new Docker();
+
+    await expect(docker.getImageExposedPort('a:latest')).resolves.toBe(8080);
+    await expect(docker.getImageExposedPort('b:latest')).resolves.toBeUndefined();
+    await expect(docker.getImageExposedPort('c:latest')).resolves.toBeUndefined();
+    await expect(docker.getImageExposedPort('d:latest')).resolves.toBeUndefined();
+  });
+
+  it('normalizes container lifecycle errors for start/stop/remove/logs', async () => {
+    const missing = createDockerContainerHandle({
+      stopError: new Error('No such container: missing-stop'),
+      startError: new Error('No such container: missing-start'),
+      removeError: new Error('No such container: missing-remove'),
+      logsError: new Error('No such container: missing-logs'),
+    });
+    const alreadyStopped = createDockerContainerHandle({
+      stopError: new Error('container is not running'),
+    });
+    const alreadyStarted = createDockerContainerHandle({
+      startError: new Error('container is already running'),
+    });
+    const removeFailure = createDockerContainerHandle({
+      removeError: new Error('permission denied'),
+    });
+
+    mockGetContainer
+      .mockReturnValueOnce(missing)
+      .mockReturnValueOnce(alreadyStopped)
+      .mockReturnValueOnce(missing)
+      .mockReturnValueOnce(alreadyStarted)
+      .mockReturnValueOnce(missing)
+      .mockReturnValueOnce(removeFailure)
+      .mockReturnValueOnce(missing);
+
+    const docker = new Docker();
+
+    await expect(docker.stopContainer('missing')).rejects.toMatchObject({
+      name: 'ContainerNotFoundError',
+    });
+    await expect(docker.stopContainer('already-stopped')).resolves.toBeUndefined();
+    await expect(docker.startContainer('missing')).rejects.toMatchObject({
+      name: 'ContainerNotFoundError',
+    });
+    await expect(docker.startContainer('already-started')).resolves.toBeUndefined();
+    await expect(docker.removeContainer('missing')).resolves.toBeUndefined();
+    await expect(docker.removeContainer('remove-failure')).rejects.toThrow('permission denied');
+    await expect(docker.getLogs('missing')).rejects.toMatchObject({
+      name: 'ContainerNotFoundError',
+    });
+  });
+
+  it('returns container logs with caller-provided tail value', async () => {
+    const container = createDockerContainerHandle({ logsOutput: 'line-a\nline-b' });
+    mockGetContainer.mockReturnValueOnce(container);
+    const docker = new Docker();
+
+    await expect(docker.getLogs('abc123', 25)).resolves.toBe('line-a\nline-b');
+    expect(container.logs).toHaveBeenCalledWith({
+      stdout: true,
+      stderr: true,
+      tail: 25,
+      follow: false,
+    });
+  });
+
+  it('maps waitForHealthy crash-loop and success paths', async () => {
+    const restarting = createDockerContainerHandle({
+      inspectResponses: [{ State: { Running: false, Restarting: true, ExitCode: 137 } }],
+    });
+    const exited = createDockerContainerHandle({
+      inspectResponses: [{ State: { Running: false, Restarting: false, ExitCode: 2 } }],
+    });
+    const healthy = createDockerContainerHandle({
+      inspectResponses: [
+        { State: { Running: true, Restarting: false, ExitCode: 0, Health: { Status: 'healthy' } } },
+      ],
+    });
+    const runningNoHealth = createDockerContainerHandle({
+      inspectResponses: [{ State: { Running: true, Restarting: false, ExitCode: 0 } }],
+    });
+    const missing = {
+      inspect: vi.fn(async () => {
+        throw new Error('No such container');
+      }),
+    };
+
+    mockGetContainer
+      .mockReturnValueOnce(restarting)
+      .mockReturnValueOnce(exited)
+      .mockReturnValueOnce(healthy)
+      .mockReturnValueOnce(runningNoHealth)
+      .mockReturnValueOnce(missing);
+
+    const docker = new Docker();
+
+    await expect(docker.waitForHealthy('restarting', 10)).resolves.toMatchObject({
+      healthy: false,
+      exitCode: 137,
+      error: expect.stringContaining('restart loop'),
+    });
+    await expect(docker.waitForHealthy('exited', 10)).resolves.toMatchObject({
+      healthy: false,
+      exitCode: 2,
+      error: 'Container exited with code 2',
+    });
+    await expect(docker.waitForHealthy('healthy', 10)).resolves.toEqual({ healthy: true });
+    await expect(docker.waitForHealthy('running-no-health', 10)).resolves.toEqual({
+      healthy: true,
+    });
+    await expect(docker.waitForHealthy('missing', 10)).resolves.toEqual({
+      healthy: false,
+      error: 'Container not found',
+    });
+  });
+
+  it('returns timeout checks from waitForHealthy final inspection fallback', async () => {
+    const finalExiting = createDockerContainerHandle({
+      inspectResponses: [{ State: { Running: false, Restarting: false, ExitCode: 0 } }],
+    });
+    const finalRestarting = createDockerContainerHandle({
+      inspectResponses: [{ State: { Running: false, Restarting: true, ExitCode: 125 } }],
+    });
+    const finalError = {
+      inspect: vi.fn(async () => {
+        throw new Error('timeout inspect error');
+      }),
+    };
+
+    mockGetContainer
+      .mockReturnValueOnce(finalExiting)
+      .mockReturnValueOnce(finalRestarting)
+      .mockReturnValueOnce(finalError);
+
+    const docker = new Docker();
+
+    await expect(docker.waitForHealthy('timeout-no-health', 0)).resolves.toEqual({
+      healthy: false,
+      exitCode: 0,
+      error: 'Container did not become healthy within timeout',
+    });
+    await expect(docker.waitForHealthy('timeout-restart', 0)).resolves.toMatchObject({
+      healthy: false,
+      exitCode: 125,
+      error: expect.stringContaining('entered restart loop'),
+    });
+    await expect(docker.waitForHealthy('timeout-error', 0)).resolves.toEqual({
+      healthy: false,
+      error: 'Container check timed out',
+    });
+  });
+
+  it('maps managed container list shape and exposes dockerode client', async () => {
+    mockListContainers.mockResolvedValueOnce([
+      {
+        Id: 'abc123',
+        Names: ['/ol-app'],
+        State: 'running',
+        Ports: [{ PublicPort: 18080 }],
+        Image: 'ol-app:latest',
+      },
+      {
+        Id: 'def456',
+        Names: [],
+        State: 'exited',
+        Ports: [],
+        Image: 'ol-worker:latest',
+      },
+    ]);
+
+    const docker = new Docker();
+    const managed = await docker.listManagedContainers();
+
+    expect(mockListContainers).toHaveBeenCalledWith({
+      all: true,
+      filters: { label: ['openlander.managed=true'] },
+    });
+    expect(managed).toEqual([
+      {
+        id: 'abc123',
+        name: 'ol-app',
+        status: 'running',
+        port: 18080,
+        imageTag: 'ol-app:latest',
+      },
+      {
+        id: 'def456',
+        name: 'unknown',
+        status: 'exited',
+        port: undefined,
+        imageTag: 'ol-worker:latest',
+      },
+    ]);
+
+    expect(docker.getClient()).toMatchObject({
+      ping: mockPing,
+      listContainers: mockListContainers,
+      buildImage: mockBuildImage,
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

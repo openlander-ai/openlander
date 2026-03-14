@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
@@ -8,10 +8,21 @@ import { Database } from '../src/db/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
 import { cloneRepo } from '../src/pipeline/git.js';
+import * as dockerfileGen from '../src/pipeline/dockerfile-gen.js';
 
 vi.mock('../src/pipeline/git.js', () => ({
   cloneRepo: vi.fn(),
 }));
+
+vi.mock('../src/pipeline/dockerfile-gen.js', async () => {
+  const actual = await vi.importActual<typeof import('../src/pipeline/dockerfile-gen.js')>(
+    '../src/pipeline/dockerfile-gen.js',
+  );
+  return {
+    ...actual,
+    ensureDockerfile: vi.fn(actual.ensureDockerfile),
+  };
+});
 
 type EnvLike = {
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
@@ -198,5 +209,408 @@ describe('DeployPipeline deployEnvironment', () => {
 
     const developmentEnvironment = db.getEnvironment('p3-development');
     expect(developmentEnvironment?.image_tag).toBe('openlander/dev-app-dev:latest');
+  });
+
+  it('delegates to compose pipeline when compose file is detected', async () => {
+    db.createProject({
+      id: 'p4',
+      name: 'compose-app',
+      repoUrl: 'https://github.com/openlander/compose-app',
+      branch: 'main',
+    });
+    db.createEnvironment({
+      id: 'p4-staging',
+      projectId: 'p4',
+      type: 'staging',
+      branch: 'compose-branch',
+    });
+
+    const composePipeline = {
+      detectComposeFile: vi.fn().mockReturnValue(join(clonePath, 'docker-compose.yml')),
+      deployCompose: vi.fn().mockResolvedValue({
+        success: true,
+        parentProjectId: 'p4',
+        parentName: 'compose-app',
+        buildDurationMs: 321,
+      }),
+    };
+    const composeEnabledPipeline = new DeployPipeline(
+      docker,
+      db,
+      env as never,
+      undefined,
+      composePipeline as never,
+    );
+
+    const result = await composeEnabledPipeline.deployEnvironment('p4', 'p4-staging', {
+      repoUrl: 'https://github.com/openlander/compose-app',
+      trigger: 'api',
+    });
+
+    expect(composePipeline.deployCompose).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoUrl: 'https://github.com/openlander/compose-app',
+        branch: 'compose-branch',
+        clonePath,
+        composePath: join(clonePath, 'docker-compose.yml'),
+        name: 'compose-app-staging',
+        trigger: 'api',
+      }),
+    );
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        projectId: 'p4',
+        projectName: 'compose-app',
+        buildDurationMs: 321,
+      }),
+    );
+  });
+
+  it('exposes quick-share tunnel for production environment deployments', async () => {
+    db.createProject({
+      id: 'p5',
+      name: 'quick-share-app',
+      repoUrl: 'https://github.com/openlander/quick-share-app',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p5')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+
+    const exposeTunnelSpy = vi
+      .spyOn(pipeline, 'exposeTunnel')
+      .mockResolvedValue('https://quick-share.example.trycloudflare.com');
+
+    const result = await pipeline.deployEnvironment('p5', productionEnvironment!.id, {
+      repoUrl: 'https://github.com/openlander/quick-share-app',
+      visibility: 'quick-share',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.publicUrl).toBe('https://quick-share.example.trycloudflare.com');
+    expect(exposeTunnelSpy).toHaveBeenCalledWith('p5', expect.any(Number));
+  });
+
+  it('auto-detects and generates Dockerfile when missing', async () => {
+    db.createProject({
+      id: 'p6',
+      name: 'autodetect-app',
+      repoUrl: 'https://github.com/openlander/autodetect-app',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p6')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+
+    rmSync(join(clonePath, 'Dockerfile'));
+
+    const autoDetector = {
+      generateDockerfile: vi.fn().mockResolvedValue({
+        generated: true,
+        type: 'dockerfile',
+        content: 'FROM node:20\nEXPOSE 8080',
+      }),
+    };
+    const autoDetectPipeline = new DeployPipeline(
+      docker,
+      db,
+      env as never,
+      undefined,
+      undefined,
+      autoDetector as never,
+    );
+
+    const ensureDockerfileMock = vi.mocked(dockerfileGen.ensureDockerfile);
+    ensureDockerfileMock.mockReturnValueOnce({ generated: false, detection: null });
+
+    const result = await autoDetectPipeline.deployEnvironment('p6', productionEnvironment!.id, {
+      repoUrl: 'https://github.com/openlander/autodetect-app',
+    });
+
+    expect(result.success).toBe(true);
+    expect(ensureDockerfileMock).toHaveBeenCalledWith(clonePath);
+    expect(autoDetector.generateDockerfile).toHaveBeenCalledWith(clonePath);
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerPort: 8080,
+      }),
+    );
+  });
+
+  it('injects filtered build-time env vars as docker build args', async () => {
+    db.createProject({
+      id: 'p7',
+      name: 'build-args-app',
+      repoUrl: 'https://github.com/openlander/build-args-app',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p7')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+
+    (env.getMergedForDeploy as ReturnType<typeof vi.fn>).mockReturnValue({
+      NODE_ENV: 'test',
+      NEXT_PUBLIC_API_URL: 'https://api.example.com',
+      INTERNAL_SECRET: 'do-not-forward',
+    });
+
+    const result = await pipeline.deployEnvironment('p7', productionEnvironment!.id, {
+      repoUrl: 'https://github.com/openlander/build-args-app',
+      envVars: {
+        VITE_CLIENT_FLAG: 'enabled',
+        SERVER_ONLY_TOKEN: 'hidden',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      clonePath,
+      'openlander/build-args-app:latest',
+      expect.objectContaining({
+        buildArgs: {
+          NEXT_PUBLIC_API_URL: 'https://api.example.com',
+          VITE_CLIENT_FLAG: 'enabled',
+        },
+      }),
+    );
+
+    const dockerfileContent = readFileSync(join(clonePath, 'Dockerfile'), 'utf8');
+    expect(dockerfileContent).toContain('ARG VITE_CLIENT_FLAG');
+    expect(dockerfileContent).toContain('ARG NEXT_PUBLIC_API_URL');
+    expect(dockerfileContent).not.toContain('ARG SERVER_ONLY_TOKEN');
+    expect(dockerfileContent).not.toContain('ARG INTERNAL_SECRET');
+  });
+
+  it('returns guard error for environment that does not belong to project', async () => {
+    db.createProject({
+      id: 'p8',
+      name: 'owner-a',
+      repoUrl: 'https://github.com/openlander/owner-a',
+      branch: 'main',
+    });
+    db.createProject({
+      id: 'p9',
+      name: 'owner-b',
+      repoUrl: 'https://github.com/openlander/owner-b',
+      branch: 'main',
+    });
+    db.createEnvironment({
+      id: 'p9-staging',
+      projectId: 'p9',
+      type: 'staging',
+      branch: 'develop',
+    });
+
+    const result = await pipeline.deployEnvironment('p8', 'p9-staging', {
+      repoUrl: 'https://github.com/openlander/owner-a',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Environment not found: p9-staging');
+    expect(cloneRepo).not.toHaveBeenCalled();
+  });
+
+  it('returns guard error when project is missing', async () => {
+    const result = await pipeline.deployEnvironment('missing-project', 'env-x', {
+      repoUrl: 'https://github.com/openlander/missing-project',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.projectName).toBe('unknown');
+    expect(result.error).toBe('Project not found: missing-project');
+    expect(cloneRepo).not.toHaveBeenCalled();
+  });
+
+  it('returns guard error when environment id does not exist', async () => {
+    db.createProject({
+      id: 'p10',
+      name: 'missing-env-app',
+      repoUrl: 'https://github.com/openlander/missing-env-app',
+      branch: 'main',
+    });
+
+    const result = await pipeline.deployEnvironment('p10', 'p10-nope');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Environment not found: p10-nope');
+    expect(cloneRepo).not.toHaveBeenCalled();
+  });
+
+  it('returns guard error when repo URL is missing from config and project', async () => {
+    db.createProject({
+      id: 'p11',
+      name: 'repo-less-app',
+      repoUrl: '',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p11')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+
+    const result = await pipeline.deployEnvironment('p11', productionEnvironment!.id);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Missing repo URL for project: p11');
+    expect(cloneRepo).not.toHaveBeenCalled();
+  });
+
+  it('does not open quick-share tunnel for non-production environments', async () => {
+    db.createProject({
+      id: 'p12',
+      name: 'staging-share-app',
+      repoUrl: 'https://github.com/openlander/staging-share-app',
+      branch: 'main',
+    });
+    db.createEnvironment({
+      id: 'p12-staging',
+      projectId: 'p12',
+      type: 'staging',
+      branch: 'develop',
+    });
+
+    const exposeTunnelSpy = vi
+      .spyOn(pipeline, 'exposeTunnel')
+      .mockResolvedValue('https://should-not-be-used.example.trycloudflare.com');
+
+    const result = await pipeline.deployEnvironment('p12', 'p12-staging', {
+      visibility: 'quick-share',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.publicUrl).toBeUndefined();
+    expect(exposeTunnelSpy).not.toHaveBeenCalled();
+  });
+
+  it('stores env vars per-environment for non-production deploys', async () => {
+    db.createProject({
+      id: 'p13',
+      name: 'env-store-app',
+      repoUrl: 'https://github.com/openlander/env-store-app',
+      branch: 'main',
+    });
+    db.createEnvironment({
+      id: 'p13-staging',
+      projectId: 'p13',
+      type: 'staging',
+      branch: 'develop',
+    });
+
+    const setEnvVarsBulkSpy = vi.spyOn(db, 'setEnvVarsBulk');
+
+    const result = await pipeline.deployEnvironment('p13', 'p13-staging', {
+      envVars: {
+        API_BASE_URL: 'https://staging.example.com',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(setEnvVarsBulkSpy).toHaveBeenCalledWith(
+      'p13',
+      { API_BASE_URL: 'https://staging.example.com' },
+      'p13-staging',
+    );
+  });
+
+  it('deploy() returns environment-not-found for missing target environment type', async () => {
+    db.createProject({
+      id: 'p14',
+      name: 'missing-target-env-app',
+      repoUrl: 'https://github.com/openlander/missing-target-env-app',
+      branch: 'main',
+    });
+
+    const result = await pipeline.deploy({
+      _projectId: 'p14',
+      name: 'missing-target-env-app',
+      repoUrl: 'https://github.com/openlander/missing-target-env-app',
+      environment: 'staging',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('staging environment not found');
+  });
+
+  it('cleanupStaleTunnels resets quick-share/shared projects to internal on startup', () => {
+    db.createProject({
+      id: 'p15',
+      name: 'quick-app',
+      repoUrl: 'https://github.com/openlander/quick-app',
+      branch: 'main',
+    });
+    db.createProject({
+      id: 'p16',
+      name: 'shared-app',
+      repoUrl: 'https://github.com/openlander/shared-app',
+      branch: 'main',
+    });
+    db.updateProject('p15', {
+      visibility: 'quick-share',
+      publicUrl: 'https://quick.example.com',
+    });
+    db.updateProject('p16', {
+      visibility: 'shared',
+      publicUrl: 'https://shared.example.com',
+    });
+
+    const startupPipeline = new DeployPipeline(docker, db, env as never);
+
+    expect(startupPipeline).toBeDefined();
+    expect(db.getProject('p15')?.visibility).toBe('internal');
+    expect(db.getProject('p15')?.public_url).toBeNull();
+    expect(db.getProject('p16')?.visibility).toBe('internal');
+    expect(db.getProject('p16')?.public_url).toBeNull();
+  });
+
+  it('exposeTunnel throws when project does not exist', async () => {
+    await expect(pipeline.exposeTunnel('does-not-exist', 12000)).rejects.toThrow(
+      'Project not found: does-not-exist',
+    );
+  });
+
+  it('closeTunnel stops active tunnel and clears project public state', () => {
+    db.createProject({
+      id: 'p17',
+      name: 'close-tunnel-app',
+      repoUrl: 'https://github.com/openlander/close-tunnel-app',
+      branch: 'main',
+    });
+    db.updateProject('p17', {
+      visibility: 'quick-share',
+      publicUrl: 'https://close.example.com',
+    });
+
+    const tunnel = { stop: vi.fn() };
+    (pipeline as unknown as { tunnels: Map<string, { stop: () => void }> }).tunnels.set(
+      'p17',
+      tunnel,
+    );
+
+    pipeline.closeTunnel('p17');
+
+    expect(tunnel.stop).toHaveBeenCalledOnce();
+    expect(db.getProject('p17')?.visibility).toBe('internal');
+    expect(db.getProject('p17')?.public_url).toBeNull();
+  });
+
+  it('detectFailStep maps incomplete build logs to expected step', () => {
+    const detectFailStep = (pipeline as unknown as { detectFailStep: (log: string) => string })
+      .detectFailStep;
+
+    expect(detectFailStep('fatal before clone')).toBe('clone');
+    expect(detectFailStep('[clone] done')).toBe('dockerfile');
+    expect(detectFailStep('[clone] done\n[dockerfile] Found Dockerfile')).toBe('build');
+    expect(detectFailStep('[clone] done\n[dockerfile] Found Dockerfile\n[build] ok')).toBe('run');
+    expect(
+      detectFailStep(
+        '[clone] done\n[dockerfile] Found Dockerfile\n[build] ok\n[run] c123\nContainer crashed after start',
+      ),
+    ).toBe('runtime');
+    expect(detectFailStep('[clone]\n[dockerfile]\n[build]\n[run]')).toBe('unknown');
   });
 });

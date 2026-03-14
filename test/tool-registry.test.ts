@@ -1,9 +1,20 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
 import { getProjectUrl } from '../src/pipeline/traefik.js';
 import type { AppContext } from '../src/app.js';
 import { ProjectNotFoundError } from '../src/errors.js';
 import { createToolRegistry } from '../src/tools/registry.js';
+
+const { mockCloneRepo } = vi.hoisted(() => ({
+  mockCloneRepo: vi.fn(),
+}));
+
+vi.mock('../src/pipeline/git.js', () => ({
+  cloneRepo: mockCloneRepo,
+}));
 
 const EXPECTED_TOOL_NAMES = [
   'deploy_project',
@@ -74,6 +85,16 @@ function createMockContext(opts?: {
 
   const pipeline = {
     stop: vi.fn().mockResolvedValue(undefined),
+    startDeploy: vi.fn().mockResolvedValue({
+      projectId: 'proj-1',
+      projectName: 'demo-app',
+      status: 'building',
+    }),
+    redeploy: vi.fn().mockResolvedValue({ status: 'redeployed' }),
+  };
+
+  const env = {
+    setBulk: vi.fn().mockReturnValue(false),
   };
 
   const ctx = {
@@ -83,10 +104,12 @@ function createMockContext(opts?: {
       },
     },
     db,
+    env,
     pipeline,
+    buildDebugger: null,
   } as unknown as AppContext;
 
-  return { ctx, db, pipeline };
+  return { ctx, db, env, pipeline };
 }
 
 function getTool(ctx: AppContext, name: string) {
@@ -219,5 +242,220 @@ describe('Tool Registry', () => {
       stopProject.execute({ project_name: 'missing-app' }, { target: 'agent' }),
     ).rejects.toBeInstanceOf(ProjectNotFoundError);
     expect(pipeline.stop).not.toHaveBeenCalled();
+  });
+
+  it('deploy_project executes with target-aware trigger and hint', async () => {
+    const { ctx, pipeline } = createMockContext();
+    const deployProject = getTool(ctx, 'deploy_project');
+
+    const result = await deployProject.execute(
+      {
+        repo_url: 'https://github.com/openlander-ai/OpenLander',
+        branch: 'main',
+        name: 'openlander',
+      },
+      { target: 'agent' },
+    );
+
+    expect(pipeline.startDeploy).toHaveBeenCalledWith({
+      repoUrl: 'https://github.com/openlander-ai/OpenLander',
+      branch: 'main',
+      name: 'openlander',
+      sshKeyPath: undefined,
+      trigger: 'chat',
+    });
+    expect(result).toEqual({
+      projectId: 'proj-1',
+      projectName: 'demo-app',
+      status: 'building',
+      hint: 'Use get_deploy_status to check progress.',
+    });
+  });
+
+  it('set_env_vars redeploys only when env changed and project is running', async () => {
+    const project = {
+      id: 'p1',
+      name: 'my-app',
+      status: 'running',
+      visibility: 'internal',
+      repo_url: 'https://github.com/user/my-app',
+      branch: 'main',
+      assigned_port: 10001,
+      public_url: null,
+      created_at: '2026-01-01 00:00:00',
+      updated_at: '2026-01-01 00:00:00',
+    } as const;
+    const { ctx, db, env, pipeline } = createMockContext({
+      projects: [project],
+      getProjectByName: () => project,
+    });
+    const setEnvVars = getTool(ctx, 'set_env_vars');
+
+    env.setBulk.mockReturnValueOnce(true);
+    const changed = await setEnvVars.execute(
+      { project_name: 'my-app', variables: '{"API_URL":"https://api.local"}' },
+      { target: 'agent' },
+    );
+    expect(db.getProjectByName).toHaveBeenCalledWith('my-app');
+    expect(pipeline.redeploy).toHaveBeenCalledWith('p1');
+    expect(changed).toEqual({
+      status: 'updated_and_redeployed',
+      project: 'my-app',
+      keys: ['API_URL'],
+    });
+
+    env.setBulk.mockReturnValueOnce(false);
+    const unchanged = await setEnvVars.execute(
+      { project_name: 'my-app', variables: '{"API_URL":"https://api.local"}' },
+      { target: 'agent' },
+    );
+    expect(unchanged).toEqual({
+      status: 'updated',
+      project: 'my-app',
+      keys: ['API_URL'],
+    });
+  });
+
+  it('set_env_vars throws on malformed JSON and does not redeploy', async () => {
+    const project = {
+      id: 'p1',
+      name: 'my-app',
+      status: 'running',
+      visibility: 'internal',
+      repo_url: 'https://github.com/user/my-app',
+      branch: 'main',
+      assigned_port: 10001,
+      public_url: null,
+      created_at: '2026-01-01 00:00:00',
+      updated_at: '2026-01-01 00:00:00',
+    } as const;
+    const { ctx, pipeline } = createMockContext({
+      getProjectByName: () => project,
+    });
+    const setEnvVars = getTool(ctx, 'set_env_vars');
+
+    await expect(
+      setEnvVars.execute({ project_name: 'my-app', variables: '{bad json' }, { target: 'agent' }),
+    ).rejects.toBeInstanceOf(SyntaxError);
+    expect(pipeline.redeploy).not.toHaveBeenCalled();
+  });
+
+  it('debug_build_error returns target-aware message when debugger is missing', async () => {
+    const { ctx } = createMockContext();
+    const debugBuildError = getTool(ctx, 'debug_build_error');
+
+    const agentResult = await debugBuildError.execute(
+      { project_name: 'my-app' },
+      { target: 'agent' },
+    );
+    const mcpResult = await debugBuildError.execute({ project_name: 'my-app' }, { target: 'mcp' });
+
+    expect(agentResult).toEqual({
+      error: 'Build debugger requires an LLM provider. Configure one first.',
+    });
+    expect(mcpResult).toEqual({
+      error: 'Build debugger requires an LLM provider.',
+    });
+  });
+
+  it('debug_build_error returns NO_FAILED_BUILD when last deploy did not fail', async () => {
+    const project = { id: 'p1', name: 'my-app', status: 'running' } as const;
+    const { ctx } = createMockContext({
+      getProjectByName: () => project,
+    });
+    const diagnose = vi.fn();
+
+    (ctx as { buildDebugger: unknown }).buildDebugger = { diagnose };
+    (
+      ctx as AppContext & {
+        db: { getLastDeployLog: (projectId: string) => { status: string } | null };
+      }
+    ).db.getLastDeployLog = vi.fn().mockReturnValueOnce({ status: 'done' });
+
+    const debugBuildError = getTool(ctx, 'debug_build_error');
+    const result = await debugBuildError.execute({ project_name: 'my-app' }, { target: 'agent' });
+
+    expect(result).toEqual({ error: 'No failed build found for this project.' });
+    expect(diagnose).not.toHaveBeenCalled();
+  });
+
+  it('debug_build_error forwards build log to debugger and uses fallback image tag', async () => {
+    const project = { id: 'p1', name: 'my-app', status: 'running', image_tag: null } as const;
+    const { ctx } = createMockContext({
+      getProjectByName: () => project,
+    });
+    const diagnose = vi.fn().mockResolvedValue({ summary: 'Fixed' });
+
+    (ctx as { buildDebugger: unknown }).buildDebugger = { diagnose };
+    (
+      ctx as AppContext & {
+        db: {
+          getLastDeployLog: (
+            projectId: string,
+          ) => { status: string; build_log: string | null } | null;
+        };
+      }
+    ).db.getLastDeployLog = vi.fn().mockReturnValueOnce({ status: 'failed', build_log: null });
+
+    const debugBuildError = getTool(ctx, 'debug_build_error');
+    const result = await debugBuildError.execute({ project_name: 'my-app' }, { target: 'agent' });
+
+    expect(diagnose).toHaveBeenCalledWith({
+      buildLog: 'No build log available',
+      projectName: 'my-app',
+      imageTag: 'openlander/my-app:latest',
+      failedStep: 'build',
+    });
+    expect(result).toEqual({ summary: 'Fixed' });
+  });
+
+  it('scan_dockerfiles ignores hidden/vendor/node_modules and reports monorepo metadata', async () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'registry-scan-'));
+    mkdirSync(join(tmpRoot, '.git'), { recursive: true });
+    mkdirSync(join(tmpRoot, 'service-a'), { recursive: true });
+    mkdirSync(join(tmpRoot, 'node_modules', 'left-pad'), { recursive: true });
+    mkdirSync(join(tmpRoot, 'vendor', 'bin'), { recursive: true });
+    writeFileSync(join(tmpRoot, 'Dockerfile'), 'FROM alpine\n');
+    writeFileSync(join(tmpRoot, 'service-a', 'Dockerfile'), 'FROM node:22\n');
+    writeFileSync(join(tmpRoot, '.git', 'Dockerfile'), 'FROM busybox\n');
+    writeFileSync(join(tmpRoot, 'node_modules', 'left-pad', 'Dockerfile'), 'FROM busybox\n');
+    writeFileSync(join(tmpRoot, 'vendor', 'bin', 'Dockerfile'), 'FROM busybox\n');
+
+    mockCloneRepo.mockResolvedValueOnce({ path: tmpRoot, commitSha: 'abc123' });
+    const { ctx } = createMockContext();
+    const scanDockerfiles = getTool(ctx, 'scan_dockerfiles');
+
+    const result = await scanDockerfiles.execute(
+      { repo_url: 'https://github.com/user/repo', branch: 'main' },
+      { target: 'agent' },
+    );
+
+    expect(mockCloneRepo).toHaveBeenCalledWith({
+      repoUrl: 'https://github.com/user/repo',
+      branch: 'main',
+      sshKeyPath: undefined,
+    });
+    expect(result).toEqual({
+      repoUrl: 'https://github.com/user/repo',
+      clonePath: tmpRoot,
+      commitSha: 'abc123',
+      dockerfiles: ['Dockerfile', 'service-a/Dockerfile'],
+      isMonorepo: true,
+    });
+
+    rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('applies tool target filtering for mcp-only tools', () => {
+    const { ctx } = createMockContext();
+
+    const defaultTools = createToolRegistry(ctx);
+    const mcpTools = createToolRegistry(ctx, { target: 'mcp' });
+    const agentTools = createToolRegistry(ctx, { target: 'agent' });
+
+    expect(defaultTools.some((tool) => tool.name === 'redeploy_project')).toBe(true);
+    expect(mcpTools.some((tool) => tool.name === 'redeploy_project')).toBe(true);
+    expect(agentTools.some((tool) => tool.name === 'redeploy_project')).toBe(false);
+    expect(agentTools.some((tool) => tool.name === 'set_env_vars')).toBe(true);
   });
 });
