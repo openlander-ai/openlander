@@ -138,8 +138,9 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       await connectGithub(githubToken.trim());
       await refetch();
       setGithubToken('');
-    } catch (err: any) {
-      setGithubError(err.message || 'Failed to connect GitHub');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to connect GitHub';
+      setGithubError(message);
     } finally {
       setGithubConnecting(false);
     }

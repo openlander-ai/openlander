@@ -3,10 +3,26 @@ import tseslint from 'typescript-eslint';
 import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  eslint.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
-  eslintConfigPrettier,
+  // Global ignores
   {
+    ignores: [
+      'dist/',
+      'node_modules/',
+      'test/',
+      'coverage/',
+      '*.config.*',
+      'web/dist/',
+      'web/node_modules/',
+    ],
+  },
+  // Root src/ - TypeScript strict mode
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    extends: [
+      eslint.configs.recommended,
+      ...tseslint.configs.strictTypeChecked,
+      eslintConfigPrettier,
+    ],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -22,7 +38,15 @@ export default tseslint.config(
       '@typescript-eslint/no-import-type-side-effects': 'error',
     },
   },
+  // Web src/ - TypeScript recommended (lighter than root strict mode)
   {
-    ignores: ['dist/', 'node_modules/', 'web/', 'test/', 'coverage/', '*.config.*'],
+    files: ['web/src/**/*.{ts,tsx}'],
+    extends: [eslint.configs.recommended, tseslint.configs.recommended, eslintConfigPrettier],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
   },
 );
