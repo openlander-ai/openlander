@@ -18,8 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { deployProject, scanEnvVars, type EnvVarInfo } from '@/lib/api';
-import { parseEnvContent } from '@/lib/parse-env';
+import { deployProject } from '@/lib/api';
+import { useEnvScanFlow } from '@/hooks/use-env-scan-flow';
 
 interface DeployDialogProps {
   open: boolean;
@@ -28,18 +28,6 @@ interface DeployDialogProps {
 }
 
 type Step = 'form' | 'scanning' | 'env-review' | 'deploying';
-type EnvPhase = 'paste' | 'summary';
-
-interface MatchedVar {
-  key: string;
-  value: string;
-  files: Array<{ path: string; line: number }>;
-}
-
-interface ExtraVar {
-  key: string;
-  value: string;
-}
 
 export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDialogProps) {
   const [repoUrl, setRepoUrl] = useState('');
@@ -48,17 +36,27 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
   const [name, setName] = useState('');
   const [step, setStep] = useState<Step>('form');
   const [error, setError] = useState<string | null>(null);
-  const [envVars, setEnvVars] = useState<EnvVarInfo[]>([]);
   const { t } = useLanguage();
 
-  // Paste-first flow state
-  const [envPhase, setEnvPhase] = useState<EnvPhase>('paste');
-  const [pasteText, setPasteText] = useState('');
-  const [matchedVars, setMatchedVars] = useState<MatchedVar[]>([]);
-  const [missingVars, setMissingVars] = useState<EnvVarInfo[]>([]);
-  const [extraVars, setExtraVars] = useState<ExtraVar[]>([]);
-  const [missingValues, setMissingValues] = useState<Record<string, string>>({});
-  const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  const {
+    envStep,
+    envVars,
+    pasteText,
+    setPasteText,
+    matchedVars,
+    missingVars,
+    extraVars,
+    missingValues,
+    setMissingValues,
+    editedValues,
+    setEditedValues,
+    startScan,
+    parseAndMap,
+    removeExtra,
+    buildFinalVars,
+    goBackToPaste,
+    reset: resetEnvFlow,
+  } = useEnvScanFlow();
 
   const reset = () => {
     setRepoUrl('');
@@ -67,14 +65,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
     setName('');
     setStep('form');
     setError(null);
-    setEnvVars([]);
-    setEnvPhase('paste');
-    setPasteText('');
-    setMatchedVars([]);
-    setMissingVars([]);
-    setExtraVars([]);
-    setMissingValues({});
-    setEditedValues({});
+    resetEnvFlow();
   };
 
   const handleEnvironmentChange = (value: string) => {
@@ -92,17 +83,11 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
     setError(null);
     setStep('scanning');
 
-    try {
-      const result = await scanEnvVars(repoUrl, branch || undefined);
-      if (result.vars.length === 0) {
-        await doDeploy({});
-      } else {
-        setEnvVars(result.vars);
-        setEnvPhase('paste');
-        setStep('env-review');
-      }
-    } catch {
+    const hasVars = await startScan(repoUrl, branch || undefined);
+    if (!hasVars) {
       await doDeploy({});
+    } else {
+      setStep('env-review');
     }
   };
 
@@ -113,49 +98,18 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
       return;
     }
 
-    const parsed = parseEnvContent(pasteText);
-    if (parsed.length === 0) {
+    const success = parseAndMap();
+    if (!success) {
       toast.error(t('deploy.dialog.noValidPairs'));
-      return;
     }
-
-    const parsedMap = new Map(parsed.map((p) => [p.key, p.value]));
-    const scannedKeys = new Set(envVars.map((v) => v.key));
-
-    setMatchedVars(
-      envVars
-        .filter((v) => parsedMap.has(v.key))
-        .map((v) => ({ ...v, value: parsedMap.get(v.key)! })),
-    );
-    setMissingVars(envVars.filter((v) => !parsedMap.has(v.key)));
-    setExtraVars(parsed.filter((p) => !scannedKeys.has(p.key)));
-    setEditedValues({});
-    setMissingValues({});
-    setEnvPhase('summary');
   };
 
   const handleRemoveExtra = (key: string) => {
-    setExtraVars((prev) => prev.filter((v) => v.key !== key));
+    removeExtra(key);
   };
 
   const handleDeployFromSummary = async () => {
-    const vars: Record<string, string> = {};
-
-    // Matched vars (with possible edits)
-    for (const v of matchedVars) {
-      vars[v.key] = editedValues[v.key] ?? v.value;
-    }
-    // Missing vars (user-entered)
-    for (const v of missingVars) {
-      if (missingValues[v.key]) {
-        vars[v.key] = missingValues[v.key];
-      }
-    }
-    // Extra vars (not removed)
-    for (const v of extraVars) {
-      vars[v.key] = v.value;
-    }
-
+    const vars = buildFinalVars();
     await doDeploy(vars);
   };
 
@@ -178,8 +132,11 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
       const msg = err instanceof Error ? err.message : t('deploy.dialog.failed');
       setError(msg);
       toast.error('Deploy failed: ' + msg);
-      setStep('env-review');
-      setEnvPhase('summary');
+      if (envVars.length > 0) {
+        setStep('env-review');
+      } else {
+        setStep('form');
+      }
     }
   };
 
@@ -188,12 +145,12 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {step === 'env-review' && envPhase === 'paste'
+            {step === 'env-review' && envStep === 'paste'
               ? t('deploy.dialog.pasteEnvTitle')
               : t('deploy.dialog.title')}
           </DialogTitle>
           <DialogDescription>
-            {step === 'env-review' && envPhase === 'paste'
+            {step === 'env-review' && envStep === 'paste'
               ? t('deploy.dialog.pasteEnvDescription')
               : t('deploy.dialog.description')}
           </DialogDescription>
@@ -287,7 +244,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
         )}
 
         {/* Step: env-review — paste phase */}
-        {step === 'env-review' && envPhase === 'paste' && (
+        {step === 'env-review' && envStep === 'paste' && (
           <div className="space-y-4 py-2">
             <div className="text-xs text-muted-foreground">
               {`Found ${String(envVars.length)} environment variable${envVars.length !== 1 ? 's' : ''} used in this project.`}
@@ -324,7 +281,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
         )}
 
         {/* Step: env-review — summary phase */}
-        {step === 'env-review' && envPhase === 'summary' && (
+        {step === 'env-review' && envStep === 'summary' && (
           <div className="space-y-3 py-2">
             <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
               {/* Matched section */}
@@ -413,7 +370,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
             {error && <div className="text-sm text-red-500">{error}</div>}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEnvPhase('paste')}>
+              <Button type="button" variant="outline" onClick={() => goBackToPaste()}>
                 {t('deploy.dialog.rePaste')}
               </Button>
               <Button

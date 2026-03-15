@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { deployProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
+import { useEnvScanFlow } from '@/hooks/use-env-scan-flow';
+import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -64,6 +66,8 @@ export function NewProjectFlow() {
   const [selectedRepo, setSelectedRepo] = useState<GitRepo | null>(null);
   const [environment, setEnvironment] = useState<string>('production');
   const [branch, setBranch] = useState<string>('main');
+
+  const envScan = useEnvScanFlow();
 
   const handleEnvironmentChange = (value: string) => {
     setEnvironment(value);
@@ -129,19 +133,33 @@ export function NewProjectFlow() {
     setSelectedRepo(repo);
     setEnvironment('production');
     setBranch(repo.defaultBranch || 'main');
+    envScan.reset();
   };
 
   const handleConfirmDeploy = async () => {
+    if (!selectedRepo) return;
+    setError(null);
+    const hasEnvVars = await envScan.startScan(selectedRepo.cloneUrl, branch);
+    if (!hasEnvVars) {
+      await doDeploy({});
+    }
+  };
+
+  const doDeploy = async (vars: Record<string, string>) => {
     if (!selectedRepo) return;
     setDeploying(true);
     setError(null);
     setDeployStatus('Starting deployment...');
     try {
+      const filtered: Record<string, string> = {};
+      for (const [k, v] of Object.entries(vars)) {
+        if (v.trim()) filtered[k] = v.trim();
+      }
       const result = await deployProject(
         selectedRepo.cloneUrl,
         branch,
         selectedRepo.name,
-        undefined,
+        Object.keys(filtered).length > 0 ? filtered : undefined,
         environment,
       );
       if (result.success && result.projectId) {
@@ -352,45 +370,216 @@ export function NewProjectFlow() {
               <p className="text-xs text-secondary-ol font-body mt-1">{selectedRepo.fullName}</p>
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-primary-ol">Environment</label>
-                <Select value={environment} onValueChange={handleEnvironmentChange}>
-                  <SelectTrigger className="h-8 text-xs bg-bg-subtle border-[hsl(var(--border))]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="production">Production</SelectItem>
-                    <SelectItem value="development">Development</SelectItem>
-                  </SelectContent>
-                </Select>
+            {envScan.envStep === 'scanning' && (
+              <div className="py-8 flex flex-col items-center justify-center space-y-3">
+                <Loader2 className="h-6 w-6 animate-spin text-agent" />
+                <p className="text-xs text-secondary-ol font-body">
+                  Scanning for environment variables...
+                </p>
               </div>
+            )}
 
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-primary-ol">Branch</label>
-                <Input
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  className="h-8 text-xs bg-bg-subtle border-[hsl(var(--border))]"
+            {envScan.envStep === 'paste' && (
+              <div className="space-y-4">
+                <div className="text-xs text-secondary-ol font-body">
+                  {`Found ${String(envScan.envVars.length)} environment variable${envScan.envVars.length !== 1 ? 's' : ''} used in this project.`}
+                </div>
+                <textarea
+                  className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-[hsl(var(--border))] text-primary-ol placeholder:text-muted-ol resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
+                  rows={8}
+                  placeholder={t('deploy.dialog.pasteEnvPlaceholder')}
+                  value={envScan.pasteText}
+                  onChange={(e) => envScan.setPasteText(e.target.value)}
                 />
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    className="text-xs text-secondary-ol hover:text-primary-ol transition-colors font-body"
+                    onClick={() => void doDeploy({})}
+                  >
+                    {t('deploy.dialog.skipEnvVars')}
+                  </button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => envScan.reset()}
+                      className="h-8 text-xs font-body"
+                    >
+                      Back
+                    </Button>
+                    <Button
+                      type="button"
+                      className="h-8 text-xs font-body bg-foreground text-background hover:bg-foreground/90"
+                      onClick={() => {
+                        if (!envScan.parseAndMap()) {
+                          toast.error(t('deploy.dialog.noValidPairs'));
+                        }
+                      }}
+                    >
+                      {t('deploy.dialog.parseAndMap')}
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="flex gap-3 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => setSelectedRepo(null)}
-                className="flex-1 h-8 text-xs font-body"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleConfirmDeploy}
-                className="flex-1 h-8 text-xs font-body bg-foreground text-background hover:bg-foreground/90"
-              >
-                Deploy Project
-              </Button>
-            </div>
+            {envScan.envStep === 'summary' && (
+              <div className="space-y-4">
+                <div className="max-h-64 overflow-y-auto space-y-4 pr-1">
+                  {/* Matched section */}
+                  {envScan.matchedVars.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-green-500">
+                        <span>✓</span>
+                        <span>
+                          {envScan.matchedVars.length} {t('deploy.dialog.varsMatched')}
+                        </span>
+                      </div>
+                      {envScan.matchedVars.map((v) => (
+                        <div key={v.key} className="flex items-center gap-2">
+                          <label className="text-xs font-mono text-secondary-ol min-w-0 shrink-0 max-w-[140px] truncate">
+                            {v.key}
+                          </label>
+                          <Input
+                            className="h-7 text-xs font-mono flex-1 bg-bg-subtle border-[hsl(var(--border))]"
+                            value={envScan.editedValues[v.key] ?? v.value}
+                            onChange={(e) =>
+                              envScan.setEditedValues((prev) => ({
+                                ...prev,
+                                [v.key]: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Missing section */}
+                  {envScan.missingVars.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-amber-500">
+                        <span>⚠</span>
+                        <span>
+                          {envScan.missingVars.length} {t('deploy.dialog.varsMissing')}
+                        </span>
+                      </div>
+                      {envScan.missingVars.map((v) => (
+                        <div key={v.key} className="flex items-center gap-2">
+                          <label className="text-xs font-mono text-secondary-ol min-w-0 shrink-0 max-w-[140px] truncate">
+                            {v.key}
+                          </label>
+                          <Input
+                            className="h-7 text-xs font-mono flex-1 bg-bg-subtle border-[hsl(var(--border))]"
+                            placeholder={`Value for ${v.key}`}
+                            value={envScan.missingValues[v.key] ?? ''}
+                            onChange={(e) =>
+                              envScan.setMissingValues((prev) => ({
+                                ...prev,
+                                [v.key]: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Extra section */}
+                  {envScan.extraVars.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-secondary-ol">
+                        <span>+</span>
+                        <span>
+                          {envScan.extraVars.length} {t('deploy.dialog.varsExtra')}
+                        </span>
+                      </div>
+                      {envScan.extraVars.map((v) => (
+                        <div key={v.key} className="flex items-center gap-2">
+                          <label className="text-xs font-mono text-secondary-ol min-w-0 shrink-0 max-w-[140px] truncate">
+                            {v.key}
+                          </label>
+                          <span className="text-xs font-mono text-secondary-ol truncate flex-1">
+                            {v.value || '(empty)'}
+                          </span>
+                          <button
+                            type="button"
+                            className="text-xs text-secondary-ol hover:text-error transition-colors shrink-0"
+                            onClick={() => envScan.removeExtra(v.key)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => envScan.goBackToPaste()}
+                    className="flex-1 h-8 text-xs font-body"
+                  >
+                    {t('deploy.dialog.rePaste')}
+                  </Button>
+                  <Button
+                    onClick={() => void doDeploy(envScan.buildFinalVars())}
+                    className="flex-1 h-8 text-xs font-body bg-foreground text-background hover:bg-foreground/90"
+                  >
+                    Deploy
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {envScan.envStep === 'idle' && (
+              <>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-primary-ol">Environment</label>
+                    <Select value={environment} onValueChange={handleEnvironmentChange}>
+                      <SelectTrigger className="h-8 text-xs bg-bg-subtle border-[hsl(var(--border))]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="production">Production</SelectItem>
+                        <SelectItem value="development">Development</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-primary-ol">Branch</label>
+                    <Input
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      className="h-8 text-xs bg-bg-subtle border-[hsl(var(--border))]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedRepo(null);
+                      envScan.reset();
+                    }}
+                    className="flex-1 h-8 text-xs font-body"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleConfirmDeploy}
+                    className="flex-1 h-8 text-xs font-body bg-foreground text-background hover:bg-foreground/90"
+                  >
+                    Deploy Project
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
