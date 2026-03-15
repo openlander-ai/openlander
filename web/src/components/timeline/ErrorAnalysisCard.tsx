@@ -93,6 +93,17 @@ export function ErrorAnalysisCard({ item }: ErrorAnalysisCardProps) {
               </ul>
             </div>
           )}
+
+          {item.detail && (
+            <details className="mt-3 group/detail">
+              <summary className="text-[11px] font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
+                {t('timeline.errorAnalysis.viewDetails')}
+              </summary>
+              <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+                {item.detail}
+              </pre>
+            </details>
+          )}
         </div>
       </div>
     </div>
