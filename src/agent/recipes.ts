@@ -160,6 +160,42 @@ export const BUILD_RECIPES: Recipe[] = [
     diagnosis: 'The application is trying to bind to a port that is already in use.',
     fix: 'OpenLander auto-assigns ports — ensure your app reads the PORT environment variable: `const port = process.env.PORT || 3000`.',
   },
+  {
+    pattern: /env_file.*not found|No such file.*\.env|env_file.*does not exist/i,
+    title: 'Docker Compose env_file missing',
+    diagnosis:
+      'The docker-compose.yml references an env_file that does not exist. This is common in monorepos where environment files are in different locations.',
+    fix: 'Choose one of 3 monorepo patterns: (1) Root .env: `env_file: .env` — single file at repo root, shared by all services. (2) Selective injection: `environment: - KEY=${KEY}` — pass specific vars from host to container. (3) Per-service files: `env_file: ./services/backend/.env` — separate env file per service. Ensure the referenced file exists in the build context.',
+  },
+  {
+    pattern: /depends_on.*not found|service.*not found|no such service|unknown service/i,
+    title: 'Docker Compose service dependency not found',
+    diagnosis:
+      'The docker-compose.yml references a service in `depends_on` that is not defined in the same compose file.',
+    fix: 'Verify all service names in `depends_on` are defined in the same docker-compose.yml. Check for typos in service names. If services are in separate compose files, use `docker compose -f file1.yml -f file2.yml up` to load multiple files.',
+  },
+  {
+    pattern: /port.*already allocated|Bind.*address already in use.*compose|docker compose.*port/i,
+    title: 'Docker Compose port conflict',
+    diagnosis:
+      'A port specified in the docker-compose.yml is already in use by another container or service.',
+    fix: 'Either: (1) Stop the conflicting container: `docker ps` to find it, then `docker stop <container>`. (2) Change the port mapping in docker-compose.yml: `ports: ["8080:3000"]` instead of `"3000:3000"`. (3) Let OpenLander auto-assign ports by removing explicit port mappings.',
+  },
+  {
+    pattern: /version.*obsolete|Compose file version.*is not supported|version.*deprecated/i,
+    title: 'Docker Compose file version obsolete',
+    diagnosis:
+      'The docker-compose.yml specifies a version that is no longer supported by the installed Docker Compose.',
+    fix: 'Update the `version:` field in docker-compose.yml to a supported version (3.8, 3.9, or omit it entirely for latest). Run `docker compose version` to check your installed version, then update the compose file accordingly.',
+  },
+  {
+    pattern:
+      /build.*context.*not found|unable to prepare context|build context.*does not exist|COPY.*build context/i,
+    title: 'Docker Compose build context not found',
+    diagnosis:
+      'The `build.context` path in docker-compose.yml does not exist or is outside the allowed build context.',
+    fix: 'Verify the `build.context` path in docker-compose.yml is relative to the compose file location. For example, if docker-compose.yml is in `./services/backend/`, then `build: { context: . }` refers to `./services/backend/`, not the repo root. Use `build: { context: ../.. }` to reference the repo root if needed.',
+  },
 ];
 
 /**

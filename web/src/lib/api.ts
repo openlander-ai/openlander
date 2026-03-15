@@ -49,6 +49,7 @@ export interface EnvironmentEnvVarsResponse {
 }
 
 export type ProjectWithOptionalEnvironments = Project & { environments?: Environment[] };
+type BackendProjectWithOptionalEnvironments = Project & { environments?: BackendEnvironment[] };
 
 function mapEnvironment(environment: BackendEnvironment): Environment {
   return {
@@ -112,8 +113,8 @@ export async function listProjects(): Promise<ProjectWithOptionalEnvironments[]>
   if (!res.ok) {
     throw new Error('Failed to fetch projects');
   }
-  const data = await res.json();
-  return data.projects.map((p: any) => ({
+  const data = (await res.json()) as { projects: BackendProjectWithOptionalEnvironments[] };
+  return data.projects.map((p) => ({
     ...p,
     environments: Array.isArray(p.environments) ? p.environments.map(mapEnvironment) : undefined,
   }));
@@ -559,7 +560,7 @@ export async function configureLLM(
   apiKey = '',
   model?: string,
   authToken?: string,
-): Promise<any> {
+): Promise<unknown> {
   const body: {
     provider: string;
     api_key?: string;
@@ -590,7 +591,7 @@ export async function configureCloudflare(config: {
   apiToken: string;
   accountId: string;
   tunnelId: string;
-}): Promise<any> {
+}): Promise<unknown> {
   const res = await fetch('/api/setup/cloudflare', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -627,13 +628,13 @@ export async function getCloudflareStatus(): Promise<{ configured: boolean; acco
   return res.json();
 }
 
-export async function startTraefik(): Promise<any> {
+export async function startTraefik(): Promise<unknown> {
   const res = await fetch('/api/setup/traefik', { method: 'POST' });
   if (!res.ok) throw new Error('Failed to start Traefik');
   return res.json();
 }
 
-export async function completeSetup(): Promise<any> {
+export async function completeSetup(): Promise<unknown> {
   const res = await fetch('/api/setup/complete', { method: 'POST' });
   if (!res.ok) throw new Error('Failed to complete setup');
   return res.json();
@@ -655,7 +656,7 @@ export async function setGlobalSecret(
   key: string,
   value: string,
   description?: string,
-): Promise<any> {
+): Promise<unknown> {
   const res = await fetch('/api/secrets', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -665,7 +666,7 @@ export async function setGlobalSecret(
   return res.json();
 }
 
-export async function deleteGlobalSecret(key: string): Promise<any> {
+export async function deleteGlobalSecret(key: string): Promise<unknown> {
   const res = await fetch(`/api/secrets/${encodeURIComponent(key)}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete secret');
   return res.json();

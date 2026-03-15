@@ -27,6 +27,25 @@ export interface AssistantItem {
   questionData?: QuestionData;
 }
 
+function toQuestionData(question: {
+  question: string;
+  header?: string;
+  options: Array<{ label: string; description?: string }>;
+  multiple?: boolean;
+}): QuestionData {
+  const extended = question as {
+    metadata?: Record<string, unknown>;
+  };
+
+  return {
+    question: question.question,
+    header: question.header,
+    options: question.options,
+    multiple: question.multiple,
+    metadata: extended.metadata,
+  };
+}
+
 /**
  * Convert a BuildStreamEvent (from deploy NDJSON stream) to an AssistantItem.
  * Returns null if the event type is not relevant to the assistant panel.
@@ -140,15 +159,17 @@ export function chatEventToAssistantItem(event: ChatStreamEvent): AssistantItem 
         toolSuccess: event.success,
         toolError: event.error,
       };
-    case 'question':
+    case 'question': {
+      const questions = event.request.questions.map((question) => toQuestionData(question));
       return {
         id: `question-${Date.now()}`,
         type: 'question',
         timestamp: ts,
         questionId: event.request.id,
-        questions: event.request.questions as QuestionData[],
-        questionData: event.request.questions[0] as QuestionData,
+        questions,
+        questionData: questions[0],
       };
+    }
     case 'error':
       return { id: `error-${Date.now()}`, type: 'error', timestamp: ts, content: event.error };
     case 'session':

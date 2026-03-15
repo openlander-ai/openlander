@@ -37,6 +37,7 @@ export interface ProjectRow {
   public_url: string | null;
   parent_project_id: string | null;
   dockerfile_path: string;
+  pending_fix: string | null;
   created_at: string;
   updated_at: string;
   deploy_lock_session: string | null;
@@ -188,6 +189,9 @@ export class Database {
     }
     if (!colNames.has('dockerfile_path')) {
       this.sqlite.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
+    }
+    if (!colNames.has('pending_fix')) {
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN pending_fix TEXT DEFAULT NULL');
     }
     if (!colNames.has('deploy_lock_session')) {
       this.sqlite.exec('ALTER TABLE projects ADD COLUMN deploy_lock_session TEXT DEFAULT NULL');
@@ -531,6 +535,7 @@ export class Database {
       publicUrl: string | null;
       parentProjectId: string | null;
       dockerfilePath: string;
+      pendingFix: string | null;
       accessCode: string | null;
       accessCodeIv: string | null;
       isPreview: 0 | 1;
@@ -565,6 +570,9 @@ export class Database {
     }
     if (updates.dockerfilePath !== undefined) {
       setValues.dockerfile_path = updates.dockerfilePath;
+    }
+    if (updates.pendingFix !== undefined) {
+      setValues.pending_fix = updates.pendingFix;
     }
     if (updates.accessCode !== undefined) {
       setValues.access_code = updates.accessCode;

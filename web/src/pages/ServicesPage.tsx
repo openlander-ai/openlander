@@ -30,6 +30,25 @@ import {
   ChevronUp,
 } from 'lucide-react';
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function parseRecordJson(raw: string | null): Record<string, unknown> | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ServicesPage() {
   const { t } = useLanguage();
   const [services, setServices] = useState<Service[]>([]);
@@ -98,9 +117,10 @@ export function ServicesPage() {
 
       await fetchServices();
       toast.success('Service created successfully');
-    } catch (err: any) {
-      setCreateError(err.message || 'Failed to create service');
-      toast.error(err.message || 'Failed to create service');
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, 'Failed to create service');
+      setCreateError(message);
+      toast.error(message);
     } finally {
       setCreating(false);
     }
@@ -397,15 +417,8 @@ export function ServicesPage() {
             const isError = service.status === 'error';
             const isExpanded = expandedService === service.id;
 
-            let creds = null;
-            try {
-              if (service.credentials) creds = JSON.parse(service.credentials);
-            } catch (e) {}
-
-            let parsedEnv = null;
-            try {
-              if (service.env_vars) parsedEnv = JSON.parse(service.env_vars);
-            } catch (e) {}
+            const creds = parseRecordJson(service.credentials);
+            const parsedEnv = parseRecordJson(service.env_vars);
 
             const hasDetails = creds || (parsedEnv && Object.keys(parsedEnv).length > 0);
 

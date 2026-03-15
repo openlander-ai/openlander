@@ -132,6 +132,34 @@ describe('buildEventToAssistantItem', () => {
     expect(item!.content).toBe('test message');
   });
 
+  it('preserves question metadata from question_pending event', () => {
+    const questions = [
+      {
+        question: 'Apply this Dockerfile fix?',
+        options: [{ label: 'Apply' }, { label: 'Skip' }],
+        metadata: {
+          fixType: 'dockerfile',
+          filePath: 'Dockerfile',
+          changes: ['Updated base image'],
+        },
+      },
+    ];
+    const item = buildEventToAssistantItem({
+      ...base,
+      type: 'question_pending',
+      questionId: 'q-meta-1',
+      questions,
+    });
+
+    expect(item).not.toBeNull();
+    expect(item!.type).toBe('question');
+    expect(item!.questionData?.metadata).toEqual({
+      fixType: 'dockerfile',
+      filePath: 'Dockerfile',
+      changes: ['Updated base image'],
+    });
+  });
+
   it('returns null for status event', () => {
     expect(buildEventToAssistantItem({ ...base, type: 'status' })).toBeNull();
   });
@@ -226,6 +254,36 @@ describe('chatEventToAssistantItem', () => {
     expect(item!.questionData).toEqual({
       question: 'Select framework',
       options: [{ label: 'Next.js' }],
+    });
+  });
+
+  it('preserves question metadata from chat question event', () => {
+    const event: ChatStreamEvent = {
+      type: 'question',
+      request: {
+        id: 'q-meta-2',
+        questions: [
+          {
+            question: 'Apply this compose fix?',
+            options: [{ label: 'Apply' }, { label: 'Show alternatives' }],
+          },
+        ],
+      },
+    };
+
+    const firstQuestion = event.request.questions[0] as Record<string, unknown>;
+    firstQuestion.metadata = {
+      fixType: 'compose',
+      errorType: 'env_file_missing',
+    };
+
+    const item = chatEventToAssistantItem(event);
+
+    expect(item).not.toBeNull();
+    expect(item!.type).toBe('question');
+    expect(item!.questionData?.metadata).toEqual({
+      fixType: 'compose',
+      errorType: 'env_file_missing',
     });
   });
 

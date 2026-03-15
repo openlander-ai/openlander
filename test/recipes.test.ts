@@ -149,6 +149,46 @@ describe('matchRecipe', () => {
     expect(recipe!.title).toContain('Port');
   });
 
+  it('matches compose env_file missing errors', () => {
+    const log = "docker-compose.yml: env_file './backend/.env' not found";
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('env_file');
+    expect(recipe!.fix).toContain('Root .env');
+    expect(recipe!.fix).toContain('Selective injection');
+    expect(recipe!.fix).toContain('Per-service');
+  });
+
+  it('matches compose depends_on service not found errors', () => {
+    const log = 'ERROR: Service "postgres" not found in docker-compose.yml\nno such service';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('service dependency');
+  });
+
+  it('matches compose port conflict errors', () => {
+    const log =
+      'docker compose up\nError: port 5432 already allocated\nBind for 0.0.0.0:5432 failed';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('Compose port conflict');
+  });
+
+  it('matches compose version obsolete errors', () => {
+    const log =
+      "docker-compose.yml: version '2.0' is not supported\nCompose file version 2.0 is deprecated";
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('version');
+  });
+
+  it('matches compose build context not found errors', () => {
+    const log = 'ERROR: build context ./nonexistent does not exist\nunable to prepare context';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('build context');
+  });
+
   it('returns the first matching recipe when multiple match', () => {
     // node-gyp comes before OOM in BUILD_RECIPES, so node-gyp wins
     const log = 'gyp ERR! build error\nJavaScript heap out of memory';
@@ -182,8 +222,8 @@ describe('matchAllRecipes', () => {
 });
 
 describe('BUILD_RECIPES', () => {
-  it('has 19 recipes', () => {
-    expect(BUILD_RECIPES).toHaveLength(19);
+  it('has 24 recipes', () => {
+    expect(BUILD_RECIPES).toHaveLength(24);
   });
 
   it('all recipes have required fields', () => {

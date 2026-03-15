@@ -260,4 +260,33 @@ describe('BuildDebugger — fixDockerfile', () => {
     expect(result.changes).toHaveLength(1);
     expect(result.changes[0]).toContain('Fixed Node version');
   });
+
+  it('returns plain Dockerfile content that can be persisted as pending fix payload', async () => {
+    const llmResponse = [
+      'FROM node:20-alpine',
+      'WORKDIR /app',
+      'COPY package*.json ./',
+      'RUN npm ci',
+      'COPY . .',
+      'CMD ["npm", "start"]',
+      '',
+      'CHANGES:',
+      '- Use npm ci for deterministic install',
+    ].join('\n');
+
+    const model = createMockModel();
+    mockLLMResponse(llmResponse);
+    const debugger_ = new BuildDebugger(model);
+
+    const result = await debugger_.fixDockerfile({
+      projectPath: '/tmp/test',
+      currentDockerfile: 'FROM node:18',
+      buildError: 'lockfile mismatch',
+      projectName: 'test-app',
+    });
+
+    expect(result.dockerfileContent).toContain('FROM node:20-alpine');
+    expect(result.dockerfileContent).not.toContain('CHANGES:');
+    expect(result.dockerfileContent).toContain('RUN npm ci');
+  });
 });

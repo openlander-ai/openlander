@@ -31,6 +31,7 @@ export const projects = sqliteTable(
       onDelete: 'cascade',
     }),
     dockerfile_path: text('dockerfile_path').default('Dockerfile'),
+    pending_fix: text('pending_fix'),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
     deploy_lock_session: text('deploy_lock_session'),

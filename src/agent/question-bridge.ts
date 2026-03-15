@@ -31,6 +31,7 @@ export interface Question {
   header?: string;
   options: QuestionOption[];
   multiple?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface QuestionRequest {

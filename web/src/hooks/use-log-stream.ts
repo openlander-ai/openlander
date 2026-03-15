@@ -316,7 +316,7 @@ export function useLogStream({
             historyLineCount: DEFAULT_HISTORY_LINE_COUNT,
           }));
         }
-      } catch (err) {
+      } catch {
         if (controller.signal.aborted) {
           return;
         }

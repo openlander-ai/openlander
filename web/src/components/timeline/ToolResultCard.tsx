@@ -10,7 +10,10 @@ import {
   KeyRound,
   Wrench,
   ExternalLink,
+  RotateCcw,
+  Layers,
 } from 'lucide-react';
+import { ErrorAnalysisCard } from './ErrorAnalysisCard';
 
 interface ToolResultCardProps {
   item: TimelineItem;
@@ -46,7 +49,10 @@ function maskSecrets(obj: unknown): unknown {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const isUp = status.toLowerCase() === 'running' || status.toLowerCase() === 'up';
+  const isUp =
+    status.toLowerCase() === 'running' ||
+    status.toLowerCase() === 'up' ||
+    status.toLowerCase() === 'success';
   return (
     <span
       className={cn(
@@ -84,6 +90,188 @@ function DeployProjectResult({ result }: { result: unknown }) {
       )}
       {typeof res.port === 'number' && (
         <div className="text-xs text-secondary-ol">Port: {res.port}</div>
+      )}
+    </div>
+  );
+}
+
+function DeployComposeResult({ result }: { result: unknown }) {
+  if (!result || typeof result !== 'object') return null;
+  const res = result as Record<string, unknown>;
+
+  const services = Array.isArray(res.services) ? res.services : [];
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-primary-ol">
+          {typeof res.parentName === 'string' ? res.parentName : 'Compose Project'}
+        </span>
+        {typeof res.success === 'boolean' && (
+          <StatusBadge status={res.success ? 'running' : 'error'} />
+        )}
+      </div>
+      {services.length > 0 && (
+        <div className="mt-1 border border-white/10 rounded-md overflow-hidden">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-white/5 text-secondary-ol">
+              <tr>
+                <th className="px-3 py-1.5 font-medium">Service</th>
+                <th className="px-3 py-1.5 font-medium">Container</th>
+                <th className="px-3 py-1.5 font-medium">Status</th>
+                <th className="px-3 py-1.5 font-medium">Ports</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {services.map((service, i: number) => {
+                const entry =
+                  typeof service === 'object' && service !== null
+                    ? (service as Record<string, unknown>)
+                    : {};
+                const name = typeof entry.name === 'string' ? entry.name : '-';
+                const container = typeof entry.container === 'string' ? entry.container : '-';
+                const status = typeof entry.status === 'string' ? entry.status : null;
+                const ports = Array.isArray(entry.ports)
+                  ? entry.ports.filter(
+                      (port): port is string | number =>
+                        typeof port === 'string' || typeof port === 'number',
+                    )
+                  : [];
+
+                return (
+                  <tr key={i} className="text-primary-ol">
+                    <td className="px-3 py-1.5">{name}</td>
+                    <td className="px-3 py-1.5 font-mono text-[10px] text-muted-ol">{container}</td>
+                    <td className="px-3 py-1.5">
+                      {status ? <StatusBadge status={status} /> : '-'}
+                    </td>
+                    <td className="px-3 py-1.5 font-mono text-[10px]">
+                      {ports.length > 0 ? ports.join(', ') : '-'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RollbackProjectResult({ result }: { result: unknown }) {
+  if (!result || typeof result !== 'object') return null;
+  const res = result as Record<string, unknown>;
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium text-primary-ol">
+          {typeof res.projectName === 'string' ? res.projectName : 'Unknown'}
+        </span>
+        {typeof res.success === 'boolean' && (
+          <StatusBadge status={res.success ? 'success' : 'failed'} />
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 text-xs text-secondary-ol bg-bg-app/50 p-2 rounded-md border border-white/5">
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-muted-ol">From</span>
+          <span className="font-mono text-error/80">
+            {typeof res.previousImageTag === 'string'
+              ? res.previousImageTag.slice(0, 7)
+              : 'unknown'}
+          </span>
+        </div>
+        <span className="text-muted-ol">→</span>
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-muted-ol">To</span>
+          <span className="font-mono text-success/80">
+            {typeof res.commitSha === 'string' ? res.commitSha.slice(0, 7) : 'unknown'}
+          </span>
+        </div>
+      </div>
+
+      {typeof res.url === 'string' && (
+        <a
+          href={res.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-agent/10 border border-agent/20 text-xs font-mono text-agent hover:bg-agent/20 transition-colors w-fit"
+        >
+          <ExternalLink className="h-3 w-3" />
+          {res.url.replace(/^https?:\/\//, '')}
+        </a>
+      )}
+    </div>
+  );
+}
+
+function FixDockerfileResult({ result }: { result: unknown }) {
+  if (!result || typeof result !== 'object') return null;
+  const res = result as Record<string, unknown>;
+
+  const changes = Array.isArray(res.changes) ? res.changes : [];
+  const before = typeof res.before === 'string' ? res.before : '';
+  const after = typeof res.after === 'string' ? res.after : '';
+
+  return (
+    <div className="mt-2 flex flex-col gap-3">
+      {typeof res.explanation === 'string' && (
+        <p className="text-sm font-body text-primary-ol leading-relaxed">{res.explanation}</p>
+      )}
+
+      {changes.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">Changes</p>
+          <ul className="space-y-1">
+            {changes.map((change: unknown, i: number) => (
+              <li key={i} className="text-xs text-secondary-ol flex items-start gap-1.5">
+                <span className="text-agent mt-0.5">•</span>
+                <span>{String(change)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {(before || after) && (
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">Diff</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {before && (
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-error/80 px-1.5 py-0.5 bg-error/10 rounded">
+                  Before
+                </span>
+                <pre className="text-[11px] font-mono text-error/90 bg-error/5 p-2.5 rounded border border-error/10 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                  {before}
+                </pre>
+              </div>
+            )}
+            {after && (
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-success/80 px-1.5 py-0.5 bg-success/10 rounded">
+                  After
+                </span>
+                <pre className="text-[11px] font-mono text-success/90 bg-success/5 p-2.5 rounded border border-success/10 overflow-x-auto whitespace-pre-wrap break-all max-h-48">
+                  {after}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {typeof res.dockerfileContent === 'string' && !after && (
+        <details className="mt-1 group/df">
+          <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
+            View Dockerfile ▾
+          </summary>
+          <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+            {res.dockerfileContent}
+          </pre>
+        </details>
       )}
     </div>
   );
@@ -272,6 +460,10 @@ export function ToolResultCard({ item }: ToolResultCardProps) {
   const isSuccess = item.toolSuccess !== false; // Default to true if undefined
   const toolName = item.toolName || 'unknown_tool';
 
+  if (toolName === 'debug_build_error') {
+    return <ErrorAnalysisCard item={item} />;
+  }
+
   const bgClass = isSuccess ? 'bg-agent/5' : 'bg-error/5';
   const borderClass = isSuccess ? 'border-agent/10' : 'border-error/10';
   const iconColorClass = isSuccess ? 'text-agent' : 'text-error';
@@ -284,6 +476,18 @@ export function ToolResultCard({ item }: ToolResultCardProps) {
     case 'deploy_project':
       Icon = CheckCircle2;
       Renderer = DeployProjectResult;
+      break;
+    case 'deploy_compose':
+      Icon = Layers;
+      Renderer = DeployComposeResult;
+      break;
+    case 'rollback_project':
+      Icon = RotateCcw;
+      Renderer = RollbackProjectResult;
+      break;
+    case 'fix_dockerfile':
+      Icon = Wrench;
+      Renderer = FixDockerfileResult;
       break;
     case 'list_projects':
       Icon = LayoutList;

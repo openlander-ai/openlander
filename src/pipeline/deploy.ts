@@ -1,8 +1,8 @@
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import type { Docker } from './docker.js';
@@ -119,6 +119,11 @@ interface PreviewDeployResult {
   success: boolean;
   url?: string;
   error?: string;
+}
+
+interface PendingFixPayload {
+  filePath: string;
+  content: string;
 }
 
 /**
@@ -397,6 +402,11 @@ export class DeployPipeline {
       });
 
       buildLog += `[clone] ${repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
+
+      const pendingFixFile = this.applyPendingFix(projectId, cloneResult.path);
+      if (pendingFixFile) {
+        buildLog += `[pending-fix] Applied ${pendingFixFile}\n`;
+      }
 
       const previousDeploy = this.db.getLastDeployLog(projectId, environmentId);
       const previousSha = previousDeploy?.commit_sha;
@@ -1641,6 +1651,53 @@ export class DeployPipeline {
       return 'No container running for this project.';
     }
     return this.docker.getLogs(project.container_id, lines);
+  }
+
+  private applyPendingFix(projectId: string, clonePath: string): string | null {
+    const project = this.db.getProject(projectId);
+    if (!project?.pending_fix) {
+      return null;
+    }
+
+    const parsed = this.parsePendingFix(project.pending_fix);
+    if (!parsed) {
+      this.db.updateProject(projectId, { pendingFix: null });
+      throw new Error('Invalid pending fix payload in database');
+    }
+
+    const normalizedPath = parsed.filePath.trim().replace(/\\/g, '/');
+    if (!normalizedPath || normalizedPath.startsWith('/')) {
+      this.db.updateProject(projectId, { pendingFix: null });
+      throw new Error('Pending fix file path must be relative');
+    }
+
+    const cloneRoot = resolve(clonePath);
+    const targetPath = resolve(clonePath, normalizedPath);
+    if (!targetPath.startsWith(`${cloneRoot}/`) && targetPath !== cloneRoot) {
+      this.db.updateProject(projectId, { pendingFix: null });
+      throw new Error('Pending fix path escaped repository root');
+    }
+
+    mkdirSync(dirname(targetPath), { recursive: true });
+    writeFileSync(targetPath, parsed.content, 'utf8');
+    this.db.updateProject(projectId, { pendingFix: null });
+    log.info({ projectId, filePath: normalizedPath }, 'Applied pending fix before build');
+    return normalizedPath;
+  }
+
+  private parsePendingFix(rawPendingFix: string): PendingFixPayload | null {
+    try {
+      const parsed = JSON.parse(rawPendingFix) as Record<string, unknown>;
+      if (typeof parsed.filePath !== 'string' || typeof parsed.content !== 'string') {
+        return null;
+      }
+      return {
+        filePath: parsed.filePath,
+        content: parsed.content,
+      };
+    } catch {
+      return null;
+    }
   }
 
   private detectFailStep(buildLog: string): string {
