@@ -138,6 +138,22 @@ export const translations = {
     awaitingInstruction: '다음 지시 대기 중...',
     aiWorking: 'AI가 작업 중입니다...',
     typeAnswer: '직접 답변 입력...',
+    errorAnalysis: {
+      title: '오류 분석',
+      rootCause: '근본 원인',
+      suggestedFixes: '제안된 해결책',
+      confidence: '신뢰도',
+    },
+    fixProposal: {
+      title: '수정 제안',
+      diff: '변경 사항',
+      approve: '승인 및 적용',
+      reject: '거절',
+    },
+    composeError: {
+      title: 'Compose 오류 감지됨',
+      selectPattern: '적용할 패턴을 선택하세요',
+    },
   },
   domains: {
     notAvailable: '사용할 수 없음 — 프로젝트가 실행 중이 아닙니다.',

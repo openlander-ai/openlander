@@ -12,6 +12,72 @@ export interface QuestionData {
   header?: string;
   options: QuestionOption[];
   multiple?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface FixSuggestion {
+  description: string;
+  location?: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface ErrorAnalysisResult {
+  summary: string;
+  rootCause: string;
+  suggestedFixes: FixSuggestion[];
+}
+
+export interface DockerfileFixResult {
+  dockerfileContent: string;
+  explanation: string;
+  changes: string[];
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isFixSuggestion(value: unknown): value is FixSuggestion {
+  if (!isObjectRecord(value)) {
+    return false;
+  }
+  const { description, confidence, location } = value;
+  return (
+    typeof description === 'string' &&
+    (location === undefined || typeof location === 'string') &&
+    (confidence === 'high' || confidence === 'medium' || confidence === 'low')
+  );
+}
+
+export function isErrorAnalysisResult(result: unknown): result is ErrorAnalysisResult {
+  if (!isObjectRecord(result)) {
+    return false;
+  }
+
+  const { summary, rootCause, suggestedFixes } = result;
+  return (
+    typeof summary === 'string' &&
+    typeof rootCause === 'string' &&
+    Array.isArray(suggestedFixes) &&
+    suggestedFixes.every((fix) => isFixSuggestion(fix))
+  );
+}
+
+export function isDockerfileFixResult(result: unknown): result is DockerfileFixResult {
+  if (!isObjectRecord(result)) {
+    return false;
+  }
+
+  const { dockerfileContent, explanation, changes } = result;
+  return (
+    typeof dockerfileContent === 'string' &&
+    typeof explanation === 'string' &&
+    isStringArray(changes)
+  );
 }
 
 // ---------------------------------------------------------------------------

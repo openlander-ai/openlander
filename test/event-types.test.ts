@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { toTimelineItem } from '../web/src/lib/event-types';
+import {
+  toTimelineItem,
+  isErrorAnalysisResult,
+  isDockerfileFixResult,
+} from '../web/src/lib/event-types';
 
 describe('toTimelineItem', () => {
   it('maps agent_thinking event to progress item with default text', () => {
@@ -82,5 +86,69 @@ describe('toTimelineItem', () => {
     expect(item.title).toBe('Docker build failed');
     expect(item.category).toBe('DOCKERFILE_SYNTAX');
     expect(item.detail).toBe('Syntax error on line 5');
+  });
+
+  it('preserves question metadata in question_pending events', () => {
+    const item = toTimelineItem({
+      type: 'question_pending',
+      message: 'Apply this fix?',
+      projectId: 'project-1',
+      timestamp: '2026-01-01T00:00:00.000Z',
+      questionId: 'q-fix-1',
+      questions: [
+        {
+          question: 'Apply this fix?',
+          options: [{ label: 'Yes' }, { label: 'No' }],
+          metadata: {
+            fixType: 'dockerfile',
+            filePath: 'Dockerfile',
+          },
+        },
+      ],
+    });
+
+    expect(item.type).toBe('question');
+    expect(item.questions?.[0]?.metadata).toEqual({
+      fixType: 'dockerfile',
+      filePath: 'Dockerfile',
+    });
+  });
+});
+
+describe('tool result type guards', () => {
+  it('identifies ErrorAnalysisResult shape', () => {
+    expect(
+      isErrorAnalysisResult({
+        summary: 'Build failed',
+        rootCause: 'Missing env file',
+        suggestedFixes: [
+          { title: 'Use root .env', description: 'Share one env file', confidence: 'high' },
+        ],
+      }),
+    ).toBe(true);
+
+    expect(isErrorAnalysisResult({ summary: 'x', rootCause: 'y', suggestedFixes: 'nope' })).toBe(
+      false,
+    );
+    expect(isErrorAnalysisResult({ summary: 'x' })).toBe(false);
+  });
+
+  it('identifies DockerfileFixResult shape', () => {
+    expect(
+      isDockerfileFixResult({
+        dockerfileContent: 'FROM node:20',
+        explanation: 'Pinned node version',
+        changes: ['Updated base image'],
+      }),
+    ).toBe(true);
+
+    expect(
+      isDockerfileFixResult({
+        dockerfileContent: 'FROM node:20',
+        explanation: 'Pinned node version',
+        changes: [1, 2, 3],
+      }),
+    ).toBe(false);
+    expect(isDockerfileFixResult({ dockerfileContent: 'FROM node:20' })).toBe(false);
   });
 });

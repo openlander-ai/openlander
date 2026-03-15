@@ -138,6 +138,10 @@ export const translations = {
     awaitingInstruction: 'Awaiting next instruction...',
     aiWorking: 'AI is working on it...',
     typeAnswer: 'Type your own answer...',
+    composeError: {
+      title: 'Compose Error Detected',
+      selectPattern: 'Select a pattern to apply',
+    },
   },
   domains: {
     notAvailable: 'Not available — project is not running.',

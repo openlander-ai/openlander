@@ -910,7 +910,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
           questions: z
             .string()
             .describe(
-              'JSON array of question objects. Each: { question: string, header?: string (max 30 chars), options: [{ label: string (1-5 words), description?: string }], multiple?: boolean }',
+              'JSON array of question objects. Each: { question: string, header?: string (max 30 chars), options: [{ label: string (1-5 words), description?: string }], multiple?: boolean, metadata?: Record<string, unknown> }',
             ),
         }),
         execute: async ({ questions }) => {
@@ -919,6 +919,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
             header?: string;
             options: Array<{ label: string; description?: string }>;
             multiple?: boolean;
+            metadata?: Record<string, unknown>;
           }>;
           const { nanoid } = await import('nanoid');
           const request = {
@@ -931,6 +932,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
                 description: o.description,
               })),
               multiple: q.multiple ?? false,
+              metadata: q.metadata,
             })),
           };
           const answers = await questionBridge.ask(request);

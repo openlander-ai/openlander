@@ -13,6 +13,9 @@ import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard
 import { InsightCard } from './InsightCard';
 import { DockerfileFixedCard } from './DockerfileFixedCard';
 import { ToolResultCard } from './ToolResultCard';
+import { ErrorAnalysisCard } from './ErrorAnalysisCard';
+import { FixProposalCard } from './FixProposalCard';
+import { ComposeErrorCard } from './ComposeErrorCard';
 
 interface TimelineItemProps {
   item: TItem;
@@ -39,7 +42,6 @@ function cleanMarkdown(text: string): string {
 export function TimelineItemCard({
   item,
   isLatest,
-  // onFixWithAI — reserved for future auto-fix UI
   onFixWithAI: _onFixWithAI,
   isFixWithAILoading: _isFixWithAILoading,
   onSubmitAnswer,
@@ -57,23 +59,48 @@ export function TimelineItemCard({
   const isAgentMessage = item.type === 'agent_message';
   const isAgentEvent = isAgentThinking || isAgentToolCall || isAgentToolResult || isAgentMessage;
 
-  // Insight items render via InsightCard
   if (isInsight) {
     return <InsightCard item={item} onAction={onInsightAction} />;
   }
 
-  // Dockerfile fix items render via DockerfileFixedCard
   if (isDockerfileFix) {
     return <DockerfileFixedCard item={item} />;
   }
 
-  // Agent tool result items render via ToolResultCard
   if (isAgentToolResult) {
+    if (item.toolName === 'error-analysis' || item.toolName === 'error_analysis') {
+      return <ErrorAnalysisCard item={item} />;
+    }
     return <ToolResultCard item={item} />;
   }
 
-  // Question items render via InputRequestCard
   if (isQuestion && item.questionId && item.questions) {
+    const hasFixProposal = item.questions.some((q) => q.metadata?.fixType);
+    const isComposeFix = item.questions.some((q) => q.metadata?.fixType === 'compose');
+
+    if (isComposeFix) {
+      return (
+        <ComposeErrorCard
+          questionId={item.questionId}
+          questions={item.questions}
+          answered={item.answered}
+          onSubmit={onSubmitAnswer ?? (() => {})}
+          onSkip={onSkipQuestion ?? (() => {})}
+        />
+      );
+    }
+
+    if (hasFixProposal) {
+      return (
+        <FixProposalCard
+          questionId={item.questionId}
+          questions={item.questions}
+          answered={item.answered}
+          onSubmit={onSubmitAnswer ?? (() => {})}
+          onSkip={onSkipQuestion ?? (() => {})}
+        />
+      );
+    }
     return (
       <InputRequestCard
         questionId={item.questionId}
@@ -96,7 +123,6 @@ export function TimelineItemCard({
         isAgentEvent && !isLatest && 'bg-agent/5 border-agent/10',
       )}
     >
-      {/* Icon */}
       <div className="shrink-0 mt-0.5 relative z-10">
         {isSuccess && (
           <div className="p-1.5 rounded-md bg-success/10 border border-success/20 relative">
@@ -133,7 +159,6 @@ export function TimelineItemCard({
         )}
       </div>
 
-      {/* Content */}
       <div className="flex-1 min-w-0 pt-0.5">
         <div className="flex items-start justify-between gap-2">
           <p
@@ -161,7 +186,6 @@ export function TimelineItemCard({
           </span>
         </div>
 
-        {/* Success URL */}
         {isSuccess && item.url && (
           <a
             href={item.url}
@@ -174,7 +198,6 @@ export function TimelineItemCard({
           </a>
         )}
 
-        {/* Agent tool call arguments */}
         {isAgentToolCall && item.toolArguments && Object.keys(item.toolArguments).length > 0 && (
           <details className="mt-2 group/args">
             <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
@@ -186,7 +209,6 @@ export function TimelineItemCard({
           </details>
         )}
 
-        {/* Error build log detail */}
         {isError && item.detail && (
           <details className="mt-2 group/log">
             <summary className="text-[11px] font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
@@ -197,8 +219,6 @@ export function TimelineItemCard({
             </pre>
           </details>
         )}
-
-        {/* Error Status removed for inline flow */}
       </div>
     </div>
   );

@@ -95,6 +95,41 @@ describe('buildSystemPrompt', () => {
     // Model overlay
     expect(prompt).toContain('Be concise');
   });
+
+  it('replaces compose-only recovery section with broad error intelligence protocol', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('## Error Intelligence Protocol');
+    expect(prompt).toContain('## Structured Error Output Format');
+    expect(prompt).toContain('## Fix Proposal Protocol');
+    expect(prompt).not.toContain('## Compose Environment Variable Recovery');
+  });
+
+  it('includes concrete recovery examples for major error classes', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('missing env_file');
+    expect(prompt).toContain('Dockerfile build error');
+    expect(prompt).toContain('port conflict');
+    expect(prompt).toContain('runtime crash');
+  });
+
+  it('keeps auto-recovery section and aligns it with explain-options-choose protocol', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('## Auto-Recovery Mode');
+    expect(prompt).toContain('Follow Error Intelligence Protocol');
+    expect(prompt).toContain('present 2-4 options');
+  });
+
+  it('preserves locale directive while including new protocol sections', () => {
+    const prompt = buildSystemPrompt('## Context\nfoo', 'gemini', 'ko');
+
+    expect(prompt).toContain('CRITICAL: You MUST respond to the user in Korean (한국어).');
+    expect(prompt).toContain('## Error Intelligence Protocol');
+    expect(prompt).toContain('## Structured Error Output Format');
+    expect(prompt).toContain('## Fix Proposal Protocol');
+  });
 });
 
 describe('buildContextSnapshot', () => {
