@@ -5,7 +5,12 @@ import { setLanguage as apiSetLanguage } from '@/lib/api';
 
 type Language = 'en' | 'ko';
 
-type Translations = any;
+interface TranslationMap {
+  [key: string]: string | TranslationMap;
+}
+
+type TranslationValue = string | TranslationMap;
+type Translations = Record<string, TranslationValue>;
 
 interface LanguageContextType {
   language: Language;
@@ -45,10 +50,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const t = (key: string): string => {
     const keys = key.split('.');
-    let current: any = translations[language];
+    let current: TranslationValue | undefined = translations[language];
 
     for (const k of keys) {
-      if (current === undefined || current === null) {
+      if (typeof current !== 'object' || current === null || !(k in current)) {
         console.warn(`Translation key not found: ${key}`);
         return key;
       }
