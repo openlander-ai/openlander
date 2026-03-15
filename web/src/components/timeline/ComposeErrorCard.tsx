@@ -26,7 +26,6 @@ export function ComposeErrorCard({
   questions,
   answered,
   onSubmit,
-  onSkip: _onSkip,
 }: ComposeErrorCardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedPatternId, setSelectedPatternId] = useState<string | null>(null);
@@ -37,10 +36,13 @@ export function ComposeErrorCard({
     (patternId: string, patternName: string) => {
       setSelectedPatternId(patternId);
       setIsSubmitting(true);
-      const answers: QuestionAnswerPayload[] = questions.map((_q, i) => {
+      const answers: QuestionAnswerPayload[] = questions.map((q, i) => {
+        const optionMatch = q.options.find((o) => o.label === patternId || o.label === patternName);
+        const labelToSubmit = optionMatch ? optionMatch.label : patternId;
+
         return {
           questionIndex: i,
-          selectedLabels: [patternName],
+          selectedLabels: [labelToSubmit],
           customText: envVars.trim() || undefined,
         };
       });
@@ -58,7 +60,7 @@ export function ComposeErrorCard({
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-body text-muted-ol">{'Compose fix answered'}</p>
+          <p className="text-sm font-body text-muted-ol">{t('timeline.composeError.answered')}</p>
         </div>
       </div>
     );
@@ -83,7 +85,7 @@ export function ComposeErrorCard({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium font-body text-agent leading-snug">
-              {t('timeline.composeError.title') || 'Compose Error Detected'}
+              {t('timeline.composeError.title')}
             </p>
             {errorType && (
               <span className="text-[10px] font-mono text-agent/80 px-1.5 py-0.5 bg-agent/10 rounded border border-agent/20">
@@ -97,7 +99,7 @@ export function ComposeErrorCard({
         {errorType === 'env_file_missing' && (
           <div className="space-y-1.5 pt-2">
             <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">
-              Environment Variables (Optional)
+              {t('timeline.composeError.envVarsOptional')}
             </p>
             <textarea
               value={envVars}
@@ -118,7 +120,7 @@ export function ComposeErrorCard({
         {patterns.length > 0 && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">
-              {t('timeline.composeError.selectPattern') || 'Select a pattern to apply'}
+              {t('timeline.composeError.selectPattern')}
             </p>
             <div className="grid grid-cols-1 gap-2">
               {patterns.map((pattern) => (
@@ -142,7 +144,7 @@ export function ComposeErrorCard({
                         <span className="text-sm font-medium text-primary-ol">{pattern.name}</span>
                         {pattern.recommended && (
                           <span className="text-[10px] font-mono text-success px-1.5 py-0.5 bg-success/10 rounded border border-success/20">
-                            Recommended
+                            {t('timeline.composeError.recommended')}
                           </span>
                         )}
                       </div>

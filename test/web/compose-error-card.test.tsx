@@ -112,7 +112,7 @@ describeCard('ComposeErrorCard', () => {
       onSkip: () => {},
     });
 
-    expect(findTextInTree(tree, 'Compose fix answered')).toBe(true);
+    expect(findTextInTree(tree, 'timeline.composeError.answered')).toBe(true);
   });
 
   it('renders compose error details and patterns correctly', () => {
