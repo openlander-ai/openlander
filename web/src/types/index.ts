@@ -60,6 +60,7 @@ export type ChatStreamEvent =
           header?: string;
           options: Array<{ label: string; description?: string }>;
           multiple?: boolean;
+          metadata?: Record<string, unknown>;
         }>;
       };
     };

@@ -42,8 +42,6 @@ function cleanMarkdown(text: string): string {
 export function TimelineItemCard({
   item,
   isLatest,
-  onFixWithAI: _onFixWithAI,
-  isFixWithAILoading: _isFixWithAILoading,
   onSubmitAnswer,
   onSkipQuestion,
   onInsightAction,
