@@ -14,7 +14,7 @@ const TRAEFIK_DYNAMIC_DIR_IN_CONTAINER = '/etc/traefik/dynamic/';
 
 export const DYNAMIC_CONFIG_DIR = join(homedir(), '.openlander', 'traefik', 'dynamic');
 
-export type TraefikEnvironment = 'production' | 'staging' | 'development';
+export type TraefikEnvironment = 'production' | 'development';
 
 /**
  * Traefik reverse proxy management.
@@ -197,10 +197,6 @@ export function getProjectUrl(projectName: string, lanIp?: string): string {
 }
 
 function getEnvironmentProjectName(projectName: string, environment: TraefikEnvironment): string {
-  if (environment === 'staging') {
-    return `staging-${projectName}`;
-  }
-
   if (environment === 'development') {
     return `dev-${projectName}`;
   }

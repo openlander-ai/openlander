@@ -206,11 +206,12 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     const projectId = existing?.id ?? nanoid(12);
 
     if (!existing) {
+      const isNonProductionEnv = body.environment && body.environment !== 'production';
       ctx.db.createProject({
         id: projectId,
         name: projectName,
         repoUrl: body.repo_url,
-        branch: body.branch,
+        branch: isNonProductionEnv ? undefined : body.branch,
       });
     }
 

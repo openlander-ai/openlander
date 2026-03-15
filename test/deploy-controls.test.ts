@@ -114,13 +114,13 @@ describe('DeployPipeline deploy controls', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p2-staging',
+      id: 'p2-development',
       projectId: 'p2',
-      type: 'staging',
-      branch: 'staging',
+      type: 'development',
+      branch: 'develop',
     });
 
-    const result = await pipeline.rollback('p2', 'p2-staging');
+    const result = await pipeline.rollback('p2', 'p2-development');
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('No previous image available for rollback');
@@ -134,38 +134,38 @@ describe('DeployPipeline deploy controls', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p3-staging',
+      id: 'p3-development',
       projectId: 'p3',
-      type: 'staging',
-      branch: 'staging',
+      type: 'development',
+      branch: 'develop',
       status: 'running',
       assignedPort: 11011,
-      containerId: 'container-staging-old',
-      imageTag: 'openlander/demo-app:staging-new',
-      previousImageTag: 'openlander/demo-app:staging-old',
+      containerId: 'container-development-old',
+      imageTag: 'openlander/demo-app:development-new',
+      previousImageTag: 'openlander/demo-app:development-old',
     });
 
-    const result = await pipeline.rollback('p3', 'p3-staging');
+    const result = await pipeline.rollback('p3', 'p3-development');
 
     expect(result.success).toBe(true);
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'container-staging-old',
+      'container-development-old',
     );
     expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'container-staging-old',
+      'container-development-old',
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        imageTag: 'openlander/demo-app:staging-old',
-        name: expect.stringContaining('ol-demo-app-staging-'),
+        imageTag: 'openlander/demo-app:development-old',
+        name: expect.stringContaining('ol-demo-app-dev-'),
         port: 11011,
       }),
     );
 
-    const environment = db.getEnvironment('p3-staging');
+    const environment = db.getEnvironment('p3-development');
     expect(environment?.status).toBe('running');
-    expect(environment?.image_tag).toBe('openlander/demo-app:staging-old');
-    expect(environment?.previous_image_tag).toBe('openlander/demo-app:staging-new');
+    expect(environment?.image_tag).toBe('openlander/demo-app:development-old');
+    expect(environment?.previous_image_tag).toBe('openlander/demo-app:development-new');
     expect(environment?.container_id).toBe('container-new-123456');
   });
 
@@ -200,10 +200,10 @@ describe('DeployPipeline deploy controls', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p5-staging',
+      id: 'p5-development',
       projectId: 'p5',
-      type: 'staging',
-      branch: 'staging',
+      type: 'development',
+      branch: 'develop',
       status: 'running',
       containerId: 'container-missing',
     });
@@ -212,8 +212,8 @@ describe('DeployPipeline deploy controls', () => {
       new ContainerNotFoundError('container-missing'),
     );
 
-    await expect(pipeline.stop('p5', 'p5-staging')).resolves.toBeUndefined();
-    expect(db.getEnvironment('p5-staging')?.status).toBe('stopped');
+    await expect(pipeline.stop('p5', 'p5-development')).resolves.toBeUndefined();
+    expect(db.getEnvironment('p5-development')?.status).toBe('stopped');
   });
 
   it('start project throws when container no longer exists and marks project error', async () => {
@@ -393,10 +393,10 @@ describe('DeployPipeline deploy controls', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p10-staging',
+      id: 'p10-development',
       projectId: 'p10',
-      type: 'staging',
-      branch: 'staging',
+      type: 'development',
+      branch: 'develop',
       status: 'stopped',
       containerId: 'container-missing-env',
     });
@@ -405,8 +405,8 @@ describe('DeployPipeline deploy controls', () => {
       new ContainerNotFoundError('container-missing-env'),
     );
 
-    await expect(pipeline.start('p10', 'p10-staging')).resolves.toBeUndefined();
-    expect(db.getEnvironment('p10-staging')?.status).toBe('running');
+    await expect(pipeline.start('p10', 'p10-development')).resolves.toBeUndefined();
+    expect(db.getEnvironment('p10-development')?.status).toBe('running');
   });
 
   it('stop/start on parent project traverses children and updates parent status', async () => {
@@ -510,14 +510,14 @@ describe('DeployPipeline deploy controls', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p15-staging',
+      id: 'p15-development',
       projectId: 'p15',
-      type: 'staging',
-      branch: 'staging',
+      type: 'development',
+      branch: 'develop',
     });
 
-    await expect(pipeline.stop('p15', 'p15-staging')).resolves.toBeUndefined();
-    await expect(pipeline.start('p15', 'p15-staging')).resolves.toBeUndefined();
+    await expect(pipeline.stop('p15', 'p15-development')).resolves.toBeUndefined();
+    await expect(pipeline.start('p15', 'p15-development')).resolves.toBeUndefined();
 
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(undefined);
     expect(docker.startContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(undefined);

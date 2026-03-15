@@ -23,7 +23,7 @@ interface ParsedPushEvent {
 
 interface EnvironmentBranchTarget {
   id: string;
-  type: 'production' | 'staging' | 'development';
+  type: 'production' | 'development';
   branch: string;
 }
 
@@ -206,13 +206,6 @@ export class WebhookManager {
       const production = branchMatches.find((environment) => environment.type === 'production');
       if (production) {
         return production;
-      }
-    }
-
-    if (branch === 'develop') {
-      const staging = branchMatches.find((environment) => environment.type === 'staging');
-      if (staging) {
-        return staging;
       }
     }
 

@@ -8,7 +8,7 @@ if (!isBunRuntime) {
   test.describe('Environment Lifecycle Flow (Task 13)', () => {
     const projectId = 'test-proj-123';
     const prodEnvId = 'env-prod-123';
-    const stagingEnvId = 'env-staging-456';
+    const developmentEnvId = 'env-development-456';
 
     test.beforeEach(async ({ page }) => {
       await page.route('**/api/projects', async (route) => {
@@ -49,8 +49,15 @@ if (!isBunRuntime) {
               repoUrl: 'https://github.com/test/my-app',
               environments: [
                 { id: prodEnvId, type: 'production', status: 'running', branch: 'main' },
-                ...(envId === stagingEnvId
-                  ? [{ id: stagingEnvId, type: 'staging', status: 'stopped', branch: 'develop' }]
+                ...(envId === developmentEnvId
+                  ? [
+                      {
+                        id: developmentEnvId,
+                        type: 'development',
+                        status: 'stopped',
+                        branch: 'develop',
+                      },
+                    ]
                   : []),
               ],
             },
@@ -65,13 +72,13 @@ if (!isBunRuntime) {
           await route.fulfill({
             json: [
               { id: prodEnvId, type: 'production', status: 'running', branch: 'main' },
-              { id: stagingEnvId, type: 'staging', status: 'stopped', branch: 'develop' },
+              { id: developmentEnvId, type: 'development', status: 'stopped', branch: 'develop' },
             ],
           });
         } else if (route.request().method() === 'POST') {
           await route.fulfill({
             status: 201,
-            json: { id: stagingEnvId, type: 'staging', status: 'idle', branch: 'develop' },
+            json: { id: developmentEnvId, type: 'development', status: 'idle', branch: 'develop' },
           });
         } else {
           await route.continue();
@@ -81,13 +88,13 @@ if (!isBunRuntime) {
       await page.route(`**/api/projects/${projectId}/environments/*/env`, async (route) => {
         if (route.request().method() === 'GET') {
           const url = route.request().url();
-          if (url.includes(stagingEnvId)) {
+          if (url.includes(developmentEnvId)) {
             await route.fulfill({
               json: {
-                vars: { APP_NAME: 'MyApp', DB_URL: 'staging-db' },
+                vars: { APP_NAME: 'MyApp', DB_URL: 'dev-db' },
                 inheritance: {
                   APP_NAME: { source: 'production', value: 'MyApp' },
-                  DB_URL: { source: 'environment', value: 'staging-db' },
+                  DB_URL: { source: 'environment', value: 'dev-db' },
                 },
               },
             });
@@ -141,26 +148,26 @@ if (!isBunRuntime) {
       await expect(page.getByText('🟢 Production')).toBeVisible();
     });
 
-    test('2. Add staging env & 7. UI environment switch', async ({ page }) => {
+    test('2. Add development env & 7. UI environment switch', async ({ page }) => {
       await page.goto(`/projects/${projectId}`);
       await page.waitForLoadState('networkidle');
 
       await page.getByRole('button', { name: /production/i }).click();
 
-      const addStagingBtn = page.getByRole('menuitem', { name: /add staging/i });
-      if (await addStagingBtn.isVisible()) {
-        await addStagingBtn.click();
+      const addDevelopmentBtn = page.getByRole('menuitem', { name: /add development/i });
+      if (await addDevelopmentBtn.isVisible()) {
+        await addDevelopmentBtn.click();
       }
 
-      await page.goto(`/projects/${projectId}?env=staging`);
+      await page.goto(`/projects/${projectId}?env=development`);
       await page.waitForLoadState('networkidle');
 
-      await expect(page).toHaveURL(/.*env=staging/);
-      await expect(page.getByText('🟡 Staging')).toBeVisible();
+      await expect(page).toHaveURL(/.*env=development/);
+      await expect(page.getByText(/development/i)).toBeVisible();
     });
 
-    test('3. Set production env vars & 4. Override in staging', async ({ page }) => {
-      await page.goto(`/projects/${projectId}?env=staging`);
+    test('3. Set production env vars & 4. Override in development', async ({ page }) => {
+      await page.goto(`/projects/${projectId}?env=development`);
       await page.waitForLoadState('networkidle');
 
       await page.getByRole('tab', { name: /settings/i }).click();
@@ -173,8 +180,8 @@ if (!isBunRuntime) {
       await expect(page.getByText('DB_URL')).toBeVisible();
     });
 
-    test('5. Deploy staging', async ({ page }) => {
-      await page.goto(`/projects/${projectId}?env=staging`);
+    test('5. Deploy development', async ({ page }) => {
+      await page.goto(`/projects/${projectId}?env=development`);
       await page.waitForLoadState('networkidle');
 
       await page
@@ -182,7 +189,7 @@ if (!isBunRuntime) {
         .first()
         .click();
 
-      await expect(page.getByLabel(/environment/i)).toHaveValue('staging');
+      await expect(page.getByLabel(/environment/i)).toHaveValue('development');
       await expect(page.getByLabel(/branch/i)).toHaveValue('develop');
 
       await page.getByRole('button', { name: /deploy now/i }).click();

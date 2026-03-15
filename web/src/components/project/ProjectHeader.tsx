@@ -85,13 +85,11 @@ export function ProjectHeader({
 
   const envColors: Record<EnvironmentType, string> = {
     production: 'bg-success/10 text-success border-success/20',
-    staging: 'bg-warning/10 text-warning border-warning/20',
     development: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
   };
 
   const envLabels: Record<EnvironmentType, string> = {
     production: 'Production',
-    staging: 'Staging',
     development: 'Development',
   };
 
@@ -187,7 +185,7 @@ export function ProjectHeader({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-40">
-                  {(['production', 'staging', 'development'] as EnvironmentType[]).map((env) => {
+                  {(['production', 'development'] as EnvironmentType[]).map((env) => {
                     const exists = env === 'production' || environments.some((e) => e.type === env);
                     return (
                       <DropdownMenuItem

@@ -61,7 +61,7 @@ export const environments = sqliteTable(
     project_id: text('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['production', 'staging', 'development'] }).notNull(),
+    type: text('type', { enum: ['production', 'development'] }).notNull(),
     branch: text('branch').notNull().default('main'),
     status: text('status', { enum: ['running', 'stopped', 'building', 'error', 'idle'] }).default(
       'idle',
@@ -75,10 +75,7 @@ export const environments = sqliteTable(
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
-    check(
-      'environments_type_check',
-      sql`${table.type} IN ('production', 'staging', 'development')`,
-    ),
+    check('environments_type_check', sql`${table.type} IN ('production', 'development')`),
     check(
       'environments_status_check',
       sql`${table.status} IN ('running', 'stopped', 'building', 'error', 'idle')`,

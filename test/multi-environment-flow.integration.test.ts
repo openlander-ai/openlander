@@ -68,17 +68,17 @@ describe('multi-environment flow integration', () => {
     expect(productionEnvironment).toBeDefined();
     expect(productionEnvironment?.branch).toBe('main');
 
-    const createStagingRes = await app.request('/api/projects/flow-p1/environments', {
+    const createDevelopmentRes = await app.request('/api/projects/flow-p1/environments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'staging', branch: 'develop' }),
+      body: JSON.stringify({ type: 'development', branch: 'develop' }),
     });
-    expect(createStagingRes.status).toBe(201);
+    expect(createDevelopmentRes.status).toBe(201);
 
-    const createStagingBody = await createStagingRes.json();
-    const stagingEnvironmentId = createStagingBody.environment.id as string;
-    expect(createStagingBody.environment.type).toBe('staging');
-    expect(createStagingBody.environment.branch).toBe('develop');
+    const createDevelopmentBody = await createDevelopmentRes.json();
+    const developmentEnvironmentId = createDevelopmentBody.environment.id as string;
+    expect(createDevelopmentBody.environment.type).toBe('development');
+    expect(createDevelopmentBody.environment.branch).toBe('develop');
 
     const setProductionEnvRes = await app.request(
       `/api/projects/flow-p1/environments/${productionEnvironment!.id}/env`,
@@ -96,43 +96,47 @@ describe('multi-environment flow integration', () => {
     );
     expect(setProductionEnvRes.status).toBe(200);
 
-    const setStagingEnvRes = await app.request(
-      `/api/projects/flow-p1/environments/${stagingEnvironmentId}/env`,
+    const setDevelopmentEnvRes = await app.request(
+      `/api/projects/flow-p1/environments/${developmentEnvironmentId}/env`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           variables: {
-            API_URL: 'https://staging-api.example.com',
+            API_URL: 'https://dev-api.example.com',
             FEATURE_FLAG: 'on',
           },
         }),
       },
     );
-    expect(setStagingEnvRes.status).toBe(200);
+    expect(setDevelopmentEnvRes.status).toBe(200);
 
-    const stagingEnvRes = await app.request(
-      `/api/projects/flow-p1/environments/${stagingEnvironmentId}/env`,
+    const developmentEnvRes = await app.request(
+      `/api/projects/flow-p1/environments/${developmentEnvironmentId}/env`,
     );
-    expect(stagingEnvRes.status).toBe(200);
+    expect(developmentEnvRes.status).toBe(200);
 
-    const stagingEnvBody = await stagingEnvRes.json();
-    expect(stagingEnvBody.envVars).toMatchObject({
-      API_URL: 'https://staging-api.example.com',
+    const developmentEnvBody = await developmentEnvRes.json();
+    expect(developmentEnvBody.envVars).toMatchObject({
+      API_URL: 'https://dev-api.example.com',
       FEATURE_FLAG: 'on',
       SHARED_TOKEN: 'prod-token-value',
     });
 
-    const deployStagingRes = await app.request(
-      '/api/projects/flow-p1/redeploy?environment=staging',
+    const deployDevelopmentRes = await app.request(
+      '/api/projects/flow-p1/redeploy?environment=development',
       {
         method: 'POST',
       },
     );
-    expect(deployStagingRes.status).toBe(200);
-    expect(ctx.pipeline.deployEnvironment).toHaveBeenCalledWith('flow-p1', stagingEnvironmentId, {
-      trigger: 'api',
-    });
+    expect(deployDevelopmentRes.status).toBe(200);
+    expect(ctx.pipeline.deployEnvironment).toHaveBeenCalledWith(
+      'flow-p1',
+      developmentEnvironmentId,
+      {
+        trigger: 'api',
+      },
+    );
 
     const webhookConfigRes = await app.request('/api/projects/flow-p1/webhooks', {
       method: 'POST',
@@ -168,9 +172,13 @@ describe('multi-environment flow integration', () => {
     );
 
     expect(webhookResult.accepted).toBe(true);
-    expect(ctx.pipeline.deployEnvironment).toHaveBeenCalledWith('flow-p1', stagingEnvironmentId, {
-      trigger: 'webhook',
-    });
+    expect(ctx.pipeline.deployEnvironment).toHaveBeenCalledWith(
+      'flow-p1',
+      developmentEnvironmentId,
+      {
+        trigger: 'webhook',
+      },
+    );
 
     const projectsRes = await app.request('/api/projects');
     expect(projectsRes.status).toBe(200);
@@ -179,13 +187,15 @@ describe('multi-environment flow integration', () => {
       (project: { id: string }) => project.id === 'flow-p1',
     ) as { id: string; environments: Array<{ type: string }> };
     expect(listedProject).toBeDefined();
-    expect(listedProject.environments.some((environment) => environment.type === 'staging')).toBe(
-      true,
+    expect(
+      listedProject.environments.some((environment) => environment.type === 'development'),
+    ).toBe(true);
+    expect(`/projects/${listedProject.id}?env=development`).toBe(
+      '/projects/flow-p1?env=development',
     );
-    expect(`/projects/${listedProject.id}?env=staging`).toBe('/projects/flow-p1?env=staging');
 
     const envExampleRes = await app.request(
-      '/api/projects/flow-p1/env-example?environment=staging',
+      '/api/projects/flow-p1/env-example?environment=development',
     );
     expect(envExampleRes.status).toBe(200);
 
@@ -194,7 +204,7 @@ describe('multi-environment flow integration', () => {
     expect(envExample).toContain('FEATURE_FLAG=<configured-in-openlander>');
     expect(envExample).toContain('# TODO: Set SHARED_TOKEN');
     expect(envExample).toContain('SHARED_TOKEN=');
-    expect(envExample).not.toContain('https://staging-api.example.com');
+    expect(envExample).not.toContain('https://dev-api.example.com');
     expect(envExample).not.toContain('prod-token-value');
 
     expect(cloneRepo as unknown as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(

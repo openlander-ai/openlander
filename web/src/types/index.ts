@@ -1,4 +1,4 @@
-export type EnvironmentType = 'production' | 'staging' | 'development';
+export type EnvironmentType = 'production' | 'development';
 
 export interface Environment {
   id: string;

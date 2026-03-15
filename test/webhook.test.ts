@@ -28,7 +28,7 @@ function createPushWebhookManager(options: {
   branchFilter?: string;
   environments: Array<{
     id: string;
-    type: 'production' | 'staging' | 'development';
+    type: 'production' | 'development';
     branch: string;
   }>;
 }) {
@@ -305,7 +305,7 @@ describe('webhook push environment routing', () => {
     const { manager, deployEnvironment, redeploy } = createPushWebhookManager({
       environments: [
         { id: 'env-prod', type: 'production', branch: 'main' },
-        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-development', type: 'development', branch: 'develop' },
         { id: 'env-dev', type: 'development', branch: 'feature/cool' },
       ],
     });
@@ -326,12 +326,12 @@ describe('webhook push environment routing', () => {
     expect(redeploy).not.toHaveBeenCalled();
   });
 
-  it('routes develop branch push to staging environment', async () => {
+  it('routes develop branch push to development environment', async () => {
     const { manager, deployEnvironment, redeploy } = createPushWebhookManager({
       branchFilter: 'develop',
       environments: [
         { id: 'env-prod', type: 'production', branch: 'main' },
-        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-development', type: 'development', branch: 'develop' },
         { id: 'env-dev', type: 'development', branch: 'feature/cool' },
       ],
     });
@@ -348,7 +348,7 @@ describe('webhook push environment routing', () => {
     );
 
     expect(result.accepted).toBe(true);
-    expect(deployEnvironment).toHaveBeenCalledWith('project-1', 'env-staging', {
+    expect(deployEnvironment).toHaveBeenCalledWith('project-1', 'env-development', {
       trigger: 'webhook',
     });
     expect(redeploy).not.toHaveBeenCalled();
@@ -359,7 +359,7 @@ describe('webhook push environment routing', () => {
       branchFilter: 'main',
       environments: [
         { id: 'env-prod', type: 'production', branch: 'main' },
-        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-development', type: 'development', branch: 'develop' },
         { id: 'env-dev', type: 'development', branch: 'feature/cool' },
       ],
     });
@@ -376,7 +376,7 @@ describe('webhook push environment routing', () => {
     );
 
     expect(result.accepted).toBe(true);
-    expect(deployEnvironment).toHaveBeenCalledWith('project-1', 'env-staging', {
+    expect(deployEnvironment).toHaveBeenCalledWith('project-1', 'env-development', {
       trigger: 'webhook',
     });
     expect(redeploy).not.toHaveBeenCalled();
@@ -387,7 +387,7 @@ describe('webhook push environment routing', () => {
       branchFilter: 'feature/cool',
       environments: [
         { id: 'env-prod', type: 'production', branch: 'main' },
-        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-development', type: 'development', branch: 'develop' },
         { id: 'env-dev', type: 'development', branch: 'feature/cool' },
       ],
     });
@@ -413,7 +413,7 @@ describe('webhook push environment routing', () => {
       branchFilter: 'feature/missing',
       environments: [
         { id: 'env-prod', type: 'production', branch: 'main' },
-        { id: 'env-staging', type: 'staging', branch: 'develop' },
+        { id: 'env-development', type: 'development', branch: 'develop' },
       ],
     });
     const body = githubPushBody('feature/missing');

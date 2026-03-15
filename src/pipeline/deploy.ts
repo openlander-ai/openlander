@@ -46,7 +46,7 @@ export interface ProjectConfig {
   sshKeyPath?: string;
   /** Deployment trigger source */
   trigger?: 'chat' | 'webhook' | 'api';
-  /** Target environment (e.g., production, staging, development) */
+  /** Target environment (e.g., production, development) */
   environment?: string;
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
@@ -207,11 +207,12 @@ export class DeployPipeline {
     }
 
     // Preflight passed - create project and start background deploy
+    const isNonProductionEnv = config.environment && config.environment !== 'production';
     this.db.createProject({
       id: projectId,
       name: projectName,
       repoUrl: config.repoUrl,
-      branch: config.branch,
+      branch: isNonProductionEnv ? undefined : config.branch,
     });
     this.db.updateProject(projectId, { status: 'building' });
     this.jobManager?.trackJob(projectId, projectName);
@@ -260,11 +261,15 @@ export class DeployPipeline {
 
     if (!config._projectId) {
       // Create project record in DB (skipped when called from startDeploy)
+      // When deploying to a non-production environment, the project-level branch
+      // (and auto-created production env) should keep the default "main",
+      // not the environment-specific branch (e.g. "dev").
+      const isNonProductionEnv = config.environment && config.environment !== 'production';
       this.db.createProject({
         id: projectId,
         name: projectName,
         repoUrl: config.repoUrl,
-        branch: config.branch,
+        branch: isNonProductionEnv ? undefined : config.branch,
       });
       this.db.updateProject(projectId, { status: 'building' });
       this.jobManager?.trackJob(projectId, projectName);
@@ -294,21 +299,19 @@ export class DeployPipeline {
       }
     }
 
-    const targetEnvironment = this.db
+    const envType = (config.environment || 'production') as 'production' | 'development';
+    let targetEnvironment = this.db
       .getEnvironmentsByProject(projectId)
-      .find((env) => env.type === (config.environment || 'production'));
+      .find((env) => env.type === envType);
 
     if (!targetEnvironment) {
-      this.db.updateProject(projectId, { status: 'error' });
-      const error = `${config.environment || 'Production'} environment not found`;
-      this.jobManager?.updatePhase(projectId, 'failed', error);
-      return {
-        success: false,
+      const project = this.db.getProject(projectId);
+      targetEnvironment = this.db.createEnvironment({
+        id: `${projectId}-${envType}`,
         projectId,
-        projectName,
-        error,
-        buildDurationMs: 0,
-      };
+        type: envType,
+        branch: config.branch ?? project?.branch ?? 'main',
+      });
     }
 
     const result = await this.deployEnvironment(projectId, targetEnvironment.id, {

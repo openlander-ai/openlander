@@ -14,9 +14,9 @@ describe('Traefik environment hostnames', () => {
     );
   });
 
-  it('adds staging hostname prefix', () => {
-    expect(getEnvironmentProjectHostname('my-app', 'staging', '10.0.0.7')).toBe(
-      'staging-my-app.10.0.0.7.sslip.io',
+  it('adds development hostname prefix', () => {
+    expect(getEnvironmentProjectHostname('my-app', 'development', '10.0.0.7')).toBe(
+      'dev-my-app.10.0.0.7.sslip.io',
     );
   });
 
@@ -37,10 +37,10 @@ describe('Traefik labels with environment', () => {
     );
   });
 
-  it('uses staging prefix in generated host rule', () => {
-    const labels = buildTraefikLabels('my-app', 10001, undefined, 'staging');
+  it('uses development prefix in generated host rule', () => {
+    const labels = buildTraefikLabels('my-app', 10001, undefined, 'development');
 
-    expect(labels['traefik.http.routers.ol-my-app.rule']).toContain('staging-my-app.');
+    expect(labels['traefik.http.routers.ol-my-app.rule']).toContain('dev-my-app.');
   });
 
   it('uses development prefix in generated host rule', () => {

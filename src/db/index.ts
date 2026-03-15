@@ -21,7 +21,7 @@ import {
 
 // --- Row types (match DB schema) ---
 
-export type EnvironmentType = 'production' | 'staging' | 'development';
+export type EnvironmentType = 'production' | 'development';
 
 export interface ProjectRow {
   id: string;
@@ -215,7 +215,7 @@ export class Database {
     this.sqlite.exec(`CREATE TABLE IF NOT EXISTS environments (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-      type TEXT NOT NULL CHECK(type IN ('production', 'staging', 'development')),
+      type TEXT NOT NULL CHECK(type IN ('production', 'development')),
       branch TEXT NOT NULL DEFAULT 'main',
       status TEXT DEFAULT 'idle' CHECK(status IN ('running', 'stopped', 'building', 'error', 'idle')),
       assigned_port INTEGER UNIQUE,

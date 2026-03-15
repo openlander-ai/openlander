@@ -91,7 +91,7 @@ export function ProjectDetail() {
   });
   const [addEnvBranch, setAddEnvBranch] = useState('');
 
-  const validEnvs: EnvironmentType[] = ['production', 'staging', 'development'];
+  const validEnvs: EnvironmentType[] = ['production', 'development'];
   const envParam = searchParams.get('env') as EnvironmentType;
   const currentEnvType = validEnvs.includes(envParam) ? envParam : 'production';
 

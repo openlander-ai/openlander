@@ -11,7 +11,7 @@ describe('EnvManager environment inheritance', () => {
   let env: EnvManager;
   let tmpDir: string;
   let productionEnvironmentId: string;
-  let stagingEnvironmentId: string;
+  let developmentEnvironmentId: string;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-env-manager-environments-test-'));
@@ -27,12 +27,12 @@ describe('EnvManager environment inheritance', () => {
     productionEnvironmentId = production.id;
 
     db.createEnvironment({
-      id: 'p1-staging',
+      id: 'p1-development',
       projectId: 'p1',
-      type: 'staging',
-      branch: 'release',
+      type: 'development',
+      branch: 'develop',
     });
-    stagingEnvironmentId = 'p1-staging';
+    developmentEnvironmentId = 'p1-development';
   });
 
   afterEach(() => {
@@ -43,14 +43,14 @@ describe('EnvManager environment inheritance', () => {
   it('supports project scope and environment scope through getAll(projectId, environmentId?)', () => {
     env.set('p1', 'PROJECT_ONLY', 'project-value');
     env.set('p1', 'PRODUCTION_ONLY', 'production-value', productionEnvironmentId);
-    env.set('p1', 'STAGING_ONLY', 'staging-value', stagingEnvironmentId);
+    env.set('p1', 'DEVELOPMENT_ONLY', 'dev-value', developmentEnvironmentId);
 
     expect(env.getAll('p1')).toEqual({ PROJECT_ONLY: 'project-value' });
     expect(env.getAll('p1', productionEnvironmentId)).toEqual({
       PRODUCTION_ONLY: 'production-value',
     });
-    expect(env.getAll('p1', stagingEnvironmentId)).toEqual({
-      STAGING_ONLY: 'staging-value',
+    expect(env.getAll('p1', developmentEnvironmentId)).toEqual({
+      DEVELOPMENT_ONLY: 'dev-value',
     });
   });
 
@@ -58,8 +58,8 @@ describe('EnvManager environment inheritance', () => {
     env.set('p1', 'LEGACY_BASE', 'project-base');
     env.set('p1', 'SHARED_KEY', 'production-value', productionEnvironmentId);
     env.set('p1', 'PRODUCTION_ONLY', 'prod-only', productionEnvironmentId);
-    env.set('p1', 'SHARED_KEY', 'staging-override', stagingEnvironmentId);
-    env.set('p1', 'STAGING_ONLY', 'staging-only', stagingEnvironmentId);
+    env.set('p1', 'SHARED_KEY', 'development-override', developmentEnvironmentId);
+    env.set('p1', 'DEVELOPMENT_ONLY', 'dev-only', developmentEnvironmentId);
 
     expect(env.getAllWithInheritance('p1', productionEnvironmentId)).toEqual({
       LEGACY_BASE: 'project-base',
@@ -67,11 +67,11 @@ describe('EnvManager environment inheritance', () => {
       PRODUCTION_ONLY: 'prod-only',
     });
 
-    expect(env.getAllWithInheritance('p1', stagingEnvironmentId)).toEqual({
+    expect(env.getAllWithInheritance('p1', developmentEnvironmentId)).toEqual({
       LEGACY_BASE: 'project-base',
-      SHARED_KEY: 'staging-override',
+      SHARED_KEY: 'development-override',
       PRODUCTION_ONLY: 'prod-only',
-      STAGING_ONLY: 'staging-only',
+      DEVELOPMENT_ONLY: 'dev-only',
     });
   });
 
@@ -80,26 +80,26 @@ describe('EnvManager environment inheritance', () => {
     expect(env.setBulk('p1', { A: '1', B: '2' })).toBe(false);
     expect(env.getAll('p1')).toEqual({ A: '1', B: '2' });
 
-    expect(env.setBulk('p1', { B: '2-env', C: '3-env' }, stagingEnvironmentId)).toBe(true);
-    expect(env.setBulk('p1', { B: '2-env', C: '3-env' }, stagingEnvironmentId)).toBe(false);
-    expect(env.getAll('p1', stagingEnvironmentId)).toEqual({ B: '2-env', C: '3-env' });
+    expect(env.setBulk('p1', { B: '2-env', C: '3-env' }, developmentEnvironmentId)).toBe(true);
+    expect(env.setBulk('p1', { B: '2-env', C: '3-env' }, developmentEnvironmentId)).toBe(false);
+    expect(env.getAll('p1', developmentEnvironmentId)).toEqual({ B: '2-env', C: '3-env' });
   });
 
   it('keeps getMergedForDeploy backward compatible and supports environment inheritance', () => {
     env.setGlobalSecret('GLOBAL_ONLY', 'global-value');
     env.set('p1', 'APP_MODE', 'project-mode');
     env.set('p1', 'API_URL', 'https://prod.example.com', productionEnvironmentId);
-    env.set('p1', 'API_URL', 'https://staging.example.com', stagingEnvironmentId);
+    env.set('p1', 'API_URL', 'https://dev.example.com', developmentEnvironmentId);
 
     expect(env.getMergedForDeploy('p1')).toEqual({
       GLOBAL_ONLY: 'global-value',
       APP_MODE: 'project-mode',
     });
 
-    expect(env.getMergedForDeploy('p1', stagingEnvironmentId)).toEqual({
+    expect(env.getMergedForDeploy('p1', developmentEnvironmentId)).toEqual({
       GLOBAL_ONLY: 'global-value',
       APP_MODE: 'project-mode',
-      API_URL: 'https://staging.example.com',
+      API_URL: 'https://dev.example.com',
     });
   });
 
@@ -108,13 +108,13 @@ describe('EnvManager environment inheritance', () => {
     env.set('p1', 'PROJECT_ONLY', 'project-value');
     env.set('p1', 'PRODUCTION_ONLY', 'production-value', productionEnvironmentId);
     env.set('p1', 'SHARED_KEY', 'production-shared', productionEnvironmentId);
-    env.set('p1', 'SHARED_KEY', 'staging-shared', stagingEnvironmentId);
+    env.set('p1', 'SHARED_KEY', 'development-shared', developmentEnvironmentId);
 
-    expect(env.getInheritanceInfo('p1', stagingEnvironmentId)).toEqual({
+    expect(env.getInheritanceInfo('p1', developmentEnvironmentId)).toEqual({
       GLOBAL_ONLY: { value: 'global-value', source: 'global' },
       PROJECT_ONLY: { value: 'project-value', source: 'project' },
       PRODUCTION_ONLY: { value: 'production-value', source: 'production' },
-      SHARED_KEY: { value: 'staging-shared', source: 'environment', isOverride: true },
+      SHARED_KEY: { value: 'development-shared', source: 'environment', isOverride: true },
     });
   });
 });

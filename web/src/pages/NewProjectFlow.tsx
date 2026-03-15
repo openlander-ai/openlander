@@ -68,8 +68,7 @@ export function NewProjectFlow() {
   const handleEnvironmentChange = (value: string) => {
     setEnvironment(value);
     if (value === 'production') setBranch('main');
-    else if (value === 'staging') setBranch('develop');
-    else if (value === 'development') setBranch('dev');
+    else if (value === 'development') setBranch('develop');
   };
 
   const fetchRepos = useCallback(async (pageNum: number) => {
@@ -146,7 +145,7 @@ export function NewProjectFlow() {
         environment,
       );
       if (result.success && result.projectId) {
-        navigate(`/projects/${result.projectId}`);
+        navigate(`/projects/${result.projectId}?env=${environment}`);
       } else {
         setError(result.error ?? 'Deploy failed');
         setDeploying(false);
@@ -362,7 +361,6 @@ export function NewProjectFlow() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="production">Production</SelectItem>
-                    <SelectItem value="staging">Staging</SelectItem>
                     <SelectItem value="development">Development</SelectItem>
                   </SelectContent>
                 </Select>

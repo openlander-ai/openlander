@@ -77,9 +77,9 @@ describe('GET /api/projects/:id/env-example', () => {
   it('returns generated env-example text for production environment', async () => {
     db.createProject({ id: 'p1', name: 'demo', repoUrl: 'https://github.com/openlander/demo' });
     db.createEnvironment({
-      id: 'env-staging',
+      id: 'env-development',
       projectId: 'p1',
-      type: 'staging',
+      type: 'development',
       branch: 'develop',
     });
 
@@ -97,10 +97,10 @@ describe('GET /api/projects/:id/env-example', () => {
             APP_ORIGIN: 'https://prod.example.com',
           };
         }
-        if (environmentId === 'env-staging') {
+        if (environmentId === 'env-development') {
           return {
-            API_KEY: 'staging-secret-value',
-            APP_ORIGIN: 'https://staging.example.com',
+            API_KEY: 'dev-secret-value',
+            APP_ORIGIN: 'https://dev.example.com',
             FEATURE_FLAG: 'enabled',
           };
         }
@@ -112,23 +112,25 @@ describe('GET /api/projects/:id/env-example', () => {
     ).getAllWithInheritance = getAllWithInheritance;
 
     const productionRes = await app.request('/api/projects/p1/env-example?environment=production');
-    const stagingRes = await app.request('/api/projects/p1/env-example?environment=staging');
+    const developmentRes = await app.request(
+      '/api/projects/p1/env-example?environment=development',
+    );
 
     expect(productionRes.status).toBe(200);
-    expect(stagingRes.status).toBe(200);
+    expect(developmentRes.status).toBe(200);
 
     const productionBody = await productionRes.text();
-    const stagingBody = await stagingRes.text();
+    const developmentBody = await developmentRes.text();
 
     expect(productionBody).toContain('FEATURE_FLAG=');
-    expect(stagingBody).toContain('FEATURE_FLAG=<configured-in-openlander>');
+    expect(developmentBody).toContain('FEATURE_FLAG=<configured-in-openlander>');
     expect(productionBody).toContain('REDIS_URL=redis://redis:6379');
-    expect(stagingBody).toContain('REDIS_URL=redis://redis:6379');
+    expect(developmentBody).toContain('REDIS_URL=redis://redis:6379');
 
     expect(productionBody).not.toContain('prod-secret-value');
-    expect(stagingBody).not.toContain('staging-secret-value');
+    expect(developmentBody).not.toContain('dev-secret-value');
     expect(productionBody).not.toContain('https://prod.example.com');
-    expect(stagingBody).not.toContain('https://staging.example.com');
+    expect(developmentBody).not.toContain('https://dev.example.com');
 
     const mockedCloneRepo = cloneRepo as unknown as ReturnType<typeof vi.fn>;
     expect(mockedCloneRepo).toHaveBeenNthCalledWith(

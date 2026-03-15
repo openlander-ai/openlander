@@ -59,56 +59,50 @@ describe('Database environments', () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/a' });
 
     const created = db.createEnvironment({
-      id: 'env-staging',
+      id: 'env-development',
       projectId: 'p1',
-      type: 'staging',
+      type: 'development',
       branch: 'release',
       status: 'building',
       containerId: 'container-1',
       assignedPort: 32100,
       imageTag: 'image:v1',
       previousImageTag: 'image:v0',
-      publicUrl: 'https://staging.example.com',
+      publicUrl: 'https://dev.example.com',
     });
 
-    expect(created.id).toBe('env-staging');
-    expect(created.type).toBe('staging');
+    expect(created.id).toBe('env-development');
+    expect(created.type).toBe('development');
 
-    const fetched = db.getEnvironment('env-staging');
+    const fetched = db.getEnvironment('env-development');
     expect(fetched).toBeDefined();
     expect(fetched!.branch).toBe('release');
     expect(fetched!.assigned_port).toBe(32100);
 
-    const development = db.createEnvironment({
-      id: 'env-development',
-      projectId: 'p1',
-      type: 'development',
-      branch: 'dev',
-    });
-    expect(development.type).toBe('development');
-    expect(development.status).toBe('idle');
+    expect(created.type).toBe('development');
+    expect(created.status).toBe('building');
 
-    db.updateEnvironment('env-staging', {
+    db.updateEnvironment('env-development', {
       status: 'running',
       branch: 'release-hotfix',
       containerId: 'container-2',
       assignedPort: 32101,
       imageTag: 'image:v2',
       previousImageTag: 'image:v1',
-      publicUrl: 'https://staging2.example.com',
+      publicUrl: 'https://dev2.example.com',
     });
 
-    const updated = db.getEnvironment('env-staging');
+    const updated = db.getEnvironment('env-development');
     expect(updated!.status).toBe('running');
     expect(updated!.branch).toBe('release-hotfix');
     expect(updated!.container_id).toBe('container-2');
     expect(updated!.assigned_port).toBe(32101);
     expect(updated!.image_tag).toBe('image:v2');
     expect(updated!.previous_image_tag).toBe('image:v1');
-    expect(updated!.public_url).toBe('https://staging2.example.com');
+    expect(updated!.public_url).toBe('https://dev2.example.com');
 
-    db.deleteEnvironment('env-staging');
-    expect(db.getEnvironment('env-staging')).toBeUndefined();
+    db.deleteEnvironment('env-development');
+    expect(db.getEnvironment('env-development')).toBeUndefined();
   });
 
   it('enforces unique (project_id, type) in environments', () => {

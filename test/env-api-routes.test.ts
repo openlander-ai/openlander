@@ -37,13 +37,13 @@ describe('Environment API routes', () => {
     const res = await app.request('/api/projects/p1/environments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'staging' }),
+      body: JSON.stringify({ type: 'development' }),
     });
 
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body.environment.type).toBe('staging');
-    expect(body.environment.branch).toBe('main');
+    expect(body.environment.type).toBe('development');
+    expect(body.environment.branch).toBe('develop');
 
     const projectRes = await app.request('/api/projects/p1');
     const projectBody = await projectRes.json();
@@ -76,10 +76,10 @@ describe('Environment API routes', () => {
       .find((environment) => environment.type === 'production');
     expect(production).toBeDefined();
 
-    const staging = db.createEnvironment({
-      id: 'env-staging',
+    const development = db.createEnvironment({
+      id: 'env-development',
       projectId: 'p1',
-      type: 'staging',
+      type: 'development',
       branch: 'develop',
     });
 
@@ -89,24 +89,24 @@ describe('Environment API routes', () => {
     env.set('p1', 'SHARED_KEY', 'project-shared');
     env.set('p1', 'PROD_ONLY', 'prod-value', production!.id);
     env.set('p1', 'SHARED_KEY', 'prod-shared', production!.id);
-    env.set('p1', 'STAGING_ONLY', 'staging-value', staging.id);
-    env.set('p1', 'SHARED_KEY', 'staging-shared', staging.id);
+    env.set('p1', 'DEVELOPMENT_ONLY', 'dev-value', development.id);
+    env.set('p1', 'SHARED_KEY', 'development-shared', development.id);
 
-    const res = await app.request('/api/projects/p1/environments/env-staging/env');
+    const res = await app.request('/api/projects/p1/environments/env-development/env');
     expect(res.status).toBe(200);
 
     const body = await res.json();
     expect(body.envVars).toMatchObject({
       PROJECT_ONLY: 'project-value',
       PROD_ONLY: 'prod-value',
-      STAGING_ONLY: 'staging-value',
-      SHARED_KEY: 'staging-shared',
+      DEVELOPMENT_ONLY: 'dev-value',
+      SHARED_KEY: 'development-shared',
     });
     expect(body.inheritance.GLOBAL_ONLY).toEqual({ value: 'global-value', source: 'global' });
     expect(body.inheritance.PROJECT_ONLY).toEqual({ value: 'project-value', source: 'project' });
     expect(body.inheritance.PROD_ONLY).toEqual({ value: 'prod-value', source: 'production' });
     expect(body.inheritance.SHARED_KEY).toEqual({
-      value: 'staging-shared',
+      value: 'development-shared',
       source: 'environment',
       isOverride: true,
     });

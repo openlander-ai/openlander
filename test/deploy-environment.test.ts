@@ -84,13 +84,13 @@ describe('DeployPipeline deployEnvironment', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p1-staging',
+      id: 'p1-development',
       projectId: 'p1',
-      type: 'staging',
+      type: 'development',
       branch: 'develop',
     });
 
-    const result = await pipeline.deployEnvironment('p1', 'p1-staging', {
+    const result = await pipeline.deployEnvironment('p1', 'p1-development', {
       repoUrl: 'https://github.com/openlander/demo-app',
     });
 
@@ -101,26 +101,26 @@ describe('DeployPipeline deployEnvironment', () => {
         branch: 'develop',
       }),
     );
-    expect(env.getMergedForDeploy).toHaveBeenCalledWith('p1', 'p1-staging');
+    expect(env.getMergedForDeploy).toHaveBeenCalledWith('p1', 'p1-development');
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ol-demo-app-staging',
+        name: 'ol-demo-app-dev',
       }),
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         traefikLabels: expect.objectContaining({
-          'traefik.http.routers.ol-demo-app.rule': expect.stringContaining('staging-demo-app.'),
+          'traefik.http.routers.ol-demo-app.rule': expect.stringContaining('dev-demo-app.'),
         }),
       }),
     );
-    expect(result.url).toContain('staging-demo-app.');
+    expect(result.url).toContain('dev-demo-app.');
 
-    const stagingEnvironment = db.getEnvironment('p1-staging');
-    expect(stagingEnvironment?.status).toBe('running');
-    expect(stagingEnvironment?.container_id).toBe('container-abc123456789');
-    expect(stagingEnvironment?.assigned_port).toBeGreaterThanOrEqual(10001);
-    expect(stagingEnvironment?.image_tag).toBe('openlander/demo-app-staging:latest');
+    const developmentEnvironment = db.getEnvironment('p1-development');
+    expect(developmentEnvironment?.status).toBe('running');
+    expect(developmentEnvironment?.container_id).toBe('container-abc123456789');
+    expect(developmentEnvironment?.assigned_port).toBeGreaterThanOrEqual(10001);
+    expect(developmentEnvironment?.image_tag).toBe('openlander/demo-app-dev:latest');
   });
 
   it('deploy() stays backward compatible by routing through production environment', async () => {
@@ -219,9 +219,9 @@ describe('DeployPipeline deployEnvironment', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p4-staging',
+      id: 'p4-development',
       projectId: 'p4',
-      type: 'staging',
+      type: 'development',
       branch: 'compose-branch',
     });
 
@@ -242,7 +242,7 @@ describe('DeployPipeline deployEnvironment', () => {
       composePipeline as never,
     );
 
-    const result = await composeEnabledPipeline.deployEnvironment('p4', 'p4-staging', {
+    const result = await composeEnabledPipeline.deployEnvironment('p4', 'p4-development', {
       repoUrl: 'https://github.com/openlander/compose-app',
       trigger: 'api',
     });
@@ -253,7 +253,7 @@ describe('DeployPipeline deployEnvironment', () => {
         branch: 'compose-branch',
         clonePath,
         composePath: join(clonePath, 'docker-compose.yml'),
-        name: 'compose-app-staging',
+        name: 'compose-app-dev',
         trigger: 'api',
       }),
     );
@@ -400,18 +400,18 @@ describe('DeployPipeline deployEnvironment', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p9-staging',
+      id: 'p9-development',
       projectId: 'p9',
-      type: 'staging',
+      type: 'development',
       branch: 'develop',
     });
 
-    const result = await pipeline.deployEnvironment('p8', 'p9-staging', {
+    const result = await pipeline.deployEnvironment('p8', 'p9-development', {
       repoUrl: 'https://github.com/openlander/owner-a',
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('Environment not found: p9-staging');
+    expect(result.error).toBe('Environment not found: p9-development');
     expect(cloneRepo).not.toHaveBeenCalled();
   });
 
@@ -463,14 +463,14 @@ describe('DeployPipeline deployEnvironment', () => {
   it('does not open quick-share tunnel for non-production environments', async () => {
     db.createProject({
       id: 'p12',
-      name: 'staging-share-app',
-      repoUrl: 'https://github.com/openlander/staging-share-app',
+      name: 'development-share-app',
+      repoUrl: 'https://github.com/openlander/development-share-app',
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p12-staging',
+      id: 'p12-development',
       projectId: 'p12',
-      type: 'staging',
+      type: 'development',
       branch: 'develop',
     });
 
@@ -478,7 +478,7 @@ describe('DeployPipeline deployEnvironment', () => {
       .spyOn(pipeline, 'exposeTunnel')
       .mockResolvedValue('https://should-not-be-used.example.trycloudflare.com');
 
-    const result = await pipeline.deployEnvironment('p12', 'p12-staging', {
+    const result = await pipeline.deployEnvironment('p12', 'p12-development', {
       visibility: 'quick-share',
     });
 
@@ -495,25 +495,25 @@ describe('DeployPipeline deployEnvironment', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p13-staging',
+      id: 'p13-development',
       projectId: 'p13',
-      type: 'staging',
+      type: 'development',
       branch: 'develop',
     });
 
     const setEnvVarsBulkSpy = vi.spyOn(db, 'setEnvVarsBulk');
 
-    const result = await pipeline.deployEnvironment('p13', 'p13-staging', {
+    const result = await pipeline.deployEnvironment('p13', 'p13-development', {
       envVars: {
-        API_BASE_URL: 'https://staging.example.com',
+        API_BASE_URL: 'https://dev.example.com',
       },
     });
 
     expect(result.success).toBe(true);
     expect(setEnvVarsBulkSpy).toHaveBeenCalledWith(
       'p13',
-      { API_BASE_URL: 'https://staging.example.com' },
-      'p13-staging',
+      { API_BASE_URL: 'https://dev.example.com' },
+      'p13-development',
     );
   });
 
@@ -529,11 +529,11 @@ describe('DeployPipeline deployEnvironment', () => {
       _projectId: 'p14',
       name: 'missing-target-env-app',
       repoUrl: 'https://github.com/openlander/missing-target-env-app',
-      environment: 'staging',
+      environment: 'development',
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('staging environment not found');
+    expect(result.error).toBe('development environment not found');
   });
 
   it('cleanupStaleTunnels resets quick-share/shared projects to internal on startup', () => {

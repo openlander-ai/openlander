@@ -16,7 +16,7 @@ import type { EnvironmentRow, EnvironmentType } from '../../db/index.js';
 const log = createModuleLogger('api');
 
 function isEnvironmentType(value: unknown): value is EnvironmentType {
-  return value === 'production' || value === 'staging' || value === 'development';
+  return value === 'production' || value === 'development';
 }
 
 function mapEnvironment(environment: EnvironmentRow) {
@@ -232,7 +232,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       return c.json(
         {
           error: 'INVALID_ENVIRONMENT_TYPE',
-          message: 'type must be one of: production, staging, development',
+          message: 'type must be one of: production, development',
         },
         400,
       );
@@ -254,7 +254,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const branch =
       typeof body.branch === 'string' && body.branch.trim().length > 0
         ? body.branch.trim()
-        : project.branch;
+        : body.type === 'development'
+          ? 'develop'
+          : project.branch;
 
     const created = ctx.db.createEnvironment({
       id: crypto.randomUUID(),
@@ -883,12 +885,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
 
     const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const allowedEnvironments = new Set(['production', 'staging', 'development']);
+    const allowedEnvironments = new Set(['production', 'development']);
     if (!allowedEnvironments.has(requestedEnvironment)) {
       return c.json(
         {
           error: 'INVALID_ENVIRONMENT',
-          message: 'environment must be one of: production, staging, development',
+          message: 'environment must be one of: production, development',
         },
         400,
       );

@@ -230,7 +230,6 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="production">Production</SelectItem>
-                  <SelectItem value="staging">Staging</SelectItem>
                   <SelectItem value="development">Development</SelectItem>
                 </SelectContent>
               </Select>
