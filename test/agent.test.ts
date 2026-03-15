@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { Agent } from '../src/agent/index.js';
@@ -9,6 +9,30 @@ import type { ToolSet, LanguageModel } from 'ai';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { Database } from '../src/db/index.js';
+import type { AppContext } from '../src/app.js';
+import { createTools } from '../src/agent/tools.js';
+import type { QuestionBridge } from '../src/agent/question-bridge.js';
+import { cloneRepo } from '../src/pipeline/git.js';
+import { loadConfig } from '../src/config/index.js';
+import { createGitProvider } from '../src/git-providers/index.js';
+
+vi.mock('../src/pipeline/git.js', () => ({
+  cloneRepo: vi.fn(),
+}));
+
+vi.mock('../src/config/index.js', () => ({
+  loadConfig: vi.fn(() => ({
+    gitProviders: {
+      github: {
+        token: '',
+      },
+    },
+  })),
+}));
+
+vi.mock('../src/git-providers/index.js', () => ({
+  createGitProvider: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Mock AI SDK
@@ -38,6 +62,12 @@ interface MockStreamTextOptions {
   >;
 }
 
+interface MockModelOptions {
+  model: LanguageModel;
+  messages: Array<{ role: string; content: string }>;
+  tools: ToolSet;
+}
+
 // Store mock implementations for each test
 let mockGenerateTextImplementation:
   | ((opts: {
@@ -56,7 +86,7 @@ let mockStreamTextImplementation:
   | null = null;
 
 vi.mock('ai', () => ({
-  generateText: vi.fn(async (opts: Parameters<typeof mockGenerateTextImplementation>[0]) => {
+  generateText: vi.fn(async (opts: MockModelOptions) => {
     if (!mockGenerateTextImplementation) {
       return { text: 'Default response', steps: [] };
     }
@@ -66,7 +96,7 @@ vi.mock('ai', () => ({
       steps: result.steps ?? [],
     };
   }),
-  streamText: vi.fn((opts: Parameters<typeof mockStreamTextImplementation>[0]) => {
+  streamText: vi.fn((opts: MockModelOptions) => {
     const events = mockStreamTextImplementation ? mockStreamTextImplementation(opts).events : [];
     return {
       fullStream: {
@@ -82,9 +112,13 @@ vi.mock('ai', () => ({
   tool: vi.fn(
     (config: {
       description?: string;
-      parameters: z.ZodSchema;
-      execute: (args: unknown) => Promise<unknown>;
-    }) => config,
+      parameters?: z.ZodSchema;
+      inputSchema?: z.ZodSchema;
+      execute: (args: unknown, options?: unknown) => Promise<unknown>;
+    }) => ({
+      ...config,
+      inputSchema: config.inputSchema ?? config.parameters,
+    }),
   ),
 }));
 
@@ -96,7 +130,7 @@ vi.mock('ai', () => ({
 function createMockTool(name: string, result: unknown = { ok: true }) {
   return tool({
     description: `Mock tool: ${name}`,
-    parameters: z.object({}),
+    inputSchema: z.object({}),
     execute: vi.fn<() => Promise<unknown>>().mockResolvedValue(result),
   });
 }
@@ -105,7 +139,7 @@ function createMockTool(name: string, result: unknown = { ok: true }) {
 function createFailingMockTool(name: string, error: Error) {
   return tool({
     description: `Mock tool: ${name}`,
-    parameters: z.object({}),
+    inputSchema: z.object({}),
     execute: vi.fn<() => Promise<unknown>>().mockRejectedValue(error),
   });
 }
@@ -483,5 +517,632 @@ describe('Agent — chatStream', () => {
     const errorEvent = events.find((e) => e.type === 'error');
     expect(errorEvent).toBeDefined();
     expect(errorEvent!.error).toContain('rate limit');
+  });
+});
+
+describe('Agent tools — fix approval flow', () => {
+  let db: Database;
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'openlander-agent-tools-test-'));
+    db = new Database(join(tmpDir, 'test.db'));
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    db.close();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function createToolsContext(questionBridge?: QuestionBridge) {
+    const startDeploy = vi
+      .fn()
+      .mockResolvedValue({ projectId: 'p1', projectName: 'demo', status: 'building' });
+    const buildDebugger = {
+      fixDockerfile: vi.fn().mockResolvedValue({
+        dockerfileContent: 'FROM node:20\nRUN npm ci\n',
+        explanation: 'Use supported Node version and deterministic install',
+        changes: ['Bump Node to 20', 'Use npm ci'],
+      }),
+    };
+
+    const composePipeline = {
+      detectComposeFile: vi.fn(),
+      deployCompose: vi.fn(),
+    };
+
+    const ctx = {
+      config: { git: { sshKeyPath: '' } },
+      db,
+      pipeline: { startDeploy },
+      composePipeline,
+      buildDebugger,
+      alertMonitor: { getActiveAlerts: vi.fn(), dismissAlert: vi.fn() },
+      env: {
+        setBulk: vi.fn(),
+        setGlobalSecret: vi.fn(),
+        getGlobalSecretsMasked: vi.fn().mockReturnValue([]),
+      },
+      cloudflare: {},
+      docker: {},
+      blueGreen: { deploy: vi.fn() },
+      dbProvisioner: { provision: vi.fn() },
+      previewDeployer: { deploy: vi.fn(), cleanup: vi.fn(), list: vi.fn().mockReturnValue([]) },
+      serviceManager: { listServices: vi.fn(), ensureService: vi.fn(), getServiceLogs: vi.fn() },
+      webhookManager: {},
+      traefik: {},
+      deployQueue: {},
+      healthMonitor: {},
+      channelManager: {},
+      autoDetector: {},
+      questionBridge,
+      mcpClientManager: {},
+      agent: null,
+      jobManager: {},
+    } as unknown as AppContext;
+
+    return {
+      tools: createTools(ctx, questionBridge) as unknown as Record<
+        string,
+        { execute?: (input: Record<string, unknown>, options?: unknown) => Promise<unknown> }
+      >,
+      buildDebugger,
+      startDeploy,
+      composePipeline,
+    };
+  }
+
+  function seedFailedProject(): void {
+    db.createProject({
+      id: 'p1',
+      name: 'demo',
+      repoUrl: 'https://github.com/openlander/demo',
+      branch: 'main',
+    });
+    db.createDeployLog({
+      id: 'fail-1',
+      projectId: 'p1',
+      status: 'failed',
+      trigger: 'chat',
+      buildLog: 'Docker build failed',
+    });
+  }
+
+  function getToolExecutor(
+    tools: Record<
+      string,
+      { execute?: (input: Record<string, unknown>, options?: unknown) => Promise<unknown> }
+    >,
+    toolName: string,
+  ): (input: Record<string, unknown>) => Promise<unknown> {
+    const target = tools[toolName];
+    expect(target).toBeDefined();
+    expect(target?.execute).toBeDefined();
+    return (input) => target.execute!(input, {});
+  }
+
+  it('fix_dockerfile asks for approval, persists pending fix, then redeploys on approve', async () => {
+    seedFailedProject();
+
+    const clonePath = join(tmpDir, 'repo');
+    writeFileSync(join(tmpDir, 'placeholder.txt'), 'x', 'utf8');
+    rmSync(join(tmpDir, 'placeholder.txt'), { force: true });
+    rmSync(clonePath, { recursive: true, force: true });
+    mkdtempSync(join(tmpDir, 'repo-'));
+    const realClonePath = join(tmpDir, 'repo-fix');
+    rmSync(realClonePath, { recursive: true, force: true });
+    mkdirSync(realClonePath, { recursive: true });
+    writeFileSync(join(realClonePath, 'Dockerfile'), 'FROM node:18\nRUN npm install\n', 'utf8');
+    vi.mocked(cloneRepo).mockResolvedValue({ path: realClonePath, commitSha: 'deadbeef' });
+
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Apply this fix and redeploy'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+
+    const { tools, startDeploy } = createToolsContext(bridge);
+    const runFixDockerfile = getToolExecutor(tools, 'fix_dockerfile');
+    const result = await runFixDockerfile({ project_name: 'demo' });
+
+    expect(bridge.ask).toHaveBeenCalledOnce();
+    const request = vi.mocked(bridge.ask).mock.calls[0]?.[0];
+    expect(request?.questions[0]?.metadata).toEqual(
+      expect.objectContaining({
+        fixType: 'dockerfile',
+        filePath: 'Dockerfile',
+        before: expect.stringContaining('FROM node:18'),
+        after: expect.stringContaining('FROM node:20'),
+      }),
+    );
+
+    const project = db.getProject('p1');
+    expect(project?.pending_fix).toBeTruthy();
+    const pendingFix = JSON.parse(project?.pending_fix ?? '{}') as {
+      filePath?: string;
+      content?: string;
+    };
+    expect(pendingFix.filePath).toBe('Dockerfile');
+    expect(pendingFix.content).toContain('FROM node:20');
+
+    expect(startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoUrl: 'https://github.com/openlander/demo',
+        name: 'demo',
+      }),
+    );
+    expect(result).toEqual(expect.objectContaining({ status: 'approved' }));
+  });
+
+  it('fix_dockerfile returns suggestion only when user rejects', async () => {
+    seedFailedProject();
+    const clonePath = join(tmpDir, 'repo-reject');
+    mkdirSync(clonePath, { recursive: true });
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
+    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: 'cafebabe' });
+
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Show me other options'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+
+    const { tools, startDeploy } = createToolsContext(bridge);
+    const runFixDockerfile = getToolExecutor(tools, 'fix_dockerfile');
+    const result = await runFixDockerfile({ project_name: 'demo' });
+
+    expect(startDeploy).not.toHaveBeenCalled();
+    expect(db.getProject('p1')?.pending_fix).toBeNull();
+    expect(result).toEqual(expect.objectContaining({ status: 'rejected' }));
+  });
+
+  it('fix_dockerfile stops after 3 attempts for the same failed deploy', async () => {
+    seedFailedProject();
+    const clonePath = join(tmpDir, 'repo-limit');
+    mkdirSync(clonePath, { recursive: true });
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
+    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: 'beaded' });
+
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Show me other options'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+
+    const { tools } = createToolsContext(bridge);
+    const runFixDockerfile = getToolExecutor(tools, 'fix_dockerfile');
+    await runFixDockerfile({ project_name: 'demo' });
+    await runFixDockerfile({ project_name: 'demo' });
+    await runFixDockerfile({ project_name: 'demo' });
+    const fourth = await runFixDockerfile({ project_name: 'demo' });
+
+    expect(bridge.ask).toHaveBeenCalledTimes(3);
+    expect(fourth).toEqual(expect.objectContaining({ error: 'MAX_FIX_ATTEMPTS_REACHED' }));
+  });
+
+  it('ask_user_question applies approved compose fix using same pending-fix path', async () => {
+    seedFailedProject();
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Apply this fix and redeploy'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+    const { tools, startDeploy } = createToolsContext(bridge);
+
+    const questions = JSON.stringify([
+      {
+        question: 'Apply compose fix?',
+        options: [{ label: 'Apply this fix and redeploy' }],
+        metadata: {
+          fixType: 'compose',
+          projectId: 'p1',
+          filePath: 'docker-compose.yml',
+          after: 'services:\n  web:\n    image: nginx',
+          failureId: 'fail-1',
+        },
+      },
+    ]);
+
+    const runAskUserQuestion = getToolExecutor(tools, 'ask_user_question');
+    const result = await runAskUserQuestion({ questions });
+    const pendingRaw = db.getProject('p1')?.pending_fix;
+    const pendingFix = JSON.parse(pendingRaw ?? '{}') as { filePath?: string; content?: string };
+
+    expect(pendingFix.filePath).toBe('docker-compose.yml');
+    expect(pendingFix.content).toContain('services:');
+    expect(startDeploy).toHaveBeenCalledOnce();
+    expect(result).toEqual(expect.objectContaining({ appliedFix: true, fixType: 'compose' }));
+  });
+
+  it('deploy_compose includes compose file content in BUILD_FAILED response', async () => {
+    const bridge = {
+      ask: vi.fn(),
+    } as unknown as QuestionBridge;
+    const { tools, composePipeline } = createToolsContext(bridge);
+
+    const clonePath = join(tmpDir, 'repo-compose');
+    mkdirSync(clonePath, { recursive: true });
+    const composePath = join(clonePath, 'docker-compose.yml');
+    writeFileSync(composePath, 'services:\n  web:\n    image: nginx\n', 'utf8');
+    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: 'feedface' });
+    composePipeline.detectComposeFile.mockReturnValue(composePath);
+    composePipeline.deployCompose.mockResolvedValue({
+      success: false,
+      parentProjectId: 'p1',
+      parentName: 'demo',
+      services: [],
+      buildDurationMs: 0,
+      error: 'env_file missing',
+    });
+
+    const runDeployCompose = getToolExecutor(tools, 'deploy_compose');
+    const result = await runDeployCompose({
+      repo_url: 'https://github.com/openlander/demo',
+      name: 'demo',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: 'BUILD_FAILED',
+        composePath,
+        composeContent: expect.stringContaining('services:'),
+      }),
+    );
+  });
+
+  it('deploy_compose returns COMPOSE_FILE_NOT_FOUND when compose is missing', async () => {
+    const { tools, composePipeline } = createToolsContext();
+    vi.mocked(cloneRepo).mockResolvedValue({ path: tmpDir, commitSha: 'facefeed' });
+    composePipeline.detectComposeFile.mockReturnValue(null);
+
+    const runDeployCompose = getToolExecutor(tools, 'deploy_compose');
+    const result = await runDeployCompose({
+      repo_url: 'https://github.com/openlander/demo',
+      name: 'demo',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: 'COMPOSE_FILE_NOT_FOUND',
+        message: expect.stringContaining('No compose file found'),
+      }),
+    );
+  });
+
+  it('deploy_compose returns BUILD_FAILED with empty compose content when read fails', async () => {
+    const { tools, composePipeline } = createToolsContext();
+    vi.mocked(cloneRepo).mockResolvedValue({ path: tmpDir, commitSha: '00aa11' });
+    const missingComposePath = join(tmpDir, 'missing-compose.yml');
+    composePipeline.detectComposeFile.mockReturnValue(missingComposePath);
+    composePipeline.deployCompose.mockResolvedValue({
+      success: false,
+      parentProjectId: 'p1',
+      parentName: 'demo',
+      services: [],
+      buildDurationMs: 0,
+      error: 'compose failed',
+    });
+
+    const runDeployCompose = getToolExecutor(tools, 'deploy_compose');
+    const result = await runDeployCompose({
+      repo_url: 'https://github.com/openlander/demo',
+      name: 'demo',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: 'BUILD_FAILED',
+        composePath: missingComposePath,
+        composeContent: '',
+      }),
+    );
+  });
+
+  it('fix_dockerfile returns proposal_ready when question bridge is not provided', async () => {
+    seedFailedProject();
+    const clonePath = join(tmpDir, 'repo-no-bridge');
+    mkdirSync(clonePath, { recursive: true });
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
+    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: '123abc' });
+
+    const { tools, startDeploy } = createToolsContext();
+    const runFixDockerfile = getToolExecutor(tools, 'fix_dockerfile');
+    const result = await runFixDockerfile({ project_name: 'demo' });
+
+    expect(startDeploy).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'proposal_ready',
+        attempts: 1,
+        dockerfileContent: expect.stringContaining('FROM node:20'),
+      }),
+    );
+  });
+
+  it('fix_dockerfile returns dismissed when user closes the question', async () => {
+    seedFailedProject();
+    const clonePath = join(tmpDir, 'repo-dismissed');
+    mkdirSync(clonePath, { recursive: true });
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
+    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: '123abd' });
+
+    const bridge = {
+      ask: vi.fn().mockResolvedValue([]),
+    } as unknown as QuestionBridge;
+
+    const { tools, startDeploy } = createToolsContext(bridge);
+    const runFixDockerfile = getToolExecutor(tools, 'fix_dockerfile');
+    const result = await runFixDockerfile({ project_name: 'demo' });
+
+    expect(startDeploy).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'dismissed',
+        attempts: 1,
+      }),
+    );
+  });
+
+  it('fix_dockerfile returns MISSING_REPO_URL when project has no repo URL', async () => {
+    db.createProject({
+      id: 'p2',
+      name: 'no-repo',
+      repoUrl: '',
+      branch: 'main',
+    });
+    db.createDeployLog({
+      id: 'fail-norepo',
+      projectId: 'p2',
+      status: 'failed',
+      trigger: 'chat',
+      buildLog: 'Docker build failed',
+    });
+
+    const clonePath = join(tmpDir, 'repo-no-url');
+    mkdirSync(clonePath, { recursive: true });
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
+    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: '123abe' });
+
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Apply this fix and redeploy'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+
+    const { tools, startDeploy } = createToolsContext(bridge);
+    const runFixDockerfile = getToolExecutor(tools, 'fix_dockerfile');
+    const result = await runFixDockerfile({ project_name: 'no-repo' });
+
+    expect(startDeploy).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: 'MISSING_REPO_URL',
+      }),
+    );
+  });
+
+  it('ask_user_question returns dismissed when no answer is submitted', async () => {
+    seedFailedProject();
+    const bridge = {
+      ask: vi.fn().mockResolvedValue([]),
+    } as unknown as QuestionBridge;
+    const { tools, startDeploy } = createToolsContext(bridge);
+
+    const runAskUserQuestion = getToolExecutor(tools, 'ask_user_question');
+    const result = await runAskUserQuestion({
+      questions: JSON.stringify([
+        {
+          question: 'Apply this?',
+          options: [{ label: 'Apply now' }],
+        },
+      ]),
+    });
+
+    expect(startDeploy).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        dismissed: true,
+      }),
+    );
+  });
+
+  it('ask_user_question returns plain answers when metadata cannot produce a pending fix', async () => {
+    seedFailedProject();
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([{ questionIndex: 0, selectedLabels: ['Apply now'], customText: '' }]),
+    } as unknown as QuestionBridge;
+    const { tools, startDeploy } = createToolsContext(bridge);
+
+    const runAskUserQuestion = getToolExecutor(tools, 'ask_user_question');
+    const result = await runAskUserQuestion({
+      questions: JSON.stringify([
+        {
+          question: 'Apply this?',
+          options: [{ label: 'Apply now' }],
+          metadata: {
+            projectId: 'p1',
+            after: 'missing filePath branch',
+          },
+        },
+      ]),
+    });
+
+    expect(startDeploy).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        answers: expect.arrayContaining([
+          expect.objectContaining({ selectedLabels: ['Apply now'], questionIndex: 0 }),
+        ]),
+      }),
+    );
+  });
+
+  it('ask_user_question enforces max attempts for approved fixes', async () => {
+    seedFailedProject();
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Apply this fix and redeploy'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+    const { tools, startDeploy } = createToolsContext(bridge);
+
+    const runAskUserQuestion = getToolExecutor(tools, 'ask_user_question');
+    const questions = {
+      questions: JSON.stringify([
+        {
+          question: 'Apply compose fix?',
+          options: [{ label: 'Apply this fix and redeploy' }],
+          metadata: {
+            fixType: 'compose',
+            projectId: 'p1',
+            filePath: 'docker-compose.yml',
+            after: 'services:\n  web:\n    image: nginx',
+            failureId: 'fail-1',
+          },
+        },
+      ]),
+    };
+
+    await runAskUserQuestion(questions);
+    await runAskUserQuestion(questions);
+    await runAskUserQuestion(questions);
+    const fourth = await runAskUserQuestion(questions);
+
+    expect(startDeploy).toHaveBeenCalledTimes(3);
+    expect(fourth).toEqual(
+      expect.objectContaining({
+        maxAttemptsReached: true,
+        fixType: 'compose',
+      }),
+    );
+  });
+
+  it('ask_user_question resolves target project by projectName metadata', async () => {
+    seedFailedProject();
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Apply this fix and redeploy'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+    const { tools, startDeploy } = createToolsContext(bridge);
+
+    const runAskUserQuestion = getToolExecutor(tools, 'ask_user_question');
+    const result = await runAskUserQuestion({
+      questions: JSON.stringify([
+        {
+          question: 'Apply dockerfile fix?',
+          options: [{ label: 'Apply this fix and redeploy' }],
+          metadata: {
+            fixType: 'dockerfile',
+            projectName: 'demo',
+            filePath: 'Dockerfile',
+            after: 'FROM node:20',
+          },
+        },
+      ]),
+    });
+
+    expect(startDeploy).toHaveBeenCalledOnce();
+    expect(result).toEqual(expect.objectContaining({ appliedFix: true, fixType: 'dockerfile' }));
+  });
+
+  it('ask_user_question returns MISSING_REPO_URL for metadata-targeted project without repo', async () => {
+    db.createProject({
+      id: 'p3',
+      name: 'missing-repo',
+      repoUrl: '',
+      branch: 'main',
+    });
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Apply this fix and redeploy'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+    const { tools, startDeploy } = createToolsContext(bridge);
+
+    const runAskUserQuestion = getToolExecutor(tools, 'ask_user_question');
+    const result = await runAskUserQuestion({
+      questions: JSON.stringify([
+        {
+          question: 'Apply compose fix?',
+          options: [{ label: 'Apply this fix and redeploy' }],
+          metadata: {
+            fixType: 'compose',
+            projectId: 'p3',
+            filePath: 'docker-compose.yml',
+            after: 'services:\n  web:\n    image: nginx',
+          },
+        },
+      ]),
+    });
+
+    expect(startDeploy).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({ error: 'MISSING_REPO_URL' }));
+  });
+
+  it('createTools omits ask_user_question when question bridge is not provided', () => {
+    const { tools } = createToolsContext();
+    expect(tools.ask_user_question).toBeUndefined();
+  });
+
+  it('list_github_repos returns GITHUB_NOT_CONFIGURED when token is missing', async () => {
+    const { tools } = createToolsContext();
+    vi.mocked(loadConfig).mockReturnValue({
+      gitProviders: {
+        github: {
+          token: '',
+        },
+      },
+    } as ReturnType<typeof loadConfig>);
+
+    const runListGithubRepos = getToolExecutor(tools, 'list_github_repos');
+    const result = await runListGithubRepos({});
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: 'GITHUB_NOT_CONFIGURED',
+      }),
+    );
+    expect(createGitProvider).not.toHaveBeenCalled();
+  });
+
+  it('search_github_repos returns GITHUB_NOT_CONFIGURED when token is missing', async () => {
+    const { tools } = createToolsContext();
+    vi.mocked(loadConfig).mockReturnValue({
+      gitProviders: {
+        github: {
+          token: '',
+        },
+      },
+    } as ReturnType<typeof loadConfig>);
+
+    const runSearchGithubRepos = getToolExecutor(tools, 'search_github_repos');
+    const result = await runSearchGithubRepos({ query: 'demo' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: 'GITHUB_NOT_CONFIGURED',
+      }),
+    );
+    expect(createGitProvider).not.toHaveBeenCalled();
   });
 });

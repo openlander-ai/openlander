@@ -6,7 +6,7 @@ import { cloneRepo } from '../pipeline/git.js';
 import { getProjectUrl } from '../pipeline/traefik.js';
 import { scanUsedPorts } from '../pipeline/port.js';
 import { DeployOrchestrator, type ServiceNode } from '../pipeline/orchestrator.js';
-import { readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createGitProvider } from '../git-providers/index.js';
 import { loadConfig } from '../config/index.js';
@@ -16,6 +16,18 @@ import { tool } from 'ai';
 import { z } from 'zod';
 
 const log = createModuleLogger('agent-tools');
+
+const MAX_FIX_ATTEMPTS = 3;
+
+interface PendingFixPayload {
+  filePath: string;
+  content: string;
+}
+
+interface FixAttemptState {
+  failureId: string;
+  count: number;
+}
 
 /**
  * Tool definitions for the OpenLander agent.
@@ -51,6 +63,42 @@ const log = createModuleLogger('agent-tools');
  * - list_previews: List active previews
  */
 export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
+  const fixAttempts = new Map<string, FixAttemptState>();
+
+  const trackFixAttempt = (projectId: string, failureId: string) => {
+    const previous = fixAttempts.get(projectId);
+    const nextCount = previous && previous.failureId === failureId ? previous.count + 1 : 1;
+    fixAttempts.set(projectId, { failureId, count: nextCount });
+    return { count: nextCount, exceeded: nextCount > MAX_FIX_ATTEMPTS };
+  };
+
+  const savePendingFix = (projectId: string, pendingFix: PendingFixPayload) => {
+    ctx.db.updateProject(projectId, {
+      pendingFix: JSON.stringify(pendingFix),
+    });
+  };
+
+  const shouldApplyApprovedFix = (selectedLabels: string[]) => {
+    return selectedLabels.some((label) => /\b(apply|approve)\b/i.test(label));
+  };
+
+  const parsePendingFixMetadata = (metadata: Record<string, unknown> | undefined) => {
+    if (!metadata) {
+      return null;
+    }
+
+    const filePath = metadata['filePath'];
+    const after = metadata['after'];
+    if (typeof filePath !== 'string' || typeof after !== 'string') {
+      return null;
+    }
+
+    return {
+      filePath,
+      content: after,
+    } satisfies PendingFixPayload;
+  };
+
   const tools = {
     deploy_project: tool({
       description:
@@ -139,10 +187,21 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
         });
 
         if (!result.success) {
+          let composeContent = '';
+          try {
+            composeContent = readFileSync(composePath, 'utf8');
+          } catch (error) {
+            log.warn(
+              { err: error, composePath },
+              'Failed to read compose file after deploy failure',
+            );
+          }
           return {
+            ...result,
             error: 'BUILD_FAILED',
             message: result.error ?? 'Compose deploy failed.',
-            ...result,
+            composePath,
+            composeContent,
           };
         }
 
@@ -448,6 +507,15 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
           return { error: 'No failed build found for this project.' };
         }
 
+        const attempt = trackFixAttempt(project.id, lastDeploy.id);
+        if (attempt.exceeded) {
+          return {
+            error: 'MAX_FIX_ATTEMPTS_REACHED',
+            message:
+              'Reached the maximum of 3 fix attempts for this failure. Please update the repository manually before retrying.',
+          };
+        }
+
         // Clone path is ephemeral (temp dir), so re-clone to get current Dockerfile
         const { cloneRepo: cloneForFix } = await import('../pipeline/git.js');
         const { readDockerfile } = await import('./debugger.js');
@@ -465,7 +533,92 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
           projectName: project_name,
         });
 
-        return fixResult;
+        if (!questionBridge) {
+          return {
+            status: 'proposal_ready',
+            attempts: attempt.count,
+            ...fixResult,
+          };
+        }
+
+        const request = {
+          id: lastDeploy.id,
+          questions: [
+            {
+              question: 'I generated a Dockerfile fix. Should I apply this fix and redeploy now?',
+              header: 'Dockerfile Fix',
+              options: [
+                {
+                  label: 'Apply this fix and redeploy',
+                  description: 'Store this Dockerfile fix and trigger a redeploy immediately.',
+                },
+                {
+                  label: 'Show me other options',
+                  description: 'Do not apply this fix yet. I will suggest alternatives.',
+                },
+              ],
+              metadata: {
+                fixType: 'dockerfile',
+                projectId: project.id,
+                projectName: project.name,
+                failureId: lastDeploy.id,
+                filePath: 'Dockerfile',
+                before: currentDockerfile,
+                after: fixResult.dockerfileContent,
+                changes: fixResult.changes,
+                attempt: attempt.count,
+                maxAttempts: MAX_FIX_ATTEMPTS,
+              },
+            },
+          ],
+        };
+
+        const answers = await questionBridge.ask(request);
+        if (answers.length === 0) {
+          return {
+            status: 'dismissed',
+            message: 'Fix proposal was dismissed. Dockerfile was not changed.',
+            attempts: attempt.count,
+            ...fixResult,
+          };
+        }
+
+        const selection = answers[0];
+        const selectedLabels = selection?.selectedLabels ?? [];
+        if (!shouldApplyApprovedFix(selectedLabels)) {
+          return {
+            status: 'rejected',
+            message: 'Fix proposal was not approved. Dockerfile remains unchanged.',
+            attempts: attempt.count,
+            selectedLabels,
+            ...fixResult,
+          };
+        }
+
+        if (!project.repo_url) {
+          return {
+            error: 'MISSING_REPO_URL',
+            message: 'Project has no repository URL configured.',
+          };
+        }
+
+        savePendingFix(project.id, {
+          filePath: 'Dockerfile',
+          content: fixResult.dockerfileContent,
+        });
+        const deploy = await ctx.pipeline.startDeploy({
+          repoUrl: project.repo_url,
+          branch: project.branch,
+          name: project.name,
+          trigger: 'chat',
+        });
+
+        return {
+          status: 'approved',
+          attempts: attempt.count,
+          deploy,
+          ...fixResult,
+        };
       },
     }),
 
@@ -942,6 +1095,68 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
               message: 'User dismissed the question without answering.',
             };
           }
+
+          const firstQuestion = request.questions[0];
+          const firstAnswer = answers[0];
+          const pendingFix = parsePendingFixMetadata(firstQuestion?.metadata);
+          const fixType = firstQuestion?.metadata?.['fixType'];
+          const metadataProjectId = firstQuestion?.metadata?.['projectId'];
+          const metadataProjectName = firstQuestion?.metadata?.['projectName'];
+
+          const targetProject =
+            typeof metadataProjectId === 'string'
+              ? ctx.db.getProject(metadataProjectId)
+              : typeof metadataProjectName === 'string'
+                ? ctx.db.getProjectByName(metadataProjectName)
+                : undefined;
+
+          if (
+            pendingFix &&
+            targetProject &&
+            shouldApplyApprovedFix(firstAnswer?.selectedLabels ?? [])
+          ) {
+            const failureIdRaw = firstQuestion?.metadata?.['failureId'];
+            const failureId =
+              typeof failureIdRaw === 'string' && failureIdRaw.trim().length > 0
+                ? failureIdRaw
+                : `session:${targetProject.id}`;
+            const attempt = trackFixAttempt(targetProject.id, failureId);
+            if (attempt.exceeded) {
+              return {
+                message:
+                  'Reached the maximum of 3 fix attempts for this failure. Please apply a manual fix.',
+                maxAttemptsReached: true,
+                fixType,
+              };
+            }
+
+            if (!targetProject.repo_url) {
+              return {
+                error: 'MISSING_REPO_URL',
+                message: 'Project has no repository URL configured.',
+              };
+            }
+
+            savePendingFix(targetProject.id, pendingFix);
+            const deploy = await ctx.pipeline.startDeploy({
+              repoUrl: targetProject.repo_url,
+              branch: targetProject.branch,
+              name: targetProject.name,
+              trigger: 'chat',
+            });
+
+            return {
+              answers: answers.map((a) => ({
+                questionIndex: a.questionIndex,
+                selectedLabels: a.selectedLabels,
+                customText: a.customText,
+              })),
+              appliedFix: true,
+              fixType,
+              deploy,
+            };
+          }
+
           return {
             answers: answers.map((a) => ({
               questionIndex: a.questionIndex,
