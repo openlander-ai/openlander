@@ -268,6 +268,85 @@ describe('DeployPipeline deployEnvironment', () => {
     );
   });
 
+  it('applies pending fix from DB after clone and clears it', async () => {
+    db.createProject({
+      id: 'p8',
+      name: 'pending-fix-app',
+      repoUrl: 'https://github.com/openlander/pending-fix-app',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p8')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+
+    db.updateProject('p8', {
+      pendingFix: JSON.stringify({
+        filePath: 'Dockerfile',
+        content: 'FROM node:20\nEXPOSE 8080\n',
+      }),
+    });
+
+    const result = await pipeline.deployEnvironment('p8', productionEnvironment!.id, {
+      repoUrl: 'https://github.com/openlander/pending-fix-app',
+    });
+
+    expect(result.success).toBe(true);
+    expect(readFileSync(join(clonePath, 'Dockerfile'), 'utf8')).toContain('FROM node:20');
+    expect(db.getProject('p8')?.pending_fix).toBeNull();
+  });
+
+  it('applies pending compose fix before delegating to compose pipeline', async () => {
+    db.createProject({
+      id: 'p9',
+      name: 'compose-fix-app',
+      repoUrl: 'https://github.com/openlander/compose-fix-app',
+      branch: 'main',
+    });
+    db.createEnvironment({
+      id: 'p9-staging',
+      projectId: 'p9',
+      type: 'staging',
+      branch: 'compose-fix',
+    });
+
+    const composePath = join(clonePath, 'docker-compose.yml');
+    writeFileSync(composePath, 'services:\n  web:\n    image: nginx:1\n', 'utf8');
+    db.updateProject('p9', {
+      pendingFix: JSON.stringify({
+        filePath: 'docker-compose.yml',
+        content: 'services:\n  web:\n    image: nginx:2\n',
+      }),
+    });
+
+    const composePipeline = {
+      detectComposeFile: vi.fn().mockReturnValue(composePath),
+      deployCompose: vi.fn().mockResolvedValue({
+        success: true,
+        parentProjectId: 'p9',
+        parentName: 'compose-fix-app',
+        services: [],
+        buildDurationMs: 123,
+      }),
+    };
+    const composeEnabledPipeline = new DeployPipeline(
+      docker,
+      db,
+      env as never,
+      undefined,
+      composePipeline as never,
+    );
+
+    const result = await composeEnabledPipeline.deployEnvironment('p9', 'p9-staging', {
+      repoUrl: 'https://github.com/openlander/compose-fix-app',
+    });
+
+    expect(result.success).toBe(true);
+    expect(readFileSync(composePath, 'utf8')).toContain('nginx:2');
+    expect(db.getProject('p9')?.pending_fix).toBeNull();
+    expect(composePipeline.deployCompose).toHaveBeenCalledOnce();
+  });
+
   it('exposes quick-share tunnel for production environment deployments', async () => {
     db.createProject({
       id: 'p5',
