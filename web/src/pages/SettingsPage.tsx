@@ -207,8 +207,9 @@ export function SettingsPage() {
       await connectGithub(githubToken.trim());
       await refetch();
       setGithubToken('');
-    } catch (err: any) {
-      setGithubError(err.message || 'Failed to connect GitHub');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to connect GitHub';
+      setGithubError(message);
     } finally {
       setGithubConnecting(false);
     }
@@ -220,8 +221,9 @@ export function SettingsPage() {
     try {
       await disconnectGithub();
       await refetch();
-    } catch (err: any) {
-      setGithubError(err.message || 'Failed to disconnect GitHub');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to disconnect GitHub';
+      setGithubError(message);
     } finally {
       setGithubDisconnecting(false);
     }
