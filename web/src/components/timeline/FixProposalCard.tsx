@@ -13,6 +13,50 @@ interface FixProposalCardProps {
   onSkip: (questionId: string) => void;
 }
 
+function computeLineDiff(before: string, after: string) {
+  if (!before && !after) return [];
+
+  const beforeLines = before ? before.split('\n') : [];
+  const afterLines = after ? after.split('\n') : [];
+
+  let start = 0;
+  while (
+    start < beforeLines.length &&
+    start < afterLines.length &&
+    beforeLines[start] === afterLines[start]
+  ) {
+    start++;
+  }
+
+  let endBefore = beforeLines.length - 1;
+  let endAfter = afterLines.length - 1;
+  while (
+    endBefore >= start &&
+    endAfter >= start &&
+    beforeLines[endBefore] === afterLines[endAfter]
+  ) {
+    endBefore--;
+    endAfter--;
+  }
+
+  const diff: { type: 'unchanged' | 'removed' | 'added'; text: string }[] = [];
+
+  for (let i = 0; i < start; i++) {
+    diff.push({ type: 'unchanged', text: beforeLines[i] });
+  }
+  for (let i = start; i <= endBefore; i++) {
+    diff.push({ type: 'removed', text: beforeLines[i] });
+  }
+  for (let i = start; i <= endAfter; i++) {
+    diff.push({ type: 'added', text: afterLines[i] });
+  }
+  for (let i = endBefore + 1; i < beforeLines.length; i++) {
+    diff.push({ type: 'unchanged', text: beforeLines[i] });
+  }
+
+  return diff;
+}
+
 export function FixProposalCard({
   questionId,
   questions,
@@ -71,7 +115,7 @@ export function FixProposalCard({
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-body text-muted-ol">{'Fix proposal answered'}</p>
+          <p className="text-sm font-body text-muted-ol">{t('timeline.fixProposal.answered')}</p>
         </div>
       </div>
     );
@@ -83,6 +127,9 @@ export function FixProposalCard({
   const metadata = q.metadata || {};
   const before = typeof metadata.before === 'string' ? metadata.before : '';
   const after = typeof metadata.after === 'string' ? metadata.after : '';
+  const filePath = typeof metadata.filePath === 'string' ? metadata.filePath : '';
+  const explanation = typeof metadata.explanation === 'string' ? metadata.explanation : '';
+  const changes = Array.isArray(metadata.changes) ? metadata.changes : [];
 
   return (
     <div className="relative flex gap-3 py-3 px-4 rounded-lg bg-agent/5 border border-agent/20 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -94,43 +141,76 @@ export function FixProposalCard({
 
       <div className="flex-1 min-w-0 space-y-3">
         <div className="space-y-1">
-          <p className="text-sm font-medium font-body text-agent leading-snug">
-            {t('timeline.fixProposal.title')}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium font-body text-agent leading-snug">
+              {t('timeline.fixProposal.title')}
+            </p>
+            {filePath && (
+              <span className="text-[10px] font-mono text-agent/80 px-1.5 py-0.5 bg-agent/10 rounded border border-agent/20">
+                {filePath}
+              </span>
+            )}
+          </div>
           <p className="text-sm font-body text-primary-ol leading-snug">{q.question}</p>
+          {explanation && (
+            <p className="text-xs font-body text-secondary-ol leading-relaxed mt-1.5">
+              {explanation}
+            </p>
+          )}
         </div>
+
+        {changes.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">
+              {t('timeline.fixProposal.changes')}
+            </p>
+            <ul className="space-y-1">
+              {changes.map((change: unknown, i: number) => (
+                <li key={i} className="text-xs text-secondary-ol flex items-start gap-1.5">
+                  <span className="text-agent mt-0.5">•</span>
+                  <span>{String(change)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {(before || after) && (
           <div className="space-y-1.5">
             <p className="text-[11px] font-mono text-agent/80 uppercase tracking-wider">
               {t('timeline.fixProposal.diff')}
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {before && (
-                <div className="space-y-1">
-                  <span className="text-[10px] font-mono text-error/80 px-1.5 py-0.5 bg-error/10 rounded">
-                    Before
-                  </span>
-                  <pre className="text-[11px] font-mono text-error/90 bg-error/5 p-2.5 rounded border border-error/10 overflow-x-auto whitespace-pre-wrap break-all">
-                    {before}
+            <div className="bg-[#0a0a0a] rounded-md border border-border overflow-hidden">
+              <details className="group/diff" open={computeLineDiff(before, after).length < 20}>
+                <summary className="text-[11px] font-mono text-muted-ol bg-bg-subtle px-3 py-2 cursor-pointer hover:text-primary-ol transition-colors select-none border-b border-border">
+                  {t('timeline.fixProposal.diff')} (Click to toggle)
+                </summary>
+                <div className="p-2.5 overflow-x-auto max-h-96">
+                  <pre className="text-[11px] font-mono leading-relaxed">
+                    {computeLineDiff(before, after).map((line, i) => (
+                      <div
+                        key={i}
+                        className={cn(
+                          'px-2 py-0.5 rounded-sm whitespace-pre',
+                          line.type === 'added' && 'bg-success/10 text-success',
+                          line.type === 'removed' && 'bg-error/10 text-error',
+                          line.type === 'unchanged' && 'text-muted-ol',
+                        )}
+                      >
+                        <span className="inline-block w-4 select-none opacity-50">
+                          {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
+                        </span>
+                        {line.text || ' '}
+                      </div>
+                    ))}
                   </pre>
                 </div>
-              )}
-              {after && (
-                <div className="space-y-1">
-                  <span className="text-[10px] font-mono text-success/80 px-1.5 py-0.5 bg-success/10 rounded">
-                    After
-                  </span>
-                  <pre className="text-[11px] font-mono text-success/90 bg-success/5 p-2.5 rounded border border-success/10 overflow-x-auto whitespace-pre-wrap break-all">
-                    {after}
-                  </pre>
-                </div>
-              )}
+              </details>
             </div>
           </div>
         )}
 
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 pt-2 flex-wrap">
           <button
             onClick={handleApprove}
             disabled={isSubmitting}
@@ -157,6 +237,34 @@ export function FixProposalCard({
             <X className="h-3.5 w-3.5" />
             {t('timeline.fixProposal.reject')}
           </button>
+          {q.options.some(
+            (o) =>
+              o.label.toLowerCase().includes('alternative') ||
+              o.label.toLowerCase().includes('other options'),
+          ) && (
+            <button
+              onClick={() => {
+                setIsSubmitting(true);
+                const altOption = q.options.find(
+                  (o) =>
+                    o.label.toLowerCase().includes('alternative') ||
+                    o.label.toLowerCase().includes('other options'),
+                );
+                if (altOption) {
+                  onSubmit(questionId, [{ questionIndex: 0, selectedLabels: [altOption.label] }]);
+                }
+              }}
+              disabled={isSubmitting}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body',
+                'text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle',
+                'transition-colors',
+                isSubmitting && 'opacity-50 cursor-not-allowed',
+              )}
+            >
+              {t('timeline.fixProposal.showAlternatives')}
+            </button>
+          )}
           <button
             onClick={handleSkip}
             disabled={isSubmitting}
@@ -167,7 +275,7 @@ export function FixProposalCard({
               isSubmitting && 'opacity-50 cursor-not-allowed',
             )}
           >
-            Skip
+            {t('timeline.fixProposal.skip')}
           </button>
         </div>
       </div>

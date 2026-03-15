@@ -111,7 +111,7 @@ describeCard('FixProposalCard', () => {
       onSkip: () => {},
     });
 
-    expect(findTextInTree(tree, 'Fix proposal answered')).toBe(true);
+    expect(findTextInTree(tree, 'timeline.fixProposal.answered')).toBe(true);
   });
 
   it('renders fix proposal details correctly', () => {
