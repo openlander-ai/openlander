@@ -9,8 +9,10 @@ import {
   removeService,
   startService,
   stopService,
+  getAllIps,
   type Service,
   type ServiceTemplate,
+  type NetworkIp,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +30,7 @@ import {
   Container,
   ChevronDown,
   ChevronUp,
+  Monitor,
 } from 'lucide-react';
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -53,6 +56,7 @@ export function ServicesPage() {
   const { t } = useLanguage();
   const [services, setServices] = useState<Service[]>([]);
   const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
+  const [networkIps, setNetworkIps] = useState<NetworkIp[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
@@ -73,9 +77,14 @@ export function ServicesPage() {
 
   const fetchServices = async () => {
     try {
-      const [svcs, tmpls] = await Promise.all([getServices(), getServiceTemplates()]);
+      const [svcs, tmpls, ips] = await Promise.all([
+        getServices(),
+        getServiceTemplates(),
+        getAllIps(),
+      ]);
       setServices(svcs);
       setTemplates(tmpls);
+      setNetworkIps(ips);
     } catch (err) {
       console.error('Failed to fetch services:', err);
     } finally {
@@ -577,6 +586,50 @@ export function ServicesPage() {
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+
+                    {networkIps.length > 0 && typeof creds?.connectionString === 'string' && (
+                      <div className="mt-4 rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Monitor className="h-3.5 w-3.5 text-muted-ol" />
+                          <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
+                            {'External Access'}
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {networkIps.map((ip) => {
+                            const host = String(creds.host);
+                            const connStr = String(creds.connectionString);
+                            const externalConnStr = connStr.replace(host, ip.address);
+                            const label =
+                              ip.type === 'vpn' ? `${ip.interface} (VPN)` : ip.interface;
+                            const fieldId = `${service.id}-ext-${ip.address}`;
+
+                            return (
+                              <div key={ip.address} className="flex items-center gap-2">
+                                <code className="flex-1 bg-bg-panel px-2 py-1 rounded border border-[hsl(var(--border))] font-mono text-xs truncate">
+                                  {externalConnStr}
+                                </code>
+                                <span className="text-[10px] font-body text-muted-ol px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] shrink-0">
+                                  {label}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 shrink-0"
+                                  onClick={() => handleCopy(externalConnStr, fieldId)}
+                                >
+                                  {copiedField === fieldId ? (
+                                    <Check className="h-3 w-3 text-success" />
+                                  ) : (
+                                    <Copy className="h-3 w-3" />
+                                  )}
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
 

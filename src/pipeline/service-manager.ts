@@ -193,10 +193,16 @@ export class ServiceManager {
         'openlander.role': 'service',
         'openlander.service': opts.name,
       },
+      ExposedPorts: {
+        [`${String(port)}/tcp`]: {},
+      },
       HostConfig: {
         NetworkMode: WEB_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
         Binds: [`${volumeName}:${dataMountPath}`],
+        PortBindings: {
+          [`${String(port)}/tcp`]: [{ HostPort: String(port) }],
+        },
       },
     });
 
