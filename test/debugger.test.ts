@@ -289,4 +289,34 @@ describe('BuildDebugger — fixDockerfile', () => {
     expect(result.dockerfileContent).not.toContain('CHANGES:');
     expect(result.dockerfileContent).toContain('RUN npm ci');
   });
+
+  it('parses star-bullet CHANGES for approval metadata change list', async () => {
+    const llmResponse = [
+      'FROM node:20',
+      'WORKDIR /app',
+      'COPY . .',
+      'RUN npm ci',
+      '',
+      'CHANGES:',
+      '* Switched from npm install to npm ci',
+      '* Kept existing build stage layout',
+    ].join('\n');
+
+    const model = createMockModel();
+    mockLLMResponse(llmResponse);
+    const debugger_ = new BuildDebugger(model);
+
+    const result = await debugger_.fixDockerfile({
+      projectPath: '/tmp/test',
+      currentDockerfile: 'FROM node:18\nRUN npm install',
+      buildError: 'lockfile mismatch',
+      projectName: 'test-app',
+    });
+
+    expect(result.dockerfileContent).toContain('FROM node:20');
+    expect(result.changes).toEqual([
+      'Switched from npm install to npm ci',
+      'Kept existing build stage layout',
+    ]);
+  });
 });

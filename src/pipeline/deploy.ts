@@ -1654,33 +1654,29 @@ export class DeployPipeline {
   }
 
   private applyPendingFix(projectId: string, clonePath: string): string | null {
-    const project = this.db.getProject(projectId);
-    if (!project?.pending_fix) {
+    const rawPendingFix = this.db.consumePendingFix(projectId);
+    if (!rawPendingFix) {
       return null;
     }
 
-    const parsed = this.parsePendingFix(project.pending_fix);
+    const parsed = this.parsePendingFix(rawPendingFix);
     if (!parsed) {
-      this.db.updateProject(projectId, { pendingFix: null });
       throw new Error('Invalid pending fix payload in database');
     }
 
     const normalizedPath = parsed.filePath.trim().replace(/\\/g, '/');
     if (!normalizedPath || normalizedPath.startsWith('/')) {
-      this.db.updateProject(projectId, { pendingFix: null });
       throw new Error('Pending fix file path must be relative');
     }
 
     const cloneRoot = resolve(clonePath);
     const targetPath = resolve(clonePath, normalizedPath);
     if (!targetPath.startsWith(`${cloneRoot}/`) && targetPath !== cloneRoot) {
-      this.db.updateProject(projectId, { pendingFix: null });
       throw new Error('Pending fix path escaped repository root');
     }
 
     mkdirSync(dirname(targetPath), { recursive: true });
     writeFileSync(targetPath, parsed.content, 'utf8');
-    this.db.updateProject(projectId, { pendingFix: null });
     log.info({ projectId, filePath: normalizedPath }, 'Applied pending fix before build');
     return normalizedPath;
   }
