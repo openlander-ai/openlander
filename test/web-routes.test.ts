@@ -540,6 +540,72 @@ describe('Web API Routes', () => {
     expect(ctx.serviceManager.list).toHaveBeenCalled();
   });
 
+  it('GET /api/services/:id returns service detail', async () => {
+    const res = await app.request('/api/services/svc-1');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('id', 'svc-1');
+    expect(ctx.serviceManager.getDetail).toHaveBeenCalledWith('svc-1');
+  });
+
+  it('GET /api/services/:id returns 404 when service does not exist', async () => {
+    (ctx.serviceManager.getDetail as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Service not found: missing-svc'),
+    );
+
+    const res = await app.request('/api/services/missing-svc');
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body).toEqual({ error: 'NOT_FOUND', message: 'Service not found: missing-svc' });
+  });
+
+  it('GET /api/services/:id/logs returns logs with default lines', async () => {
+    const res = await app.request('/api/services/svc-1/logs');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ logs: 'service logs' });
+    expect(ctx.serviceManager.getLogs).toHaveBeenCalledWith('svc-1', 100);
+  });
+
+  it('GET /api/services/:id/logs accepts lines query', async () => {
+    const res = await app.request('/api/services/svc-1/logs?lines=10');
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.getLogs).toHaveBeenCalledWith('svc-1', 10);
+  });
+
+  it('GET /api/services/:id/logs validates lines query', async () => {
+    const res = await app.request('/api/services/svc-1/logs?lines=abc');
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('INVALID_FIELD');
+  });
+
+  it('GET /api/services/:id/stats returns service stats', async () => {
+    const res = await app.request('/api/services/svc-1/stats');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ status: 'running', diskUsageBytes: 128 });
+    expect(ctx.serviceManager.getStats).toHaveBeenCalledWith('svc-1');
+  });
+
+  it('GET /api/services/:id/stats returns 404 when service does not exist', async () => {
+    (ctx.serviceManager.getStats as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Service not found: missing-svc'),
+    );
+
+    const res = await app.request('/api/services/missing-svc/stats');
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body).toEqual({ error: 'NOT_FOUND', message: 'Service not found: missing-svc' });
+  });
+
   it('POST /api/services creates service', async () => {
     const res = await app.request('/api/services', {
       method: 'POST',
@@ -616,6 +682,76 @@ describe('Web API Routes', () => {
         expect.objectContaining({ id: 'mongodb', image: 'mongo:7', port: 27017 }),
       ]),
     );
+  });
+
+  it('GET /api/services/templates includes versions array for each template', async () => {
+    const res = await app.request('/api/services/templates');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'postgresql',
+          versions: expect.arrayContaining(['17-alpine', '16-alpine', '15-alpine', '14-alpine']),
+        }),
+        expect.objectContaining({
+          id: 'mysql',
+          versions: expect.arrayContaining(['9', '8']),
+        }),
+        expect.objectContaining({
+          id: 'redis',
+          versions: expect.arrayContaining(['8-alpine', '7-alpine']),
+        }),
+        expect.objectContaining({
+          id: 'mongodb',
+          versions: expect.arrayContaining(['8', '7']),
+        }),
+      ]),
+    );
+  });
+
+  it('POST /api/services passes version parameter to serviceManager.create', async () => {
+    const res = await app.request('/api/services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'shared-pg-15',
+        template: 'postgresql',
+        version: '15-alpine',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.create).toHaveBeenCalledWith({
+      name: 'shared-pg-15',
+      template: 'postgresql',
+      image: undefined,
+      port: undefined,
+      version: '15-alpine',
+      envVars: undefined,
+    });
+  });
+
+  it('POST /api/services works without version parameter (backward compatible)', async () => {
+    const res = await app.request('/api/services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'shared-pg-default',
+        template: 'postgresql',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.create).toHaveBeenCalledWith({
+      name: 'shared-pg-default',
+      template: 'postgresql',
+      image: undefined,
+      port: undefined,
+      version: undefined,
+      envVars: undefined,
+    });
   });
 
   it('DELETE /api/services/:id removes service', async () => {

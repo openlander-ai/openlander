@@ -19,6 +19,13 @@ interface ServiceCredentials {
   database: string;
 }
 
+export const AVAILABLE_VERSIONS: Record<string, string[]> = {
+  postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
+  mysql: ['9', '8'],
+  redis: ['8-alpine', '7-alpine'],
+  mongodb: ['8', '7'],
+};
+
 interface ContainerExecResult {
   stdout: string;
   stderr: string;
@@ -96,6 +103,7 @@ export class ServiceManager {
     template?: string;
     image?: string;
     port?: number;
+    version?: string;
     envVars?: Array<{ key: string; value: string }>;
   }): Promise<ServiceRow> {
     const hasTemplate = typeof opts.template === 'string';
@@ -123,7 +131,9 @@ export class ServiceManager {
       }
 
       type = template.type;
-      image = template.image;
+      // Use provided version or default to first available version
+      const version = opts.version ?? AVAILABLE_VERSIONS[templateId]?.[0] ?? 'latest';
+      image = template.image.replace(/:[^:]+$/, `:${version}`);
       port = template.port;
       dataMountPath = this.getDataMountPath(template.type);
 
@@ -318,6 +328,63 @@ export class ServiceManager {
     }
 
     return this.db.listServices();
+  }
+
+  async getDetail(id: string): Promise<ServiceRow> {
+    const service = this.getRequiredService(id);
+
+    if (!service.container_id && !service.container_name) {
+      return service;
+    }
+
+    const containerId = service.container_id ?? service.container_name;
+    try {
+      const info = await this.docker.getClient().getContainer(containerId).inspect();
+      const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
+      const containerIdFromDocker = info.Id;
+
+      if (status !== service.status || containerIdFromDocker !== service.container_id) {
+        this.db.updateService(service.id, { status, containerId: containerIdFromDocker });
+      }
+    } catch (err) {
+      log.debug({ err, serviceId: service.id, containerId }, 'Failed to inspect service container');
+      if (service.status !== 'error') {
+        this.db.updateService(service.id, { status: 'error' });
+      }
+    }
+
+    const refreshed = this.db.getService(id);
+    if (!refreshed) {
+      throw new Error(`Service not found: ${id}`);
+    }
+    return refreshed;
+  }
+
+  async getLogs(id: string, lines = 100): Promise<string> {
+    const service = this.getRequiredService(id);
+    const tail = Number.isInteger(lines) && lines > 0 ? lines : 100;
+    const containerId = service.container_id ?? service.container_name;
+    return this.docker.getLogs(containerId, tail);
+  }
+
+  async getStats(
+    id: string,
+  ): Promise<{ status: ServiceRow['status']; diskUsageBytes: number | null }> {
+    const service = await this.getDetail(id);
+    if (service.status !== 'running') {
+      return { status: service.status, diskUsageBytes: null };
+    }
+
+    const dataMountPath = this.getDataMountPath(service.type);
+    const result = await this.execInServiceContainer(service, ['du', '-sb', dataMountPath]);
+    const usageRaw = result.stdout.trim().split(/\s+/)[0] ?? '';
+    const diskUsageBytes = Number.parseInt(usageRaw, 10);
+
+    if (!Number.isFinite(diskUsageBytes)) {
+      throw new Error(`Failed to parse disk usage output for service: ${service.id}`);
+    }
+
+    return { status: service.status, diskUsageBytes };
   }
 
   async createDatabase(serviceId: string, dbName: string): Promise<CreateDatabaseResult> {
