@@ -367,24 +367,84 @@ export class ServiceManager {
     return this.docker.getLogs(containerId, tail);
   }
 
-  async getStats(
-    id: string,
-  ): Promise<{ status: ServiceRow['status']; diskUsageBytes: number | null }> {
+  async getStats(id: string): Promise<{
+    status: ServiceRow['status'];
+    diskUsageBytes: number | null;
+    cpuPercent: number | null;
+    memoryUsageBytes: number | null;
+    memoryLimitBytes: number | null;
+  }> {
     const service = await this.getDetail(id);
     if (service.status !== 'running') {
-      return { status: service.status, diskUsageBytes: null };
+      return {
+        status: service.status,
+        diskUsageBytes: null,
+        cpuPercent: null,
+        memoryUsageBytes: null,
+        memoryLimitBytes: null,
+      };
     }
 
-    const dataMountPath = this.getDataMountPath(service.type);
-    const result = await this.execInServiceContainer(service, ['du', '-sb', dataMountPath]);
-    const usageRaw = result.stdout.trim().split(/\s+/)[0] ?? '';
-    const diskUsageBytes = Number.parseInt(usageRaw, 10);
-
-    if (!Number.isFinite(diskUsageBytes)) {
-      throw new Error(`Failed to parse disk usage output for service: ${service.id}`);
+    let diskUsageBytes: number | null = null;
+    try {
+      const dataMountPath = this.getDataMountPath(service.type);
+      const result = await this.execInServiceContainer(service, ['du', '-sb', dataMountPath]);
+      const usageRaw = result.stdout.trim().split(/\s+/)[0] ?? '';
+      const parsed = Number.parseInt(usageRaw, 10);
+      if (Number.isFinite(parsed)) {
+        diskUsageBytes = parsed;
+      }
+    } catch {
+      // disk usage unavailable — non-fatal
     }
 
-    return { status: service.status, diskUsageBytes };
+    let cpuPercent: number | null = null;
+    let memoryUsageBytes: number | null = null;
+    let memoryLimitBytes: number | null = null;
+    try {
+      const containerId = service.container_id ?? service.container_name;
+      const container = this.docker.getClient().getContainer(containerId);
+      const rawStats = await container.stats({ stream: false });
+      const cpuDelta =
+        rawStats.cpu_stats.cpu_usage.total_usage - rawStats.precpu_stats.cpu_usage.total_usage;
+      const systemDelta =
+        rawStats.cpu_stats.system_cpu_usage - rawStats.precpu_stats.system_cpu_usage;
+      const percpuUsage = rawStats.cpu_stats.cpu_usage.percpu_usage as number[] | undefined;
+      const numCpus = percpuUsage ? percpuUsage.length : 1;
+      cpuPercent =
+        systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * numCpus * 100 * 10) / 10 : 0;
+      memoryUsageBytes = (rawStats.memory_stats.usage as number | undefined) ?? null;
+      memoryLimitBytes = (rawStats.memory_stats.limit as number | undefined) ?? null;
+    } catch {
+      // container stats unavailable — non-fatal
+    }
+
+    return {
+      status: service.status,
+      diskUsageBytes,
+      cpuPercent,
+      memoryUsageBytes,
+      memoryLimitBytes,
+    };
+  }
+
+  getConnectedProjects(serviceId: string): Array<{ id: string; name: string }> {
+    const service = this.getRequiredService(serviceId);
+    const containerName = service.container_name;
+    const projects = this.db.listProjects();
+    const connected: Array<{ id: string; name: string }> = [];
+
+    for (const project of projects) {
+      const envVars = this.db.getEnvVars(project.id);
+      const hasConnection = Object.values(envVars).some(
+        (value) => typeof value === 'string' && value.includes(containerName),
+      );
+      if (hasConnection) {
+        connected.push({ id: project.id, name: project.name });
+      }
+    }
+
+    return connected;
   }
 
   async createDatabase(serviceId: string, dbName: string): Promise<CreateDatabaseResult> {

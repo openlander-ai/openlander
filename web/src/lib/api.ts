@@ -908,11 +908,25 @@ export async function stopService(id: string): Promise<void> {
 export interface ServiceStats {
   status: 'running' | 'stopped' | 'error';
   diskUsageBytes: number | null;
+  cpuPercent: number | null;
+  memoryUsageBytes: number | null;
+  memoryLimitBytes: number | null;
+}
+
+export interface ConnectedProject {
+  id: string;
+  name: string;
 }
 
 export async function getServiceStats(id: string): Promise<ServiceStats> {
   const res = await fetch(`/api/services/${id}/stats`);
   if (!res.ok) throw new Error('Failed to fetch service stats');
+  return res.json();
+}
+
+export async function getConnectedProjects(id: string): Promise<ConnectedProject[]> {
+  const res = await fetch(`/api/services/${id}/connected-projects`);
+  if (!res.ok) throw new Error('Failed to fetch connected projects');
   return res.json();
 }
 

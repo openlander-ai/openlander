@@ -249,6 +249,24 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     }
   });
 
+  api.get('/services/:id/connected-projects', (c) => {
+    const id = c.req.param('id');
+    try {
+      const projects = ctx.serviceManager.getConnectedProjects(id);
+      return c.json(projects);
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Get connected projects failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json(
+        { error: 'INTERNAL_ERROR', message: 'Failed to fetch connected projects' },
+        500,
+      );
+    }
+  });
+
   api.delete('/services/:id', async (c) => {
     const id = c.req.param('id');
     try {
