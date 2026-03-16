@@ -5,7 +5,7 @@ import { createGitProvider } from '../../git-providers/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getSystemStats, formatStatsSummary } from '../../monitor/stats.js';
 import { detectReverseProxy, getProxyStatus, getLanIp, getAllIps } from '../../pipeline/traefik.js';
-import { SERVICE_TEMPLATES } from '../../pipeline/service-manager.js';
+import { SERVICE_TEMPLATES, AVAILABLE_VERSIONS } from '../../pipeline/service-manager.js';
 
 const log = createModuleLogger('api');
 
@@ -138,6 +138,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         name: key.charAt(0).toUpperCase() + key.slice(1),
         image: template.image,
         port: template.port,
+        versions: AVAILABLE_VERSIONS[key] ?? [],
       })),
     );
   });
@@ -149,6 +150,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         template?: string;
         image?: string;
         port?: number;
+        version?: string;
         env_vars?: Array<{ key: string; value: string }>;
       }>();
 
@@ -182,6 +184,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         template: body.template,
         image: body.image,
         port: body.port,
+        version: body.version,
         envVars: body.env_vars,
       });
       return c.json(service);
@@ -192,6 +195,57 @@ export function createSystemRoutes(ctx: AppContext): Hono {
         { error: 'INTERNAL_ERROR', message: detail || 'Failed to create service' },
         500,
       );
+    }
+  });
+
+  api.get('/services/:id', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const service = await ctx.serviceManager.getDetail(id);
+      return c.json(service);
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Get service detail failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service detail' }, 500);
+    }
+  });
+
+  api.get('/services/:id/logs', async (c) => {
+    const id = c.req.param('id');
+    const linesQuery = c.req.query('lines');
+    const lines = linesQuery ? Number.parseInt(linesQuery, 10) : 100;
+    if (!Number.isInteger(lines) || lines <= 0) {
+      return c.json({ error: 'INVALID_FIELD', message: 'lines must be a positive integer' }, 400);
+    }
+
+    try {
+      const logs = await ctx.serviceManager.getLogs(id, lines);
+      return c.json({ logs });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Get service logs failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service logs' }, 500);
+    }
+  });
+
+  api.get('/services/:id/stats', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const stats = await ctx.serviceManager.getStats(id);
+      return c.json(stats);
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Get service stats failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to fetch service stats' }, 500);
     }
   });
 

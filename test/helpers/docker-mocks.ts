@@ -216,6 +216,7 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
       stopContainer: vi.fn(async (containerId: string) => {
         await getContainerControl(containerId).stop();
       }),
+      pullImage: vi.fn().mockResolvedValue(undefined),
       getClient: vi.fn().mockReturnValue(client),
     } as unknown as Docker,
     client,

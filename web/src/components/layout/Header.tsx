@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Menu, Cpu, MemoryStick, Bell } from 'lucide-react';
+import { Menu, Cpu, MemoryStick, Bell, HardDrive } from 'lucide-react';
 import type { SystemStats } from '@/types';
 import type { Notification } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
@@ -130,6 +130,21 @@ export function Header({
               <MemoryStick className="h-3 w-3" />
               <span className="text-[10px]">{formatMemory(stats.memory)}</span>
             </div>
+            {stats.disk && (
+              <div
+                className={cn(
+                  'flex items-center gap-1',
+                  stats.disk.usagePercent > 80 ? 'text-warning' : '',
+                )}
+                title={'Disk Usage'}
+              >
+                <HardDrive className="h-3 w-3" />
+                <span className="text-[10px]">
+                  {stats.disk.usedGB.toFixed(1)}G / {stats.disk.totalGB.toFixed(1)}G (
+                  {stats.disk.usagePercent.toFixed(0)}%)
+                </span>
+              </div>
+            )}
             <div className="w-px h-4 bg-[hsl(var(--border))]" />
           </div>
         )}

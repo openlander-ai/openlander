@@ -101,22 +101,27 @@ export function createMockHealthMonitor() {
 }
 
 export function createMockServiceManager() {
+  const baseService = {
+    id: 'svc-1',
+    name: 'shared-pg',
+    type: 'postgresql',
+    image: 'postgres:16-alpine',
+    status: 'running',
+    container_id: 'container-1',
+    container_name: 'ol-svc-shared-pg',
+    port: 5432,
+    env_vars: null,
+    credentials: '{}',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
   return {
     list: vi.fn().mockResolvedValue([]),
-    create: vi.fn().mockResolvedValue({
-      id: 'svc-1',
-      name: 'shared-pg',
-      type: 'postgresql',
-      image: 'postgres:16-alpine',
-      status: 'running',
-      container_id: 'container-1',
-      container_name: 'ol-svc-shared-pg',
-      port: 5432,
-      env_vars: null,
-      credentials: '{}',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }),
+    getDetail: vi.fn().mockResolvedValue(baseService),
+    getLogs: vi.fn().mockResolvedValue('service logs'),
+    getStats: vi.fn().mockResolvedValue({ status: 'running', diskUsageBytes: 128 }),
+    create: vi.fn().mockResolvedValue(baseService),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     remove: vi.fn().mockResolvedValue(undefined),
