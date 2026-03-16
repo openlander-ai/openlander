@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { Docker } from './docker.js';
+import { allocatePort } from './port.js';
 
 const log = createModuleLogger('service-manager');
 
@@ -168,6 +169,9 @@ export class ServiceManager {
       throw new Error(`Invalid service port: ${String(port)}`);
     }
 
+    const containerPort = port;
+    const hostPort = await allocatePort(this.db, this.docker);
+
     const id = nanoid(12);
     const containerName = this.getContainerName(opts.name);
     const volumeName = this.getVolumeName(opts.name);
@@ -194,14 +198,14 @@ export class ServiceManager {
         'openlander.service': opts.name,
       },
       ExposedPorts: {
-        [`${String(port)}/tcp`]: {},
+        [`${String(containerPort)}/tcp`]: {},
       },
       HostConfig: {
         NetworkMode: WEB_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
         Binds: [`${volumeName}:${dataMountPath}`],
         PortBindings: {
-          [`${String(port)}/tcp`]: [{ HostPort: String(port) }],
+          [`${String(containerPort)}/tcp`]: [{ HostPort: String(hostPort) }],
         },
       },
     });
@@ -214,7 +218,7 @@ export class ServiceManager {
       type,
       image,
       containerName,
-      port,
+      port: hostPort,
       envVars: userEnvJson,
       credentials: credentialsJson,
     });
