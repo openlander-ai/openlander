@@ -1,6 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Clock, HardDrive, Box, Activity, Hash, Network } from 'lucide-react';
-import { getServiceStats, type Service, type ServiceStats } from '@/lib/api';
+import { useNavigate } from 'react-router-dom';
+import {
+  Clock,
+  HardDrive,
+  Box,
+  Activity,
+  Hash,
+  Network,
+  Cpu,
+  MemoryStick,
+  FolderGit2,
+} from 'lucide-react';
+import {
+  getServiceStats,
+  getConnectedProjects,
+  type Service,
+  type ServiceStats,
+  type ConnectedProject,
+} from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
@@ -27,26 +44,34 @@ function formatBytes(bytes: number): string {
 }
 
 export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<ServiceStats | null>(null);
+  const [connectedProjects, setConnectedProjects] = useState<ConnectedProject[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingProjects, setLoadingProjects] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    async function fetchStats() {
+    async function fetchData() {
       try {
-        const data = await getServiceStats(service.id);
+        const [statsData, projectsData] = await Promise.all([
+          getServiceStats(service.id),
+          getConnectedProjects(service.id),
+        ]);
         if (mounted) {
-          setStats(data);
+          setStats(statsData);
+          setConnectedProjects(projectsData);
         }
       } catch (error) {
-        console.error('Failed to fetch service stats:', error);
+        console.error('Failed to fetch service data:', error);
       } finally {
         if (mounted) {
           setLoadingStats(false);
+          setLoadingProjects(false);
         }
       }
     }
-    void fetchStats();
+    void fetchData();
     return () => {
       mounted = false;
     };
@@ -56,76 +81,130 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
   const status = statusConfig[service.status] ?? statusConfig.stopped;
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      {/* Card 1: Status & Uptime */}
-      <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
-        <h3 className="text-sm font-display font-medium text-primary-ol mb-3 flex items-center gap-2">
-          <Activity className="h-4 w-4 text-muted-ol" />
-          Status
-        </h3>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
+    <div className="max-w-3xl space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Status */}
+        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
+            <Activity className="h-3.5 w-3.5" />
+            Status
+          </div>
+          <div className="flex items-center gap-2 mb-2">
             <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', status.dot)} />
-            <span className={cn('text-sm font-body', status.color)}>{status.label}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm font-body">
-            <Clock className="h-3.5 w-3.5 text-muted-ol" />
-            <span className="text-muted-ol w-16">Uptime:</span>
-            <span className="text-secondary-ol">
-              {service.status === 'running' ? formatRelativeTime(service.created_at) : 'N/A'}
+            <span className={cn('text-sm font-body font-medium', status.color)}>
+              {status.label}
             </span>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol">
+            <Clock className="h-3 w-3" />
+            {service.status === 'running' ? formatRelativeTime(service.created_at) : 'N/A'}
+          </div>
+        </div>
+
+        {/* Container */}
+        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
+            <Box className="h-3.5 w-3.5" />
+            Container
+          </div>
+          <div className="text-sm font-mono text-primary-ol mb-1">{service.image}</div>
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol">
+            <Hash className="h-3 w-3" />
+            {service.container_id ? service.container_id.substring(0, 12) : 'N/A'}
+          </div>
+        </div>
+
+        {/* CPU */}
+        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
+            <Cpu className="h-3.5 w-3.5" />
+            CPU
+          </div>
+          <div className="text-lg font-mono font-medium text-primary-ol">
+            {loadingStats ? (
+              <span className="text-sm animate-pulse text-muted-ol">...</span>
+            ) : stats?.cpuPercent != null ? (
+              `${stats.cpuPercent}%`
+            ) : (
+              <span className="text-sm text-muted-ol">N/A</span>
+            )}
+          </div>
+        </div>
+
+        {/* Memory */}
+        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
+            <MemoryStick className="h-3.5 w-3.5" />
+            Memory
+          </div>
+          <div className="text-lg font-mono font-medium text-primary-ol">
+            {loadingStats ? (
+              <span className="text-sm animate-pulse text-muted-ol">...</span>
+            ) : stats?.memoryUsageBytes != null ? (
+              formatBytes(stats.memoryUsageBytes)
+            ) : (
+              <span className="text-sm text-muted-ol">N/A</span>
+            )}
+          </div>
+          {stats?.memoryLimitBytes != null && (
+            <div className="text-xs font-body text-muted-ol mt-1">
+              / {formatBytes(stats.memoryLimitBytes)}
+            </div>
+          )}
+        </div>
+
+        {/* Network */}
+        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
+            <Network className="h-3.5 w-3.5" />
+            Network
+          </div>
+          <div className="text-sm font-mono text-primary-ol">Port {service.port}</div>
+          <div className="text-xs font-body text-muted-ol mt-1">{service.container_name}</div>
+        </div>
+
+        {/* Disk */}
+        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
+            <HardDrive className="h-3.5 w-3.5" />
+            Volume
+          </div>
+          <div className="text-lg font-mono font-medium text-primary-ol">
+            {loadingStats ? (
+              <span className="text-sm animate-pulse text-muted-ol">...</span>
+            ) : stats?.diskUsageBytes != null ? (
+              formatBytes(stats.diskUsageBytes)
+            ) : (
+              <span className="text-sm text-muted-ol">N/A</span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Card 2: Container Info */}
+      {/* Connected Projects */}
       <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
-        <h3 className="text-sm font-display font-medium text-primary-ol mb-3 flex items-center gap-2">
-          <Box className="h-4 w-4 text-muted-ol" />
-          Container Info
-        </h3>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm font-body">
-            <span className="text-muted-ol w-20">Image:</span>
-            <span className="text-secondary-ol font-mono text-xs bg-bg-panel px-1.5 py-0.5 rounded border border-[hsl(var(--border))]">
-              {service.image}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-sm font-body">
-            <Hash className="h-3.5 w-3.5 text-muted-ol" />
-            <span className="text-muted-ol w-16">ID:</span>
-            <span className="text-secondary-ol font-mono text-xs">
-              {service.container_id ? service.container_id.substring(0, 12) : 'N/A'}
-            </span>
-          </div>
+        <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
+          <FolderGit2 className="h-3.5 w-3.5" />
+          Connected Projects
         </div>
-      </div>
-
-      {/* Card 3: Network & Storage */}
-      <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
-        <h3 className="text-sm font-display font-medium text-primary-ol mb-3 flex items-center gap-2">
-          <Network className="h-4 w-4 text-muted-ol" />
-          Network & Storage
-        </h3>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm font-body">
-            <span className="text-muted-ol w-20">Port:</span>
-            <span className="text-secondary-ol">{service.port}</span>
+        {loadingProjects ? (
+          <div className="text-sm text-muted-ol animate-pulse">Loading...</div>
+        ) : connectedProjects.length === 0 ? (
+          <div className="text-sm text-muted-ol">No projects are using this service</div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {connectedProjects.map((project) => (
+              <button
+                key={project.id}
+                onClick={() => navigate(`/projects/${project.id}`)}
+                className="flex items-center gap-2 text-sm font-body text-primary-ol hover:text-agent transition-colors text-left"
+              >
+                <div className="h-1.5 w-1.5 rounded-full bg-agent shrink-0" />
+                {project.name}
+              </button>
+            ))}
           </div>
-          <div className="flex items-center gap-2 text-sm font-body">
-            <HardDrive className="h-3.5 w-3.5 text-muted-ol" />
-            <span className="text-muted-ol w-16">Disk:</span>
-            <span className="text-secondary-ol">
-              {loadingStats ? (
-                <span className="animate-pulse">Loading...</span>
-              ) : stats?.diskUsageBytes != null ? (
-                `${formatBytes(stats.diskUsageBytes)} / 20 GB`
-              ) : (
-                'N/A'
-              )}
-            </span>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
