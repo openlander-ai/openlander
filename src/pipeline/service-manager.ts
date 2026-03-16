@@ -172,6 +172,8 @@ export class ServiceManager {
     const containerName = this.getContainerName(opts.name);
     const volumeName = this.getVolumeName(opts.name);
 
+    await this.docker.pullImage(image);
+
     const client = this.docker.getClient();
     await client.createVolume({
       Name: volumeName,

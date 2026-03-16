@@ -460,6 +460,36 @@ export class Docker {
       return [];
     }
   }
+  /**
+   * Pull a Docker image from registry.
+   * Silently succeeds if the image already exists locally and pull fails
+   * (e.g. no network).
+   */
+  async pullImage(imageTag: string): Promise<void> {
+    try {
+      const stream = await this.client.pull(imageTag);
+      await new Promise<void>((resolve, reject) => {
+        this.client.modem.followProgress(stream, (err: Error | null) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      });
+    } catch (err) {
+      // Check if image exists locally — if so, swallow the pull error
+      try {
+        await this.client.getImage(imageTag).inspect();
+        log.debug({ err, imageTag }, 'Image pull failed but image exists locally');
+      } catch (_inspectErr) {
+        throw new Error(
+          `Failed to pull image "${imageTag}": ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
   /** Get the underlying dockerode client (for Traefik manager). */
   getClient(): Dockerode {
     return this.client;

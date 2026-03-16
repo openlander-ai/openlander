@@ -164,6 +164,8 @@ export class DatabaseProvisioner {
   ): Promise<DbProvisionResult> {
     const client = this.docker.getClient();
 
+    await this.docker.pullImage(POSTGRES_IMAGE);
+
     const dbUser = config.user ?? 'openlander';
     const dbPassword = config.password ?? randomBytes(16).toString('hex');
     const dbName = config.dbName ?? projectName;

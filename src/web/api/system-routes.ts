@@ -187,7 +187,11 @@ export function createSystemRoutes(ctx: AppContext): Hono {
       return c.json(service);
     } catch (err) {
       log.debug({ err }, 'Create service failed');
-      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create service' }, 500);
+      const detail = err instanceof Error ? err.message : String(err);
+      return c.json(
+        { error: 'INTERNAL_ERROR', message: detail || 'Failed to create service' },
+        500,
+      );
     }
   });
 
