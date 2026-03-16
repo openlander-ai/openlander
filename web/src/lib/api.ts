@@ -834,6 +834,7 @@ export interface ServiceTemplate {
   name: string;
   image: string;
   port: number;
+  versions?: string[];
 }
 
 export interface Service {
@@ -857,6 +858,12 @@ export async function getServices(): Promise<Service[]> {
   return res.json();
 }
 
+export async function getService(id: string): Promise<Service> {
+  const res = await fetch(`/api/services/${id}`);
+  if (!res.ok) throw new Error('Failed to fetch service');
+  return res.json();
+}
+
 export async function getServiceTemplates(): Promise<ServiceTemplate[]> {
   const res = await fetch('/api/services/templates');
   if (!res.ok) throw new Error('Failed to fetch templates');
@@ -866,6 +873,7 @@ export async function getServiceTemplates(): Promise<ServiceTemplate[]> {
 export async function createService(opts: {
   name: string;
   template?: string;
+  version?: string;
   image?: string;
   port?: number;
   env_vars?: Array<{ key: string; value: string }>;
@@ -895,6 +903,24 @@ export async function startService(id: string): Promise<void> {
 export async function stopService(id: string): Promise<void> {
   const res = await fetch(`/api/services/${id}/stop`, { method: 'POST' });
   if (!res.ok) throw new Error('Failed to stop service');
+}
+
+export interface ServiceStats {
+  status: 'running' | 'stopped' | 'error';
+  diskUsageBytes: number | null;
+}
+
+export async function getServiceStats(id: string): Promise<ServiceStats> {
+  const res = await fetch(`/api/services/${id}/stats`);
+  if (!res.ok) throw new Error('Failed to fetch service stats');
+  return res.json();
+}
+
+export async function getServiceLogs(id: string, lines: number = 100): Promise<string> {
+  const res = await fetch(`/api/services/${id}/logs?lines=${lines}`);
+  if (!res.ok) throw new Error('Failed to fetch service logs');
+  const data = await res.json();
+  return data.logs;
 }
 
 export interface PostmortemData {

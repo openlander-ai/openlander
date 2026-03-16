@@ -9,6 +9,7 @@ import { ProjectsGrid } from '@/pages/ProjectsGrid';
 import { DeploymentDetail } from '@/pages/DeploymentDetail';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
+import { ServiceDetail } from '@/pages/ServiceDetail';
 import './App.css';
 import { getSetupStatus } from '@/lib/api';
 import { Toaster } from 'sonner';
@@ -92,6 +93,7 @@ function App() {
                 <Route path="/projects/:id/deployments/:deployId" element={<DeploymentDetail />} />
                 <Route path="/projects/:id" element={<ProjectDetail />} />
                 <Route path="/services" element={<ServicesPage />} />
+                <Route path="/services/:id" element={<ServiceDetail />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>
             </Route>
