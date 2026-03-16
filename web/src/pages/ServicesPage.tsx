@@ -601,7 +601,15 @@ export function ServicesPage() {
                           {networkIps.map((ip) => {
                             const host = String(creds.host);
                             const connStr = String(creds.connectionString);
-                            const externalConnStr = connStr.replace(host, ip.address);
+                            const containerPort = String(creds.port ?? '');
+                            const hostPort = String(service.port ?? '');
+                            let externalConnStr = connStr.replace(host, ip.address);
+                            if (containerPort && hostPort && containerPort !== hostPort) {
+                              externalConnStr = externalConnStr.replace(
+                                `:${containerPort}/`,
+                                `:${hostPort}/`,
+                              );
+                            }
                             const label =
                               ip.type === 'vpn' ? `${ip.interface} (VPN)` : ip.interface;
                             const fieldId = `${service.id}-ext-${ip.address}`;
