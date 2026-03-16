@@ -32,17 +32,19 @@ function toQuestionData(question: {
   header?: string;
   options: Array<{ label: string; description?: string }>;
   multiple?: boolean;
+  metadata?: Record<string, unknown>;
 }): QuestionData {
-  const extended = question as {
-    metadata?: Record<string, unknown>;
-  };
+  const metadata =
+    typeof question.metadata === 'object' && question.metadata !== null
+      ? question.metadata
+      : undefined;
 
   return {
     question: question.question,
     header: question.header,
     options: question.options,
     multiple: question.multiple,
-    metadata: extended.metadata,
+    metadata,
   };
 }
 

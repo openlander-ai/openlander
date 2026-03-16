@@ -1032,6 +1032,85 @@ describe('Agent tools — fix approval flow', () => {
     );
   });
 
+  it('ask_user_question resets retry guard when failure chain ID changes', async () => {
+    seedFailedProject();
+    const bridge = {
+      ask: vi
+        .fn()
+        .mockResolvedValue([
+          { questionIndex: 0, selectedLabels: ['Apply this fix and redeploy'], customText: '' },
+        ]),
+    } as unknown as QuestionBridge;
+    const { tools, startDeploy } = createToolsContext(bridge);
+
+    const runAskUserQuestion = getToolExecutor(tools, 'ask_user_question');
+    const firstFailureQuestions = {
+      questions: JSON.stringify([
+        {
+          question: 'Apply compose fix?',
+          options: [{ label: 'Apply this fix and redeploy' }],
+          metadata: {
+            fixType: 'compose',
+            projectId: 'p1',
+            filePath: 'docker-compose.yml',
+            after: 'services:\n  web:\n    image: nginx',
+            failureId: 'fail-1',
+          },
+        },
+      ]),
+    };
+    const secondFailureQuestions = {
+      questions: JSON.stringify([
+        {
+          question: 'Apply compose fix?',
+          options: [{ label: 'Apply this fix and redeploy' }],
+          metadata: {
+            fixType: 'compose',
+            projectId: 'p1',
+            filePath: 'docker-compose.yml',
+            after: 'services:\n  web:\n    image: nginx:stable',
+            failureId: 'fail-2',
+          },
+        },
+      ]),
+    };
+
+    await runAskUserQuestion(firstFailureQuestions);
+    await runAskUserQuestion(firstFailureQuestions);
+    await runAskUserQuestion(firstFailureQuestions);
+
+    const blocked = await runAskUserQuestion(firstFailureQuestions);
+    const newChainAttempt = await runAskUserQuestion(secondFailureQuestions);
+
+    expect(blocked).toEqual(expect.objectContaining({ maxAttemptsReached: true }));
+    expect(newChainAttempt).toEqual(
+      expect.objectContaining({ appliedFix: true, fixType: 'compose' }),
+    );
+    expect(startDeploy).toHaveBeenCalledTimes(4);
+  });
+
+  it('persists pending_fix in DB so it survives process restart before deploy apply', () => {
+    seedFailedProject();
+    db.updateProject('p1', {
+      pendingFix: JSON.stringify({
+        filePath: 'Dockerfile',
+        content: 'FROM node:20\nRUN npm ci\n',
+      }),
+    });
+
+    db.close();
+    db = new Database(join(tmpDir, 'test.db'));
+
+    const reloadedProject = db.getProject('p1');
+    expect(reloadedProject?.pending_fix).toBeTruthy();
+    const pendingFix = JSON.parse(reloadedProject?.pending_fix ?? '{}') as {
+      filePath?: string;
+      content?: string;
+    };
+    expect(pendingFix.filePath).toBe('Dockerfile');
+    expect(pendingFix.content).toContain('RUN npm ci');
+  });
+
   it('ask_user_question resolves target project by projectName metadata', async () => {
     seedFailedProject();
     const bridge = {

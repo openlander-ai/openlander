@@ -1,35 +1,46 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AssistantItem } from '../../web/src/hooks/use-assistant.js';
 
-let mockExpandedState = false;
+const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
-vi.mock('react', () => {
-  const mockUseState = <T,>(initial: T): [T, (value: T | ((prev: T) => T)) => void] => [
-    (typeof initial === 'boolean' ? mockExpandedState : initial) as T,
-    () => {},
-  ];
-  type MockElement = {
-    type: unknown;
-    props: Record<string, unknown> & { children: unknown[] };
-  };
-  return {
-    useState: mockUseState,
-    default: {
-      useState: mockUseState,
-    },
-    Fragment: ({ children }: { children?: unknown }) => children,
-    createElement: (
-      type: unknown,
-      props: Record<string, unknown> | null,
-      ...children: unknown[]
-    ): MockElement => ({
-      type,
-      props: { ...props, children },
-    }),
-  };
-});
+interface HookDispatcher {
+  useState<T>(initial: T | (() => T)): readonly [T, (next: T | ((value: T) => T)) => void];
+  useCallback<T extends (...args: never[]) => unknown>(callback: T): T;
+}
 
-import type { AssistantItem } from '@/hooks/use-assistant';
-import { CollapsedToolGroup, ToolCallItem, ToolResultItem } from '../ToolCallGroup';
+interface ReactClientInternals {
+  H: HookDispatcher | null;
+}
+
+interface ReactModuleLike {
+  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE: ReactClientInternals;
+}
+
+let ReactModule: ReactModuleLike;
+let hookIndex = 0;
+const hookSlots: unknown[] = [];
+
+const hookDispatcher: HookDispatcher = {
+  useState<T>(initial: T | (() => T)) {
+    const slotIndex = hookIndex;
+    hookIndex += 1;
+
+    if (hookSlots[slotIndex] === undefined) {
+      hookSlots[slotIndex] = initial instanceof Function ? initial() : initial;
+    }
+
+    const setState = (next: T | ((value: T) => T)) => {
+      const currentValue = hookSlots[slotIndex] as T;
+      hookSlots[slotIndex] = next instanceof Function ? next(currentValue) : next;
+    };
+
+    const state = hookSlots[slotIndex] as T;
+    return [state, setState] as const;
+  },
+  useCallback(callback) {
+    return callback;
+  },
+};
 
 vi.mock('@/lib/utils', () => ({
   cn: (...values: unknown[]) => values.filter(Boolean).join(' '),
@@ -79,7 +90,44 @@ function findTextInTree(node: unknown, text: string): boolean {
   return getTextContent(node).includes(text);
 }
 
-describe('CollapsedToolGroup', () => {
+let CollapsedToolGroup: any;
+let ToolCallItem: any;
+let ToolResultItem: any;
+
+function renderComponent(Component: any, props: any, expandedState = false) {
+  const internals = ReactModule.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+  internals.H = hookDispatcher;
+  hookIndex = 0;
+  hookSlots[0] = expandedState;
+  if (expandedState) {
+    hookSlots[1] = true;
+    hookSlots[2] = true;
+    hookSlots[3] = true;
+    hookSlots[4] = true;
+  }
+
+  return Component(props);
+}
+
+const describeGroup = isBunRuntime ? describe.skip : describe;
+
+describeGroup('CollapsedToolGroup', () => {
+  beforeAll(async () => {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    ReactModule = require('../../web/node_modules/react/index.js') as ReactModuleLike;
+    const mod = await import('../../web/src/components/assistant/ToolCallGroup.js');
+    CollapsedToolGroup = mod.CollapsedToolGroup;
+    ToolCallItem = mod.ToolCallItem;
+    ToolResultItem = mod.ToolResultItem;
+  });
+
+  beforeEach(() => {
+    hookSlots.length = 0;
+    const internals = ReactModule.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+    internals.H = hookDispatcher;
+  });
+
   it('renders fallback failure summary with truncated tool list', () => {
     const items: AssistantItem[] = [
       {
@@ -120,12 +168,11 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items });
     expect(findTextInTree(tree, 'Failed unknown_a, unknown_b, unknown_c +1 — 4 tools')).toBe(true);
   });
 
   it('renders expanded children when group starts expanded', () => {
-    mockExpandedState = true;
     const items: AssistantItem[] = [
       {
         id: '1',
@@ -144,10 +191,9 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items }, true);
     expect(findTextInTree(tree, 'deploy_project')).toBe(true);
     expect(findTextInTree(tree, 'status')).toBe(true);
-    mockExpandedState = false;
   });
 
   it('renders generic fallback for unknown tools', () => {
@@ -161,7 +207,7 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items });
     expect(findTextInTree(tree, 'Used unknown_tool — 1 tool')).toBe(true);
   });
 
@@ -176,7 +222,7 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items });
     expect(findTextInTree(tree, 'Deploying https://github.com/test/repo...')).toBe(true);
   });
 
@@ -199,7 +245,7 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items });
     expect(findTextInTree(tree, 'Failed to execute deploy_project')).toBe(true);
   });
 
@@ -214,7 +260,7 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items });
     expect(findTextInTree(tree, 'Analyzing build error...')).toBe(true);
   });
 
@@ -229,7 +275,7 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items });
     expect(findTextInTree(tree, 'Generating Dockerfile fix...')).toBe(true);
   });
 
@@ -244,7 +290,7 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items });
     expect(findTextInTree(tree, 'Setting 2 env vars...')).toBe(true);
   });
 
@@ -259,12 +305,11 @@ describe('CollapsedToolGroup', () => {
       },
     ];
 
-    const tree = CollapsedToolGroup({ items });
+    const tree = renderComponent(CollapsedToolGroup, { items });
     expect(findTextInTree(tree, 'Waiting for your input...')).toBe(true);
   });
 
   it('renders ToolCallItem expanded with tool arguments', () => {
-    mockExpandedState = true;
     const item: AssistantItem = {
       id: '10',
       type: 'tool_call',
@@ -273,14 +318,12 @@ describe('CollapsedToolGroup', () => {
       timestamp: new Date().toISOString(),
     };
 
-    const tree = ToolCallItem({ item });
+    const tree = renderComponent(ToolCallItem, { item }, true);
     expect(findTextInTree(tree, 'set_env_vars')).toBe(true);
     expect(findTextInTree(tree, 'API_KEY')).toBe(true);
-    mockExpandedState = false;
   });
 
   it('renders ToolResultItem expanded for success and failure payloads', () => {
-    mockExpandedState = true;
     const successItem: AssistantItem = {
       id: '11',
       type: 'tool_result',
@@ -298,13 +341,12 @@ describe('CollapsedToolGroup', () => {
       timestamp: new Date().toISOString(),
     };
 
-    const successTree = ToolResultItem({ item: successItem });
-    const failureTree = ToolResultItem({ item: failureItem });
+    const successTree = renderComponent(ToolResultItem, { item: successItem }, true);
+    const failureTree = renderComponent(ToolResultItem, { item: failureItem }, true);
 
     expect(findTextInTree(successTree, 'deploy_project ✓')).toBe(true);
     expect(findTextInTree(successTree, 'demo.example.com')).toBe(true);
     expect(findTextInTree(failureTree, 'deploy_project ✗')).toBe(true);
     expect(findTextInTree(failureTree, 'deploy failed')).toBe(true);
-    mockExpandedState = false;
   });
 });

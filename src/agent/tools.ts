@@ -73,9 +73,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
   };
 
   const savePendingFix = (projectId: string, pendingFix: PendingFixPayload) => {
-    ctx.db.updateProject(projectId, {
-      pendingFix: JSON.stringify(pendingFix),
-    });
+    ctx.db.setPendingFix(projectId, pendingFix);
   };
 
   const shouldApplyApprovedFix = (selectedLabels: string[]) => {

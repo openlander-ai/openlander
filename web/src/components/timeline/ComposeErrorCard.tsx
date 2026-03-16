@@ -11,6 +11,8 @@ interface ComposePattern {
   description: string;
   codeSnippet?: string;
   recommended?: boolean;
+  pros?: string;
+  cons?: string;
 }
 
 interface ComposeErrorCardProps {
@@ -149,6 +151,22 @@ export function ComposeErrorCard({
                         )}
                       </div>
                       <p className="text-xs text-secondary-ol">{pattern.description}</p>
+                      {(pattern.pros || pattern.cons) && (
+                        <div className="mt-1.5 space-y-1">
+                          {pattern.pros && (
+                            <p className="text-[11px] text-success/90 flex items-start gap-1.5">
+                              <span className="font-bold mt-0.5">+</span>
+                              <span>{pattern.pros}</span>
+                            </p>
+                          )}
+                          {pattern.cons && (
+                            <p className="text-[11px] text-error/90 flex items-start gap-1.5">
+                              <span className="font-bold mt-0.5">-</span>
+                              <span>{pattern.cons}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {pattern.codeSnippet && (

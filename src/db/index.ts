@@ -147,6 +147,11 @@ export interface ServiceRow {
   updated_at: string;
 }
 
+export interface PendingFixRow {
+  filePath: string;
+  content: string;
+}
+
 // --- Database class ---
 
 /**
@@ -594,6 +599,24 @@ export class Database {
       .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, id))
       .run();
+  }
+
+  setPendingFix(projectId: string, pendingFix: PendingFixRow): void {
+    this.updateProject(projectId, {
+      pendingFix: JSON.stringify(pendingFix),
+    });
+  }
+
+  consumePendingFix(projectId: string): string | null {
+    return this.transaction(() => {
+      const project = this.getProject(projectId);
+      const rawPendingFix = project?.pending_fix ?? null;
+      if (!rawPendingFix) {
+        return null;
+      }
+      this.updateProject(projectId, { pendingFix: null });
+      return rawPendingFix;
+    });
   }
 
   /** Delete a project and all associated data (cascading). */

@@ -68,6 +68,24 @@ describe('ToolResultCard', () => {
     expect(findTextInTree(tree, 'Build failed due to missing dependency')).toBe(true);
   });
 
+  it('renders debug_build_error using FallbackResult when data is not ErrorAnalysisResult', () => {
+    const item: TimelineItem = {
+      id: '1b',
+      type: 'agent_tool_result',
+      timestamp: new Date().toISOString(),
+      title: 'Error Analysis',
+      percent: -1,
+      toolName: 'debug_build_error',
+      toolResult: {
+        someOtherData: 'not an error analysis result',
+      },
+    };
+
+    const tree = ToolResultCard({ item });
+    expect(findTextInTree(tree, 'View result ▾')).toBe(true);
+    expect(findTextInTree(tree, 'not an error analysis result')).toBe(true);
+  });
+
   it('renders deploy_compose with compact structured view', () => {
     const item: TimelineItem = {
       id: '2',

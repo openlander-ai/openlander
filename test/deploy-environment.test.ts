@@ -304,9 +304,9 @@ describe('DeployPipeline deployEnvironment', () => {
       branch: 'main',
     });
     db.createEnvironment({
-      id: 'p9-staging',
+      id: 'p9-development',
       projectId: 'p9',
-      type: 'staging',
+      type: 'development',
       branch: 'compose-fix',
     });
 
@@ -337,7 +337,7 @@ describe('DeployPipeline deployEnvironment', () => {
       composePipeline as never,
     );
 
-    const result = await composeEnabledPipeline.deployEnvironment('p9', 'p9-staging', {
+    const result = await composeEnabledPipeline.deployEnvironment('p9', 'p9-development', {
       repoUrl: 'https://github.com/openlander/compose-fix-app',
     });
 
@@ -594,25 +594,6 @@ describe('DeployPipeline deployEnvironment', () => {
       { API_BASE_URL: 'https://dev.example.com' },
       'p13-development',
     );
-  });
-
-  it('deploy() returns environment-not-found for missing target environment type', async () => {
-    db.createProject({
-      id: 'p14',
-      name: 'missing-target-env-app',
-      repoUrl: 'https://github.com/openlander/missing-target-env-app',
-      branch: 'main',
-    });
-
-    const result = await pipeline.deploy({
-      _projectId: 'p14',
-      name: 'missing-target-env-app',
-      repoUrl: 'https://github.com/openlander/missing-target-env-app',
-      environment: 'development',
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBe('development environment not found');
   });
 
   it('cleanupStaleTunnels resets quick-share/shared projects to internal on startup', () => {

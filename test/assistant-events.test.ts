@@ -287,6 +287,30 @@ describe('chatEventToAssistantItem', () => {
     });
   });
 
+  it('ignores invalid question metadata shape from chat question event', () => {
+    const event: ChatStreamEvent = {
+      type: 'question',
+      request: {
+        id: 'q-meta-3',
+        questions: [
+          {
+            question: 'Apply this fix?',
+            options: [{ label: 'Apply' }, { label: 'Skip' }],
+          },
+        ],
+      },
+    };
+
+    const firstQuestion = event.request.questions[0] as Record<string, unknown>;
+    firstQuestion.metadata = 'invalid';
+
+    const item = chatEventToAssistantItem(event);
+
+    expect(item).not.toBeNull();
+    expect(item!.type).toBe('question');
+    expect(item!.questionData?.metadata).toBeUndefined();
+  });
+
   it('maps error event', () => {
     const item = chatEventToAssistantItem({ type: 'error', error: 'connection lost' });
     expect(item!.type).toBe('error');

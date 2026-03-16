@@ -114,6 +114,17 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('runtime crash');
   });
 
+  it('enforces explain-options-choose workflow with recommendation and bounded retries', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('For EVERY deploy error, follow explain');
+    expect(prompt).toContain('Present options (2-4 numbered solution patterns)');
+    expect(prompt).toContain('pros/cons');
+    expect(prompt).toContain('Include one recommended option');
+    expect(prompt).toContain('Let user choose via ask_user_question');
+    expect(prompt).toContain('Maximum 3 fix attempts per failure chain');
+  });
+
   it('keeps auto-recovery section and aligns it with explain-options-choose protocol', () => {
     const prompt = buildSystemPrompt('', 'gemini');
 

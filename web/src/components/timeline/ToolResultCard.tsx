@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import type { TimelineItem } from '@/lib/event-types';
+import { isErrorAnalysisResult, type TimelineItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/time';
 import {
@@ -460,7 +460,7 @@ export function ToolResultCard({ item }: ToolResultCardProps) {
   const isSuccess = item.toolSuccess !== false; // Default to true if undefined
   const toolName = item.toolName || 'unknown_tool';
 
-  if (toolName === 'debug_build_error') {
+  if (toolName === 'debug_build_error' && isErrorAnalysisResult(item.toolResult)) {
     return <ErrorAnalysisCard item={item} />;
   }
 
