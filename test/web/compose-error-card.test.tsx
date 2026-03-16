@@ -136,6 +136,8 @@ describeCard('ComposeErrorCard', () => {
                 description: 'Use a single .env file at the root of the project.',
                 codeSnippet: 'env_file: .env',
                 recommended: true,
+                pros: 'Simple to set up',
+                cons: 'Hard to manage multiple environments',
               },
               {
                 id: 'selective',
@@ -143,6 +145,8 @@ describeCard('ComposeErrorCard', () => {
                 description: 'Inject specific variables from the host environment.',
                 codeSnippet: 'environment:\n  - KEY=${KEY}',
                 recommended: false,
+                pros: 'Secure, explicit',
+                cons: 'Verbose',
               },
               {
                 id: 'per_service',
@@ -170,5 +174,9 @@ describeCard('ComposeErrorCard', () => {
     expect(findTextInTree(tree, 'environment:\n  - KEY=${KEY}')).toBe(true);
     expect(findTextInTree(tree, 'Per-service files')).toBe(true);
     expect(findTextInTree(tree, 'env_file: ./env/backend.env')).toBe(true);
+    expect(findTextInTree(tree, 'Simple to set up')).toBe(true);
+    expect(findTextInTree(tree, 'Hard to manage multiple environments')).toBe(true);
+    expect(findTextInTree(tree, 'Secure, explicit')).toBe(true);
+    expect(findTextInTree(tree, 'Verbose')).toBe(true);
   });
 });
