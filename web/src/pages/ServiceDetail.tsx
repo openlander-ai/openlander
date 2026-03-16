@@ -6,6 +6,10 @@ import { getService, startService, stopService, removeService, type Service } fr
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Activity, Link as LinkIcon, SquareTerminal, Settings } from 'lucide-react';
 import { ServiceHeader } from '@/components/service/ServiceHeader';
+import { ServiceOverviewTab } from '@/components/service/ServiceOverviewTab';
+import { ServiceConnectionTab } from '@/components/service/ServiceConnectionTab';
+import { ServiceLogsTab } from '@/components/service/ServiceLogsTab';
+import { ServiceSettingsTab } from '@/components/service/ServiceSettingsTab';
 
 export function ServiceDetail() {
   const { id } = useParams();
@@ -139,20 +143,20 @@ export function ServiceDetail() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="flex-1 min-h-0 mt-0 p-6">
-          <div className="text-sm text-secondary-ol">Overview Tab Placeholder</div>
+        <TabsContent value="overview" className="flex-1 min-h-0 mt-0 p-6 overflow-auto">
+          <ServiceOverviewTab service={service} />
         </TabsContent>
 
-        <TabsContent value="connection" className="flex-1 min-h-0 mt-0 p-6">
-          <div className="text-sm text-secondary-ol">Connection Tab Placeholder</div>
+        <TabsContent value="connection" className="flex-1 min-h-0 mt-0 p-6 overflow-auto">
+          <ServiceConnectionTab service={service} />
         </TabsContent>
 
-        <TabsContent value="logs" className="flex-1 min-h-0 mt-0 p-6">
-          <div className="text-sm text-secondary-ol">Logs Tab Placeholder</div>
+        <TabsContent value="logs" className="flex-1 min-h-0 mt-0 overflow-auto">
+          <ServiceLogsTab service={service} />
         </TabsContent>
 
-        <TabsContent value="settings" className="flex-1 min-h-0 mt-0 p-6">
-          <div className="text-sm text-secondary-ol">Settings Tab Placeholder</div>
+        <TabsContent value="settings" className="flex-1 min-h-0 mt-0 p-6 overflow-auto">
+          <ServiceSettingsTab service={service} onDeleteClick={handleDelete} />
         </TabsContent>
       </Tabs>
     </div>

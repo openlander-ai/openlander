@@ -1,6 +1,7 @@
+import { useNavigate } from 'react-router-dom';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Trash2, Database } from 'lucide-react';
+import { Play, Square, Trash2, Database, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Service } from '@/lib/api';
 
@@ -29,6 +30,7 @@ export function ServiceHeader({
   onStart,
   onDelete,
 }: ServiceHeaderProps) {
+  const navigate = useNavigate();
   const statusConfig = getStatusConfig();
   const status = statusConfig[service.status] ?? statusConfig.stopped;
   const isRunning = service.status === 'running';
@@ -38,6 +40,13 @@ export function ServiceHeader({
     <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => navigate('/services')}
+            className="shrink-0 p-1 rounded hover:bg-secondary-ol/10 text-secondary-ol hover:text-primary-ol transition-colors"
+            title="Back to Services"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
           <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">

@@ -65,8 +65,8 @@ export function ServicesPage() {
     }
   };
 
-  const openCustom = () => {
-    setCreateMode('custom');
+  const openCreate = () => {
+    setCreateMode('template');
     setShowCreate(true);
   };
 
@@ -122,9 +122,9 @@ export function ServicesPage() {
           </p>
         </div>
         {services.length > 0 && (
-          <Button onClick={openCustom} className="gap-2">
-            <Plus className="h-4 w-4" />
-            {'Create Service'}
+          <Button onClick={openCreate} size="sm" className="gap-1.5 text-xs">
+            <Plus className="h-3.5 w-3.5" />
+            Create Service
           </Button>
         )}
       </div>
@@ -146,9 +146,9 @@ export function ServicesPage() {
             <p className="text-sm text-secondary-ol mt-1 mb-4">
               Create your first service to get started
             </p>
-            <Button onClick={openCustom}>
-              <Plus className="h-4 w-4 mr-2" />
-              {'Create Service'}
+            <Button onClick={openCreate} size="sm" className="gap-1.5 text-xs">
+              <Plus className="h-3.5 w-3.5" />
+              Create Service
             </Button>
           </div>
         ) : (
