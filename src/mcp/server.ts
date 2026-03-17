@@ -1,5 +1,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -8,6 +9,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import type { AppContext } from '../app.js';
 import { getSystemStats, formatStatsSummary } from '../monitor/stats.js';
 import { createGitProvider } from '../git-providers/index.js';
@@ -413,10 +416,11 @@ function errorResponse(error: unknown): {
 }
 
 // ---------------------------------------------------------------------------
-// Server
+// Server factory (shared by stdio + HTTP transports)
 // ---------------------------------------------------------------------------
 
-export async function startMcpServer(ctx: AppContext): Promise<void> {
+// eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
+function createMcpServerInstance(ctx: AppContext): Server {
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(
     { name: 'openlander', version: '0.4.1' },
@@ -961,7 +965,79 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
     }
   });
 
+  return server;
+}
+
+// ---------------------------------------------------------------------------
+// Stdio transport (CLI: openlander mcp)
+// ---------------------------------------------------------------------------
+
+export async function startMcpServer(ctx: AppContext): Promise<void> {
+  const server = createMcpServerInstance(ctx);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   log.info('OpenLander MCP server started on stdio transport');
+}
+
+// ---------------------------------------------------------------------------
+// HTTP transport (Web server: /mcp endpoint for remote LAN access)
+// ---------------------------------------------------------------------------
+
+interface McpSession {
+  server: Server; // eslint-disable-line @typescript-eslint/no-deprecated
+  transport: WebStandardStreamableHTTPServerTransport;
+}
+
+export function createMcpHttpRoutes(ctx: AppContext): Hono {
+  const app = new Hono();
+  const sessions = new Map<string, McpSession>();
+
+  app.use(
+    '*',
+    cors({
+      origin: '*',
+      allowMethods: ['GET', 'POST', 'DELETE'],
+      allowHeaders: [
+        'Content-Type',
+        'Accept',
+        'mcp-session-id',
+        'mcp-protocol-version',
+        'Last-Event-ID',
+      ],
+      exposeHeaders: ['mcp-session-id'],
+    }),
+  );
+
+  app.all('/', async (c) => {
+    const sessionId = c.req.header('mcp-session-id');
+
+    if (sessionId) {
+      const session = sessions.get(sessionId);
+      if (!session) {
+        return c.json(
+          { jsonrpc: '2.0', error: { code: -32001, message: 'Session not found' }, id: null },
+          404,
+        );
+      }
+      return session.transport.handleRequest(c.req.raw);
+    }
+
+    const server = createMcpServerInstance(ctx);
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+      onsessioninitialized: (sid) => {
+        sessions.set(sid, { server, transport });
+        log.info({ sessionId: sid }, 'MCP HTTP session created');
+      },
+      onsessionclosed: (sid) => {
+        sessions.delete(sid);
+        log.info({ sessionId: sid }, 'MCP HTTP session closed');
+      },
+    });
+
+    await server.connect(transport);
+    return transport.handleRequest(c.req.raw);
+  });
+
+  return app;
 }

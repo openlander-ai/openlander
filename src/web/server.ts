@@ -14,6 +14,7 @@ import { createSetupRoutes } from './api/setup-routes.js';
 import { createAuthRoutes } from './api/auth-routes.js';
 import { createChatRoutes } from './api/chat-routes.js';
 import { createTerminalRoutes } from './api/terminal-routes.js';
+import { createMcpHttpRoutes } from '../mcp/server.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
@@ -139,6 +140,9 @@ function createApp(ctx: AppContext, options: CreateAppOptions = {}): Hono {
   // v0.2: Domain management routes
   const domainRoutes = createDomainRoutes(ctx);
   app.route('/api', domainRoutes);
+
+  const mcpRoutes = createMcpHttpRoutes(ctx);
+  app.route('/mcp', mcpRoutes);
 
   // v0.4: Channel webhook routes
   if (ctx.config.channels.slack.enabled) {
