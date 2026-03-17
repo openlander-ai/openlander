@@ -135,7 +135,7 @@ describeGroup('CollapsedToolGroup', () => {
     internals.H = hookDispatcher;
   });
 
-  it('renders fallback failure summary with truncated tool list', () => {
+  it('renders terminal-style tool names with failure markers', () => {
     const items: AssistantItem[] = [
       {
         id: '1',
@@ -152,20 +152,6 @@ describeGroup('CollapsedToolGroup', () => {
         timestamp: new Date().toISOString(),
       },
       {
-        id: '3',
-        type: 'tool_call',
-        toolName: 'unknown_c',
-        toolArgs: {},
-        timestamp: new Date().toISOString(),
-      },
-      {
-        id: '4',
-        type: 'tool_call',
-        toolName: 'unknown_d',
-        toolArgs: {},
-        timestamp: new Date().toISOString(),
-      },
-      {
         id: '5',
         type: 'tool_result',
         toolName: 'unknown_a',
@@ -176,7 +162,9 @@ describeGroup('CollapsedToolGroup', () => {
     ];
 
     const tree = renderComponent(CollapsedToolGroup, { items });
-    expect(findTextInTree(tree, 'Failed unknown_a, unknown_b, unknown_c +1 — 4 tools')).toBe(true);
+    expect(findTextInTree(tree, 'unknown_a')).toBe(true);
+    expect(findTextInTree(tree, 'unknown_b')).toBe(true);
+    expect(findTextInTree(tree, '✗')).toBe(true);
   });
 
   it('renders expanded children when group starts expanded', () => {
@@ -203,7 +191,7 @@ describeGroup('CollapsedToolGroup', () => {
     expect(findTextInTree(tree, 'ok')).toBe(true);
   });
 
-  it('renders generic fallback for unknown tools', () => {
+  it('renders tool name inline for unknown tools', () => {
     const items: AssistantItem[] = [
       {
         id: '1',
@@ -215,10 +203,11 @@ describeGroup('CollapsedToolGroup', () => {
     ];
 
     const tree = renderComponent(CollapsedToolGroup, { items });
-    expect(findTextInTree(tree, 'Used unknown_tool — 1 tool')).toBe(true);
+    expect(findTextInTree(tree, 'unknown_tool')).toBe(true);
+    expect(findTextInTree(tree, '▸')).toBe(true);
   });
 
-  it('renders specific summary for deploy_project', () => {
+  it('renders deploy_project with pending indicator', () => {
     const items: AssistantItem[] = [
       {
         id: '1',
@@ -230,10 +219,11 @@ describeGroup('CollapsedToolGroup', () => {
     ];
 
     const tree = renderComponent(CollapsedToolGroup, { items });
-    expect(findTextInTree(tree, 'Deploying https://github.com/test/repo...')).toBe(true);
+    expect(findTextInTree(tree, 'deploy_project')).toBe(true);
+    expect(findTextInTree(tree, '▸')).toBe(true);
   });
 
-  it('renders specific failure summary for deploy_project', () => {
+  it('renders deploy_project failure with ✗ marker', () => {
     const items: AssistantItem[] = [
       {
         id: '1',
@@ -253,10 +243,11 @@ describeGroup('CollapsedToolGroup', () => {
     ];
 
     const tree = renderComponent(CollapsedToolGroup, { items });
-    expect(findTextInTree(tree, 'Failed to execute deploy_project')).toBe(true);
+    expect(findTextInTree(tree, 'deploy_project')).toBe(true);
+    expect(findTextInTree(tree, '✗')).toBe(true);
   });
 
-  it('renders specific summary for debug_build_error', () => {
+  it('renders debug_build_error tool name', () => {
     const items: AssistantItem[] = [
       {
         id: '1',
@@ -268,10 +259,10 @@ describeGroup('CollapsedToolGroup', () => {
     ];
 
     const tree = renderComponent(CollapsedToolGroup, { items });
-    expect(findTextInTree(tree, 'Analyzing build error...')).toBe(true);
+    expect(findTextInTree(tree, 'debug_build_error')).toBe(true);
   });
 
-  it('renders specific summary for fix_dockerfile', () => {
+  it('renders fix_dockerfile tool name', () => {
     const items: AssistantItem[] = [
       {
         id: '1',
@@ -283,10 +274,10 @@ describeGroup('CollapsedToolGroup', () => {
     ];
 
     const tree = renderComponent(CollapsedToolGroup, { items });
-    expect(findTextInTree(tree, 'Generating Dockerfile fix...')).toBe(true);
+    expect(findTextInTree(tree, 'fix_dockerfile')).toBe(true);
   });
 
-  it('renders specific summary for set_env_vars', () => {
+  it('renders set_env_vars tool name', () => {
     const items: AssistantItem[] = [
       {
         id: '1',
@@ -298,7 +289,7 @@ describeGroup('CollapsedToolGroup', () => {
     ];
 
     const tree = renderComponent(CollapsedToolGroup, { items });
-    expect(findTextInTree(tree, 'Setting 2 env vars...')).toBe(true);
+    expect(findTextInTree(tree, 'set_env_vars')).toBe(true);
   });
 
   it('renders specific summary for ask_user_question', () => {
@@ -313,7 +304,7 @@ describeGroup('CollapsedToolGroup', () => {
     ];
 
     const tree = renderComponent(CollapsedToolGroup, { items });
-    expect(findTextInTree(tree, 'Waiting for your input...')).toBe(true);
+    expect(findTextInTree(tree, 'ask_user_question')).toBe(true);
   });
 
   it('renders ToolCallItem expanded with tool arguments', () => {

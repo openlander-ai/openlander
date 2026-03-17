@@ -15,6 +15,36 @@ import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.j
 
 const log = createModuleLogger('api');
 
+function getToolResultSummary(toolName: string, success: boolean, korean: boolean): string | null {
+  if (!success) {
+    const failMap: Record<string, [string, string]> = {
+      scan_project: ['프로젝트 스캔 실패', 'Project scan failed'],
+      deploy_compose: [
+        'docker-compose 배포 실패 — 다른 방법을 시도합니다',
+        'docker-compose deploy failed — trying alternative',
+      ],
+      deploy_project: ['프로젝트 배포 실패', 'Project deploy failed'],
+      deploy_monorepo: ['모노레포 배포 실패', 'Monorepo deploy failed'],
+      orchestrate_deploy: ['배포 오케스트레이션 실패', 'Deploy orchestration failed'],
+    };
+    const msg = failMap[toolName];
+    return msg ? (korean ? msg[0] : msg[1]) : null;
+  }
+
+  const successMap: Record<string, [string, string]> = {
+    scan_project: ['프로젝트 구조 분석 완료', 'Project structure analyzed'],
+    list_services: ['사용 가능한 서비스 확인 완료', 'Available services checked'],
+    deploy_project: ['배포가 시작되었습니다', 'Deploy started'],
+    deploy_monorepo: ['모노레포 배포가 시작되었습니다', 'Monorepo deploy started'],
+    deploy_compose: ['docker-compose 배포가 시작되었습니다', 'Compose deploy started'],
+    orchestrate_deploy: ['배포 오케스트레이션이 시작되었습니다', 'Deploy orchestration started'],
+    set_env_vars: ['환경변수 설정 완료', 'Environment variables configured'],
+    debug_build_error: ['빌드 오류 분석 완료', 'Build error analyzed'],
+  };
+  const msg = successMap[toolName];
+  return msg ? (korean ? msg[0] : msg[1]) : null;
+}
+
 const ENV_STYLE_KEYS = new Set(['envvars', 'environmentvariables']);
 const SECRET_FIELD_PATTERN =
   /(password|secret|token|credential|api[_-]?key|private[_-]?key|ssh[_-]?key|access[_-]?key|auth[_-]?token)/i;
@@ -293,6 +323,8 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           timestamp: new Date().toISOString(),
         });
 
+        let deployStarted = false;
+
         await agent.chatStream(
           message,
           async (event) => {
@@ -300,9 +332,51 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
               ...event,
               timestamp: new Date().toISOString(),
             });
+
+            if (event.type === 'tool_result') {
+              const toolName = event.toolName;
+              const success = event.success;
+
+              if (
+                [
+                  'deploy_project',
+                  'deploy_monorepo',
+                  'deploy_compose',
+                  'orchestrate_deploy',
+                ].includes(toolName) &&
+                success
+              ) {
+                deployStarted = true;
+              }
+
+              const summary = getToolResultSummary(toolName, success, isKorean);
+              if (summary) {
+                await emitAgentEvent({
+                  type: 'message',
+                  content: summary,
+                  timestamp: new Date().toISOString(),
+                });
+              }
+            }
           },
           sessionId,
         );
+
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set inside async callback
+        if (!deployStarted) {
+          await emitAgentEvent({
+            type: 'message',
+            content: isKorean
+              ? '⚠️ 배포가 시작되지 않았습니다. 위의 오류를 확인하고 다시 시도해 주세요.'
+              : '⚠️ Deploy was not started. Check the errors above and try again.',
+            timestamp: new Date().toISOString(),
+          });
+          await eventBus.emit('deploy:failed', {
+            projectId,
+            step: 'agent',
+            error: 'Agent finished without starting a deploy',
+          });
+        }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         log.error({ err, projectId }, 'Agent chatStream failed during deploy');
