@@ -102,6 +102,8 @@ export function ServiceDetail() {
     );
   }
 
+  const supportsDatabases = service.type === 'postgresql' || service.type === 'mysql';
+
   return (
     <div className="flex flex-col h-full">
       <ServiceHeader
@@ -128,7 +130,7 @@ export function ServiceDetail() {
             <LinkIcon className="h-3.5 w-3.5" />
             Connection
           </TabsTrigger>
-          {service.type !== 'redis' && (
+          {supportsDatabases && (
             <TabsTrigger
               value="databases"
               className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
@@ -161,7 +163,7 @@ export function ServiceDetail() {
           <ServiceConnectionTab service={service} />
         </TabsContent>
 
-        {service.type !== 'redis' && (
+        {supportsDatabases && (
           <TabsContent value="databases" className="flex-1 min-h-0 mt-0 p-6 overflow-auto">
             <ServiceDatabasesTab service={service} />
           </TabsContent>

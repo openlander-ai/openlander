@@ -176,6 +176,12 @@ vi.mock('@/components/service/ServiceSettingsTab', () => ({
   },
 }));
 
+vi.mock('@/components/service/ServiceDatabasesTab', () => ({
+  ServiceDatabasesTab: function ServiceDatabasesTab() {
+    return 'Databases Tab Placeholder';
+  },
+}));
+
 vi.mock('@/components/service/ServiceHeader', () => ({
   ServiceHeader: function ServiceHeader() {
     return 'ServiceHeaderComponent';
@@ -288,5 +294,163 @@ describeDetail('ServiceDetail', () => {
     expect(findTextInTree(tree, 'Connection')).toBe(true);
     expect(findTextInTree(tree, 'Logs')).toBe(true);
     expect(findTextInTree(tree, 'Settings')).toBe(true);
+  });
+
+  it('shows Databases tab trigger for PostgreSQL service', () => {
+    hookSlots[1] = {
+      id: '123',
+      name: 'postgres-service',
+      image: 'postgres:15',
+      status: 'running',
+      type: 'postgresql',
+    }; // service
+    hookSlots[2] = false; // loading
+    hookSlots[3] = null; // actionLoading
+    hookSlots[4] = 'overview'; // activeTab
+    hookSlots[5] = false; // showDeleteDialog
+    hookSlots[6] = ''; // deleteConfirmName
+
+    const tree = renderDetail();
+
+    // Verify Databases tab trigger is present
+    expect(findTextInTree(tree, 'Databases')).toBe(true);
+    // Verify other tabs are still present
+    expect(findTextInTree(tree, 'Overview')).toBe(true);
+    expect(findTextInTree(tree, 'Connection')).toBe(true);
+    expect(findTextInTree(tree, 'Logs')).toBe(true);
+    expect(findTextInTree(tree, 'Settings')).toBe(true);
+  });
+
+  it('shows Databases tab trigger for MySQL service', () => {
+    hookSlots[1] = {
+      id: '456',
+      name: 'mysql-service',
+      image: 'mysql:8',
+      status: 'running',
+      type: 'mysql',
+    }; // service
+    hookSlots[2] = false; // loading
+    hookSlots[3] = null; // actionLoading
+    hookSlots[4] = 'overview'; // activeTab
+    hookSlots[5] = false; // showDeleteDialog
+    hookSlots[6] = ''; // deleteConfirmName
+
+    const tree = renderDetail();
+
+    // Verify Databases tab trigger is present
+    expect(findTextInTree(tree, 'Databases')).toBe(true);
+    // Verify other tabs are still present
+    expect(findTextInTree(tree, 'Overview')).toBe(true);
+    expect(findTextInTree(tree, 'Connection')).toBe(true);
+    expect(findTextInTree(tree, 'Logs')).toBe(true);
+    expect(findTextInTree(tree, 'Settings')).toBe(true);
+  });
+
+  it('does NOT show Databases tab trigger for Redis service', () => {
+    hookSlots[1] = {
+      id: '789',
+      name: 'redis-service',
+      image: 'redis:7',
+      status: 'running',
+      type: 'redis',
+    }; // service
+    hookSlots[2] = false; // loading
+    hookSlots[3] = null; // actionLoading
+    hookSlots[4] = 'overview'; // activeTab
+    hookSlots[5] = false; // showDeleteDialog
+    hookSlots[6] = ''; // deleteConfirmName
+
+    const tree = renderDetail();
+
+    // Verify Databases tab trigger is NOT present
+    expect(findTextInTree(tree, 'Databases')).toBe(false);
+    // Verify other tabs are still present
+    expect(findTextInTree(tree, 'Overview')).toBe(true);
+    expect(findTextInTree(tree, 'Connection')).toBe(true);
+    expect(findTextInTree(tree, 'Logs')).toBe(true);
+    expect(findTextInTree(tree, 'Settings')).toBe(true);
+  });
+
+  it('renders Databases tab content for PostgreSQL service', () => {
+    hookSlots[1] = {
+      id: '123',
+      name: 'postgres-service',
+      image: 'postgres:15',
+      status: 'running',
+      type: 'postgresql',
+    }; // service
+    hookSlots[2] = false; // loading
+    hookSlots[3] = null; // actionLoading
+    hookSlots[4] = 'overview'; // activeTab
+    hookSlots[5] = false; // showDeleteDialog
+    hookSlots[6] = ''; // deleteConfirmName
+
+    const tree = renderDetail();
+
+    // Verify Databases tab content component is present in tree (even if not active)
+    // The TabsContent with value="databases" should be rendered for postgres
+    expect(findComponentInTree(tree, 'ServiceDatabasesTab')).toBe(true);
+  });
+
+  it('does NOT render Databases tab content for Redis service', () => {
+    hookSlots[1] = {
+      id: '789',
+      name: 'redis-service',
+      image: 'redis:7',
+      status: 'running',
+      type: 'redis',
+    }; // service
+    hookSlots[2] = false; // loading
+    hookSlots[3] = null; // actionLoading
+    hookSlots[4] = 'databases'; // activeTab - attempt to set to databases
+    hookSlots[5] = false; // showDeleteDialog
+    hookSlots[6] = ''; // deleteConfirmName
+
+    const tree = renderDetail();
+
+    // Verify Databases tab content is NOT rendered
+    expect(findTextInTree(tree, 'Databases Tab Placeholder')).toBe(false);
+  });
+
+  it('does NOT show Databases tab trigger for MongoDB service', () => {
+    hookSlots[1] = {
+      id: '790',
+      name: 'mongo-service',
+      image: 'mongo:7',
+      status: 'running',
+      type: 'mongodb',
+    }; // service
+    hookSlots[2] = false; // loading
+    hookSlots[3] = null; // actionLoading
+    hookSlots[4] = 'overview'; // activeTab
+    hookSlots[5] = false; // showDeleteDialog
+    hookSlots[6] = ''; // deleteConfirmName
+
+    const tree = renderDetail();
+
+    expect(findTextInTree(tree, 'Databases')).toBe(false);
+    expect(findTextInTree(tree, 'Overview')).toBe(true);
+    expect(findTextInTree(tree, 'Connection')).toBe(true);
+    expect(findTextInTree(tree, 'Logs')).toBe(true);
+    expect(findTextInTree(tree, 'Settings')).toBe(true);
+  });
+
+  it('does NOT render Databases tab content for MongoDB service', () => {
+    hookSlots[1] = {
+      id: '790',
+      name: 'mongo-service',
+      image: 'mongo:7',
+      status: 'running',
+      type: 'mongodb',
+    }; // service
+    hookSlots[2] = false; // loading
+    hookSlots[3] = null; // actionLoading
+    hookSlots[4] = 'databases'; // activeTab
+    hookSlots[5] = false; // showDeleteDialog
+    hookSlots[6] = ''; // deleteConfirmName
+
+    const tree = renderDetail();
+
+    expect(findTextInTree(tree, 'Databases Tab Placeholder')).toBe(false);
   });
 });
