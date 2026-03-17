@@ -37,7 +37,6 @@ describe('deploy-flow unification integration evidence', () => {
     expect(source).toContain('if (!ctx.agent) {');
     expect(source).toContain('const result = await ctx.pipeline.deploy({');
     expect(source).not.toContain('setTimeout(() =>');
-    expect(source).not.toContain('Falling back');
     expect(source).not.toContain('agent_completed_without_deploy_project');
   });
 

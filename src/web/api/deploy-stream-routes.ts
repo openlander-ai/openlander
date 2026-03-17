@@ -4,10 +4,12 @@ import { cloneRepo } from '../../pipeline/git.js';
 import { scanForEnvUsage } from '../../pipeline/env-scan.js';
 import { stream } from 'hono/streaming';
 import { nanoid } from 'nanoid';
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
 import type { AppContext } from '../../app.js';
 import { PreflightCheckError, ProjectNotFoundError } from '../../errors.js';
-import { eventBus, type EventPayload } from '../../events/index.js';
+import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { extractProjectName } from '../../pipeline/helpers.js';
 import { preflightCheckOrThrow } from '../../pipeline/preflight.js';
@@ -15,35 +17,172 @@ import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.j
 
 const log = createModuleLogger('api');
 
-function getToolResultSummary(toolName: string, success: boolean, korean: boolean): string | null {
-  if (!success) {
-    const failMap: Record<string, [string, string]> = {
-      scan_project: ['프로젝트 스캔 실패', 'Project scan failed'],
-      deploy_compose: [
-        'docker-compose 배포 실패 — 다른 방법을 시도합니다',
-        'docker-compose deploy failed — trying alternative',
-      ],
-      deploy_project: ['프로젝트 배포 실패', 'Project deploy failed'],
-      deploy_monorepo: ['모노레포 배포 실패', 'Monorepo deploy failed'],
-      orchestrate_deploy: ['배포 오케스트레이션 실패', 'Deploy orchestration failed'],
-    };
-    const msg = failMap[toolName];
-    return msg ? (korean ? msg[0] : msg[1]) : null;
+// ============================================================================
+// DETERMINISTIC DEPLOY HELPERS
+// ============================================================================
+// These helpers are extracted for Task 2 (orchestration replacement).
+// They will be consumed when agent.chatStream() is replaced with deterministic execution.
+
+/**
+ * Emit a terminal-style status message via eventBus.
+ * Used to send progress updates to the timeline/build stream UI.
+ */
+async function emitTerminalMessage(
+  projectId: string,
+  message: string,
+  _isKorean: boolean,
+): Promise<void> {
+  await eventBus.emit('agent:event', {
+    projectId,
+    event: {
+      type: 'message',
+      content: message,
+      timestamp: new Date().toISOString(),
+    },
+  });
+}
+
+/**
+ * Scan a cloned repository to detect its shape:
+ * - Dockerfiles at various depths
+ * - docker-compose files at root
+ * Returns structured info for deploy mode classification.
+ */
+interface RepoShape {
+  dockerfiles: string[];
+  composeFiles: string[];
+  hasRootDockerfile: boolean;
+  hasRootCompose: boolean;
+}
+
+function scanRepoShape(clonePath: string): RepoShape {
+  const dockerfiles: string[] = [];
+  const composeFiles: string[] = [];
+
+  // Scan for Dockerfiles (depth <= 3)
+  function walkForDockerfiles(dir: string, depth: number): void {
+    if (depth > 3) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith('.') || entry === 'node_modules' || entry === 'vendor') continue;
+      const fullPath = join(dir, entry);
+      try {
+        const stat = statSync(fullPath);
+        if (stat.isFile() && entry === 'Dockerfile') {
+          dockerfiles.push(fullPath);
+        } else if (stat.isDirectory()) {
+          walkForDockerfiles(fullPath, depth + 1);
+        }
+      } catch {
+        continue;
+      }
+    }
   }
 
-  const successMap: Record<string, [string, string]> = {
-    scan_project: ['프로젝트 구조 분석 완료', 'Project structure analyzed'],
-    list_services: ['사용 가능한 서비스 확인 완료', 'Available services checked'],
-    deploy_project: ['배포가 시작되었습니다', 'Deploy started'],
-    deploy_monorepo: ['모노레포 배포가 시작되었습니다', 'Monorepo deploy started'],
-    deploy_compose: ['docker-compose 배포가 시작되었습니다', 'Compose deploy started'],
-    orchestrate_deploy: ['배포 오케스트레이션이 시작되었습니다', 'Deploy orchestration started'],
-    set_env_vars: ['환경변수 설정 완료', 'Environment variables configured'],
-    debug_build_error: ['빌드 오류 분석 완료', 'Build error analyzed'],
+  walkForDockerfiles(clonePath, 0);
+
+  // Scan for compose files at root
+  const composeFilenames = [
+    'docker-compose.yml',
+    'docker-compose.yaml',
+    'compose.yml',
+    'compose.yaml',
+  ];
+  for (const filename of composeFilenames) {
+    const candidatePath = join(clonePath, filename);
+    try {
+      if (statSync(candidatePath).isFile()) {
+        composeFiles.push(candidatePath);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  const hasRootDockerfile = dockerfiles.some((df) => df === join(clonePath, 'Dockerfile'));
+  const hasRootCompose = composeFiles.length > 0;
+
+  return {
+    dockerfiles,
+    composeFiles,
+    hasRootDockerfile,
+    hasRootCompose,
   };
-  const msg = successMap[toolName];
-  return msg ? (korean ? msg[0] : msg[1]) : null;
 }
+
+/**
+ * Classify the deploy mode based on repo shape.
+ * Returns one of: 'compose' | 'monorepo' | 'single'
+ */
+interface DeployModeResult {
+  mode: 'compose' | 'monorepo' | 'single';
+  reason: string;
+  dockerfileCount: number;
+  composeFileCount: number;
+}
+
+interface ServiceSelectionOption {
+  label: string;
+  description: string;
+  dockerfile: string;
+  serviceName: string;
+}
+
+function buildServiceSelectionOptions(dockerfiles: string[]): ServiceSelectionOption[] {
+  return dockerfiles.map((dockerfilePath) => {
+    const serviceName =
+      dockerfilePath === 'Dockerfile' ? 'root' : dockerfilePath.replace(/\/Dockerfile$/, '');
+    const label = `${serviceName} (${dockerfilePath})`;
+    return {
+      label,
+      description: `Deploy only ${serviceName} from ${dockerfilePath}`,
+      dockerfile: dockerfilePath,
+      serviceName,
+    };
+  });
+}
+
+function classifyDeployMode(shape: RepoShape): DeployModeResult {
+  const dockerfileCount = shape.dockerfiles.length;
+  const composeFileCount = shape.composeFiles.length;
+
+  // Compose mode: has docker-compose file(s) at root
+  if (composeFileCount > 0) {
+    return {
+      mode: 'compose',
+      reason: `Found ${String(composeFileCount)} compose file(s) at root`,
+      dockerfileCount,
+      composeFileCount,
+    };
+  }
+
+  // Monorepo mode: multiple Dockerfiles at different depths
+  if (dockerfileCount > 1) {
+    return {
+      mode: 'monorepo',
+      reason: `Found ${String(dockerfileCount)} Dockerfiles at different paths`,
+      dockerfileCount,
+      composeFileCount,
+    };
+  }
+
+  // Single mode: one Dockerfile (or none, will auto-generate)
+  return {
+    mode: 'single',
+    reason:
+      dockerfileCount === 1 ? 'Single Dockerfile at root or subdirectory' : 'No Dockerfile found',
+    dockerfileCount,
+    composeFileCount,
+  };
+}
+
+// Mark helpers as used for Task 2 consumption (no-op at runtime)
+void [emitTerminalMessage, scanRepoShape, classifyDeployMode];
 
 const ENV_STYLE_KEYS = new Set(['envvars', 'environmentvariables']);
 const SECRET_FIELD_PATTERN =
@@ -284,107 +423,618 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     }
 
     const isKorean = ctx.config.language === 'ko';
-    const message = isKorean
-      ? `${body.repo_url} 저장소를 배포해줘${body.branch ? ` (브랜치: ${body.branch})` : ''}${body.name ? ` 이름: ${body.name}` : ''}`
-      : `Deploy ${body.repo_url}${body.branch ? ` branch ${body.branch}` : ''}${body.name ? ` as ${body.name}` : ''}`;
-    const sessionId = nanoid(12);
-
-    const emitAgentEvent = async (event: EventPayload['agent:event']['event']) => {
-      await eventBus.emit('agent:event', { projectId, event });
-    };
 
     void (async () => {
-      // Emit progress so user sees activity before agent responds
-      await emitAgentEvent({
-        type: 'message',
-        content: isKorean ? '배포 슬롯 확보 중...' : 'Acquiring deploy slot...',
-        timestamp: new Date().toISOString(),
-      });
+      await emitTerminalMessage(
+        projectId,
+        isKorean ? '배포 준비 중...' : 'Preparing deployment...',
+        isKorean,
+      );
+
+      await emitTerminalMessage(
+        projectId,
+        isKorean ? '배포 슬롯 확보 중...' : 'Acquiring deploy slot...',
+        isKorean,
+      );
+
       const release = await ctx.deployQueue.acquire();
-      await emitAgentEvent({
-        type: 'message',
-        content: isKorean
-          ? '프로젝트 분석 및 배포 준비 중...'
-          : 'Analyzing project and preparing deployment...',
-        timestamp: new Date().toISOString(),
-      });
 
-      try {
-        const agent = ctx.agent;
-        if (!agent) {
-          throw new Error('Agent is null');
-        }
+      let hasRetriedAfterTerminalFailure = false;
 
-        await emitAgentEvent({
-          type: 'message',
-          content: isKorean
-            ? '배포 전략 수립 중...'
-            : 'Agent is reasoning about deployment strategy...',
-          timestamp: new Date().toISOString(),
-        });
-
-        let deployStarted = false;
-
-        await agent.chatStream(
-          message,
-          async (event) => {
-            await emitAgentEvent({
-              ...event,
-              timestamp: new Date().toISOString(),
-            });
-
-            if (event.type === 'tool_result') {
-              const toolName = event.toolName;
-              const success = event.success;
-
-              if (
-                [
-                  'deploy_project',
-                  'deploy_monorepo',
-                  'deploy_compose',
-                  'orchestrate_deploy',
-                ].includes(toolName) &&
-                success
-              ) {
-                deployStarted = true;
-              }
-
-              const summary = getToolResultSummary(toolName, success, isKorean);
-              if (summary) {
-                await emitAgentEvent({
-                  type: 'message',
-                  content: summary,
-                  timestamp: new Date().toISOString(),
-                });
-              }
-            }
-          },
-          sessionId,
-        );
-
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set inside async callback
-        if (!deployStarted) {
-          await emitAgentEvent({
-            type: 'message',
-            content: isKorean
-              ? '⚠️ 배포가 시작되지 않았습니다. 위의 오류를 확인하고 다시 시도해 주세요.'
-              : '⚠️ Deploy was not started. Check the errors above and try again.',
-            timestamp: new Date().toISOString(),
-          });
+      const handleTerminalFailure = async (input: {
+        step: 'deploy-start' | 'monorepo' | 'orchestrate';
+        failedStep: string;
+        error: string;
+      }): Promise<void> => {
+        if (!ctx.buildDebugger) {
           await eventBus.emit('deploy:failed', {
             projectId,
-            step: 'agent',
-            error: 'Agent finished without starting a deploy',
+            step: input.step,
+            error: input.error,
           });
+          return;
         }
+
+        await emitTerminalMessage(
+          projectId,
+          isKorean
+            ? 'AI 분석을 실행해 실패 원인과 다음 조치를 정리합니다...'
+            : 'Running AI analysis for root cause and next steps...',
+          isKorean,
+        );
+
+        let diagnosis: {
+          summary: string;
+          rootCause: string;
+          suggestedFixes: Array<{
+            description: string;
+            location?: string;
+            confidence: 'high' | 'medium' | 'low';
+          }>;
+        } | null = null;
+
+        try {
+          diagnosis = await ctx.buildDebugger.diagnose({
+            buildLog: input.error,
+            projectName,
+            imageTag: existing?.image_tag ?? `openlander/${projectName}:latest`,
+            failedStep: input.failedStep,
+          });
+        } catch (diagnoseErr) {
+          const diagnoseMsg =
+            diagnoseErr instanceof Error ? diagnoseErr.message : String(diagnoseErr);
+          await emitTerminalMessage(
+            projectId,
+            isKorean ? `AI 분석 실패: ${diagnoseMsg}` : `AI analysis failed: ${diagnoseMsg}`,
+            isKorean,
+          );
+          await eventBus.emit('deploy:failed', {
+            projectId,
+            step: input.step,
+            error: input.error,
+          });
+          return;
+        }
+
+        await emitTerminalMessage(
+          projectId,
+          isKorean ? `AI 요약: ${diagnosis.summary}` : `AI summary: ${diagnosis.summary}`,
+          isKorean,
+        );
+        await emitTerminalMessage(
+          projectId,
+          isKorean ? `근본 원인: ${diagnosis.rootCause}` : `Root cause: ${diagnosis.rootCause}`,
+          isKorean,
+        );
+
+        const topFixes = diagnosis.suggestedFixes.slice(0, 3);
+        if (topFixes.length > 0) {
+          await emitTerminalMessage(
+            projectId,
+            isKorean ? '추천 조치:' : 'Suggested fixes:',
+            isKorean,
+          );
+          for (const [index, fix] of topFixes.entries()) {
+            const locationText = fix.location ? ` (${fix.location})` : '';
+            await emitTerminalMessage(
+              projectId,
+              `  ${String(index + 1)}. ${fix.description}${locationText}`,
+              isKorean,
+            );
+          }
+        }
+
+        const retryLabel = isKorean ? '지금 배포 재시도' : 'Retry deployment now';
+        const cancelLabel = isKorean ? '취소' : 'Cancel';
+        const manualFixLabelPrefix = isKorean ? '수동 조치' : 'Manual follow-up';
+        const suggestedFixOptions = topFixes.map((fix, index) => {
+          const confidenceText = isKorean
+            ? `신뢰도 ${fix.confidence}`
+            : `Confidence ${fix.confidence}`;
+          const locationText = fix.location
+            ? isKorean
+              ? `위치: ${fix.location}`
+              : `Location: ${fix.location}`
+            : isKorean
+              ? '위치 정보 없음'
+              : 'No location provided';
+
+          return {
+            label: `${manualFixLabelPrefix} ${String(index + 1)}`,
+            description: `${fix.description} (${confidenceText}; ${locationText})`,
+            fix,
+          };
+        });
+        const manualFixByLabel = new Map(
+          suggestedFixOptions.map((option) => [option.label, option.fix]),
+        );
+
+        let answers: Array<{ selectedLabels: string[] }> | null = null;
+        try {
+          answers = await ctx.questionBridge.ask({
+            id: nanoid(12),
+            questions: [
+              {
+                header: isKorean ? '배포 복구 선택' : 'Deployment Recovery',
+                question: isKorean ? '다음으로 어떤 작업을 진행할까요?' : 'What should we do next?',
+                options: [
+                  {
+                    label: retryLabel,
+                    description: isKorean
+                      ? '동일 설정으로 결정론적 배포 시작을 한 번 더 실행합니다.'
+                      : 'Retry deterministic deploy startup once with the same settings.',
+                  },
+                  ...suggestedFixOptions.map((option) => ({
+                    label: option.label,
+                    description: option.description,
+                  })),
+                  {
+                    label: cancelLabel,
+                    description: isKorean
+                      ? '현재 실패 상태를 유지하고 배포를 종료합니다.'
+                      : 'Keep the current failed state and stop here.',
+                  },
+                ],
+                multiple: false,
+                metadata: {
+                  questionType: 'deterministic_terminal_failure_recovery',
+                  projectId,
+                  failedStep: input.failedStep,
+                },
+              },
+            ],
+          });
+        } catch (askErr) {
+          const askMsg = askErr instanceof Error ? askErr.message : String(askErr);
+          await emitTerminalMessage(
+            projectId,
+            isKorean
+              ? `사용자 응답 대기 중 오류가 발생해 배포를 종료합니다: ${askMsg}`
+              : `Stopping deploy because user input failed: ${askMsg}`,
+            isKorean,
+          );
+          await eventBus.emit('deploy:failed', {
+            projectId,
+            step: input.step,
+            error: input.error,
+          });
+          return;
+        }
+
+        const selectedLabels = answers[0]?.selectedLabels ?? [];
+        if (selectedLabels.includes(retryLabel) && !hasRetriedAfterTerminalFailure) {
+          hasRetriedAfterTerminalFailure = true;
+          await emitTerminalMessage(
+            projectId,
+            isKorean
+              ? '사용자 선택: 배포를 결정론적으로 다시 시작합니다.'
+              : 'User selected retry. Restarting deterministic deployment startup.',
+            isKorean,
+          );
+
+          void ctx.pipeline
+            .deploy({
+              repoUrl: body.repo_url,
+              branch: body.branch,
+              name: projectName,
+              envVars: body.env_vars,
+              visibility: body.visibility,
+              sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+              trigger: 'api',
+              environment: body.environment,
+              _projectId: projectId,
+            })
+            .catch(async (retryErr: unknown) => {
+              const retryErrMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+              await emitTerminalMessage(
+                projectId,
+                isKorean
+                  ? `❌ 재시도 배포 시작 실패: ${retryErrMsg}`
+                  : `❌ Failed to start retry deployment: ${retryErrMsg}`,
+                isKorean,
+              );
+              await eventBus.emit('deploy:failed', {
+                projectId,
+                step: 'deploy-start',
+                error: retryErrMsg,
+              });
+            });
+
+          return;
+        }
+
+        if (selectedLabels.includes(retryLabel) && hasRetriedAfterTerminalFailure) {
+          await emitTerminalMessage(
+            projectId,
+            isKorean
+              ? '이미 한 번 재시도했기 때문에 추가 자동 재시도는 건너뜁니다.'
+              : 'Retry was already attempted once. Skipping additional automatic retry.',
+            isKorean,
+          );
+        } else {
+          const selectedManualFixLabel = selectedLabels.find((label) =>
+            manualFixByLabel.has(label),
+          );
+          if (selectedManualFixLabel) {
+            const selectedManualFix = manualFixByLabel.get(selectedManualFixLabel);
+            if (selectedManualFix) {
+              await emitTerminalMessage(
+                projectId,
+                isKorean
+                  ? `사용자 선택: 제안 ${selectedManualFixLabel}은(는) 자동 적용하지 않습니다. 수동 조치가 필요합니다.`
+                  : `User selected ${selectedManualFixLabel}. OpenLander will not auto-apply this fix; manual follow-up is required.`,
+                isKorean,
+              );
+
+              ctx.db.updateProject(projectId, { status: 'error' });
+              await eventBus.emit('deploy:needs-user-action', {
+                projectId,
+                category: 'manual_followup_required',
+                title: isKorean ? '수동 조치 필요' : 'Manual fix required',
+                description: isKorean
+                  ? `다음 제안은 자동 적용되지 않았습니다: ${selectedManualFix.description}`
+                  : `This suggested fix was not auto-applied: ${selectedManualFix.description}`,
+                userSteps: [
+                  {
+                    label: selectedManualFix.description,
+                  },
+                  {
+                    label: isKorean
+                      ? '수동 조치 완료 후 배포를 다시 시도하세요.'
+                      : 'After completing the manual fix, retry deployment.',
+                  },
+                ],
+              });
+              return;
+            }
+          }
+
+          await emitTerminalMessage(
+            projectId,
+            isKorean ? '사용자 선택: 배포를 취소합니다.' : 'User selected cancel. Stopping deploy.',
+            isKorean,
+          );
+        }
+
+        await eventBus.emit('deploy:failed', {
+          projectId,
+          step: input.step,
+          error: input.error,
+        });
+      };
+
+      try {
+        await emitTerminalMessage(
+          projectId,
+          isKorean
+            ? '저장소 복제 및 구조 분석 중...'
+            : 'Cloning repository and scanning project shape...',
+          isKorean,
+        );
+
+        const cloneResult = await cloneRepo({
+          repoUrl: body.repo_url,
+          branch: body.branch,
+          sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+        });
+        const shape = scanRepoShape(cloneResult.path);
+
+        await emitTerminalMessage(
+          projectId,
+          isKorean ? '배포 모드 분류 중...' : 'Classifying deploy mode...',
+          isKorean,
+        );
+        const deployMode = classifyDeployMode(shape);
+        const dockerfiles = shape.dockerfiles.map((dockerfilePath) =>
+          dockerfilePath.startsWith(`${cloneResult.path}/`)
+            ? dockerfilePath.slice(cloneResult.path.length + 1)
+            : dockerfilePath,
+        );
+
+        await emitTerminalMessage(
+          projectId,
+          isKorean
+            ? `배포 전략 확정: ${deployMode.mode} (${deployMode.reason})`
+            : `Deploy strategy selected: ${deployMode.mode} (${deployMode.reason})`,
+          isKorean,
+        );
+
+        const startSingleDeploy = async (isFallback: boolean): Promise<void> => {
+          if (isFallback) {
+            await emitTerminalMessage(
+              projectId,
+              isKorean
+                ? 'Compose/모노레포 배포를 시작하지 못해 단일 서비스 배포로 폴백합니다...'
+                : 'Compose/monorepo could not start deployment. Falling back to single-service deploy...',
+              isKorean,
+            );
+          }
+
+          await emitTerminalMessage(
+            projectId,
+            isKorean ? '단일 서비스 배포를 시작합니다...' : 'Starting single-service deploy...',
+            isKorean,
+          );
+
+          void ctx.pipeline
+            .deploy({
+              repoUrl: body.repo_url,
+              branch: body.branch,
+              name: projectName,
+              envVars: body.env_vars,
+              visibility: body.visibility,
+              sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+              trigger: 'api',
+              environment: body.environment,
+              _projectId: projectId,
+            })
+            .catch(async (err: unknown) => {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              await emitTerminalMessage(
+                projectId,
+                isKorean ? `❌ 배포 시작 실패: ${errMsg}` : `❌ Failed to start deploy: ${errMsg}`,
+                isKorean,
+              );
+              await handleTerminalFailure({
+                step: 'deploy-start',
+                failedStep: 'deploy_start',
+                error: errMsg,
+              });
+            });
+        };
+
+        const startMonorepoDeploy = async (isFallback: boolean): Promise<void> => {
+          if (isFallback) {
+            await emitTerminalMessage(
+              projectId,
+              isKorean
+                ? 'Compose 배포가 시작되지 않아 모노레포 배포로 폴백합니다...'
+                : 'Compose deploy failed before startup. Falling back to monorepo deploy...',
+              isKorean,
+            );
+          }
+
+          const allServicesLabel = isKorean ? '모든 서비스 배포' : 'Deploy all services';
+          const serviceSelectionOptions = buildServiceSelectionOptions(dockerfiles);
+
+          await emitTerminalMessage(
+            projectId,
+            isKorean
+              ? `여러 서비스(${String(dockerfiles.length)}개)가 감지되어 배포 대상을 선택해야 합니다.`
+              : `Detected ${String(dockerfiles.length)} services. Please choose what to deploy.`,
+            isKorean,
+          );
+
+          const answers = await ctx.questionBridge.ask({
+            id: nanoid(12),
+            questions: [
+              {
+                header: isKorean ? '서비스 선택' : 'Service Selection',
+                question: isKorean
+                  ? '이번 배포에서 어떤 서비스를 배포할까요?'
+                  : 'Which services should be deployed in this run?',
+                options: [
+                  {
+                    label: allServicesLabel,
+                    description: isKorean
+                      ? `${String(dockerfiles.length)}개 서비스를 모두 배포합니다.`
+                      : `Deploy all ${String(dockerfiles.length)} detected services.`,
+                  },
+                  ...serviceSelectionOptions.map((option) => ({
+                    label: option.label,
+                    description: option.description,
+                  })),
+                ],
+                multiple: false,
+                metadata: {
+                  questionType: 'deterministic_service_selection',
+                  projectId,
+                  dockerfileByLabel: Object.fromEntries(
+                    serviceSelectionOptions.map((option) => [option.label, option.dockerfile]),
+                  ),
+                },
+              },
+            ],
+          });
+
+          const selectedLabels = answers[0]?.selectedLabels ?? [];
+          if (selectedLabels.length === 0) {
+            await emitTerminalMessage(
+              projectId,
+              isKorean
+                ? '❌ 서비스 선택이 없어 배포를 중단합니다. 선택 후 다시 시도해주세요.'
+                : '❌ Deployment cancelled: no services were selected. Please choose a service and retry.',
+              isKorean,
+            );
+            ctx.db.updateProject(projectId, { status: 'error' });
+            await eventBus.emit('deploy:needs-user-action', {
+              projectId,
+              category: 'selection_required',
+              title: isKorean ? '서비스 선택 필요' : 'Service selection required',
+              description: isKorean
+                ? '모노레포 배포를 시작하려면 배포할 서비스를 선택해야 합니다.'
+                : 'Select at least one service to start this monorepo deployment.',
+              userSteps: [
+                {
+                  label: isKorean
+                    ? '다시 배포하고 서비스 선택하기'
+                    : 'Retry deployment and select a service',
+                },
+              ],
+            });
+            return;
+          }
+
+          const selectedDockerfiles = selectedLabels.includes(allServicesLabel)
+            ? dockerfiles
+            : serviceSelectionOptions
+                .filter((option) => selectedLabels.includes(option.label))
+                .map((option) => option.dockerfile);
+
+          if (selectedDockerfiles.length === 0) {
+            await emitTerminalMessage(
+              projectId,
+              isKorean
+                ? '❌ 선택한 서비스가 유효하지 않아 배포를 중단합니다.'
+                : '❌ Deployment cancelled: selected service is invalid.',
+              isKorean,
+            );
+            ctx.db.updateProject(projectId, { status: 'error' });
+            await eventBus.emit('deploy:needs-user-action', {
+              projectId,
+              category: 'selection_invalid',
+              title: isKorean ? '서비스 선택 확인 필요' : 'Service selection needs confirmation',
+              description: isKorean
+                ? '선택한 항목을 현재 저장소 서비스로 매핑하지 못했습니다.'
+                : 'Could not map your selection to detected services in this repository.',
+              userSteps: [
+                {
+                  label: isKorean
+                    ? '다시 배포하고 서비스 재선택하기'
+                    : 'Retry deployment and choose a listed service',
+                },
+              ],
+            });
+            return;
+          }
+
+          const selectedServiceNames = selectedLabels.includes(allServicesLabel)
+            ? ['all services']
+            : serviceSelectionOptions
+                .filter((option) => selectedDockerfiles.includes(option.dockerfile))
+                .map((option) => option.serviceName);
+
+          await emitTerminalMessage(
+            projectId,
+            isKorean
+              ? `선택 완료: ${selectedServiceNames.join(', ')} 서비스 배포를 시작합니다.`
+              : `Selection confirmed: deploying ${selectedServiceNames.join(', ')}.`,
+            isKorean,
+          );
+
+          await emitTerminalMessage(
+            projectId,
+            isKorean ? '모노레포 배포를 시작합니다...' : 'Starting monorepo deploy...',
+            isKorean,
+          );
+
+          void ctx.pipeline
+            .deployMonorepo({
+              repoUrl: body.repo_url,
+              branch: body.branch,
+              clonePath: cloneResult.path,
+              commitSha: cloneResult.commitSha,
+              dockerfiles: selectedDockerfiles,
+              envVars: body.env_vars,
+              visibility: body.visibility,
+              trigger: 'api',
+              name: projectName,
+              _parentId: projectId,
+            })
+            .catch(async (err: unknown) => {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              await emitTerminalMessage(
+                projectId,
+                isKorean
+                  ? `❌ 모노레포 배포 시작 실패: ${errMsg}`
+                  : `❌ Failed to start monorepo deploy: ${errMsg}`,
+                isKorean,
+              );
+              await handleTerminalFailure({
+                step: 'monorepo',
+                failedStep: 'monorepo_start',
+                error: errMsg,
+              });
+            });
+        };
+
+        if (deployMode.mode === 'compose') {
+          const composePath = shape.composeFiles[0];
+          let composeError: string | null = null;
+
+          if (!composePath) {
+            composeError = 'Compose mode selected but no compose file found';
+          } else {
+            await emitTerminalMessage(
+              projectId,
+              isKorean ? 'Compose 배포를 시작합니다...' : 'Starting compose deploy...',
+              isKorean,
+            );
+
+            try {
+              const composeResult = await ctx.composePipeline.deployCompose({
+                repoUrl: body.repo_url,
+                branch: body.branch,
+                clonePath: cloneResult.path,
+                composePath,
+                name: projectName,
+                envVars: body.env_vars,
+                trigger: 'api',
+                _parentId: projectId,
+              });
+
+              if (composeResult.success) {
+                return;
+              }
+
+              composeError = composeResult.error ?? 'Compose deploy failed before startup';
+            } catch (err) {
+              composeError = err instanceof Error ? err.message : String(err);
+            }
+          }
+
+          await emitTerminalMessage(
+            projectId,
+            isKorean
+              ? `❌ Compose 배포 실패: ${composeError}`
+              : `❌ Compose deploy failed: ${composeError}`,
+            isKorean,
+          );
+
+          if (dockerfiles.length > 1) {
+            await emitTerminalMessage(
+              projectId,
+              isKorean
+                ? 'Compose 실패로 인해 모노레포 폴백을 시도합니다.'
+                : 'Compose failed before deployment startup. Attempting monorepo fallback.',
+              isKorean,
+            );
+            await startMonorepoDeploy(true);
+            return;
+          }
+
+          await emitTerminalMessage(
+            projectId,
+            isKorean
+              ? '모노레포 조건이 충족되지 않아 단일 서비스 폴백을 시도합니다.'
+              : 'Monorepo fallback not applicable. Attempting single-service fallback.',
+            isKorean,
+          );
+          await startSingleDeploy(true);
+          return;
+        }
+
+        if (deployMode.mode === 'monorepo') {
+          await startMonorepoDeploy(false);
+          return;
+        }
+
+        await startSingleDeploy(false);
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        log.error({ err, projectId }, 'Agent chatStream failed during deploy');
+        log.error({ err, projectId }, 'Deterministic deploy orchestration failed');
 
-        await emitAgentEvent({
-          type: 'error',
+        await emitTerminalMessage(
+          projectId,
+          isKorean
+            ? `❌ 배포 오케스트레이션 실패: ${errMsg}`
+            : `❌ Deploy orchestration failed: ${errMsg}`,
+          isKorean,
+        );
+        await handleTerminalFailure({
+          step: 'orchestrate',
+          failedStep: 'orchestrate',
           error: errMsg,
-          timestamp: new Date().toISOString(),
         });
       } finally {
         release();

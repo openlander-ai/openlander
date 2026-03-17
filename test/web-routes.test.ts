@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { join } from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import type { AppContext } from '../src/app.js';
 import { Database } from '../src/db/index.js';
 import { eventBus } from '../src/events/index.js';
+import { cloneRepo } from '../src/pipeline/git.js';
 import { createApiRoutes } from '../src/web/api/routes.js';
 import { createMockContext } from './helpers/web-route-mocks.js';
 // Mock preflight check to always pass in tests
@@ -214,7 +215,7 @@ describe('Web API Routes', () => {
     expect(ctx.questionBridge.setActiveProject).toHaveBeenCalledWith(body.projectId);
   });
 
-  it('POST /api/projects/deploy runs agent in background after returning JSON', async () => {
+  it('POST /api/projects/deploy runs deterministic deploy orchestration in background', async () => {
     const res = await app.request('/api/projects/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -227,62 +228,44 @@ describe('Web API Routes', () => {
     const body = await res.json();
     expect(body.projectId).toBeDefined();
 
-    // Wait a tick for async agent.chatStream to be called
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    // Verify agent.chatStream was called (fire-and-forget)
-    expect(ctx.agent?.chatStream).toHaveBeenCalled();
+    expect(ctx.pipeline.deploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoUrl: 'https://github.com/user/test-project',
+        trigger: 'api',
+      }),
+    );
+    expect(ctx.agent?.chatStream).not.toHaveBeenCalled();
   });
 
-  it('POST /api/projects/deploy keeps agent-only flow when chat completes without deploy_project', async () => {
-    const chatStreamMock = ctx.agent?.chatStream as ReturnType<typeof vi.fn>;
-    chatStreamMock.mockImplementationOnce(
-      async (
-        _message: string,
-        callback: (event: { type: string; content?: string }) => Promise<void>,
-      ) => {
-        await callback({ type: 'message', content: 'I need to inspect this repo first.' });
-        await callback({ type: 'done' });
-      },
-    );
-
+  it('POST /api/projects/deploy ignores agent orchestration and starts deploy deterministically', async () => {
     const res = await app.request('/api/projects/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        repo_url: 'https://github.com/user/no-fallback-app',
+        repo_url: 'https://github.com/user/no-agent-orchestration-app',
       }),
     });
 
     expect(res.status).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 25));
 
-    expect(ctx.agent?.chatStream).toHaveBeenCalled();
-    expect(ctx.pipeline.deploy).not.toHaveBeenCalled();
+    expect(ctx.agent?.chatStream).not.toHaveBeenCalled();
+    expect(ctx.pipeline.deploy).toHaveBeenCalledTimes(1);
   });
 
-  it('POST /api/projects/deploy forwards agent question events without fallback deploy', async () => {
+  it('POST /api/projects/deploy emits deterministic terminal messages via agent:event stream', async () => {
     const capturedAgentEvents: Array<{ projectId: string; type: string }> = [];
     const unsubscribe = eventBus.on('agent:event', (payload) => {
       capturedAgentEvents.push({ projectId: payload.projectId, type: payload.event.type });
     });
 
-    const chatStreamMock = ctx.agent?.chatStream as ReturnType<typeof vi.fn>;
-    chatStreamMock.mockImplementationOnce(
-      async (
-        _message: string,
-        callback: (event: { type: string; question?: string }) => Promise<void>,
-      ) => {
-        await callback({ type: 'question', question: 'Which environment should I deploy to?' });
-        await callback({ type: 'done' });
-      },
-    );
-
     const res = await app.request('/api/projects/deploy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        repo_url: 'https://github.com/user/question-first-app',
+        repo_url: 'https://github.com/user/deterministic-message-app',
       }),
     });
 
@@ -292,12 +275,422 @@ describe('Web API Routes', () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
     unsubscribe();
 
-    const questionEvents = capturedAgentEvents.filter(
-      (event) => event.projectId === body.projectId && event.type === 'question',
+    const messageEvents = capturedAgentEvents.filter(
+      (event) => event.projectId === body.projectId && event.type === 'message',
     );
 
-    expect(questionEvents.length).toBeGreaterThan(0);
-    expect(ctx.pipeline.deploy).not.toHaveBeenCalled();
+    expect(messageEvents.length).toBeGreaterThan(0);
+    expect(ctx.agent?.chatStream).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/projects/deploy asks service selection for monorepo and deploys selected service', async () => {
+    const monorepoPath = join(tmpDir, 'monorepo-select');
+    mkdirSync(join(monorepoPath, 'frontend'), { recursive: true });
+    mkdirSync(join(monorepoPath, 'backend'), { recursive: true });
+    writeFileSync(join(monorepoPath, 'frontend', 'Dockerfile'), 'FROM node:20\n');
+    writeFileSync(join(monorepoPath, 'backend', 'Dockerfile'), 'FROM node:20\n');
+
+    (
+      cloneRepo as unknown as { mockResolvedValueOnce: (value: unknown) => void }
+    ).mockResolvedValueOnce({
+      path: monorepoPath,
+      commitSha: 'abc123',
+    });
+
+    const deployMonorepo = vi.fn().mockResolvedValue({ success: true, children: [] });
+    (ctx.pipeline as unknown as { deployMonorepo: typeof deployMonorepo }).deployMonorepo =
+      deployMonorepo;
+    (
+      ctx.questionBridge.ask as unknown as {
+        mockResolvedValueOnce: (value: unknown) => void;
+      }
+    ).mockResolvedValueOnce([
+      {
+        questionIndex: 0,
+        selectedLabels: ['frontend (frontend/Dockerfile)'],
+      },
+    ]);
+
+    const capturedMessages: string[] = [];
+    const unsubscribe = eventBus.on('agent:event', (payload) => {
+      if (payload.event.type === 'message') {
+        capturedMessages.push(payload.event.content);
+      }
+    });
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_url: 'https://github.com/user/monorepo-select',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    unsubscribe();
+
+    expect(ctx.questionBridge.ask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questions: [
+          expect.objectContaining({
+            header: 'Service Selection',
+            multiple: false,
+            options: expect.arrayContaining([
+              expect.objectContaining({ label: 'Deploy all services' }),
+              expect.objectContaining({ label: 'frontend (frontend/Dockerfile)' }),
+              expect.objectContaining({ label: 'backend (backend/Dockerfile)' }),
+            ]),
+          }),
+        ],
+      }),
+    );
+    expect(deployMonorepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dockerfiles: ['frontend/Dockerfile'],
+      }),
+    );
+    expect(
+      capturedMessages.some((message) => message.includes('Selection confirmed: deploying')),
+    ).toBe(true);
+  });
+
+  it('POST /api/projects/deploy falls back from compose failure to monorepo deploy', async () => {
+    const composeMonorepoPath = join(tmpDir, 'compose-monorepo-fallback');
+    mkdirSync(join(composeMonorepoPath, 'frontend'), { recursive: true });
+    mkdirSync(join(composeMonorepoPath, 'backend'), { recursive: true });
+    writeFileSync(
+      join(composeMonorepoPath, 'docker-compose.yml'),
+      'services:\n  web:\n    image: nginx\n',
+    );
+    writeFileSync(join(composeMonorepoPath, 'frontend', 'Dockerfile'), 'FROM node:20\n');
+    writeFileSync(join(composeMonorepoPath, 'backend', 'Dockerfile'), 'FROM node:20\n');
+
+    (
+      cloneRepo as unknown as { mockResolvedValueOnce: (value: unknown) => void }
+    ).mockResolvedValueOnce({
+      path: composeMonorepoPath,
+      commitSha: 'feed123',
+    });
+
+    const deployCompose = vi
+      .fn()
+      .mockResolvedValue({ success: false, error: 'docker compose up failed for web: boom' });
+    (
+      ctx as unknown as { composePipeline: { deployCompose: typeof deployCompose } }
+    ).composePipeline = { deployCompose };
+
+    const deployMonorepo = vi.fn().mockResolvedValue({ success: true, children: [] });
+    (ctx.pipeline as unknown as { deployMonorepo: typeof deployMonorepo }).deployMonorepo =
+      deployMonorepo;
+
+    (
+      ctx.questionBridge.ask as unknown as {
+        mockResolvedValueOnce: (value: unknown) => void;
+      }
+    ).mockResolvedValueOnce([
+      {
+        questionIndex: 0,
+        selectedLabels: ['Deploy all services'],
+      },
+    ]);
+
+    const capturedMessages: string[] = [];
+    const unsubscribe = eventBus.on('agent:event', (payload) => {
+      if (payload.event.type === 'message') capturedMessages.push(payload.event.content);
+    });
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_url: 'https://github.com/user/compose-monorepo-fallback' }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    unsubscribe();
+
+    expect(deployCompose).toHaveBeenCalledTimes(1);
+    expect(deployMonorepo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dockerfiles: expect.arrayContaining(['frontend/Dockerfile', 'backend/Dockerfile']),
+      }),
+    );
+    expect(
+      capturedMessages.some((message) => message.includes('Attempting monorepo fallback')),
+    ).toBe(true);
+  });
+
+  it('POST /api/projects/deploy falls back from compose failure to single deploy when monorepo is not applicable', async () => {
+    const composeSinglePath = join(tmpDir, 'compose-single-fallback');
+    mkdirSync(composeSinglePath, { recursive: true });
+    writeFileSync(
+      join(composeSinglePath, 'docker-compose.yml'),
+      'services:\n  web:\n    image: nginx\n',
+    );
+    writeFileSync(join(composeSinglePath, 'Dockerfile'), 'FROM node:20\n');
+
+    (
+      cloneRepo as unknown as { mockResolvedValueOnce: (value: unknown) => void }
+    ).mockResolvedValueOnce({
+      path: composeSinglePath,
+      commitSha: 'feed456',
+    });
+
+    const deployCompose = vi
+      .fn()
+      .mockResolvedValue({ success: false, error: 'compose env validation failed' });
+    (
+      ctx as unknown as { composePipeline: { deployCompose: typeof deployCompose } }
+    ).composePipeline = { deployCompose };
+
+    const deploySingle = vi.fn().mockResolvedValue({ success: true });
+    (ctx.pipeline as unknown as { deploy: typeof deploySingle }).deploy = deploySingle;
+
+    const capturedMessages: string[] = [];
+    const unsubscribe = eventBus.on('agent:event', (payload) => {
+      if (payload.event.type === 'message') capturedMessages.push(payload.event.content);
+    });
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_url: 'https://github.com/user/compose-single-fallback' }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    unsubscribe();
+
+    expect(deployCompose).toHaveBeenCalledTimes(1);
+    expect(deploySingle).toHaveBeenCalledTimes(1);
+    expect(ctx.questionBridge.ask).not.toHaveBeenCalled();
+    expect(
+      capturedMessages.some((message) => message.includes('Attempting single-service fallback')),
+    ).toBe(true);
+  });
+
+  it('POST /api/projects/deploy runs AI terminal analysis and retries when user selects retry', async () => {
+    const deploySingle = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('docker build failed at step 8'))
+      .mockResolvedValueOnce({ success: true, projectId: 'p1', url: 'http://localhost:10001' });
+    (ctx.pipeline as unknown as { deploy: typeof deploySingle }).deploy = deploySingle;
+
+    const diagnose = vi.fn().mockResolvedValue({
+      summary: 'Missing package manager lockfile',
+      rootCause: 'The build expects a lockfile that is not committed.',
+      suggestedFixes: [
+        {
+          description: 'Commit package-lock.json and retry the build.',
+          location: 'repo root',
+          confidence: 'high' as const,
+        },
+      ],
+      rawAnalysis: 'raw',
+    });
+    ctx.buildDebugger = { diagnose } as unknown as AppContext['buildDebugger'];
+
+    (
+      ctx.questionBridge.ask as unknown as {
+        mockResolvedValueOnce: (value: unknown) => void;
+      }
+    ).mockResolvedValueOnce([
+      {
+        questionIndex: 0,
+        selectedLabels: ['Retry deployment now'],
+      },
+    ]);
+
+    const capturedMessages: string[] = [];
+    const unsubscribe = eventBus.on('agent:event', (payload) => {
+      if (payload.event.type === 'message') capturedMessages.push(payload.event.content);
+    });
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_url: 'https://github.com/user/terminal-ai-retry' }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    unsubscribe();
+
+    expect(diagnose).toHaveBeenCalledWith(
+      expect.objectContaining({
+        buildLog: 'docker build failed at step 8',
+        failedStep: 'deploy_start',
+      }),
+    );
+    expect(ctx.questionBridge.ask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        questions: [
+          expect.objectContaining({
+            header: 'Deployment Recovery',
+            options: expect.arrayContaining([
+              expect.objectContaining({ label: 'Retry deployment now' }),
+              expect.objectContaining({ label: 'Manual follow-up 1' }),
+              expect.objectContaining({ label: 'Cancel' }),
+            ]),
+          }),
+        ],
+      }),
+    );
+    expect(deploySingle).toHaveBeenCalledTimes(2);
+    expect(capturedMessages.some((message) => message.includes('AI summary:'))).toBe(true);
+    expect(capturedMessages.some((message) => message.includes('Root cause:'))).toBe(true);
+  });
+
+  it('POST /api/projects/deploy keeps explicit failure when user selects cancel after AI analysis', async () => {
+    const deploySingle = vi.fn().mockRejectedValue(new Error('container failed before start'));
+    (ctx.pipeline as unknown as { deploy: typeof deploySingle }).deploy = deploySingle;
+
+    const diagnose = vi.fn().mockResolvedValue({
+      summary: 'Container start command exited immediately',
+      rootCause: 'The runtime command exits with non-zero status.',
+      suggestedFixes: [],
+      rawAnalysis: 'raw',
+    });
+    ctx.buildDebugger = { diagnose } as unknown as AppContext['buildDebugger'];
+
+    (
+      ctx.questionBridge.ask as unknown as {
+        mockResolvedValueOnce: (value: unknown) => void;
+      }
+    ).mockResolvedValueOnce([
+      {
+        questionIndex: 0,
+        selectedLabels: ['Cancel'],
+      },
+    ]);
+
+    const failedEvents: Array<{ step: string; error: string }> = [];
+    const unsubscribe = eventBus.on('deploy:failed', (payload) => {
+      failedEvents.push({ step: payload.step, error: payload.error });
+    });
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_url: 'https://github.com/user/terminal-ai-cancel' }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    unsubscribe();
+
+    expect(diagnose).toHaveBeenCalledTimes(1);
+    expect(deploySingle).toHaveBeenCalledTimes(1);
+    expect(failedEvents).toContainEqual({
+      step: 'deploy-start',
+      error: 'container failed before start',
+    });
+  });
+
+  it('POST /api/projects/deploy emits manual follow-up when user selects AI suggested fix option', async () => {
+    const deploySingle = vi.fn().mockRejectedValue(new Error('npm ci exited with code 1'));
+    (ctx.pipeline as unknown as { deploy: typeof deploySingle }).deploy = deploySingle;
+
+    const diagnose = vi.fn().mockResolvedValue({
+      summary: 'Dependency lockfile mismatch',
+      rootCause: 'package-lock.json is stale relative to package.json.',
+      suggestedFixes: [
+        {
+          description: 'Regenerate package-lock.json and commit it before redeploying.',
+          location: 'repo root',
+          confidence: 'high' as const,
+        },
+      ],
+      rawAnalysis: 'raw',
+    });
+    ctx.buildDebugger = { diagnose } as unknown as AppContext['buildDebugger'];
+
+    (
+      ctx.questionBridge.ask as unknown as {
+        mockResolvedValueOnce: (value: unknown) => void;
+      }
+    ).mockResolvedValueOnce([
+      {
+        questionIndex: 0,
+        selectedLabels: ['Manual follow-up 1'],
+      },
+    ]);
+
+    const userActionEvents: Array<{ category: string; title: string; description: string }> = [];
+    const unsubscribe = eventBus.on('deploy:needs-user-action', (payload) => {
+      userActionEvents.push({
+        category: payload.category,
+        title: payload.title,
+        description: payload.description,
+      });
+    });
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo_url: 'https://github.com/user/terminal-ai-manual-fix' }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    unsubscribe();
+
+    expect(diagnose).toHaveBeenCalledTimes(1);
+    expect(deploySingle).toHaveBeenCalledTimes(1);
+    expect(userActionEvents).toContainEqual({
+      category: 'manual_followup_required',
+      title: 'Manual fix required',
+      description:
+        'This suggested fix was not auto-applied: Regenerate package-lock.json and commit it before redeploying.',
+    });
+  });
+
+  it('POST /api/projects/deploy emits user-action-needed when monorepo selection is dismissed', async () => {
+    const monorepoPath = join(tmpDir, 'monorepo-dismissed');
+    mkdirSync(join(monorepoPath, 'api'), { recursive: true });
+    mkdirSync(join(monorepoPath, 'worker'), { recursive: true });
+    writeFileSync(join(monorepoPath, 'api', 'Dockerfile'), 'FROM node:20\n');
+    writeFileSync(join(monorepoPath, 'worker', 'Dockerfile'), 'FROM node:20\n');
+
+    (
+      cloneRepo as unknown as { mockResolvedValueOnce: (value: unknown) => void }
+    ).mockResolvedValueOnce({
+      path: monorepoPath,
+      commitSha: 'def456',
+    });
+
+    const deployMonorepo = vi.fn().mockResolvedValue({ success: true, children: [] });
+    (ctx.pipeline as unknown as { deployMonorepo: typeof deployMonorepo }).deployMonorepo =
+      deployMonorepo;
+    (
+      ctx.questionBridge.ask as unknown as {
+        mockResolvedValueOnce: (value: unknown) => void;
+      }
+    ).mockResolvedValueOnce([]);
+
+    const userActionEvents: Array<{ category: string; title: string }> = [];
+    const unsubscribe = eventBus.on('deploy:needs-user-action', (payload) => {
+      userActionEvents.push({ category: payload.category, title: payload.title });
+    });
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_url: 'https://github.com/user/monorepo-dismissed',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    unsubscribe();
+
+    expect(deployMonorepo).not.toHaveBeenCalled();
+    expect(userActionEvents).toContainEqual({
+      category: 'selection_required',
+      title: 'Service selection required',
+    });
   });
 
   it('GET /api/projects/:id/build/stream masks sensitive data in agent tool results', async () => {
