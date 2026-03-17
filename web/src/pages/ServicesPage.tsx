@@ -1,19 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  getServices,
-  getServiceTemplates,
-  startService,
-  stopService,
-  type Service,
-  type ServiceTemplate,
-} from '@/lib/api';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { getServices, getServiceTemplates, type Service, type ServiceTemplate } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { Plus, Play, Square, Loader2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { CreateServiceDialog } from '@/components/service/CreateServiceDialog';
 
@@ -22,9 +12,7 @@ export function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
-  // Create form state
   const [showCreate, setShowCreate] = useState(false);
   const [createMode, setCreateMode] = useState<'template' | 'custom'>('template');
 
@@ -44,30 +32,15 @@ export function ServicesPage() {
     fetchServices();
   }, []);
 
-  const handleAction = async (e: React.MouseEvent, id: string, action: 'start' | 'stop') => {
-    e.stopPropagation();
-    setActionLoading((prev) => ({ ...prev, [`${id}-${action}`]: true }));
-    try {
-      if (action === 'start') {
-        await startService(id);
-        toast.success('Service started');
-      } else if (action === 'stop') {
-        await stopService(id);
-        toast.success('Service stopped');
-      }
-
-      await fetchServices();
-    } catch (err) {
-      console.error(`Failed to ${action} service:`, err);
-      toast.error(`Failed to ${action} service`);
-    } finally {
-      setActionLoading((prev) => ({ ...prev, [`${id}-${action}`]: false }));
-    }
-  };
-
   const openCreate = () => {
     setCreateMode('template');
     setShowCreate(true);
+  };
+
+  const statusLabel = (status: string) => {
+    if (status === 'running') return 'Running';
+    if (status === 'error') return 'Error';
+    return 'Stopped';
   };
 
   if (loading) {
@@ -128,7 +101,7 @@ export function ServicesPage() {
               className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 h-36 flex flex-col justify-between cursor-pointer hover:border-primary-ol/50 transition-colors card-hover"
             >
               <div>
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-1.5">
                   <div
                     className={cn(
                       'w-2 h-2 rounded-full shrink-0',
@@ -139,42 +112,23 @@ export function ServicesPage() {
                     {service.name}
                   </h3>
                 </div>
-                <Badge variant="outline" className="text-[10px] font-mono">
-                  {service.image}
-                </Badge>
+                <p className="text-[11px] font-mono text-muted-ol truncate">{service.image}</p>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-ol">Port {service.port}</span>
-                {isRunning ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={(e) => handleAction(e, service.id, 'stop')}
-                    disabled={actionLoading[`${service.id}-stop`]}
-                  >
-                    {actionLoading[`${service.id}-stop`] ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Square className="h-3 w-3" />
-                    )}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={(e) => handleAction(e, service.id, 'start')}
-                    disabled={actionLoading[`${service.id}-start`]}
-                  >
-                    {actionLoading[`${service.id}-start`] ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                  </Button>
-                )}
+              <div className="flex items-center justify-between text-xs text-muted-ol">
+                <span
+                  className={cn(
+                    'font-body',
+                    isRunning
+                      ? 'text-success'
+                      : isError
+                        ? 'text-error'
+                        : 'text-[var(--text-muted)]',
+                  )}
+                >
+                  {statusLabel(service.status)}
+                </span>
+                <span className="font-mono">:{service.port}</span>
               </div>
             </div>
           );
