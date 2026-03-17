@@ -84,18 +84,69 @@ export type EventType =
   | 'deploy:diff-analyzed';
 
 export interface EventPayload {
-  'deploy:start': { projectId: string; repoUrl: string };
-  'deploy:clone': { projectId: string; path: string; commitSha: string };
-  'deploy:build': { projectId: string; imageTag: string; durationMs: number };
-  'deploy:run': { projectId: string; containerId: string; port: number; url: string };
+  'deploy:start': {
+    projectId: string;
+    repoUrl: string;
+    parentProjectId?: string;
+    phase?: string;
+    scope?: string;
+    status?: 'pending' | 'in_progress' | 'success' | 'failed';
+    message?: string;
+  };
+  'deploy:clone': {
+    projectId: string;
+    path: string;
+    commitSha: string;
+    parentProjectId?: string;
+    phase?: string;
+    scope?: string;
+    status?: 'pending' | 'in_progress' | 'success' | 'failed';
+    message?: string;
+  };
+  'deploy:build': {
+    projectId: string;
+    imageTag: string;
+    durationMs: number;
+    parentProjectId?: string;
+    phase?: string;
+    scope?: string;
+    status?: 'pending' | 'in_progress' | 'success' | 'failed';
+    message?: string;
+  };
+  'deploy:run': {
+    projectId: string;
+    containerId: string;
+    port: number;
+    url: string;
+    parentProjectId?: string;
+    phase?: string;
+    scope?: string;
+    status?: 'pending' | 'in_progress' | 'success' | 'failed';
+    message?: string;
+  };
   'deploy:auto-detect': { projectId: string; framework: string; type: 'dockerfile' | 'compose' };
-  'deploy:success': { projectId: string; url: string; totalDurationMs: number };
+  'deploy:success': {
+    projectId: string;
+    url: string;
+    totalDurationMs: number;
+    parentProjectId?: string;
+    phase?: string;
+    scope?: string;
+    status?: 'pending' | 'in_progress' | 'success' | 'failed';
+    message?: string;
+  };
   'deploy:failed': {
     projectId: string;
     step: string;
     error: string;
     buildLog?: string;
     diffContext?: string;
+    parentProjectId?: string;
+    phase?: string;
+    scope?: string;
+    status?: 'pending' | 'in_progress' | 'success' | 'failed';
+    message?: string;
+    durationMs?: number;
   };
   'deploy:needs-user-action': {
     projectId: string;
@@ -115,7 +166,18 @@ export interface EventPayload {
     explanation: string;
     retryCount: number;
   };
-  'build:output': { projectId: string; line: string; stream: 'stdout' | 'error' };
+  'build:output': {
+    projectId: string;
+    line: string;
+    stream: 'stdout' | 'error';
+    parentProjectId?: string;
+    phase?: string;
+    scope?: string;
+    status?: 'pending' | 'in_progress' | 'success' | 'failed';
+    message?: string;
+    durationMs?: number;
+    logChunk?: string;
+  };
   'compose:start': { projectId: string; composePath: string; serviceCount: number };
   'compose:up': { projectId: string; services: string[] };
   'compose:down': { projectId: string };

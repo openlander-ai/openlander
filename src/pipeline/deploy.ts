@@ -899,6 +899,24 @@ export class DeployPipeline {
       this.jobManager?.trackJob(parentId, parentName);
     }
 
+    await eventBus.emit('deploy:start', {
+      projectId: parentId,
+      repoUrl: config.repoUrl,
+      phase: 'orchestrate',
+      scope: 'parent',
+      status: 'in_progress',
+      message: `Starting monorepo deploy (${String(config.dockerfiles.length)} services)`,
+    });
+    await eventBus.emit('deploy:clone', {
+      projectId: parentId,
+      path: config.clonePath,
+      commitSha: config.commitSha,
+      phase: 'clone',
+      scope: 'parent',
+      status: 'success',
+      message: `Using cloned repository (${config.commitSha.slice(0, 7)})`,
+    });
+
     const serviceNameCounts = new Map<string, number>();
     const services: ServiceNode[] = config.dockerfiles.map((dockerfilePath) => {
       const baseName = deriveServiceName(dockerfilePath);
@@ -926,6 +944,16 @@ export class DeployPipeline {
       const errorMsg = error instanceof Error ? error.message : String(error);
       this.db.updateProject(parentId, { status: 'error' });
       this.jobManager?.updatePhase(parentId, 'failed', errorMsg);
+      await eventBus.emit('deploy:failed', {
+        projectId: parentId,
+        step: 'topology',
+        error: errorMsg,
+        phase: 'orchestrate',
+        scope: 'parent',
+        status: 'failed',
+        message: `Monorepo topology build failed: ${errorMsg}`,
+        durationMs: Date.now() - startTime,
+      });
       return {
         success: false,
         parentProjectId: parentId,
@@ -947,6 +975,16 @@ export class DeployPipeline {
       const validationError = validation.errors.join('; ');
       this.db.updateProject(parentId, { status: 'error' });
       this.jobManager?.updatePhase(parentId, 'failed', validationError);
+      await eventBus.emit('deploy:failed', {
+        projectId: parentId,
+        step: 'topology',
+        error: validationError,
+        phase: 'orchestrate',
+        scope: 'parent',
+        status: 'failed',
+        message: `Monorepo topology validation failed: ${validationError}`,
+        durationMs: Date.now() - startTime,
+      });
       return {
         success: false,
         parentProjectId: parentId,
@@ -983,12 +1021,33 @@ export class DeployPipeline {
         this.db.updateProject(childId, { status: 'building' });
         this.jobManager?.trackJob(childId, childName);
 
+        await eventBus.emit('deploy:start', {
+          projectId: childId,
+          parentProjectId: parentId,
+          repoUrl: config.repoUrl,
+          phase: 'build',
+          scope: service.name,
+          status: 'in_progress',
+          message: `[${service.name}] Starting service deployment`,
+        });
+
         if (!dockerfilePath) {
+          const noDockerfileError = `Service ${service.name} has no Dockerfile path`;
+          await eventBus.emit('deploy:failed', {
+            projectId: childId,
+            parentProjectId: parentId,
+            step: 'dockerfile',
+            error: noDockerfileError,
+            phase: 'build',
+            scope: service.name,
+            status: 'failed',
+            message: `[${service.name}] ${noDockerfileError}`,
+          });
           const failed: DeployResult = {
             success: false,
             projectId: childId,
             projectName: childName,
-            error: `Service ${service.name} has no Dockerfile path`,
+            error: noDockerfileError,
             buildDurationMs: Date.now() - childStartTime,
           };
           resultByService.set(service.name, failed);
@@ -1017,7 +1076,41 @@ export class DeployPipeline {
               'utf8',
             );
           }
-          await this.docker.buildImage(contextPath, imageTag, { buildArgs: buildTimeVarsForChild });
+          let lastBuildOutputEmit = 0;
+          await this.docker.buildImage(contextPath, imageTag, {
+            buildArgs: buildTimeVarsForChild,
+            onProgress: (event) => {
+              const line = event.stream?.trim() ?? event.error ?? '';
+              if (!line) return;
+
+              const now = Date.now();
+              if (now - lastBuildOutputEmit <= 50) return;
+              lastBuildOutputEmit = now;
+
+              void eventBus.emit('build:output', {
+                projectId: childId,
+                parentProjectId: parentId,
+                line,
+                stream: event.error ? 'error' : 'stdout',
+                phase: 'build',
+                scope: service.name,
+                status: 'in_progress',
+                message: line,
+                logChunk: line,
+              });
+            },
+          });
+
+          await eventBus.emit('deploy:build', {
+            projectId: childId,
+            parentProjectId: parentId,
+            imageTag,
+            durationMs: Date.now() - childStartTime,
+            phase: 'build',
+            scope: service.name,
+            status: 'success',
+            message: `[${service.name}] Docker image built`,
+          });
 
           this.jobManager?.updatePhase(childId, 'starting');
           const port = await allocatePort(this.db, this.docker);
@@ -1035,6 +1128,18 @@ export class DeployPipeline {
           });
 
           const internalUrl = getProjectUrl(childName.replace('/', '-'));
+
+          await eventBus.emit('deploy:run', {
+            projectId: childId,
+            parentProjectId: parentId,
+            containerId,
+            port,
+            url: internalUrl,
+            phase: 'run',
+            scope: service.name,
+            status: 'success',
+            message: `[${service.name}] Service running on port ${String(port)}`,
+          });
 
           this.db.updateProject(childId, {
             status: 'running',
@@ -1056,6 +1161,17 @@ export class DeployPipeline {
 
           this.jobManager?.updatePhase(childId, 'done');
 
+          await eventBus.emit('deploy:success', {
+            projectId: childId,
+            parentProjectId: parentId,
+            url: internalUrl,
+            totalDurationMs: Date.now() - childStartTime,
+            phase: 'complete',
+            scope: service.name,
+            status: 'success',
+            message: `[${service.name}] Service deploy complete`,
+          });
+
           const successResult: DeployResult = {
             success: true,
             projectId: childId,
@@ -1076,6 +1192,18 @@ export class DeployPipeline {
           const errorMsg = error instanceof Error ? error.message : String(error);
           this.db.updateProject(childId, { status: 'error' });
           this.jobManager?.updatePhase(childId, 'failed', errorMsg);
+
+          await eventBus.emit('deploy:failed', {
+            projectId: childId,
+            parentProjectId: parentId,
+            step: 'service-deploy',
+            error: errorMsg,
+            phase: 'build',
+            scope: service.name,
+            status: 'failed',
+            message: `[${service.name}] ${errorMsg}`,
+            durationMs: Date.now() - childStartTime,
+          });
 
           this.db.createDeployLog({
             id: nanoid(12),
@@ -1186,6 +1314,34 @@ export class DeployPipeline {
     const allSuccess = orchestration.success && childResults.every((r) => r.success);
     this.db.updateProject(parentId, { status: allSuccess ? 'running' : 'error' });
     this.jobManager?.updatePhase(parentId, allSuccess ? 'done' : 'failed');
+
+    if (allSuccess) {
+      await eventBus.emit('deploy:success', {
+        projectId: parentId,
+        url: getProjectUrl(parentName),
+        totalDurationMs: Date.now() - startTime,
+        phase: 'complete',
+        scope: 'parent',
+        status: 'success',
+        message: `Monorepo deploy complete (${String(childResults.length)} services)`,
+      });
+    } else {
+      const failedSummary = childResults
+        .filter((child) => !child.success)
+        .map((child) => `${child.projectName}: ${child.error ?? 'unknown error'}`)
+        .join('; ');
+
+      await eventBus.emit('deploy:failed', {
+        projectId: parentId,
+        step: 'monorepo',
+        error: failedSummary || 'One or more monorepo services failed',
+        phase: 'complete',
+        scope: 'parent',
+        status: 'failed',
+        message: 'Monorepo deploy failed',
+        durationMs: Date.now() - startTime,
+      });
+    }
 
     return {
       success: allSuccess,

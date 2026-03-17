@@ -126,6 +126,12 @@ export interface BuildStreamEvent {
   category?: string;
   userMessage?: string;
   userDetail?: string;
+  phase?: string;
+  scope?: string;
+  status?: 'pending' | 'in_progress' | 'success' | 'failed';
+  durationMs?: number;
+  logChunk?: string;
+  sourceProjectId?: string;
 }
 
 /** Action button for insight/anomaly timeline items */
@@ -179,6 +185,12 @@ export interface TimelineItem {
   toolSuccess?: boolean;
   toolError?: string | null;
   category?: string;
+  phase?: string;
+  scope?: string;
+  status?: 'pending' | 'in_progress' | 'success' | 'failed';
+  durationMs?: number;
+  logChunk?: string;
+  sourceProjectId?: string;
 }
 
 /** Message pattern → progress percentage mapping */
@@ -210,6 +222,14 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
   idCounter += 1;
   const id = event.id ?? `tl-${idCounter}-${event.timestamp}`;
   const progressPercent = event.percent ?? estimatePercent(event.message);
+  const scopedMeta = {
+    phase: event.phase,
+    scope: event.scope,
+    status: event.status,
+    durationMs: event.durationMs,
+    logChunk: event.logChunk,
+    sourceProjectId: event.sourceProjectId,
+  };
 
   switch (event.type) {
     case 'log':
@@ -219,6 +239,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         timestamp: event.timestamp,
         title: event.message,
         percent: -1,
+        ...scopedMeta,
       };
     case 'complete':
       return {
@@ -228,6 +249,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         title: event.message,
         percent: event.percent ?? 100,
         url: extractUrl(event.message),
+        ...scopedMeta,
       };
     case 'error':
       return {
@@ -237,6 +259,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         title: event.message,
         detail: event.detail ?? undefined,
         percent: event.percent ?? -1,
+        ...scopedMeta,
       };
     case 'question_pending':
       return {
@@ -248,6 +271,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         questionId: event.questionId,
         questions: event.questions,
         answered: false,
+        ...scopedMeta,
       };
     case 'insight':
       return {
@@ -259,6 +283,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         severity: event.severity ?? 'info',
         actionButtons: event.actionButtons,
+        ...scopedMeta,
       };
     case 'dockerfile_fixed':
       return {
@@ -269,6 +294,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         dockerfileChanges: event.dockerfileChanges,
         retryCount: event.retryCount,
+        ...scopedMeta,
       };
     case 'agent_thinking':
       return {
@@ -277,6 +303,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         timestamp: event.timestamp,
         title: event.message || 'Agent is analyzing...',
         percent: -1,
+        ...scopedMeta,
       };
     case 'agent_tool_call':
       return {
@@ -287,6 +314,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         toolName: event.toolName,
         toolArguments: event.toolArguments ? sanitizeToolArguments(event.toolArguments) : undefined,
+        ...scopedMeta,
       };
     case 'agent_tool_result':
       return {
@@ -299,6 +327,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         toolResult: event.toolResult,
         toolSuccess: event.toolSuccess,
         toolError: event.toolError,
+        ...scopedMeta,
       };
     case 'agent_message':
       return {
@@ -307,6 +336,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         timestamp: event.timestamp,
         title: event.content ?? event.message,
         percent: -1,
+        ...scopedMeta,
       };
     case 'needs_user_action':
       return {
@@ -317,6 +347,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         category: event.category,
         detail: event.userDetail ?? event.detail ?? undefined,
+        ...scopedMeta,
       };
     default:
       return {
@@ -326,6 +357,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         title: event.message,
         percent: progressPercent,
         stepName: event.stepName,
+        ...scopedMeta,
       };
   }
 }

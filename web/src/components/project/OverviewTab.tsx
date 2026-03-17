@@ -3,7 +3,7 @@ import type { ErrorInfo, ReactNode } from 'react';
 import { PostmortemCard } from '@/components/timeline/PostmortemCard';
 import { LogPreview } from '@/components/timeline/LogPreview';
 import { ChatMessageList } from '@/components/assistant/ChatMessageList';
-import { UnifiedBriefingFeed } from '@/components/project/UnifiedBriefingFeed';
+import { DeployTerminalSession } from '@/components/deploy-terminal/DeployTerminalSession';
 import type { AssistantItem } from '@/hooks/use-assistant';
 import type { TimelineItem } from '@/lib/event-types';
 import type { PostmortemData } from '@/lib/api';
@@ -25,14 +25,14 @@ class LocalErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('UnifiedBriefingFeed Error:', error, errorInfo);
+    console.error('DeployTerminalSession Error:', error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <div className="p-4 text-sm text-error bg-error/10 border border-error/20 rounded-lg m-4">
-          Failed to load briefing feed. Please refresh the page.
+          Failed to load deploy terminal. Please refresh the page.
         </div>
       );
     }
@@ -67,17 +67,23 @@ export function OverviewTab({
   timelineItems,
   isTimelineStreaming,
   postmortem,
-  fixingItemId,
+
   onSubmitAnswer,
   onSkipQuestion,
-  onInsightAction,
-  onFixWithAI,
+
   onOpenLogs,
   assistantItems,
   isAssistantStreaming,
   onSendMessage,
 }: OverviewTabProps) {
   const [project, setProject] = useState<Project | null>(null);
+  const [wasBuilding, setWasBuilding] = useState(false);
+
+  useEffect(() => {
+    if (projectStatus === 'building') {
+      setWasBuilding(true);
+    }
+  }, [projectStatus]);
 
   useEffect(() => {
     let mounted = true;
@@ -91,7 +97,10 @@ export function OverviewTab({
     };
   }, [projectId]);
 
-  const showTimeline = projectStatus === 'building' || projectStatus === 'error';
+  const showTimeline =
+    projectStatus === 'building' ||
+    projectStatus === 'error' ||
+    (projectStatus === 'running' && wasBuilding);
 
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0">
@@ -113,17 +122,16 @@ export function OverviewTab({
           <>
             <section className="rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
               <LocalErrorBoundary>
-                <UnifiedBriefingFeed
+                <DeployTerminalSession
+                  projectName={displayProject?.name || project?.name || projectId}
+                  branchName={displayProject?.branch || project?.branch}
+                  projectStatus={projectStatus}
                   timelineItems={timelineItems}
                   isTimelineStreaming={isTimelineStreaming}
-                  projectStatus={projectStatus}
-                  fixingItemId={fixingItemId}
-                  onFixWithAI={onFixWithAI}
-                  onSubmitAnswer={onSubmitAnswer}
-                  onSkipQuestion={onSkipQuestion}
-                  onInsightAction={onInsightAction}
                   assistantItems={assistantItems}
                   isAssistantStreaming={isAssistantStreaming}
+                  onSubmitAnswer={onSubmitAnswer}
+                  onSkipQuestion={onSkipQuestion}
                   onSendMessage={onSendMessage}
                 />
               </LocalErrorBoundary>

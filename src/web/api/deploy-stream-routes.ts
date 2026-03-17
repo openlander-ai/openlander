@@ -14,6 +14,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { extractProjectName } from '../../pipeline/helpers.js';
 import { preflightCheckOrThrow } from '../../pipeline/preflight.js';
 import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
+import type { ProjectRow } from '../../db/types.js';
 
 const log = createModuleLogger('api');
 
@@ -1115,6 +1116,51 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         }
       };
 
+      const childProjectCache = new Map<string, ProjectRow | null>();
+
+      const resolveScopedProject = (
+        sourceProjectId: string,
+        explicitScope?: unknown,
+        explicitParentProjectId?: unknown,
+      ): { scope: string; sourceProjectId: string; isChild: boolean } | null => {
+        if (sourceProjectId === project.id) {
+          const scope =
+            typeof explicitScope === 'string' && explicitScope.trim().length > 0
+              ? explicitScope
+              : 'project';
+          return { scope, sourceProjectId, isChild: false };
+        }
+
+        if (explicitParentProjectId === project.id) {
+          const scope =
+            typeof explicitScope === 'string' && explicitScope.trim().length > 0
+              ? explicitScope
+              : sourceProjectId;
+          return { scope, sourceProjectId, isChild: true };
+        }
+
+        if (!childProjectCache.has(sourceProjectId)) {
+          childProjectCache.set(sourceProjectId, ctx.db.getProject(sourceProjectId) ?? null);
+        }
+
+        const childProject = childProjectCache.get(sourceProjectId);
+        if (!childProject || childProject.parent_project_id !== project.id) {
+          return null;
+        }
+
+        const inferredScope =
+          childProject.name.startsWith(`${project.name}/`) &&
+          childProject.name.length > `${project.name}/`.length
+            ? childProject.name.slice(project.name.length + 1)
+            : childProject.name;
+        const scope =
+          typeof explicitScope === 'string' && explicitScope.trim().length > 0
+            ? explicitScope
+            : inferredScope;
+
+        return { scope, sourceProjectId, isChild: true };
+      };
+
       const write = (data: {
         type: string;
         message: string;
@@ -1188,55 +1234,115 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
       unsubscribers.push(
         eventBus.on('deploy:start', (payload) => {
-          if (payload.projectId !== project.id) return;
+          const scoped = resolveScopedProject(
+            payload.projectId,
+            payload.scope,
+            payload.parentProjectId,
+          );
+          if (!scoped) return;
           emitTimelineEvent({
-            type: 'status',
-            message: 'Starting deployment...',
+            type: scoped.isChild ? 'log' : 'status',
+            message: payload.message ?? 'Starting deployment...',
             projectId: project.id,
-            percent: 0,
+            percent: scoped.isChild ? undefined : 0,
+            phase: payload.phase,
+            scope: scoped.scope,
+            status: payload.status,
+            sourceProjectId: scoped.sourceProjectId,
           });
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:clone', (payload) => {
-          if (payload.projectId !== project.id) return;
+          const scoped = resolveScopedProject(
+            payload.projectId,
+            payload.scope,
+            payload.parentProjectId,
+          );
+          if (!scoped) return;
           emitTimelineEvent({
-            type: 'status',
-            message: `Cloning repository (${payload.commitSha.slice(0, 7)})`,
+            type: scoped.isChild ? 'log' : 'status',
+            message: payload.message ?? `Cloning repository (${payload.commitSha.slice(0, 7)})`,
             projectId: project.id,
-            percent: 15,
+            percent: scoped.isChild ? undefined : 15,
+            phase: payload.phase,
+            scope: scoped.scope,
+            status: payload.status,
+            sourceProjectId: scoped.sourceProjectId,
           });
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:build', (payload) => {
-          if (payload.projectId !== project.id) return;
+          const scoped = resolveScopedProject(
+            payload.projectId,
+            payload.scope,
+            payload.parentProjectId,
+          );
+          if (!scoped) return;
           emitTimelineEvent({
-            type: 'status',
-            message: `Docker image built (${String(Math.round(payload.durationMs / 1000))}s)`,
+            type: scoped.isChild ? 'log' : 'status',
+            message:
+              payload.message ??
+              `Docker image built (${String(Math.round(payload.durationMs / 1000))}s)`,
             projectId: project.id,
-            percent: 60,
+            percent: scoped.isChild ? undefined : 60,
+            phase: payload.phase,
+            scope: scoped.scope,
+            status: payload.status,
+            durationMs: payload.durationMs,
+            sourceProjectId: scoped.sourceProjectId,
           });
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:run', (payload) => {
-          if (payload.projectId !== project.id) return;
+          const scoped = resolveScopedProject(
+            payload.projectId,
+            payload.scope,
+            payload.parentProjectId,
+          );
+          if (!scoped) return;
           emitTimelineEvent({
-            type: 'status',
-            message: `Starting container on port ${String(payload.port)}`,
+            type: scoped.isChild ? 'log' : 'status',
+            message: payload.message ?? `Starting container on port ${String(payload.port)}`,
             projectId: project.id,
-            percent: 90,
+            percent: scoped.isChild ? undefined : 90,
+            phase: payload.phase,
+            scope: scoped.scope,
+            status: payload.status,
+            sourceProjectId: scoped.sourceProjectId,
           });
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:success', (payload) => {
-          if (payload.projectId !== project.id) return;
+          const scoped = resolveScopedProject(
+            payload.projectId,
+            payload.scope,
+            payload.parentProjectId,
+          );
+          if (!scoped) return;
+
+          if (scoped.isChild) {
+            emitTimelineEvent({
+              type: 'log',
+              message:
+                payload.message ??
+                `Service complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
+              projectId: project.id,
+              phase: payload.phase,
+              scope: scoped.scope,
+              status: payload.status,
+              durationMs: payload.totalDurationMs,
+              sourceProjectId: scoped.sourceProjectId,
+            });
+            return;
+          }
 
           // Generate post-deploy insights before sending complete event
           void (async () => {
@@ -1270,9 +1376,16 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
             // Send complete event and close stream
             emitTimelineEvent({
               type: 'complete',
-              message: `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
+              message:
+                payload.message ??
+                `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
               projectId: project.id,
               percent: 100,
+              phase: payload.phase,
+              scope: scoped.scope,
+              status: payload.status,
+              durationMs: payload.totalDurationMs,
+              sourceProjectId: scoped.sourceProjectId,
             });
             clearTimeout(streamTimeout);
             cleanup();
@@ -1283,13 +1396,23 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
       unsubscribers.push(
         eventBus.on('deploy:failed', (payload) => {
-          if (payload.projectId !== project.id) return;
+          const scoped = resolveScopedProject(
+            payload.projectId,
+            payload.scope,
+            payload.parentProjectId,
+          );
+          if (!scoped) return;
           emitTimelineEvent({
             type: 'error',
-            message: `Deploy failed at ${payload.step}: ${payload.error}`,
+            message: payload.message ?? `Deploy failed at ${payload.step}: ${payload.error}`,
             detail: payload.buildLog ?? null,
             projectId: project.id,
             percent: -1,
+            phase: payload.phase,
+            scope: scoped.scope,
+            status: payload.status,
+            durationMs: payload.durationMs,
+            sourceProjectId: scoped.sourceProjectId,
           });
           // Do NOT close stream — auto-recovery may follow
         }),
@@ -1456,8 +1579,23 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
       unsubscribers.push(
         eventBus.on('build:output', (payload) => {
-          if (payload.projectId !== project.id) return;
-          write({ type: 'log', message: payload.line, projectId: project.id });
+          const scoped = resolveScopedProject(
+            payload.projectId,
+            payload.scope,
+            payload.parentProjectId,
+          );
+          if (!scoped) return;
+          write({
+            type: 'log',
+            message: payload.message ?? payload.line,
+            projectId: project.id,
+            phase: payload.phase,
+            scope: scoped.scope,
+            status: payload.status,
+            durationMs: payload.durationMs,
+            logChunk: payload.logChunk ?? payload.line,
+            sourceProjectId: scoped.sourceProjectId,
+          });
         }),
       );
 
