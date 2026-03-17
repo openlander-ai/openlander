@@ -102,7 +102,8 @@ export function ServiceDetail() {
     );
   }
 
-  const supportsDatabases = service.type === 'postgresql' || service.type === 'mysql';
+  const supportsDatabases =
+    service.type === 'postgresql' || service.type === 'mysql' || service.type === 'mongodb';
 
   return (
     <div className="flex flex-col h-full">

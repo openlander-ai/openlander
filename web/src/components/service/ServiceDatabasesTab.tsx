@@ -175,6 +175,8 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
                     connString = `postgresql://${creds.user}:${creds.password}@${service.container_name}:${service.port}/${db.name}`;
                   } else if (service.type === 'mysql') {
                     connString = `mysql://${creds.user}:${creds.password}@${service.container_name}:${service.port}/${db.name}`;
+                  } else if (service.type === 'mongodb') {
+                    connString = `mongodb://${creds.user}:${creds.password}@${service.container_name}:${service.port}/${db.name}`;
                   }
                 } catch {
                   // Ignore parse errors
