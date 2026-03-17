@@ -111,7 +111,7 @@ export function OverviewTab({
         )}
         {showTimeline ? (
           <>
-            <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[500px]">
+            <section className="rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
               <LocalErrorBoundary>
                 <UnifiedBriefingFeed
                   timelineItems={timelineItems}
