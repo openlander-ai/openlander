@@ -46,6 +46,15 @@ interface CreateUserResult {
   connectionString: string;
 }
 
+interface ListedDatabase {
+  name: string;
+  sizeBytes: number | null;
+}
+
+interface ListedUser {
+  name: string;
+}
+
 export interface ServiceTemplate {
   type: string;
   image: string;
@@ -445,6 +454,143 @@ export class ServiceManager {
     }
 
     return connected;
+  }
+
+  async listDatabases(serviceId: string): Promise<ListedDatabase[]> {
+    const service = this.getRequiredService(serviceId);
+    await this.ensureServiceContainerRunning(service);
+
+    if (service.type === 'redis') {
+      throw new Error('Database listing is not supported for redis services');
+    }
+
+    if (service.type === 'postgresql') {
+      const credentials = this.parseServiceCredentials(service);
+      await this.waitForPostgresReady(service, credentials);
+
+      const result = await this.execInServiceContainer(service, [
+        'psql',
+        '-t',
+        '-A',
+        '-F',
+        '|',
+        '-U',
+        credentials.user,
+        '-d',
+        'postgres',
+        '-c',
+        'SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate = false',
+      ]);
+
+      return result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+          const separatorIndex = line.indexOf('|');
+          if (separatorIndex < 0) {
+            return {
+              name: line,
+              sizeBytes: null,
+            };
+          }
+
+          const name = line.slice(0, separatorIndex).trim();
+          const sizeRaw = line.slice(separatorIndex + 1).trim();
+          const parsedSize = Number.parseInt(sizeRaw, 10);
+          return {
+            name,
+            sizeBytes: Number.isFinite(parsedSize) ? parsedSize : null,
+          };
+        })
+        .filter((database) => database.name.length > 0);
+    }
+
+    if (service.type === 'mysql') {
+      const credentials = this.parseServiceCredentials(service);
+      await this.waitForMySqlReady(service, credentials);
+
+      const result = await this.execInServiceContainer(service, [
+        'mysql',
+        '-N',
+        '-uroot',
+        `-p${credentials.password}`,
+        '-e',
+        "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema','mysql','performance_schema','sys')",
+      ]);
+
+      return result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((name) => name.length > 0)
+        .map((name) => ({
+          name,
+          sizeBytes: null,
+        }));
+    }
+
+    throw new Error(`Database listing is not supported for service type: ${service.type}`);
+  }
+
+  async listUsers(serviceId: string): Promise<ListedUser[]> {
+    const service = this.getRequiredService(serviceId);
+    await this.ensureServiceContainerRunning(service);
+
+    if (service.type === 'redis') {
+      throw new Error('User listing is not supported for redis services');
+    }
+
+    if (service.type === 'postgresql') {
+      const credentials = this.parseServiceCredentials(service);
+      await this.waitForPostgresReady(service, credentials);
+
+      const result = await this.execInServiceContainer(service, [
+        'psql',
+        '-t',
+        '-A',
+        '-F',
+        '|',
+        '-U',
+        credentials.user,
+        '-d',
+        'postgres',
+        '-c',
+        'SELECT rolname FROM pg_roles WHERE rolcanlogin = true',
+      ]);
+
+      return result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+          const separatorIndex = line.indexOf('|');
+          const name = separatorIndex >= 0 ? line.slice(0, separatorIndex).trim() : line;
+          return { name };
+        })
+        .filter((user) => user.name.length > 0);
+    }
+
+    if (service.type === 'mysql') {
+      const credentials = this.parseServiceCredentials(service);
+      await this.waitForMySqlReady(service, credentials);
+
+      const result = await this.execInServiceContainer(service, [
+        'mysql',
+        '-N',
+        '-uroot',
+        `-p${credentials.password}`,
+        '-e',
+        "SELECT user FROM mysql.user WHERE user NOT IN ('root','mysql.sys','mysql.infoschema','mysql.session')",
+      ]);
+
+      return result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((name) => name.length > 0)
+        .map((name) => ({ name }));
+    }
+
+    throw new Error(`User listing is not supported for service type: ${service.type}`);
   }
 
   async createDatabase(serviceId: string, dbName: string): Promise<CreateDatabaseResult> {

@@ -860,7 +860,7 @@ export async function getServices(): Promise<Service[]> {
 
 export async function getService(id: string): Promise<Service> {
   const res = await fetch(`/api/services/${id}`);
-  if (!res.ok) throw new Error('Failed to fetch service');
+  if (!res.ok) throw new Error(`Failed to fetch service: ${res.status}`);
   return res.json();
 }
 
@@ -942,6 +942,57 @@ export interface PostmortemData {
   projectName: string;
   markdown: string;
   generatedAt: string;
+}
+
+export interface ServiceDatabase {
+  name: string;
+  sizeBytes: number | null;
+}
+
+export interface ServiceUser {
+  name: string;
+}
+
+export async function getServiceDatabases(id: string): Promise<ServiceDatabase[]> {
+  const res = await fetch(`/api/services/${id}/databases`);
+  if (!res.ok) throw new Error('Failed to fetch service databases');
+  const data = await res.json();
+  return data.databases;
+}
+
+export async function createServiceDatabase(
+  id: string,
+  name: string,
+): Promise<{ connectionString: string }> {
+  const res = await fetch(`/api/services/${id}/databases`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error('Failed to create service database');
+  return res.json();
+}
+
+export async function getServiceUsers(id: string): Promise<ServiceUser[]> {
+  const res = await fetch(`/api/services/${id}/users`);
+  if (!res.ok) throw new Error('Failed to fetch service users');
+  const data = await res.json();
+  return data.users;
+}
+
+export async function createServiceUser(
+  id: string,
+  username: string,
+  password?: string,
+  database?: string,
+): Promise<{ connectionString: string }> {
+  const res = await fetch(`/api/services/${id}/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, database }),
+  });
+  if (!res.ok) throw new Error('Failed to create service user');
+  return res.json();
 }
 
 export async function getPostmortem(projectId: string): Promise<PostmortemData | null> {

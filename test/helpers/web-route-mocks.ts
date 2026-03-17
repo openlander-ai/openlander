@@ -121,6 +121,23 @@ export function createMockServiceManager() {
     getDetail: vi.fn().mockResolvedValue(baseService),
     getLogs: vi.fn().mockResolvedValue('service logs'),
     getStats: vi.fn().mockResolvedValue({ status: 'running', diskUsageBytes: 128 }),
+    listDatabases: vi.fn().mockResolvedValue([
+      { name: 'openlander', sizeBytes: 1024 },
+      { name: 'postgres', sizeBytes: 2048 },
+    ]),
+    createDatabase: vi.fn().mockResolvedValue({
+      database: 'appdb',
+      user: 'openlander',
+      password: 'pw',
+      connectionString: 'postgresql://openlander:pw@ol-svc-shared-pg:5432/appdb',
+    }),
+    listUsers: vi.fn().mockResolvedValue([{ name: 'openlander' }]),
+    createUser: vi.fn().mockResolvedValue({
+      database: 'openlander',
+      user: 'app_user',
+      password: 'pw',
+      connectionString: 'postgresql://app_user:pw@ol-svc-shared-pg:5432/openlander',
+    }),
     create: vi.fn().mockResolvedValue(baseService),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),

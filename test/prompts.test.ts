@@ -133,6 +133,18 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('present 2-4 options');
   });
 
+  it('includes bounded post-failure env recovery loop for build and runtime failures', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('Post-failure env recovery loop (build failure or runtime crash)');
+    expect(prompt).toContain('get_deploy_status for latest state');
+    expect(prompt).toContain('debug_build_error for build context');
+    expect(prompt).toContain('get_logs for runtime crashes');
+    expect(prompt).toContain('Ask only for missing keys via ask_user_question');
+    expect(prompt).toContain('Call set_env_vars with only the missing keys/values');
+    expect(prompt).toContain('hard cap at 3 attempts per failure chain');
+  });
+
   it('preserves locale directive while including new protocol sections', () => {
     const prompt = buildSystemPrompt('## Context\nfoo', 'gemini', 'ko');
 
@@ -140,6 +152,66 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('## Error Intelligence Protocol');
     expect(prompt).toContain('## Structured Error Output Format');
     expect(prompt).toContain('## Fix Proposal Protocol');
+  });
+
+  it('includes smart env setup protocol with classification and tool flow', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('## Smart Environment Variable Setup');
+    expect(prompt).toContain('infrastructure');
+    expect(prompt).toContain('config');
+    expect(prompt).toContain('secret');
+    expect(prompt).toContain('localhost');
+    expect(prompt).toContain('127.0.0.1');
+    expect(prompt).toContain('192.168.x.x');
+    expect(prompt).toContain('call list_services');
+    expect(prompt).toContain('before -> after summary');
+    expect(prompt).toContain('call set_env_vars ONCE');
+  });
+
+  it('includes concrete pasted env and transformed examples', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('Example pasted .env input:');
+    expect(prompt).toContain('DATABASE_URL=postgresql://postgres:postgres@localhost:5432/app');
+    expect(prompt).toContain('REDIS_URL=redis://192.168.0.15:6379');
+    expect(prompt).toContain('Example transformed result');
+    expect(prompt).toContain('DATABASE_URL=postgresql://postgres:postgres@postgres-main:5432/app');
+    expect(prompt).toContain('REDIS_URL=redis://redis-cache:6379');
+  });
+
+  it('adds deploy planning mode with explicit analyze-confirm-execute flow', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('## Deploy Planning Mode');
+    expect(prompt).toContain('Flow is strict: analyze -> present plan -> confirm -> execute.');
+    expect(prompt).toContain('Only execute deploy tools after explicit user confirmation.');
+  });
+
+  it('references list_services in planning steps before deployment execution', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('Use list_services to see what shared services already exist');
+    expect(prompt).toContain('scan_dockerfiles -> detect multiple Dockerfiles');
+    expect(prompt).toContain('On confirmation -> deploy_monorepo, then get_deploy_status');
+  });
+
+  it('keeps deploy planning, smart env setup, and post-failure recovery sections together', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    const planningIndex = prompt.indexOf('## Deploy Planning Mode');
+    const smartEnvIndex = prompt.indexOf('## Smart Environment Variable Setup');
+    const recoveryIndex = prompt.indexOf('## Auto-Recovery Mode');
+
+    expect(planningIndex).toBeGreaterThan(-1);
+    expect(smartEnvIndex).toBeGreaterThan(-1);
+    expect(recoveryIndex).toBeGreaterThan(-1);
+    expect(planningIndex).toBeLessThan(smartEnvIndex);
+    expect(smartEnvIndex).toBeLessThan(recoveryIndex);
+
+    expect(prompt).toContain('Flow is strict: analyze -> present plan -> confirm -> execute.');
+    expect(prompt).toContain('before -> after summary');
+    expect(prompt).toContain('Post-failure env recovery loop (build failure or runtime crash)');
   });
 });
 

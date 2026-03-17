@@ -97,6 +97,39 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
     } satisfies PendingFixPayload;
   };
 
+  const parseServiceCredentials = (credentials: string | null): Record<string, unknown> | null => {
+    if (!credentials) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(credentials) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed as Record<string, unknown>;
+    } catch (error) {
+      log.warn({ err: error }, 'Failed to parse service credentials');
+      return null;
+    }
+  };
+
+  const findServiceByName = async (serviceName: string) => {
+    const services = await ctx.serviceManager.list();
+    const service = services.find((item) => item.name === serviceName);
+    if (!service) {
+      return {
+        service: null,
+        error: `Service not found: ${serviceName}`,
+      };
+    }
+
+    return {
+      service,
+      error: null,
+    };
+  };
+
   const tools = {
     deploy_project: tool({
       description:
@@ -321,6 +354,89 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
         }
 
         return { status: 'updated', project: project_name, keys: Object.keys(vars) };
+      },
+    }),
+
+    list_services: tool({
+      description:
+        'List all shared services with status and credentials. Use when preparing app environment variables or deciding which service to connect. Returns { count, services[] } where each service includes credentials if available.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const services = await ctx.serviceManager.list();
+        return {
+          count: services.length,
+          services: services.map((service) => ({
+            id: service.id,
+            name: service.name,
+            type: service.type,
+            status: service.status,
+            port: service.port,
+            containerName: service.container_name,
+            credentials: parseServiceCredentials(service.credentials),
+          })),
+        };
+      },
+    }),
+
+    list_databases: tool({
+      description:
+        'List databases for a named PostgreSQL or MySQL service. Use when selecting an existing database during environment setup. Returns { service, count, databases[] }. Errors: SERVICE_NOT_FOUND or unsupported service type.',
+      inputSchema: z.object({
+        service_name: z.string().describe('Service name to inspect'),
+      }),
+      execute: async ({ service_name }) => {
+        const resolved = await findServiceByName(service_name);
+        if (!resolved.service) {
+          return { error: resolved.error };
+        }
+
+        try {
+          const databases = await ctx.serviceManager.listDatabases(resolved.service.id);
+          return {
+            service: resolved.service.name,
+            count: databases.length,
+            databases: databases.map((database) => ({
+              name: database.name,
+              sizeBytes: database.sizeBytes,
+            })),
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
+      },
+    }),
+
+    create_database: tool({
+      description:
+        'Create a database in a named PostgreSQL or MySQL service. Use when provisioning app-specific database credentials. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND or unsupported service type.',
+      inputSchema: z.object({
+        service_name: z.string().describe('Service name where database will be created'),
+        database_name: z.string().describe('Database name to create'),
+      }),
+      execute: async ({ service_name, database_name }) => {
+        const resolved = await findServiceByName(service_name);
+        if (!resolved.service) {
+          return { error: resolved.error };
+        }
+
+        try {
+          const result = await ctx.serviceManager.createDatabase(
+            resolved.service.id,
+            database_name,
+          );
+          return {
+            status: 'created',
+            service: resolved.service.name,
+            database: result.database,
+            user: result.user,
+            password: result.password,
+            connectionString: result.connectionString,
+          };
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          return { error: msg };
+        }
       },
     }),
 

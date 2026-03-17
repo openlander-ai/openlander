@@ -606,6 +606,195 @@ describe('Web API Routes', () => {
     expect(body).toEqual({ error: 'NOT_FOUND', message: 'Service not found: missing-svc' });
   });
 
+  it('GET /api/services/:id/databases returns service databases', async () => {
+    const res = await app.request('/api/services/svc-1/databases');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({
+      databases: [
+        { name: 'openlander', sizeBytes: 1024 },
+        { name: 'postgres', sizeBytes: 2048 },
+      ],
+    });
+    expect(ctx.serviceManager.listDatabases).toHaveBeenCalledWith('svc-1');
+  });
+
+  it('GET /api/services/:id/databases returns 404 when service does not exist', async () => {
+    (ctx.serviceManager.listDatabases as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Service not found: missing-svc'),
+    );
+
+    const res = await app.request('/api/services/missing-svc/databases');
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body).toEqual({ error: 'NOT_FOUND', message: 'Service not found: missing-svc' });
+  });
+
+  it('GET /api/services/:id/databases returns 400 for unsupported service type', async () => {
+    (ctx.serviceManager.listDatabases as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Database listing is not supported for redis services'),
+    );
+
+    const res = await app.request('/api/services/svc-redis/databases');
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('UNSUPPORTED_SERVICE_TYPE');
+  });
+
+  it('POST /api/services/:id/databases creates database', async () => {
+    const res = await app.request('/api/services/svc-1/databases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'appdb' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.createDatabase).toHaveBeenCalledWith('svc-1', 'appdb');
+  });
+
+  it('POST /api/services/:id/databases validates required name field', async () => {
+    const res = await app.request('/api/services/svc-1/databases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    expect(ctx.serviceManager.createDatabase).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/services/:id/databases returns 400 SERVICE_STOPPED when container is not running', async () => {
+    (ctx.serviceManager.listDatabases as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Service container is not running: svc-1'),
+    );
+
+    const res = await app.request('/api/services/svc-1/databases');
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: 'SERVICE_STOPPED',
+      message: 'Service container is not running: svc-1',
+    });
+  });
+
+  it('POST /api/services/:id/databases returns 400 SERVICE_STOPPED when container is not running', async () => {
+    (ctx.serviceManager.createDatabase as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Service container is not running: svc-1'),
+    );
+
+    const res = await app.request('/api/services/svc-1/databases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'appdb' }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: 'SERVICE_STOPPED',
+      message: 'Service container is not running: svc-1',
+    });
+  });
+
+  it('GET /api/services/:id/users returns service users', async () => {
+    const res = await app.request('/api/services/svc-1/users');
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ users: [{ name: 'openlander' }] });
+    expect(ctx.serviceManager.listUsers).toHaveBeenCalledWith('svc-1');
+  });
+
+  it('GET /api/services/:id/users returns 400 for unsupported service type', async () => {
+    (ctx.serviceManager.listUsers as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('User listing is not supported for redis services'),
+    );
+
+    const res = await app.request('/api/services/svc-redis/users');
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('UNSUPPORTED_SERVICE_TYPE');
+  });
+
+  it('GET /api/services/:id/users returns 400 SERVICE_STOPPED when container is not running', async () => {
+    (ctx.serviceManager.listUsers as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Service container is not running: svc-1'),
+    );
+
+    const res = await app.request('/api/services/svc-1/users');
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: 'SERVICE_STOPPED',
+      message: 'Service container is not running: svc-1',
+    });
+  });
+
+  it('POST /api/services/:id/users creates service user', async () => {
+    const res = await app.request('/api/services/svc-1/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'app_user', password: 'pw123', database: 'appdb' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(ctx.serviceManager.createUser).toHaveBeenCalledWith('svc-1', 'app_user', 'pw123', {
+      database: 'appdb',
+    });
+  });
+
+  it('POST /api/services/:id/users validates required username field', async () => {
+    const res = await app.request('/api/services/svc-1/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'pw123' }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(ctx.serviceManager.createUser).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/services/:id/users returns 404 when service does not exist', async () => {
+    (ctx.serviceManager.createUser as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Service not found: missing-svc'),
+    );
+
+    const res = await app.request('/api/services/missing-svc/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'app_user' }),
+    });
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body).toEqual({ error: 'NOT_FOUND', message: 'Service not found: missing-svc' });
+  });
+
+  it('POST /api/services/:id/users returns 400 SERVICE_STOPPED when container is not running', async () => {
+    (ctx.serviceManager.createUser as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Service container is not running: svc-1'),
+    );
+
+    const res = await app.request('/api/services/svc-1/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'app_user' }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body).toEqual({
+      error: 'SERVICE_STOPPED',
+      message: 'Service container is not running: svc-1',
+    });
+  });
+
   it('POST /api/services creates service', async () => {
     const res = await app.request('/api/services', {
       method: 'POST',
