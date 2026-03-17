@@ -171,7 +171,7 @@ export function ServiceDatabasesTab({ service }: ServiceDatabasesTabProps) {
               if (service.credentials) {
                 try {
                   const creds = JSON.parse(service.credentials);
-                  if (service.type === 'postgres') {
+                  if (service.type === 'postgresql') {
                     connString = `postgresql://${creds.user}:${creds.password}@${service.container_name}:${service.port}/${db.name}`;
                   } else if (service.type === 'mysql') {
                     connString = `mysql://${creds.user}:${creds.password}@${service.container_name}:${service.port}/${db.name}`;
