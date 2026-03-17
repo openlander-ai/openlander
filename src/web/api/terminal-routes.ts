@@ -61,7 +61,7 @@ export function createTerminalRoutes(
   api.get(
     '/projects/:id/terminal',
     upgradeWebSocket((c) => {
-      const id = c.req.param('id');
+      const id = c.req.param('id') ?? '';
       return {
         onOpen(_evt, ws) {
           void (async () => {
