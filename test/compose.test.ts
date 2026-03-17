@@ -6,7 +6,11 @@ import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
 
-import { ComposePipeline } from '../src/pipeline/compose.js';
+import {
+  ComposePipeline,
+  filterServicesByProfiles,
+  type ComposeService,
+} from '../src/pipeline/compose.js';
 import { Database } from '../src/db/index.js';
 import { EventBus } from '../src/events/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
@@ -62,12 +66,14 @@ const describeCompose = isBunRuntime ? describe.skip : describe;
 describeCompose('ComposePipeline', () => {
   let tmpDir: string;
   let db: Database;
+  let events: EventBus;
   let pipeline: ComposePipeline;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-compose-test-'));
     db = new Database(join(tmpDir, 'test.db'));
-    pipeline = new ComposePipeline(createMockDocker(), db, new EventBus());
+    events = new EventBus();
+    pipeline = new ComposePipeline(createMockDocker(), db, events);
   });
 
   afterEach(() => {
@@ -146,6 +152,159 @@ describeCompose('ComposePipeline', () => {
     expect(api?.environment).toEqual(['NODE_ENV=production']);
     expect(api?.dependsOn).toEqual(['db']);
     expect(dbService?.environment).toEqual({ POSTGRES_DB: 'app' });
+  });
+
+  it('parseComposeFile parses service profiles from YAML', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  api:
+    image: nginx
+    profiles:
+      - web
+  db:
+    image: postgres
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const api = parsed.services.find((service) => service.name === 'api');
+    const dbService = parsed.services.find((service) => service.name === 'db');
+
+    expect(api?.profiles).toEqual(['web']);
+    expect(dbService?.profiles).toBeUndefined();
+  });
+
+  it('parseComposeFile keeps profiles undefined when absent', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  worker:
+    image: busybox
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const worker = parsed.services.find((service) => service.name === 'worker');
+
+    expect(worker?.profiles).toBeUndefined();
+  });
+
+  it('parseComposeFile parses multiple profiles', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  worker:
+    image: busybox
+    profiles:
+      - jobs
+      - async
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const worker = parsed.services.find((service) => service.name === 'worker');
+
+    expect(worker?.profiles).toEqual(['jobs', 'async']);
+  });
+
+  it('filterServicesByProfiles excludes profiled services when activeProfiles is undefined', () => {
+    const services: ComposeService[] = [{ name: 'api', profiles: ['app'] }, { name: 'db' }];
+
+    const filtered = filterServicesByProfiles(services, undefined);
+
+    expect(filtered.map((service) => service.name)).toEqual(['db']);
+  });
+
+  it('filterServicesByProfiles filters profiled services when activeProfiles is empty', () => {
+    const services: ComposeService[] = [
+      { name: 'api', profiles: ['app'] },
+      { name: 'db' },
+      { name: 'worker', profiles: ['jobs'] },
+    ];
+
+    const filtered = filterServicesByProfiles(services, []);
+
+    expect(filtered.map((service) => service.name)).toEqual(['db']);
+  });
+
+  it('filterServicesByProfiles includes service when a profile matches', () => {
+    const services: ComposeService[] = [{ name: 'api', profiles: ['app'] }, { name: 'db' }];
+
+    const filtered = filterServicesByProfiles(services, ['app']);
+
+    expect(filtered.map((service) => service.name)).toEqual(['api', 'db']);
+  });
+
+  it('filterServicesByProfiles applies OR matching for multi-profile services', () => {
+    const services: ComposeService[] = [
+      { name: 'worker', profiles: ['jobs', 'async'] },
+      { name: 'db' },
+    ];
+
+    const filtered = filterServicesByProfiles(services, ['async']);
+
+    expect(filtered.map((service) => service.name)).toEqual(['worker', 'db']);
+  });
+
+  it('filterServicesByProfiles excludes profiled services when no profile matches', () => {
+    const services: ComposeService[] = [{ name: 'api', profiles: ['app'] }, { name: 'db' }];
+
+    const filtered = filterServicesByProfiles(services, ['jobs']);
+
+    expect(filtered.map((service) => service.name)).toEqual(['db']);
+  });
+
+  it('filterServicesByProfiles strips dependsOn entries to removed services', () => {
+    const services: ComposeService[] = [
+      { name: 'api', profiles: ['app'], dependsOn: ['db', 'cache'] },
+      { name: 'db' },
+      { name: 'cache', profiles: ['cache'] },
+    ];
+
+    const filtered = filterServicesByProfiles(services, ['app']);
+    const api = filtered.find((service) => service.name === 'api');
+
+    expect(api?.dependsOn).toEqual(['db']);
+  });
+
+  it('filterServicesByProfiles preserves dependsOn entries to kept services', () => {
+    const services: ComposeService[] = [
+      { name: 'api', profiles: ['app'], dependsOn: ['db'] },
+      { name: 'db' },
+    ];
+
+    const filtered = filterServicesByProfiles(services, ['app']);
+    const api = filtered.find((service) => service.name === 'api');
+
+    expect(api?.dependsOn).toEqual(['db']);
+  });
+
+  it('filterServicesByProfiles is immutable for input array and dependsOn arrays', () => {
+    const services: ComposeService[] = [
+      { name: 'api', profiles: ['app'], dependsOn: ['db', 'cache'] },
+      { name: 'db' },
+      { name: 'cache', profiles: ['cache'] },
+    ];
+
+    const originalSnapshot = services.map((service) => ({
+      ...service,
+      profiles: service.profiles ? [...service.profiles] : undefined,
+      dependsOn: service.dependsOn ? [...service.dependsOn] : undefined,
+    }));
+
+    const filtered = filterServicesByProfiles(services, ['app']);
+    const api = filtered.find((service) => service.name === 'api');
+
+    expect(services).toEqual(originalSnapshot);
+    expect(api?.dependsOn).toEqual(['db']);
+    expect(api?.dependsOn).not.toBe(services[0]?.dependsOn);
   });
 
   it('parseComposeFile handles empty and invalid compose files', () => {
@@ -235,6 +394,193 @@ describeCompose('ComposePipeline', () => {
         return cmd.includes('--no-deps');
       }),
     ).toBe(true);
+  });
+
+  it('deployCompose excludes profiled services when profiles is omitted', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n  db:\n    image: postgres\n    profiles:\n      - infra\n`,
+      'utf8',
+    );
+
+    const composeCommands: string[] = [];
+    const startEvents: Array<{ serviceCount: number }> = [];
+    events.on('compose:start', (payload) => {
+      startEvents.push({ serviceCount: payload.serviceCount });
+    });
+
+    mockSpawnImplementation = (_cmd: string, args: string[]) => {
+      const argText = args.join(' ');
+      composeCommands.push(argText);
+
+      if (argText.includes(' up ') && argText.includes(' web')) {
+        return createMockProcess('web started\n', '', 0) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' ps ')) {
+        return createMockProcess(
+          JSON.stringify([
+            {
+              Service: 'web',
+              State: 'running',
+              ID: 'web-container',
+              Publishers: [],
+            },
+          ]),
+          '',
+          0,
+        ) as unknown as ChildProcess;
+      }
+
+      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
+    };
+
+    const result = await pipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.services.map((service) => service.name)).toEqual(['web']);
+    expect(startEvents).toEqual([{ serviceCount: 1 }]);
+
+    const children = db.getChildProjects(result.parentProjectId);
+    expect(children).toHaveLength(1);
+    expect(children[0]?.name).toBe('stack/web');
+
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps web'));
+    expect(composeCommands).not.toContainEqual(
+      expect.stringContaining('up -d --build --no-deps db'),
+    );
+  });
+
+  it('deployCompose includes matching profiled services', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n  db:\n    image: postgres\n    profiles:\n      - infra\n`,
+      'utf8',
+    );
+
+    const composeCommands: string[] = [];
+    const startEvents: Array<{ serviceCount: number }> = [];
+    events.on('compose:start', (payload) => {
+      startEvents.push({ serviceCount: payload.serviceCount });
+    });
+
+    mockSpawnImplementation = (_cmd: string, args: string[]) => {
+      const argText = args.join(' ');
+      composeCommands.push(argText);
+
+      if (argText.includes(' up ') && argText.includes(' web')) {
+        return createMockProcess('web started\n', '', 0) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' up ') && argText.includes(' db')) {
+        return createMockProcess('db started\n', '', 0) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' ps ')) {
+        return createMockProcess(
+          JSON.stringify([
+            {
+              Service: 'web',
+              State: 'running',
+              ID: 'web-container',
+              Publishers: [],
+            },
+            {
+              Service: 'db',
+              State: 'running',
+              ID: 'db-container',
+              Publishers: [],
+            },
+          ]),
+          '',
+          0,
+        ) as unknown as ChildProcess;
+      }
+
+      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
+    };
+
+    const result = await pipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      profiles: ['infra'],
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.services.map((service) => service.name).sort()).toEqual(['db', 'web']);
+    expect(startEvents).toEqual([{ serviceCount: 2 }]);
+
+    const children = db.getChildProjects(result.parentProjectId);
+    expect(children).toHaveLength(2);
+    expect(children.map((child) => child.name).sort()).toEqual(['stack/db', 'stack/web']);
+
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps web'));
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
+  });
+
+  it('deployCompose handles depends_on targeting filtered-out profiled services', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  api:\n    image: nginx\n    depends_on:\n      - cache\n  cache:\n    image: redis\n    profiles:\n      - infra\n`,
+      'utf8',
+    );
+
+    const composeCommands: string[] = [];
+    mockSpawnImplementation = (_cmd: string, args: string[]) => {
+      const argText = args.join(' ');
+      composeCommands.push(argText);
+
+      if (argText.includes(' up ') && argText.includes(' api')) {
+        return createMockProcess('api started\n', '', 0) as unknown as ChildProcess;
+      }
+
+      if (argText.includes(' ps ')) {
+        return createMockProcess(
+          JSON.stringify([
+            {
+              Service: 'api',
+              State: 'running',
+              ID: 'api-container',
+              Publishers: [],
+            },
+          ]),
+          '',
+          0,
+        ) as unknown as ChildProcess;
+      }
+
+      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
+    };
+
+    const result = await pipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      profiles: [],
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.services.map((service) => service.name)).toEqual(['api']);
+
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps api'));
+    expect(composeCommands).not.toContainEqual(
+      expect.stringContaining('up -d --build --no-deps cache'),
+    );
   });
 
   it('rolls back previously started compose services when a dependency-ordered service fails', async () => {

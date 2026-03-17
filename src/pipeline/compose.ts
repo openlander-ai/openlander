@@ -26,6 +26,7 @@ export interface ComposeService {
   image?: string;
   build?: string | { context: string; dockerfile?: string };
   ports?: string[];
+  profiles?: string[];
   environment?: Record<string, string> | string[];
   envFile?: string[];
   dependsOn?: string[];
@@ -43,10 +44,41 @@ export interface ComposeDeployConfig {
   branch?: string;
   clonePath: string;
   composePath: string;
+  profiles?: string[];
   name?: string;
   envVars?: Record<string, string>;
   trigger?: 'chat' | 'webhook' | 'api';
   _parentId?: string;
+}
+
+/**
+ * Filters compose services based on active profiles.
+ * Services without profiles are always included.
+ */
+export function filterServicesByProfiles(
+  services: ComposeService[],
+  activeProfiles?: string[],
+): ComposeService[] {
+  const resolvedProfiles = activeProfiles ?? [];
+  const includedServices = services.filter((service) => {
+    if (!service.profiles || service.profiles.length === 0) {
+      return true;
+    }
+    return service.profiles.some((profile) => resolvedProfiles.includes(profile));
+  });
+
+  const keptNames = new Set(includedServices.map((service) => service.name));
+
+  return includedServices.map((service) => {
+    if (!service.dependsOn) {
+      return service;
+    }
+
+    return {
+      ...service,
+      dependsOn: service.dependsOn.filter((dependency) => keptNames.has(dependency)),
+    };
+  });
 }
 
 export interface ComposeDeployResult {
@@ -254,6 +286,7 @@ export class ComposePipeline {
       const volumesRaw = serviceObj['volumes'];
       const imageRaw = serviceObj['image'];
       const envFileRaw = serviceObj['env_file'];
+      const profilesRaw = serviceObj['profiles'];
 
       // Parse env_file - can be a string or array
       let envFile: string[] | undefined;
@@ -263,11 +296,19 @@ export class ComposePipeline {
         envFile = envFileRaw.map((f) => String(f));
       }
 
+      let profiles: string[] | undefined;
+      if (typeof profilesRaw === 'string') {
+        profiles = [profilesRaw];
+      } else if (Array.isArray(profilesRaw)) {
+        profiles = profilesRaw.map((profile) => String(profile));
+      }
+
       services.push({
         name,
         image: typeof imageRaw === 'string' ? imageRaw : undefined,
         build,
         ports: Array.isArray(portsRaw) ? portsRaw.map((port) => String(port)) : undefined,
+        profiles,
         environment,
         envFile,
         dependsOn,
@@ -320,17 +361,21 @@ export class ComposePipeline {
     let buildLog = '';
 
     const composeProject = this.parseComposeFile(config.composePath);
+    const filteredComposeProject: ComposeProject = {
+      ...composeProject,
+      services: filterServicesByProfiles(composeProject.services, config.profiles),
+    };
 
     const envVars = { ...(config.envVars ?? {}) };
 
     // Check env_file references first - fail fast if missing
-    const envFileErrors = this.checkEnvFileReferences(composeProject, envVars);
+    const envFileErrors = this.checkEnvFileReferences(filteredComposeProject, envVars);
     if (envFileErrors.length > 0) {
       const errorMessages = envFileErrors.map((err) => {
         let msg = `env_file '${err.envFilePath}' referenced by service '${err.service}' not found`;
         if (err.templatePath) {
           const relativeTemplate = err.templatePath
-            .replace(composeProject.projectPath, '')
+            .replace(filteredComposeProject.projectPath, '')
             .replace(/^\//, '');
           msg += `. Template '${relativeTemplate}' defines variables: ${err.requiredVars.join(', ')}`;
         } else {
@@ -341,7 +386,7 @@ export class ComposePipeline {
       throw new Error(`Missing env_file(s) in docker-compose:\n${errorMessages.join('\n')}`);
     }
 
-    const envCheckResult = checkEnvRequirements(composeProject.projectPath, envVars);
+    const envCheckResult = checkEnvRequirements(filteredComposeProject.projectPath, envVars);
     if (envCheckResult.missing.length > 0) {
       throw new Error(
         'compose env validation failed: ' +
@@ -351,7 +396,7 @@ export class ComposePipeline {
       );
     }
 
-    this.createComposeEnvFileIfMissing(composeProject.projectPath, envVars);
+    this.createComposeEnvFileIfMissing(filteredComposeProject.projectPath, envVars);
 
     if (!config._parentId) {
       this.db.createProject({
@@ -370,7 +415,7 @@ export class ComposePipeline {
     });
 
     const childrenByService = new Map<string, string>();
-    for (const service of composeProject.services) {
+    for (const service of filteredComposeProject.services) {
       const childId = nanoid(12);
       const childName = `${parentName}/${service.name}`;
       childrenByService.set(service.name, childId);
@@ -389,15 +434,15 @@ export class ComposePipeline {
     await this.events.emit('compose:start', {
       projectId: parentProjectId,
       composePath: config.composePath,
-      serviceCount: composeProject.services.length,
+      serviceCount: filteredComposeProject.services.length,
     });
 
     try {
       this.jobManager?.updatePhase(parentProjectId, 'building');
 
-      const conflicts = this.detectPortConflicts(composeProject);
+      const conflicts = this.detectPortConflicts(filteredComposeProject);
       if (conflicts.length > 0) {
-        const override = await this.generateOverride(composeProject, conflicts);
+        const override = await this.generateOverride(filteredComposeProject, conflicts);
         this.writeOverride(config.composePath, override);
         log.info({ conflicts: conflicts.length }, 'Generated port conflict override');
       }
@@ -409,7 +454,7 @@ export class ComposePipeline {
         conflictedPortsByService.set(conflict.service, ports);
       }
 
-      const services: ServiceNode[] = composeProject.services.map((service) => {
+      const services: ServiceNode[] = filteredComposeProject.services.map((service) => {
         const requestedPort = (service.ports ?? [])
           .map((mapping) => parseComposePortMapping(mapping))
           .find((parsed) => parsed?.hostPort !== null && parsed?.hostPort !== undefined)?.hostPort;
@@ -552,7 +597,7 @@ export class ComposePipeline {
       const orchestrationByService = new Map(
         orchestration.services.map((service) => [service.name, service]),
       );
-      const reconciledStatuses = composeProject.services.map((service) => {
+      const reconciledStatuses = filteredComposeProject.services.map((service) => {
         const status = serviceStatusByName.get(service.name);
         const orchestrationStatus = orchestrationByService.get(service.name)?.status;
 

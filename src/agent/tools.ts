@@ -6,6 +6,7 @@ import { cloneRepo } from '../pipeline/git.js';
 import { getProjectUrl } from '../pipeline/traefik.js';
 import { scanUsedPorts } from '../pipeline/port.js';
 import { DeployOrchestrator, type ServiceNode } from '../pipeline/orchestrator.js';
+import { filterServicesByProfiles } from '../pipeline/compose.js';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createGitProvider } from '../git-providers/index.js';
@@ -198,8 +199,12 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
         repo_url: z.string().describe('Git repository URL'),
         branch: z.string().optional().describe('Branch (default: repo default branch)'),
         name: z.string().optional().describe('Project name (auto-generated from repo if omitted)'),
+        profiles: z
+          .array(z.string())
+          .optional()
+          .describe('Docker Compose profiles to activate (e.g., ["infra", "dev"])'),
       }),
-      execute: async ({ repo_url, branch, name }) => {
+      execute: async ({ repo_url, branch, name, profiles }) => {
         const cloneResult = await cloneRepo({
           repoUrl: repo_url,
           branch,
@@ -220,6 +225,7 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
           clonePath: cloneResult.path,
           composePath,
           name,
+          profiles,
           trigger: 'chat',
         });
 
@@ -984,8 +990,12 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
       inputSchema: z.object({
         repo_url: z.string().describe('Git repository URL'),
         branch: z.string().optional().describe('Branch (default: repo default branch)'),
+        profiles: z
+          .array(z.string())
+          .optional()
+          .describe('Docker Compose profiles to activate (e.g., ["infra", "dev"])'),
       }),
-      execute: async ({ repo_url, branch }) => {
+      execute: async ({ repo_url, branch, profiles }) => {
         const cloneResult = await cloneRepo({
           repoUrl: repo_url,
           branch,
@@ -1001,11 +1011,12 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
           ? ctx.composePipeline.parseComposeFile(composePath)
           : null;
 
-        const services = buildServiceNodes(
-          cloneResult.path,
-          dockerfiles,
+        const filteredComposeServices = filterServicesByProfiles(
           composeProject?.services ?? [],
+          profiles,
         );
+
+        const services = buildServiceNodes(cloneResult.path, dockerfiles, filteredComposeServices);
         const orchestrator = new DeployOrchestrator();
         const topology = orchestrator.buildTopology(
           services,

@@ -471,6 +471,7 @@ export class DeployPipeline {
           branch: environment.branch,
           clonePath: cloneResult.path,
           composePath,
+          profiles: [],
           name: routeName,
           trigger,
           envVars: composeEnvVars,

@@ -834,11 +834,17 @@ export function createToolRegistry(
           ? ctx.composePipeline.parseComposeFile(composePath)
           : null;
 
-        const services = buildServiceNodes(
-          cloneResult.path,
-          dockerfiles,
-          composeProject?.services ?? [],
-        );
+        // Filter compose services by profile (exclude profiled services when no profiles active)
+        // but preserve original dependsOn values since buildServiceNodes handles Dockerfile-only services
+        const activeProfiles: string[] = [];
+        const filteredComposeServices = (composeProject?.services ?? []).filter((service) => {
+          if (!service.profiles || service.profiles.length === 0) {
+            return true;
+          }
+          return service.profiles.some((profile) => activeProfiles.includes(profile));
+        });
+
+        const services = buildServiceNodes(cloneResult.path, dockerfiles, filteredComposeServices);
         const orchestrator = new DeployOrchestrator();
         const topology = orchestrator.buildTopology(
           services,
