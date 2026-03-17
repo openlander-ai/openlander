@@ -267,6 +267,111 @@ export function createSystemRoutes(ctx: AppContext): Hono {
     }
   });
 
+  api.get('/services/:id/databases', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const databases = await ctx.serviceManager.listDatabases(id);
+      return c.json({ databases });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'List service databases failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      if (message.includes('not supported')) {
+        return c.json({ error: 'UNSUPPORTED_SERVICE_TYPE', message }, 400);
+      }
+      if (message.includes('Service container is not running')) {
+        return c.json({ error: 'SERVICE_STOPPED', message }, 400);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to list service databases' }, 500);
+    }
+  });
+
+  api.post('/services/:id/databases', async (c) => {
+    const id = c.req.param('id');
+    const body = await c.req.json<{ name?: string }>();
+    if (!body.name) {
+      return c.json({ error: 'MISSING_FIELD', message: 'name is required' }, 400);
+    }
+
+    try {
+      const result = await ctx.serviceManager.createDatabase(id, body.name);
+      return c.json(result);
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Create service database failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      if (message.includes('not supported')) {
+        return c.json({ error: 'UNSUPPORTED_SERVICE_TYPE', message }, 400);
+      }
+      if (message.includes('Service container is not running')) {
+        return c.json({ error: 'SERVICE_STOPPED', message }, 400);
+      }
+      if (message.includes('Invalid')) {
+        return c.json({ error: 'INVALID_FIELD', message }, 400);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create service database' }, 500);
+    }
+  });
+
+  api.get('/services/:id/users', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const users = await ctx.serviceManager.listUsers(id);
+      return c.json({ users });
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'List service users failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      if (message.includes('not supported')) {
+        return c.json({ error: 'UNSUPPORTED_SERVICE_TYPE', message }, 400);
+      }
+      if (message.includes('Service container is not running')) {
+        return c.json({ error: 'SERVICE_STOPPED', message }, 400);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to list service users' }, 500);
+    }
+  });
+
+  api.post('/services/:id/users', async (c) => {
+    const id = c.req.param('id');
+    const body = await c.req.json<{ username?: string; password?: string; database?: string }>();
+    if (!body.username) {
+      return c.json({ error: 'MISSING_FIELD', message: 'username is required' }, 400);
+    }
+
+    try {
+      const result = await ctx.serviceManager.createUser(
+        id,
+        body.username,
+        body.password,
+        body.database ? { database: body.database } : undefined,
+      );
+      return c.json(result);
+    } catch (err) {
+      log.debug({ err, serviceId: id }, 'Create service user failed');
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Service not found')) {
+        return c.json({ error: 'NOT_FOUND', message: `Service not found: ${id}` }, 404);
+      }
+      if (message.includes('not supported')) {
+        return c.json({ error: 'UNSUPPORTED_SERVICE_TYPE', message }, 400);
+      }
+      if (message.includes('Service container is not running')) {
+        return c.json({ error: 'SERVICE_STOPPED', message }, 400);
+      }
+      if (message.includes('Invalid')) {
+        return c.json({ error: 'INVALID_FIELD', message }, 400);
+      }
+      return c.json({ error: 'INTERNAL_ERROR', message: 'Failed to create service user' }, 500);
+    }
+  });
+
   api.delete('/services/:id', async (c) => {
     const id = c.req.param('id');
     try {
