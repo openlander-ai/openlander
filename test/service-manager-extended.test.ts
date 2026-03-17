@@ -118,6 +118,122 @@ describe('ServiceManager extended DB/user operations', () => {
     );
   });
 
+  it('listDatabases() parses postgres machine-readable output', async () => {
+    const postgres = createService({
+      id: 'svc-pg',
+      type: 'postgresql',
+      container_id: 'svc-pg-container',
+      container_name: 'ol-svc-shared-pg',
+      port: 5432,
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-pg-container', true);
+    dockerHarness.queueExecResult('svc-pg-container', { exitCode: 0 });
+    dockerHarness.queueExecResult('svc-pg-container', {
+      exitCode: 0,
+      stdout: 'hotdeal_db|1234567\nusers_db|8901234\n',
+    });
+
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([postgres]));
+
+    await expect(manager.listDatabases('svc-pg')).resolves.toEqual([
+      { name: 'hotdeal_db', sizeBytes: 1234567 },
+      { name: 'users_db', sizeBytes: 8901234 },
+    ]);
+
+    const commands = dockerHarness.getExecCommands('svc-pg-container');
+    expect(commands[1]).toEqual([
+      'psql',
+      '-t',
+      '-A',
+      '-F',
+      '|',
+      '-U',
+      'openlander',
+      '-d',
+      'postgres',
+      '-c',
+      'SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate = false',
+    ]);
+  });
+
+  it('listUsers() parses mysql machine-readable output', async () => {
+    const mysql = createService({
+      id: 'svc-mysql',
+      type: 'mysql',
+      image: 'mysql:8',
+      container_id: 'svc-mysql-container',
+      container_name: 'ol-svc-shared-mysql',
+      port: 3306,
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-mysql-container', true);
+    dockerHarness.queueExecResult('svc-mysql-container', { exitCode: 0 });
+    dockerHarness.queueExecResult('svc-mysql-container', {
+      exitCode: 0,
+      stdout: 'app_user\nreporting_user\n',
+    });
+
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([mysql]));
+
+    await expect(manager.listUsers('svc-mysql')).resolves.toEqual([
+      { name: 'app_user' },
+      { name: 'reporting_user' },
+    ]);
+
+    const commands = dockerHarness.getExecCommands('svc-mysql-container');
+    expect(commands[1]).toEqual([
+      'mysql',
+      '-N',
+      '-uroot',
+      '-prootpw',
+      '-e',
+      "SELECT user FROM mysql.user WHERE user NOT IN ('root','mysql.sys','mysql.infoschema','mysql.session')",
+    ]);
+  });
+
+  it('listDatabases() rejects redis service type', async () => {
+    const redis = createService({
+      id: 'svc-redis',
+      name: 'shared-redis',
+      type: 'redis',
+      container_id: 'svc-redis-container',
+      container_name: 'ol-svc-shared-redis',
+      port: 6379,
+      credentials: null,
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-redis-container', true);
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
+
+    await expect(manager.listDatabases('svc-redis')).rejects.toThrow(
+      'Database listing is not supported for redis services',
+    );
+  });
+
+  it('listUsers() rejects redis service type', async () => {
+    const redis = createService({
+      id: 'svc-redis',
+      name: 'shared-redis',
+      type: 'redis',
+      container_id: 'svc-redis-container',
+      container_name: 'ol-svc-shared-redis',
+      port: 6379,
+      credentials: null,
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-redis-container', true);
+    const manager = new ServiceManager(dockerHarness.docker, createDbMock([redis]));
+
+    await expect(manager.listUsers('svc-redis')).rejects.toThrow(
+      'User listing is not supported for redis services',
+    );
+  });
+
   it('createDatabase() rejects redis service type', async () => {
     const redis = createService({
       id: 'svc-redis',
@@ -231,7 +347,13 @@ describe('ServiceManager detail/log/stats operations', () => {
 
     const stats = await manager.getStats('svc-stats');
 
-    expect(stats).toEqual({ status: 'running', diskUsageBytes: 4096 });
+    expect(stats).toEqual({
+      status: 'running',
+      diskUsageBytes: 4096,
+      cpuPercent: null,
+      memoryUsageBytes: null,
+      memoryLimitBytes: null,
+    });
     const commands = dockerHarness.getExecCommands('svc-stats-container');
     expect(commands[0]).toEqual(['du', '-sb', '/var/lib/postgresql/data']);
   });
@@ -250,7 +372,13 @@ describe('ServiceManager detail/log/stats operations', () => {
 
     const stats = await manager.getStats('svc-stopped');
 
-    expect(stats).toEqual({ status: 'stopped', diskUsageBytes: null });
+    expect(stats).toEqual({
+      status: 'stopped',
+      diskUsageBytes: null,
+      cpuPercent: null,
+      memoryUsageBytes: null,
+      memoryLimitBytes: null,
+    });
     expect(dockerHarness.getExecCommands('svc-stopped-container')).toEqual([]);
   });
 });

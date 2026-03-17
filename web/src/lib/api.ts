@@ -944,6 +944,55 @@ export interface PostmortemData {
   generatedAt: string;
 }
 
+export interface ServiceDatabase {
+  name: string;
+  sizeBytes: number | null;
+}
+
+export interface ServiceUser {
+  name: string;
+}
+
+export async function getServiceDatabases(id: string): Promise<ServiceDatabase[]> {
+  const res = await fetch(`/api/services/${id}/databases`);
+  if (!res.ok) throw new Error('Failed to fetch service databases');
+  return res.json();
+}
+
+export async function createServiceDatabase(
+  id: string,
+  name: string,
+): Promise<{ connectionString: string }> {
+  const res = await fetch(`/api/services/${id}/databases`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error('Failed to create service database');
+  return res.json();
+}
+
+export async function getServiceUsers(id: string): Promise<ServiceUser[]> {
+  const res = await fetch(`/api/services/${id}/users`);
+  if (!res.ok) throw new Error('Failed to fetch service users');
+  return res.json();
+}
+
+export async function createServiceUser(
+  id: string,
+  username: string,
+  password?: string,
+  database?: string,
+): Promise<{ connectionString: string }> {
+  const res = await fetch(`/api/services/${id}/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, database }),
+  });
+  if (!res.ok) throw new Error('Failed to create service user');
+  return res.json();
+}
+
 export async function getPostmortem(projectId: string): Promise<PostmortemData | null> {
   const res = await fetch(`/api/projects/${projectId}/postmortem/latest`);
   if (res.status === 204) return null;

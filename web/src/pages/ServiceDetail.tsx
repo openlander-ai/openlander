@@ -4,10 +4,11 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getService, startService, stopService, removeService, type Service } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Activity, Link as LinkIcon, SquareTerminal, Settings } from 'lucide-react';
+import { Activity, Link as LinkIcon, SquareTerminal, Settings, Database } from 'lucide-react';
 import { ServiceHeader } from '@/components/service/ServiceHeader';
 import { ServiceOverviewTab } from '@/components/service/ServiceOverviewTab';
 import { ServiceConnectionTab } from '@/components/service/ServiceConnectionTab';
+import { ServiceDatabasesTab } from '@/components/service/ServiceDatabasesTab';
 import { ServiceLogsTab } from '@/components/service/ServiceLogsTab';
 import { ServiceSettingsTab } from '@/components/service/ServiceSettingsTab';
 
@@ -127,6 +128,15 @@ export function ServiceDetail() {
             <LinkIcon className="h-3.5 w-3.5" />
             Connection
           </TabsTrigger>
+          {service.type !== 'redis' && (
+            <TabsTrigger
+              value="databases"
+              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+            >
+              <Database className="h-3.5 w-3.5" />
+              Databases
+            </TabsTrigger>
+          )}
           <TabsTrigger
             value="logs"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
@@ -150,6 +160,12 @@ export function ServiceDetail() {
         <TabsContent value="connection" className="flex-1 min-h-0 mt-0 p-6 overflow-auto">
           <ServiceConnectionTab service={service} />
         </TabsContent>
+
+        {service.type !== 'redis' && (
+          <TabsContent value="databases" className="flex-1 min-h-0 mt-0 p-6 overflow-auto">
+            <ServiceDatabasesTab service={service} />
+          </TabsContent>
+        )}
 
         <TabsContent value="logs" className="flex-1 min-h-0 mt-0 overflow-auto">
           <ServiceLogsTab service={service} />

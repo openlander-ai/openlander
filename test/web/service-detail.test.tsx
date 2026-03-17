@@ -149,6 +149,7 @@ vi.mock('lucide-react', () => ({
   Key: () => 'KeyIcon',
   Terminal: () => 'TerminalIcon',
   Network: () => 'NetworkIcon',
+  Database: () => 'DatabaseIcon',
 }));
 
 vi.mock('@/components/service/ServiceOverviewTab', () => ({

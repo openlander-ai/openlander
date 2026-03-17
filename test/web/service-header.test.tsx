@@ -5,6 +5,9 @@ const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined
 interface HookDispatcher {
   useState<T>(initial: T | (() => T)): readonly [T, (next: T | ((value: T) => T)) => void];
   useCallback<T extends (...args: never[]) => unknown>(callback: T): T;
+  useContext(context: any): any;
+  useRef<T>(initialValue: T): { current: T };
+  useLayoutEffect(effect: () => void | (() => void), deps?: unknown[]): void;
 }
 
 interface ReactClientInternals {
@@ -39,6 +42,37 @@ const hookDispatcher: HookDispatcher = {
   useCallback(callback) {
     return callback;
   },
+  useContext(context) {
+    return new Proxy(
+      {},
+      {
+        get(target, prop) {
+          if (prop === 'matches') return [{ params: { id: '123' } }];
+          if (prop === 'pathname') return '/';
+          if (prop === 'search') return '';
+          if (prop === 'hash') return '';
+          if (prop === 'state') return null;
+          if (prop === 'key') return 'default';
+          if (prop === 'basename') return '/';
+          if (prop === 'navigator')
+            return { push: vi.fn(), replace: vi.fn(), go: vi.fn(), createHref: vi.fn() };
+          if (prop === 'static') return false;
+          if (prop === 'location')
+            return { pathname: '/', search: '', hash: '', state: null, key: 'default' };
+          return undefined;
+        },
+      },
+    );
+  },
+  useRef(initialValue) {
+    const slotIndex = hookIndex;
+    hookIndex += 1;
+    if (hookSlots[slotIndex] === undefined) {
+      hookSlots[slotIndex] = { current: initialValue };
+    }
+    return hookSlots[slotIndex] as { current: any };
+  },
+  useLayoutEffect(effect: () => void | (() => void), deps?: unknown[]) {},
 };
 
 vi.mock('@/lib/utils', () => ({
@@ -50,6 +84,7 @@ vi.mock('lucide-react', () => ({
   Square: () => 'SquareIcon',
   Trash2: () => 'Trash2Icon',
   Database: () => 'DatabaseIcon',
+  ArrowLeft: () => 'ArrowLeftIcon',
 }));
 
 vi.mock('@/components/ui/button', () => ({
