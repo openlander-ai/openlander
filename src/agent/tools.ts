@@ -18,6 +18,12 @@ import { z } from 'zod';
 const log = createModuleLogger('agent-tools');
 
 const MAX_FIX_ATTEMPTS = 3;
+const COMPOSE_FILENAMES = [
+  'docker-compose.yml',
+  'docker-compose.yaml',
+  'compose.yml',
+  'compose.yaml',
+] as const;
 
 interface PendingFixPayload {
   filePath: string;
@@ -906,6 +912,42 @@ export function createTools(ctx: AppContext, questionBridge?: QuestionBridge) {
       },
     }),
 
+    scan_project: tool({
+      description:
+        'Scan a repository for deployment-relevant files before deploying. Reuses an existing clone when clone_path is provided; otherwise clones from repo_url. Detects Dockerfiles and known Docker Compose filenames to identify monorepo signals. Returns { isMonorepo, dockerfiles, composeFiles, clonePath }.',
+      inputSchema: z.object({
+        repo_url: z.string().describe('Git repository URL to scan'),
+        branch: z.string().optional().describe('Branch to scan (default: repo default branch)'),
+        clone_path: z
+          .string()
+          .optional()
+          .describe('Existing clone path to reuse instead of cloning again'),
+      }),
+      execute: async ({ repo_url, branch, clone_path }) => {
+        const clonePath = clone_path
+          ? clone_path
+          : (
+              await cloneRepo({
+                repoUrl: repo_url,
+                branch,
+                sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+              })
+            ).path;
+
+        const dockerfiles = findDockerfiles(clonePath).map((dockerfilePath) =>
+          relative(clonePath, dockerfilePath),
+        );
+        const composeFiles = findComposeFiles(clonePath);
+
+        return {
+          isMonorepo: dockerfiles.length > 1 || composeFiles.length > 0,
+          dockerfiles,
+          composeFiles,
+          clonePath,
+        };
+      },
+    }),
+
     deploy_monorepo: tool({
       description:
         'Start deploying a monorepo with multiple services in the background. Use AFTER scan_dockerfiles confirms multiple Dockerfiles. Returns immediately with { parentProjectId, parentName, status: "building" } while all services build in parallel. Use get_deploy_status to check progress. Errors: BUILD_FAILED on individual services (others continue).',
@@ -1315,6 +1357,21 @@ function findDockerfiles(dir: string, maxDepth = 3): string[] {
   }
   walk(dir, 0);
   return results;
+}
+
+function findComposeFiles(clonePath: string): string[] {
+  return COMPOSE_FILENAMES.filter((filename) => {
+    const candidatePath = join(clonePath, filename);
+    try {
+      return statSync(candidatePath).isFile();
+    } catch (err) {
+      log.debug(
+        { err, candidatePath },
+        'Failed to stat compose file candidate during project scan',
+      );
+      return false;
+    }
+  });
 }
 
 function buildServiceNodes(

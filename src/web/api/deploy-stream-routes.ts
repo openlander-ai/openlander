@@ -235,12 +235,6 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     };
 
     void (async () => {
-      const deployState = {
-        agentStarted: false,
-        deployToolCalled: false,
-        fallbackTriggered: false,
-      };
-
       // Emit progress so user sees activity before agent responds
       await emitAgentEvent({
         type: 'message',
@@ -253,48 +247,8 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         content: 'Analyzing project and preparing deployment...',
         timestamp: new Date().toISOString(),
       });
-      let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
-
-      const runFallbackDeploy = async (reason: string) => {
-        log.warn({ projectId, reason }, 'Falling back to direct deploy');
-
-        await emitAgentEvent({
-          type: 'message',
-          content: 'Agent did not start deploy. Falling back to direct pipeline deploy.',
-          timestamp: new Date().toISOString(),
-        });
-
-        try {
-          await ctx.pipeline.deploy({
-            repoUrl: body.repo_url,
-            branch: body.branch,
-            name: projectName,
-            envVars: body.env_vars,
-            visibility: body.visibility,
-            sshKeyPath: ctx.config.git.sshKeyPath || undefined,
-            trigger: 'api',
-            environment: body.environment,
-            _projectId: projectId,
-          });
-        } catch (err) {
-          const errMsg = err instanceof Error ? err.message : String(err);
-          log.error({ err, projectId }, 'Fallback deploy failed');
-          await emitAgentEvent({
-            type: 'error',
-            error: errMsg,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      };
 
       try {
-        fallbackTimer = setTimeout(() => {
-          if (!deployState.agentStarted && !deployState.fallbackTriggered) {
-            deployState.fallbackTriggered = true;
-            void runFallbackDeploy('timeout');
-          }
-        }, 5000);
-
         const agent = ctx.agent;
         if (!agent) {
           throw new Error('Agent is null');
@@ -309,18 +263,6 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         await agent.chatStream(
           message,
           async (event) => {
-            if (
-              event.type === 'tool_call' ||
-              event.type === 'question' ||
-              event.type === 'message'
-            ) {
-              deployState.agentStarted = true;
-            }
-
-            if (event.type === 'tool_call' && event.toolName === 'deploy_project') {
-              deployState.deployToolCalled = true;
-            }
-
             await emitAgentEvent({
               ...event,
               timestamp: new Date().toISOString(),
@@ -328,11 +270,6 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           },
           sessionId,
         );
-
-        if (!deployState.deployToolCalled && !deployState.fallbackTriggered) {
-          deployState.fallbackTriggered = true;
-          await runFallbackDeploy('agent_completed_without_deploy_project');
-        }
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
         log.error({ err, projectId }, 'Agent chatStream failed during deploy');
@@ -343,9 +280,6 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           timestamp: new Date().toISOString(),
         });
       } finally {
-        if (fallbackTimer) {
-          clearTimeout(fallbackTimer);
-        }
         release();
       }
     })();

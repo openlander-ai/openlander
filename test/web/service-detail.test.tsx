@@ -412,7 +412,7 @@ describeDetail('ServiceDetail', () => {
     expect(findTextInTree(tree, 'Databases Tab Placeholder')).toBe(false);
   });
 
-  it('does NOT show Databases tab trigger for MongoDB service', () => {
+  it('shows Databases tab trigger for MongoDB service', () => {
     hookSlots[1] = {
       id: '790',
       name: 'mongo-service',
@@ -428,14 +428,14 @@ describeDetail('ServiceDetail', () => {
 
     const tree = renderDetail();
 
-    expect(findTextInTree(tree, 'Databases')).toBe(false);
+    expect(findTextInTree(tree, 'Databases')).toBe(true);
     expect(findTextInTree(tree, 'Overview')).toBe(true);
     expect(findTextInTree(tree, 'Connection')).toBe(true);
     expect(findTextInTree(tree, 'Logs')).toBe(true);
     expect(findTextInTree(tree, 'Settings')).toBe(true);
   });
 
-  it('does NOT render Databases tab content for MongoDB service', () => {
+  it('renders Databases tab component for MongoDB service', () => {
     hookSlots[1] = {
       id: '790',
       name: 'mongo-service',
@@ -451,6 +451,6 @@ describeDetail('ServiceDetail', () => {
 
     const tree = renderDetail();
 
-    expect(findTextInTree(tree, 'Databases Tab Placeholder')).toBe(false);
+    expect(findComponentInTree(tree, 'ServiceDatabasesTab')).toBe(true);
   });
 });

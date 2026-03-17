@@ -145,6 +145,23 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('hard cap at 3 attempts per failure chain');
   });
 
+  it('classifies conflict/build/runtime/env error classes and blocks env questions on non-env failures', () => {
+    const prompt = buildSystemPrompt('', 'gemini');
+
+    expect(prompt).toContain('already in use');
+    expect(prompt).toContain('Conflict');
+    expect(prompt).toContain('network already exists');
+    expect(prompt).toContain('build failed');
+    expect(prompt).toContain('COPY failed');
+    expect(prompt).toContain('module not found');
+    expect(prompt).toContain('exit code');
+    expect(prompt).toContain('healthcheck failed');
+    expect(prompt).toContain('undefined');
+    expect(prompt).toContain('required');
+    expect(prompt).toContain('not set');
+    expect(prompt).toContain('Do NOT ask for env vars when evidence matches non-env classes');
+  });
+
   it('preserves locale directive while including new protocol sections', () => {
     const prompt = buildSystemPrompt('## Context\nfoo', 'gemini', 'ko');
 
@@ -180,19 +197,26 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('REDIS_URL=redis://redis-cache:6379');
   });
 
-  it('adds deploy planning mode with explicit analyze-confirm-execute flow', () => {
+  it('adds deploy planning mode with explicit scan-first planning flow', () => {
     const prompt = buildSystemPrompt('', 'gemini');
 
     expect(prompt).toContain('## Deploy Planning Mode');
-    expect(prompt).toContain('Flow is strict: analyze -> present plan -> confirm -> execute.');
-    expect(prompt).toContain('Only execute deploy tools after explicit user confirmation.');
+    expect(prompt).toContain(
+      'Flow is strict: scan -> classify -> ask (if needed) -> match services/env -> confirm -> execute.',
+    );
+    expect(prompt).toContain('Call scan_project before any deploy call.');
   });
 
-  it('references list_services in planning steps before deployment execution', () => {
+  it('covers monorepo disambiguation and service-env-deploy sequence in planning mode', () => {
     const prompt = buildSystemPrompt('', 'gemini');
 
-    expect(prompt).toContain('Use list_services to see what shared services already exist');
-    expect(prompt).toContain('scan_dockerfiles -> detect multiple Dockerfiles');
+    expect(prompt).toContain(
+      'ask_user_question to let the user choose which app/service(s) to deploy.',
+    );
+    expect(prompt).toContain('call set_env_vars before deploy');
+    expect(prompt).toContain(
+      'list_services + set_env_vars -> map REDIS_URL/DB_URL for selected services',
+    );
     expect(prompt).toContain('On confirmation -> deploy_monorepo, then get_deploy_status');
   });
 
@@ -209,7 +233,9 @@ describe('buildSystemPrompt', () => {
     expect(planningIndex).toBeLessThan(smartEnvIndex);
     expect(smartEnvIndex).toBeLessThan(recoveryIndex);
 
-    expect(prompt).toContain('Flow is strict: analyze -> present plan -> confirm -> execute.');
+    expect(prompt).toContain(
+      'Flow is strict: scan -> classify -> ask (if needed) -> match services/env -> confirm -> execute.',
+    );
     expect(prompt).toContain('before -> after summary');
     expect(prompt).toContain('Post-failure env recovery loop (build failure or runtime crash)');
   });

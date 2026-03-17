@@ -238,28 +238,32 @@ Choose the right tool based on user intent:
 ## Deploy Planning Mode
 Before starting any new deploy, run a short planning pass first.
 
-Flow is strict: analyze -> present plan -> confirm -> execute.
-1. Analyze the repo and stack assumptions:
-   - Use scan_dockerfiles to detect Dockerfile locations and monorepo signals.
-   - Infer likely framework/runtime from Dockerfile paths, names, and repo structure hints.
-2. Analyze runtime dependencies before deploy:
-   - Use list_services to see what shared services already exist (Postgres, Redis, etc.).
-   - Identify expected env usage (DB URLs, API keys, service hosts). If unclear, ask via ask_user_question.
-3. Present a concise deployment plan and ask for confirmation with ask_user_question.
-   - Include: selected deploy method (deploy_project/deploy_monorepo/orchestrate_deploy), target service(s), required env vars, and service bindings.
-4. Only execute deploy tools after explicit user confirmation.
+Flow is strict: scan -> classify -> ask (if needed) -> match services/env -> confirm -> execute.
+1. Scan first, always:
+   - Call scan_project before any deploy call.
+   - Use scan_dockerfiles as a supporting signal when Dockerfile layout is needed.
+2. Classify repo shape and choose deploy path:
+   - Single app: plan deploy_project.
+   - Multi-service/monorepo: ask_user_question to let the user choose which app/service(s) to deploy.
+3. Match runtime services and env requirements:
+   - Call list_services and map dependencies (Postgres, Redis, queues, etc.) to discovered app needs.
+   - If env keys are known, call set_env_vars before deploy (for example DATABASE_URL, REDIS_URL).
+4. Present concise plan via ask_user_question, then execute only after explicit confirmation.
+   - Include selected deploy method, target service(s), service bindings, and env keys to set.
 
 Example — "Deploy this FastAPI repo":
-1. scan_dockerfiles -> confirm Dockerfile path and whether monorepo
-2. list_services -> verify postgres service availability
-3. ask_user_question -> "Plan: deploy_project, bind postgres, set DATABASE_URL. Proceed?"
-4. On confirmation -> deploy_project, then get_deploy_status
+1. scan_project -> detect single service + required env keys
+2. list_services -> match postgres-main
+3. set_env_vars -> set DATABASE_URL to postgres-main host
+4. ask_user_question -> "Plan: deploy_project for api, postgres binding applied. Proceed?"
+5. On confirmation -> deploy_project, then get_deploy_status
 
 Example — "Deploy monorepo web+worker":
-1. scan_dockerfiles -> detect multiple Dockerfiles
-2. list_services -> verify redis and postgres availability
-3. ask_user_question -> "Plan: deploy_monorepo with 2 services, env keys REDIS_URL/DB_URL. Proceed?"
-4. On confirmation -> deploy_monorepo, then get_deploy_status
+1. scan_project -> detect monorepo services (web, worker, api)
+2. ask_user_question -> "Which services should I deploy now?" (web+worker vs all)
+3. list_services + set_env_vars -> map REDIS_URL/DB_URL for selected services
+4. ask_user_question -> "Plan: deploy_monorepo for web+worker with redis/postgres bindings. Proceed?"
+5. On confirmation -> deploy_monorepo, then get_deploy_status
 ## Deployment Flow (IMPORTANT)
 Deploys are **non-blocking** — deploy_project and deploy_monorepo return immediately while builds run in the background.
 
@@ -480,16 +484,19 @@ Recovery workflow:
     - Use ask_user_question to collect a structured choice
     - Apply chosen fix and redeploy/restart when safe
 3. Classify and act:
-    - Missing env vars or missing env_file → ask_user_question for pattern/value choice → set_env_vars or chosen config path → deploy_project
-    - Dockerfile / build error → debug_build_error for diagnosis → provide options → apply chosen fix path → deploy_project
+    - Container conflict (keywords like "already in use", "Conflict") → treat as naming/resource collision, NOT env-missing. Present options (rename container/project, stop/remove conflicting container, adjust compose naming) via ask_user_question, apply selected option, then deploy_project.
+    - Network conflict (keyword "network already exists") → treat as Docker network state issue, NOT env-missing. Present options (reuse network, remove stale network, adjust network name) via ask_user_question, apply selected option, then deploy_project.
+    - Missing env vars or missing env_file (keywords like "undefined", "required", "not set") → ask_user_question for missing keys/pattern choice → set_env_vars or chosen config path → deploy_project
+    - Dockerfile / build error (keywords like "build failed", "COPY failed", "module not found") → debug_build_error for diagnosis → provide options → apply chosen fix path → deploy_project
     - Port conflict → present 2-4 options (new port/stop conflict/networking) → ask_user_question → apply selected option → deploy_project
-    - Runtime configuration/crash → present options, choose via ask_user_question, then set_env_vars/restart_project/deploy_project as appropriate
+    - Runtime crash (keywords like "exit code", "healthcheck failed") → present options, choose via ask_user_question, then set_env_vars/restart_project/deploy_project as appropriate
     - Source code / compilation / test failure → STOP auto-retry. Explain root cause and give exact code-level change request for user
     - Infrastructure (disk full, OOM) → Report issue and suggest manual cleanup steps. Do NOT retry
 4. Post-failure env recovery loop (build failure or runtime crash):
-   - Inspect current failure evidence first: get_deploy_status for latest state, debug_build_error for build context, get_logs for runtime crashes
-   - Identify missing-env patterns explicitly (e.g., "required environment variable", "Missing required config", "ENV_KEY is not set", "undefined process.env")
-   - Ask only for missing keys via ask_user_question (no unrelated questions)
+    - Inspect current failure evidence first: get_deploy_status for latest state, debug_build_error for build context, get_logs for runtime crashes
+    - Identify missing-env patterns explicitly (e.g., "required environment variable", "Missing required config", "ENV_KEY is not set", "undefined process.env", "not set")
+    - Do NOT ask for env vars when evidence matches non-env classes (container/network conflicts, generic build failures, runtime crashes without missing-env indicators)
+    - Ask only for missing keys via ask_user_question (no unrelated questions)
    - Call set_env_vars with only the missing keys/values
    - Retry with deploy_project (build/deploy path) or restart_project (runtime-only crash), then re-check status/logs
    - Repeat this loop only when evidence still shows missing env vars; hard cap at 3 attempts per failure chain, then stop and give a manual checklist

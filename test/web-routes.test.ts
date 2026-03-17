@@ -234,6 +234,72 @@ describe('Web API Routes', () => {
     expect(ctx.agent?.chatStream).toHaveBeenCalled();
   });
 
+  it('POST /api/projects/deploy keeps agent-only flow when chat completes without deploy_project', async () => {
+    const chatStreamMock = ctx.agent?.chatStream as ReturnType<typeof vi.fn>;
+    chatStreamMock.mockImplementationOnce(
+      async (
+        _message: string,
+        callback: (event: { type: string; content?: string }) => Promise<void>,
+      ) => {
+        await callback({ type: 'message', content: 'I need to inspect this repo first.' });
+        await callback({ type: 'done' });
+      },
+    );
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_url: 'https://github.com/user/no-fallback-app',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    expect(ctx.agent?.chatStream).toHaveBeenCalled();
+    expect(ctx.pipeline.deploy).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/projects/deploy forwards agent question events without fallback deploy', async () => {
+    const capturedAgentEvents: Array<{ projectId: string; type: string }> = [];
+    const unsubscribe = eventBus.on('agent:event', (payload) => {
+      capturedAgentEvents.push({ projectId: payload.projectId, type: payload.event.type });
+    });
+
+    const chatStreamMock = ctx.agent?.chatStream as ReturnType<typeof vi.fn>;
+    chatStreamMock.mockImplementationOnce(
+      async (
+        _message: string,
+        callback: (event: { type: string; question?: string }) => Promise<void>,
+      ) => {
+        await callback({ type: 'question', question: 'Which environment should I deploy to?' });
+        await callback({ type: 'done' });
+      },
+    );
+
+    const res = await app.request('/api/projects/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo_url: 'https://github.com/user/question-first-app',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    unsubscribe();
+
+    const questionEvents = capturedAgentEvents.filter(
+      (event) => event.projectId === body.projectId && event.type === 'question',
+    );
+
+    expect(questionEvents.length).toBeGreaterThan(0);
+    expect(ctx.pipeline.deploy).not.toHaveBeenCalled();
+  });
+
   it('GET /api/projects/:id/build/stream masks sensitive data in agent tool results', async () => {
     db.createProject({
       id: 'stream-p1',
