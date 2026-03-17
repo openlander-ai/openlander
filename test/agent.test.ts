@@ -857,6 +857,60 @@ describe('Agent tools — fix approval flow', () => {
     );
   });
 
+  it('scan_project clones repository and reports single-project metadata', async () => {
+    const clonePath = join(tmpDir, 'repo-single');
+    mkdirSync(clonePath, { recursive: true });
+    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:22\n', 'utf8');
+    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: 'single123' });
+
+    const { tools } = createToolsContext();
+    const runScanProject = getToolExecutor(tools, 'scan_project');
+    const result = await runScanProject({
+      repo_url: 'https://github.com/openlander/single',
+      branch: 'main',
+    });
+
+    expect(cloneRepo).toHaveBeenCalledWith({
+      repoUrl: 'https://github.com/openlander/single',
+      branch: 'main',
+      sshKeyPath: undefined,
+    });
+    expect(result).toEqual({
+      isMonorepo: false,
+      dockerfiles: ['Dockerfile'],
+      composeFiles: [],
+      clonePath,
+    });
+  });
+
+  it('scan_project reuses clone_path and reports monorepo-like metadata', async () => {
+    const clonePath = join(tmpDir, 'repo-mono');
+    mkdirSync(join(clonePath, 'service-a'), { recursive: true });
+    mkdirSync(join(clonePath, 'service-b'), { recursive: true });
+    writeFileSync(join(clonePath, 'service-a', 'Dockerfile'), 'FROM node:22\n', 'utf8');
+    writeFileSync(join(clonePath, 'service-b', 'Dockerfile'), 'FROM node:22\n', 'utf8');
+    writeFileSync(
+      join(clonePath, 'docker-compose.yml'),
+      'services:\n  api:\n    build: .\n',
+      'utf8',
+    );
+
+    const { tools } = createToolsContext();
+    const runScanProject = getToolExecutor(tools, 'scan_project');
+    const result = await runScanProject({
+      repo_url: 'https://github.com/openlander/mono',
+      clone_path: clonePath,
+    });
+
+    expect(cloneRepo).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      isMonorepo: true,
+      dockerfiles: ['service-a/Dockerfile', 'service-b/Dockerfile'],
+      composeFiles: ['docker-compose.yml'],
+      clonePath,
+    });
+  });
+
   it('fix_dockerfile returns proposal_ready when question bridge is not provided', async () => {
     seedFailedProject();
     const clonePath = join(tmpDir, 'repo-no-bridge');
