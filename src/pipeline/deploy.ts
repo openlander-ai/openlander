@@ -276,6 +276,8 @@ export class DeployPipeline {
       });
       this.db.updateProject(projectId, { status: 'building' });
       this.jobManager?.trackJob(projectId, projectName);
+    } else if (config.branch) {
+      this.db.updateProject(projectId, { branch: config.branch });
     }
 
     // Preflight check - skip if already called from startDeploy()

@@ -121,46 +121,44 @@ export function UnifiedBriefingFeed({
           {/* Vertical connector line for timeline items */}
           <div className="absolute left-[29px] top-6 bottom-6 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent pointer-events-none" />
 
-          {/* Progress Header */}
+          {/* Pipeline Steps */}
           {latestProgress &&
             projectStatus !== 'running' &&
             projectStatus !== 'stopped' &&
             projectStatus !== 'error' && (
               <div className="mb-4 px-4 py-3 rounded-lg bg-bg-subtle/40 border border-white/5 relative z-10">
-                <div className="flex justify-between items-center text-[10px] font-mono text-agent/80 uppercase tracking-wider mb-2">
-                  <span>{'System Progress'}</span>
-                  <span>{latestProgress.percent}%</span>
+                <div className="flex gap-2 items-center flex-wrap">
+                  {['Preparing', 'Clone', 'Build', 'Start', 'Health Check', 'Complete'].map(
+                    (step, i, arr) => {
+                      const steps = arr;
+                      const currentIdx = steps.indexOf(latestProgress.stepName ?? '');
+                      const stepIdx = i;
+                      const isDone = currentIdx > stepIdx;
+                      const isCurrent = latestProgress.stepName === step;
+                      return (
+                        <div key={step} className="flex items-center gap-1">
+                          <span
+                            className={cn(
+                              'px-2 py-0.5 rounded text-[10px] font-mono',
+                              isCurrent && 'bg-agent/30 text-agent font-semibold',
+                              isDone && 'text-success',
+                              !isCurrent && !isDone && 'text-muted-ol',
+                            )}
+                          >
+                            {isDone ? '✓ ' : ''}
+                            {step}
+                          </span>
+                          {step !== 'Complete' && <span className="text-muted-ol">→</span>}
+                        </div>
+                      );
+                    },
+                  )}
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-bg-subtle overflow-hidden border border-white/5 relative">
-                  <div
-                    className="absolute top-0 left-0 h-full rounded-full bg-agent progress-stripes progress-glow"
-                    style={{ width: `${latestProgress.percent}%` }}
-                  />
-                </div>
-                {latestProgress.stepName && (
-                  <div className="mt-3 text-xs font-mono text-muted-ol space-y-1">
-                    <div className="flex gap-2 items-center flex-wrap">
-                      {['Preparing', 'Clone', 'Build', 'Start', 'Health Check', 'Complete'].map(
-                        (step) => (
-                          <div key={step} className="flex items-center gap-1">
-                            <span
-                              className={cn(
-                                'px-2 py-0.5 rounded text-[10px] font-mono',
-                                latestProgress.stepName === step
-                                  ? 'bg-agent/30 text-agent font-semibold'
-                                  : 'text-muted-ol',
-                              )}
-                            >
-                              {step}
-                            </span>
-                            {step !== 'Complete' && <span className="text-muted-ol">→</span>}
-                          </div>
-                        ),
-                      )}
-                    </div>
+                {latestProgress.title && (
+                  <div className="mt-2 text-xs font-body text-primary-ol">
+                    {latestProgress.title}
                   </div>
                 )}
-                <div className="mt-2 text-xs font-body text-primary-ol">{latestProgress.title}</div>
               </div>
             )}
 

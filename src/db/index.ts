@@ -545,6 +545,7 @@ export class Database {
       accessCodeIv: string | null;
       isPreview: 0 | 1;
       prNumber: number | null;
+      branch: string;
     }>,
   ): void {
     const setValues: Partial<typeof projects.$inferInsert> = {};
@@ -590,6 +591,9 @@ export class Database {
     }
     if (updates.prNumber !== undefined) {
       setValues.pr_number = updates.prNumber;
+    }
+    if (updates.branch !== undefined) {
+      setValues.branch = updates.branch;
     }
 
     if (Object.keys(setValues).length === 0) return;

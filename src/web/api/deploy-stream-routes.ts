@@ -253,7 +253,10 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       }
     }
 
-    const message = `Deploy ${body.repo_url}${body.branch ? ` branch ${body.branch}` : ''}${body.name ? ` as ${body.name}` : ''}`;
+    const isKorean = ctx.config.language === 'ko';
+    const message = isKorean
+      ? `${body.repo_url} 저장소를 배포해줘${body.branch ? ` (브랜치: ${body.branch})` : ''}${body.name ? ` 이름: ${body.name}` : ''}`
+      : `Deploy ${body.repo_url}${body.branch ? ` branch ${body.branch}` : ''}${body.name ? ` as ${body.name}` : ''}`;
     const sessionId = nanoid(12);
 
     const emitAgentEvent = async (event: EventPayload['agent:event']['event']) => {
@@ -264,13 +267,15 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       // Emit progress so user sees activity before agent responds
       await emitAgentEvent({
         type: 'message',
-        content: 'Acquiring deploy slot...',
+        content: isKorean ? '배포 슬롯 확보 중...' : 'Acquiring deploy slot...',
         timestamp: new Date().toISOString(),
       });
       const release = await ctx.deployQueue.acquire();
       await emitAgentEvent({
         type: 'message',
-        content: 'Analyzing project and preparing deployment...',
+        content: isKorean
+          ? '프로젝트 분석 및 배포 준비 중...'
+          : 'Analyzing project and preparing deployment...',
         timestamp: new Date().toISOString(),
       });
 
@@ -282,7 +287,9 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
         await emitAgentEvent({
           type: 'message',
-          content: 'Agent is reasoning about deployment strategy...',
+          content: isKorean
+            ? '배포 전략 수립 중...'
+            : 'Agent is reasoning about deployment strategy...',
           timestamp: new Date().toISOString(),
         });
 
