@@ -111,18 +111,23 @@ export function ServicesPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-display font-bold text-primary-ol flex items-center gap-2">
             <Database className="h-6 w-6" />
-            {'Services'}
+            Services
           </h1>
           <p className="text-sm text-secondary-ol mt-1">
             Manage shared infrastructure services like databases and caches
           </p>
         </div>
         {services.length > 0 && (
-          <Button onClick={openCreate} size="sm" className="gap-1.5 text-xs">
+          <Button
+            onClick={openCreate}
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs shrink-0 mt-0.5"
+          >
             <Plus className="h-3.5 w-3.5" />
             Create Service
           </Button>
@@ -146,7 +151,7 @@ export function ServicesPage() {
             <p className="text-sm text-secondary-ol mt-1 mb-4">
               Create your first service to get started
             </p>
-            <Button onClick={openCreate} size="sm" className="gap-1.5 text-xs">
+            <Button onClick={openCreate} variant="outline" size="sm" className="gap-1.5 text-xs">
               <Plus className="h-3.5 w-3.5" />
               Create Service
             </Button>
