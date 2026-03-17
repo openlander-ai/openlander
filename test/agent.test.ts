@@ -552,6 +552,15 @@ describe('Agent tools — fix approval flow', () => {
       deployCompose: vi.fn(),
     };
 
+    const serviceManager = {
+      list: vi.fn().mockResolvedValue([]),
+      listDatabases: vi.fn(),
+      createDatabase: vi.fn(),
+      listServices: vi.fn(),
+      ensureService: vi.fn(),
+      getServiceLogs: vi.fn(),
+    };
+
     const ctx = {
       config: { git: { sshKeyPath: '' } },
       db,
@@ -569,7 +578,7 @@ describe('Agent tools — fix approval flow', () => {
       blueGreen: { deploy: vi.fn() },
       dbProvisioner: { provision: vi.fn() },
       previewDeployer: { deploy: vi.fn(), cleanup: vi.fn(), list: vi.fn().mockReturnValue([]) },
-      serviceManager: { listServices: vi.fn(), ensureService: vi.fn(), getServiceLogs: vi.fn() },
+      serviceManager,
       webhookManager: {},
       traefik: {},
       deployQueue: {},
@@ -590,6 +599,7 @@ describe('Agent tools — fix approval flow', () => {
       buildDebugger,
       startDeploy,
       composePipeline,
+      serviceManager,
     };
   }
 
@@ -1223,5 +1233,231 @@ describe('Agent tools — fix approval flow', () => {
       }),
     );
     expect(createGitProvider).not.toHaveBeenCalled();
+  });
+
+  it('list_services returns service count and parsed credentials', async () => {
+    const { tools, serviceManager } = createToolsContext();
+    serviceManager.list.mockResolvedValue([
+      {
+        id: 'svc-1',
+        name: 'shared-postgres',
+        type: 'postgresql',
+        status: 'running',
+        port: 5432,
+        container_name: 'openlander-postgres',
+        credentials: JSON.stringify({
+          host: 'openlander-postgres',
+          port: 5432,
+          user: 'postgres',
+          password: 'secret',
+        }),
+      },
+      {
+        id: 'svc-2',
+        name: 'shared-redis',
+        type: 'redis',
+        status: 'stopped',
+        port: 6379,
+        container_name: 'openlander-redis',
+        credentials: null,
+      },
+    ]);
+
+    const runListServices = getToolExecutor(tools, 'list_services');
+    const result = await runListServices({});
+
+    expect(result).toEqual({
+      count: 2,
+      services: [
+        {
+          id: 'svc-1',
+          name: 'shared-postgres',
+          type: 'postgresql',
+          status: 'running',
+          port: 5432,
+          containerName: 'openlander-postgres',
+          credentials: {
+            host: 'openlander-postgres',
+            port: 5432,
+            user: 'postgres',
+            password: 'secret',
+          },
+        },
+        {
+          id: 'svc-2',
+          name: 'shared-redis',
+          type: 'redis',
+          status: 'stopped',
+          port: 6379,
+          containerName: 'openlander-redis',
+          credentials: null,
+        },
+      ],
+    });
+  });
+
+  it('list_databases returns database list for named service', async () => {
+    const { tools, serviceManager } = createToolsContext();
+    serviceManager.list.mockResolvedValue([
+      {
+        id: 'svc-1',
+        name: 'shared-postgres',
+      },
+    ]);
+    serviceManager.listDatabases.mockResolvedValue([
+      { name: 'app_db', sizeBytes: 2048 },
+      { name: 'analytics', sizeBytes: null },
+    ]);
+
+    const runListDatabases = getToolExecutor(tools, 'list_databases');
+    const result = await runListDatabases({ service_name: 'shared-postgres' });
+
+    expect(serviceManager.listDatabases).toHaveBeenCalledWith('svc-1');
+    expect(result).toEqual({
+      service: 'shared-postgres',
+      count: 2,
+      databases: [
+        { name: 'app_db', sizeBytes: 2048 },
+        { name: 'analytics', sizeBytes: null },
+      ],
+    });
+  });
+
+  it('list_databases returns SERVICE_NOT_FOUND error when service does not exist', async () => {
+    const { tools, serviceManager } = createToolsContext();
+    serviceManager.list.mockResolvedValue([{ id: 'svc-1', name: 'other-service' }]);
+
+    const runListDatabases = getToolExecutor(tools, 'list_databases');
+    const result = await runListDatabases({ service_name: 'shared-postgres' });
+
+    expect(serviceManager.listDatabases).not.toHaveBeenCalled();
+    expect(result).toEqual({ error: 'Service not found: shared-postgres' });
+  });
+
+  it('create_database creates database and returns connection details', async () => {
+    const { tools, serviceManager } = createToolsContext();
+    serviceManager.list.mockResolvedValue([
+      {
+        id: 'svc-1',
+        name: 'shared-postgres',
+      },
+    ]);
+    serviceManager.createDatabase.mockResolvedValue({
+      database: 'app_db',
+      user: 'postgres',
+      password: 'secret',
+      connectionString: 'postgresql://postgres:secret@shared-postgres:5432/app_db',
+    });
+
+    const runCreateDatabase = getToolExecutor(tools, 'create_database');
+    const result = await runCreateDatabase({
+      service_name: 'shared-postgres',
+      database_name: 'app_db',
+    });
+
+    expect(serviceManager.createDatabase).toHaveBeenCalledWith('svc-1', 'app_db');
+    expect(result).toEqual({
+      status: 'created',
+      service: 'shared-postgres',
+      database: 'app_db',
+      user: 'postgres',
+      password: 'secret',
+      connectionString: 'postgresql://postgres:secret@shared-postgres:5432/app_db',
+    });
+  });
+
+  it('create_database returns service manager errors', async () => {
+    const { tools, serviceManager } = createToolsContext();
+    serviceManager.list.mockResolvedValue([
+      {
+        id: 'svc-1',
+        name: 'shared-redis',
+      },
+    ]);
+    serviceManager.createDatabase.mockRejectedValue(
+      new Error('Database creation is not supported for redis services'),
+    );
+
+    const runCreateDatabase = getToolExecutor(tools, 'create_database');
+    const result = await runCreateDatabase({
+      service_name: 'shared-redis',
+      database_name: 'cache_db',
+    });
+
+    expect(result).toEqual({ error: 'Database creation is not supported for redis services' });
+  });
+
+  it('covers list_services -> list_databases -> create_database workflow coherently', async () => {
+    const { tools, serviceManager } = createToolsContext();
+    serviceManager.list.mockResolvedValue([
+      {
+        id: 'svc-1',
+        name: 'shared-postgres',
+        type: 'postgresql',
+        status: 'running',
+        port: 5432,
+        container_name: 'ol-svc-shared-postgres',
+        credentials: JSON.stringify({
+          host: 'ol-svc-shared-postgres',
+          port: 5432,
+          user: 'openlander',
+          password: 'pw',
+          database: 'openlander',
+        }),
+      },
+    ]);
+    serviceManager.listDatabases.mockResolvedValue([{ name: 'openlander', sizeBytes: 1024 }]);
+    serviceManager.createDatabase.mockResolvedValue({
+      database: 'appdb',
+      user: 'openlander',
+      password: 'pw',
+      connectionString: 'postgresql://openlander:pw@ol-svc-shared-postgres:5432/appdb',
+    });
+
+    const runListServices = getToolExecutor(tools, 'list_services');
+    const runListDatabases = getToolExecutor(tools, 'list_databases');
+    const runCreateDatabase = getToolExecutor(tools, 'create_database');
+
+    const servicesResult = (await runListServices({})) as {
+      count: number;
+      services: Array<{ name: string }>;
+    };
+    expect(servicesResult.count).toBe(1);
+    expect(servicesResult.services[0]?.name).toBe('shared-postgres');
+
+    const databasesResult = (await runListDatabases({
+      service_name: servicesResult.services[0]!.name,
+    })) as {
+      service: string;
+      count: number;
+      databases: Array<{ name: string; sizeBytes: number | null }>;
+    };
+    expect(databasesResult).toEqual({
+      service: 'shared-postgres',
+      count: 1,
+      databases: [{ name: 'openlander', sizeBytes: 1024 }],
+    });
+
+    const createResult = (await runCreateDatabase({
+      service_name: servicesResult.services[0]!.name,
+      database_name: 'appdb',
+    })) as {
+      status: string;
+      service: string;
+      database: string;
+      user: string;
+      password: string;
+      connectionString: string;
+    };
+    expect(createResult).toEqual({
+      status: 'created',
+      service: 'shared-postgres',
+      database: 'appdb',
+      user: 'openlander',
+      password: 'pw',
+      connectionString: 'postgresql://openlander:pw@ol-svc-shared-postgres:5432/appdb',
+    });
+    expect(serviceManager.listDatabases).toHaveBeenCalledWith('svc-1');
+    expect(serviceManager.createDatabase).toHaveBeenCalledWith('svc-1', 'appdb');
   });
 });
