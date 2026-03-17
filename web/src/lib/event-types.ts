@@ -104,6 +104,8 @@ export interface BuildStreamEvent {
   projectId: string;
   timestamp: string;
   percent?: number;
+  /** Pipeline step name (e.g., 'Preparing', 'Clone', 'Build', 'Start', 'Health Check', 'Complete') */
+  stepName?: string;
   /** Present only for question_pending events */
   questionId?: string;
   questions?: QuestionData[];
@@ -157,6 +159,8 @@ export interface TimelineItem {
   detail?: string;
   percent: number;
   url?: string;
+  /** Pipeline step name for progress items */
+  stepName?: string;
   /** Present only for question items */
   questionId?: string;
   questions?: QuestionData[];
@@ -321,6 +325,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         timestamp: event.timestamp,
         title: event.message,
         percent: progressPercent,
+        stepName: event.stepName,
       };
   }
 }

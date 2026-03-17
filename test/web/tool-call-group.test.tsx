@@ -62,6 +62,13 @@ vi.mock('lucide-react', () => ({
   Key: () => 'Key',
   MessageCircle: () => 'MessageCircle',
   Clock: () => 'Clock',
+  ExternalLink: () => 'ExternalLink',
+  RotateCcw: () => 'RotateCcw',
+  Layers: () => 'Layers',
+  LayoutList: () => 'LayoutList',
+  ScrollText: () => 'ScrollText',
+  Activity: () => 'Activity',
+  KeyRound: () => 'KeyRound',
 }));
 
 function getTextContent(node: unknown): string {
@@ -193,7 +200,7 @@ describeGroup('CollapsedToolGroup', () => {
 
     const tree = renderComponent(CollapsedToolGroup, { items }, true);
     expect(findTextInTree(tree, 'deploy_project')).toBe(true);
-    expect(findTextInTree(tree, 'status')).toBe(true);
+    expect(findTextInTree(tree, 'ok')).toBe(true);
   });
 
   it('renders generic fallback for unknown tools', () => {
@@ -314,7 +321,7 @@ describeGroup('CollapsedToolGroup', () => {
       id: '10',
       type: 'tool_call',
       toolName: 'set_env_vars',
-      toolArgs: { key: 'API_KEY' },
+      toolArgs: { some_var: 'API_KEY' },
       timestamp: new Date().toISOString(),
     };
 

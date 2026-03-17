@@ -27,6 +27,7 @@ import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
 import type { BuildDebugger } from '../agent/debugger.js';
+import { extractProjectName } from './helpers.js';
 
 /**
  * Project configuration for a deployment.
@@ -80,6 +81,8 @@ export interface MonorepoConfig {
   envVars?: Record<string, string>;
   visibility?: 'internal' | 'quick-share' | 'shared' | 'production';
   trigger?: 'chat' | 'webhook' | 'api';
+  /** Parent project name (auto-generated from repo if not provided) */
+  name?: string;
   /** @internal Pre-allocated parent ID from startMonorepoDeploy(). Do not set manually. */
   _parentId?: string;
 }
@@ -212,12 +215,11 @@ export class DeployPipeline {
     }
 
     // Preflight passed - create project and start background deploy
-    const isNonProductionEnv = config.environment && config.environment !== 'production';
     this.db.createProject({
       id: projectId,
       name: projectName,
       repoUrl: config.repoUrl,
-      branch: isNonProductionEnv ? undefined : config.branch,
+      branch: config.branch,
     });
     this.db.updateProject(projectId, { status: 'building' });
     this.jobManager?.trackJob(projectId, projectName);
@@ -235,7 +237,7 @@ export class DeployPipeline {
    * Returns immediately with the parent project ID.
    */
   startMonorepoDeploy(config: MonorepoConfig): StartMonorepoResult {
-    const parentName = config.clonePath.split('/').pop() ?? extractProjectName(config.repoUrl);
+    const parentName = config.name ?? extractProjectName(config.repoUrl);
     const parentId = nanoid(12);
 
     // Create parent record NOW for immediate status queries
@@ -266,15 +268,11 @@ export class DeployPipeline {
 
     if (!config._projectId) {
       // Create project record in DB (skipped when called from startDeploy)
-      // When deploying to a non-production environment, the project-level branch
-      // (and auto-created production env) should keep the default "main",
-      // not the environment-specific branch (e.g. "dev").
-      const isNonProductionEnv = config.environment && config.environment !== 'production';
       this.db.createProject({
         id: projectId,
         name: projectName,
         repoUrl: config.repoUrl,
-        branch: isNonProductionEnv ? undefined : config.branch,
+        branch: config.branch,
       });
       this.db.updateProject(projectId, { status: 'building' });
       this.jobManager?.trackJob(projectId, projectName);
@@ -611,6 +609,13 @@ export class DeployPipeline {
 
       // Step 4b: Post-deploy health check — detect crash loops before marking as running
       const healthResult = await this.docker.waitForHealthy(containerId, 20000);
+
+      await eventBus.emit('monitor:healthcheck', {
+        projectId,
+        healthy: healthResult.healthy,
+        responseTimeMs: 0,
+      });
+
       if (!healthResult.healthy) {
         const containerLogs = await this.docker
           .getLogs(containerId, 50)
@@ -875,7 +880,7 @@ export class DeployPipeline {
 
   async deployMonorepo(config: MonorepoConfig): Promise<MonorepoResult> {
     const startTime = Date.now();
-    const parentName = config.clonePath.split('/').pop() ?? extractProjectName(config.repoUrl);
+    const parentName = config.name ?? extractProjectName(config.repoUrl);
     const trigger = config.trigger ?? 'chat';
 
     // Use pre-allocated parentId from startMonorepoDeploy() if available
@@ -1709,18 +1714,6 @@ export class DeployPipeline {
 }
 
 // --- Helpers ---
-
-/** Extract project name from a repo URL. */
-function extractProjectName(repoUrl: string): string {
-  // Handle: github.com/user/repo, https://github.com/user/repo.git, git@github.com:user/repo.git
-  const cleaned = repoUrl
-    .replace(/\.git$/, '')
-    .replace(/^(https?:\/\/|git@)/, '')
-    .replace(/:/g, '/');
-
-  const parts = cleaned.split('/');
-  return parts[parts.length - 1] ?? 'project';
-}
 
 function deriveServiceName(dockerfilePath: string): string {
   const dir = dirname(dockerfilePath);

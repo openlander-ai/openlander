@@ -567,12 +567,12 @@ ${plan.agentGuidance}
   // v0.4: ChannelManager needs AppContext but never self-references channelManager.
   // We cast partialCtx which is structurally complete for ChannelManager's actual usage.
   const channelManager = new ChannelManager(partialCtx as AppContext);
-  const incidentReporter = new IncidentReporter(channelManager, eventBus, db, config.language);
+  const incidentReporter = new IncidentReporter(channelManager, eventBus, db, config);
   incidentReporter.start();
   activeIncidentReporter = incidentReporter;
 
   if (agent) {
-    const postmortem = new PostmortemGenerator(eventBus, db, agent, config.language);
+    const postmortem = new PostmortemGenerator(eventBus, db, agent, config);
     postmortem.start();
     setPostmortemInstance(postmortem);
   }

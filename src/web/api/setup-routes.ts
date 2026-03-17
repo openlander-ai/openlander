@@ -623,7 +623,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         agent.setQuestionBridge(ctx.questionBridge);
         (ctx as { agent: typeof agent }).agent = agent;
       } catch (err) {
-        log.debug({ err, language: lang }, 'Agent hot-reload failed');
+        log.error({ err, language: lang }, 'Agent hot-reload failed');
         // Agent hot-reload failed — language saved but agent uses old locale until restart
       }
     }

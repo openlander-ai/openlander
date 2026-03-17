@@ -85,35 +85,62 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       unsubscribers.push(
         eventBus.on('deploy:start', (payload) => {
           if (payload.projectId !== project.id) return;
-          void s.write(JSON.stringify({ percent: 0, step: 'Starting deployment...' }) + '\n');
+          void s.write(
+            JSON.stringify({ percent: 0, step: 'Starting deployment...', stepName: 'Preparing' }) +
+              '\n',
+          );
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:clone', (payload) => {
           if (payload.projectId !== project.id) return;
-          void s.write(JSON.stringify({ percent: 25, step: 'Cloning repository...' }) + '\n');
+          void s.write(
+            JSON.stringify({ percent: 15, step: 'Cloning repository...', stepName: 'Clone' }) +
+              '\n',
+          );
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:build', (payload) => {
           if (payload.projectId !== project.id) return;
-          void s.write(JSON.stringify({ percent: 60, step: 'Building Docker image...' }) + '\n');
+          void s.write(
+            JSON.stringify({ percent: 60, step: 'Building Docker image...', stepName: 'Build' }) +
+              '\n',
+          );
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:run', (payload) => {
           if (payload.projectId !== project.id) return;
-          void s.write(JSON.stringify({ percent: 90, step: 'Starting container...' }) + '\n');
+          void s.write(
+            JSON.stringify({ percent: 85, step: 'Starting container...', stepName: 'Start' }) +
+              '\n',
+          );
+        }),
+      );
+
+      unsubscribers.push(
+        eventBus.on('monitor:healthcheck', (payload) => {
+          if (payload.projectId !== project.id) return;
+          void s.write(
+            JSON.stringify({
+              percent: 95,
+              step: 'Running health checks...',
+              stepName: 'Health Check',
+            }) + '\n',
+          );
         }),
       );
 
       unsubscribers.push(
         eventBus.on('deploy:success', (payload) => {
           if (payload.projectId !== project.id) return;
-          void s.write(JSON.stringify({ percent: 100, step: 'Complete' }) + '\n');
+          void s.write(
+            JSON.stringify({ percent: 100, step: 'Complete', stepName: 'Complete' }) + '\n',
+          );
           void s.close();
         }),
       );
@@ -206,12 +233,11 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     const projectId = existing?.id ?? nanoid(12);
 
     if (!existing) {
-      const isNonProductionEnv = body.environment && body.environment !== 'production';
       ctx.db.createProject({
         id: projectId,
         name: projectName,
         repoUrl: body.repo_url,
-        branch: isNonProductionEnv ? undefined : body.branch,
+        branch: body.branch,
       });
     }
 
@@ -448,7 +474,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
             type: 'status',
             message: `Cloning repository (${payload.commitSha.slice(0, 7)})`,
             projectId: project.id,
-            percent: 25,
+            percent: 15,
           });
         }),
       );

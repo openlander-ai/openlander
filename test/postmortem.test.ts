@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from '../src/agent/index.js';
 import type { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import { EventBus } from '../src/events/index.js';
 import {
   getPostmortemInstance,
@@ -12,6 +13,64 @@ import {
 type RedactSecretsAccessor = {
   redactSecrets: (text: string) => string;
 };
+
+function createMockConfig(language: 'en' | 'ko' = 'en'): OpenLanderConfig {
+  return {
+    language,
+    llm: {
+      provider: 'gemini',
+      apiKey: '',
+      model: 'gemini-2.0-flash',
+      authToken: '',
+      ollamaEndpoint: 'http://localhost:11434',
+    },
+    server: {
+      port: 10114,
+      host: '0.0.0.0',
+      baseUrl: 'http://localhost:10114',
+    },
+    docker: {
+      socketPath: '',
+      networkName: 'web',
+      portRangeStart: 10001,
+      portRangeEnd: 10999,
+    },
+    git: {
+      sshKeyPath: '',
+      cloneDir: '',
+    },
+    cloudflare: {
+      apiToken: '',
+      tunnelId: '',
+      accountId: '',
+    },
+    monitoring: {
+      healthcheckIntervalSec: 60,
+      inactivityThresholdDays: 14,
+    },
+    mcp: {
+      enabled: false,
+      transport: 'stdio',
+      servers: [],
+    },
+    channels: {
+      slack: { enabled: false, token: '', signingSecret: '' },
+      discord: { enabled: false, token: '', applicationId: '', publicKey: '' },
+      telegram: { enabled: false, token: '', webhookSecret: '' },
+    },
+    gitProviders: {
+      github: { token: '', username: '' },
+      gitlab: { token: '', username: '' },
+    },
+    localModel: {
+      preferLocal: false,
+      modelName: 'openlander-agent',
+    },
+    traefik: {
+      mode: 'managed',
+    },
+  };
+}
 
 async function waitForAssertion(assertion: () => void, timeoutMs = 500): Promise<void> {
   const startedAt = Date.now();
@@ -46,8 +105,9 @@ describe('PostmortemGenerator - redactSecrets', () => {
     const agent = {
       chat: vi.fn().mockResolvedValue({ message: 'test markdown' }),
     } as unknown as Agent;
+    const config = createMockConfig();
 
-    generator = new PostmortemGenerator(events, db, agent);
+    generator = new PostmortemGenerator(events, db, agent, config);
   });
 
   it('redacts all supported secret patterns', () => {
@@ -102,8 +162,9 @@ describe('PostmortemGenerator - lifecycle and generation', () => {
     const agent = {
       chat,
     } as unknown as Agent;
+    const config = createMockConfig();
 
-    generator = new PostmortemGenerator(events, db, agent);
+    generator = new PostmortemGenerator(events, db, agent, config);
   });
 
   it('start() subscribes to recovery success and exhausted events', () => {
@@ -177,10 +238,68 @@ describe('PostmortemGenerator singleton helpers', () => {
     const agent = {
       chat: vi.fn().mockResolvedValue({ message: 'test markdown' }),
     } as unknown as Agent;
-    const instance = new PostmortemGenerator(events, db, agent);
+    const config = createMockConfig();
+    const instance = new PostmortemGenerator(events, db, agent, config);
 
     setPostmortemInstance(instance);
 
     expect(getPostmortemInstance()).toBe(instance);
+  });
+});
+
+describe('PostmortemGenerator - dynamic locale behavior', () => {
+  it('respects runtime language changes in generated prompts', async () => {
+    const events = new EventBus();
+    const getProject = vi.fn().mockReturnValue({ name: 'Demo Project' });
+    const getDeployLogs = vi.fn().mockReturnValue([
+      {
+        build_log: 'Build failed',
+      },
+    ]);
+    const chat = vi.fn().mockResolvedValue({ message: 'test markdown' });
+
+    const db = {
+      getProject,
+      getDeployLogs,
+    } as unknown as Database;
+    const agent = {
+      chat,
+    } as unknown as Agent;
+    const config = createMockConfig('en');
+
+    const generator = new PostmortemGenerator(events, db, agent, config);
+    generator.start();
+
+    await events.emit('recovery:success', {
+      projectId: 'project-1',
+      attempt: 1,
+      durationMs: 1000,
+      lastError: 'test error',
+    });
+
+    await waitForAssertion(() => {
+      expect(chat).toHaveBeenCalledOnce();
+    });
+
+    const firstPrompt = chat.mock.calls[0]?.[0] as string;
+    expect(firstPrompt).toContain('Write the entire report in English');
+
+    chat.mockClear();
+
+    config.language = 'ko';
+
+    await events.emit('recovery:success', {
+      projectId: 'project-2',
+      attempt: 1,
+      durationMs: 1000,
+      lastError: 'test error',
+    });
+
+    await waitForAssertion(() => {
+      expect(chat).toHaveBeenCalledOnce();
+    });
+
+    const secondPrompt = chat.mock.calls[0]?.[0] as string;
+    expect(secondPrompt).toContain('Write the entire report in Korean');
   });
 });

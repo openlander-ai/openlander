@@ -15,6 +15,8 @@ import {
 import { cn } from '@/lib/utils';
 import type { AssistantItem } from '@/hooks/use-assistant';
 
+import { ToolResultContent, maskSecrets } from './ToolResultContent';
+
 export function ToolCallItem({ item }: { item: AssistantItem }) {
   const [expanded, setExpanded] = React.useState(false);
   return (
@@ -32,7 +34,7 @@ export function ToolCallItem({ item }: { item: AssistantItem }) {
       {expanded && item.toolArgs && (
         <div className="px-3 py-2 border-t border-agent/10 bg-bg-app/50">
           <pre className="text-[10px] font-mono text-muted-ol whitespace-pre-wrap break-all">
-            {JSON.stringify(item.toolArgs, null, 2)}
+            {JSON.stringify(maskSecrets(item.toolArgs), null, 2)}
           </pre>
         </div>
       )}
@@ -65,14 +67,18 @@ export function ToolResultItem({ item }: { item: AssistantItem }) {
       </button>
       {expanded && (
         <div className="px-3 py-2 border-t border-black/10 bg-bg-app/50">
-          <pre
-            className={cn(
-              'text-[10px] font-mono whitespace-pre-wrap break-all',
-              isSuccess ? 'text-success/80' : 'text-error/80',
-            )}
-          >
-            {item.toolError || JSON.stringify(item.toolResult, null, 2)}
-          </pre>
+          {item.toolError ? (
+            <pre
+              className={cn(
+                'text-[10px] font-mono whitespace-pre-wrap break-all',
+                isSuccess ? 'text-success/80' : 'text-error/80',
+              )}
+            >
+              {item.toolError}
+            </pre>
+          ) : (
+            <ToolResultContent toolName={item.toolName || ''} result={item.toolResult} />
+          )}
         </div>
       )}
     </div>

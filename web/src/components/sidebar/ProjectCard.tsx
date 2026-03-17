@@ -69,11 +69,12 @@ export function ProjectCard({ project, onUpdate }: ProjectCardProps) {
     }
   };
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     running: 'bg-green-500',
     stopped: 'bg-gray-500',
     building: 'bg-yellow-500',
     error: 'bg-red-500',
+    idle: 'bg-gray-400',
   };
 
   return (

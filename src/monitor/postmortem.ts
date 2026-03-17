@@ -1,6 +1,7 @@
 import type { Agent } from '../agent/index.js';
 import type { Database, DeployLogRow } from '../db/index.js';
 import type { EventBus, EventPayload } from '../events/index.js';
+import type { OpenLanderConfig } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('postmortem');
@@ -18,15 +19,23 @@ export class PostmortemGenerator {
   private readonly events: EventBus;
   private readonly db: Database;
   private readonly agent: Agent;
-  private readonly locale: Locale;
+  private readonly config: OpenLanderConfig;
   private readonly postmortems = new Map<string, PostmortemEntry>();
   private unsubscribers: Array<() => void> = [];
 
-  constructor(events: EventBus, db: Database, agent: Agent, locale: string = 'en') {
+  constructor(events: EventBus, db: Database, agent: Agent, config: OpenLanderConfig) {
     this.events = events;
     this.db = db;
     this.agent = agent;
-    this.locale = locale === 'ko' ? 'ko' : 'en';
+    this.config = config;
+  }
+
+  /**
+   * Get the current locale from config.
+   * This allows the generator to respect runtime language changes.
+   */
+  private getCurrentLocale(): Locale {
+    return this.config.language === 'ko' ? 'ko' : 'en';
   }
 
   start(): void {
@@ -93,8 +102,9 @@ export class PostmortemGenerator {
             : 0;
       const durationMs = 'durationMs' in payload ? payload.durationMs : 0;
 
+      const locale = this.getCurrentLocale();
       const languageInstruction =
-        this.locale === 'ko'
+        locale === 'ko'
           ? 'Write the entire report in Korean (한국어). Keep technical identifiers (service names, URLs, ports, error codes) in English.'
           : 'Write the entire report in English.';
 

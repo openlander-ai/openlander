@@ -132,6 +132,29 @@ export function TimelineFeed({
                     style={{ width: `${latestProgress.percent}%` }}
                   />
                 </div>
+                {latestProgress.stepName && (
+                  <div className="mt-3 text-xs font-mono text-muted-ol space-y-1">
+                    <div className="flex gap-2 items-center flex-wrap">
+                      {['Preparing', 'Clone', 'Build', 'Start', 'Health Check', 'Complete'].map(
+                        (step) => (
+                          <div key={step} className="flex items-center gap-1">
+                            <span
+                              className={cn(
+                                'px-2 py-0.5 rounded text-[10px] font-mono',
+                                latestProgress.stepName === step
+                                  ? 'bg-agent/30 text-agent font-semibold'
+                                  : 'text-muted-ol',
+                              )}
+                            >
+                              {step}
+                            </span>
+                            {step !== 'Complete' && <span className="text-muted-ol">→</span>}
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="mt-2 text-xs font-body text-primary-ol">{latestProgress.title}</div>
               </div>
             )}

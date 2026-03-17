@@ -1,6 +1,7 @@
 import type { ChannelManager } from '../channels/base.js';
 import type { Database } from '../db/index.js';
 import type { EventBus, EventPayload } from '../events/index.js';
+import type { OpenLanderConfig } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('incident-reporter');
@@ -19,7 +20,7 @@ export class IncidentReporter {
   private readonly channelManager: ChannelManager;
   private readonly events: EventBus;
   private readonly db: Database;
-  private readonly locale: Locale;
+  private readonly config: OpenLanderConfig;
   private readonly incidents = new Map<string, IncidentState>();
   private unsubscribers: Array<() => void> = [];
 
@@ -27,12 +28,20 @@ export class IncidentReporter {
     channelManager: ChannelManager,
     events: EventBus,
     db: Database,
-    locale: string = 'en',
+    config: OpenLanderConfig,
   ) {
     this.channelManager = channelManager;
     this.events = events;
     this.db = db;
-    this.locale = locale === 'ko' ? 'ko' : 'en';
+    this.config = config;
+  }
+
+  /**
+   * Get the current locale from config.
+   * This allows the reporter to respect runtime language changes.
+   */
+  private getCurrentLocale(): Locale {
+    return this.config.language === 'ko' ? 'ko' : 'en';
   }
 
   start(): void {
@@ -147,8 +156,9 @@ export class IncidentReporter {
     attempt: number,
   ): string {
     const durationSec = Math.max(1, Math.round(durationMs / 1000));
+    const locale = this.getCurrentLocale();
 
-    if (this.locale === 'ko') {
+    if (locale === 'ko') {
       return [
         '🛬 OpenLander — 장애 복구 완료',
         '',
@@ -182,7 +192,9 @@ export class IncidentReporter {
     totalAttempts: number,
     lastError: string,
   ): string {
-    if (this.locale === 'ko') {
+    const locale = this.getCurrentLocale();
+
+    if (locale === 'ko') {
       return [
         '🛬 OpenLander — 장애 복구 실패',
         '',
@@ -208,7 +220,8 @@ export class IncidentReporter {
   }
 
   private formatTimestamp(date: Date): string {
-    const locale = this.locale === 'ko' ? 'ko-KR' : 'en-US';
+    const currentLocale = this.getCurrentLocale();
+    const locale = currentLocale === 'ko' ? 'ko-KR' : 'en-US';
     return date.toLocaleString(locale, { hour12: false });
   }
 }

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { TimelineFeed } from '@/components/timeline/TimelineFeed';
+import { useEffect, useState, Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import { PostmortemCard } from '@/components/timeline/PostmortemCard';
 import { LogPreview } from '@/components/timeline/LogPreview';
 import { ChatMessageList } from '@/components/assistant/ChatMessageList';
+import { UnifiedBriefingFeed } from '@/components/project/UnifiedBriefingFeed';
 import type { AssistantItem } from '@/hooks/use-assistant';
 import type { TimelineItem } from '@/lib/event-types';
 import type { PostmortemData } from '@/lib/api';
@@ -10,6 +11,34 @@ import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCa
 import { SummaryDashboard } from '@/components/project/SummaryDashboard';
 import { getProject } from '@/lib/api';
 import type { Project } from '@/types';
+import { cn } from '@/lib/utils';
+
+class LocalErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  static getDerivedStateFromError(_error: Error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('UnifiedBriefingFeed Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 text-sm text-error bg-error/10 border border-error/20 rounded-lg m-4">
+          Failed to load briefing feed. Please refresh the page.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface OverviewTabProps {
   projectId: string;
@@ -66,7 +95,12 @@ export function OverviewTab({
 
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0">
-      <div className="flex-1 min-w-0 min-h-0 overflow-auto p-4 space-y-4 border-b md:border-b-0 md:border-r border-[hsl(var(--border))]">
+      <div
+        className={cn(
+          'flex-1 min-w-0 min-h-0 overflow-auto p-4 space-y-4 border-b md:border-b-0 border-[hsl(var(--border))]',
+          !showTimeline && 'md:border-r',
+        )}
+      >
         {postmortem && (
           <PostmortemCard
             projectId={postmortem.projectId}
@@ -78,16 +112,21 @@ export function OverviewTab({
         {showTimeline ? (
           <>
             <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden flex flex-col h-[500px]">
-              <TimelineFeed
-                items={timelineItems}
-                isStreaming={isTimelineStreaming}
-                projectStatus={projectStatus}
-                onSubmitAnswer={onSubmitAnswer}
-                onSkipQuestion={onSkipQuestion}
-                onInsightAction={onInsightAction}
-                onFixWithAI={onFixWithAI}
-                fixingItemId={fixingItemId}
-              />
+              <LocalErrorBoundary>
+                <UnifiedBriefingFeed
+                  timelineItems={timelineItems}
+                  isTimelineStreaming={isTimelineStreaming}
+                  projectStatus={projectStatus}
+                  fixingItemId={fixingItemId}
+                  onFixWithAI={onFixWithAI}
+                  onSubmitAnswer={onSubmitAnswer}
+                  onSkipQuestion={onSkipQuestion}
+                  onInsightAction={onInsightAction}
+                  assistantItems={assistantItems}
+                  isAssistantStreaming={isAssistantStreaming}
+                  onSendMessage={onSendMessage}
+                />
+              </LocalErrorBoundary>
             </section>
 
             {projectId && (
@@ -111,13 +150,15 @@ export function OverviewTab({
         )}
       </div>
 
-      <ChatMessageList
-        assistantItems={assistantItems}
-        isStreaming={isAssistantStreaming}
-        onSendMessage={onSendMessage}
-        onSubmitAnswer={onSubmitAnswer}
-        onSkipQuestion={onSkipQuestion}
-      />
+      {!showTimeline && (
+        <ChatMessageList
+          assistantItems={assistantItems}
+          isStreaming={isAssistantStreaming}
+          onSendMessage={onSendMessage}
+          onSubmitAnswer={onSubmitAnswer}
+          onSkipQuestion={onSkipQuestion}
+        />
+      )}
     </div>
   );
 }
