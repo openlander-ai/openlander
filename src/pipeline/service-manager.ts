@@ -382,6 +382,8 @@ export class ServiceManager {
     cpuPercent: number | null;
     memoryUsageBytes: number | null;
     memoryLimitBytes: number | null;
+    activeConnections: number | null;
+    maxConnections: number | null;
   }> {
     const service = await this.getDetail(id);
     if (service.status !== 'running') {
@@ -391,6 +393,8 @@ export class ServiceManager {
         cpuPercent: null,
         memoryUsageBytes: null,
         memoryLimitBytes: null,
+        activeConnections: null,
+        maxConnections: null,
       };
     }
 
@@ -428,12 +432,96 @@ export class ServiceManager {
       // container stats unavailable — non-fatal
     }
 
+    let activeConnections: number | null = null;
+    let maxConnections: number | null = null;
+    try {
+      if (service.type === 'postgresql') {
+        const credentials = this.parseServiceCredentials(service);
+        const connResult = await this.execInServiceContainer(service, [
+          'psql',
+          '-t',
+          '-A',
+          '-U',
+          credentials.user,
+          '-d',
+          'postgres',
+          '-c',
+          'SELECT count(*) FROM pg_stat_activity WHERE state IS NOT NULL',
+        ]);
+        const maxResult = await this.execInServiceContainer(service, [
+          'psql',
+          '-t',
+          '-A',
+          '-U',
+          credentials.user,
+          '-d',
+          'postgres',
+          '-c',
+          'SHOW max_connections',
+        ]);
+        activeConnections = Number.parseInt(connResult.stdout.trim(), 10) || 0;
+        maxConnections = Number.parseInt(maxResult.stdout.trim(), 10) || null;
+      } else if (service.type === 'mysql') {
+        const credentials = this.parseServiceCredentials(service);
+        const connResult = await this.execInServiceContainer(service, [
+          'mysql',
+          '-N',
+          '-uroot',
+          `-p${credentials.password}`,
+          '-e',
+          'SELECT COUNT(*) FROM information_schema.processlist',
+        ]);
+        const maxResult = await this.execInServiceContainer(service, [
+          'mysql',
+          '-N',
+          '-uroot',
+          `-p${credentials.password}`,
+          '-e',
+          "SHOW VARIABLES LIKE 'max_connections'",
+        ]);
+        activeConnections = Number.parseInt(connResult.stdout.trim(), 10) || 0;
+        const maxParts = maxResult.stdout.trim().split(/\s+/);
+        maxConnections =
+          maxParts.length >= 2 ? Number.parseInt(maxParts[1] ?? '', 10) || null : null;
+      } else if (service.type === 'redis') {
+        const infoResult = await this.execInServiceContainer(service, [
+          'redis-cli',
+          'INFO',
+          'clients',
+        ]);
+        const clientsMatch = infoResult.stdout.match(/connected_clients:(\d+)/);
+        const maxMatch = infoResult.stdout.match(/maxclients:(\d+)/);
+        activeConnections = clientsMatch ? Number.parseInt(clientsMatch[1] ?? '', 10) : null;
+        maxConnections = maxMatch ? Number.parseInt(maxMatch[1] ?? '', 10) : null;
+      } else if (service.type === 'mongodb') {
+        const connResult = await this.execInServiceContainer(service, [
+          'mongosh',
+          '--quiet',
+          '--eval',
+          'JSON.stringify(db.serverStatus().connections)',
+        ]);
+        const parsed = JSON.parse(connResult.stdout.trim()) as {
+          current?: number;
+          available?: number;
+        };
+        activeConnections = parsed.current ?? null;
+        maxConnections =
+          parsed.available != null && parsed.current != null
+            ? parsed.current + parsed.available
+            : null;
+      }
+    } catch {
+      // connection stats unavailable — non-fatal
+    }
+
     return {
       status: service.status,
       diskUsageBytes,
       cpuPercent,
       memoryUsageBytes,
       memoryLimitBytes,
+      activeConnections,
+      maxConnections,
     };
   }
 
@@ -529,6 +617,29 @@ export class ServiceManager {
         }));
     }
 
+    if (service.type === 'mongodb') {
+      const result = await this.execInServiceContainer(service, [
+        'mongosh',
+        '--quiet',
+        '--eval',
+        'db.adminCommand("listDatabases").databases.filter(d => !["admin","config","local"].includes(d.name)).forEach(d => print(d.name + "|" + d.sizeOnDisk))',
+      ]);
+
+      return result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => {
+          const separatorIndex = line.indexOf('|');
+          if (separatorIndex < 0) return { name: line, sizeBytes: null };
+          const name = line.slice(0, separatorIndex).trim();
+          const sizeRaw = line.slice(separatorIndex + 1).trim();
+          const parsedSize = Number.parseInt(sizeRaw, 10);
+          return { name, sizeBytes: Number.isFinite(parsedSize) ? parsedSize : null };
+        })
+        .filter((db) => db.name.length > 0);
+    }
+
     throw new Error(`Database listing is not supported for service type: ${service.type}`);
   }
 
@@ -581,6 +692,21 @@ export class ServiceManager {
         `-p${credentials.password}`,
         '-e',
         "SELECT user FROM mysql.user WHERE user NOT IN ('root','mysql.sys','mysql.infoschema','mysql.session')",
+      ]);
+
+      return result.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((name) => name.length > 0)
+        .map((name) => ({ name }));
+    }
+
+    if (service.type === 'mongodb') {
+      const result = await this.execInServiceContainer(service, [
+        'mongosh',
+        '--quiet',
+        '--eval',
+        'db.system.users.find({}, {user:1, _id:0}).forEach(u => print(u.user))',
       ]);
 
       return result.stdout

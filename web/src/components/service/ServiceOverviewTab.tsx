@@ -10,6 +10,7 @@ import {
   Cpu,
   MemoryStick,
   FolderGit2,
+  Plug,
 } from 'lucide-react';
 import {
   getServiceStats,
@@ -179,6 +180,26 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Connections */}
+      <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
+          <Plug className="h-3.5 w-3.5" />
+          Connections
+        </div>
+        <div className="text-lg font-mono font-medium text-primary-ol">
+          {loadingStats ? (
+            <span className="text-sm animate-pulse text-muted-ol">...</span>
+          ) : stats?.activeConnections != null ? (
+            stats.activeConnections
+          ) : (
+            <span className="text-sm text-muted-ol">N/A</span>
+          )}
+        </div>
+        {stats?.maxConnections != null && (
+          <div className="text-xs font-body text-muted-ol mt-1">/ {stats.maxConnections} max</div>
+        )}
       </div>
 
       {/* Connected Projects */}

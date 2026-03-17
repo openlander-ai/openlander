@@ -911,6 +911,8 @@ export interface ServiceStats {
   cpuPercent: number | null;
   memoryUsageBytes: number | null;
   memoryLimitBytes: number | null;
+  activeConnections: number | null;
+  maxConnections: number | null;
 }
 
 export interface ConnectedProject {
