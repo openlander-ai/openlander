@@ -111,27 +111,26 @@ export function ServicesPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-display font-bold text-primary-ol flex items-center gap-2">
-            <Database className="h-6 w-6" />
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <h1 className="flex items-center gap-2 text-xl font-display font-bold tracking-tight text-primary-ol">
+            <Database className="h-5 w-5 text-secondary-ol" />
             Services
           </h1>
-          <p className="text-sm text-secondary-ol mt-1">
-            Manage shared infrastructure services like databases and caches
-          </p>
+          {services.length > 0 && (
+            <Button
+              onClick={openCreate}
+              size="sm"
+              className="h-8 self-start shrink-0 gap-1.5 rounded-md bg-foreground px-3 text-[11px] font-body font-medium text-background shadow-sm hover:bg-foreground/90"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Create Service
+            </Button>
+          )}
         </div>
-        {services.length > 0 && (
-          <Button
-            onClick={openCreate}
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs shrink-0 mt-0.5"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Create Service
-          </Button>
-        )}
+        <p className="max-w-2xl text-sm font-body leading-6 text-secondary-ol">
+          Manage shared infrastructure services like databases and caches
+        </p>
       </div>
 
       <CreateServiceDialog
