@@ -45,15 +45,34 @@ export interface QuestionAnswer {
   customText?: string;
 }
 
+const QUESTION_SESSION_TIMEOUT_MS = 5 * 60 * 1000;
+const QUESTION_SESSION_TIMEOUT_MESSAGE =
+  'Session timed out — user did not respond within 5 minutes';
+
+type TimerApi = {
+  setTimeout: (handler: () => void, timeout?: number) => unknown;
+  clearTimeout: (timeoutId: unknown) => void;
+};
+
+const timerApi: TimerApi = globalThis as unknown as TimerApi;
+
 // ---------------------------------------------------------------------------
 // Bridge
 // ---------------------------------------------------------------------------
 
 export class QuestionBridge {
   private pendingResolve: ((answers: QuestionAnswer[]) => void) | null = null;
+  private pendingTimeout: unknown = null;
   private onQuestion: ((request: QuestionRequest) => void) | null = null;
   private eventBus: EventBus | null = null;
   private activeProjectId: string | null = null;
+
+  private clearPendingTimeout(): void {
+    if (this.pendingTimeout) {
+      timerApi.clearTimeout(this.pendingTimeout);
+      this.pendingTimeout = null;
+    }
+  }
 
   /**
    * Attach the EventBus so question events are broadcast to stream listeners.
@@ -84,8 +103,13 @@ export class QuestionBridge {
    * Returns a Promise that pauses the agentic loop until the user responds.
    */
   ask(request: QuestionRequest): Promise<QuestionAnswer[]> {
-    return new Promise<QuestionAnswer[]>((resolve) => {
+    return new Promise<QuestionAnswer[]>((resolve, reject) => {
       this.pendingResolve = resolve;
+      this.pendingTimeout = timerApi.setTimeout(() => {
+        this.pendingResolve = null;
+        this.pendingTimeout = null;
+        reject(new Error(QUESTION_SESSION_TIMEOUT_MESSAGE));
+      }, QUESTION_SESSION_TIMEOUT_MS);
 
       // Broadcast to EventBus so the web build stream can pick it up
       if (this.eventBus && this.activeProjectId) {
@@ -109,6 +133,7 @@ export class QuestionBridge {
    * @param answers - User's selected answers.
    */
   reply(requestId: string, answers: QuestionAnswer[]): void {
+    this.clearPendingTimeout();
     const resolve = this.pendingResolve;
     this.pendingResolve = null;
 
@@ -128,6 +153,7 @@ export class QuestionBridge {
    * Resolves with empty answers so the LLM knows the user declined.
    */
   reject(): void {
+    this.clearPendingTimeout();
     const resolve = this.pendingResolve;
     this.pendingResolve = null;
     resolve?.([]);
