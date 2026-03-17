@@ -353,6 +353,8 @@ describe('ServiceManager detail/log/stats operations', () => {
       cpuPercent: null,
       memoryUsageBytes: null,
       memoryLimitBytes: null,
+      activeConnections: 0,
+      maxConnections: null,
     });
     const commands = dockerHarness.getExecCommands('svc-stats-container');
     expect(commands[0]).toEqual(['du', '-sb', '/var/lib/postgresql/data']);
@@ -378,6 +380,8 @@ describe('ServiceManager detail/log/stats operations', () => {
       cpuPercent: null,
       memoryUsageBytes: null,
       memoryLimitBytes: null,
+      activeConnections: null,
+      maxConnections: null,
     });
     expect(dockerHarness.getExecCommands('svc-stopped-container')).toEqual([]);
   });
