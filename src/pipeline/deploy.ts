@@ -554,11 +554,12 @@ export class DeployPipeline {
       }
 
       // Step 3: docker build
+      const buildContextPath = dirname(dockerfilePath);
       const buildStart = Date.now();
       let lastBuildOutputEmit = 0;
       let dockerBuildOutput = '';
       this.jobManager?.updatePhase(projectId, 'building');
-      await this.docker.buildImage(cloneResult.path, imageTag, {
+      await this.docker.buildImage(buildContextPath, imageTag, {
         noCache: config._noCacheBuild === true,
         buildArgs: buildTimeVars,
         onProgress: (event) => {
