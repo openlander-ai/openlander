@@ -1,4 +1,5 @@
 import { cpus, totalmem, freemem, loadavg, uptime, hostname } from 'node:os';
+import { execSync } from 'node:child_process';
 import { readFileSync, statfsSync } from 'node:fs';
 import { platform } from 'node:process';
 import { createModuleLogger } from '../lib/logger.js';
@@ -136,6 +137,25 @@ function getAvailableMemory(): number {
       // fall through
     }
   }
+
+  if (platform === 'darwin') {
+    try {
+      const output = execSync('vm_stat', { encoding: 'utf8', timeout: 3000 });
+      const pageSize = /page size of (\d+) bytes/.exec(output);
+      const free = /Pages free:\s+(\d+)/.exec(output);
+      const inactive = /Pages inactive:\s+(\d+)/.exec(output);
+      const purgeable = /Pages purgeable:\s+(\d+)/.exec(output);
+      if (pageSize?.[1] && free?.[1]) {
+        const ps = Number(pageSize[1]);
+        const available =
+          (Number(free[1]) + Number(inactive?.[1] ?? 0) + Number(purgeable?.[1] ?? 0)) * ps;
+        return available;
+      }
+    } catch {
+      // fall through
+    }
+  }
+
   return freemem();
 }
 
