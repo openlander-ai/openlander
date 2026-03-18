@@ -18,6 +18,7 @@ const EXPECTED_TOOL_NAMES = [
   'redeploy_project',
   'get_logs',
   'list_projects',
+  'list_env_vars',
   'set_env_vars',
   'expose_public',
   'unexpose_public',
@@ -87,6 +88,7 @@ function createMockContext(opts?: {
 
   const env = {
     setBulk: vi.fn().mockReturnValue(false),
+    getAllMasked: vi.fn().mockReturnValue({}),
   };
 
   const ctx = {
@@ -317,6 +319,36 @@ describe('Tool Registry', () => {
       status: 'updated',
       project: 'my-app',
       keys: ['API_URL'],
+    });
+  });
+
+  it('list_env_vars returns masked variables for a project', async () => {
+    const project = {
+      id: 'p1',
+      name: 'my-app',
+      status: 'running',
+      visibility: 'internal',
+      repo_url: 'https://github.com/user/my-app',
+      branch: 'main',
+      assigned_port: 10001,
+      public_url: null,
+      created_at: '2026-01-01 00:00:00',
+      updated_at: '2026-01-01 00:00:00',
+    } as const;
+    const { ctx, env } = createMockContext({
+      getProjectByName: () => project,
+    });
+    const listEnvVars = getTool(ctx, 'list_env_vars');
+
+    env.getAllMasked.mockReturnValueOnce({
+      DATABASE_URL: 'pos****5432',
+      API_KEY: 'sk-****7890',
+    });
+    const result = await listEnvVars.execute({ project_name: 'my-app' }, { target: 'mcp' });
+    expect(env.getAllMasked).toHaveBeenCalledWith('p1');
+    expect(result).toEqual({
+      variables: { DATABASE_URL: 'pos****5432', API_KEY: 'sk-****7890' },
+      count: 2,
     });
   });
 

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.1] - Bugfix
+
+### Fixed
+
+- `set_env_vars` now merges with existing variables instead of replacing them — previously, calling `set_env_vars` with new keys would delete all previously set variables
+- `deploy_project` env_vars now merge with existing project variables instead of replacing — variables from both `deploy_project` and `set_env_vars` are preserved across redeploys
+- `provision_database` env vars (DATABASE_URL, etc.) now merge with existing project variables instead of replacing
+- Health monitor no longer marks non-HTTP workers (e.g., arq, Celery) as unhealthy — falls back to Docker container state check when HTTP health check fails
+
+### Added
+
+- `list_env_vars` tool — list all environment variables for a project with masked values for security
+- `mergeEnvVars()` database method for additive env var updates without deleting existing keys
+
 ## [1.0.0] - First Stable Release
 
 ### Added

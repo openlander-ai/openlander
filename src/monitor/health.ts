@@ -147,6 +147,28 @@ export class HealthMonitor {
       };
     }
 
+    const project = this.db.getProject(projectId);
+    const containerId = project?.container_id;
+
+    if (!containerId) {
+      return lastResult;
+    }
+
+    try {
+      const container = this.docker.getClient().getContainer(containerId);
+      const info = await container.inspect();
+      if (info.State.Running && !info.State.Restarting) {
+        return {
+          ...lastResult,
+          healthy: true,
+          error: undefined,
+          consecutiveFailures: 0,
+        };
+      }
+    } catch {
+      return lastResult;
+    }
+
     return lastResult;
   }
 

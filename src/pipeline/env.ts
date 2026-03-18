@@ -47,7 +47,7 @@ export class EnvManager {
     return changed;
   }
 
-  /** Set multiple env vars at once. Returns true if any changed. */
+  /** Set multiple env vars at once (merge — existing keys not in `vars` are preserved). Returns true if any changed. */
   setBulk(projectId: string, vars: Record<string, string>, environmentId?: string): boolean {
     const existing = this.db.getEnvVars(projectId, environmentId);
     let changed = false;
@@ -59,15 +59,8 @@ export class EnvManager {
       }
     }
 
-    for (const key of Object.keys(existing)) {
-      if (!(key in vars)) {
-        changed = true;
-        break;
-      }
-    }
-
     if (changed) {
-      this.db.setEnvVarsBulk(projectId, vars, environmentId);
+      this.db.mergeEnvVars(projectId, vars, environmentId);
     }
     return changed;
   }

@@ -1,6 +1,7 @@
 import type { ToolDef } from './types.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import {
+  listEnvVarsSchema,
   listGlobalSecretsSchema,
   listSecretFilesSchema,
   projectNameSchema,
@@ -19,6 +20,18 @@ function getProjectByName(appCtx: Parameters<ToolDef['execute']>[1]['appCtx'], n
 }
 
 export const envToolDefs: ToolDef[] = [
+  {
+    name: 'list_env_vars',
+    description:
+      'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count }. Errors: PROJECT_NOT_FOUND.',
+    inputSchema: listEnvVarsSchema,
+    execute: (_args, { appCtx }) => {
+      const projectName = _args['project_name'] as string;
+      const project = getProjectByName(appCtx, projectName);
+      const masked = appCtx.env.getAllMasked(project.id);
+      return Promise.resolve({ variables: masked, count: Object.keys(masked).length });
+    },
+  },
   {
     name: 'set_env_vars',
     description:

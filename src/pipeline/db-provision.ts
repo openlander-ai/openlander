@@ -198,7 +198,7 @@ export class DatabaseProvisioner {
       PGDATABASE: dbName,
     };
 
-    this.db.setEnvVarsBulk(projectId, envVars);
+    this.db.mergeEnvVars(projectId, envVars);
 
     return {
       type: 'postgres',
@@ -229,7 +229,7 @@ export class DatabaseProvisioner {
       DATABASE_URL: `file:${connectionString}`,
     };
 
-    this.db.setEnvVarsBulk(projectId, envVars);
+    this.db.mergeEnvVars(projectId, envVars);
 
     return {
       type: 'sqlite',

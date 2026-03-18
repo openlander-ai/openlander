@@ -179,6 +179,29 @@ describe('Database', () => {
       expect(vars['A']).toBe('1');
     });
 
+    it('mergeEnvVars preserves existing keys not in new vars', () => {
+      db.setEnvVar('p1', 'A', '1');
+      db.setEnvVar('p1', 'B', '2');
+
+      db.mergeEnvVars('p1', { C: '3' });
+
+      const vars = db.getEnvVars('p1');
+      expect(vars['A']).toBe('1');
+      expect(vars['B']).toBe('2');
+      expect(vars['C']).toBe('3');
+      expect(Object.keys(vars)).toHaveLength(3);
+    });
+
+    it('mergeEnvVars updates existing keys', () => {
+      db.setEnvVar('p1', 'A', '1');
+
+      db.mergeEnvVars('p1', { A: 'updated', B: '2' });
+
+      const vars = db.getEnvVars('p1');
+      expect(vars['A']).toBe('updated');
+      expect(vars['B']).toBe('2');
+    });
+
     it('finds projects by env key', () => {
       db.createProject({ id: 'p2', name: 'other-app', repoUrl: 'https://github.com/test/b' });
 

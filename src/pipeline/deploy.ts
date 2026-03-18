@@ -802,12 +802,12 @@ export class DeployPipeline {
         });
       }
 
-      // Set env vars in DB
+      // Merge env vars into DB (preserves previously set vars)
       if (config.envVars) {
         if (shouldSyncProjectState) {
-          this.db.setEnvVarsBulk(projectId, config.envVars);
+          this.db.mergeEnvVars(projectId, config.envVars);
         } else {
-          this.db.setEnvVarsBulk(projectId, config.envVars, environmentId);
+          this.db.mergeEnvVars(projectId, config.envVars, environmentId);
         }
       }
 

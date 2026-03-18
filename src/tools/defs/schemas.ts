@@ -55,6 +55,10 @@ export const setEnvVarsSchema = z.object({
     .describe('JSON object of key-value pairs (e.g., {"DATABASE_URL": "..."})'),
 });
 
+export const listEnvVarsSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+});
+
 export const setGlobalSecretSchema = z.object({
   key: z.string().min(1).describe('Secret key'),
   value: z.string().min(1).describe('Secret value'),

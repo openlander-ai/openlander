@@ -870,6 +870,17 @@ export class Database {
     transaction();
   }
 
+  /** Merge env vars into existing ones (UPSERT only, no DELETE). Existing keys not in `vars` are preserved. */
+  mergeEnvVars(projectId: string, vars: Record<string, string>, environmentId?: string): void {
+    const transaction = this.sqlite.transaction(() => {
+      for (const [key, value] of Object.entries(vars)) {
+        this.setEnvVar(projectId, key, value, environmentId);
+      }
+    });
+
+    transaction();
+  }
+
   deleteEnvVar(projectId: string, key: string, environmentId?: string): void {
     const whereClause =
       environmentId === undefined
