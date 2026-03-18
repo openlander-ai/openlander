@@ -305,8 +305,25 @@ export const serviceToolDefs: ToolDef[] = [
       const serviceName = args['service_name'] as string;
       const service = await getServiceByName(appCtx, serviceName);
       const lines = (args['lines'] as number | undefined) ?? 50;
-      const logs = await appCtx.serviceManager.getLogs(service.id, lines);
-      return { service: serviceName, logs };
+      try {
+        const logs = await appCtx.serviceManager.getLogs(service.id, lines);
+        return { service: serviceName, logs };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isContainerGone =
+          message.includes('not found') ||
+          message.includes('No such container') ||
+          message.includes('is not running');
+        if (isContainerGone) {
+          return {
+            service: serviceName,
+            status: service.status,
+            logs: null,
+            error: `Service "${serviceName}" is in ${service.status} state — container is not running. Logs are unavailable. Try start_service to restart, or check Docker host health.`,
+          };
+        }
+        throw error;
+      }
     },
     targets: ['mcp'],
   },

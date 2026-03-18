@@ -210,6 +210,11 @@ export class DeployPipeline {
         }
       }
 
+      for (const service of this.db.listServices()) {
+        if (service.container_id) knownIds.add(service.container_id);
+        if (service.container_name) knownNames.add(service.container_name);
+      }
+
       for (const container of managed) {
         if (knownIds.has(container.id)) continue;
         if (knownNames.has(container.name)) continue;
