@@ -64,14 +64,10 @@ function sortProjects(a: Project, b: Project) {
 export function Sidebar({ projects, loading }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [filter, setFilter] = useState<'all' | 'running' | 'error'>('all');
   const [groupState, setGroupState] = useState<Record<string, boolean>>({});
 
   const isActive = (path: string) => location.pathname === path;
   const isProjectActive = (id: string) => location.pathname === `/projects/${id}`;
-
-  const runningCount = projects.filter((p) => p.status === 'running').length;
-  const errorCount = projects.filter((p) => p.status === 'error').length;
 
   const tempGroups = new Map<string, Project[]>();
   for (const p of projects) {
@@ -107,9 +103,6 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   };
 
   const renderProjectItem = (project: Project) => {
-    if (filter === 'running' && project.status !== 'running') return null;
-    if (filter === 'error' && project.status !== 'error') return null;
-
     return (
       <button
         key={project.id}
@@ -158,47 +151,6 @@ export function Sidebar({ projects, loading }: SidebarProps) {
 
       <Separator className="bg-[hsl(var(--border))]" />
 
-      {/* Filter Tabs (Hidden in collapsed mode) */}
-      <div className="px-2 lg:px-3 py-2 hidden lg:flex items-center gap-1 shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn(
-            'h-6 px-2 text-xs font-body rounded-full',
-            filter === 'all' ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
-          )}
-          onClick={() => setFilter('all')}
-        >
-          All <span className="ml-1 opacity-50">{projects.length}</span>
-        </Button>
-        {runningCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'h-6 px-2 text-xs font-body rounded-full',
-              filter === 'running' ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
-            )}
-            onClick={() => setFilter('running')}
-          >
-            Running <span className="ml-1 opacity-50">{runningCount}</span>
-          </Button>
-        )}
-        {errorCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              'h-6 px-2 text-xs font-body rounded-full',
-              filter === 'error' ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
-            )}
-            onClick={() => setFilter('error')}
-          >
-            Errors <span className="ml-1 opacity-50">{errorCount}</span>
-          </Button>
-        )}
-      </div>
-
       {/* Projects List */}
       <ScrollArea className="flex-1">
         <div className="p-2 lg:p-3 space-y-0.5">
@@ -222,13 +174,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           {/* Grouped list for expanded mode (>= lg) */}
           <div className="hidden lg:block space-y-4">
             {Array.from(groups.entries()).map(([url, projs]) => {
-              const visibleProjs = projs.filter((p) => {
-                if (filter === 'running') return p.status === 'running';
-                if (filter === 'error') return p.status === 'error';
-                return true;
-              });
-
-              if (visibleProjs.length === 0) return null;
+              const visibleProjs = projs;
 
               const open = isGroupOpen(url, projs);
               const repoName = getRepoName(url);
