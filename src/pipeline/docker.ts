@@ -234,6 +234,7 @@ export class Docker {
   async runContainer(options: RunContainerOptions): Promise<string> {
     const envArray = Object.entries(options.envVars).map(([k, v]) => `${k}=${v}`);
     const cPort = options.containerPort ?? options.port;
+    const extraHosts = await this.resolveExtraHosts();
 
     const container = await this.client.createContainer({
       Image: options.imageTag,
@@ -253,12 +254,41 @@ export class Docker {
         },
         NetworkMode: this.networkName,
         RestartPolicy: { Name: 'unless-stopped' },
-        ExtraHosts: ['host.docker.internal:host-gateway'],
+        ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
       },
     });
 
     await container.start();
     return container.id;
+  }
+
+  private async resolveExtraHosts(): Promise<string[]> {
+    try {
+      const info = (await this.client.info()) as { ServerVersion?: string };
+      const version = info.ServerVersion ?? '';
+      const parts = version.split('.').map(Number);
+      const major = parts[0] ?? 0;
+      const minor = parts[1] ?? 0;
+      if (major > 20 || (major === 20 && minor >= 10)) {
+        return ['host.docker.internal:host-gateway'];
+      }
+    } catch {
+      // fall through
+    }
+
+    try {
+      const network = (await this.client.getNetwork(this.networkName).inspect()) as {
+        IPAM?: { Config?: Array<{ Gateway?: string }> };
+      };
+      const gateway = network.IPAM?.Config?.[0]?.Gateway;
+      if (gateway) {
+        return [`host.docker.internal:${gateway}`];
+      }
+    } catch {
+      // fall through
+    }
+
+    return [];
   }
 
   /** Get the first EXPOSE port from a Docker image. Returns undefined if none found. */

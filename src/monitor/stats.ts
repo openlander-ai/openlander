@@ -1,5 +1,6 @@
 import { cpus, totalmem, freemem, loadavg, uptime, hostname } from 'node:os';
-import { statfsSync } from 'node:fs';
+import { readFileSync, statfsSync } from 'node:fs';
+import { platform } from 'node:process';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('monitor');
@@ -43,7 +44,7 @@ export interface SystemStats {
 export function getSystemStats(): SystemStats {
   const cpuInfo = cpus();
   const totalMem = totalmem();
-  const freeMem = freemem();
+  const freeMem = getAvailableMemory();
   const usedMem = totalMem - freeMem;
   const load = loadavg();
   const uptimeSec = uptime();
@@ -121,6 +122,21 @@ export function formatStatsSummary(stats: SystemStats): string {
 
 function round(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+function getAvailableMemory(): number {
+  if (platform === 'linux') {
+    try {
+      const meminfo = readFileSync('/proc/meminfo', 'utf8');
+      const match = /MemAvailable:\s+(\d+)\s+kB/.exec(meminfo);
+      if (match?.[1]) {
+        return Number(match[1]) * 1024;
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return freemem();
 }
 
 function formatUptime(seconds: number): string {
