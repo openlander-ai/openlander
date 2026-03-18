@@ -158,8 +158,8 @@ export class DeployPipeline {
     private readonly autoDetector?: AutoDetector,
     private readonly buildDebugger?: BuildDebugger,
   ) {
-    // Cleanup stale quick-share/shared tunnel state from previous process
     this.cleanupStaleTunnels();
+    void this.cleanupOrphanContainers();
   }
 
   /**
@@ -176,6 +176,38 @@ export class DeployPipeline {
           publicUrl: null,
         });
       }
+    }
+  }
+
+  private async cleanupOrphanContainers(): Promise<void> {
+    try {
+      const managed = await this.docker.listManagedContainers();
+      const knownIds = new Set<string>();
+      const knownNames = new Set<string>();
+
+      for (const project of this.db.listProjects()) {
+        if (project.container_id) knownIds.add(project.container_id);
+        knownNames.add(`ol-${project.name}`);
+
+        for (const env of this.db.getEnvironmentsByProject(project.id)) {
+          if (env.container_id) knownIds.add(env.container_id);
+          knownNames.add(`ol-${getRouteName(project.name, env.type)}`);
+        }
+      }
+
+      for (const container of managed) {
+        if (knownIds.has(container.id)) continue;
+        if (knownNames.has(container.name)) continue;
+
+        log.info({ id: container.id, name: container.name }, 'Removing orphan container');
+        try {
+          await this.docker.removeContainer(container.id);
+        } catch (err) {
+          log.debug({ err, container: container.name }, 'Orphan container removal failed');
+        }
+      }
+    } catch (err) {
+      log.debug({ err }, 'Orphan container cleanup failed — Docker may not be available');
     }
   }
 
@@ -1384,22 +1416,7 @@ export class DeployPipeline {
       };
     }
 
-    // Stop old container if exists (by ID or by name)
-    if (project.container_id) {
-      try {
-        await this.docker.stopContainer(project.container_id);
-        await this.docker.removeContainer(project.container_id);
-      } catch (err) {
-        log.warn({ err }, 'Container cleanup by ID during redeploy failed');
-      }
-    }
-    // Also try removing by convention name to catch orphans
-    try {
-      await this.docker.removeContainer(`ol-${project.name}`);
-    } catch (err) {
-      log.debug({ err, projectName: project.name }, 'Container cleanup by convention name failed');
-      // Container may not exist — that's fine
-    }
+    await this.cleanupProjectContainers(projectId, 'remove');
 
     // Save current image for rollback
     if (project.image_tag) {
@@ -1653,6 +1670,41 @@ export class DeployPipeline {
     }
   }
 
+  private async cleanupProjectContainers(
+    projectId: string,
+    mode: 'stop' | 'remove',
+  ): Promise<void> {
+    const project = this.db.getProject(projectId);
+    if (!project) return;
+
+    const action =
+      mode === 'remove'
+        ? (id: string) => this.docker.removeContainer(id)
+        : (id: string) => this.docker.stopContainer(id);
+
+    const tryCleanup = async (identifier: string) => {
+      try {
+        await action(identifier);
+      } catch (err) {
+        log.debug({ err, identifier, mode }, 'Container cleanup failed — may not exist');
+      }
+    };
+
+    const environments = this.db.getEnvironmentsByProject(projectId);
+    for (const env of environments) {
+      if (env.container_id) {
+        await tryCleanup(env.container_id);
+      }
+      const envRouteName = getRouteName(project.name, env.type);
+      await tryCleanup(`ol-${envRouteName}`);
+    }
+
+    if (project.container_id) {
+      await tryCleanup(project.container_id);
+    }
+    await tryCleanup(`ol-${project.name}`);
+  }
+
   /** Stop a project's container. */
   async stop(projectId: string, environmentId?: string): Promise<void> {
     if (environmentId) {
@@ -1662,14 +1714,7 @@ export class DeployPipeline {
       try {
         await this.docker.stopContainer(environment.container_id);
       } catch (err) {
-        if (err instanceof ContainerNotFoundError) {
-          log.debug(
-            { projectId, environmentId },
-            'Container not found during stop — may have been removed externally',
-          );
-        } else {
-          throw err;
-        }
+        if (!(err instanceof ContainerNotFoundError)) throw err;
       }
       this.db.updateEnvironment(environmentId, { status: 'stopped' });
       await eventBus.emit('container:stop', { projectId, containerId: environment.container_id });
@@ -1683,24 +1728,11 @@ export class DeployPipeline {
       return;
     }
 
-    const project = this.db.getProject(projectId);
-    if (!project?.container_id) return;
-
-    try {
-      await this.docker.stopContainer(project.container_id);
-    } catch (err) {
-      if (err instanceof ContainerNotFoundError) {
-        log.debug(
-          { projectId },
-          'Container not found during stop — may have been removed externally',
-        );
-      } else {
-        throw err;
-      }
-    }
+    await this.cleanupProjectContainers(projectId, 'stop');
     this.db.updateProject(projectId, { status: 'stopped' });
     this.closeTunnel(projectId);
-    await eventBus.emit('container:stop', { projectId, containerId: project.container_id });
+    const project = this.db.getProject(projectId);
+    await eventBus.emit('container:stop', { projectId, containerId: project?.container_id ?? '' });
   }
 
   /** Start a stopped project's container. */
@@ -1763,13 +1795,7 @@ export class DeployPipeline {
     const project = this.db.getProject(projectId);
     if (!project) return;
 
-    if (project.container_id) {
-      try {
-        await this.docker.removeContainer(project.container_id);
-      } catch (err) {
-        log.debug({ err }, 'Container removal during project delete failed — may not exist');
-      }
-    }
+    await this.cleanupProjectContainers(projectId, 'remove');
 
     // Clean up Cloudflare DNS records and tunnel routes for production domains
     if (cloudflare) {

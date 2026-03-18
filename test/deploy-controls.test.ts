@@ -84,9 +84,6 @@ describe('DeployPipeline deploy controls', () => {
     const result = await pipeline.redeploy('p1');
 
     expect(result.success).toBe(true);
-    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'container-old-1',
-    );
     expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-old-1',
     );
