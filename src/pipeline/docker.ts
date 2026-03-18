@@ -67,6 +67,7 @@ export interface BuildImageOptions {
   noCache?: boolean;
   buildArgs?: Record<string, string>;
   target?: string;
+  dockerfile?: string;
   onProgress?: (event: { stream?: string; error?: string }) => void;
 }
 
@@ -205,6 +206,7 @@ export class Docker {
           nocache: options?.noCache === true,
           buildargs: options?.buildArgs,
           target: options?.target,
+          dockerfile: options?.dockerfile,
         },
       );
     } catch (error) {

@@ -2,7 +2,7 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import type { Docker } from './docker.js';
@@ -605,8 +605,9 @@ export class DeployPipeline {
         );
       }
 
-      // Step 3: docker build
-      const buildContextPath = dirname(dockerfilePath);
+      // Step 3: docker build — context = clone root (not dirname) so monorepo COPY works
+      const buildContextPath = cloneResult.path;
+      const relativeDockerfile = relative(buildContextPath, dockerfilePath);
       const buildStart = Date.now();
       let lastBuildOutputEmit = 0;
       let dockerBuildOutput = '';
@@ -615,6 +616,7 @@ export class DeployPipeline {
         noCache: config._noCacheBuild === true,
         buildArgs: buildTimeVars,
         target: config.dockerTarget,
+        dockerfile: relativeDockerfile,
         onProgress: (event) => {
           const line = event.stream?.trim() ?? event.error ?? '';
           if (!line) return;
@@ -1133,7 +1135,7 @@ export class DeployPipeline {
 
         try {
           this.jobManager?.updatePhase(childId, 'building');
-          const contextPath = join(config.clonePath, dirname(dockerfilePath));
+          const contextPath = config.clonePath;
           const envVars = {
             ...config.envVars,
             ...service.envVars,
@@ -1152,6 +1154,7 @@ export class DeployPipeline {
           let lastBuildOutputEmit = 0;
           await this.docker.buildImage(contextPath, imageTag, {
             buildArgs: buildTimeVarsForChild,
+            dockerfile: dockerfilePath,
             onProgress: (event) => {
               const line = event.stream?.trim() ?? event.error ?? '';
               if (!line) return;
