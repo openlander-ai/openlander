@@ -264,7 +264,15 @@ export class Docker {
 
   private async resolveExtraHosts(): Promise<string[]> {
     try {
-      const info = (await this.client.info()) as { ServerVersion?: string };
+      const info = (await this.client.info()) as {
+        ServerVersion?: string;
+        OperatingSystem?: string;
+      };
+
+      if (info.OperatingSystem?.includes('Docker Desktop')) {
+        return [];
+      }
+
       const version = info.ServerVersion ?? '';
       const parts = version.split('.').map(Number);
       const major = parts[0] ?? 0;
