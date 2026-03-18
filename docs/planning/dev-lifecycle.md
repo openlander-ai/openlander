@@ -193,8 +193,8 @@ PM이 하는 것:
 **출력**: 검증 결과 (pass/fail)
 
 ```
-□ bun run build: exit code 0
-□ bun test: 0 failures
+□ npm run build: exit code 0
+□ npm test: 0 failures
 □ lsp_diagnostics: 변경 파일 에러 0
 □ 수락기준 1:1 대조
 ```

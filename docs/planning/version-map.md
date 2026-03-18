@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ── v0.2.2 ✅ ── v0.2.3 ✅ ── v0.2.4 ✅ ── v0.2.5 ✅(partial) ── v0.2.6 ✅ ── v1.0.0 🔧
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 ✅ ── v0.0.7 ✅ ── v0.0.9 ✅ ── v0.1.0 ✅ ── v0.0.11 ✅ ── v0.0.10 ✅ ── v0.0.12 ✅ ── v0.0.8 ✅ ── v0.2.0 ✅ ── v0.2.1 ✅ ── v0.2.2 ✅ ── v0.2.3 ✅ ── v0.2.4 ✅ ── v0.2.5 ✅(partial) ── v0.2.6 ✅ ── v1.0.0 🔧
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -53,9 +53,9 @@ v0.0.1 ✅ ── v0.0.2 ✅ ── v0.0.3 ✅ ── v0.0.4 ✅ ── v0.0.6 �
 | 23     | **v0.2.0 버그 트래커**                 | `v0.2.0/bugs.md`                             | v0.2.0         | 100%   | ✅ BUG-014~017 전부 해결. Deploy UX 아키텍쳐 개선 (project-first 모델).                                                           |
 | 24     | **v0.2.0 Deploy UX 수정 스펙**         | `v0.2.0/deploy-ux-fix.md`                    | v0.2.0         | 100%   | ✅ 3 Phase 구현 완료. SSE→JSON deploy, agent event streaming, log panel.                                                          |
 | 25     | **v0.2.1 i18n + 버그 수정**            | — (커밋 내 독립 파일)                        | v0.2.1         | 100%   | ✅ i18n (한/영) + 빌드 에러 리포팅 + Redeploy UI 갱신 버그 수정.                                                                  |
-| 26     | **v1.0.0 AI Co-pilot**                 | `release/v1.0.0-ai-copilot.md`               | v1.0.0         | 90%    | 🔧 AI co-pilot 7기능 ✅, 에이전트 강화 4건 ✅ (P0-1,P0-2,P1-1,P1-2), P1-3 UI 미구현.                                              |
+| 26     | **v1.0.0 AI Co-pilot**                 | `release/v1.0.0-ai-copilot.md`               | TBD            | 90%    | 🔧 AI co-pilot 7기능 ✅, 에이전트 강화 4건 ✅. P1-3 UI 미구현. 품질 안정화 진행 중.                                               |
 | 27     | **v0.2.6 Shared Mode & PR Preview**    | `v0.2.6/shared-mode-pr-preview.md`           | v0.2.6         | 100%   | ✅ 3 Phase 구현 완료. Traefik File Provider + Quick Share + Shared 모드 + PR 프리뷰 + 16 bugfix. 535 tests (dead TUI tests 제거). |
-| 28     | **Agent Enhancement Sprint**           | `.sisyphus/plans/agent-enhancement.md`       | v1.0.0         | 80%    | ✅ P0-1 questionBridge fix, P0-2 채널 스트리밍, P1-1 MCP agent_execute_goal, P1-2 오케스트레이터. P1-3 UI 미구현.                 |
+| 28     | **Agent Enhancement Sprint**           | `.sisyphus/plans/agent-enhancement.md`       | TBD            | 80%    | ✅ P0-1 questionBridge fix, P0-2 채널 스트리밍, P1-1 MCP agent_execute_goal, P1-2 오케스트레이터. P1-3 UI 미구현.                 |
 
 ---
 
@@ -612,9 +612,9 @@ Phase 3 — PR Preview:
 
 ---
 
-### v1.0.0 — AI Co-pilot (배포 라이프사이클 AI 통합) 🔧
+### v1.0.0 — Stable Release (TBD)
 
-**상태**: 🔧 백엔드 완료, 프론트엔드 핵심 완료 | **관련 문서**: [`release/v1.0.0-ai-copilot.md`](release/v1.0.0-ai-copilot.md)
+**상태**: TBD — 품질 안정화 진행 중 | **관련 문서**: [`release/v1.0.0-ai-copilot.md`](release/v1.0.0-ai-copilot.md)
 
 > **핵심 가치**: AI를 에러 시 소방관에서, 배포 전체 라이프사이클의 "조용한 부조종사"로 전환.
 > **관련 결정**: DEC-033 (AI 기능 전체 재설계), DEC-034 (인라인 AI 안 B 채택)
@@ -667,11 +667,11 @@ Phase 3 — PR Preview:
 - `test/orchestrator.test.ts` — 신규: 8 테스트 (topo sort, rollback, cycles)
 - `test/channels.test.ts` — 스트리밍/인터랙티브 테스트 추가
 
-### 정식 릴리즈 (v1.0.0)
+### 정식 릴리즈 (v1.0.0 — TBD)
 
-**상태**: 🔧 AI co-pilot 구현 완료, 품질 게이트 완료 | npm publish 대기
+**상태**: 품질 안정화 진행 중 — 도그푸딩에서 다수 버그/개선점 발견
 
-v0.2.6까지의 기능을 안정화하고 AI co-pilot 7개 기능 추가 후 정식 릴리즈. 아래 품질 항목 + AI 기능 구현 완료.
+v0.6.2까지의 기능을 안정화하고 품질 검증 완료 후 릴리즈 예정. 날짜 미정.
 
 #### 필수 품질 항목 (4건 전부 완료) ✅
 
@@ -717,70 +717,70 @@ v0.2.6까지의 기능을 안정화하고 AI co-pilot 7개 기능 추가 후 정
 
 ## 미해결 항목 총정리
 
-| #      | 항목                                   | 버전                 | 문서                                   | 우선순위                                |
-| ------ | -------------------------------------- | -------------------- | -------------------------------------- | --------------------------------------- |
-| ~~1~~  | ~~i18n (다국어 지원)~~                 | v0.2.1               | 11 commits on main                     | ✅ Web i18n 구현 완료                   |
-| ~~2~~  | ~~프로젝트 검색/필터~~                 | v0.0.6               | `archive/requirements.md`              | ❌ 제거 (TUI 아카이브)                  |
-| 3      | ~~전체 컨테이너 스캔~~                 | v0.0.9               | `v0.0.9/server-awareness.md` 9-1       | ✅ 완료                                 |
-| 4      | ~~OS 레벨 포트 스캔~~                  | v0.0.9               | `v0.0.9/server-awareness.md` 9-2       | ✅ 완료                                 |
-| 5      | ~~리버스 프록시 감지~~                 | v0.0.9               | `v0.0.9/server-awareness.md` 9-3       | ✅ 완료                                 |
-| 6      | ~~시스템 프롬프트 확장~~               | v0.0.9               | `v0.0.9/server-awareness.md` 9-4       | ✅ 완료                                 |
-| 7      | ~~에이전트 도구 3개 추가~~             | v0.0.9               | `v0.0.9/server-awareness.md` 9-5       | ✅ 완료                                 |
-| 8      | ~~Dashboard Server 섹션~~              | v0.0.9               | `v0.0.9/server-awareness.md` 9-6       | ✅ 완료                                 |
-| 9      | ~~Preflight Check~~                    | v0.0.9               | `v0.0.9/server-awareness.md` 9-7       | ✅ 완료                                 |
-| ~~10~~ | ~~Global Secrets + 암호화~~            | v0.0.10              | `v0.0.10/env-secrets.md` 10-1          | ✅ 완료                                 |
-| ~~11~~ | ~~.env.example 감지~~                  | v0.0.10              | `v0.0.10/env-secrets.md` 10-2          | ✅ 완료                                 |
-| ~~12~~ | ~~환경변수 도구 추가~~                 | v0.0.10              | `v0.0.10/env-secrets.md` 10-3          | ✅ 완료                                 |
-| ~~13~~ | ~~/env 오버레이 확장~~                 | v0.0.10              | `v0.0.10/env-secrets.md` 10-4          | ✅ 완료                                 |
-| ~~14~~ | ~~Vercel AI SDK 마이그레이션~~         | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md`    | ✅ 완료                                 |
-| 15     | 파인튜닝 모델                          | TBD(정식릴리즈 이후) | `requirements.md` L425~429             | 미래                                    |
-| ~~16~~ | ~~Post-Deploy Insight~~                | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1    | ✅ 완료                                 |
-| ~~17~~ | ~~Anomaly Nudge~~                      | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2    | ✅ 완료                                 |
+| #      | 항목                                   | 버전                 | 문서                                   | 우선순위                             |
+| ------ | -------------------------------------- | -------------------- | -------------------------------------- | ------------------------------------ |
+| ~~1~~  | ~~i18n (다국어 지원)~~                 | v0.2.1               | 11 commits on main                     | ✅ Web i18n 구현 완료                |
+| ~~2~~  | ~~프로젝트 검색/필터~~                 | v0.0.6               | `archive/requirements.md`              | ❌ 제거 (TUI 아카이브)               |
+| 3      | ~~전체 컨테이너 스캔~~                 | v0.0.9               | `v0.0.9/server-awareness.md` 9-1       | ✅ 완료                              |
+| 4      | ~~OS 레벨 포트 스캔~~                  | v0.0.9               | `v0.0.9/server-awareness.md` 9-2       | ✅ 완료                              |
+| 5      | ~~리버스 프록시 감지~~                 | v0.0.9               | `v0.0.9/server-awareness.md` 9-3       | ✅ 완료                              |
+| 6      | ~~시스템 프롬프트 확장~~               | v0.0.9               | `v0.0.9/server-awareness.md` 9-4       | ✅ 완료                              |
+| 7      | ~~에이전트 도구 3개 추가~~             | v0.0.9               | `v0.0.9/server-awareness.md` 9-5       | ✅ 완료                              |
+| 8      | ~~Dashboard Server 섹션~~              | v0.0.9               | `v0.0.9/server-awareness.md` 9-6       | ✅ 완료                              |
+| 9      | ~~Preflight Check~~                    | v0.0.9               | `v0.0.9/server-awareness.md` 9-7       | ✅ 완료                              |
+| ~~10~~ | ~~Global Secrets + 암호화~~            | v0.0.10              | `v0.0.10/env-secrets.md` 10-1          | ✅ 완료                              |
+| ~~11~~ | ~~.env.example 감지~~                  | v0.0.10              | `v0.0.10/env-secrets.md` 10-2          | ✅ 완료                              |
+| ~~12~~ | ~~환경변수 도구 추가~~                 | v0.0.10              | `v0.0.10/env-secrets.md` 10-3          | ✅ 완료                              |
+| ~~13~~ | ~~/env 오버레이 확장~~                 | v0.0.10              | `v0.0.10/env-secrets.md` 10-4          | ✅ 완료                              |
+| ~~14~~ | ~~Vercel AI SDK 마이그레이션~~         | v0.0.8               | `v0.0.8/vercel-ai-sdk-migration.md`    | ✅ 완료                              |
+| 15     | 파인튜닝 모델                          | TBD(정식릴리즈 이후) | `requirements.md` L425~429             | 미래                                 |
+| ~~16~~ | ~~Post-Deploy Insight~~                | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-1    | ✅ 완료                              |
+| ~~17~~ | ~~Anomaly Nudge~~                      | v0.0.11              | `v0.0.11/agent-proactivity.md` 11-2    | ✅ 완료                              |
 | ~~18~~ | ~~Smart Defaults~~                     | v0.0.11              | ✅                                     |
 | ~~19~~ | ~~Idle Scan~~                          | v0.0.11              | ❌                                     |
-| ~~20~~ | ~~온보딩 CLI 리팩토링~~                | v0.0.9               | `v0.0.9/onboarding-refactor.md`        | ⏸️ 보류 (DEC-017)                       |
-| ~~21~~ | ~~OAuth 인프라 (DB + 토큰 + 라우트)~~  | v0.0.12              | `v0.0.12/provider-oauth.md` 인프라     | ✅ 완료                                 |
-| ~~22~~ | ~~OpenAI OAuth PKCE~~                  | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1       | ✅ 완료                                 |
-| ~~23~~ | ~~OpenRouter OAuth PKCE~~              | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2       | ✅ 완료                                 |
-| ~~24~~ | ~~Anthropic/Gemini 안내 개선~~         | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3,4     | ✅ 완료                                 |
-| ~~25~~ | ~~프론트엔드 OAuth 통합~~              | v0.0.12              | `v0.0.12/provider-oauth.md` 통합       | ✅ 완료                                 |
-| ~~26~~ | ~~Web MVP Phase 1~~                    | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1            | ✅ 완료                                 |
-| ~~27~~ | ~~Web MVP Phase 2~~                    | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2            | ✅ 완료                                 |
-| ~~28~~ | ~~Web MVP Phase 3~~                    | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3            | ✅ 완료                                 |
-| ~~29~~ | ~~TUI Freeze~~                         | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4             | ✅ 완료                                 |
-| ~~30~~ | ~~Web Deploy Agent 경유~~              | v0.1.0               | `v0.1.0/web-deploy-agent-mediated.md`  | 🧪 구현 완료, 도그푸딩 대기             |
-| ~~31~~ | ~~Dashboard Redesign Phase 1~~         | v0.2.0               | `v0.2.0/dashboard-redesign.md` Phase 1 | ✅ 완료                                 |
-| ~~32~~ | ~~Dashboard Redesign Phase 2~~         | v0.2.0               | `v0.2.0/dashboard-redesign.md` Phase 2 | ✅ 완료                                 |
-| ~~33~~ | ~~Dashboard Redesign Phase 3~~         | v0.2.0               | `v0.2.0/dashboard-redesign.md` Phase 3 | ✅ 완료                                 |
-| ~~34~~ | ~~Dashboard Redesign Phase 4~~         | v0.2.0               | `v0.2.0/dashboard-redesign.md` Phase 4 | ✅ 완료                                 |
-| ~~35~~ | ~~Dockerfile 자동 수정 루프~~          | v0.1.0               | `v0.1.0/dockerfile-fix-loop.md`        | ✅ 완료                                 |
-| ~~36~~ | ~~BUG-014: ask_user_question 멈춤~~    | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                                 |
-| ~~37~~ | ~~BUG-015: 에이전트 스트리밍 미노출~~  | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                                 |
-| ~~38~~ | ~~BUG-016: Running 타임라인 비어있음~~ | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                                 |
-| ~~39~~ | ~~BUG-017: 로그 미니 패널~~            | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                                 |
-| ~~40~~ | ~~E2E 시나리오 테스트 (Q-1)~~          | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료                       |
-| ~~41~~ | ~~이벤트 배선 검증 (Q-2)~~             | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료                       |
-| ~~42~~ | ~~Config 조합 매트릭스 테스트 (Q-3)~~  | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료                       |
-| 43     | **자동 복구 (Auto-Recovery)**          | v0.2.0               | `version-map.md` v0.2.0 섹션           | ✅ 완료 (E2E 검증)                      |
-| ~~44~~ | ~~i18n 백엔드 + 프론트엔드 + 온보딩~~  | v0.2.1               | 11 commits on main                     | ✅ 완료                                 |
-| ~~45~~ | ~~빌드 에러 리포팅 버그~~              | v0.2.1               | 11 commits on main                     | ✅ 해결                                 |
-| ~~46~~ | ~~Redeploy UI 갱신 버그~~              | v0.2.1               | 11 commits on main                     | ✅ 해결                                 |
-| 47     | **Traefik Cutover + 시간대 수정**      | v0.2.2               | `version-map.md` v0.2.2 섹션           | 📋 P0 — Traefik 경유 전환 + 시간대 버그 |
-| 48     | **롤백 버튼 UI**                       | v0.2.3               | `version-map.md` v0.2.3 섹션           | 📋 P1                                   |
-| 49     | **블루-그린 배포 UI**                  | v0.2.3               | `version-map.md` v0.2.3 섹션           | 📋 P1                                   |
-| 50     | **Webhook 설정 UI + API**              | v0.2.3               | `version-map.md` v0.2.3 섹션           | 📋 P1                                   |
-| 51     | **프로젝트 Start 버튼**                | v0.2.3               | `version-map.md` v0.2.3 섹션           | 📋 P1                                   |
-| 52     | **도메인 매핑 CRUD UI**                | v0.2.4               | `version-map.md` v0.2.4 섹션           | 📋 P2                                   |
-| 53     | **서버 상태 스캔 UI**                  | v0.2.4               | `version-map.md` v0.2.4 섹션           | 📋 P2                                   |
-| 54     | **리소스 모니터링 UI**                 | v0.2.4               | `version-map.md` v0.2.4 섹션           | 📋 P2                                   |
-| 55     | **프리뷰 배포 UI**                     | v0.2.5               | `version-map.md` v0.2.5 섹션           | 📋 P3                                   |
-| 56     | **DB 프로비저닝 UI**                   | v0.2.5               | `version-map.md` v0.2.5 섹션           | 📋 P3                                   |
-| 57     | **DB 백업 (S3)**                       | v0.2.5               | `version-map.md` v0.2.5 섹션           | 📋 P3                                   |
-| F-1    | 웹 터미널                              | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟡 실수요 시                            |
-| F-2    | 자동 SSL (Let's Encrypt)               | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟡 실수요 시                            |
-| F-3    | 멀티 서버                              | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟠 실수요 시                            |
-| F-4    | 팀/RBAC                                | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟠 실수요 시                            |
-| F-5    | One-Click 앱 마켓                      | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟠 실수요 시                            |
+| ~~20~~ | ~~온보딩 CLI 리팩토링~~                | v0.0.9               | `v0.0.9/onboarding-refactor.md`        | ⏸️ 보류 (DEC-017)                    |
+| ~~21~~ | ~~OAuth 인프라 (DB + 토큰 + 라우트)~~  | v0.0.12              | `v0.0.12/provider-oauth.md` 인프라     | ✅ 완료                              |
+| ~~22~~ | ~~OpenAI OAuth PKCE~~                  | v0.0.12              | `v0.0.12/provider-oauth.md` 12-1       | ✅ 완료                              |
+| ~~23~~ | ~~OpenRouter OAuth PKCE~~              | v0.0.12              | `v0.0.12/provider-oauth.md` 12-2       | ✅ 완료                              |
+| ~~24~~ | ~~Anthropic/Gemini 안내 개선~~         | v0.0.12              | `v0.0.12/provider-oauth.md` 12-3,4     | ✅ 완료                              |
+| ~~25~~ | ~~프론트엔드 OAuth 통합~~              | v0.0.12              | `v0.0.12/provider-oauth.md` 통합       | ✅ 완료                              |
+| ~~26~~ | ~~Web MVP Phase 1~~                    | v0.1.0               | `v0.1.0/web-mvp.md` Phase 1            | ✅ 완료                              |
+| ~~27~~ | ~~Web MVP Phase 2~~                    | v0.1.0               | `v0.1.0/web-mvp.md` Phase 2            | ✅ 완료                              |
+| ~~28~~ | ~~Web MVP Phase 3~~                    | v0.1.0               | `v0.1.0/web-mvp.md` Phase 3            | ✅ 완료                              |
+| ~~29~~ | ~~TUI Freeze~~                         | v0.1.0               | `v0.1.0/web-mvp.md` §3.4.4             | ✅ 완료                              |
+| ~~30~~ | ~~Web Deploy Agent 경유~~              | v0.1.0               | `v0.1.0/web-deploy-agent-mediated.md`  | 🧪 구현 완료, 도그푸딩 대기          |
+| ~~31~~ | ~~Dashboard Redesign Phase 1~~         | v0.2.0               | `v0.2.0/dashboard-redesign.md` Phase 1 | ✅ 완료                              |
+| ~~32~~ | ~~Dashboard Redesign Phase 2~~         | v0.2.0               | `v0.2.0/dashboard-redesign.md` Phase 2 | ✅ 완료                              |
+| ~~33~~ | ~~Dashboard Redesign Phase 3~~         | v0.2.0               | `v0.2.0/dashboard-redesign.md` Phase 3 | ✅ 완료                              |
+| ~~34~~ | ~~Dashboard Redesign Phase 4~~         | v0.2.0               | `v0.2.0/dashboard-redesign.md` Phase 4 | ✅ 완료                              |
+| ~~35~~ | ~~Dockerfile 자동 수정 루프~~          | v0.1.0               | `v0.1.0/dockerfile-fix-loop.md`        | ✅ 완료                              |
+| ~~36~~ | ~~BUG-014: ask_user_question 멈춤~~    | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                              |
+| ~~37~~ | ~~BUG-015: 에이전트 스트리밍 미노출~~  | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                              |
+| ~~38~~ | ~~BUG-016: Running 타임라인 비어있음~~ | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                              |
+| ~~39~~ | ~~BUG-017: 로그 미니 패널~~            | v0.2.0               | `v0.2.0/bugs.md`                       | ✅ 해결                              |
+| ~~40~~ | ~~E2E 시나리오 테스트 (Q-1)~~          | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료                    |
+| ~~41~~ | ~~이벤트 배선 검증 (Q-2)~~             | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료                    |
+| ~~42~~ | ~~Config 조합 매트릭스 테스트 (Q-3)~~  | 정식 릴리즈          | `version-map.md` 정식 릴리즈 섹션      | 🔧 스펙 정의 완료                    |
+| 43     | **자동 복구 (Auto-Recovery)**          | v0.2.0               | `version-map.md` v0.2.0 섹션           | ✅ 완료 (E2E 검증)                   |
+| ~~44~~ | ~~i18n 백엔드 + 프론트엔드 + 온보딩~~  | v0.2.1               | 11 commits on main                     | ✅ 완료                              |
+| ~~45~~ | ~~빌드 에러 리포팅 버그~~              | v0.2.1               | 11 commits on main                     | ✅ 해결                              |
+| ~~46~~ | ~~Redeploy UI 갱신 버그~~              | v0.2.1               | 11 commits on main                     | ✅ 해결                              |
+| ~~47~~ | ~~Traefik Cutover~~                    | v0.6.2               | `version-map.md` v0.2.2 섹션           | ✅ HTTP Provider로 마이그레이션 완료 |
+| 48     | **롤백 버튼 UI**                       | v0.2.3               | `version-map.md` v0.2.3 섹션           | 📋 P1                                |
+| 49     | **블루-그린 배포 UI**                  | v0.2.3               | `version-map.md` v0.2.3 섹션           | 📋 P1                                |
+| 50     | **Webhook 설정 UI + API**              | v0.2.3               | `version-map.md` v0.2.3 섹션           | 📋 P1                                |
+| 51     | **프로젝트 Start 버튼**                | v0.2.3               | `version-map.md` v0.2.3 섹션           | 📋 P1                                |
+| 52     | **도메인 매핑 CRUD UI**                | v0.2.4               | `version-map.md` v0.2.4 섹션           | 📋 P2                                |
+| 53     | **서버 상태 스캔 UI**                  | v0.2.4               | `version-map.md` v0.2.4 섹션           | 📋 P2                                |
+| 54     | **리소스 모니터링 UI**                 | v0.2.4               | `version-map.md` v0.2.4 섹션           | 📋 P2                                |
+| 55     | **프리뷰 배포 UI**                     | v0.2.5               | `version-map.md` v0.2.5 섹션           | 📋 P3                                |
+| 56     | **DB 프로비저닝 UI**                   | v0.2.5               | `version-map.md` v0.2.5 섹션           | 📋 P3                                |
+| 57     | **DB 백업 (S3)**                       | v0.2.5               | `version-map.md` v0.2.5 섹션           | 📋 P3                                |
+| F-1    | 웹 터미널                              | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟡 실수요 시                         |
+| F-2    | 자동 SSL (Let's Encrypt)               | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟡 실수요 시                         |
+| F-3    | 멀티 서버                              | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟠 실수요 시                         |
+| F-4    | 팀/RBAC                                | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟠 실수요 시                         |
+| F-5    | One-Click 앱 마켓                      | 정식 릴리즈 이후     | `version-map.md` 정식 릴리즈 섹션      | 🟠 실수요 시                         |
 
 ---
 
@@ -797,15 +797,15 @@ v0.2.6까지의 기능을 안정화하고 AI co-pilot 7개 기능 추가 후 정
 
 ## 검증 기준
 
-**2026-03-10 기준 (에이전트 강화 스프린트 완료 후)**:
+**2026-03-19 기준 (v0.6.2)**:
 
 ```
-✅ tsup build — 성공
-✅ vite build — 성공
-✅ vitest — 531/531 pass (38 test files)
+✅ npm run build — 성공
+✅ vitest — 1014+ pass
 ✅ lsp_diagnostics — 0 errors
-✅ v1.0.0 — AI co-pilot 7개 기능 + 에이전트 강화 4건 (P0-1, P0-2, P1-1, P1-2)
-✅ 10 commits on main (chore 1 + fix 2 + feat 3 + 기존 4)
+✅ v0.6.1 — env vars merge fix, list_env_vars, healthcheck Docker fallback
+✅ v0.6.2 — compose service filtering, secret file mount, env escaping,
+            build log detail, redeploy port fix, Traefik HTTP Provider
 ```
 
 ---
@@ -821,7 +821,7 @@ AI: bugs.md "활성 버그"에 BUG-NNN 추가
     ↓
 AI: gh issue create --label "bug,[version]" (버그 이슈 생성)
     ↓
-AI: 버그 수정 + bun test 통과
+AI: 버그 수정 + npm test 통과
     ↓
 AI: bugs.md → 해결됨 + gh issue close
 ```

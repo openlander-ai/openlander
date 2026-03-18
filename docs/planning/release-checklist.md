@@ -2,7 +2,7 @@
 
 > **용도**: v1.0.0 릴리즈 직전 1회 수동 검증 (UI/API/MCP 실제 구현 기준)
 > **작성일**: 2026-03-08
-> **기준 소스**: `web/src/*`, `src/web/api/routes.ts`, `src/tools/registry.ts`, `src/cli/index.ts`
+> **기준 소스**: `web/src/*`, `src/web/api/routes.ts`, `src/tools/defs/`, `src/cli/index.ts`
 
 ---
 

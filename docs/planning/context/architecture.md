@@ -124,8 +124,7 @@ src/
 
 ### 런타임
 
-- **Bun** 전용 (Node.js 호환 but Bun 전용 API 사용 — bun:sqlite 등)
-- TUI는 **OpenTUI** (Zig 네이티브, SolidJS 렌더러) — React/Ink 아님
+- **Node.js** + **better-sqlite3** (bun:sqlite에서 마이그레이션 완료)
 - ESM only, `.js` 확장자 필수
 
 ### 배포 런타임 (DEC-036 반영)
