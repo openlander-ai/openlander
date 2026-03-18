@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { Project } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Settings, Box, Loader2, Database } from 'lucide-react';
+import { Plus, Settings, Box, Loader2, Database, ChevronRight, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SidebarProps {
@@ -18,12 +19,122 @@ const statusColor: Record<string, string> = {
   error: 'bg-error',
 };
 
+const VISIBILITY_ORDER: Record<string, number> = {
+  production: 0,
+  shared: 1,
+  'quick-share': 2,
+  internal: 3,
+};
+
+const STATUS_ORDER: Record<string, number> = {
+  error: 0,
+  building: 1,
+  running: 2,
+  idle: 3,
+  stopped: 4,
+};
+
+function normalizeRepoUrl(url: string) {
+  let normalized = url.toLowerCase();
+  normalized = normalized.replace(/^https?:\/\//, '');
+  normalized = normalized.replace(/\.git$/, '');
+  return normalized;
+}
+
+function getRepoName(normalizedUrl: string) {
+  const parts = normalizedUrl.split('/');
+  if (parts.length >= 3) {
+    return parts.slice(-2).join('/');
+  }
+  return normalizedUrl;
+}
+
+function sortProjects(a: Project, b: Project) {
+  const visA = VISIBILITY_ORDER[a.visibility] ?? 99;
+  const visB = VISIBILITY_ORDER[b.visibility] ?? 99;
+  if (visA !== visB) return visA - visB;
+
+  const statA = STATUS_ORDER[a.status] ?? 99;
+  const statB = STATUS_ORDER[b.status] ?? 99;
+  if (statA !== statB) return statA - statB;
+
+  return a.name.localeCompare(b.name);
+}
+
 export function Sidebar({ projects, loading }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [filter, setFilter] = useState<'all' | 'running' | 'error'>('all');
+  const [groupState, setGroupState] = useState<Record<string, boolean>>({});
 
   const isActive = (path: string) => location.pathname === path;
   const isProjectActive = (id: string) => location.pathname === `/projects/${id}`;
+
+  const runningCount = projects.filter((p) => p.status === 'running').length;
+  const errorCount = projects.filter((p) => p.status === 'error').length;
+
+  const tempGroups = new Map<string, Project[]>();
+  for (const p of projects) {
+    const url = p.repoUrl ? normalizeRepoUrl(p.repoUrl) : 'unknown';
+    if (!tempGroups.has(url)) tempGroups.set(url, []);
+    tempGroups.get(url)!.push(p);
+  }
+
+  const groups = new Map<string, Project[]>();
+  const singletons: Project[] = [];
+
+  for (const [url, projs] of tempGroups.entries()) {
+    if (projs.length >= 2) {
+      groups.set(url, projs.sort(sortProjects));
+    } else {
+      singletons.push(...projs);
+    }
+  }
+  singletons.sort(sortProjects);
+
+  const isGroupOpen = (url: string, projs: Project[]) => {
+    if (groupState[url] !== undefined) return groupState[url];
+    const hasActive = projs.some((p) => isProjectActive(p.id));
+    const hasErrorOrBuilding = projs.some((p) => p.status === 'error' || p.status === 'building');
+    return hasActive || hasErrorOrBuilding;
+  };
+
+  const toggleGroup = (url: string, projs: Project[]) => {
+    setGroupState((prev) => ({
+      ...prev,
+      [url]: !isGroupOpen(url, projs),
+    }));
+  };
+
+  const renderProjectItem = (project: Project) => {
+    if (filter === 'running' && project.status !== 'running') return null;
+    if (filter === 'error' && project.status !== 'error') return null;
+
+    return (
+      <button
+        key={project.id}
+        onClick={() => navigate(`/projects/${project.id}`)}
+        title={project.name}
+        className={cn(
+          'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150',
+          'lg:justify-start justify-center',
+          'hover:bg-bg-subtle',
+          isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+        )}
+      >
+        <div
+          className={cn(
+            'h-2 w-2 rounded-full shrink-0',
+            statusColor[project.status] ?? 'bg-[var(--text-muted)]',
+          )}
+        />
+        <span className="hidden lg:inline text-xs font-body truncate">{project.name}</span>
+      </button>
+    );
+  };
+
+  // Flat list for collapsed mode (lg:hidden)
+  const allSortedProjects = [...projects].sort(sortProjects);
 
   return (
     <div className="flex flex-col h-full">
@@ -47,6 +158,47 @@ export function Sidebar({ projects, loading }: SidebarProps) {
 
       <Separator className="bg-[hsl(var(--border))]" />
 
+      {/* Filter Tabs (Hidden in collapsed mode) */}
+      <div className="px-2 lg:px-3 py-2 hidden lg:flex items-center gap-1 shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          className={cn(
+            'h-6 px-2 text-xs font-body rounded-full',
+            filter === 'all' ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+          )}
+          onClick={() => setFilter('all')}
+        >
+          All <span className="ml-1 opacity-50">{projects.length}</span>
+        </Button>
+        {runningCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              'h-6 px-2 text-xs font-body rounded-full',
+              filter === 'running' ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+            )}
+            onClick={() => setFilter('running')}
+          >
+            Running <span className="ml-1 opacity-50">{runningCount}</span>
+          </Button>
+        )}
+        {errorCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              'h-6 px-2 text-xs font-body rounded-full',
+              filter === 'error' ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+            )}
+            onClick={() => setFilter('error')}
+          >
+            Errors <span className="ml-1 opacity-50">{errorCount}</span>
+          </Button>
+        )}
+      </div>
+
       {/* Projects List */}
       <ScrollArea className="flex-1">
         <div className="p-2 lg:p-3 space-y-0.5">
@@ -64,27 +216,51 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             </div>
           )}
 
-          {projects.map((project) => (
-            <button
-              key={project.id}
-              onClick={() => navigate(`/projects/${project.id}`)}
-              title={project.name}
-              className={cn(
-                'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150',
-                'lg:justify-start justify-center',
-                'hover:bg-bg-subtle',
-                isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
-              )}
-            >
-              <div
-                className={cn(
-                  'h-2 w-2 rounded-full shrink-0',
-                  statusColor[project.status] ?? 'bg-[var(--text-muted)]',
-                )}
-              />
-              <span className="hidden lg:inline text-xs font-body truncate">{project.name}</span>
-            </button>
-          ))}
+          {/* Flat list for collapsed mode (< lg) */}
+          <div className="lg:hidden space-y-0.5">{allSortedProjects.map(renderProjectItem)}</div>
+
+          {/* Grouped list for expanded mode (>= lg) */}
+          <div className="hidden lg:block space-y-4">
+            {Array.from(groups.entries()).map(([url, projs]) => {
+              const visibleProjs = projs.filter((p) => {
+                if (filter === 'running') return p.status === 'running';
+                if (filter === 'error') return p.status === 'error';
+                return true;
+              });
+
+              if (visibleProjs.length === 0) return null;
+
+              const open = isGroupOpen(url, projs);
+              const repoName = getRepoName(url);
+
+              return (
+                <div key={url} className="space-y-0.5">
+                  <button
+                    onClick={() => toggleGroup(url, projs)}
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-muted-ol hover:text-secondary-ol transition-colors group"
+                  >
+                    {open ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span className="text-xs font-medium truncate">{repoName}</span>
+                    <span className="text-[10px] bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
+                      {visibleProjs.length}
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="space-y-0.5 pl-2 border-l border-border/50 ml-3 mt-1">
+                      {visibleProjs.map(renderProjectItem)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Singletons */}
+            <div className="space-y-0.5">{singletons.map(renderProjectItem)}</div>
+          </div>
         </div>
       </ScrollArea>
 
