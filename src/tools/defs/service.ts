@@ -46,7 +46,7 @@ export const serviceToolDefs: ToolDef[] = [
   {
     name: 'create_service',
     description:
-      'Create a new service (database, cache, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb) or custom image with port. Returns { id, name, type, status, credentials } with connection details. After creating, use set_env_vars to connect projects: DATABASE_URL for postgres/mysql, REDIS_URL for redis, MONGODB_URL for mongodb — use the container_name from credentials as hostname. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new service (database, cache, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb) or custom image with port. Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL) for connecting a project. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const result = await appCtx.serviceManager.create({
@@ -55,6 +55,8 @@ export const serviceToolDefs: ToolDef[] = [
         image: args['image'] as string | undefined,
         port: args['port'] as number | undefined,
       });
+
+      const suggestedEnv = appCtx.serviceManager.getSuggestedEnv(result);
 
       return {
         status: 'created',
@@ -66,6 +68,7 @@ export const serviceToolDefs: ToolDef[] = [
           port: result.port,
           credentials: parseServiceCredentials(result.credentials),
         },
+        suggested_env: suggestedEnv,
       };
     },
     targets: ['mcp'],

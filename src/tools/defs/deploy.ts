@@ -31,6 +31,7 @@ export const deployToolDefs: ToolDef[] = [
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
+        force: (args['force'] as boolean | undefined) ?? undefined,
         envVars,
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
         trigger: context.target === 'agent' ? 'chat' : 'api',

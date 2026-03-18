@@ -265,35 +265,28 @@ export class Docker {
   private async resolveExtraHosts(): Promise<string[]> {
     try {
       const info = (await this.client.info()) as {
-        ServerVersion?: string;
         OperatingSystem?: string;
       };
 
       if (info.OperatingSystem?.includes('Docker Desktop')) {
         return [];
       }
-
-      const version = info.ServerVersion ?? '';
-      const parts = version.split('.').map(Number);
-      const major = parts[0] ?? 0;
-      const minor = parts[1] ?? 0;
-      if (major > 20 || (major === 20 && minor >= 10)) {
-        return ['host.docker.internal:host-gateway'];
-      }
     } catch {
-      // fall through
+      return [];
     }
 
+    // Prefer concrete gateway IP — host-gateway relies on daemon resolution
+    // which fails on some configurations (Podman, misconfigured daemons, WSL)
     try {
       const network = (await this.client.getNetwork(this.networkName).inspect()) as {
         IPAM?: { Config?: Array<{ Gateway?: string }> };
       };
       const gateway = network.IPAM?.Config?.[0]?.Gateway;
-      if (gateway) {
+      if (gateway && /^\d+\.\d+\.\d+\.\d+$/.test(gateway)) {
         return [`host.docker.internal:${gateway}`];
       }
-    } catch {
-      // fall through
+    } catch (_) {
+      /* network inspect may fail */
     }
 
     return [];

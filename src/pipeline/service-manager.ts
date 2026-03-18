@@ -101,11 +101,66 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
   },
 };
 
+/**
+ * Standard env var key for each built-in service type.
+ * First service of a type gets the standard key; subsequent ones are prefixed.
+ */
+const DEFAULT_ENV_KEYS: Record<string, string> = {
+  postgresql: 'DATABASE_URL',
+  mysql: 'DATABASE_URL',
+  redis: 'REDIS_URL',
+  mongodb: 'MONGODB_URL',
+};
+
 export class ServiceManager {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
   ) {}
+
+  /**
+   * Compute suggested env var(s) for a newly created service so the agent
+   * can auto-link it to a project via set_env_vars.
+   *
+   * Rules:
+   *  - First service of a type → standard key (DATABASE_URL, REDIS_URL, …)
+   *  - Subsequent services of the same type → prefixed key (e.g. MYDB_DATABASE_URL)
+   */
+  getSuggestedEnv(service: ServiceRow): Array<{ key: string; value: string }> {
+    const baseKey = DEFAULT_ENV_KEYS[service.type];
+    if (!baseKey) {
+      return [];
+    }
+
+    const credentials = service.credentials ? this.tryParseCredentials(service.credentials) : null;
+    const connectionString = (credentials?.['connectionString'] as string | undefined) ?? null;
+    if (!connectionString) {
+      return [];
+    }
+
+    const existing = this.db
+      .listServices()
+      .filter((s) => s.type === service.type && s.id !== service.id);
+
+    const key =
+      existing.length === 0
+        ? baseKey
+        : `${service.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_${baseKey}`;
+
+    return [{ key, value: connectionString }];
+  }
+
+  private tryParseCredentials(raw: string): Record<string, unknown> | null {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
 
   async create(opts: {
     name: string;

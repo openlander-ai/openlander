@@ -52,6 +52,7 @@ export interface ProjectConfig {
   dockerfilePath?: string;
   dockerTarget?: string;
   preferDockerfile?: boolean;
+  force?: boolean;
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
   _retryCount?: number;
@@ -219,11 +220,26 @@ export class DeployPipeline {
     const projectName = config.name ?? extractProjectName(config.repoUrl);
     const projectId = nanoid(12);
 
-    // Run preflight check first (before creating project record)
     try {
       await preflightCheckOrThrow(this.db, this.docker, projectName);
     } catch (error) {
-      if (error instanceof PreflightCheckError) {
+      if (error instanceof PreflightCheckError && config.force) {
+        await this.forceCleanConflicts(projectName, error);
+        try {
+          await preflightCheckOrThrow(this.db, this.docker, projectName);
+        } catch (retryError) {
+          if (retryError instanceof PreflightCheckError) {
+            return {
+              projectId,
+              projectName,
+              status: 'preflight_failed',
+              preflightError: retryError.message,
+              preflightWarnings: retryError.result.warnings,
+            };
+          }
+          throw retryError;
+        }
+      } else if (error instanceof PreflightCheckError) {
         return {
           projectId,
           projectName,
@@ -231,8 +247,9 @@ export class DeployPipeline {
           preflightError: error.message,
           preflightWarnings: error.result.warnings,
         };
+      } else {
+        throw error;
       }
-      throw error;
     }
 
     // Check if project with this name already exists
@@ -1705,6 +1722,27 @@ export class DeployPipeline {
       await tryCleanup(project.container_id);
     }
     await tryCleanup(`ol-${project.name}`);
+  }
+
+  private async forceCleanConflicts(
+    projectName: string,
+    error: PreflightCheckError,
+  ): Promise<void> {
+    const containerName = `ol-${projectName}`;
+
+    if (!error.result.checks.nameAvailable.pass) {
+      log.info({ containerName }, 'Force mode: removing conflicting container');
+      try {
+        await this.docker.stopContainer(containerName);
+      } catch (_) {
+        /* best-effort */
+      }
+      try {
+        await this.docker.removeContainer(containerName);
+      } catch (_) {
+        /* best-effort */
+      }
+    }
   }
 
   /** Stop a project's container. */

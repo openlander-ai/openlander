@@ -23,6 +23,12 @@ export const deployProjectSchema = z.object({
     .boolean()
     .optional()
     .describe('Prefer Dockerfile flow and skip compose detection'),
+  force: z
+    .boolean()
+    .optional()
+    .describe(
+      'Force deploy by auto-removing conflicting containers before preflight check. Use when redeploying a project that has a stale container.',
+    ),
 });
 
 export const projectNameSchema = z.object({

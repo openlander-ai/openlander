@@ -37,6 +37,7 @@ function createMockContext(services: ServiceRow[] = []) {
     remove: vi.fn(async () => undefined),
     createDatabase: vi.fn(),
     createUser: vi.fn(),
+    getSuggestedEnv: vi.fn(() => []),
   };
 
   const ctx = {
@@ -158,6 +159,7 @@ describe('MCP service tools (Task 8)', () => {
           password: 'pw',
         },
       },
+      suggested_env: [],
     });
 
     serviceManager.create.mockRejectedValueOnce(new Error('Unsupported service template: bad'));
@@ -201,6 +203,7 @@ describe('MCP service tools (Task 8)', () => {
           password: 'mysqlpw',
         },
       },
+      suggested_env: [],
     });
     expect(serviceManager.create).toHaveBeenCalledWith({ name: 'shared-mysql', template: 'mysql' });
   });
@@ -239,6 +242,7 @@ describe('MCP service tools (Task 8)', () => {
           connectionString: 'redis://ol-svc-shared-redis:6379',
         },
       },
+      suggested_env: [],
     });
     expect(serviceManager.create).toHaveBeenCalledWith({ name: 'shared-redis', template: 'redis' });
   });

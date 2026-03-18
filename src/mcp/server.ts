@@ -6,6 +6,7 @@ import { cors } from 'hono/cors';
 import type { AppContext } from '../app.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { registerMcpTools } from '../tools/adapters/mcp.js';
+import { registerMcpPrompts } from './prompts.js';
 import { debugToolDefs } from '../tools/defs/debug.js';
 import { deployToolDefs } from '../tools/defs/deploy.js';
 import { envToolDefs } from '../tools/defs/env.js';
@@ -34,10 +35,11 @@ function createMcpServerInstance(ctx: AppContext): Server {
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(
     { name: 'openlander', version: '0.4.1' },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {}, prompts: {} } },
   );
 
   registerMcpTools(server, mcpToolDefs, ctx);
+  registerMcpPrompts(server);
 
   return server;
 }
