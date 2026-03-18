@@ -4,7 +4,6 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { Agent } from '../src/agent/index.js';
-import type { ToolResult } from '../src/agent/index.js';
 import type { ToolSet, LanguageModel } from 'ai';
 import { tool } from 'ai';
 import { z } from 'zod';
@@ -12,27 +11,30 @@ import { Database } from '../src/db/index.js';
 import type { AppContext } from '../src/app.js';
 import { createTools } from '../src/agent/tools.js';
 import type { QuestionBridge } from '../src/agent/question-bridge.js';
-import { cloneRepo } from '../src/pipeline/git.js';
-import { loadConfig } from '../src/config/index.js';
-import { createGitProvider } from '../src/git-providers/index.js';
+import * as gitPipeline from '../src/pipeline/git.js';
+import * as configModule from '../src/config/index.js';
+import * as gitProvidersModule from '../src/git-providers/index.js';
 
-vi.mock('../src/pipeline/git.js', () => ({
-  cloneRepo: vi.fn(),
-}));
+const cloneRepoMock = vi.spyOn(gitPipeline, 'cloneRepo') as unknown as {
+  mockResolvedValue: (value: unknown) => unknown;
+};
+const loadConfigMock = vi.spyOn(configModule, 'loadConfig') as unknown as {
+  mockReturnValue: (value: unknown) => unknown;
+};
+const createGitProviderMock = vi.spyOn(gitProvidersModule, 'createGitProvider') as unknown as {
+  mockReturnValue: (value: unknown) => unknown;
+};
 
-vi.mock('../src/config/index.js', () => ({
-  loadConfig: vi.fn(() => ({
+beforeEach(() => {
+  vi.clearAllMocks();
+  loadConfigMock.mockReturnValue({
     gitProviders: {
       github: {
         token: '',
       },
     },
-  })),
-}));
-
-vi.mock('../src/git-providers/index.js', () => ({
-  createGitProvider: vi.fn(),
-}));
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Mock AI SDK
@@ -644,7 +646,7 @@ describe('Agent tools — fix approval flow', () => {
     rmSync(realClonePath, { recursive: true, force: true });
     mkdirSync(realClonePath, { recursive: true });
     writeFileSync(join(realClonePath, 'Dockerfile'), 'FROM node:18\nRUN npm install\n', 'utf8');
-    vi.mocked(cloneRepo).mockResolvedValue({ path: realClonePath, commitSha: 'deadbeef' });
+    cloneRepoMock.mockResolvedValue({ path: realClonePath, commitSha: 'deadbeef' });
 
     const bridge = {
       ask: vi
@@ -659,8 +661,15 @@ describe('Agent tools — fix approval flow', () => {
     const result = await runFixDockerfile({ project_name: 'demo' });
 
     expect(bridge.ask).toHaveBeenCalledOnce();
-    const request = vi.mocked(bridge.ask).mock.calls[0]?.[0];
-    expect(request?.questions[0]?.metadata).toEqual(
+    const request = (
+      bridge.ask as unknown as {
+        mock: {
+          calls: Array<[{ questions?: Array<{ metadata?: unknown }> }]>;
+        };
+      }
+    ).mock.calls[0]?.[0];
+    const firstQuestionMetadata = request?.questions?.[0]?.metadata;
+    expect(firstQuestionMetadata).toEqual(
       expect.objectContaining({
         fixType: 'dockerfile',
         filePath: 'Dockerfile',
@@ -692,7 +701,7 @@ describe('Agent tools — fix approval flow', () => {
     const clonePath = join(tmpDir, 'repo-reject');
     mkdirSync(clonePath, { recursive: true });
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
-    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: 'cafebabe' });
+    cloneRepoMock.mockResolvedValue({ path: clonePath, commitSha: 'cafebabe' });
 
     const bridge = {
       ask: vi
@@ -716,7 +725,7 @@ describe('Agent tools — fix approval flow', () => {
     const clonePath = join(tmpDir, 'repo-limit');
     mkdirSync(clonePath, { recursive: true });
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
-    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: 'beaded' });
+    cloneRepoMock.mockResolvedValue({ path: clonePath, commitSha: 'beaded' });
 
     const bridge = {
       ask: vi
@@ -783,7 +792,7 @@ describe('Agent tools — fix approval flow', () => {
     mkdirSync(clonePath, { recursive: true });
     const composePath = join(clonePath, 'docker-compose.yml');
     writeFileSync(composePath, 'services:\n  web:\n    image: nginx\n', 'utf8');
-    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: 'feedface' });
+    cloneRepoMock.mockResolvedValue({ path: clonePath, commitSha: 'feedface' });
     composePipeline.detectComposeFile.mockReturnValue(composePath);
     composePipeline.deployCompose.mockResolvedValue({
       success: false,
@@ -811,7 +820,7 @@ describe('Agent tools — fix approval flow', () => {
 
   it('deploy_compose returns COMPOSE_FILE_NOT_FOUND when compose is missing', async () => {
     const { tools, composePipeline } = createToolsContext();
-    vi.mocked(cloneRepo).mockResolvedValue({ path: tmpDir, commitSha: 'facefeed' });
+    cloneRepoMock.mockResolvedValue({ path: tmpDir, commitSha: 'facefeed' });
     composePipeline.detectComposeFile.mockReturnValue(null);
 
     const runDeployCompose = getToolExecutor(tools, 'deploy_compose');
@@ -830,7 +839,7 @@ describe('Agent tools — fix approval flow', () => {
 
   it('deploy_compose returns BUILD_FAILED with empty compose content when read fails', async () => {
     const { tools, composePipeline } = createToolsContext();
-    vi.mocked(cloneRepo).mockResolvedValue({ path: tmpDir, commitSha: '00aa11' });
+    cloneRepoMock.mockResolvedValue({ path: tmpDir, commitSha: '00aa11' });
     const missingComposePath = join(tmpDir, 'missing-compose.yml');
     composePipeline.detectComposeFile.mockReturnValue(missingComposePath);
     composePipeline.deployCompose.mockResolvedValue({
@@ -861,7 +870,7 @@ describe('Agent tools — fix approval flow', () => {
     const clonePath = join(tmpDir, 'repo-single');
     mkdirSync(clonePath, { recursive: true });
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:22\n', 'utf8');
-    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: 'single123' });
+    cloneRepoMock.mockResolvedValue({ path: clonePath, commitSha: 'single123' });
 
     const { tools } = createToolsContext();
     const runScanProject = getToolExecutor(tools, 'scan_project');
@@ -870,7 +879,7 @@ describe('Agent tools — fix approval flow', () => {
       branch: 'main',
     });
 
-    expect(cloneRepo).toHaveBeenCalledWith({
+    expect(cloneRepoMock).toHaveBeenCalledWith({
       repoUrl: 'https://github.com/openlander/single',
       branch: 'main',
       sshKeyPath: undefined,
@@ -902,7 +911,7 @@ describe('Agent tools — fix approval flow', () => {
       clone_path: clonePath,
     });
 
-    expect(cloneRepo).not.toHaveBeenCalled();
+    expect(cloneRepoMock).not.toHaveBeenCalled();
     expect(result).toEqual({
       isMonorepo: true,
       dockerfiles: ['service-a/Dockerfile', 'service-b/Dockerfile'],
@@ -916,7 +925,7 @@ describe('Agent tools — fix approval flow', () => {
     const clonePath = join(tmpDir, 'repo-no-bridge');
     mkdirSync(clonePath, { recursive: true });
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
-    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: '123abc' });
+    cloneRepoMock.mockResolvedValue({ path: clonePath, commitSha: '123abc' });
 
     const { tools, startDeploy } = createToolsContext();
     const runFixDockerfile = getToolExecutor(tools, 'fix_dockerfile');
@@ -937,7 +946,7 @@ describe('Agent tools — fix approval flow', () => {
     const clonePath = join(tmpDir, 'repo-dismissed');
     mkdirSync(clonePath, { recursive: true });
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
-    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: '123abd' });
+    cloneRepoMock.mockResolvedValue({ path: clonePath, commitSha: '123abd' });
 
     const bridge = {
       ask: vi.fn().mockResolvedValue([]),
@@ -974,7 +983,7 @@ describe('Agent tools — fix approval flow', () => {
     const clonePath = join(tmpDir, 'repo-no-url');
     mkdirSync(clonePath, { recursive: true });
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:18\n', 'utf8');
-    vi.mocked(cloneRepo).mockResolvedValue({ path: clonePath, commitSha: '123abe' });
+    cloneRepoMock.mockResolvedValue({ path: clonePath, commitSha: '123abe' });
 
     const bridge = {
       ask: vi
@@ -1249,13 +1258,13 @@ describe('Agent tools — fix approval flow', () => {
 
   it('list_github_repos returns GITHUB_NOT_CONFIGURED when token is missing', async () => {
     const { tools } = createToolsContext();
-    vi.mocked(loadConfig).mockReturnValue({
+    loadConfigMock.mockReturnValue({
       gitProviders: {
         github: {
           token: '',
         },
       },
-    } as ReturnType<typeof loadConfig>);
+    } as ReturnType<typeof configModule.loadConfig>);
 
     const runListGithubRepos = getToolExecutor(tools, 'list_github_repos');
     const result = await runListGithubRepos({});
@@ -1265,18 +1274,18 @@ describe('Agent tools — fix approval flow', () => {
         error: 'GITHUB_NOT_CONFIGURED',
       }),
     );
-    expect(createGitProvider).not.toHaveBeenCalled();
+    expect(createGitProviderMock).not.toHaveBeenCalled();
   });
 
   it('search_github_repos returns GITHUB_NOT_CONFIGURED when token is missing', async () => {
     const { tools } = createToolsContext();
-    vi.mocked(loadConfig).mockReturnValue({
+    loadConfigMock.mockReturnValue({
       gitProviders: {
         github: {
           token: '',
         },
       },
-    } as ReturnType<typeof loadConfig>);
+    } as ReturnType<typeof configModule.loadConfig>);
 
     const runSearchGithubRepos = getToolExecutor(tools, 'search_github_repos');
     const result = await runSearchGithubRepos({ query: 'demo' });
@@ -1286,7 +1295,7 @@ describe('Agent tools — fix approval flow', () => {
         error: 'GITHUB_NOT_CONFIGURED',
       }),
     );
-    expect(createGitProvider).not.toHaveBeenCalled();
+    expect(createGitProviderMock).not.toHaveBeenCalled();
   });
 
   it('list_services returns service count and parsed credentials', async () => {

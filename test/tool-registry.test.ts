@@ -1,20 +1,15 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 import { getProjectUrl } from '../src/pipeline/traefik.js';
 import type { AppContext } from '../src/app.js';
 import { ProjectNotFoundError } from '../src/errors.js';
-import { createToolRegistry } from '../src/tools/registry.js';
+import * as gitPipeline from '../src/pipeline/git.js';
+import { createSharedToolRegistry } from './tools/shared-tool-registry.js';
 
-const { mockCloneRepo } = vi.hoisted(() => ({
-  mockCloneRepo: vi.fn(),
-}));
-
-vi.mock('../src/pipeline/git.js', () => ({
-  cloneRepo: mockCloneRepo,
-}));
+const mockCloneRepo = vi.fn();
 
 const EXPECTED_TOOL_NAMES = [
   'deploy_project',
@@ -47,9 +42,6 @@ const EXPECTED_TOOL_NAMES = [
   // v0.0.10: Global secrets tools
   'set_global_secret',
   'list_global_secrets',
-  'list_all_containers',
-  'scan_ports',
-  'get_container_stats',
   'create_service',
   'list_services',
   'get_service_status',
@@ -113,16 +105,28 @@ function createMockContext(opts?: {
 }
 
 function getTool(ctx: AppContext, name: string) {
-  const tool = createToolRegistry(ctx).find((entry) => entry.name === name);
+  const tool = createSharedToolRegistry(ctx, { names: EXPECTED_TOOL_NAMES }).find(
+    (entry) => entry.name === name,
+  );
   expect(tool).toBeDefined();
   return tool!;
 }
 
 describe('Tool Registry', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.spyOn(gitPipeline, 'cloneRepo').mockImplementation((...args) => mockCloneRepo(...args));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('returns all expected tool names', () => {
     const { ctx } = createMockContext();
 
-    const tools = createToolRegistry(ctx);
+    const tools = createSharedToolRegistry(ctx, { names: EXPECTED_TOOL_NAMES });
     const names = tools.map((tool) => tool.name);
 
     expect(names).toHaveLength(EXPECTED_TOOL_NAMES.length);
@@ -131,7 +135,7 @@ describe('Tool Registry', () => {
 
   it('defines required shape for each tool', () => {
     const { ctx } = createMockContext();
-    const tools = createToolRegistry(ctx);
+    const tools = createSharedToolRegistry(ctx, { names: EXPECTED_TOOL_NAMES });
 
     for (const tool of tools) {
       expect(tool.name.length).toBeGreaterThan(0);
@@ -449,9 +453,15 @@ describe('Tool Registry', () => {
   it('applies tool target filtering for mcp-only tools', () => {
     const { ctx } = createMockContext();
 
-    const defaultTools = createToolRegistry(ctx);
-    const mcpTools = createToolRegistry(ctx, { target: 'mcp' });
-    const agentTools = createToolRegistry(ctx, { target: 'agent' });
+    const defaultTools = createSharedToolRegistry(ctx, { names: EXPECTED_TOOL_NAMES });
+    const mcpTools = createSharedToolRegistry(ctx, {
+      target: 'mcp',
+      names: EXPECTED_TOOL_NAMES,
+    });
+    const agentTools = createSharedToolRegistry(ctx, {
+      target: 'agent',
+      names: EXPECTED_TOOL_NAMES,
+    });
 
     expect(defaultTools.some((tool) => tool.name === 'redeploy_project')).toBe(true);
     expect(mcpTools.some((tool) => tool.name === 'redeploy_project')).toBe(true);

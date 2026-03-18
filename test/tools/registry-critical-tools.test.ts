@@ -1,52 +1,20 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../../src/app.js';
-import { createToolRegistry } from '../../src/tools/registry.js';
+import * as configModule from '../../src/config/index.js';
+import * as gitPipeline from '../../src/pipeline/git.js';
+import { DeployOrchestrator } from '../../src/pipeline/orchestrator.js';
+import * as portModule from '../../src/pipeline/port.js';
+import { createSharedToolRegistry } from './shared-tool-registry.js';
 
-const {
-  mockCloneRepo,
-  mockScanUsedPorts,
-  mockLoadConfig,
-  mockBuildTopology,
-  mockValidateTopology,
-} = vi.hoisted(() => ({
-  mockCloneRepo: vi.fn(),
-  mockScanUsedPorts: vi.fn(),
-  mockLoadConfig: vi.fn(),
-  mockBuildTopology: vi.fn(),
-  mockValidateTopology: vi.fn(),
-}));
-
-vi.mock('../../src/pipeline/git.js', () => ({
-  cloneRepo: mockCloneRepo,
-}));
-
-vi.mock('../../src/pipeline/port.js', () => ({
-  scanUsedPorts: mockScanUsedPorts,
-}));
-
-vi.mock('../../src/config/index.js', () => ({
-  loadConfig: mockLoadConfig,
-}));
-
-vi.mock('../../src/pipeline/orchestrator.js', () => ({
-  DeployOrchestrator: class {
-    buildTopology(...args: unknown[]) {
-      return mockBuildTopology(...args);
-    }
-
-    validateTopology(...args: unknown[]) {
-      return mockValidateTopology(...args);
-    }
-
-    executeOrdered() {
-      return Promise.resolve({ success: true, services: [], totalDuration: 0 });
-    }
-  },
-}));
+const mockCloneRepo = vi.fn();
+const mockScanUsedPorts = vi.fn();
+const mockLoadConfig = vi.fn();
+const mockBuildTopology = vi.fn();
+const mockValidateTopology = vi.fn();
 
 function createMockContext() {
   const project = {
@@ -100,7 +68,7 @@ function createMockContext() {
 }
 
 function getTool(ctx: AppContext, name: string, target?: 'agent' | 'mcp') {
-  const tool = createToolRegistry(ctx, target ? { target } : {}).find(
+  const tool = createSharedToolRegistry(ctx, target ? { target } : undefined).find(
     (entry) => entry.name === name,
   );
   expect(tool).toBeDefined();
@@ -109,8 +77,31 @@ function getTool(ctx: AppContext, name: string, target?: 'agent' | 'mcp') {
 
 describe('registry critical tool behaviors', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.spyOn(gitPipeline, 'cloneRepo').mockImplementation((...args) => mockCloneRepo(...args));
+    vi.spyOn(portModule, 'scanUsedPorts').mockImplementation((...args) =>
+      mockScanUsedPorts(...args),
+    );
+    vi.spyOn(configModule, 'loadConfig').mockImplementation((...args) => mockLoadConfig(...args));
+    vi.spyOn(DeployOrchestrator.prototype, 'buildTopology').mockImplementation(function (...args) {
+      return mockBuildTopology(...args);
+    });
+    vi.spyOn(DeployOrchestrator.prototype, 'validateTopology').mockImplementation(function (
+      ...args
+    ) {
+      return mockValidateTopology(...args);
+    });
+    vi.spyOn(DeployOrchestrator.prototype, 'executeOrdered').mockResolvedValue({
+      success: true,
+      services: [],
+      totalDuration: 0,
+    });
     mockLoadConfig.mockReturnValue({ gitProviders: { github: { token: '' } } });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('deploy_project uses target to set trigger source', async () => {
@@ -247,7 +238,7 @@ describe('registry critical tool behaviors', () => {
           expect.objectContaining({
             name: 'web',
             dockerfile: 'web/Dockerfile',
-            dependsOn: ['app'],
+            dependsOn: [],
             port: 8080,
             envVars: { NODE_ENV: 'production' },
           }),

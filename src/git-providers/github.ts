@@ -191,7 +191,7 @@ export class GitHubProvider implements GitProvider {
       throw new Error(`GitHub API error ${String(res.status)}: ${body.slice(0, 200)}`);
     }
 
-    const data = await res.json();
+    const data: unknown = await res.json();
     return { data, headers: res.headers };
   }
 }

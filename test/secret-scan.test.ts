@@ -1,23 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { scanForSecrets } from '../src/pipeline/secret-scan.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 const describeSecretScan = isBunRuntime ? describe.skip : describe;
 
-// Mock the fs module at the module level
-vi.mock('node:fs', () => ({
-  readdirSync: vi.fn(),
-  readFileSync: vi.fn(),
-  statSync: vi.fn(),
-}));
-
-// Import mocked functions after mocking
-import * as fs from 'node:fs';
-
-const readdirMock = fs.readdirSync as ReturnType<typeof vi.fn>;
-const readFileMock = fs.readFileSync as ReturnType<typeof vi.fn>;
-const statMock = fs.statSync as ReturnType<typeof vi.fn>;
+let scanForSecrets!: (projectPath: string) => Array<{
+  file: string;
+  line: number;
+  type: string;
+  pattern: string;
+}>;
+let readdirMock!: ReturnType<typeof vi.fn>;
+let readFileMock!: ReturnType<typeof vi.fn>;
+let statMock!: ReturnType<typeof vi.fn>;
 
 function setupSingleFile(fileName: string, content: string): void {
   readdirMock.mockReturnValue([fileName]);
@@ -30,8 +24,29 @@ function setupSingleFile(fileName: string, content: string): void {
 }
 
 describeSecretScan('scanForSecrets', () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    vi.doMock('node:fs', () => ({
+      readdirSync: vi.fn(),
+      readFileSync: vi.fn(),
+      statSync: vi.fn(),
+    }));
+
+    const fs = await import('node:fs');
+    readdirMock = fs.readdirSync as ReturnType<typeof vi.fn>;
+    readFileMock = fs.readFileSync as ReturnType<typeof vi.fn>;
+    statMock = fs.statSync as ReturnType<typeof vi.fn>;
+
+    ({ scanForSecrets } = await import('../src/pipeline/secret-scan.js'));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterAll(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
   });
 
   // --- Pattern detection tests ---

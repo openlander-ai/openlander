@@ -18,12 +18,19 @@ describe('deploy-flow unification integration evidence', () => {
     expect(source).toContain('this.clearPendingTimeout();');
   });
 
-  it('keeps scan_project tool and scan-first prompt guidance aligned', () => {
+  it('keeps scan_project adapter wiring and scan-first prompt guidance aligned', () => {
     const toolsSource = readSource('src/agent/tools.ts');
+    const gitToolDefsSource = readSource('src/tools/defs/git.ts');
     const promptsSource = readSource('src/agent/prompts.ts');
 
-    expect(toolsSource).toContain('scan_project: tool({');
-    expect(toolsSource).toContain('isMonorepo: dockerfiles.length > 1 || composeFiles.length > 0');
+    expect(toolsSource).toContain("import { toAiSdkTools } from '../tools/adapters/ai-sdk.js';");
+    expect(toolsSource).toContain('...gitToolDefs,');
+    expect(toolsSource).toContain('return toAiSdkTools(agentToolDefs, ctx, questionBridge);');
+    expect(gitToolDefsSource).toContain("name: 'scan_project'");
+    expect(gitToolDefsSource).toContain("targets: ['agent']");
+    expect(gitToolDefsSource).toContain(
+      'isMonorepo: dockerfiles.length > 1 || composeFiles.length > 0',
+    );
     expect(promptsSource).toContain('## Deploy Planning Mode');
     expect(promptsSource).toContain('Call scan_project before any deploy call.');
     expect(promptsSource).toContain(

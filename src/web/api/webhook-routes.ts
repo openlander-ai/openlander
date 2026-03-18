@@ -40,8 +40,8 @@ export function createWebhookRoutes(ctx: AppContext): Hono {
 
 function normalizeHeaders(rawHeaders: Headers): Record<string, string> {
   const normalized: Record<string, string> = {};
-  for (const [key, value] of rawHeaders.entries()) {
+  rawHeaders.forEach((value, key) => {
     normalized[key.toLowerCase()] = value;
-  }
+  });
   return normalized;
 }

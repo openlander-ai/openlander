@@ -24,6 +24,7 @@ export interface BuildDiagnosis {
   }>;
   /** Raw LLM response for display */
   rawAnalysis: string;
+  buildLog?: string;
 }
 
 export interface FixDockerfileInput {
@@ -180,13 +181,14 @@ export class BuildDebugger {
     const buildLog = truncateBuildLog(context.buildLog);
 
     // Fast path: check known error patterns before making an LLM call.
-    const recipe = matchRecipe(context.buildLog);
+    const recipe = matchRecipe(buildLog);
     if (recipe) {
       return {
         summary: recipe.title,
         rootCause: recipe.diagnosis,
         suggestedFixes: [{ description: recipe.fix, confidence: 'high' }],
-        rawAnalysis: `[Matched recipe: ${recipe.title}]`,
+        rawAnalysis: `[Matched recipe: ${recipe.title}]\n\n--- Build Log Context ---\n${buildLog}`,
+        buildLog,
       };
     }
 
@@ -218,7 +220,10 @@ Diagnose this build failure. Respond ONLY with the JSON format specified.`;
     });
 
     try {
-      return parseDiagnosis(response.text);
+      return {
+        ...parseDiagnosis(response.text),
+        buildLog,
+      };
     } catch (err) {
       log.debug({ err }, 'Failed to parse LLM diagnosis response');
       return {
@@ -226,6 +231,7 @@ Diagnose this build failure. Respond ONLY with the JSON format specified.`;
         rootCause: response.text,
         suggestedFixes: [],
         rawAnalysis: response.text,
+        buildLog,
       };
     }
   }

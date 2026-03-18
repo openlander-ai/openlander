@@ -28,9 +28,14 @@ export interface ComposeService {
   ports?: string[];
   profiles?: string[];
   environment?: Record<string, string> | string[];
-  envFile?: string[];
+  envFile?: ComposeEnvFile[];
   dependsOn?: string[];
   volumes?: string[];
+}
+
+export interface ComposeEnvFile {
+  path: string;
+  required: boolean;
 }
 
 export interface ComposeProject {
@@ -152,11 +157,16 @@ export class ComposePipeline {
     for (const service of composeProject.services) {
       if (!service.envFile) continue;
 
-      for (const envFilePath of service.envFile) {
+      for (const envFileRef of service.envFile) {
+        const envFilePath = envFileRef.path;
         const fullPath = join(projectPath, envFilePath);
 
         // Already exists — nothing to do
         if (existsSync(fullPath)) {
+          continue;
+        }
+
+        if (!envFileRef.required) {
           continue;
         }
 
@@ -288,12 +298,34 @@ export class ComposePipeline {
       const envFileRaw = serviceObj['env_file'];
       const profilesRaw = serviceObj['profiles'];
 
-      // Parse env_file - can be a string or array
-      let envFile: string[] | undefined;
+      let envFile: ComposeEnvFile[] | undefined;
       if (typeof envFileRaw === 'string') {
-        envFile = [envFileRaw];
+        envFile = [{ path: envFileRaw, required: true }];
       } else if (Array.isArray(envFileRaw)) {
-        envFile = envFileRaw.map((f) => String(f));
+        envFile = envFileRaw
+          .map((entry): ComposeEnvFile | null => {
+            if (typeof entry === 'string') {
+              return { path: entry, required: true };
+            }
+            if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+              const item = entry as Record<string, unknown>;
+              const path = item['path'];
+              if (typeof path !== 'string') {
+                return null;
+              }
+              const required = typeof item['required'] === 'boolean' ? item['required'] : true;
+              return { path, required };
+            }
+            return null;
+          })
+          .filter((entry): entry is ComposeEnvFile => entry !== null);
+      } else if (envFileRaw && typeof envFileRaw === 'object' && !Array.isArray(envFileRaw)) {
+        const item = envFileRaw as Record<string, unknown>;
+        const path = item['path'];
+        if (typeof path === 'string') {
+          const required = typeof item['required'] === 'boolean' ? item['required'] : true;
+          envFile = [{ path, required }];
+        }
       }
 
       let profiles: string[] | undefined;

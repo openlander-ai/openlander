@@ -21,34 +21,6 @@ vi.mock('lucide-react', () => ({
   Activity: () => 'Activity',
 }));
 
-vi.mock('../../web/src/components/timeline/InputRequestCard.js', () => ({
-  InputRequestCard: () => 'InputRequestCard',
-}));
-
-vi.mock('../../web/src/components/timeline/InsightCard.js', () => ({
-  InsightCard: () => 'InsightCard',
-}));
-
-vi.mock('../../web/src/components/timeline/DockerfileFixedCard.js', () => ({
-  DockerfileFixedCard: () => 'DockerfileFixedCard',
-}));
-
-vi.mock('../../web/src/components/timeline/ToolResultCard.js', () => ({
-  ToolResultCard: () => 'ToolResultCard',
-}));
-
-vi.mock('../../web/src/components/timeline/ErrorAnalysisCard.js', () => ({
-  ErrorAnalysisCard: () => 'ErrorAnalysisCard',
-}));
-
-vi.mock('../../web/src/components/timeline/FixProposalCard.js', () => ({
-  FixProposalCard: () => 'FixProposalCard',
-}));
-
-vi.mock('../../web/src/components/timeline/ComposeErrorCard.js', () => ({
-  ComposeErrorCard: () => 'ComposeErrorCard',
-}));
-
 // Helper to find text in the React element tree
 function findTextInTree(node: any, text: string): boolean {
   if (typeof node === 'string' || typeof node === 'number') {
@@ -134,8 +106,8 @@ describeTimeline('TimelineItemCard', () => {
     const insightTree = TimelineItemCard({ item: insightItem });
     const dockerfileTree = TimelineItemCard({ item: dockerfileFixedItem });
 
-    expect(findTextInTree(insightTree, 'InsightCard')).toBe(true);
-    expect(findTextInTree(dockerfileTree, 'DockerfileFixedCard')).toBe(true);
+    expect(findTextInTree(insightTree, 'Insight')).toBe(true);
+    expect(findTextInTree(dockerfileTree, 'Fixed')).toBe(true);
   });
 
   it('routes agent_tool_result error-analysis variant to ErrorAnalysisCard', () => {
@@ -150,7 +122,7 @@ describeTimeline('TimelineItemCard', () => {
     };
 
     const tree = TimelineItemCard({ item });
-    expect(findTextInTree(tree, 'ErrorAnalysisCard')).toBe(true);
+    expect(findTextInTree(tree, 'timeline.errorAnalysis.title')).toBe(true);
   });
 
   it('routes non analysis agent_tool_result to ToolResultCard', () => {
@@ -165,7 +137,7 @@ describeTimeline('TimelineItemCard', () => {
     };
 
     const tree = TimelineItemCard({ item });
-    expect(findTextInTree(tree, 'ToolResultCard')).toBe(true);
+    expect(findTextInTree(tree, 'Result')).toBe(true);
   });
 
   it('routes compose and fix-proposal questions by metadata', () => {
@@ -204,8 +176,8 @@ describeTimeline('TimelineItemCard', () => {
     const composeTree = TimelineItemCard({ item: composeQuestion });
     const proposalTree = TimelineItemCard({ item: proposalQuestion });
 
-    expect(findTextInTree(composeTree, 'ComposeErrorCard')).toBe(true);
-    expect(findTextInTree(proposalTree, 'FixProposalCard')).toBe(true);
+    expect(findTextInTree(composeTree, 'Fix compose?')).toBe(true);
+    expect(findTextInTree(proposalTree, 'Fix dockerfile?')).toBe(true);
   });
 
   it('routes plain questions to InputRequestCard', () => {
@@ -225,7 +197,7 @@ describeTimeline('TimelineItemCard', () => {
     };
 
     const tree = TimelineItemCard({ item: plainQuestion });
-    expect(findTextInTree(tree, 'InputRequestCard')).toBe(true);
+    expect(findTextInTree(tree, 'Choose one')).toBe(true);
   });
 
   it('renders success link without protocol and error build log tail', () => {

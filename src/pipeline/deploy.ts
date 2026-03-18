@@ -49,6 +49,8 @@ export interface ProjectConfig {
   trigger?: 'chat' | 'webhook' | 'api';
   /** Target environment (e.g., production, development) */
   environment?: string;
+  dockerfilePath?: string;
+  preferDockerfile?: boolean;
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
   _retryCount?: number;
@@ -459,7 +461,13 @@ export class DeployPipeline {
         });
       }
 
-      const composePath = this.composePipeline?.detectComposeFile(cloneResult.path);
+      const hasExplicitDockerfilePath =
+        typeof config.dockerfilePath === 'string' && config.dockerfilePath.trim().length > 0;
+      const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
+
+      const composePath = preferDockerfile
+        ? null
+        : this.composePipeline?.detectComposeFile(cloneResult.path);
       const composeEnvVars = {
         ...(config.envVars ?? {}),
         ...this.env.getMergedForDeploy(projectId, environmentId),
@@ -487,12 +495,19 @@ export class DeployPipeline {
         };
       }
 
+      const dockerfilePath = resolveDockerfilePath(cloneResult.path, config.dockerfilePath);
+      const usingExplicitDockerfile = hasExplicitDockerfilePath;
+
       // Step 2: Auto-generate Dockerfile if missing (v0.4)
-      const dockerfileResult = ensureDockerfile(cloneResult.path);
-      const dockerfilePath = join(cloneResult.path, 'Dockerfile');
+      const dockerfileResult = usingExplicitDockerfile ? null : ensureDockerfile(cloneResult.path);
 
       let autoDetected = false;
-      if (!dockerfileResult.generated && !existsSync(dockerfilePath)) {
+      if (
+        !usingExplicitDockerfile &&
+        dockerfileResult &&
+        !dockerfileResult.generated &&
+        !existsSync(dockerfilePath)
+      ) {
         const autoDetectResult =
           (await this.autoDetector?.generateDockerfile(cloneResult.path)) ?? null;
         if (autoDetectResult?.generated && autoDetectResult.type === 'dockerfile') {
@@ -515,7 +530,9 @@ export class DeployPipeline {
         throw new DockerfileNotFoundError(cloneResult.path);
       }
 
-      if (!autoDetected && dockerfileResult.generated && dockerfileResult.detection) {
+      if (usingExplicitDockerfile) {
+        buildLog += `[dockerfile] Using ${config.dockerfilePath as string}\n`;
+      } else if (!autoDetected && dockerfileResult?.generated && dockerfileResult.detection) {
         buildLog += `[dockerfile] Auto-generated for ${dockerfileResult.detection.framework} (${dockerfileResult.detection.language})\n`;
       } else if (!autoDetected) {
         buildLog += '[dockerfile] Found Dockerfile\n';
@@ -1872,6 +1889,25 @@ export class DeployPipeline {
 }
 
 // --- Helpers ---
+
+function resolveDockerfilePath(clonePath: string, dockerfilePath?: string): string {
+  if (!dockerfilePath || dockerfilePath.trim().length === 0) {
+    return join(clonePath, 'Dockerfile');
+  }
+
+  const normalizedPath = dockerfilePath.trim().replace(/\\/g, '/');
+  if (normalizedPath.startsWith('/')) {
+    throw new Error('Dockerfile path must be relative');
+  }
+
+  const cloneRoot = resolve(clonePath);
+  const targetPath = resolve(clonePath, normalizedPath);
+  if (!targetPath.startsWith(`${cloneRoot}/`) && targetPath !== cloneRoot) {
+    throw new Error('Dockerfile path escaped repository root');
+  }
+
+  return targetPath;
+}
 
 function deriveServiceName(dockerfilePath: string): string {
   const dir = dirname(dockerfilePath);

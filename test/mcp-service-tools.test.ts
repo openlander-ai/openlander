@@ -1,26 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../src/app.js';
 import type { ServiceRow } from '../src/db/index.js';
-import { createToolRegistry } from '../src/tools/registry.js';
+import * as gitPipeline from '../src/pipeline/git.js';
+import * as infraAnalyzer from '../src/lib/infra-analyzer.js';
+import * as webSearchModule from '../src/lib/web-search.js';
+import { createSharedToolRegistry } from './tools/shared-tool-registry.js';
 
-const { mockCloneRepo, mockAnalyzeInfrastructure, mockWebSearch } = vi.hoisted(() => ({
-  mockCloneRepo: vi.fn(),
-  mockAnalyzeInfrastructure: vi.fn(),
-  mockWebSearch: vi.fn(),
-}));
-
-vi.mock('../src/pipeline/git.js', () => ({
-  cloneRepo: mockCloneRepo,
-}));
-
-vi.mock('../src/lib/infra-analyzer.js', () => ({
-  analyzeInfrastructure: mockAnalyzeInfrastructure,
-}));
-
-vi.mock('../src/lib/web-search.js', () => ({
-  webSearch: mockWebSearch,
-}));
+const mockCloneRepo = vi.fn();
+const mockAnalyzeInfrastructure = vi.fn();
+const mockWebSearch = vi.fn();
 
 function createServiceRow(partial: Partial<ServiceRow>): ServiceRow {
   return {
@@ -66,19 +55,31 @@ function createMockContext(services: ServiceRow[] = []) {
 }
 
 function getTool(ctx: AppContext, name: string) {
-  const tool = createToolRegistry(ctx, { target: 'mcp' }).find((entry) => entry.name === name);
+  const tool = createSharedToolRegistry(ctx, { target: 'mcp' }).find(
+    (entry) => entry.name === name,
+  );
   expect(tool).toBeDefined();
   return tool!;
 }
 
 describe('MCP service tools (Task 8)', () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+    vi.spyOn(gitPipeline, 'cloneRepo').mockImplementation((...args) => mockCloneRepo(...args));
+    vi.spyOn(infraAnalyzer, 'analyzeInfrastructure').mockImplementation((...args) =>
+      mockAnalyzeInfrastructure(...args),
+    );
+    vi.spyOn(webSearchModule, 'webSearch').mockImplementation((...args) => mockWebSearch(...args));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('includes all 11 new MCP tools', () => {
     const { ctx } = createMockContext();
-    const names = createToolRegistry(ctx, { target: 'mcp' }).map((tool) => tool.name);
+    const names = createSharedToolRegistry(ctx, { target: 'mcp' }).map((tool) => tool.name);
 
     for (const toolName of [
       'create_service',
@@ -128,7 +129,7 @@ describe('MCP service tools (Task 8)', () => {
     ).toBe(true);
   });
 
-  it('create_service returns parsed credentials and propagates errors', async () => {
+  it('create_service returns parsed credentials and throws service-manager errors', async () => {
     const { ctx, serviceManager } = createMockContext();
     const tool = getTool(ctx, 'create_service');
 
@@ -143,21 +144,26 @@ describe('MCP service tools (Task 8)', () => {
     const ok = await tool.execute({ name: 'shared-pg', template: 'postgresql' }, { target: 'mcp' });
 
     expect(ok).toEqual({
-      id: 'svc-created',
-      name: 'shared-pg',
-      type: 'postgresql',
-      status: 'running',
-      credentials: {
-        host: 'ol-svc-shared-pg',
+      status: 'created',
+      service: {
+        id: 'svc-created',
+        name: 'shared-pg',
+        type: 'postgresql',
+        status: 'running',
         port: 5432,
-        user: 'openlander',
-        password: 'pw',
+        credentials: {
+          host: 'ol-svc-shared-pg',
+          port: 5432,
+          user: 'openlander',
+          password: 'pw',
+        },
       },
     });
 
     serviceManager.create.mockRejectedValueOnce(new Error('Unsupported service template: bad'));
-    const failed = await tool.execute({ name: 'bad', template: 'bad' }, { target: 'mcp' });
-    expect(failed).toEqual({ error: 'Unsupported service template: bad' });
+    await expect(tool.execute({ name: 'bad', template: 'bad' }, { target: 'mcp' })).rejects.toThrow(
+      'Unsupported service template: bad',
+    );
   });
 
   it('create_service works for mysql template', async () => {
@@ -181,15 +187,19 @@ describe('MCP service tools (Task 8)', () => {
     );
 
     expect(result).toEqual({
-      id: 'svc-mysql',
-      name: 'shared-mysql',
-      type: 'mysql',
-      status: 'running',
-      credentials: {
-        host: 'ol-svc-shared-mysql',
+      status: 'created',
+      service: {
+        id: 'svc-mysql',
+        name: 'shared-mysql',
+        type: 'mysql',
+        status: 'running',
         port: 3306,
-        user: 'openlander',
-        password: 'mysqlpw',
+        credentials: {
+          host: 'ol-svc-shared-mysql',
+          port: 3306,
+          user: 'openlander',
+          password: 'mysqlpw',
+        },
       },
     });
     expect(serviceManager.create).toHaveBeenCalledWith({ name: 'shared-mysql', template: 'mysql' });
@@ -216,20 +226,24 @@ describe('MCP service tools (Task 8)', () => {
     );
 
     expect(result).toEqual({
-      id: 'svc-redis',
-      name: 'shared-redis',
-      type: 'redis',
-      status: 'running',
-      credentials: {
-        host: 'ol-svc-shared-redis',
+      status: 'created',
+      service: {
+        id: 'svc-redis',
+        name: 'shared-redis',
+        type: 'redis',
+        status: 'running',
         port: 6379,
-        connectionString: 'redis://ol-svc-shared-redis:6379',
+        credentials: {
+          host: 'ol-svc-shared-redis',
+          port: 6379,
+          connectionString: 'redis://ol-svc-shared-redis:6379',
+        },
       },
     });
     expect(serviceManager.create).toHaveBeenCalledWith({ name: 'shared-redis', template: 'redis' });
   });
 
-  it('list_services returns services and handles failures', async () => {
+  it('list_services returns services and throws service-manager failures', async () => {
     const services = [
       createServiceRow({ id: 'svc-pg', name: 'shared-pg' }),
       createServiceRow({ id: 'svc-redis', name: 'shared-redis', type: 'redis', port: 6379 }),
@@ -252,8 +266,7 @@ describe('MCP service tools (Task 8)', () => {
     });
 
     serviceManager.list.mockRejectedValueOnce(new Error('Service list unavailable'));
-    const failed = await tool.execute({}, { target: 'mcp' });
-    expect(failed).toEqual({ error: 'Service list unavailable' });
+    await expect(tool.execute({}, { target: 'mcp' })).rejects.toThrow('Service list unavailable');
   });
 
   it('get_service_status/start/stop/remove/get_credentials support happy and invalid service paths', async () => {
@@ -273,40 +286,49 @@ describe('MCP service tools (Task 8)', () => {
     const credentialsTool = getTool(ctx, 'get_service_credentials');
 
     expect(await statusTool.execute({ service_name: 'shared-pg' }, { target: 'mcp' })).toEqual(
-      expect.objectContaining({ id: 'svc-pg', name: 'shared-pg', status: 'running' }),
+      expect.objectContaining({
+        id: 'svc-pg',
+        name: 'shared-pg',
+        status: 'running',
+        port: 5432,
+      }),
     );
     expect(await startTool.execute({ service_name: 'shared-pg' }, { target: 'mcp' })).toEqual({
       status: 'started',
-      id: 'svc-pg',
-      name: 'shared-pg',
+      service: 'shared-pg',
     });
     expect(serviceManager.start).toHaveBeenCalledWith('svc-pg');
 
     expect(await stopTool.execute({ service_name: 'shared-pg' }, { target: 'mcp' })).toEqual({
       status: 'stopped',
-      id: 'svc-pg',
-      name: 'shared-pg',
+      service: 'shared-pg',
     });
     expect(serviceManager.stop).toHaveBeenCalledWith('svc-pg');
 
     expect(await removeTool.execute({ service_name: 'shared-pg' }, { target: 'mcp' })).toEqual({
       status: 'removed',
-      id: 'svc-pg',
-      name: 'shared-pg',
+      service: 'shared-pg',
     });
     expect(serviceManager.remove).toHaveBeenCalledWith('svc-pg');
 
     expect(await credentialsTool.execute({ service_name: 'shared-pg' }, { target: 'mcp' })).toEqual(
       {
-        id: 'svc-pg',
-        name: 'shared-pg',
+        service: 'shared-pg',
+        type: 'postgresql',
         credentials: { host: 'ol-svc-shared-pg', port: 5432 },
+        connectionString: null,
+        host: 'ol-svc-shared-pg',
+        port: 5432,
+        user: null,
+        password: null,
+        database: null,
       },
     );
 
     for (const tool of [statusTool, startTool, stopTool, removeTool, credentialsTool]) {
-      const failed = await tool.execute({ service_name: 'missing-service' }, { target: 'mcp' });
-      expect(failed).toEqual({ error: 'Service not found: missing-service' });
+      await expect(
+        tool.execute({ service_name: 'missing-service' }, { target: 'mcp' }),
+      ).rejects.toThrow('Service not found: missing-service');
     }
   });
 
@@ -339,20 +361,16 @@ describe('MCP service tools (Task 8)', () => {
     });
     expect(serviceManager.createDatabase).toHaveBeenCalledWith('svc-pg', 'appdb');
 
-    const missing = await tool.execute(
-      { service_name: 'missing-service', database_name: 'appdb' },
-      { target: 'mcp' },
-    );
-    expect(missing).toEqual({ error: 'Service not found: missing-service' });
+    await expect(
+      tool.execute({ service_name: 'missing-service', database_name: 'appdb' }, { target: 'mcp' }),
+    ).rejects.toThrow('Service not found: missing-service');
 
     serviceManager.createDatabase.mockRejectedValueOnce(
       new Error('Database creation is not supported for redis services'),
     );
-    const redisError = await tool.execute(
-      { service_name: 'shared-redis', database_name: 'cachedb' },
-      { target: 'mcp' },
-    );
-    expect(redisError).toEqual({ error: 'Database creation is not supported for redis services' });
+    await expect(
+      tool.execute({ service_name: 'shared-redis', database_name: 'cachedb' }, { target: 'mcp' }),
+    ).rejects.toThrow('Database creation is not supported for redis services');
   });
 
   it('create_service_user handles happy path, invalid service_name, and redis unsupported path', async () => {
@@ -391,20 +409,16 @@ describe('MCP service tools (Task 8)', () => {
       database: 'appdb',
     });
 
-    const missing = await tool.execute(
-      { service_name: 'missing-service', username: 'u1' },
-      { target: 'mcp' },
-    );
-    expect(missing).toEqual({ error: 'Service not found: missing-service' });
+    await expect(
+      tool.execute({ service_name: 'missing-service', username: 'u1' }, { target: 'mcp' }),
+    ).rejects.toThrow('Service not found: missing-service');
 
     serviceManager.createUser.mockRejectedValueOnce(
       new Error('User creation is not supported for redis services'),
     );
-    const redisError = await tool.execute(
-      { service_name: 'shared-redis', username: 'cache-user' },
-      { target: 'mcp' },
-    );
-    expect(redisError).toEqual({ error: 'User creation is not supported for redis services' });
+    await expect(
+      tool.execute({ service_name: 'shared-redis', username: 'cache-user' }, { target: 'mcp' }),
+    ).rejects.toThrow('User creation is not supported for redis services');
   });
 
   it('analyze_infrastructure returns analyzer contract and reports clone failures', async () => {

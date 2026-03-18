@@ -23,7 +23,7 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": false,
     "paths": {
-      "@/*": ["./src/*"]
+      "lucide-react": ["./web/node_modules/lucide-react/dist/esm/lucide-react.js"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "e2e/**/*.ts", "playwright.config.ts"],

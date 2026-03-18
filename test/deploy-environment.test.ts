@@ -7,22 +7,8 @@ import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
-import { cloneRepo } from '../src/pipeline/git.js';
+import * as gitPipeline from '../src/pipeline/git.js';
 import * as dockerfileGen from '../src/pipeline/dockerfile-gen.js';
-
-vi.mock('../src/pipeline/git.js', () => ({
-  cloneRepo: vi.fn(),
-}));
-
-vi.mock('../src/pipeline/dockerfile-gen.js', async () => {
-  const actual = await vi.importActual<typeof import('../src/pipeline/dockerfile-gen.js')>(
-    '../src/pipeline/dockerfile-gen.js',
-  );
-  return {
-    ...actual,
-    ensureDockerfile: vi.fn(actual.ensureDockerfile),
-  };
-});
 
 type EnvLike = {
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
@@ -48,8 +34,11 @@ describe('DeployPipeline deployEnvironment', () => {
   let docker: Docker;
   let env: EnvLike;
   let pipeline: DeployPipeline;
+  let cloneRepoSpy: ReturnType<typeof vi.spyOn<typeof gitPipeline, 'cloneRepo'>>;
+  let ensureDockerfileSpy: ReturnType<typeof vi.spyOn<typeof dockerfileGen, 'ensureDockerfile'>>;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-deploy-environment-'));
     clonePath = join(tmpDir, 'repo');
     mkdirSync(clonePath, { recursive: true });
@@ -63,13 +52,17 @@ describe('DeployPipeline deployEnvironment', () => {
     };
     pipeline = new DeployPipeline(docker, db, env as never);
 
-    (cloneRepo as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+    cloneRepoSpy = vi.spyOn(gitPipeline, 'cloneRepo');
+    cloneRepoSpy.mockResolvedValue({
       path: clonePath,
       commitSha: 'deadbeefcafebabe',
     });
+
+    ensureDockerfileSpy = vi.spyOn(dockerfileGen, 'ensureDockerfile');
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     clearPortScanCache();
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
@@ -95,7 +88,7 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(cloneRepo).toHaveBeenCalledWith(
+    expect(cloneRepoSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         repoUrl: 'https://github.com/openlander/demo-app',
         branch: 'develop',
@@ -146,7 +139,7 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(cloneRepo).toHaveBeenCalledWith(
+    expect(cloneRepoSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         branch: 'release',
       }),
@@ -403,15 +396,14 @@ describe('DeployPipeline deployEnvironment', () => {
       autoDetector as never,
     );
 
-    const ensureDockerfileMock = vi.mocked(dockerfileGen.ensureDockerfile);
-    ensureDockerfileMock.mockReturnValueOnce({ generated: false, detection: null });
+    ensureDockerfileSpy.mockReturnValueOnce({ generated: false, detection: null });
 
     const result = await autoDetectPipeline.deployEnvironment('p6', productionEnvironment!.id, {
       repoUrl: 'https://github.com/openlander/autodetect-app',
     });
 
     expect(result.success).toBe(true);
-    expect(ensureDockerfileMock).toHaveBeenCalledWith(clonePath);
+    expect(ensureDockerfileSpy).toHaveBeenCalledWith(clonePath);
     expect(autoDetector.generateDockerfile).toHaveBeenCalledWith(clonePath);
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -491,7 +483,7 @@ describe('DeployPipeline deployEnvironment', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('Environment not found: p9-development');
-    expect(cloneRepo).not.toHaveBeenCalled();
+    expect(cloneRepoSpy).not.toHaveBeenCalled();
   });
 
   it('returns guard error when project is missing', async () => {
@@ -502,7 +494,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(result.success).toBe(false);
     expect(result.projectName).toBe('unknown');
     expect(result.error).toBe('Project not found: missing-project');
-    expect(cloneRepo).not.toHaveBeenCalled();
+    expect(cloneRepoSpy).not.toHaveBeenCalled();
   });
 
   it('returns guard error when environment id does not exist', async () => {
@@ -517,7 +509,7 @@ describe('DeployPipeline deployEnvironment', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('Environment not found: p10-nope');
-    expect(cloneRepo).not.toHaveBeenCalled();
+    expect(cloneRepoSpy).not.toHaveBeenCalled();
   });
 
   it('returns guard error when repo URL is missing from config and project', async () => {
@@ -536,7 +528,7 @@ describe('DeployPipeline deployEnvironment', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('Missing repo URL for project: p11');
-    expect(cloneRepo).not.toHaveBeenCalled();
+    expect(cloneRepoSpy).not.toHaveBeenCalled();
   });
 
   it('does not open quick-share tunnel for non-production environments', async () => {

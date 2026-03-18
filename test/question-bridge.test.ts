@@ -28,13 +28,12 @@ describe('QuestionBridge timeout handling', () => {
   it('rejects ask() after 5 minutes with a clear timeout message', async () => {
     const bridge = new QuestionBridge();
     const promise = bridge.ask(createRequest());
-    const rejection = expect(promise).rejects.toThrow(
+
+    vi.advanceTimersByTime(FIVE_MINUTES_MS);
+
+    await expect(promise).rejects.toThrow(
       'Session timed out — user did not respond within 5 minutes',
     );
-
-    await vi.advanceTimersByTimeAsync(FIVE_MINUTES_MS);
-
-    await rejection;
     expect(bridge.hasPending()).toBe(false);
   });
 

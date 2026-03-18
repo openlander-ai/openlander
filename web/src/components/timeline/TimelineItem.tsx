@@ -66,7 +66,11 @@ export function TimelineItemCard({
   }
 
   if (isAgentToolResult) {
-    if (item.toolName === 'error-analysis' || item.toolName === 'error_analysis') {
+    if (
+      item.toolName === 'error-analysis' ||
+      item.toolName === 'error_analysis' ||
+      item.toolName === 'debug_build_error'
+    ) {
       return <ErrorAnalysisCard item={item} />;
     }
     return <ToolResultCard item={item} />;

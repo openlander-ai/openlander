@@ -2,20 +2,58 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('react', () => {
   const mockUseState = <T,>(initial: T): [T, (value: T | ((prev: T) => T)) => void] => [
-    initial,
+    (typeof initial === 'boolean' ? true : initial) as unknown as T,
     () => {},
   ];
+  const mockUseRef = <T,>(initial: T) => ({ current: initial });
+  const mockUseEffect = () => {};
   const mockUseCallback = (fn: unknown) => fn;
+  const mockUseMemo = (fn: () => unknown) => fn();
+  const mockCreateContext = () => ({
+    Provider: ({ children }: { children: unknown }) => children,
+    Consumer: ({ children }: { children: unknown }) => children,
+  });
+  const mockUseContext = () => ({});
+  const mockMemo = (c: unknown) => c;
+  const mockForwardRef = (c: unknown) => c;
+
+  class MockComponent<P = unknown> {
+    props: P;
+
+    constructor(props: P) {
+      this.props = props;
+    }
+  }
+
   type MockElement = {
     type: unknown;
     props: Record<string, unknown> & { children: unknown[] };
   };
+
   return {
     useState: mockUseState,
+    useRef: mockUseRef,
+    useEffect: mockUseEffect,
+    useLayoutEffect: mockUseEffect,
     useCallback: mockUseCallback,
+    useMemo: mockUseMemo,
+    createContext: mockCreateContext,
+    useContext: mockUseContext,
+    memo: mockMemo,
+    forwardRef: mockForwardRef,
+    Component: MockComponent,
     default: {
       useState: mockUseState,
+      useRef: mockUseRef,
+      useEffect: mockUseEffect,
+      useLayoutEffect: mockUseEffect,
       useCallback: mockUseCallback,
+      useMemo: mockUseMemo,
+      createContext: mockCreateContext,
+      useContext: mockUseContext,
+      memo: mockMemo,
+      forwardRef: mockForwardRef,
+      Component: MockComponent,
     },
     Fragment: ({ children }: { children?: unknown }) => children,
     createElement: (
@@ -43,9 +81,60 @@ vi.mock('@/lib/utils', () => ({
 }));
 
 vi.mock('lucide-react', () => ({
+  Bot: () => 'Bot',
+  ChevronDown: () => 'ChevronDown',
+  ChevronUp: () => 'ChevronUp',
+  CheckCircle2: () => 'CheckCircle2',
+  XCircle: () => 'XCircle',
+  Rocket: () => 'Rocket',
+  Search: () => 'Search',
   Wrench: () => 'Wrench',
-  Check: () => 'Check',
+  Key: () => 'Key',
+  MessageCircle: () => 'MessageCircle',
+  Clock: () => 'Clock',
+  LayoutList: () => 'LayoutList',
+  ScrollText: () => 'ScrollText',
+  Activity: () => 'Activity',
+  KeyRound: () => 'KeyRound',
+  ExternalLink: () => 'ExternalLink',
+  RotateCcw: () => 'RotateCcw',
+  Layers: () => 'Layers',
+  Menu: () => 'Menu',
+  Cpu: () => 'Cpu',
+  MemoryStick: () => 'MemoryStick',
+  Bell: () => 'Bell',
+  HardDrive: () => 'HardDrive',
+  AlertTriangle: () => 'AlertTriangle',
+  AlertCircle: () => 'AlertCircle',
+  Info: () => 'Info',
   X: () => 'X',
+  ArrowRight: () => 'ArrowRight',
+  Archive: () => 'Archive',
+  Container: () => 'Container',
+  Network: () => 'Network',
+  Server: () => 'Server',
+  Play: () => 'Play',
+  Square: () => 'Square',
+  RefreshCw: () => 'RefreshCw',
+  Trash2: () => 'Trash2',
+  Globe: () => 'Globe',
+  Globe2: () => 'Globe2',
+  Loader2: () => 'Loader2',
+  Terminal: () => 'Terminal',
+  Settings: () => 'Settings',
+  LogOut: () => 'LogOut',
+  ChevronRight: () => 'ChevronRight',
+  ChevronLeft: () => 'ChevronLeft',
+  Plus: () => 'Plus',
+  MoreVertical: () => 'MoreVertical',
+  MoreHorizontal: () => 'MoreHorizontal',
+  Edit: () => 'Edit',
+  Copy: () => 'Copy',
+  Check: () => 'Check',
+  FileCode2: () => 'FileCode2',
+  Send: () => 'Send',
+  SkipForward: () => 'SkipForward',
+  MessageCircleQuestion: () => 'MessageCircleQuestion',
 }));
 
 function getTextContent(node: unknown): string {

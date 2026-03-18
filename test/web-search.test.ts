@@ -1,24 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockDuckSearch, mockFetch } = vi.hoisted(() => ({
-  mockDuckSearch: vi.fn(),
-  mockFetch: vi.fn(),
-}));
+const mockDuckSearch = vi.fn();
+const mockFetch = vi.fn();
 
 vi.mock('duck-duck-scrape', () => ({
   search: mockDuckSearch,
 }));
+
+const originalFetch = globalThis.fetch;
+
+globalThis.fetch = mockFetch as any;
 
 import { webSearch } from '../src/lib/web-search.js';
 
 describe('webSearch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('fetch', mockFetch);
+    mockFetch.mockClear();
+    globalThis.fetch = mockFetch as any;
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    globalThis.fetch = originalFetch;
   });
 
   it('uses duck-duck-scrape first and returns mapped { results }', async () => {
