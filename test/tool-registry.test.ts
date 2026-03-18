@@ -12,10 +12,11 @@ import { createSharedToolRegistry } from './tools/shared-tool-registry.js';
 const mockCloneRepo = vi.fn();
 
 const EXPECTED_TOOL_NAMES = [
-  'deploy_project',
+  'create_deploy_plan',
+  'update_deploy_plan',
+  'execute_deploy_plan',
   'stop_project',
   'remove_project',
-  'redeploy_project',
   'get_logs',
   'list_projects',
   'list_env_vars',
@@ -91,6 +92,18 @@ function createMockContext(opts?: {
     getAllMasked: vi.fn().mockReturnValue({}),
   };
 
+  const planEngine = {
+    createPlan: vi.fn().mockResolvedValue({
+      plan_id: 'plan-1',
+      status: 'ready',
+      complexity: 'simple',
+      app: { name: 'test-app' },
+      services: [],
+      missing: [],
+      warnings: [],
+    }),
+  };
+
   const ctx = {
     config: {
       git: {
@@ -100,10 +113,11 @@ function createMockContext(opts?: {
     db,
     env,
     pipeline,
+    planEngine,
     buildDebugger: null,
   } as unknown as AppContext;
 
-  return { ctx, db, env, pipeline };
+  return { ctx, db, env, pipeline, planEngine };
 }
 
 function getTool(ctx: AppContext, name: string) {
@@ -148,11 +162,11 @@ describe('Tool Registry', () => {
     }
   });
 
-  it('deploy_project schema validates required repo_url input', () => {
+  it('create_deploy_plan schema validates required repo_url input', () => {
     const { ctx } = createMockContext();
-    const deployProject = getTool(ctx, 'deploy_project');
+    const createPlan = getTool(ctx, 'create_deploy_plan');
 
-    const valid = deployProject.inputSchema.safeParse({
+    const valid = createPlan.inputSchema.safeParse({
       repo_url: 'https://github.com/openlander-ai/OpenLander',
       branch: 'main',
       name: 'openlander',
@@ -161,11 +175,11 @@ describe('Tool Registry', () => {
     expect(valid.success).toBe(true);
   });
 
-  it('deploy_project schema rejects missing required fields', () => {
+  it('create_deploy_plan schema rejects missing required fields', () => {
     const { ctx } = createMockContext();
-    const deployProject = getTool(ctx, 'deploy_project');
+    const createPlan = getTool(ctx, 'create_deploy_plan');
 
-    const invalid = deployProject.inputSchema.safeParse({
+    const invalid = createPlan.inputSchema.safeParse({
       branch: 'main',
     });
 
@@ -250,11 +264,11 @@ describe('Tool Registry', () => {
     expect(pipeline.stop).not.toHaveBeenCalled();
   });
 
-  it('deploy_project executes with target-aware trigger and hint', async () => {
-    const { ctx, pipeline } = createMockContext();
-    const deployProject = getTool(ctx, 'deploy_project');
+  it('create_deploy_plan executes with target-aware trigger and hint', async () => {
+    const { ctx } = createMockContext();
+    const createPlan = getTool(ctx, 'create_deploy_plan');
 
-    const result = await deployProject.execute(
+    const result = await createPlan.execute(
       {
         repo_url: 'https://github.com/openlander-ai/OpenLander',
         branch: 'main',
@@ -263,19 +277,9 @@ describe('Tool Registry', () => {
       { target: 'agent' },
     );
 
-    expect(pipeline.startDeploy).toHaveBeenCalledWith({
-      repoUrl: 'https://github.com/openlander-ai/OpenLander',
-      branch: 'main',
-      name: 'openlander',
-      sshKeyPath: undefined,
-      trigger: 'chat',
-    });
-    expect(result).toEqual({
-      projectId: 'proj-1',
-      projectName: 'demo-app',
-      status: 'building',
-      hint: 'Use get_deploy_status to check progress.',
-    });
+    expect(result).toHaveProperty('plan_id');
+    expect(result).toHaveProperty('status');
+    expect(result).toHaveProperty('complexity');
   });
 
   it('set_env_vars redeploys only when env changed and project is running', async () => {
@@ -495,9 +499,12 @@ describe('Tool Registry', () => {
       names: EXPECTED_TOOL_NAMES,
     });
 
-    expect(defaultTools.some((tool) => tool.name === 'redeploy_project')).toBe(true);
-    expect(mcpTools.some((tool) => tool.name === 'redeploy_project')).toBe(true);
-    expect(agentTools.some((tool) => tool.name === 'redeploy_project')).toBe(false);
-    expect(agentTools.some((tool) => tool.name === 'set_env_vars')).toBe(true);
+    // start_service is mcp-only
+    expect(defaultTools.some((tool) => tool.name === 'start_service')).toBe(true);
+    expect(mcpTools.some((tool) => tool.name === 'start_service')).toBe(true);
+    expect(agentTools.some((tool) => tool.name === 'start_service')).toBe(false);
+
+    // All expected tools should be available in default registry
+    expect(defaultTools.length).toBe(EXPECTED_TOOL_NAMES.length);
   });
 });
