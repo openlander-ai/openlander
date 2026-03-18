@@ -13,6 +13,12 @@ export const deployProjectSchema = z.object({
     .string()
     .optional()
     .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
+  env_vars: z
+    .string()
+    .optional()
+    .describe(
+      'JSON object of environment variables to set before deploy (e.g., {"DATABASE_URL": "...", "REDIS_URL": "..."})',
+    ),
   prefer_dockerfile: z
     .boolean()
     .optional()
@@ -84,10 +90,9 @@ export const deployMonorepoSchema = z.object({
   clone_path: z.string().min(1).describe('Path where repo is cloned'),
   commit_sha: z.string().min(1).describe('Commit SHA'),
   dockerfiles: z
-    .string()
-    .min(1)
+    .union([z.array(z.string()), z.string().min(1)])
     .describe(
-      'JSON array of Dockerfile paths (from scan_dockerfiles), e.g. ["frontend/Dockerfile", "backend/Dockerfile"]',
+      'Dockerfile paths from scan_dockerfiles — array or JSON string, e.g. ["frontend/Dockerfile", "backend/Dockerfile"]',
     ),
   branch: z.string().optional().describe('Branch'),
 });
@@ -166,6 +171,15 @@ export const webSearchSchema = z.object({
 });
 
 // Debug & troubleshooting schemas
+export const getBuildLogSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  deploy_index: z
+    .number()
+    .int()
+    .optional()
+    .describe('Deploy index (0 = latest, 1 = previous). Default: 0'),
+});
+
 export const debugBuildErrorSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
   build_log: z

@@ -21,6 +21,9 @@ export const deployToolDefs: ToolDef[] = [
     inputSchema: deployProjectSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
+      const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
+      const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
+
       const result = await appCtx.pipeline.startDeploy({
         repoUrl: args['repo_url'] as string,
         branch: (args['branch'] as string | undefined) ?? undefined,
@@ -28,6 +31,7 @@ export const deployToolDefs: ToolDef[] = [
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
+        envVars,
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
         trigger: context.target === 'agent' ? 'chat' : 'api',
       });
@@ -144,6 +148,18 @@ export const deployToolDefs: ToolDef[] = [
       const appCtx = context.appCtx;
       const projectName = args['project_name'] as string | undefined;
 
+      const formatJob = (job: {
+        projectName: string;
+        phase: string;
+        startedAt: Date;
+        errorSummary?: string;
+      }) => ({
+        name: job.projectName,
+        phase: job.phase,
+        elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
+        error: job.errorSummary,
+      });
+
       if (projectName) {
         const project = appCtx.db.getProjectByName(projectName);
         if (!project) {
@@ -153,44 +169,25 @@ export const deployToolDefs: ToolDef[] = [
         const status = appCtx.jobManager.getStatus(project.id);
         const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
 
-        if (context.target === 'mcp') {
-          return Promise.resolve({
-            active: isActive ? 1 : 0,
-            jobs: status ? [{ name: projectName, phase: status.phase }] : [],
-          });
-        }
-
         return Promise.resolve({
           active: isActive ? 1 : 0,
-          jobs: status
-            ? [
-                {
-                  name: projectName,
-                  phase: status.phase,
-                  elapsed: `${String(Math.round((Date.now() - status.startedAt.getTime()) / 1000))}s`,
-                  error: status.errorSummary,
-                },
-              ]
-            : [],
+          jobs: status ? [formatJob(status)] : [],
         });
       }
 
-      const jobs = appCtx.jobManager.getActiveJobs();
-      if (context.target === 'mcp') {
-        return Promise.resolve({
-          active: jobs.length,
-          jobs: jobs.map((job) => ({ name: job.projectName, phase: job.phase })),
-        });
-      }
+      const allJobs = appCtx.jobManager.getStatuses();
+      const recentJobs = allJobs.filter(
+        (j) =>
+          (j.phase !== 'done' && j.phase !== 'failed') ||
+          (j.completedAt && Date.now() - j.completedAt.getTime() < 5 * 60 * 1000),
+      );
+      const activeCount = recentJobs.filter(
+        (j) => j.phase !== 'done' && j.phase !== 'failed',
+      ).length;
 
       return Promise.resolve({
-        active: jobs.length,
-        jobs: jobs.map((job) => ({
-          name: job.projectName,
-          phase: job.phase,
-          elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
-          error: job.errorSummary,
-        })),
+        active: activeCount,
+        jobs: recentJobs.map(formatJob),
       });
     },
   },

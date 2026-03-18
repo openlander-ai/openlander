@@ -149,8 +149,18 @@ describe('registry critical tool behaviors', () => {
     const now = new Date(Date.now() - 3000);
 
     jobManager.getStatus
-      .mockReturnValueOnce({ phase: 'building', startedAt: now, errorSummary: null })
-      .mockReturnValueOnce({ phase: 'done', startedAt: now, errorSummary: 'none' });
+      .mockReturnValueOnce({
+        projectName: 'critical-app',
+        phase: 'building',
+        startedAt: now,
+        errorSummary: null,
+      })
+      .mockReturnValueOnce({
+        projectName: 'critical-app',
+        phase: 'done',
+        startedAt: now,
+        errorSummary: 'none',
+      });
 
     const agentResult = await tool.execute({ project_name: 'critical-app' }, { target: 'agent' });
     const mcpResult = await tool.execute({ project_name: 'critical-app' }, { target: 'mcp' });
@@ -167,7 +177,13 @@ describe('registry critical tool behaviors', () => {
     });
     expect(mcpResult).toEqual({
       active: 0,
-      jobs: [{ name: 'critical-app', phase: 'done' }],
+      jobs: [
+        expect.objectContaining({
+          name: 'critical-app',
+          phase: 'done',
+          elapsed: expect.any(String),
+        }),
+      ],
     });
   });
 

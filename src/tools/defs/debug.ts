@@ -1,8 +1,33 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
-import { debugBuildErrorSchema } from './schemas.js';
+import { debugBuildErrorSchema, getBuildLogSchema } from './schemas.js';
 
 export const debugToolDefs: ToolDef[] = [
+  {
+    name: 'get_build_log',
+    description:
+      'Get the raw build log for a project deployment. Returns the full unprocessed build output. Use this instead of debug_build_error when you need to parse the log yourself. Returns { status, build_log, duration_ms, created_at }. Errors: PROJECT_NOT_FOUND, NO_DEPLOY_LOGS.',
+    inputSchema: getBuildLogSchema,
+    execute: (args, { appCtx }) => {
+      const projectName = args['project_name'] as string;
+      const project = appCtx.db.getProjectByName(projectName);
+      if (!project) throw new ProjectNotFoundError(projectName);
+
+      const index = (args['deploy_index'] as number | undefined) ?? 0;
+      const logs = appCtx.db.getDeployLogs(project.id, index + 1);
+      const log = logs[index];
+      if (!log) {
+        return Promise.resolve({ error: 'NO_DEPLOY_LOGS', message: 'No deploy logs found.' });
+      }
+
+      return Promise.resolve({
+        status: log.status,
+        build_log: log.build_log ?? 'No build log captured.',
+        duration_ms: log.duration_ms,
+        created_at: log.created_at,
+      });
+    },
+  },
   {
     name: 'debug_build_error',
     description:

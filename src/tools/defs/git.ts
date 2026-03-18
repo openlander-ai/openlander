@@ -142,7 +142,8 @@ export const gitToolDefs: ToolDef[] = [
       'Start deploying a monorepo with multiple services in the background. Use AFTER scan_dockerfiles confirms multiple Dockerfiles. Returns immediately with { parentProjectId, parentName, status: "building" } while all services build in parallel. Use get_deploy_status to check progress. Errors: BUILD_FAILED on individual services (others continue).',
     inputSchema: deployMonorepoSchema,
     execute: (args, { appCtx }) => {
-      const dockerfiles = JSON.parse(args['dockerfiles'] as string) as string[];
+      const raw = args['dockerfiles'] as string | string[];
+      const dockerfiles = Array.isArray(raw) ? raw : (JSON.parse(raw) as string[]);
       const result = appCtx.pipeline.startMonorepoDeploy({
         repoUrl: args['repo_url'] as string,
         clonePath: args['clone_path'] as string,
