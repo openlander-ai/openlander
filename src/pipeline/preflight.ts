@@ -207,14 +207,18 @@ export async function preflightCheck(
     // Resource status check (warning only)
     const resourceWarnings: string[] = [];
     const diskFreeGB = systemStats?.disk ? systemStats.disk.freeGB : 999;
-    const memoryUsagePercent = systemStats?.memory ? systemStats.memory.usagePercent : 0;
+    const mem = systemStats?.memory;
+    const memUsedGB = mem ? (mem.usedMB / 1024).toFixed(1) : '?';
+    const memTotalGB = mem ? (mem.totalMB / 1024).toFixed(1) : '?';
+    const memFreeGB = mem ? (mem.freeMB / 1024).toFixed(1) : '?';
+    const memoryUsagePercent = mem ? mem.usagePercent : 0;
 
     if (diskFreeGB < DISK_WARNING_THRESHOLD_GB) {
       resourceWarnings.push(`Disk space low: ${diskFreeGB.toFixed(1)}GB free (builds may fail)`);
     }
     if (memoryUsagePercent >= MEMORY_WARNING_THRESHOLD_PERCENT) {
       resourceWarnings.push(
-        `Memory high: ${memoryUsagePercent.toFixed(0)}% used - builds may be slow`,
+        `Memory high: ${memUsedGB}GB / ${memTotalGB}GB (${memoryUsagePercent.toFixed(0)}%) - ${memFreeGB}GB available`,
       );
     }
 
@@ -223,7 +227,7 @@ export async function preflightCheck(
       detail:
         resourceWarnings.length > 0
           ? resourceWarnings.join('; ')
-          : `Disk: ${diskFreeGB.toFixed(1)}GB free, Memory: ${memoryUsagePercent.toFixed(0)}% used`,
+          : `Disk: ${diskFreeGB.toFixed(1)}GB free, Memory: ${memUsedGB}GB / ${memTotalGB}GB (${memoryUsagePercent.toFixed(0)}%) - ${memFreeGB}GB available`,
     };
 
     warnings.push(...resourceWarnings);
