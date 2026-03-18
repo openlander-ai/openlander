@@ -272,6 +272,7 @@ export class DeployPipeline {
       name: projectName,
       repoUrl: config.repoUrl,
       branch: config.branch,
+      dockerfilePath: config.dockerfilePath,
       dockerTarget: config.dockerTarget,
     });
     this.db.updateProject(projectId, { status: 'building' });
@@ -1459,6 +1460,8 @@ export class DeployPipeline {
       name: project.name,
       visibility: project.visibility,
       dockerTarget: project.docker_target ?? undefined,
+      dockerfilePath:
+        project.dockerfile_path !== 'Dockerfile' ? project.dockerfile_path : undefined,
       _projectId: projectId,
     });
   }
