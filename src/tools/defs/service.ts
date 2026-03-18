@@ -46,7 +46,7 @@ export const serviceToolDefs: ToolDef[] = [
   {
     name: 'create_service',
     description:
-      'Create a new service (database, cache, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb) or custom image with port. Returns { id, name, type, status, credentials } with connection details. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new service (database, cache, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb) or custom image with port. Returns { id, name, type, status, credentials } with connection details. After creating, use set_env_vars to connect projects: DATABASE_URL for postgres/mysql, REDIS_URL for redis, MONGODB_URL for mongodb — use the container_name from credentials as hostname. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const result = await appCtx.serviceManager.create({
@@ -301,7 +301,7 @@ export const serviceToolDefs: ToolDef[] = [
   {
     name: 'provision_database',
     description:
-      'Provision a database sidecar (PostgreSQL or SQLite) for a project. Automatically sets DATABASE_URL in the project env vars and redeploys. Use when user says they need a database. Defaults to PostgreSQL. Returns { status, connectionUrl, type }. Errors: PROJECT_NOT_FOUND, ALREADY_PROVISIONED.',
+      'Provision a database sidecar (PostgreSQL or SQLite) for a project. Automatically sets DATABASE_URL in the project env vars and redeploys. Use when user says they need a database. Defaults to PostgreSQL. Returns { status, connectionUrl, type }. For other services (Redis, MongoDB) use create_service + set_env_vars pattern instead. Errors: PROJECT_NOT_FOUND, ALREADY_PROVISIONED.',
     inputSchema: provisionDbSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;

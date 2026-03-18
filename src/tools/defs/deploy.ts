@@ -17,7 +17,7 @@ export const deployToolDefs: ToolDef[] = [
     description:
       'Start deploying a project from a git repository URL. Returns immediately with { projectId, projectName, status: "building" } while the build runs in the background. ALWAYS follow up with get_deploy_status to check progress and report the result to the user. Errors: CLONE_FAILED (bad URL or private repo without SSH key), BUILD_FAILED (Dockerfile error — suggest debug_build_error next), ALREADY_EXISTS (project name taken). Only works with repos that have a Dockerfile.',
     mcpDescription:
-      'Start deploying a project from a git repository URL. Returns immediately while build runs in background.',
+      'Start deploying a project from a git repository URL. Returns immediately while build runs in background. Key params: dockerfile_path bypasses compose detection, docker_target selects multi-stage target, env_vars sets runtime env (JSON string). For service connections use host.docker.internal for host services or container names (ol-svc-*) for OpenLander services. Check get_build_log for raw logs if build fails.',
     inputSchema: deployProjectSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
