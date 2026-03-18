@@ -255,6 +255,7 @@ export class DeployPipeline {
       name: projectName,
       repoUrl: config.repoUrl,
       branch: config.branch,
+      dockerTarget: config.dockerTarget,
     });
     this.db.updateProject(projectId, { status: 'building' });
     this.jobManager?.trackJob(projectId, projectName);
@@ -1437,6 +1438,7 @@ export class DeployPipeline {
       branch: project.branch,
       name: project.name,
       visibility: project.visibility,
+      dockerTarget: project.docker_target ?? undefined,
       _projectId: projectId,
     });
   }
