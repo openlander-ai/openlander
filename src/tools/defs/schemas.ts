@@ -290,3 +290,27 @@ export const fixDockerfileSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
   error: z.string().min(1).describe('Build error message'),
 });
+
+export const uploadSecretFileSchema = z.object({
+  project_name: z
+    .string()
+    .optional()
+    .describe('Project name. Omit for global secret file (shared across all projects).'),
+  filename: z.string().min(1).describe('Filename (e.g. firebase-sa.json, tls-cert.pem)'),
+  content: z.string().min(1).describe('File content (plaintext — will be encrypted at rest)'),
+  mount_path: z
+    .string()
+    .optional()
+    .describe(
+      'Container mount directory (default: /run/secrets). File available at mount_path/filename.',
+    ),
+});
+
+export const listSecretFilesSchema = z.object({
+  project_name: z.string().optional().describe('Project name. Omit to list global secret files.'),
+});
+
+export const removeSecretFileSchema = z.object({
+  project_name: z.string().optional().describe('Project name. Omit for global secret file.'),
+  filename: z.string().min(1).describe('Filename to remove'),
+});

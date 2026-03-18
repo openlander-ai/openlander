@@ -1,5 +1,5 @@
 import { ProjectNotFoundError } from '../../errors.js';
-import { getProjectUrl } from '../../pipeline/traefik.js';
+import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import {
   emptySchema,
   removeProjectSchema,
@@ -64,6 +64,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             branch: project.branch,
             port: project.assigned_port,
             url: project.assigned_port ? getProjectUrl(project.name) : null,
+            urls: project.assigned_port ? getProjectUrls(project.name) : [],
             publicUrl: project.public_url,
             createdAt: project.created_at,
             updatedAt: project.updated_at,

@@ -2,9 +2,10 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('docker');
 
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type Dockerode from 'dockerode';
 
 import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
@@ -15,6 +16,12 @@ export type DockerStatus =
   | { state: 'not_running' }
   | { state: 'permission_denied'; groupFixed?: boolean };
 
+export interface SecretFileMount {
+  filename: string;
+  content: string;
+  mountPath: string;
+}
+
 export interface RunContainerOptions {
   imageTag: string;
   name: string;
@@ -24,6 +31,7 @@ export interface RunContainerOptions {
   containerPort?: number;
   envVars: Record<string, string>;
   traefikLabels: Record<string, string>;
+  secretFiles?: SecretFileMount[];
 }
 
 export interface ContainerInfo {
@@ -235,6 +243,7 @@ export class Docker {
     const envArray = Object.entries(options.envVars).map(([k, v]) => `${k}=${v}`);
     const cPort = options.containerPort ?? options.port;
     const extraHosts = await this.resolveExtraHosts();
+    const binds = this.writeSecretFiles(options.name, options.secretFiles ?? []);
 
     const container = await this.client.createContainer({
       Image: options.imageTag,
@@ -252,6 +261,7 @@ export class Docker {
         PortBindings: {
           [`${String(cPort)}/tcp`]: [{ HostPort: String(options.port) }],
         },
+        Binds: binds.length > 0 ? binds : undefined,
         NetworkMode: this.networkName,
         RestartPolicy: { Name: 'unless-stopped' },
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
@@ -260,6 +270,30 @@ export class Docker {
 
     await container.start();
     return container.id;
+  }
+
+  private writeSecretFiles(containerName: string, files: SecretFileMount[]): string[] {
+    if (files.length === 0) return [];
+
+    const secretsDir = join(homedir(), '.openlander', 'container-secrets', containerName);
+    mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
+
+    const binds: string[] = [];
+    for (const file of files) {
+      const hostPath = join(secretsDir, file.filename);
+      writeFileSync(hostPath, file.content, { mode: 0o600 });
+      binds.push(`${hostPath}:${file.mountPath}:ro`);
+    }
+    return binds;
+  }
+
+  cleanupSecretFiles(containerName: string): void {
+    const secretsDir = join(homedir(), '.openlander', 'container-secrets', containerName);
+    try {
+      rmSync(secretsDir, { recursive: true, force: true });
+    } catch (_) {
+      /* best-effort */
+    }
   }
 
   private async resolveExtraHosts(): Promise<string[]> {

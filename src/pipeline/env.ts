@@ -203,6 +203,46 @@ export class EnvManager {
     return { ...globalVars, ...projectVars };
   }
 
+  // ===== Secret Files =====
+
+  uploadSecretFile(
+    projectId: string | null,
+    filename: string,
+    content: string,
+    mountPath: string = '/run/secrets',
+  ): void {
+    const { encrypted, iv } = encrypt(content);
+    this.db.upsertSecretFile(projectId, filename, encrypted, iv, mountPath);
+  }
+
+  listSecretFiles(
+    projectId: string | null,
+  ): Array<{ filename: string; mountPath: string; scope: 'project' | 'global' }> {
+    const rows = this.db.getSecretFiles(projectId);
+    return rows.map((r) => ({
+      filename: r.filename,
+      mountPath: `${r.mount_path}/${r.filename}`,
+      scope: r.project_id ? 'project' : 'global',
+    }));
+  }
+
+  removeSecretFile(projectId: string | null, filename: string): boolean {
+    return this.db.deleteSecretFile(projectId, filename);
+  }
+
+  getSecretFilesForDeploy(projectId: string): Array<{
+    filename: string;
+    content: string;
+    mountPath: string;
+  }> {
+    const rows = this.db.getSecretFilesForDeploy(projectId);
+    return rows.map((r) => ({
+      filename: r.filename,
+      content: decrypt(r.encrypted_content, r.iv),
+      mountPath: `${r.mount_path}/${r.filename}`,
+    }));
+  }
+
   // ===== Masking =====
 
   /** Mask a value for display: sk-1234567890 → sk-****7890 */

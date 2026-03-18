@@ -2,9 +2,12 @@ import type { ToolDef } from './types.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import {
   listGlobalSecretsSchema,
+  listSecretFilesSchema,
   projectNameSchema,
+  removeSecretFileSchema,
   setEnvVarsSchema,
   setGlobalSecretSchema,
+  uploadSecretFileSchema,
 } from './schemas.js';
 
 function getProjectByName(appCtx: Parameters<ToolDef['execute']>[1]['appCtx'], name: string) {
@@ -98,5 +101,71 @@ export const envToolDefs: ToolDef[] = [
       appCtx.pipeline.closeTunnel(project.id);
       return { status: 'unexposed', project: projectName };
     },
+  },
+  {
+    name: 'upload_secret_file',
+    description:
+      'Upload a secret file that will be mounted into containers at /run/secrets/filename. Use for credential files like Firebase service account JSON, TLS certificates, or any file the app reads from disk. Content is encrypted at rest. Omit project_name to make it global (available to all projects). Requires redeploy to take effect. Returns { status, mountPath }.',
+    inputSchema: uploadSecretFileSchema,
+    execute: (args, { appCtx }) => {
+      const projectName = args['project_name'] as string | undefined;
+      const filename = args['filename'] as string;
+      const content = args['content'] as string;
+      const mountPath = (args['mount_path'] as string | undefined) ?? '/run/secrets';
+
+      let projectId: string | null = null;
+      if (projectName) {
+        const project = getProjectByName(appCtx, projectName);
+        projectId = project.id;
+      }
+
+      appCtx.env.uploadSecretFile(projectId, filename, content, mountPath);
+
+      return {
+        status: 'uploaded',
+        filename,
+        mountPath: `${mountPath}/${filename}`,
+        scope: projectId ? 'project' : 'global',
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'list_secret_files',
+    description:
+      'List secret files uploaded for a project or globally. Shows filenames, mount paths, and scope (project/global) — file content is never returned for security. Omit project_name to list global secret files. Returns { files[], count }.',
+    inputSchema: listSecretFilesSchema,
+    execute: (_args, { appCtx }) => {
+      const projectName = _args['project_name'] as string | undefined;
+      let projectId: string | null = null;
+      if (projectName) {
+        const project = getProjectByName(appCtx, projectName);
+        projectId = project.id;
+      }
+
+      const files = appCtx.env.listSecretFiles(projectId);
+      return { files, count: files.length };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'remove_secret_file',
+    description:
+      'Remove a previously uploaded secret file from a project or global scope. The file will no longer be mounted after the next redeploy. Omit project_name for global secret files. Returns { status: "removed"|"not_found", filename }. Errors: PROJECT_NOT_FOUND.',
+    inputSchema: removeSecretFileSchema,
+    execute: (args, { appCtx }) => {
+      const projectName = args['project_name'] as string | undefined;
+      const filename = args['filename'] as string;
+
+      let projectId: string | null = null;
+      if (projectName) {
+        const project = getProjectByName(appCtx, projectName);
+        projectId = project.id;
+      }
+
+      const removed = appCtx.env.removeSecretFile(projectId, filename);
+      return { status: removed ? 'removed' : 'not_found', filename };
+    },
+    targets: ['mcp'],
   },
 ];

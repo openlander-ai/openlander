@@ -469,6 +469,7 @@ describe('agent UX integration flow', () => {
       const envManager = {
         getAll: vi.fn().mockReturnValue({}),
         getMergedForDeploy: vi.fn().mockReturnValue({}),
+        getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       };
 
       const deployPipeline = new DeployPipeline(

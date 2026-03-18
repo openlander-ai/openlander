@@ -1,4 +1,5 @@
 import { ProjectNotFoundError } from '../../errors.js';
+import { getProjectUrls } from '../../pipeline/traefik.js';
 import type { ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
@@ -159,6 +160,7 @@ export const deployToolDefs: ToolDef[] = [
         phase: job.phase,
         elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
         error: job.errorSummary,
+        ...(job.phase === 'done' ? { urls: getProjectUrls(job.projectName) } : {}),
       });
 
       if (projectName) {

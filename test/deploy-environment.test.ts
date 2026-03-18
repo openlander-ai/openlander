@@ -13,6 +13,9 @@ import * as dockerfileGen from '../src/pipeline/dockerfile-gen.js';
 type EnvLike = {
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
   getMergedForDeploy: (projectId: string, environmentId?: string) => Record<string, string>;
+  getSecretFilesForDeploy: (
+    projectId: string,
+  ) => Array<{ filename: string; content: string; mountPath: string }>;
 };
 
 function createMockDocker(): Docker {
@@ -49,6 +52,7 @@ describe('DeployPipeline deployEnvironment', () => {
     env = {
       getAll: vi.fn().mockReturnValue({}),
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
+      getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
     pipeline = new DeployPipeline(docker, db, env as never);
 

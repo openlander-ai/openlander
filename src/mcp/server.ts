@@ -56,6 +56,9 @@ CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTT
 ### Environment & Config
 - set_env_vars — Set env vars on a project (JSON string of key-value pairs). Requires redeploy to take effect.
 - set_global_secret / list_global_secrets — Encrypted secrets shared across ALL projects automatically. Use for shared API keys, external service credentials.
+- upload_secret_file — Upload a credential file (e.g. Firebase JSON, TLS cert) that mounts at /run/secrets/filename. Encrypted at rest. Omit project_name for global (all projects). Requires redeploy.
+- list_secret_files — List uploaded secret files (content never returned).
+- remove_secret_file — Remove a secret file. Requires redeploy.
 - expose_public / unexpose_public — Toggle public URL via Cloudflare tunnel.
 
 ### Monitoring & Debug
@@ -137,6 +140,16 @@ Common failure patterns:
 4. get_service_credentials({ service_name: "shared-pg" }) — get connection details
 5. set_env_vars on each project with its specific database name in the connection string
 
+### Firebase / GCP credential file
+1. upload_secret_file({ project_name: "myapp", filename: "firebase-sa.json", content: '{"type":"service_account",...}' })
+   → Encrypted, mounted at /run/secrets/firebase-sa.json
+2. set_env_vars({ project_name: "myapp", variables: '{"GOOGLE_APPLICATION_CREDENTIALS": "/run/secrets/firebase-sa.json"}' })
+3. redeploy_project({ project_name: "myapp" })
+
+### TLS certificate (global, all projects)
+1. upload_secret_file({ filename: "ca-cert.pem", content: "-----BEGIN CERTIFICATE-----..." })
+   → Global: available to all projects at /run/secrets/ca-cert.pem
+
 ### Deploy with stale container conflict
 - deploy_project({ repo_url: "...", force: true }) — auto-removes conflicting containers
 
@@ -172,9 +185,11 @@ When a user provides env vars (pasted .env file or key=value pairs):
 - deploy_project runs preflight checks automatically. Use force=true to bypass name conflicts.
 - Second service of the same type gets a prefixed env key (e.g. ANALYTICS_DATABASE_URL instead of DATABASE_URL).
 - Deploys are non-blocking — deploy_project returns immediately. ALWAYS poll get_deploy_status afterward.
+- list_projects and get_deploy_status return a urls array with LAN and VPN access URLs (type: "lan" or "vpn"). Use these to tell the user how to access from other devices on the network.
 - provision_database is a shortcut for "create PostgreSQL + auto-set DATABASE_URL". Use create_service for more control (MySQL, Redis, MongoDB, custom images).
 - scan_project before first deploy is strongly recommended — it reveals framework, required env vars, and monorepo structure.
-- Global secrets (set_global_secret) are auto-injected into all deploys. Project-level env vars override them.`;
+- Global secrets (set_global_secret) are auto-injected into all deploys. Project-level env vars override them.
+- Secret files (upload_secret_file) mount at /run/secrets/filename inside containers. Use for Firebase JSON, TLS certs, SSH keys — any file the app needs on disk. Set GOOGLE_APPLICATION_CREDENTIALS or similar env var pointing to the mount path.`;
 
 // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
 function createMcpServerInstance(ctx: AppContext): Server {

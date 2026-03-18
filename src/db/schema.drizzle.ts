@@ -266,6 +266,24 @@ export const services = sqliteTable(
   ],
 );
 
+export const secretFiles = sqliteTable(
+  'secret_files',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+    filename: text('filename').notNull(),
+    encrypted_content: text('encrypted_content').notNull(),
+    iv: text('iv').notNull(),
+    mount_path: text('mount_path').notNull().default('/run/secrets'),
+    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index('idx_secret_files_project').on(table.project_id),
+    uniqueIndex('idx_secret_files_unique').on(table.project_id, table.filename),
+  ],
+);
+
 export const drizzleSchema = {
   projects,
   environments,
@@ -278,4 +296,5 @@ export const drizzleSchema = {
   webhookConfigs,
   globalSecrets,
   services,
+  secretFiles,
 };

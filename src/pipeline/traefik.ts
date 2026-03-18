@@ -262,6 +262,20 @@ export function getAllIps(): NetworkIp[] {
   return ips.sort((a, b) => (a.type === 'lan' ? -1 : 1) - (b.type === 'lan' ? -1 : 1));
 }
 
+export interface ProjectUrl {
+  url: string;
+  type: 'lan' | 'vpn';
+  ip: string;
+}
+
+export function getProjectUrls(projectName: string): ProjectUrl[] {
+  return getAllIps().map((ip) => ({
+    url: `http://${projectName}.${ip.address}.sslip.io`,
+    type: ip.type,
+    ip: ip.address,
+  }));
+}
+
 export function buildTraefikLabels(
   projectName: string,
   containerPort: number,

@@ -13,6 +13,9 @@ import { clearPortScanCache } from '../src/pipeline/port.js';
 
 type EnvLike = {
   getMergedForDeploy: (projectId: string, environmentId?: string) => Record<string, string>;
+  getSecretFilesForDeploy: (
+    projectId: string,
+  ) => Array<{ filename: string; content: string; mountPath: string }>;
 };
 
 function createMockDocker(): Docker {
@@ -26,6 +29,7 @@ function createMockDocker(): Docker {
     listAllContainers: vi.fn().mockResolvedValue([]),
     inspectContainer: vi.fn().mockResolvedValue(null),
     getLogs: vi.fn().mockResolvedValue(''),
+    cleanupSecretFiles: vi.fn(),
   } as unknown as Docker;
 }
 
@@ -42,6 +46,7 @@ describe('DeployPipeline deploy controls', () => {
     docker = createMockDocker();
     env = {
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
+      getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
     pipeline = new DeployPipeline(docker, db, env as never);
   });

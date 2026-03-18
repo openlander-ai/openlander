@@ -659,6 +659,7 @@ export class DeployPipeline {
       );
 
       this.jobManager?.updatePhase(projectId, 'starting');
+      const secretFilesMounts = this.env.getSecretFilesForDeploy(projectId);
       const containerId = await this.docker.runContainer({
         imageTag,
         name: `ol-${routeName}`,
@@ -666,6 +667,7 @@ export class DeployPipeline {
         containerPort,
         envVars,
         traefikLabels,
+        secretFiles: secretFilesMounts,
       });
 
       const internalUrl = `http://${getEnvironmentProjectHostname(projectName, environment.type)}`;
@@ -1195,6 +1197,7 @@ export class DeployPipeline {
             containerPort: childContainerPort,
             envVars,
             traefikLabels,
+            secretFiles: this.env.getSecretFilesForDeploy(childId),
           });
 
           const internalUrl = getProjectUrl(childName.replace('/', '-'));
@@ -1568,6 +1571,7 @@ export class DeployPipeline {
             undefined,
             environment.type,
           ),
+          secretFiles: this.env.getSecretFilesForDeploy(projectId),
         });
 
         this.db.updateEnvironment(environmentId, {
@@ -1634,6 +1638,7 @@ export class DeployPipeline {
         containerPort,
         envVars,
         traefikLabels,
+        secretFiles: this.env.getSecretFilesForDeploy(projectId),
       });
 
       // Update DB: swap image tags
@@ -1722,6 +1727,10 @@ export class DeployPipeline {
       await tryCleanup(project.container_id);
     }
     await tryCleanup(`ol-${project.name}`);
+
+    if (mode === 'remove') {
+      this.docker.cleanupSecretFiles(`ol-${project.name}`);
+    }
   }
 
   private async forceCleanConflicts(

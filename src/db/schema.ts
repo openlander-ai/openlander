@@ -162,4 +162,19 @@ CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens(provider);
 CREATE INDEX IF NOT EXISTS idx_webhook_configs_project_source ON webhook_configs(project_id, source);
 CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key);
 CREATE INDEX IF NOT EXISTS idx_services_type ON services(type);
+
+CREATE TABLE IF NOT EXISTS secret_files (
+  id TEXT PRIMARY KEY,
+  project_id TEXT,
+  filename TEXT NOT NULL,
+  encrypted_content TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  mount_path TEXT NOT NULL DEFAULT '/run/secrets',
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_secret_files_project ON secret_files(project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_secret_files_unique ON secret_files(project_id, filename);
 `;
