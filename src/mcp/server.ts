@@ -15,6 +15,8 @@ import { infraToolDefs } from '../tools/defs/infra.js';
 import { monitoringToolDefs } from '../tools/defs/monitoring.js';
 import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
 import { serviceToolDefs } from '../tools/defs/service.js';
+import { webhookToolDefs } from '../tools/defs/webhook.js';
+import { environmentToolDefs } from '../tools/defs/environment.js';
 import type { ToolDef } from '../tools/defs/types.js';
 
 const log = createModuleLogger('mcp');
@@ -28,6 +30,8 @@ const mcpToolDefs: ToolDef[] = [
   ...gitToolDefs,
   ...monitoringToolDefs,
   ...debugToolDefs,
+  ...webhookToolDefs,
+  ...environmentToolDefs,
 ];
 
 const SERVER_INSTRUCTIONS = `You are connected to OpenLander, a self-hosted deployment platform that builds Docker images from git repos and runs them behind Traefik.
@@ -42,6 +46,7 @@ CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTT
 - rollback_project — Revert to previous Docker image.
 - deploy_blue_green — Zero-downtime deploy with health check before traffic switch. Use for production projects where downtime is unacceptable.
 - preview_deploy / cleanup_preview / list_previews — Ephemeral branch previews for PR testing.
+- deploy_environment — Deploy a specific environment (production/development) for a project. Returns immediately.
 - get_deploy_status — Poll build progress. Shows phase (queued/cloning/building/starting/done/failed) and elapsed time.
 
 ### Services (Databases & Caches)
@@ -79,6 +84,16 @@ CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTT
 
 ### Git Integration
 - list_github_repos / search_github_repos — Browse connected GitHub repos.
+
+### Webhook Auto-Deploy
+- enable_webhook — Configure a git provider (GitHub/GitLab/Bitbucket) to auto-deploy on push. Returns webhook URL and secret for git provider configuration.
+- disable_webhook — Disable webhook for a provider without deleting config.
+- get_webhook_config — List all webhook configs for a project.
+
+### Environments
+- create_environment — Add a development environment with a specific branch. Production is auto-created on first deploy.
+- list_environments — See all environments for a project with status and branch info.
+- deploy_environment — Deploy a specific environment (pulls from that environment's branch).
 
 ## Deploy Planning (ALWAYS follow for new deploys)
 
@@ -161,6 +176,21 @@ Common failure patterns:
 1. set_global_secret({ key: "STRIPE_API_KEY", value: "sk_live_...", description: "Stripe production key" })
    → Automatically injected into every deploy. No need to set per-project.
 
+### Set up auto-deploy webhook
+1. enable_webhook({ project_name: "myapp", source: "github" })
+   → Returns { secret, webhookPath: "/api/webhooks/PROJECT_ID/github" }
+2. In GitHub repo settings → Webhooks → Add webhook:
+   - URL: YOUR_OPENLANDER_HOST + webhookPath
+   - Secret: the returned secret
+   - Events: Push events (and optionally Pull request events for previews)
+3. Now every push to main auto-triggers redeploy_project
+
+### Deploy to multiple environments
+1. deploy_project({ repo_url: "...", env_vars: '...' }) — auto-creates production env
+2. create_environment({ project_name: "myapp", type: "development", branch: "develop" })
+3. deploy_environment({ project_name: "myapp", environment_type: "development" })
+4. Each environment has its own container, port, and URL
+
 ## Environment Variable Handling
 
 When a user provides env vars (pasted .env file or key=value pairs):
@@ -176,6 +206,16 @@ When a user provides env vars (pasted .env file or key=value pairs):
    - http://192.168.1.100:8080 → http://host.docker.internal:8080 (host service)
 
 3. Apply all vars in one set_env_vars call, then redeploy_project.
+
+### Build-Time Variables (Automatic)
+Environment variables with these prefixes are automatically injected as Docker build args:
+- NEXT_PUBLIC_* (Next.js)
+- VITE_* (Vite)
+- REACT_APP_* (Create React App)
+- NUXT_PUBLIC_* (Nuxt)
+- PUBLIC_* (SvelteKit/general)
+- GATSBY_* (Gatsby)
+No extra configuration needed. Pass them via env_vars in deploy_project or set_env_vars — they'll be available at both build time and runtime.
 
 ## Key Rules
 - Connection strings use Docker container names (ol-svc-*) as hostnames, NEVER localhost or 127.0.0.1.

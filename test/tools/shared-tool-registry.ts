@@ -8,6 +8,8 @@ import { infraToolDefs } from '../../src/tools/defs/infra.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
 import { projectOpsToolDefs } from '../../src/tools/defs/project-ops.js';
 import { serviceToolDefs } from '../../src/tools/defs/service.js';
+import { webhookToolDefs } from '../../src/tools/defs/webhook.js';
+import { environmentToolDefs } from '../../src/tools/defs/environment.js';
 import type { ToolDef, ToolTarget } from '../../src/tools/defs/types.js';
 
 export interface LegacyToolSpec {
@@ -33,6 +35,8 @@ const sharedToolDefs: ToolDef[] = [
   ...debugToolDefs,
   ...serviceToolDefs,
   ...composeToolDefs,
+  ...webhookToolDefs,
+  ...environmentToolDefs,
 ];
 
 export function createSharedToolRegistry(

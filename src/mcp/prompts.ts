@@ -88,6 +88,34 @@ redeploy_project({ project_name: "myapp" })
 4. **Ignoring preflight failures** — \`deploy_project\` runs preflight checks. If port or name conflicts exist, resolve them first.
 5. **Not checking build logs on failure** — Always call \`get_build_log\` before asking the user to debug.
 
+## Build-Time Environment Variables
+
+OpenLander auto-detects environment variables that need to be available at Docker build time.
+Variables with these prefixes are automatically injected as Docker build args:
+- NEXT_PUBLIC_* (Next.js)
+- VITE_* (Vite)
+- REACT_APP_* (Create React App)
+- NUXT_PUBLIC_* (Nuxt)
+- PUBLIC_* (SvelteKit/general)
+- GATSBY_* (Gatsby)
+
+No special configuration needed — just pass them via env_vars in deploy_project or set_env_vars.
+
+## Webhook Auto-Deploy
+
+Set up automatic deploys on git push:
+1. enable_webhook({ project_name: "myapp", source: "github" })
+   → Returns { secret, webhookPath }
+2. Configure webhook in GitHub/GitLab with the URL and secret
+3. Pushes to the configured branch auto-trigger redeploy
+
+## Multi-Environment Deploys
+
+Each project auto-creates a production environment. Add a development environment:
+1. create_environment({ project_name: "myapp", type: "development", branch: "develop" })
+2. deploy_environment({ project_name: "myapp", environment_type: "development" })
+3. list_environments({ project_name: "myapp" }) — see all environments
+
 ${typeSpecific}`,
           },
         },
@@ -102,7 +130,7 @@ function getTypeSpecificAdvice(projectType: string): string {
     case 'next':
       return `## Next.js Tips
 - Use \`docker_target: "runner"\` for multi-stage Dockerfiles with standalone output.
-- Set \`NEXT_PUBLIC_*\` env vars at build time (they're inlined). Runtime env vars use \`NEXT_*\`.
+- \`NEXT_PUBLIC_*\` env vars are automatically injected as Docker build args — just pass them via env_vars.
 - Standalone output mode (\`output: 'standalone'\` in next.config) produces smaller images.`;
 
     case 'fastapi':

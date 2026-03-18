@@ -18,7 +18,7 @@ export const deployToolDefs: ToolDef[] = [
     description:
       'Start deploying a project from a git repository URL. Returns immediately with { projectId, projectName, status: "building" } while the build runs in the background. ALWAYS follow up with get_deploy_status to check progress and report the result to the user. Errors: CLONE_FAILED (bad URL or private repo without SSH key), BUILD_FAILED (Dockerfile error — suggest debug_build_error next), ALREADY_EXISTS (project name taken). Only works with repos that have a Dockerfile.',
     mcpDescription:
-      'Start deploying a project from a git repository URL. Returns immediately while build runs in background. Key params: dockerfile_path bypasses compose detection, docker_target selects multi-stage target, env_vars sets runtime env (JSON string). For service connections use host.docker.internal for host services or container names (ol-svc-*) for OpenLander services. Check get_build_log for raw logs if build fails.',
+      'Start deploying a project from a git repository URL. Returns immediately while build runs in background. Key params: dockerfile_path bypasses compose detection, docker_target selects multi-stage target, env_vars (JSON string) — set at container runtime; vars with NEXT_PUBLIC_*, VITE_*, REACT_APP_*, NUXT_PUBLIC_*, PUBLIC_*, GATSBY_* prefixes are also auto-injected as Docker build args. For service connections use host.docker.internal for host services or container names (ol-svc-*) for OpenLander services. Check get_build_log for raw logs if build fails.',
     inputSchema: deployProjectSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -66,8 +66,10 @@ export const deployToolDefs: ToolDef[] = [
   },
   {
     name: 'redeploy_project',
-    description: 'Redeploy an existing project.',
-    mcpDescription: 'Redeploy an existing project.',
+    description:
+      'Redeploy an existing project by pulling latest code from the same branch and rebuilding. Preserves project settings (dockerfile_path, docker_target, branch, visibility). Env vars from set_env_vars are automatically included. Returns immediately — poll with get_deploy_status.',
+    mcpDescription:
+      'Redeploy an existing project by pulling latest code from the same branch and rebuilding. Preserves project settings (dockerfile_path, docker_target, branch, visibility). Env vars from set_env_vars are automatically included. Returns immediately — poll with get_deploy_status.',
     inputSchema: redeployProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;

@@ -314,3 +314,35 @@ export const removeSecretFileSchema = z.object({
   project_name: z.string().optional().describe('Project name. Omit for global secret file.'),
   filename: z.string().min(1).describe('Filename to remove'),
 });
+
+// Webhook management schemas
+export const enableWebhookSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  source: z.enum(['github', 'gitlab', 'bitbucket']).describe('Git provider'),
+  branch_filter: z.string().optional().describe('Branch to trigger deploys on (default: main)'),
+});
+
+export const disableWebhookSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  source: z.enum(['github', 'gitlab', 'bitbucket']).describe('Git provider'),
+});
+
+export const getWebhookConfigSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+});
+
+// Environment management schemas
+export const createEnvironmentSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  type: z.enum(['production', 'development']).describe('Environment type'),
+  branch: z.string().min(1).describe('Git branch for this environment'),
+});
+
+export const listEnvironmentsSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+});
+
+export const deployEnvironmentSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  environment_type: z.enum(['production', 'development']).describe('Environment to deploy'),
+});
