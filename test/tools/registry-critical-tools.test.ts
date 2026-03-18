@@ -104,34 +104,6 @@ describe('registry critical tool behaviors', () => {
     vi.restoreAllMocks();
   });
 
-  it('deploy_project uses target to set trigger source', async () => {
-    const { ctx, pipeline } = createMockContext();
-    const tool = getTool(ctx, 'deploy_project', 'mcp');
-
-    await tool.execute(
-      { repo_url: 'https://github.com/openlander-ai/OpenLander' },
-      { target: 'mcp' },
-    );
-
-    expect(pipeline.startDeploy).toHaveBeenCalledWith({
-      repoUrl: 'https://github.com/openlander-ai/OpenLander',
-      branch: undefined,
-      name: undefined,
-      sshKeyPath: undefined,
-      trigger: 'api',
-    });
-  });
-
-  it('redeploy_project resolves project id and calls redeploy', async () => {
-    const { ctx, pipeline } = createMockContext();
-    const tool = getTool(ctx, 'redeploy_project', 'mcp');
-
-    const result = await tool.execute({ project_name: 'critical-app' }, { target: 'mcp' });
-
-    expect(pipeline.redeploy).toHaveBeenCalledWith('p1');
-    expect(result).toEqual({ status: 'redeployed' });
-  });
-
   it('get_logs applies target-specific default line counts', async () => {
     const { ctx, pipeline } = createMockContext();
     const tool = getTool(ctx, 'get_logs');

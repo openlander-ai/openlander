@@ -1,17 +1,11 @@
 import type { ToolDef } from './types.js';
-import type { AppContext } from '../../app.js';
-import type { PlanEngine } from '../../pipeline/deploy-plan/engine.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
+
 import {
   createDeployPlanSchema,
   updateDeployPlanSchema,
   executeDeployPlanSchema,
 } from './schemas.js';
-
-/** Temporary accessor until planEngine is added to AppContext interface */
-function getPlanEngine(appCtx: AppContext): PlanEngine {
-  return (appCtx as unknown as Record<string, unknown>).planEngine as PlanEngine;
-}
 
 export const deployPlanToolDefs: ToolDef[] = [
   {
@@ -26,7 +20,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
 
-      const plan: DeployPlan = await getPlanEngine(appCtx).createPlan({
+      const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: args['repo_url'] as string,
         branch: (args['branch'] as string | undefined) ?? undefined,
         name: (args['name'] as string | undefined) ?? undefined,
@@ -58,7 +52,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const updatesRaw = args['updates'] as string;
       const updates = JSON.parse(updatesRaw) as Record<string, unknown>;
 
-      const plan: DeployPlan = getPlanEngine(appCtx).updatePlan(planId, updates);
+      const plan: DeployPlan = appCtx.planEngine.updatePlan(planId, updates);
 
       return {
         plan_id: plan.plan_id,
@@ -78,7 +72,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const appCtx = context.appCtx;
       const planId = args['plan_id'] as string;
 
-      const result = await getPlanEngine(appCtx).executePlan(planId);
+      const result = await appCtx.planEngine.executePlan(planId);
 
       if (result.success) {
         return {

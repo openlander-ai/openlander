@@ -4,61 +4,13 @@ import type { ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
   deployBlueGreenSchema,
-  deployProjectSchema,
   deployStatusSchema,
   listPreviewsSchema,
   previewDeploySchema,
-  redeployProjectSchema,
   rollbackProjectSchema,
 } from './schemas.js';
 
 export const deployToolDefs: ToolDef[] = [
-  {
-    name: 'deploy_project',
-    description:
-      'Start deploying a project from a git repository URL. Returns immediately with { projectId, projectName, status: "building" } while the build runs in the background. ALWAYS follow up with get_deploy_status to check progress and report the result to the user. Errors: CLONE_FAILED (bad URL or private repo without SSH key), BUILD_FAILED (Dockerfile error — suggest debug_build_error next), ALREADY_EXISTS (project name taken). Only works with repos that have a Dockerfile.',
-    mcpDescription:
-      'Start deploying a project from a git repository URL. Returns immediately while build runs in background. Key params: dockerfile_path bypasses compose detection, docker_target selects multi-stage target, env_vars (JSON string) — set at container runtime; vars with NEXT_PUBLIC_*, VITE_*, REACT_APP_*, NUXT_PUBLIC_*, PUBLIC_*, GATSBY_* prefixes are also auto-injected as Docker build args. For service connections use host.docker.internal for host services or container names (ol-svc-*) for OpenLander services. Check get_build_log for raw logs if build fails.',
-    inputSchema: deployProjectSchema,
-    execute: async (args, context) => {
-      const appCtx = context.appCtx;
-      const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
-      const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
-
-      const dryRun = (args['dry_run'] as boolean | undefined) ?? false;
-
-      const composeServices = (args['compose_services'] as string[] | undefined) ?? undefined;
-
-      const result = await appCtx.pipeline.startDeploy({
-        repoUrl: args['repo_url'] as string,
-        branch: (args['branch'] as string | undefined) ?? undefined,
-        name: (args['name'] as string | undefined) ?? undefined,
-        dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
-        dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
-        preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
-        force: (args['force'] as boolean | undefined) ?? undefined,
-        dryRun,
-        envVars,
-        composeServices,
-        sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
-        trigger: context.target === 'agent' ? 'chat' : 'api',
-      });
-
-      if (dryRun) {
-        return { ...result, hint: 'This was a dry run — no deploy was executed.' };
-      }
-
-      if (context.target === 'mcp' && result.status === 'preflight_failed') {
-        return {
-          ...result,
-          error: result.preflightError,
-          hint: 'Fix the preflight issues and try again.',
-        };
-      }
-
-      return { ...result, hint: 'Use get_deploy_status to check progress.' };
-    },
-  },
   {
     name: 'preview_deploy',
     description:
@@ -73,23 +25,6 @@ export const deployToolDefs: ToolDef[] = [
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
       });
     },
-  },
-  {
-    name: 'redeploy_project',
-    description:
-      'Redeploy an existing project by pulling latest code from the same branch and rebuilding. Preserves project settings (dockerfile_path, docker_target, branch, visibility). Env vars from set_env_vars are automatically included. Returns immediately — poll with get_deploy_status.',
-    mcpDescription:
-      'Redeploy an existing project by pulling latest code from the same branch and rebuilding. Preserves project settings (dockerfile_path, docker_target, branch, visibility). Env vars from set_env_vars are automatically included. Returns immediately — poll with get_deploy_status.',
-    inputSchema: redeployProjectSchema,
-    execute: async (args, context) => {
-      const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
-      return context.appCtx.pipeline.redeploy(project.id);
-    },
-    targets: ['mcp'],
   },
   {
     name: 'rollback_project',

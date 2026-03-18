@@ -95,6 +95,19 @@ function createMockContext(): AppContext {
       getGlobalSecretsMasked: vi.fn(() => []),
     },
     questionBridge: undefined,
+    planEngine: {
+      createPlan: vi.fn(async () => ({
+        plan_id: 'plan_test123',
+        status: 'ready',
+        complexity: 'simple',
+        app: { name: 'demo-app' },
+        services: [],
+        missing: [],
+        warnings: [],
+      })),
+      updatePlan: vi.fn(),
+      executePlan: vi.fn(),
+    },
   } as unknown as AppContext;
 }
 
@@ -367,6 +380,37 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "branch": {
+                "description": "Branch to deploy (default: repo default branch)",
+                "type": "string",
+              },
+              "env_vars": {
+                "description": "JSON object of environment variables to include in the plan (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})",
+                "type": "string",
+              },
+              "name": {
+                "description": "Project name (auto-generated from repo if not provided)",
+                "type": "string",
+              },
+              "prefer_dockerfile": {
+                "description": "Prefer Dockerfile flow and skip compose detection",
+                "type": "boolean",
+              },
+              "repo_url": {
+                "description": "Git repository URL (e.g., github.com/user/repo)",
+                "type": "string",
+              },
+            },
+            "required": [
+              "repo_url",
+            ],
+            "type": "object",
+          },
+          "name": "create_deploy_plan",
+        },
+        {
+          "inputSchema": {
+            "properties": {
               "build_log": {
                 "description": "Optional build log text to analyze when stored deploy logs are missing",
                 "type": "string",
@@ -475,60 +519,6 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
-              "branch": {
-                "description": "Branch to deploy (default: repo default branch)",
-                "type": "string",
-              },
-              "compose_services": {
-                "description": "Specific docker-compose services to deploy (e.g., ["backend"]). Deploys all if omitted.",
-                "items": {
-                  "type": "string",
-                },
-                "type": "array",
-              },
-              "docker_target": {
-                "description": "Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)",
-                "type": "string",
-              },
-              "dockerfile_path": {
-                "description": "Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)",
-                "type": "string",
-              },
-              "dry_run": {
-                "description": "Preview deployment plan without executing. Clones repo and returns detected config, Dockerfile, build context, and resource allocation — but does NOT build or deploy.",
-                "type": "boolean",
-              },
-              "env_vars": {
-                "description": "JSON object of environment variables to set before deploy (e.g., {"DATABASE_URL": "...", "REDIS_URL": "..."})",
-                "type": "string",
-              },
-              "force": {
-                "description": "Force deploy by auto-removing conflicting containers before preflight check. Use when redeploying a project that has a stale container.",
-                "type": "boolean",
-              },
-              "name": {
-                "description": "Project name (auto-generated from repo if not provided)",
-                "type": "string",
-              },
-              "prefer_dockerfile": {
-                "description": "Prefer Dockerfile flow and skip compose detection",
-                "type": "boolean",
-              },
-              "repo_url": {
-                "description": "Git repository URL (e.g., github.com/user/repo)",
-                "type": "string",
-              },
-            },
-            "required": [
-              "repo_url",
-            ],
-            "type": "object",
-          },
-          "name": "deploy_project",
-        },
-        {
-          "inputSchema": {
-            "properties": {
               "alert_id": {
                 "description": "Alert ID",
                 "type": "string",
@@ -540,6 +530,21 @@ describe('Tool parity baseline snapshots', () => {
             "type": "object",
           },
           "name": "dismiss_alert",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "plan_id": {
+                "description": "Plan ID to execute. Plan must be in "ready" status.",
+                "type": "string",
+              },
+            },
+            "required": [
+              "plan_id",
+            ],
+            "type": "object",
+          },
+          "name": "execute_deploy_plan",
         },
         {
           "inputSchema": {
@@ -1006,6 +1011,26 @@ describe('Tool parity baseline snapshots', () => {
           },
           "name": "unexpose_public",
         },
+        {
+          "inputSchema": {
+            "properties": {
+              "plan_id": {
+                "description": "Plan ID returned from create_deploy_plan",
+                "type": "string",
+              },
+              "updates": {
+                "description": "JSON object with plan updates. Supported fields: env (to fill missing environment variables), dockerfile (to select specific Dockerfile), services (to configure service decisions)",
+                "type": "string",
+              },
+            },
+            "required": [
+              "plan_id",
+              "updates",
+            ],
+            "type": "object",
+          },
+          "name": "update_deploy_plan",
+        },
       ]
     `);
   });
@@ -1087,6 +1112,37 @@ describe('Tool parity baseline snapshots', () => {
             "type": "object",
           },
           "name": "cleanup_preview",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "branch": {
+                "description": "Branch to deploy (default: repo default branch)",
+                "type": "string",
+              },
+              "env_vars": {
+                "description": "JSON object of environment variables to include in the plan (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})",
+                "type": "string",
+              },
+              "name": {
+                "description": "Project name (auto-generated from repo if not provided)",
+                "type": "string",
+              },
+              "prefer_dockerfile": {
+                "description": "Prefer Dockerfile flow and skip compose detection",
+                "type": "boolean",
+              },
+              "repo_url": {
+                "description": "Git repository URL (e.g., github.com/user/repo)",
+                "type": "string",
+              },
+            },
+            "required": [
+              "repo_url",
+            ],
+            "type": "object",
+          },
+          "name": "create_deploy_plan",
         },
         {
           "inputSchema": {
@@ -1297,60 +1353,6 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
-              "branch": {
-                "description": "Branch to deploy (default: repo default branch)",
-                "type": "string",
-              },
-              "compose_services": {
-                "description": "Specific docker-compose services to deploy (e.g., ["backend"]). Deploys all if omitted.",
-                "items": {
-                  "type": "string",
-                },
-                "type": "array",
-              },
-              "docker_target": {
-                "description": "Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)",
-                "type": "string",
-              },
-              "dockerfile_path": {
-                "description": "Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)",
-                "type": "string",
-              },
-              "dry_run": {
-                "description": "Preview deployment plan without executing. Clones repo and returns detected config, Dockerfile, build context, and resource allocation — but does NOT build or deploy.",
-                "type": "boolean",
-              },
-              "env_vars": {
-                "description": "JSON object of environment variables to set before deploy (e.g., {"DATABASE_URL": "...", "REDIS_URL": "..."})",
-                "type": "string",
-              },
-              "force": {
-                "description": "Force deploy by auto-removing conflicting containers before preflight check. Use when redeploying a project that has a stale container.",
-                "type": "boolean",
-              },
-              "name": {
-                "description": "Project name (auto-generated from repo if not provided)",
-                "type": "string",
-              },
-              "prefer_dockerfile": {
-                "description": "Prefer Dockerfile flow and skip compose detection",
-                "type": "boolean",
-              },
-              "repo_url": {
-                "description": "Git repository URL (e.g., github.com/user/repo)",
-                "type": "string",
-              },
-            },
-            "required": [
-              "repo_url",
-            ],
-            "type": "object",
-          },
-          "name": "deploy_project",
-        },
-        {
-          "inputSchema": {
-            "properties": {
               "project_name": {
                 "description": "Project name",
                 "type": "string",
@@ -1401,6 +1403,21 @@ describe('Tool parity baseline snapshots', () => {
             "type": "object",
           },
           "name": "enable_webhook",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "plan_id": {
+                "description": "Plan ID to execute. Plan must be in "ready" status.",
+                "type": "string",
+              },
+            },
+            "required": [
+              "plan_id",
+            ],
+            "type": "object",
+          },
+          "name": "execute_deploy_plan",
         },
         {
           "inputSchema": {
@@ -1731,21 +1748,6 @@ describe('Tool parity baseline snapshots', () => {
             ],
             "type": "object",
           },
-          "name": "redeploy_project",
-        },
-        {
-          "inputSchema": {
-            "properties": {
-              "project_name": {
-                "description": "Project name",
-                "type": "string",
-              },
-            },
-            "required": [
-              "project_name",
-            ],
-            "type": "object",
-          },
           "name": "remove_project",
         },
         {
@@ -1971,6 +1973,26 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "plan_id": {
+                "description": "Plan ID returned from create_deploy_plan",
+                "type": "string",
+              },
+              "updates": {
+                "description": "JSON object with plan updates. Supported fields: env (to fill missing environment variables), dockerfile (to select specific Dockerfile), services (to configure service decisions)",
+                "type": "string",
+              },
+            },
+            "required": [
+              "plan_id",
+              "updates",
+            ],
+            "type": "object",
+          },
+          "name": "update_deploy_plan",
+        },
+        {
+          "inputSchema": {
+            "properties": {
               "content": {
                 "description": "File content (plaintext — will be encrypted at rest)",
                 "type": "string",
@@ -2028,7 +2050,7 @@ describe('Tool parity baseline snapshots', () => {
       list_projects: {},
       get_logs: { project_name: 'demo-app' },
       list_github_repos: {},
-      deploy_project: {
+      create_deploy_plan: {
         repo_url: 'https://github.com/acme/demo-app',
         branch: 'main',
         name: 'demo-app',
@@ -2050,7 +2072,7 @@ describe('Tool parity baseline snapshots', () => {
       'list_projects',
       'get_logs',
       'list_github_repos',
-      'deploy_project',
+      'create_deploy_plan',
       'debug_build_error',
     ]) {
       const args = argsByTool[tool];
@@ -2209,36 +2231,51 @@ describe('Tool parity baseline snapshots', () => {
         },
         {
           "agentShape": {
-            "hint": "string",
-            "projectId": "string",
-            "projectName": "string",
+            "app_name": "string",
+            "complexity": "string",
+            "missing": [],
+            "plan_id": "string",
+            "services": "number",
             "status": "string",
+            "warnings": [],
           },
           "exactTopLevelParity": true,
           "mcpShape": {
-            "hint": "string",
-            "projectId": "string",
-            "projectName": "string",
+            "app_name": "string",
+            "complexity": "string",
+            "missing": [],
+            "plan_id": "string",
+            "services": "number",
             "status": "string",
+            "warnings": [],
           },
           "sharedTopLevelKeys": [
-            "hint",
-            "projectId",
-            "projectName",
+            "app_name",
+            "complexity",
+            "missing",
+            "plan_id",
+            "services",
             "status",
+            "warnings",
           ],
-          "tool": "deploy_project",
+          "tool": "create_deploy_plan",
           "topLevelAgentKeys": [
-            "hint",
-            "projectId",
-            "projectName",
+            "app_name",
+            "complexity",
+            "missing",
+            "plan_id",
+            "services",
             "status",
+            "warnings",
           ],
           "topLevelMcpKeys": [
-            "hint",
-            "projectId",
-            "projectName",
+            "app_name",
+            "complexity",
+            "missing",
+            "plan_id",
+            "services",
             "status",
+            "warnings",
           ],
         },
         {

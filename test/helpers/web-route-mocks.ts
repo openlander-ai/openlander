@@ -211,5 +211,10 @@ export function createMockContext(db: Database): AppContext {
     mcpClientManager: {
       disconnectAll: vi.fn().mockResolvedValue(undefined),
     } as unknown as AppContext['mcpClientManager'],
+    planEngine: {
+      createPlan: vi.fn(),
+      updatePlan: vi.fn(),
+      executePlan: vi.fn(),
+    } as unknown as AppContext['planEngine'],
   };
 }

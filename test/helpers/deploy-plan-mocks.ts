@@ -166,6 +166,7 @@ export function createMockPlanContext(db?: Database): AppContext {
     mcpClientManager: {
       disconnectAll: vi.fn().mockResolvedValue(undefined),
     } as unknown as AppContext['mcpClientManager'],
+    planEngine: createMockPlanEngine() as unknown as AppContext['planEngine'],
   };
 }
 

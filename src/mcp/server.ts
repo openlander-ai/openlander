@@ -9,6 +9,7 @@ import { registerMcpTools } from '../tools/adapters/mcp.js';
 import { registerMcpPrompts } from './prompts.js';
 import { debugToolDefs } from '../tools/defs/debug.js';
 import { deployToolDefs } from '../tools/defs/deploy.js';
+import { deployPlanToolDefs } from '../tools/defs/deploy-plan.js';
 import { envToolDefs } from '../tools/defs/env.js';
 import { gitToolDefs } from '../tools/defs/git.js';
 import { infraToolDefs } from '../tools/defs/infra.js';
@@ -23,6 +24,7 @@ const log = createModuleLogger('mcp');
 
 const mcpToolDefs: ToolDef[] = [
   ...deployToolDefs,
+  ...deployPlanToolDefs,
   ...projectOpsToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,

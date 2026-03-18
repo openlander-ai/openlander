@@ -4,6 +4,7 @@ import { toAiSdkTools } from '../tools/adapters/ai-sdk.js';
 import { composeToolDefs } from '../tools/defs/compose.js';
 import { debugToolDefs } from '../tools/defs/debug.js';
 import { deployToolDefs } from '../tools/defs/deploy.js';
+import { deployPlanToolDefs } from '../tools/defs/deploy-plan.js';
 import { envToolDefs } from '../tools/defs/env.js';
 import { gitToolDefs } from '../tools/defs/git.js';
 import { infraToolDefs } from '../tools/defs/infra.js';
@@ -14,6 +15,7 @@ import type { ToolDef } from '../tools/defs/types.js';
 
 const agentToolDefs: ToolDef[] = [
   ...deployToolDefs,
+  ...deployPlanToolDefs,
   ...composeToolDefs,
   ...projectOpsToolDefs,
   ...envToolDefs,

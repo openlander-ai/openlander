@@ -2,6 +2,7 @@ import type { AppContext } from '../../src/app.js';
 import { composeToolDefs } from '../../src/tools/defs/compose.js';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
 import { deployToolDefs } from '../../src/tools/defs/deploy.js';
+import { deployPlanToolDefs } from '../../src/tools/defs/deploy-plan.js';
 import { envToolDefs } from '../../src/tools/defs/env.js';
 import { gitToolDefs } from '../../src/tools/defs/git.js';
 import { infraToolDefs } from '../../src/tools/defs/infra.js';
@@ -27,6 +28,7 @@ export interface LegacyToolSpec {
 
 const sharedToolDefs: ToolDef[] = [
   ...deployToolDefs,
+  ...deployPlanToolDefs,
   ...projectOpsToolDefs,
   ...envToolDefs,
   ...infraToolDefs,
