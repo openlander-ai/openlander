@@ -185,6 +185,97 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.4.0** | Deployments UX        | Done   | Deployments filters, richer history rows, detail metadata cards, API UTC normalization, safer browser time parsing                                                         |
 | **v1.0.0** | First Stable Release  | Next   | TUI removed, code quality hardened (error handling, dead code, coverage gates), 23-framework auto-detect (Rails, Spring Boot, Laravel, ASP.NET), enhanced preflight checks |
 
+## MCP Integration (AI Coding Agents)
+
+OpenLander runs as an MCP server, letting AI coding agents deploy and manage projects directly.
+
+### OpenCode
+
+```jsonc
+// opencode.json (project root or ~/.config/opencode/config.json)
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "openlander": {
+      "type": "local",
+      "command": ["openlander", "mcp"],
+      "enabled": true,
+    },
+  },
+}
+```
+
+For remote servers (e.g. via Tailscale/VPN):
+
+```jsonc
+{
+  "mcp": {
+    "openlander": {
+      "type": "remote",
+      "url": "http://YOUR_SERVER_IP:10114/mcp",
+      "enabled": true,
+    },
+  },
+}
+```
+
+Verify: `opencode mcp list` / `opencode mcp debug openlander`
+
+### Claude Desktop
+
+```jsonc
+// ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
+// %APPDATA%\Claude\claude_desktop_config.json (Windows)
+{
+  "mcpServers": {
+    "openlander": {
+      "command": "openlander",
+      "args": ["mcp"],
+    },
+  },
+}
+```
+
+### Cursor
+
+```jsonc
+// .cursor/mcp.json (project root)
+{
+  "mcpServers": {
+    "openlander": {
+      "command": "openlander",
+      "args": ["mcp"],
+    },
+  },
+}
+```
+
+### Windsurf
+
+```jsonc
+// ~/.codeium/windsurf/mcp_config.json
+{
+  "mcpServers": {
+    "openlander": {
+      "command": "openlander",
+      "args": ["mcp"],
+    },
+  },
+}
+```
+
+### Available Tools
+
+Once connected, AI agents get 30+ tools including:
+
+| Category | Tools                                                                         |
+| -------- | ----------------------------------------------------------------------------- |
+| Deploy   | `deploy_project`, `redeploy_project`, `rollback_project`, `deploy_blue_green` |
+| Services | `create_service`, `get_service_credentials`, `provision_database`             |
+| Config   | `set_env_vars`, `set_global_secret`, `upload_secret_file`                     |
+| Monitor  | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`         |
+| Projects | `list_projects`, `stop_project`, `remove_project`, `scan_project`             |
+
 ## Requirements
 
 - **Platform**: Linux or macOS (Windows is not supported, but WSL2 on Windows works)
