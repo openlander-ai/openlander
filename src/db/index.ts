@@ -8,6 +8,7 @@ import { SCHEMA } from './schema.js';
 import {
   chatHistory,
   deployLogs,
+  deployPlans,
   domainMappings,
   environments,
   envVars,
@@ -152,6 +153,21 @@ export interface ServiceRow {
 export interface PendingFixRow {
   filePath: string;
   content: string;
+}
+
+export interface DeployPlanRow {
+  id: string;
+  project_name: string | null;
+  project_id: string | null;
+  status: string;
+  complexity: string | null;
+  plan_json: string;
+  commit_sha: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  executed_at: string | null;
+  completed_at: string | null;
 }
 
 // --- Database class ---
@@ -479,6 +495,28 @@ export class Database {
     } else if (!svcColNames.has('env_vars')) {
       this.sqlite.exec('ALTER TABLE services ADD COLUMN env_vars TEXT');
     }
+
+    // deploy_plans table (v1.0.0)
+    this.sqlite.exec(`CREATE TABLE IF NOT EXISTS deploy_plans (
+      id TEXT PRIMARY KEY,
+      project_name TEXT,
+      project_id TEXT,
+      status TEXT NOT NULL,
+      complexity TEXT,
+      plan_json TEXT NOT NULL,
+      commit_sha TEXT,
+      error_message TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      executed_at TEXT,
+      completed_at TEXT
+    )`);
+    this.sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_deploy_plans_project_name ON deploy_plans(project_name)',
+    );
+    this.sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_deploy_plans_created_at ON deploy_plans(created_at)',
+    );
   }
 
   // ===== Projects =====
@@ -1511,6 +1549,118 @@ export class Database {
     } | null;
     return row?.changes ?? 0;
   }
+  // ===== Deploy Plans =====
+
+  /** Create a new deploy plan. */
+  createDeployPlan(plan: {
+    id: string;
+    projectName?: string;
+    projectId?: string;
+    status: string;
+    complexity?: string;
+    planJson: string;
+    commitSha?: string;
+  }): DeployPlanRow {
+    this.db
+      .insert(deployPlans)
+      .values({
+        id: plan.id,
+        project_name: plan.projectName ?? null,
+        project_id: plan.projectId ?? null,
+        status: plan.status,
+        complexity: plan.complexity ?? null,
+        plan_json: plan.planJson,
+        commit_sha: plan.commitSha ?? null,
+      })
+      .run();
+
+    const created = this.getDeployPlan(plan.id);
+    if (!created) throw new Error(`Failed to create deploy plan ${plan.id}`);
+    return created;
+  }
+
+  /** Get a deploy plan by ID. */
+  getDeployPlan(planId: string): DeployPlanRow | undefined {
+    return this.db.select().from(deployPlans).where(eq(deployPlans.id, planId)).get() as
+      | DeployPlanRow
+      | undefined;
+  }
+
+  /** Update deploy plan fields. Only provided fields are updated. */
+  updateDeployPlan(
+    planId: string,
+    updates: Partial<{
+      status: string;
+      complexity: string | null;
+      errorMessage: string | null;
+      executedAt: string | null;
+      completedAt: string | null;
+    }>,
+  ): void {
+    const setValues: Partial<typeof deployPlans.$inferInsert> = {};
+
+    if (updates.status !== undefined) {
+      setValues.status = updates.status;
+    }
+    if (updates.complexity !== undefined) {
+      setValues.complexity = updates.complexity;
+    }
+    if (updates.errorMessage !== undefined) {
+      setValues.error_message = updates.errorMessage;
+    }
+    if (updates.executedAt !== undefined) {
+      setValues.executed_at = updates.executedAt;
+    }
+    if (updates.completedAt !== undefined) {
+      setValues.completed_at = updates.completedAt;
+    }
+
+    if (Object.keys(setValues).length === 0) return;
+
+    this.db
+      .update(deployPlans)
+      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(deployPlans.id, planId))
+      .run();
+  }
+
+  /** Update deploy plan status only. */
+  updateDeployPlanStatus(planId: string, status: string): void {
+    this.db
+      .update(deployPlans)
+      .set({ status, updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(deployPlans.id, planId))
+      .run();
+  }
+
+  /** List deploy plans, optionally filtered by project name. Ordered by created_at desc. */
+  listDeployPlans(projectName?: string): DeployPlanRow[] {
+    if (projectName) {
+      return this.db
+        .select()
+        .from(deployPlans)
+        .where(eq(deployPlans.project_name, projectName))
+        .orderBy(desc(deployPlans.created_at))
+        .all() as DeployPlanRow[];
+    }
+    return this.db
+      .select()
+      .from(deployPlans)
+      .orderBy(desc(deployPlans.created_at))
+      .all() as DeployPlanRow[];
+  }
+
+  /** Get the most recent deploy plan for a project. */
+  getLatestPlanForProject(projectName: string): DeployPlanRow | undefined {
+    return this.db
+      .select()
+      .from(deployPlans)
+      .where(eq(deployPlans.project_name, projectName))
+      .orderBy(desc(deployPlans.created_at), desc(sql`rowid`))
+      .limit(1)
+      .get() as DeployPlanRow | undefined;
+  }
+
   // ===== Utility =====
 
   /** Run a function inside a transaction. */

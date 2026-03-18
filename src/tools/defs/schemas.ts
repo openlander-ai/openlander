@@ -380,3 +380,34 @@ export const deployEnvironmentSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
   environment_type: z.enum(['production', 'development']).describe('Environment to deploy'),
 });
+
+// Deploy Plan Engine schemas
+export const createDeployPlanSchema = z.object({
+  repo_url: z.string().min(1).describe('Git repository URL (e.g., github.com/user/repo)'),
+  branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
+  name: z.string().optional().describe('Project name (auto-generated from repo if not provided)'),
+  env_vars: z
+    .string()
+    .optional()
+    .describe(
+      'JSON object of environment variables to include in the plan (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})',
+    ),
+  prefer_dockerfile: z
+    .boolean()
+    .optional()
+    .describe('Prefer Dockerfile flow and skip compose detection'),
+});
+
+export const updateDeployPlanSchema = z.object({
+  plan_id: z.string().min(1).describe('Plan ID returned from create_deploy_plan'),
+  updates: z
+    .string()
+    .min(1)
+    .describe(
+      'JSON object with plan updates. Supported fields: env (to fill missing environment variables), dockerfile (to select specific Dockerfile), services (to configure service decisions)',
+    ),
+});
+
+export const executeDeployPlanSchema = z.object({
+  plan_id: z.string().min(1).describe('Plan ID to execute. Plan must be in "ready" status.'),
+});
