@@ -1595,6 +1595,9 @@ export class Database {
       errorMessage: string | null;
       executedAt: string | null;
       completedAt: string | null;
+      planJson: string;
+      projectName: string | null;
+      projectId: string | null;
     }>,
   ): void {
     const setValues: Partial<typeof deployPlans.$inferInsert> = {};
@@ -1613,6 +1616,15 @@ export class Database {
     }
     if (updates.completedAt !== undefined) {
       setValues.completed_at = updates.completedAt;
+    }
+    if (updates.planJson !== undefined) {
+      setValues.plan_json = updates.planJson;
+    }
+    if (updates.projectName !== undefined) {
+      setValues.project_name = updates.projectName;
+    }
+    if (updates.projectId !== undefined) {
+      setValues.project_id = updates.projectId;
     }
 
     if (Object.keys(setValues).length === 0) return;
