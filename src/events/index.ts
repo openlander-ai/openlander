@@ -134,6 +134,7 @@ export interface EventPayload {
     scope?: string;
     status?: 'pending' | 'in_progress' | 'success' | 'failed';
     message?: string;
+    planId?: string;
   };
   'deploy:failed': {
     projectId: string;
