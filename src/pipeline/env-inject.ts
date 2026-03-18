@@ -350,12 +350,19 @@ function unquoteEnvValue(rawValue: string): string {
   return rawValue;
 }
 
-function formatEnvValue(value: string): string {
+export function formatEnvValue(value: string): string {
   if (!value) {
     return '';
   }
-  if (/\s|#/.test(value)) {
-    return `"${value.replace(/"/g, '\\"')}"`;
+  if (/[\s#"'$`\\=\n\r]/.test(value)) {
+    const escaped = value
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\$/g, '\\$')
+      .replace(/`/g, '\\`');
+    return `"${escaped}"`;
   }
   return value;
 }

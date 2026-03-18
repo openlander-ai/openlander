@@ -1,4 +1,3 @@
-import { mkdirSync } from 'node:fs';
 import { homedir, networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 
@@ -10,7 +9,6 @@ import type { Docker } from './docker.js';
 const TRAEFIK_CONTAINER_NAME = 'openlander-traefik';
 const TRAEFIK_IMAGE = 'traefik:v3.6';
 const TRAEFIK_NETWORK = 'web';
-const TRAEFIK_DYNAMIC_DIR_IN_CONTAINER = '/etc/traefik/dynamic/';
 
 export const DYNAMIC_CONFIG_DIR = join(homedir(), '.openlander', 'traefik', 'dynamic');
 
@@ -24,7 +22,10 @@ export type TraefikEnvironment = 'production' | 'development';
  * configure routing without touching any config files.
  */
 export class TraefikManager {
-  constructor(private readonly docker: Docker) {}
+  constructor(
+    private readonly docker: Docker,
+    private readonly openLanderPort: number = 3000,
+  ) {}
 
   /** Check if Traefik container is running. */
   async isRunning(): Promise<boolean> {
@@ -50,7 +51,7 @@ export class TraefikManager {
       const container = client.getContainer(TRAEFIK_CONTAINER_NAME);
       const info = await container.inspect();
       const cmd: string[] = (info.Config.Cmd as string[] | null) ?? [];
-      return cmd.some((arg: string) => arg.includes('providers.file.directory'));
+      return cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
     } catch (_err) {
       return false;
     }
@@ -82,11 +83,10 @@ export class TraefikManager {
     // If running, check if config is up-to-date (e.g., File Provider added in v0.2.6)
     if (await this.isRunning()) {
       if (await this.hasCurrentConfig()) return;
-      log.info('Traefik config outdated (missing File Provider) — recreating container');
+      log.info('Traefik config outdated (missing HTTP Provider) — recreating container');
     }
 
     await this.ensureNetwork();
-    mkdirSync(DYNAMIC_CONFIG_DIR, { recursive: true });
 
     const client = this.docker.getClient();
 
@@ -124,8 +124,8 @@ export class TraefikManager {
         '--providers.docker=true',
         '--providers.docker.exposedbydefault=false',
         `--providers.docker.network=${TRAEFIK_NETWORK}`,
-        `--providers.file.directory=${TRAEFIK_DYNAMIC_DIR_IN_CONTAINER}`,
-        '--providers.file.watch=true',
+        `--providers.http.endpoint=http://host.docker.internal:${String(this.openLanderPort)}/api/traefik/config`,
+        '--providers.http.pollInterval=5s',
         '--entrypoints.web.address=:80',
       ],
       ExposedPorts: {
@@ -137,10 +137,8 @@ export class TraefikManager {
           '80/tcp': [{ HostPort: '80' }],
           '8080/tcp': [{ HostPort: '8080' }],
         },
-        Binds: [
-          '/var/run/docker.sock:/var/run/docker.sock:ro',
-          `${DYNAMIC_CONFIG_DIR}:${TRAEFIK_DYNAMIC_DIR_IN_CONTAINER}:rw`,
-        ],
+        Binds: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
+        ExtraHosts: ['host.docker.internal:host-gateway'],
         NetworkMode: TRAEFIK_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
       },

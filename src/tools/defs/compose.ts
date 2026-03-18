@@ -57,6 +57,11 @@ export const composeToolDefs: ToolDef[] = [
         };
       }
 
+      const existingProject = name ? appCtx.db.getProjectByName(name) : undefined;
+      const envVars = existingProject
+        ? appCtx.env.getMergedForDeploy(existingProject.id)
+        : appCtx.env.getGlobalSecrets();
+
       const result = await appCtx.composePipeline.deployCompose({
         repoUrl,
         branch,
@@ -64,6 +69,7 @@ export const composeToolDefs: ToolDef[] = [
         composePath,
         name,
         profiles,
+        envVars,
         trigger: 'chat',
       });
 

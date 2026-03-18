@@ -109,8 +109,17 @@ export class BlueGreenDeployer {
 
       imageTag = `openlander/${projectName}:${String(Date.now())}`;
       const buildStart = Date.now();
-      await this.docker.buildImage(cloneResult.path, imageTag);
+      let buildOutput = '';
+      await this.docker.buildImage(cloneResult.path, imageTag, {
+        onProgress: (event) => {
+          const line = event.stream?.trimEnd() ?? event.error ?? '';
+          if (line) buildOutput += line + '\n';
+        },
+      });
       const buildDuration = Date.now() - buildStart;
+      if (buildOutput) {
+        log.debug({ projectName }, 'Blue-green build output:\n%s', buildOutput);
+      }
 
       await this.eventBus.emit('deploy:build', {
         projectId,

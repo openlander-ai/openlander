@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `compose_services` parameter for `deploy_project` — deploy specific docker-compose services (e.g., `["backend"]`) instead of all
+- Secret file mounting for compose containers via docker-compose.override.yml volume binds
+- Global secrets now passed to compose deploys via `deploy_compose` tool
+- Verbose Docker build output for preview and blue-green deployments (onProgress callback)
+- `--progress=plain` flag for compose builds — full Docker build output in logs
+- Traefik HTTP Provider — dynamic routing config served via API endpoint instead of file watching, fixing custom domain routing on macOS Docker Desktop and Windows WSL where bind mount inotify doesn't propagate
+- Redeploy port collision fix — environment `assigned_port` now reset alongside project during redeploy
+- Build failure responses include `buildLogTail` (last 30 lines) for immediate error diagnosis
+
+### Fixed
+
+- Env var escaping in `.env` files — newlines, `$`, backticks, quotes, and backslashes now properly escaped for both compose and env-inject paths
+- Compose containers now receive uploaded secret files (previously only regular Docker deploys did)
+- Redeploy no longer fails with `UNIQUE constraint failed: environments.assigned_port` — environment port is now reset alongside project port during redeploy
+- Build failure responses now include `buildLogTail` (last 30 lines) so error cause is visible without calling `get_build_log`
+- Traefik migrated from File Provider to HTTP Provider — eliminates file watching issues on macOS/Windows Docker Desktop where inotify doesn't propagate through bind mounts
+- Quick-share tunnel routing now served via HTTP Provider API instead of YAML files
+
 ## [0.6.1] - Bugfix
 
 ### Fixed

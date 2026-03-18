@@ -27,6 +27,8 @@ export const deployToolDefs: ToolDef[] = [
 
       const dryRun = (args['dry_run'] as boolean | undefined) ?? false;
 
+      const composeServices = (args['compose_services'] as string[] | undefined) ?? undefined;
+
       const result = await appCtx.pipeline.startDeploy({
         repoUrl: args['repo_url'] as string,
         branch: (args['branch'] as string | undefined) ?? undefined,
@@ -37,6 +39,7 @@ export const deployToolDefs: ToolDef[] = [
         force: (args['force'] as boolean | undefined) ?? undefined,
         dryRun,
         envVars,
+        composeServices,
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
         trigger: context.target === 'agent' ? 'chat' : 'api',
       });

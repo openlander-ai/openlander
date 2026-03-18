@@ -59,6 +59,8 @@ export interface ProjectConfig {
   _projectId?: string;
   _retryCount?: number;
   _noCacheBuild?: boolean;
+  /** Specific docker-compose services to deploy. Deploys all if omitted. */
+  composeServices?: string[];
 }
 
 /**
@@ -75,6 +77,7 @@ export interface DeployResult {
   commitSha?: string;
   buildDurationMs?: number;
   error?: string;
+  buildLogTail?: string;
   preflightWarnings?: string[];
 }
 
@@ -584,6 +587,7 @@ export class DeployPipeline {
           clonePath: cloneResult.path,
           composePath,
           profiles: [],
+          services: config.composeServices,
           name: routeName,
           trigger,
           envVars: composeEnvVars,
@@ -997,11 +1001,15 @@ export class DeployPipeline {
         diffContext,
       });
 
+      const logLines = buildLogWithError.split('\n').filter(Boolean);
+      const buildLogTail = logLines.slice(-30).join('\n');
+
       return {
         success: false,
         projectId,
         projectName,
         error: errorMsg,
+        buildLogTail,
         buildDurationMs: Date.now() - startTime,
       };
     }
@@ -1500,13 +1508,21 @@ export class DeployPipeline {
       this.db.updateProject(projectId, { previousImageTag: project.image_tag });
     }
 
-    // Reset project state for fresh deploy (keep same ID so build/stream listeners work)
+    // Reset project + environment state for fresh deploy (keep same ID so build/stream listeners work)
     this.db.updateProject(projectId, {
       status: 'building',
       containerId: null,
       imageTag: null,
       assignedPort: null,
     });
+    for (const env of this.db.getEnvironmentsByProject(projectId)) {
+      this.db.updateEnvironment(env.id, {
+        assignedPort: null,
+        containerId: null,
+        imageTag: null,
+        status: 'idle',
+      });
+    }
     this.jobManager?.trackJob(projectId, project.name);
 
     return this.deploy({

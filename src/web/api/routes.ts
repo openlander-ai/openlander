@@ -222,6 +222,56 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'deleted', key });
   });
 
+  api.get('/traefik/config', (c) => {
+    const routers: Record<string, { rule: string; entryPoints: string[]; service: string }> = {};
+
+    const mappings = ctx.db.listDomainMappings();
+    const projectDomains = new Map<string, { projectName: string; domains: string[] }>();
+    for (const mapping of mappings) {
+      const existing = projectDomains.get(mapping.project_id);
+      if (existing) {
+        existing.domains.push(mapping.domain);
+      } else {
+        const project = ctx.db.getProject(mapping.project_id);
+        if (project) {
+          projectDomains.set(mapping.project_id, {
+            projectName: project.name,
+            domains: [mapping.domain],
+          });
+        }
+      }
+    }
+    for (const [, { projectName, domains }] of projectDomains) {
+      const routeRule = domains.map((d) => `Host(\`${d}\`)`).join(' || ');
+      routers[`prod-${projectName}`] = {
+        rule: routeRule,
+        entryPoints: ['web'],
+        service: `ol-${projectName}@docker`,
+      };
+    }
+
+    const allProjects = ctx.db.listProjects('running');
+    for (const project of allProjects) {
+      if (
+        (project.visibility === 'quick-share' || project.visibility === 'shared') &&
+        project.public_url
+      ) {
+        try {
+          const host = new URL(project.public_url).hostname;
+          routers[`qs-${project.name}`] = {
+            rule: `Host(\`${host}\`)`,
+            entryPoints: ['web'],
+            service: `ol-${project.name}@docker`,
+          };
+        } catch {
+          // skip invalid URL
+        }
+      }
+    }
+
+    return c.json({ http: { routers } });
+  });
+
   api.route('/', createDeployStreamRoutes(ctx));
   api.route('/', createProjectRoutes(ctx));
   api.route('/', createSystemRoutes(ctx));

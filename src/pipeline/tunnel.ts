@@ -1,11 +1,8 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { hashSync } from 'bcryptjs';
 
 import { TunnelStartError, CloudflaredNotFoundError } from '../errors.js';
-import { DYNAMIC_CONFIG_DIR } from './traefik.js';
 
 /**
  * TryCloudflare tunnel for Quick Share mode.
@@ -18,8 +15,6 @@ import { DYNAMIC_CONFIG_DIR } from './traefik.js';
 export class CloudflareTunnel {
   private process: ChildProcess | null = null;
   private _url: string | null = null;
-  private host: string | null = null;
-  private projectName: string | null = null;
 
   get url(): string | null {
     return this._url;
@@ -51,14 +46,12 @@ export class CloudflareTunnel {
     throw lastError as Error;
   }
 
-  private tryStart(projectName: string, timeoutMs: number): Promise<string> {
+  private tryStart(_projectName: string, timeoutMs: number): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.stop();
         reject(new TunnelStartError(`Tunnel failed to start within ${String(timeoutMs)}ms`));
       }, timeoutMs);
-
-      this.projectName = projectName;
 
       this.process = spawn('cloudflared', ['tunnel', '--url', 'http://localhost:80'], {
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -76,15 +69,8 @@ export class CloudflareTunnel {
           settled = true;
           clearTimeout(timeout);
           this._url = urlMatch[0];
-          this.host = extractHostname(this._url);
-          try {
-            writeYamlConfig(projectName, generateQuickShareYaml(projectName, this.host));
-            resolve(urlMatch[0]);
-          } catch (err) {
-            this.stop();
-            const message = err instanceof Error ? err.message : String(err);
-            reject(new TunnelStartError(`Failed to write tunnel config: ${message}`));
-          }
+
+          resolve(urlMatch[0]);
         }
       });
 
@@ -114,28 +100,20 @@ export class CloudflareTunnel {
 
   /** Stop the tunnel process. */
   stop(): void {
-    if (this.projectName) {
-      deleteYamlConfig(this.projectName);
-    }
-
     if (this.process) {
       this.process.kill('SIGTERM');
       this.process = null;
     }
 
     this._url = null;
-    this.host = null;
-    this.projectName = null;
   }
 
-  enableSharedMode(projectName: string, accessCode: string): void {
-    if (!this.host) return;
-    writeYamlConfig(projectName, generateSharedYaml(projectName, this.host, accessCode));
+  enableSharedMode(_projectName: string, _accessCode: string): void {
+    // no-op: shared mode routing handled by HTTP Provider
   }
 
-  disableSharedMode(projectName: string): void {
-    if (!this.host) return;
-    writeYamlConfig(projectName, generateQuickShareYaml(projectName, this.host));
+  disableSharedMode(_projectName: string): void {
+    // no-op: routing handled by HTTP Provider
   }
 }
 
@@ -153,26 +131,4 @@ export function generateQuickShareYaml(projectName: string, host: string): strin
 export function generateSharedYaml(projectName: string, host: string, accessCode: string): string {
   const bcryptHash = hashSync(accessCode, 5);
   return `http:\n  routers:\n    qs-${projectName}:\n      rule: "Host(\`${host}\`)"\n      entryPoints:\n        - web\n      service: ol-${projectName}@docker\n      middlewares:\n        - qs-auth-${projectName}\n  middlewares:\n    qs-auth-${projectName}:\n      basicAuth:\n        users:\n          - "viewer:${bcryptHash}"\n`;
-}
-
-function writeYamlConfig(projectName: string, yaml: string): void {
-  const filename = `qs-${projectName}.yaml`;
-  const tempPath = join(DYNAMIC_CONFIG_DIR, `.${filename}.tmp`);
-  const targetPath = join(DYNAMIC_CONFIG_DIR, filename);
-
-  mkdirSync(DYNAMIC_CONFIG_DIR, { recursive: true });
-  writeFileSync(tempPath, yaml, 'utf8');
-  renameSync(tempPath, targetPath);
-}
-
-function deleteYamlConfig(projectName: string): void {
-  const yamlPath = join(DYNAMIC_CONFIG_DIR, `qs-${projectName}.yaml`);
-  try {
-    unlinkSync(yamlPath);
-  } catch (error) {
-    const err = error as NodeJS.ErrnoException;
-    if (err.code !== 'ENOENT') {
-      throw error;
-    }
-  }
 }

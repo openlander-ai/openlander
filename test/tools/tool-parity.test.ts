@@ -444,8 +444,18 @@ describe('Tool parity baseline snapshots', () => {
                 "type": "string",
               },
               "dockerfiles": {
-                "description": "JSON array of Dockerfile paths (from scan_dockerfiles), e.g. ["frontend/Dockerfile", "backend/Dockerfile"]",
-                "type": "string",
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string",
+                    },
+                    "type": "array",
+                  },
+                  {
+                    "type": "string",
+                  },
+                ],
+                "description": "Dockerfile paths from scan_dockerfiles — array or JSON string, e.g. ["frontend/Dockerfile", "backend/Dockerfile"]",
               },
               "repo_url": {
                 "description": "Git repository URL",
@@ -469,9 +479,32 @@ describe('Tool parity baseline snapshots', () => {
                 "description": "Branch to deploy (default: repo default branch)",
                 "type": "string",
               },
+              "compose_services": {
+                "description": "Specific docker-compose services to deploy (e.g., ["backend"]). Deploys all if omitted.",
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "docker_target": {
+                "description": "Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)",
+                "type": "string",
+              },
               "dockerfile_path": {
                 "description": "Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)",
                 "type": "string",
+              },
+              "dry_run": {
+                "description": "Preview deployment plan without executing. Clones repo and returns detected config, Dockerfile, build context, and resource allocation — but does NOT build or deploy.",
+                "type": "boolean",
+              },
+              "env_vars": {
+                "description": "JSON object of environment variables to set before deploy (e.g., {"DATABASE_URL": "...", "REDIS_URL": "..."})",
+                "type": "string",
+              },
+              "force": {
+                "description": "Force deploy by auto-removing conflicting containers before preflight check. Use when redeploying a project that has a stale container.",
+                "type": "boolean",
               },
               "name": {
                 "description": "Project name (auto-generated from repo if not provided)",
@@ -545,6 +578,25 @@ describe('Tool parity baseline snapshots', () => {
             "type": "object",
           },
           "name": "get_alerts",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "deploy_index": {
+                "description": "Deploy index (0 = latest, 1 = previous). Default: 0",
+                "type": "integer",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "get_build_log",
         },
         {
           "inputSchema": {
@@ -623,6 +675,21 @@ describe('Tool parity baseline snapshots', () => {
             "type": "object",
           },
           "name": "list_domains",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "list_env_vars",
         },
         {
           "inputSchema": {
@@ -960,121 +1027,493 @@ describe('Tool parity baseline snapshots', () => {
       [
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "goal": {
+                "description": "The goal for the agent to accomplish using available tools",
+                "type": "string",
+              },
+            },
+            "required": [
+              "goal",
+            ],
+            "type": "object",
           },
           "name": "agent_execute_goal",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "branch": {
+                "description": "Branch",
+                "type": "string",
+              },
+              "repo_url": {
+                "description": "Git repository URL",
+                "type": "string",
+              },
+            },
+            "required": [
+              "repo_url",
+            ],
+            "type": "object",
           },
           "name": "analyze_infrastructure",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "service_name": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+            ],
+            "type": "object",
+          },
+          "name": "backup_service",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "preview_id": {
+                "description": "Preview deployment ID",
+                "type": "string",
+              },
+            },
+            "required": [
+              "preview_id",
+            ],
+            "type": "object",
           },
           "name": "cleanup_preview",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "branch": {
+                "description": "Git branch for this environment",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+              "type": {
+                "description": "Environment type",
+                "enum": [
+                  "production",
+                  "development",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "branch",
+              "project_name",
+              "type",
+            ],
+            "type": "object",
+          },
+          "name": "create_environment",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "image": {
+                "description": "Docker image",
+                "type": "string",
+              },
+              "name": {
+                "description": "Service name",
+                "type": "string",
+              },
+              "port": {
+                "description": "Port number",
+                "type": "integer",
+              },
+              "template": {
+                "description": "Service template (postgres, mysql, redis, etc.)",
+                "type": "string",
+              },
+            },
+            "required": [
+              "name",
+            ],
+            "type": "object",
           },
           "name": "create_service",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "database_name": {
+                "description": "Database name",
+                "type": "string",
+              },
+              "service_name": {
+                "description": "Service name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "database_name",
+              "service_name",
+            ],
+            "type": "object",
           },
           "name": "create_service_database",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "database": {
+                "description": "Database name",
+                "type": "string",
+              },
+              "password": {
+                "description": "Password (auto-generated if omitted)",
+                "type": "string",
+              },
+              "service_name": {
+                "description": "Service name",
+                "type": "string",
+              },
+              "username": {
+                "description": "Username",
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+              "username",
+            ],
+            "type": "object",
           },
           "name": "create_service_user",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "build_log": {
+                "description": "Optional build log text to analyze when stored deploy logs are missing",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "debug_build_error",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "deploy_blue_green",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "environment_type": {
+                "description": "Environment to deploy",
+                "enum": [
+                  "production",
+                  "development",
+                ],
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "environment_type",
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "deploy_environment",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "branch": {
+                "description": "Branch",
+                "type": "string",
+              },
+              "clone_path": {
+                "description": "Path where repo is cloned",
+                "type": "string",
+              },
+              "commit_sha": {
+                "description": "Commit SHA",
+                "type": "string",
+              },
+              "dockerfiles": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string",
+                    },
+                    "type": "array",
+                  },
+                  {
+                    "type": "string",
+                  },
+                ],
+                "description": "Dockerfile paths from scan_dockerfiles — array or JSON string, e.g. ["frontend/Dockerfile", "backend/Dockerfile"]",
+              },
+              "repo_url": {
+                "description": "Git repository URL",
+                "type": "string",
+              },
+            },
+            "required": [
+              "clone_path",
+              "commit_sha",
+              "dockerfiles",
+              "repo_url",
+            ],
+            "type": "object",
           },
           "name": "deploy_monorepo",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "branch": {
+                "description": "Branch to deploy (default: repo default branch)",
+                "type": "string",
+              },
+              "compose_services": {
+                "description": "Specific docker-compose services to deploy (e.g., ["backend"]). Deploys all if omitted.",
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
+              "docker_target": {
+                "description": "Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)",
+                "type": "string",
+              },
+              "dockerfile_path": {
+                "description": "Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)",
+                "type": "string",
+              },
+              "dry_run": {
+                "description": "Preview deployment plan without executing. Clones repo and returns detected config, Dockerfile, build context, and resource allocation — but does NOT build or deploy.",
+                "type": "boolean",
+              },
+              "env_vars": {
+                "description": "JSON object of environment variables to set before deploy (e.g., {"DATABASE_URL": "...", "REDIS_URL": "..."})",
+                "type": "string",
+              },
+              "force": {
+                "description": "Force deploy by auto-removing conflicting containers before preflight check. Use when redeploying a project that has a stale container.",
+                "type": "boolean",
+              },
+              "name": {
+                "description": "Project name (auto-generated from repo if not provided)",
+                "type": "string",
+              },
+              "prefer_dockerfile": {
+                "description": "Prefer Dockerfile flow and skip compose detection",
+                "type": "boolean",
+              },
+              "repo_url": {
+                "description": "Git repository URL (e.g., github.com/user/repo)",
+                "type": "string",
+              },
+            },
+            "required": [
+              "repo_url",
+            ],
+            "type": "object",
           },
           "name": "deploy_project",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+              "source": {
+                "description": "Git provider",
+                "enum": [
+                  "github",
+                  "gitlab",
+                  "bitbucket",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+              "source",
+            ],
+            "type": "object",
+          },
+          "name": "disable_webhook",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "branch_filter": {
+                "description": "Branch to trigger deploys on (default: main)",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+              "source": {
+                "description": "Git provider",
+                "enum": [
+                  "github",
+                  "gitlab",
+                  "bitbucket",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+              "source",
+            ],
+            "type": "object",
+          },
+          "name": "enable_webhook",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "expose_public",
         },
         {
           "inputSchema": {
-            "properties": {},
+            "properties": {
+              "deploy_index": {
+                "description": "Deploy index (0 = latest, 1 = previous). Default: 0",
+                "type": "integer",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "get_build_log",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "project_name": {
+                "description": "Project name (optional, returns all if omitted)",
+                "type": "string",
+              },
+            },
             "required": [],
-            "type": null,
+            "type": "object",
           },
           "name": "get_deploy_status",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "lines": {
+                "description": "Number of log lines to retrieve",
+                "type": "integer",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "get_logs",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "service_name": {
+                "description": "Service name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+            ],
+            "type": "object",
           },
           "name": "get_service_credentials",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "lines": {
+                "description": "Number of log lines to retrieve",
+                "type": "integer",
+              },
+              "service_name": {
+                "description": "Service name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+            ],
+            "type": "object",
+          },
+          "name": "get_service_logs",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "service_name": {
+                "description": "Service name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+            ],
+            "type": "object",
           },
           "name": "get_service_status",
         },
@@ -1082,23 +1521,82 @@ describe('Tool parity baseline snapshots', () => {
           "inputSchema": {
             "properties": {},
             "required": [],
-            "type": null,
+            "type": "object",
           },
           "name": "get_system_stats",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
-          "name": "list_domains",
+          "name": "get_webhook_config",
         },
         {
           "inputSchema": {
             "properties": {},
             "required": [],
-            "type": null,
+            "type": "object",
+          },
+          "name": "list_domains",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "list_env_vars",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "list_environments",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "page": {
+                "description": "Page number",
+                "type": "integer",
+              },
+              "visibility": {
+                "description": "Repository visibility filter",
+                "enum": [
+                  "all",
+                  "public",
+                  "private",
+                ],
+                "type": "string",
+              },
+            },
+            "required": [],
+            "type": "object",
           },
           "name": "list_github_repos",
         },
@@ -1106,7 +1604,7 @@ describe('Tool parity baseline snapshots', () => {
           "inputSchema": {
             "properties": {},
             "required": [],
-            "type": null,
+            "type": "object",
           },
           "name": "list_global_secrets",
         },
@@ -1114,7 +1612,7 @@ describe('Tool parity baseline snapshots', () => {
           "inputSchema": {
             "properties": {},
             "required": [],
-            "type": null,
+            "type": "object",
           },
           "name": "list_previews",
         },
@@ -1122,151 +1620,398 @@ describe('Tool parity baseline snapshots', () => {
           "inputSchema": {
             "properties": {},
             "required": [],
-            "type": null,
+            "type": "object",
           },
           "name": "list_projects",
         },
         {
           "inputSchema": {
+            "properties": {
+              "project_name": {
+                "description": "Project name. Omit to list global secret files.",
+                "type": "string",
+              },
+            },
+            "required": [],
+            "type": "object",
+          },
+          "name": "list_secret_files",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "service_name": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+            ],
+            "type": "object",
+          },
+          "name": "list_service_backups",
+        },
+        {
+          "inputSchema": {
             "properties": {},
             "required": [],
-            "type": null,
+            "type": "object",
           },
           "name": "list_services",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "domain": {
+                "description": "Domain name",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "domain",
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "map_domain",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "branch": {
+                "description": "Branch to preview",
+                "type": "string",
+              },
+              "repo_url": {
+                "description": "Git repository URL",
+                "type": "string",
+              },
+            },
+            "required": [
+              "branch",
+              "repo_url",
+            ],
+            "type": "object",
           },
           "name": "preview_deploy",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "db_type": {
+                "description": "Database type: "sqlite" or "postgres" (default: postgres)",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "provision_database",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "redeploy_project",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "remove_project",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "filename": {
+                "description": "Filename to remove",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name. Omit for global secret file.",
+                "type": "string",
+              },
+            },
+            "required": [
+              "filename",
+            ],
+            "type": "object",
+          },
+          "name": "remove_secret_file",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "service_name": {
+                "description": "Service name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+            ],
+            "type": "object",
           },
           "name": "remove_service",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "restart_project",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "backup_id": {
+                "type": "string",
+              },
+              "service_name": {
+                "type": "string",
+              },
+            },
+            "required": [
+              "backup_id",
+              "service_name",
+            ],
+            "type": "object",
+          },
+          "name": "restore_service",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "rollback_project",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "branch": {
+                "description": "Branch to scan",
+                "type": "string",
+              },
+              "repo_url": {
+                "description": "Git repository URL",
+                "type": "string",
+              },
+            },
+            "required": [
+              "repo_url",
+            ],
+            "type": "object",
           },
           "name": "scan_dockerfiles",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "query": {
+                "description": "Search query",
+                "type": "string",
+              },
+            },
+            "required": [
+              "query",
+            ],
+            "type": "object",
           },
           "name": "search_github_repos",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+              "variables": {
+                "description": "JSON object of key-value pairs (e.g., {"DATABASE_URL": "..."})",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+              "variables",
+            ],
+            "type": "object",
           },
           "name": "set_env_vars",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "description": {
+                "description": "Description of the secret",
+                "type": "string",
+              },
+              "key": {
+                "description": "Secret key",
+                "type": "string",
+              },
+              "value": {
+                "description": "Secret value",
+                "type": "string",
+              },
+            },
+            "required": [
+              "key",
+              "value",
+            ],
+            "type": "object",
           },
           "name": "set_global_secret",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "service_name": {
+                "description": "Service name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+            ],
+            "type": "object",
           },
           "name": "start_service",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "stop_project",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "service_name": {
+                "description": "Service name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "service_name",
+            ],
+            "type": "object",
           },
           "name": "stop_service",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
           },
           "name": "unexpose_public",
         },
         {
           "inputSchema": {
-            "properties": {},
-            "required": [],
-            "type": null,
+            "properties": {
+              "content": {
+                "description": "File content (plaintext — will be encrypted at rest)",
+                "type": "string",
+              },
+              "filename": {
+                "description": "Filename (e.g. firebase-sa.json, tls-cert.pem)",
+                "type": "string",
+              },
+              "mount_path": {
+                "description": "Container mount directory (default: /run/secrets). File available at mount_path/filename.",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name. Omit for global secret file (shared across all projects).",
+                "type": "string",
+              },
+            },
+            "required": [
+              "content",
+              "filename",
+            ],
+            "type": "object",
+          },
+          "name": "upload_secret_file",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "max_results": {
+                "description": "Maximum results",
+                "type": "integer",
+              },
+              "query": {
+                "description": "Search query",
+                "type": "string",
+              },
+            },
+            "required": [
+              "query",
+            ],
+            "type": "object",
           },
           "name": "web_search",
         },
@@ -1361,6 +2106,13 @@ describe('Tool parity baseline snapshots', () => {
                 "status": "string",
                 "updatedAt": "string",
                 "url": "string",
+                "urls": [
+                  {
+                    "ip": "string",
+                    "type": "string",
+                    "url": "string",
+                  },
+                ],
                 "visibility": "string",
               },
             ],

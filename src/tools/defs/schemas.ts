@@ -35,6 +35,12 @@ export const deployProjectSchema = z.object({
     .describe(
       'Preview deployment plan without executing. Clones repo and returns detected config, Dockerfile, build context, and resource allocation — but does NOT build or deploy.',
     ),
+  compose_services: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Specific docker-compose services to deploy (e.g., ["backend"]). Deploys all if omitted.',
+    ),
 });
 
 export const projectNameSchema = z.object({

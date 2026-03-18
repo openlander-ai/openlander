@@ -14,6 +14,7 @@ import {
 import { Database } from '../src/db/index.js';
 import { EventBus } from '../src/events/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
+import { formatEnvValue } from '../src/pipeline/env-inject.js';
 
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
@@ -760,5 +761,41 @@ describeCompose('ComposePipeline', () => {
         containerId: 'worker-id',
       },
     ]);
+  });
+});
+
+describe('formatEnvValue', () => {
+  it('returns plain value for simple strings', () => {
+    expect(formatEnvValue('hello')).toBe('hello');
+    expect(formatEnvValue('12345')).toBe('12345');
+  });
+
+  it('quotes values with whitespace', () => {
+    expect(formatEnvValue('hello world')).toBe('"hello world"');
+  });
+
+  it('escapes newlines in values', () => {
+    const pem = '-----BEGIN KEY-----\nMIIC...\n-----END KEY-----';
+    const result = formatEnvValue(pem);
+    expect(result).toContain('\\n');
+    expect(result).not.toContain('\n');
+    expect(result.startsWith('"')).toBe(true);
+    expect(result.endsWith('"')).toBe(true);
+  });
+
+  it('escapes dollar signs to prevent shell interpolation', () => {
+    expect(formatEnvValue('price=$100')).toBe('"price=\\$100"');
+  });
+
+  it('escapes backticks', () => {
+    expect(formatEnvValue('cmd=`whoami`')).toBe('"cmd=\\`whoami\\`"');
+  });
+
+  it('escapes double quotes in values', () => {
+    expect(formatEnvValue('{"key":"value"}')).toBe('"{\\"key\\":\\"value\\"}"');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(formatEnvValue('')).toBe('');
   });
 });

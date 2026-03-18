@@ -576,7 +576,7 @@ describe('DeployPipeline deployEnvironment', () => {
       branch: 'develop',
     });
 
-    const setEnvVarsBulkSpy = vi.spyOn(db, 'setEnvVarsBulk');
+    const mergeEnvVarsSpy = vi.spyOn(db, 'mergeEnvVars');
 
     const result = await pipeline.deployEnvironment('p13', 'p13-development', {
       envVars: {
@@ -585,7 +585,7 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(setEnvVarsBulkSpy).toHaveBeenCalledWith(
+    expect(mergeEnvVarsSpy).toHaveBeenCalledWith(
       'p13',
       { API_BASE_URL: 'https://dev.example.com' },
       'p13-development',

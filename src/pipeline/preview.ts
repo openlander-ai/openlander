@@ -93,7 +93,16 @@ export class PreviewDeployer {
       ensureDockerfile(cloneResult.path);
 
       const imageTag = `openlander/preview-${options.branch}:latest`;
-      await this.docker.buildImage(cloneResult.path, imageTag);
+      let buildOutput = '';
+      await this.docker.buildImage(cloneResult.path, imageTag, {
+        onProgress: (event) => {
+          const line = event.stream?.trimEnd() ?? event.error ?? '';
+          if (line) buildOutput += line + '\n';
+        },
+      });
+      if (buildOutput) {
+        log.debug({ branch: options.branch }, 'Preview build output:\n%s', buildOutput);
+      }
 
       const port = await this.allocatePreviewPort();
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? port;

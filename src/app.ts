@@ -84,9 +84,9 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   const db = new Database(dbPath);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
   const jobManager = new JobManager();
-  const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager);
-  const traefik = new TraefikManager(docker);
   const env = new EnvManager(db);
+  const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager, env);
+  const traefik = new TraefikManager(docker, config.server.port);
 
   let model: LanguageModel | null = null;
   if (config.llm.apiKey || config.llm.authToken || config.llm.provider === 'ollama') {

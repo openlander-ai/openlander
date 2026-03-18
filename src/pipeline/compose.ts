@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { homedir } from 'node:os';
 import { createModuleLogger } from '../lib/logger.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { checkEnvRequirements, classifyVar, detectEnvFile, parseEnvFile } from './env-inject.js';
@@ -10,6 +11,7 @@ import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
 
 const log = createModuleLogger('compose');
@@ -50,6 +52,7 @@ export interface ComposeDeployConfig {
   clonePath: string;
   composePath: string;
   profiles?: string[];
+  services?: string[];
   name?: string;
   envVars?: Record<string, string>;
   trigger?: 'chat' | 'webhook' | 'api';
@@ -128,6 +131,7 @@ export class ComposePipeline {
     private readonly db: Database,
     private readonly events: EventBus,
     private readonly jobManager?: JobManager,
+    private readonly env?: EnvManager,
   ) {
     void this.docker;
   }
@@ -398,6 +402,13 @@ export class ComposePipeline {
       services: filterServicesByProfiles(composeProject.services, config.profiles),
     };
 
+    if (config.services && config.services.length > 0) {
+      const requestedServices = new Set(config.services);
+      filteredComposeProject.services = filteredComposeProject.services.filter((s) =>
+        requestedServices.has(s.name),
+      );
+    }
+
     const envVars = { ...(config.envVars ?? {}) };
 
     // Check env_file references first - fail fast if missing
@@ -429,6 +440,14 @@ export class ComposePipeline {
     }
 
     this.createComposeEnvFileIfMissing(filteredComposeProject.projectPath, envVars);
+
+    if (this.env) {
+      const secretFiles = this.env.getSecretFilesForDeploy(parentProjectId);
+      if (secretFiles.length > 0) {
+        const secretMounts = this.writeComposeSecretFiles(parentName, secretFiles);
+        this.writeSecretOverride(config.composePath, filteredComposeProject.services, secretMounts);
+      }
+    }
 
     if (!config._parentId) {
       this.db.createProject({
@@ -539,6 +558,7 @@ export class ComposePipeline {
             '-d',
             '--build',
             '--no-deps',
+            '--progress=plain',
             service.name,
           ]);
           buildLog += `[compose up ${service.name}]\n${upResult.stdout}${upResult.stderr}`;
@@ -912,6 +932,58 @@ export class ComposePipeline {
     return overridePath;
   }
 
+  private writeComposeSecretFiles(
+    projectName: string,
+    files: Array<{ filename: string; content: string; mountPath: string }>,
+  ): Array<{ hostPath: string; containerPath: string }> {
+    const secretDir = join(homedir(), '.openlander', 'container-secrets', projectName);
+    mkdirSync(secretDir, { recursive: true });
+    const mounts: Array<{ hostPath: string; containerPath: string }> = [];
+    for (const file of files) {
+      const hostPath = join(secretDir, file.filename);
+      writeFileSync(hostPath, file.content, { mode: 0o600 });
+      mounts.push({ hostPath, containerPath: file.mountPath });
+    }
+    return mounts;
+  }
+
+  private writeSecretOverride(
+    composePath: string,
+    services: ComposeService[],
+    mounts: Array<{ hostPath: string; containerPath: string }>,
+  ): void {
+    if (mounts.length === 0) return;
+    const overridePath = join(dirname(composePath), 'docker-compose.override.yml');
+
+    let existingOverride: Record<string, unknown> = {};
+    if (existsSync(overridePath)) {
+      const parsed = parseYaml(readFileSync(overridePath, 'utf8')) as Record<
+        string,
+        unknown
+      > | null;
+      existingOverride = parsed ?? {};
+    }
+
+    const overrideServices = (existingOverride['services'] ?? {}) as Record<
+      string,
+      { volumes?: string[]; ports?: string[] }
+    >;
+    for (const service of services) {
+      const existing = overrideServices[service.name] ?? {};
+      const volumes = [...(existing.volumes ?? [])];
+      for (const mount of mounts) {
+        volumes.push(`${mount.hostPath}:${mount.containerPath}:ro`);
+      }
+      overrideServices[service.name] = { ...existing, volumes };
+    }
+
+    writeFileSync(
+      overridePath,
+      stringifyYaml({ ...existingOverride, services: overrideServices }),
+      'utf8',
+    );
+  }
+
   private createComposeEnvFileIfMissing(
     projectPath: string,
     envVars: Record<string, string>,
@@ -955,8 +1027,15 @@ export class ComposePipeline {
       return '';
     }
 
-    if (/\s|#/.test(value)) {
-      return '"' + value.replace(/"/g, '\\"') + '"';
+    if (/[\s#"'$`\\=\n\r]/.test(value)) {
+      const escaped = value
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\$/g, '\\$')
+        .replace(/`/g, '\\`');
+      return '"' + escaped + '"';
     }
 
     return value;
