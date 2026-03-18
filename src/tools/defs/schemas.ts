@@ -29,6 +29,12 @@ export const deployProjectSchema = z.object({
     .describe(
       'Force deploy by auto-removing conflicting containers before preflight check. Use when redeploying a project that has a stale container.',
     ),
+  dry_run: z
+    .boolean()
+    .optional()
+    .describe(
+      'Preview deployment plan without executing. Clones repo and returns detected config, Dockerfile, build context, and resource allocation — but does NOT build or deploy.',
+    ),
 });
 
 export const projectNameSchema = z.object({
@@ -140,6 +146,24 @@ export const createServiceSchema = z.object({
 
 export const serviceNameSchema = z.object({
   service_name: z.string().min(1).describe('Service name'),
+});
+
+export const backupServiceSchema = z.object({
+  service_name: z.string().min(1),
+});
+
+export const restoreServiceSchema = z.object({
+  service_name: z.string().min(1),
+  backup_id: z.string().min(1),
+});
+
+export const listServiceBackupsSchema = z.object({
+  service_name: z.string().min(1),
+});
+
+export const getServiceLogsSchema = z.object({
+  service_name: z.string().min(1).describe('Service name'),
+  lines: z.number().int().positive().optional().describe('Number of log lines to retrieve'),
 });
 
 export const createServiceDatabaseSchema = z.object({

@@ -1,8 +1,11 @@
 import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 
 import { nanoid } from 'nanoid';
 
+import { getDataDir } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { Docker } from './docker.js';
@@ -116,6 +119,7 @@ export class ServiceManager {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
+    private readonly dataDir: string = getDataDir(),
   ) {}
 
   /**
@@ -360,6 +364,112 @@ export class ServiceManager {
     }
 
     this.db.deleteService(id);
+  }
+
+  async backup(id: string): Promise<{ backupId: string; path: string; size: number }> {
+    const service = this.getRequiredService(id);
+    const volumeName = this.getVolumeName(service.name);
+    const backupDir = this.getBackupDir();
+    const backupId = `${service.name}-${String(Date.now())}`;
+    const backupPath = join(backupDir, `${backupId}.tar.gz`);
+
+    mkdirSync(backupDir, { recursive: true });
+    await this.docker.pullImage('alpine');
+
+    const client = this.docker.getClient();
+    const container = await client.createContainer({
+      Image: 'alpine',
+      Cmd: ['tar', 'czf', `/backup/${backupId}.tar.gz`, '-C', '/data', '.'],
+      HostConfig: {
+        Binds: [`${volumeName}:/data:ro`, `${backupDir}:/backup`],
+        AutoRemove: true,
+      },
+    });
+
+    await container.start();
+    const waitResult: unknown = await container.wait();
+    const backupExitCode =
+      waitResult && typeof waitResult === 'object' && 'StatusCode' in waitResult
+        ? (waitResult as { StatusCode: number }).StatusCode
+        : 1;
+    if (backupExitCode !== 0) {
+      throw new Error(
+        `Backup failed with exit code ${String(backupExitCode)} for service: ${service.id}`,
+      );
+    }
+
+    if (!existsSync(backupPath)) {
+      throw new Error(`Backup file not found after backup: ${backupPath}`);
+    }
+    const size = statSync(backupPath).size;
+
+    return { backupId, path: backupPath, size };
+  }
+
+  async restore(id: string, backupId: string): Promise<void> {
+    const service = this.getRequiredService(id);
+    const backupDir = this.getBackupDir();
+    const backupFilename = `${backupId}.tar.gz`;
+    const backupPath = join(backupDir, backupFilename);
+    if (!existsSync(backupPath)) {
+      throw new Error(`Backup not found: ${backupPath}`);
+    }
+
+    const volumeName = this.getVolumeName(service.name);
+    await this.stop(id);
+
+    try {
+      await this.docker.pullImage('alpine');
+      const client = this.docker.getClient();
+      const container = await client.createContainer({
+        Image: 'alpine',
+        Cmd: ['sh', '-c', `rm -rf /data/* && tar xzf /backup/${backupFilename} -C /data`],
+        HostConfig: {
+          Binds: [`${volumeName}:/data`, `${backupDir}:/backup:ro`],
+          AutoRemove: true,
+        },
+      });
+
+      await container.start();
+      const waitResult: unknown = await container.wait();
+      const restoreExitCode =
+        waitResult && typeof waitResult === 'object' && 'StatusCode' in waitResult
+          ? (waitResult as { StatusCode: number }).StatusCode
+          : 1;
+      if (restoreExitCode !== 0) {
+        throw new Error(
+          `Restore failed with exit code ${String(restoreExitCode)} for service: ${service.id}`,
+        );
+      }
+    } finally {
+      await this.start(id);
+    }
+  }
+
+  listBackups(id: string): Array<{ backupId: string; createdAt: Date; sizeBytes: number }> {
+    const service = this.getRequiredService(id);
+    const backupDir = this.getBackupDir();
+    if (!existsSync(backupDir)) {
+      return [];
+    }
+
+    const prefix = `${service.name}-`;
+    const entries = readdirSync(backupDir)
+      .filter((name) => name.startsWith(prefix) && name.endsWith('.tar.gz'))
+      .map((name) => {
+        const backupId = name.slice(0, -'.tar.gz'.length);
+        const timestampRaw = backupId.slice(prefix.length);
+        const timestamp = Number.parseInt(timestampRaw, 10);
+        const stats = statSync(join(backupDir, name));
+        return {
+          backupId,
+          createdAt: Number.isFinite(timestamp) ? new Date(timestamp) : stats.mtime,
+          sizeBytes: stats.size,
+        };
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return entries;
   }
 
   async list(): Promise<ServiceRow[]> {
@@ -955,6 +1065,10 @@ export class ServiceManager {
 
   private getVolumeName(name: string): string {
     return `ol-svc-data-${name}`;
+  }
+
+  private getBackupDir(): string {
+    return join(this.dataDir, 'backups');
   }
 
   private getDataMountPath(type: string): string {

@@ -25,6 +25,8 @@ export const deployToolDefs: ToolDef[] = [
       const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
 
+      const dryRun = (args['dry_run'] as boolean | undefined) ?? false;
+
       const result = await appCtx.pipeline.startDeploy({
         repoUrl: args['repo_url'] as string,
         branch: (args['branch'] as string | undefined) ?? undefined,
@@ -33,10 +35,15 @@ export const deployToolDefs: ToolDef[] = [
         dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         force: (args['force'] as boolean | undefined) ?? undefined,
+        dryRun,
         envVars,
         sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
         trigger: context.target === 'agent' ? 'chat' : 'api',
       });
+
+      if (dryRun) {
+        return { ...result, hint: 'This was a dry run — no deploy was executed.' };
+      }
 
       if (context.target === 'mcp' && result.status === 'preflight_failed') {
         return {

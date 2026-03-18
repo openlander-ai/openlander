@@ -41,7 +41,7 @@ CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTT
 ## Tools by Category
 
 ### Deploy
-- deploy_project — Deploy from git URL. Key params: dockerfile_path, docker_target (multi-stage), env_vars (JSON string), force (auto-clean conflicts). Returns immediately; poll with get_deploy_status.
+- deploy_project — Deploy from git URL. Key params: name (project name override — NOT "project_name"), dockerfile_path, docker_target (multi-stage), env_vars (JSON string), prefer_dockerfile (skip compose detection — use for monorepos), force (auto-clean conflicts), dry_run (preview plan without deploying). Returns immediately; poll with get_deploy_status.
 - redeploy_project — Redeploy existing project (picks up new env vars, pulls latest code).
 - rollback_project — Revert to previous Docker image.
 - deploy_blue_green — Zero-downtime deploy with health check before traffic switch. Use for production projects where downtime is unacceptable.
@@ -54,7 +54,11 @@ CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTT
 - provision_database — Quick shortcut: creates a PostgreSQL container tied to a specific project and auto-sets DATABASE_URL. Use when you just need "give this project a database".
 - list_services / get_service_status — See running services.
 - get_service_credentials — Get connection string, host, port, user, password.
-- start_service / stop_service / remove_service — Lifecycle management.
+- get_service_logs — Get container logs for a service. Essential for diagnosing error-state services.
+- backup_service — Snapshot a service's persistent data (DB files, etc.) BEFORE removing. Returns backupId.
+- restore_service — Restore a service from a backup snapshot.
+- list_service_backups — List available backups for a service.
+- start_service / stop_service / remove_service — Lifecycle management. IMPORTANT: remove_service deletes ALL data. Always backup_service first.
 - create_service_database — Create additional databases inside an existing PostgreSQL/MySQL service.
 - create_service_user — Create a user with optional database grants and per-database access.
 
@@ -67,7 +71,7 @@ CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTT
 - expose_public / unexpose_public — Toggle public URL via Cloudflare tunnel.
 
 ### Monitoring & Debug
-- get_logs — Container runtime logs (default 20 lines).
+- get_logs — Container runtime logs for projects (default 20 lines). For service logs, use get_service_logs.
 - get_system_stats — Disk, memory, CPU, container count. Call before deploying to check resources.
 - get_build_log — Raw Docker build output. Essential for debugging build failures.
 - debug_build_error — AI-powered build error analysis with actionable fix suggestions.

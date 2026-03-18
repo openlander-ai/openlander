@@ -2,13 +2,17 @@ import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { ToolDef } from './types.js';
 import {
+  backupServiceSchema,
   createDatabaseSchema,
   createServiceDatabaseSchema,
   createServiceSchema,
   createServiceUserSchema,
+  getServiceLogsSchema,
   listDatabasesSchema,
+  listServiceBackupsSchema,
   listServicesSchema,
   provisionDbSchema,
+  restoreServiceSchema,
   serviceNameSchema,
 } from './schemas.js';
 
@@ -222,13 +226,87 @@ export const serviceToolDefs: ToolDef[] = [
   {
     name: 'remove_service',
     description:
-      'Permanently remove a service — deletes the container, volume, and database record. DESTRUCTIVE — cannot be undone. Use only when user explicitly wants to delete a service. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. Returns { status, service, warning }. Errors: SERVICE_NOT_FOUND.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
       const service = await getServiceByName(appCtx, serviceName);
+      const serviceType = service.type;
       await appCtx.serviceManager.remove(service.id);
-      return { status: 'removed', service: serviceName };
+      return {
+        status: 'removed',
+        service: serviceName,
+        warning: `All persistent data for ${serviceType} service "${serviceName}" has been permanently deleted. This cannot be undone. If you needed the data, it is now lost. Use backup_service before remove_service in the future.`,
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'backup_service',
+    description:
+      "Create a backup snapshot of a service's persistent data (database files, etc.). Returns { status, backupId, path, sizeBytes }. Use BEFORE remove_service to prevent data loss.",
+    inputSchema: backupServiceSchema,
+    execute: async (args, { appCtx }) => {
+      const service = await getServiceByName(appCtx, args['service_name'] as string);
+      const result = await appCtx.serviceManager.backup(service.id);
+      return {
+        status: 'backed_up',
+        service: service.name,
+        backupId: result.backupId,
+        path: result.path,
+        sizeBytes: result.size,
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'restore_service',
+    description:
+      'Restore a service volume from a backup snapshot. Stops the service container, restores the selected backup into the service volume, then starts the service again. Returns { status, service, backupId }.',
+    inputSchema: restoreServiceSchema,
+    execute: async (args, { appCtx }) => {
+      const service = await getServiceByName(appCtx, args['service_name'] as string);
+      const backupId = args['backup_id'] as string;
+      await appCtx.serviceManager.restore(service.id, backupId);
+      return {
+        status: 'restored',
+        service: service.name,
+        backupId,
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'list_service_backups',
+    description:
+      'List available backup snapshots for a service. Returns { service, count, backups[] } with backupId, createdAt, and sizeBytes for each snapshot.',
+    inputSchema: listServiceBackupsSchema,
+    execute: async (args, { appCtx }) => {
+      const service = await getServiceByName(appCtx, args['service_name'] as string);
+      const backups = appCtx.serviceManager.listBackups(service.id);
+      return {
+        service: service.name,
+        count: backups.length,
+        backups: backups.map((backup) => ({
+          backupId: backup.backupId,
+          createdAt: backup.createdAt,
+          sizeBytes: backup.sizeBytes,
+        })),
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'get_service_logs',
+    description:
+      'Get recent container logs for a service (database, cache, or custom container). Use when a service is in error state or behaving unexpectedly. Returns { service, logs }. Errors: SERVICE_NOT_FOUND.',
+    inputSchema: getServiceLogsSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const service = await getServiceByName(appCtx, serviceName);
+      const lines = (args['lines'] as number | undefined) ?? 50;
+      const logs = await appCtx.serviceManager.getLogs(service.id, lines);
+      return { service: serviceName, logs };
     },
     targets: ['mcp'],
   },

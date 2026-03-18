@@ -53,6 +53,8 @@ export interface ProjectConfig {
   dockerTarget?: string;
   preferDockerfile?: boolean;
   force?: boolean;
+  /** Preview deployment plan without building or deploying */
+  dryRun?: boolean;
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
   _retryCount?: number;
@@ -99,12 +101,24 @@ export interface MonorepoResult {
   buildDurationMs: number;
 }
 
+export interface DryRunPlan {
+  projectName: string;
+  repoUrl: string;
+  branch?: string;
+  dockerfile: string | null;
+  composeDetected: boolean;
+  preferDockerfile: boolean;
+  envVarsProvided: number;
+  existingProject: boolean;
+}
+
 export interface StartDeployResult {
   projectId: string;
   projectName: string;
-  status: 'building' | 'preflight_failed';
+  status: 'building' | 'preflight_failed' | 'dry_run';
   preflightWarnings?: string[];
   preflightError?: string;
+  dryRunPlan?: DryRunPlan;
 }
 
 export interface StartMonorepoResult {
@@ -250,6 +264,39 @@ export class DeployPipeline {
       } else {
         throw error;
       }
+    }
+
+    if (config.dryRun) {
+      const cloneResult = await cloneRepo({
+        repoUrl: config.repoUrl,
+        branch: config.branch,
+        sshKeyPath: config.sshKeyPath,
+      });
+
+      const hasExplicitDockerfilePath =
+        typeof config.dockerfilePath === 'string' && config.dockerfilePath.trim().length > 0;
+      const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
+      const composePath = preferDockerfile
+        ? null
+        : this.composePipeline?.detectComposeFile(cloneResult.path);
+      const dockerfilePath = join(cloneResult.path, config.dockerfilePath ?? 'Dockerfile');
+      const dockerfileExists = existsSync(dockerfilePath);
+
+      return {
+        projectId: '',
+        projectName,
+        status: 'dry_run' as const,
+        dryRunPlan: {
+          projectName,
+          repoUrl: config.repoUrl,
+          branch: config.branch,
+          dockerfile: dockerfileExists ? (config.dockerfilePath ?? 'Dockerfile') : null,
+          composeDetected: !!composePath,
+          preferDockerfile,
+          envVarsProvided: config.envVars ? Object.keys(config.envVars).length : 0,
+          existingProject: !!this.db.getProjectByName(projectName),
+        },
+      };
     }
 
     // Check if project with this name already exists
