@@ -58,6 +58,7 @@ export interface AllContainerInfo {
 export interface BuildImageOptions {
   noCache?: boolean;
   buildArgs?: Record<string, string>;
+  target?: string;
   onProgress?: (event: { stream?: string; error?: string }) => void;
 }
 
@@ -191,7 +192,12 @@ export class Docker {
     try {
       stream = await this.client.buildImage(
         { context: contextPath, src: ['.'] },
-        { t: tag, nocache: options?.noCache === true, buildargs: options?.buildArgs },
+        {
+          t: tag,
+          nocache: options?.noCache === true,
+          buildargs: options?.buildArgs,
+          target: options?.target,
+        },
       );
     } catch (error) {
       throw new DockerBuildError(tag, error instanceof Error ? error.message : String(error));
@@ -245,8 +251,9 @@ export class Docker {
         PortBindings: {
           [`${String(cPort)}/tcp`]: [{ HostPort: String(options.port) }],
         },
-        NetworkMode: this.networkName, // Traefik network
+        NetworkMode: this.networkName,
         RestartPolicy: { Name: 'unless-stopped' },
+        ExtraHosts: ['host.docker.internal:host-gateway'],
       },
     });
 

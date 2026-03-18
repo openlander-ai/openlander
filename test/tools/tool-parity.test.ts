@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 
 import type { AppContext } from '../../src/app.js';
 import { createTools } from '../../src/agent/tools.js';
@@ -323,15 +323,7 @@ describe('Tool parity baseline snapshots', () => {
       .map(([name, toolDef]) => ({
         name,
         inputSchema: simplifyToolSchema(
-          (() => {
-            const inputSchema = (toolDef as { inputSchema: unknown }).inputSchema as {
-              toJSONSchema?: () => unknown;
-            };
-            if (typeof inputSchema?.toJSONSchema === 'function') {
-              return inputSchema.toJSONSchema();
-            }
-            return zodToJsonSchema(inputSchema as Parameters<typeof zodToJsonSchema>[0]);
-          })(),
+          z.toJSONSchema((toolDef as { inputSchema: z.ZodType }).inputSchema),
         ),
       }));
 

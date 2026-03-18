@@ -1051,6 +1051,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       branch?: string;
       name?: string;
       environment?: string;
+      docker_target?: string;
     }>();
 
     if (!body.repo_url) {
@@ -1061,6 +1062,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       repoUrl: body.repo_url,
       branch: body.branch,
       name: body.name,
+      dockerTarget: body.docker_target,
       sshKeyPath: ctx.config.git.sshKeyPath || undefined,
       trigger: 'api',
       environment: body.environment,

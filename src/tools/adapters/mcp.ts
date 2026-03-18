@@ -5,7 +5,6 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { AppContext } from '../../app.js';
 import type { ToolDef } from '../defs/types.js';
 
@@ -16,8 +15,8 @@ const agentExecuteGoalSchema = z.object({
 const agentExecuteGoalDescription =
   'Run the AI agent to accomplish a complex goal. The agent reasons about steps and chains multiple tools (deploy, configure, debug, etc.) automatically. Use this for multi-step tasks instead of calling individual tools.';
 
-function toInputSchema(schema: unknown) {
-  return zodToJsonSchema(schema as Parameters<typeof zodToJsonSchema>[0]);
+function toInputSchema(schema: z.ZodType) {
+  return z.toJSONSchema(schema);
 }
 
 function successResponse(result: unknown): { content: Array<{ type: 'text'; text: string }> } {

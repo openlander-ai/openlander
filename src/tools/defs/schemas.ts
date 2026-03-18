@@ -9,6 +9,10 @@ export const deployProjectSchema = z.object({
     .string()
     .optional()
     .describe('Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)'),
+  docker_target: z
+    .string()
+    .optional()
+    .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
   prefer_dockerfile: z
     .boolean()
     .optional()

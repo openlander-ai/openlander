@@ -12,6 +12,7 @@ export interface ProjectRow {
   public_url: string | null;
   parent_project_id: string | null;
   dockerfile_path: string;
+  docker_target: string | null;
   created_at: string;
   updated_at: string;
   deploy_lock_session: string | null;

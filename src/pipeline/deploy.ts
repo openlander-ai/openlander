@@ -50,6 +50,7 @@ export interface ProjectConfig {
   /** Target environment (e.g., production, development) */
   environment?: string;
   dockerfilePath?: string;
+  dockerTarget?: string;
   preferDockerfile?: boolean;
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
@@ -562,6 +563,7 @@ export class DeployPipeline {
       await this.docker.buildImage(buildContextPath, imageTag, {
         noCache: config._noCacheBuild === true,
         buildArgs: buildTimeVars,
+        target: config.dockerTarget,
         onProgress: (event) => {
           const line = event.stream?.trim() ?? event.error ?? '';
           if (!line) return;

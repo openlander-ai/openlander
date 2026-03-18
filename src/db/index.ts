@@ -37,6 +37,7 @@ export interface ProjectRow {
   public_url: string | null;
   parent_project_id: string | null;
   dockerfile_path: string;
+  docker_target: string | null;
   pending_fix: string | null;
   created_at: string;
   updated_at: string;
@@ -194,6 +195,9 @@ export class Database {
     }
     if (!colNames.has('dockerfile_path')) {
       this.sqlite.exec("ALTER TABLE projects ADD COLUMN dockerfile_path TEXT DEFAULT 'Dockerfile'");
+    }
+    if (!colNames.has('docker_target')) {
+      this.sqlite.exec('ALTER TABLE projects ADD COLUMN docker_target TEXT DEFAULT NULL');
     }
     if (!colNames.has('pending_fix')) {
       this.sqlite.exec('ALTER TABLE projects ADD COLUMN pending_fix TEXT DEFAULT NULL');
@@ -467,6 +471,7 @@ export class Database {
     branch?: string;
     parentProjectId?: string;
     dockerfilePath?: string;
+    dockerTarget?: string;
   }): ProjectRow {
     try {
       this.db
@@ -478,6 +483,7 @@ export class Database {
           branch: project.branch ?? 'main',
           parent_project_id: project.parentProjectId ?? null,
           dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
+          docker_target: project.dockerTarget ?? null,
         })
         .run();
     } catch (error) {
@@ -540,6 +546,7 @@ export class Database {
       publicUrl: string | null;
       parentProjectId: string | null;
       dockerfilePath: string;
+      dockerTarget: string | null;
       pendingFix: string | null;
       accessCode: string | null;
       accessCodeIv: string | null;
@@ -576,6 +583,9 @@ export class Database {
     }
     if (updates.dockerfilePath !== undefined) {
       setValues.dockerfile_path = updates.dockerfilePath;
+    }
+    if (updates.dockerTarget !== undefined) {
+      setValues.docker_target = updates.dockerTarget;
     }
     if (updates.pendingFix !== undefined) {
       setValues.pending_fix = updates.pendingFix;
