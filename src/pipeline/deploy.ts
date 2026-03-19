@@ -36,6 +36,7 @@ import {
   parsePendingFix,
 } from './deploy/helpers.js';
 import { ContainerLifecycle } from './deploy/lifecycle.js';
+import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
 
 /**
@@ -173,6 +174,7 @@ interface PreviewDeployResult {
 export class DeployPipeline {
   private readonly tunnelManager: TunnelManager;
   private readonly lifecycle: ContainerLifecycle;
+  private readonly rollbackExecutor: RollbackExecutor;
 
   private get detectFailStep(): (buildLog: string) => string {
     return detectFailStep;
@@ -189,6 +191,7 @@ export class DeployPipeline {
   ) {
     this.tunnelManager = new TunnelManager(this.db);
     this.lifecycle = new ContainerLifecycle(this.docker, this.db);
+    this.rollbackExecutor = new RollbackExecutor(this.docker, this.db);
     this.cleanupStaleTunnels();
     void this.cleanupOrphanContainers();
   }
@@ -1611,190 +1614,7 @@ export class DeployPipeline {
 
   /** Rollback a project to its previous image tag. */
   async rollback(projectId: string, environmentId?: string): Promise<DeployResult> {
-    const startTime = Date.now();
-    const project = this.db.getProject(projectId);
-    if (!project) {
-      return {
-        success: false,
-        projectId,
-        projectName: 'unknown',
-        error: `Project not found: ${projectId}`,
-      };
-    }
-
-    if (environmentId) {
-      const environment = this.db.getEnvironment(environmentId);
-      if (!environment) {
-        return {
-          success: false,
-          projectId,
-          projectName: project.name,
-          error: `Environment not found: ${environmentId}`,
-        };
-      }
-
-      if (!environment.previous_image_tag) {
-        return {
-          success: false,
-          projectId,
-          projectName: project.name,
-          error: 'No previous image available for rollback',
-        };
-      }
-
-      const rollbackImageTag = environment.previous_image_tag;
-      const currentImageTag = environment.image_tag ?? '';
-
-      try {
-        // Stop and remove current container
-        if (environment.container_id && environment.status === 'running') {
-          try {
-            await this.docker.stopContainer(environment.container_id);
-            await this.docker.removeContainer(environment.container_id);
-          } catch (err) {
-            log.warn({ err }, 'Container cleanup during rollback failed');
-          }
-        }
-
-        // Start previous container
-        const routeName = getRouteName(project.name, environment.type);
-        const port = environment.assigned_port ?? (await allocatePort(this.db, this.docker));
-        const envVars = this.env.getMergedForDeploy(projectId, environmentId);
-        const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
-
-        const containerId = await this.docker.runContainer({
-          imageTag: rollbackImageTag,
-          name: `ol-${routeName}-${String(Date.now())}`,
-          port,
-          containerPort,
-          envVars,
-          traefikLabels: buildTraefikLabels(
-            project.name,
-            containerPort,
-            undefined,
-            environment.type,
-          ),
-          secretFiles: this.env.getSecretFilesForDeploy(projectId),
-        });
-
-        this.db.updateEnvironment(environmentId, {
-          status: 'running',
-          containerId,
-          imageTag: rollbackImageTag,
-          previousImageTag: currentImageTag,
-          assignedPort: port,
-        });
-
-        return {
-          success: true,
-          projectId,
-          projectName: project.name,
-          buildDurationMs: Date.now() - startTime,
-        };
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        this.db.updateEnvironment(environmentId, { status: 'error' });
-        return {
-          success: false,
-          projectId,
-          projectName: project.name,
-          error: errorMsg,
-          buildDurationMs: Date.now() - startTime,
-        };
-      }
-    }
-
-    if (!project.previous_image_tag) {
-      return {
-        success: false,
-        projectId,
-        projectName: project.name,
-        error: 'No previous image available for rollback',
-      };
-    }
-
-    const rollbackImageTag = project.previous_image_tag;
-    const currentImageTag = project.image_tag ?? '';
-
-    try {
-      // Stop and remove current container
-      if (project.container_id && project.status === 'running') {
-        try {
-          await this.docker.stopContainer(project.container_id);
-          await this.docker.removeContainer(project.container_id);
-        } catch (err) {
-          log.warn({ err }, 'Container cleanup during rollback failed');
-          // Container might already be stopped
-        }
-      }
-
-      // Allocate a new port and start container with previous image
-      const port = await allocatePort(this.db, this.docker);
-      const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
-      const envVars = this.env.getMergedForDeploy(projectId);
-      const traefikLabels = buildTraefikLabels(project.name, containerPort);
-
-      const containerId = await this.docker.runContainer({
-        imageTag: rollbackImageTag,
-        name: `ol-${project.name}`,
-        port,
-        containerPort,
-        envVars,
-        traefikLabels,
-        secretFiles: this.env.getSecretFilesForDeploy(projectId),
-      });
-
-      // Update DB: swap image tags
-      this.db.updateProject(projectId, {
-        status: 'running',
-        assignedPort: port,
-        containerId,
-        imageTag: rollbackImageTag,
-        previousImageTag: currentImageTag,
-      });
-
-      await eventBus.emit('deploy:rollback', {
-        projectId,
-        fromImage: currentImageTag,
-        toImage: rollbackImageTag,
-      });
-
-      const totalDuration = Date.now() - startTime;
-
-      // Record deploy log
-      const { nanoid } = await import('nanoid');
-      this.db.createDeployLog({
-        id: nanoid(12),
-        projectId,
-        environmentId,
-        status: 'success',
-        trigger: 'api',
-        buildLog: `[rollback] ${currentImageTag} → ${rollbackImageTag}\n`,
-        durationMs: totalDuration,
-      });
-
-      return {
-        success: true,
-        projectId,
-        projectName: project.name,
-        containerId,
-        url: getProjectUrl(project.name),
-        port,
-        buildDurationMs: totalDuration,
-      };
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-
-      this.db.updateProject(projectId, { status: 'error' });
-
-      return {
-        success: false,
-        projectId,
-        projectName: project.name,
-        error: `Rollback failed: ${errorMsg}`,
-        buildDurationMs: Date.now() - startTime,
-      };
-    }
+    return this.rollbackExecutor.rollbackToImage(projectId, environmentId);
   }
 
   private async cleanupProjectContainers(
