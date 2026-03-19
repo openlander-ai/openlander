@@ -65,6 +65,21 @@ export class EnvManager {
     return changed;
   }
 
+  verifyRoundTrip(
+    projectId: string,
+    expected: Record<string, string>,
+    environmentId?: string,
+  ): string[] {
+    const stored = this.db.getEnvVars(projectId, environmentId);
+    const mismatches: string[] = [];
+    for (const [key, value] of Object.entries(expected)) {
+      if (stored[key] !== value) {
+        mismatches.push(key);
+      }
+    }
+    return mismatches;
+  }
+
   /** Delete an env var. Returns true if container needs restart. */
   delete(projectId: string, key: string, environmentId?: string): boolean {
     const existing = this.db.getEnvVars(projectId, environmentId);

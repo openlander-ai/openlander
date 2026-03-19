@@ -48,6 +48,7 @@ export type EventType =
   | 'container:start'
   | 'container:stop'
   | 'container:remove'
+  | 'container:missing'
   | 'container:health'
   // Tunnel
   | 'tunnel:start'
@@ -220,6 +221,12 @@ export interface EventPayload {
   'container:start': { projectId: string; containerId: string };
   'container:stop': { projectId: string; containerId: string };
   'container:remove': { projectId: string; containerId: string };
+  'container:missing': {
+    projectId: string;
+    projectName: string;
+    containerId: string;
+    suggestion: string;
+  };
   'container:health': { projectId: string; healthy: boolean };
   'tunnel:start': { projectId: string; localPort: number };
   'tunnel:stop': { projectId: string };

@@ -8,6 +8,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { nanoid } from 'nanoid';
 import { allocatePort } from './port.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
+import { connectToTraefikNetwork } from './traefik.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
@@ -790,6 +791,21 @@ export class ComposePipeline {
         hasError ? (errorMessage ?? 'One or more services failed to start') : undefined,
         parentLogTail,
       );
+
+      for (const status of reconciledStatuses) {
+        if (status.status !== 'running' || !status.containerId) {
+          continue;
+        }
+
+        try {
+          await connectToTraefikNetwork(this.docker, status.containerId, 'web');
+        } catch (err) {
+          log.debug(
+            { err, service: status.name, containerId: status.containerId },
+            'Failed to connect compose service container to web network',
+          );
+        }
+      }
 
       return {
         success: !hasError,

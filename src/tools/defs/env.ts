@@ -42,6 +42,16 @@ export const envToolDefs: ToolDef[] = [
       const project = getProjectByName(appCtx, projectName);
       const vars = JSON.parse(args['variables'] as string) as Record<string, string>;
       const changed = appCtx.env.setBulk(project.id, vars);
+      const mismatches = appCtx.env.verifyRoundTrip(project.id, vars);
+
+      if (mismatches.length > 0) {
+        return {
+          status: 'error',
+          project: projectName,
+          error: `Round-trip verification failed for keys: ${mismatches.join(', ')}. Values may have been mangled during storage.`,
+          keys: Object.keys(vars),
+        };
+      }
 
       if (changed && project.status === 'running') {
         await appCtx.pipeline.redeploy(project.id);

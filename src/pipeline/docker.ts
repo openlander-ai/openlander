@@ -210,7 +210,11 @@ export class Docker {
         },
       );
     } catch (error) {
-      throw new DockerBuildError(tag, error instanceof Error ? error.message : String(error));
+      const errMsg = error instanceof Error ? error.message : String(error);
+      throw new DockerBuildError(
+        tag,
+        `Build failed for ${tag} (context: ${contextPath}): ${errMsg}`,
+      );
     }
 
     // Collect build log and wait for completion
@@ -221,9 +225,21 @@ export class Docker {
         stream,
         (err: Error | null) => {
           if (err) {
-            reject(new DockerBuildError(tag, buildLog + '\n' + err.message));
+            const reason = [buildLog, buildError, err.message].filter(Boolean).join('\n');
+            reject(
+              new DockerBuildError(
+                tag,
+                `Build failed for ${tag} (context: ${contextPath}): ${reason}`,
+              ),
+            );
           } else if (buildError) {
-            reject(new DockerBuildError(tag, buildLog + '\n' + buildError));
+            const reason = [buildLog, buildError].filter(Boolean).join('\n');
+            reject(
+              new DockerBuildError(
+                tag,
+                `Build failed for ${tag} (context: ${contextPath}): ${reason}`,
+              ),
+            );
           } else {
             resolve();
           }

@@ -1,4 +1,5 @@
 import { ProjectNotFoundError } from '../../errors.js';
+import { createModuleLogger } from '../../lib/logger.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import {
   emptySchema,
@@ -7,6 +8,40 @@ import {
   stopProjectSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
+
+const log = createModuleLogger('tools-defs-project-ops');
+
+async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
+  let client: ReturnType<typeof appCtx.docker.getClient>;
+  try {
+    client = appCtx.docker.getClient();
+  } catch {
+    return;
+  }
+
+  const projects = appCtx.db.listProjects();
+
+  for (const project of projects) {
+    if (project.status !== 'running' || !project.container_id) {
+      continue;
+    }
+
+    try {
+      const info = await client.getContainer(project.container_id).inspect();
+      const status = info.State.Running ? 'running' : 'stopped';
+
+      if (status !== project.status || info.Id !== project.container_id) {
+        appCtx.db.updateProject(project.id, { status, containerId: info.Id });
+      }
+    } catch (err) {
+      log.debug(
+        { err, projectId: project.id, containerId: project.container_id },
+        'Failed to inspect project container',
+      );
+      appCtx.db.updateProject(project.id, { status: 'error' });
+    }
+  }
+}
 
 export const projectOpsToolDefs: ToolDef[] = [
   {
@@ -49,11 +84,15 @@ export const projectOpsToolDefs: ToolDef[] = [
       'List all deployed projects with name, status (running/stopped/error), ports, local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
     mcpDescription: 'List all deployed projects with status and URLs.',
     inputSchema: emptySchema,
-    execute: (_args, context) => {
+    execute: async (_args, context) => {
+      if (context.target === 'mcp') {
+        await reconcileRunningProjects(context.appCtx);
+      }
+
       const projects = context.appCtx.db.listProjects();
 
       if (context.target === 'mcp') {
-        return Promise.resolve({
+        return {
           count: projects.length,
           projects: projects.map((project) => ({
             id: project.id,
@@ -69,10 +108,10 @@ export const projectOpsToolDefs: ToolDef[] = [
             createdAt: project.created_at,
             updatedAt: project.updated_at,
           })),
-        });
+        };
       }
 
-      return Promise.resolve({
+      return {
         count: projects.length,
         projects: projects.map((project) => ({
           name: project.name,
@@ -83,7 +122,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           publicUrl: project.public_url,
           repoUrl: project.repo_url,
         })),
-      });
+      };
     },
   },
   {
@@ -101,8 +140,15 @@ export const projectOpsToolDefs: ToolDef[] = [
       }
 
       await context.appCtx.pipeline.stop(project.id);
-      const result = await context.appCtx.pipeline.redeploy(project.id, { noCache });
-      return { status: 'restarted', project: projectName, ...result };
+      void context.appCtx.pipeline.redeploy(project.id, { noCache }).catch((err: unknown) => {
+        log.error({ err, projectId: project.id }, 'Restart redeploy failed');
+      });
+
+      return {
+        status: 'restarting',
+        project: projectName,
+        message: 'Redeployment started. Use get_deploy_status to track progress.',
+      };
     },
   },
 ];

@@ -449,10 +449,32 @@ export class AlertMonitor {
           suggestion,
         });
       } catch (err) {
-        log.debug(
-          { err, containerId: project.container_id },
-          'Failed to inspect container for crash check',
-        );
+        const message = `${project.name} container was removed externally (docker prune or manual deletion)`;
+        const suggestion = 'Run restart_project to redeploy.';
+
+        this.db.updateProject(project.id, { status: 'error' });
+
+        await this.events.emit('container:missing', {
+          projectId: project.id,
+          projectName: project.name,
+          containerId: project.container_id,
+          suggestion,
+        });
+
+        await this.upsertAlert(key, {
+          type: 'container-crash',
+          severity: 'critical',
+          message,
+          details: {
+            projectId: project.id,
+            projectName: project.name,
+            containerId: project.container_id,
+            reason: 'container_missing',
+          },
+          suggestion,
+        });
+
+        log.warn({ err, containerId: project.container_id, projectId: project.id }, message);
       }
     }
   }

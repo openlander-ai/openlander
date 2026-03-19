@@ -211,19 +211,13 @@ function getEnvironmentProjectName(projectName: string, environment: TraefikEnvi
  */
 /**
  * Get the primary LAN IP address of this machine.
- * Returns undefined if no non-internal IPv4 address is found.
+ * Prefers LAN IPs over VPN IPs, and skips Docker bridge interfaces.
+ * Returns undefined if no usable IPv4 address is found.
  */
 export function getLanIp(): string | undefined {
-  const nets = networkInterfaces();
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name] ?? []) {
-      // Skip internal (loopback) and non-IPv4 addresses
-      if (!net.internal && net.family === 'IPv4') {
-        return net.address;
-      }
-    }
-  }
-  return undefined;
+  const ips = getAllIps();
+  const first = ips[0];
+  return first?.address;
 }
 
 export interface NetworkIp {
