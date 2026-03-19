@@ -51,6 +51,7 @@ export interface ProjectConfig {
   environment?: string;
   dockerfilePath?: string;
   dockerTarget?: string;
+  buildContext?: string;
   preferDockerfile?: boolean;
   force?: boolean;
   /** Preview deployment plan without building or deploying */
@@ -662,8 +663,9 @@ export class DeployPipeline {
         );
       }
 
-      // Step 3: docker build — context = clone root (not dirname) so monorepo COPY works
-      const buildContextPath = cloneResult.path;
+      const buildContextPath = config.buildContext
+        ? join(cloneResult.path, config.buildContext)
+        : cloneResult.path;
       const relativeDockerfile = relative(buildContextPath, dockerfilePath);
       const buildStart = Date.now();
       let lastBuildOutputEmit = 0;

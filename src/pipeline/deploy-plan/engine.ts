@@ -105,16 +105,8 @@ export class PlanEngine {
     this.composePipeline = deps.composePipeline;
   }
 
-  private redactPlanForStorage(plan: DeployPlan): DeployPlan {
-    return {
-      ...plan,
-      env: {
-        ...plan.env,
-        provided: Object.fromEntries(
-          Object.entries(plan.env.provided).map(([key]) => [key, '[REDACTED]']),
-        ),
-      },
-    };
+  private preparePlanForStorage(plan: DeployPlan): DeployPlan {
+    return plan;
   }
 
   async createPlan(opts: CreatePlanOptions): Promise<DeployPlan> {
@@ -297,6 +289,10 @@ export class PlanEngine {
 
     const now = new Date().toISOString();
     const planBranch = branch || 'default';
+    const dockerfileDir = userDockerfile.includes('/')
+      ? userDockerfile.substring(0, userDockerfile.lastIndexOf('/'))
+      : '.';
+
     const plan: DeployPlan = {
       plan_id: planId,
       status: initialStatus,
@@ -312,7 +308,7 @@ export class PlanEngine {
       build: {
         method: buildMethod,
         dockerfile: userDockerfile,
-        context: '.',
+        context: dockerfileDir,
         target: opts.dockerTarget,
         generated_dockerfile: generatedDockerfile,
         compose_file: composeFilePath,
@@ -344,7 +340,7 @@ export class PlanEngine {
       projectName,
       status: initialStatus,
       complexity,
-      planJson: JSON.stringify(this.redactPlanForStorage(plan)),
+      planJson: JSON.stringify(this.preparePlanForStorage(plan)),
       commitSha,
     });
 
@@ -474,7 +470,7 @@ export class PlanEngine {
     log.info({ planId, status: merged.status }, 'Updating deploy plan');
     this.db.updateDeployPlan(planId, {
       status: merged.status,
-      planJson: JSON.stringify(this.redactPlanForStorage(merged)),
+      planJson: JSON.stringify(this.preparePlanForStorage(merged)),
     });
 
     return merged;
@@ -496,7 +492,7 @@ export class PlanEngine {
     const executingPlan = PlanStateMachine.transition(plan, 'executing');
     this.db.updateDeployPlan(planId, {
       status: 'executing',
-      planJson: JSON.stringify(this.redactPlanForStorage(executingPlan)),
+      planJson: JSON.stringify(this.preparePlanForStorage(executingPlan)),
     });
 
     try {
@@ -532,7 +528,7 @@ export class PlanEngine {
             const completed = PlanStateMachine.transition(executingPlan, 'completed');
             this.db.updateDeployPlan(planId, {
               status: 'completed',
-              planJson: JSON.stringify(this.redactPlanForStorage(completed)),
+              planJson: JSON.stringify(this.preparePlanForStorage(completed)),
             });
             log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
             cleanup();
@@ -545,7 +541,7 @@ export class PlanEngine {
             const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
             this.db.updateDeployPlan(planId, {
               status: 'failed',
-              planJson: JSON.stringify(this.redactPlanForStorage(failed)),
+              planJson: JSON.stringify(this.preparePlanForStorage(failed)),
               errorMessage: errMsg,
             });
             log.info(
@@ -572,6 +568,7 @@ export class PlanEngine {
         dockerfilePath:
           !isCompose && plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,
         dockerTarget: plan.build.target,
+        buildContext: plan.build.context !== '.' ? plan.build.context : undefined,
         composeServices: deployOnly,
       });
 
@@ -580,7 +577,7 @@ export class PlanEngine {
         const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
         this.db.updateDeployPlan(planId, {
           status: 'failed',
-          planJson: JSON.stringify(this.redactPlanForStorage(failedPlan)),
+          planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
           errorMessage: errMsg,
         });
         return {
@@ -612,7 +609,7 @@ export class PlanEngine {
       const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMsg);
       this.db.updateDeployPlan(planId, {
         status: 'failed',
-        planJson: JSON.stringify(this.redactPlanForStorage(failedPlan)),
+        planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
         errorMessage: errorMsg,
       });
 
