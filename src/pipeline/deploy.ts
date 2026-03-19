@@ -756,6 +756,53 @@ export class DeployPipeline {
 
       buildLog += `[run] ${containerId.slice(0, 12)} on port ${String(port)}\n`;
 
+      // Step 4b: Post-deploy health check — detect crash loops before marking as running
+      const healthResult = await this.docker.waitForHealthy(containerId, 20000);
+
+      await eventBus.emit('monitor:healthcheck', {
+        projectId,
+        healthy: healthResult.healthy,
+        responseTimeMs: 0,
+      });
+
+      if (!healthResult.healthy) {
+        const containerLogs = await this.docker
+          .getLogs(containerId, 50)
+          .catch(() => '(no logs available)');
+        log.error(
+          { projectId, error: healthResult.error, exitCode: healthResult.exitCode },
+          'Container crashed after deploy',
+        );
+
+        this.db.updateEnvironment(environmentId, {
+          status: 'error',
+          assignedPort: port,
+          containerId,
+          imageTag,
+        });
+
+        if (shouldSyncProjectState) {
+          this.db.updateProject(projectId, {
+            status: 'error',
+            assignedPort: port,
+            containerId,
+            imageTag,
+            visibility: config.visibility ?? 'internal',
+          });
+        }
+
+        await eventBus.emit('deploy:crash', {
+          projectId,
+          containerId,
+          error: healthResult.error,
+          exitCode: healthResult.exitCode,
+        });
+
+        throw new Error(
+          `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs:\n${containerLogs}`,
+        );
+      }
+
       this.db.updateEnvironment(environmentId, {
         status: 'running',
         assignedPort: port,

@@ -1,5 +1,4 @@
 import type { Database } from '../../db/index.js';
-import { eventBus } from '../../events/index.js';
 import type { Docker } from '../docker.js';
 import { allocatePort } from '../port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname } from '../traefik.js';
@@ -49,69 +48,10 @@ export class ContainerRunner {
 
     const url = `http://${getEnvironmentProjectHostname(config.projectName, environmentType)}`;
 
-    const healthResult = await this.docker.waitForHealthy(containerId, 20000);
-    await eventBus.emit('monitor:healthcheck', {
-      projectId: config.projectId,
-      healthy: healthResult.healthy,
-      responseTimeMs: 0,
-    });
-
-    if (!healthResult.healthy) {
-      const containerLogs = await this.docker
-        .getLogs(containerId, 50)
-        .catch(() => '(no logs available)');
-
-      this.updateStatus(config, 'error', {
-        assignedPort: port,
-        containerId,
-        imageTag: config.imageTag,
-      });
-
-      await eventBus.emit('deploy:crash', {
-        projectId: config.projectId,
-        containerId,
-        error: healthResult.error,
-        exitCode: healthResult.exitCode,
-      });
-
-      throw new Error(
-        `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs:\n${containerLogs}`,
-      );
-    }
-
-    this.updateStatus(config, 'running', {
-      assignedPort: port,
-      containerId,
-      imageTag: config.imageTag,
-    });
-
     return {
       containerId,
       port,
       url,
     };
-  }
-
-  private updateStatus(
-    config: RunConfig,
-    status: 'running' | 'error',
-    details: { assignedPort: number; containerId: string; imageTag: string },
-  ): void {
-    if (config.environmentId) {
-      this.db.updateEnvironment(config.environmentId, {
-        status,
-        assignedPort: details.assignedPort,
-        containerId: details.containerId,
-        imageTag: details.imageTag,
-      });
-      return;
-    }
-
-    this.db.updateProject(config.projectId, {
-      status,
-      assignedPort: details.assignedPort,
-      containerId: details.containerId,
-      imageTag: details.imageTag,
-    });
   }
 }

@@ -8,20 +8,17 @@ import { ContainerRunner } from '../../../src/pipeline/deploy/run-step.js';
 function createMockDocker(): Docker {
   return {
     runContainer: vi.fn().mockResolvedValue('container-abc123456789'),
-    waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
-    getLogs: vi.fn().mockResolvedValue(''),
   } as unknown as Docker;
 }
 
 function createMockDatabase(): Database {
   return {
-    updateProject: vi.fn(),
-    updateEnvironment: vi.fn(),
+    getUsedPorts: vi.fn().mockReturnValue([]),
   } as unknown as Database;
 }
 
 describe('ContainerRunner', () => {
-  it('runs container with allocated port, health check, and environment DB update', async () => {
+  it('runs container with allocated port and returns run metadata', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();
     const runner = new ContainerRunner(docker, db);
@@ -49,19 +46,6 @@ describe('ContainerRunner', () => {
         secretFiles: [{ filename: '.env', content: 'A=1', mountPath: '/run/secrets/.env' }],
       }),
     );
-    expect(docker.waitForHealthy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'container-abc123456789',
-      20000,
-    );
-    expect(db.updateEnvironment as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'p1-development',
-      {
-        status: 'running',
-        assignedPort: 12001,
-        containerId: 'container-abc123456789',
-        imageTag: 'openlander/demo:latest',
-      },
-    );
     expect(result).toEqual({
       containerId: 'container-abc123456789',
       port: 12001,
@@ -69,7 +53,7 @@ describe('ContainerRunner', () => {
     });
   });
 
-  it('uses custom containerPort and updates project DB when environmentId is absent', async () => {
+  it('uses custom containerPort when provided', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();
     const runner = new ContainerRunner(docker, db);
@@ -88,26 +72,14 @@ describe('ContainerRunner', () => {
         containerPort: 8080,
       }),
     );
-    expect(db.updateProject as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('child-1', {
-      status: 'running',
-      assignedPort: 13000,
-      containerId: 'container-abc123456789',
-      imageTag: 'openlander/api:latest',
-    });
     expect(result.url).toContain('mono-api.');
   });
 
-  it('marks DB as error and throws when health check fails', async () => {
+  it('does not perform health check or DB status updates', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();
     const runner = new ContainerRunner(docker, db);
     vi.spyOn(portPipeline, 'allocatePort').mockResolvedValue(14000);
-    (docker.waitForHealthy as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      healthy: false,
-      error: 'Exited with code 1',
-      exitCode: 1,
-    });
-    (docker.getLogs as ReturnType<typeof vi.fn>).mockResolvedValueOnce('fatal: startup failed');
 
     await expect(
       runner.run({
@@ -118,17 +90,11 @@ describe('ContainerRunner', () => {
         environmentType: 'production',
         envVars: {},
       }),
-    ).rejects.toThrow('Container crashed after start: Exited with code 1');
-
-    expect(db.updateEnvironment as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'p-fail-production',
-      {
-        status: 'error',
-        assignedPort: 14000,
-        containerId: 'container-abc123456789',
-        imageTag: 'openlander/fail:latest',
-      },
-    );
+    ).resolves.toEqual({
+      containerId: 'container-abc123456789',
+      port: 14000,
+      url: expect.stringContaining('failing-app.'),
+    });
   });
 
   it('returns deploy:run payload fields for upstream event emission', async () => {
