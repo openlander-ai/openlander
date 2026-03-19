@@ -612,6 +612,130 @@ Phase 3 — PR Preview:
 
 ---
 
+### v0.3.0 — Developer Experience ✅
+
+**상태**: 완료
+
+| 항목                                 | 상태 |
+| ------------------------------------ | ---- |
+| Real-time Docker build log streaming | ✅   |
+| ANSI color rendering                 | ✅   |
+| xterm.js web terminal                | ✅   |
+| WebSocket infrastructure             | ✅   |
+
+---
+
+### v0.3.1 — UI Polish & Stability ✅
+
+**상태**: 완료
+
+| 항목                                          | 상태 |
+| --------------------------------------------- | ---- |
+| Terminal shell probing for Alpine/slim images | ✅   |
+| Log-first console layout                      | ✅   |
+| Overview summary dashboard                    | ✅   |
+
+---
+
+### v0.4.0 — Deployments UX ✅
+
+**상태**: 완료
+
+| 항목                                     | 상태 |
+| ---------------------------------------- | ---- |
+| Deployments filters, richer history rows | ✅   |
+| Detail metadata cards                    | ✅   |
+| API UTC normalization                    | ✅   |
+| Safer browser time parsing               | ✅   |
+
+---
+
+### v0.5.1 — Multi-Environment Support ✅
+
+**상태**: 완료
+
+| 항목                                              | 상태 |
+| ------------------------------------------------- | ---- |
+| Environment schema + multi-environment DB support | ✅   |
+| Environment injection/scanning in deploy pipeline | ✅   |
+| Environment-aware deploy orchestration            | ✅   |
+| Environment management REST API routes            | ✅   |
+| Webhook environment support                       | ✅   |
+
+---
+
+### v0.5.2 — Bugfix ✅
+
+**상태**: 완료
+
+| 항목                                | 상태 |
+| ----------------------------------- | ---- |
+| Dockerode CJS/ESM import crash fix  | ✅   |
+| Release automation (release-it)     | ✅   |
+| Historical git tags (v0.1.0~v0.5.1) | ✅   |
+
+---
+
+### v0.6.0 — 아키텍처 리빌드 + AI Co-pilot ✅
+
+**상태**: 완료 — v0.5.1 이후 대규모 리팩토링 + 기능 추가
+
+| 항목                                                                                                    | 상태 |
+| ------------------------------------------------------------------------------------------------------- | ---- |
+| **아키텍처**                                                                                            |      |
+| TUI 런타임 완전 제거 (SolidJS/OpenTUI/IPC)                                                              | ✅   |
+| Tool Registry 통합 — ToolDef 공유 + MCP/Agent 듀얼 어댑터 (14개 정의 파일)                              | ✅   |
+| 결정론적 배포 파이프라인 — 배포 플로우에서 LLM 호출 완전 제거                                           | ✅   |
+| **인프라**                                                                                              |      |
+| 공유 인프라 (PostgreSQL/MySQL/Redis) — ServiceManager + 7개 MCP 도구                                    | ✅   |
+| 서비스 페이지 전면 리디자인 — 카드 그리드, 상세 페이지, DB 탭, CPU/메모리/디스크 모니터링               | ✅   |
+| DB 프로비저닝 UI (Databases 탭)                                                                         | ✅   |
+| **배포 UX**                                                                                             |      |
+| 프리미엄 배포 터미널 세션 UI — 10개 컴포넌트 (PhaseRail, StepGroup, LogBlock 등)                        | ✅   |
+| 스마트 env 설정 — 인프라 분석 + .env.example 감지                                                       | ✅   |
+| **MCP**                                                                                                 |      |
+| MCP 도구 설명 강화 — 서비스 연결 패턴, 사용 힌트, 워크플로우 가이드                                     | ✅   |
+| Webhook 도구 12개 (enable/disable/configure/list)                                                       | ✅   |
+| MCP agent_execute_goal — 외부 클라이언트 고수준 목표 위임                                               | ✅   |
+| Streamable HTTP transport (원격 LAN 접근)                                                               | ✅   |
+| **AI**                                                                                                  |      |
+| AI co-pilot 7기능 (자동 복구, 장애 리포트, 롤백 제안, env 감지, 포스트모템, 시크릿 스캔, 성공 인사이트) | ✅   |
+| 채널 스트리밍 + 인터랙티브 컴포넌트 (Slack/Discord/Telegram)                                            | ✅   |
+| **품질**                                                                                                |      |
+| 23-framework auto-detect (Rails, Spring, Laravel, ASP.NET) + Dockerfile 템플릿                          | ✅   |
+| Preflight warning checks (env completeness, Dockerfile syntax)                                          | ✅   |
+| Coverage gates (lines 60%, branches 55%, functions 55%)                                                 | ✅   |
+
+---
+
+### v0.6.1 — Bugfix ✅
+
+**상태**: 완료
+
+| 항목                             | 상태 |
+| -------------------------------- | ---- |
+| Env vars merge (replace → merge) | ✅   |
+| list_env_vars 도구 추가          | ✅   |
+| HealthMonitor Docker fallback    | ✅   |
+
+---
+
+### v0.6.2 — Compose, Env Escaping, Traefik HTTP Provider ✅
+
+**상태**: 완료
+
+| 항목                                               | 상태 |
+| -------------------------------------------------- | ---- |
+| compose_services 파라미터 (서비스 선택 배포)       | ✅   |
+| Secret file compose 마운트                         | ✅   |
+| .env 파일 이스케이핑 (newline, $, backtick)        | ✅   |
+| 빌드 로그 상세화 (--progress=plain, onProgress)    | ✅   |
+| Redeploy port 충돌 fix                             | ✅   |
+| Traefik File Provider → HTTP Provider 마이그레이션 | ✅   |
+| buildLogTail (실패 응답에 로그 포함)               | ✅   |
+
+---
+
 ### v1.0.0 — Stable Release (TBD)
 
 **상태**: TBD — 품질 안정화 진행 중 | **관련 문서**: [`release/v1.0.0-ai-copilot.md`](release/v1.0.0-ai-copilot.md)
