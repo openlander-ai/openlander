@@ -8,8 +8,8 @@ import { nanoid } from 'nanoid';
 import type { Docker } from './docker.js';
 import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
-import { allocatePort, scanUsedPorts } from './port.js';
-import { buildTraefikLabels, getEnvironmentProjectHostname, getProjectUrl } from './traefik.js';
+import { scanUsedPorts } from './port.js';
+import { getProjectUrl } from './traefik.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery, type BuildContext as RecoveryBuildContext } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
@@ -39,6 +39,7 @@ import { ContainerLifecycle } from './deploy/lifecycle.js';
 import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
 import { BuildExecutor } from './deploy/build-step.js';
+import { ContainerRunner } from './deploy/run-step.js';
 
 /**
  * Project configuration for a deployment.
@@ -177,6 +178,7 @@ export class DeployPipeline {
   private readonly lifecycle: ContainerLifecycle;
   private readonly rollbackExecutor: RollbackExecutor;
   private readonly buildExecutor: BuildExecutor;
+  private readonly containerRunner: ContainerRunner;
 
   private get detectFailStep(): (buildLog: string) => string {
     return detectFailStep;
@@ -195,6 +197,7 @@ export class DeployPipeline {
     this.lifecycle = new ContainerLifecycle(this.docker, this.db);
     this.rollbackExecutor = new RollbackExecutor(this.docker, this.db);
     this.buildExecutor = new BuildExecutor(this.docker);
+    this.containerRunner = new ContainerRunner(this.docker, this.db);
     this.cleanupStaleTunnels();
     void this.cleanupOrphanContainers();
   }
@@ -722,34 +725,27 @@ export class DeployPipeline {
       buildLog += `[build] ${imageTag} (${String(buildDuration)}ms)\n`;
 
       // Step 4: docker run
-      const port = await allocatePort(this.db, this.docker, {
-        preferredPort: config._preferredPort,
-      });
-      const containerPort = parseDockerfileExposePort(dockerfilePath) ?? port;
+      const containerPort = parseDockerfileExposePort(dockerfilePath) ?? undefined;
       const envVars = {
         ...config.envVars,
         ...this.env.getMergedForDeploy(projectId, environmentId),
       };
-      const traefikLabels = buildTraefikLabels(
-        projectName,
-        containerPort,
-        undefined,
-        environment.type,
-      );
 
       this.jobManager?.updatePhase(projectId, 'starting');
       const secretFilesMounts = this.env.getSecretFilesForDeploy(projectId);
-      const containerId = await this.docker.runContainer({
+      const runResult = await this.containerRunner.run({
         imageTag,
-        name: `ol-${routeName}`,
-        port,
+        projectName,
+        containerName: routeName,
+        projectId,
+        environmentType: environment.type,
+        environmentId,
+        preferredPort: config._preferredPort,
         containerPort,
         envVars,
-        traefikLabels,
         secretFiles: secretFilesMounts,
       });
-
-      const internalUrl = `http://${getEnvironmentProjectHostname(projectName, environment.type)}`;
+      const { containerId, port, url: internalUrl } = runResult;
 
       await eventBus.emit('deploy:run', {
         projectId,
@@ -759,53 +755,6 @@ export class DeployPipeline {
       });
 
       buildLog += `[run] ${containerId.slice(0, 12)} on port ${String(port)}\n`;
-
-      // Step 4b: Post-deploy health check — detect crash loops before marking as running
-      const healthResult = await this.docker.waitForHealthy(containerId, 20000);
-
-      await eventBus.emit('monitor:healthcheck', {
-        projectId,
-        healthy: healthResult.healthy,
-        responseTimeMs: 0,
-      });
-
-      if (!healthResult.healthy) {
-        const containerLogs = await this.docker
-          .getLogs(containerId, 50)
-          .catch(() => '(no logs available)');
-        log.error(
-          { projectId, error: healthResult.error, exitCode: healthResult.exitCode },
-          'Container crashed after deploy',
-        );
-
-        this.db.updateEnvironment(environmentId, {
-          status: 'error',
-          assignedPort: port,
-          containerId,
-          imageTag,
-        });
-
-        if (shouldSyncProjectState) {
-          this.db.updateProject(projectId, {
-            status: 'error',
-            assignedPort: port,
-            containerId,
-            imageTag,
-            visibility: config.visibility ?? 'internal',
-          });
-        }
-
-        await eventBus.emit('deploy:crash', {
-          projectId,
-          containerId,
-          error: healthResult.error,
-          exitCode: healthResult.exitCode,
-        });
-
-        throw new Error(
-          `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs:\n${containerLogs}`,
-        );
-      }
 
       this.db.updateEnvironment(environmentId, {
         status: 'running',
@@ -1263,22 +1212,18 @@ export class DeployPipeline {
           });
 
           this.jobManager?.updatePhase(childId, 'starting');
-          const port = await allocatePort(this.db, this.docker);
           const childDockerfilePath = join(config.clonePath, dockerfilePath);
-          const childContainerPort = parseDockerfileExposePort(childDockerfilePath) ?? port;
-          const traefikLabels = buildTraefikLabels(childName.replace('/', '-'), childContainerPort);
-
-          const containerId = await this.docker.runContainer({
+          const childContainerPort = parseDockerfileExposePort(childDockerfilePath) ?? undefined;
+          const runResult = await this.containerRunner.run({
             imageTag,
-            name: `ol-${childName.replace('/', '-')}`,
-            port,
+            projectName: childName.replace('/', '-'),
+            containerName: childName.replace('/', '-'),
+            projectId: childId,
             containerPort: childContainerPort,
             envVars,
-            traefikLabels,
             secretFiles: this.env.getSecretFilesForDeploy(childId),
           });
-
-          const internalUrl = getProjectUrl(childName.replace('/', '-'));
+          const { containerId, port, url: internalUrl } = runResult;
 
           await eventBus.emit('deploy:run', {
             projectId: childId,
