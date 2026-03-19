@@ -674,9 +674,40 @@ export class PlanEngine {
           }
         });
 
+        const unsubComposeUp = this.events.on('compose:up', (payload) => {
+          if (payload.projectId === startedProjectId) {
+            const completed = PlanStateMachine.transition(executingPlan, 'completed');
+            this.db.updateDeployPlan(planId, {
+              status: 'completed',
+              planJson: JSON.stringify(this.preparePlanForStorage(completed)),
+            });
+            log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
+            cleanup();
+          }
+        });
+
+        const unsubComposeFailed = this.events.on('compose:failed', (payload) => {
+          if (payload.projectId === startedProjectId) {
+            const errMsg = payload.error || 'Deploy failed';
+            const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+            this.db.updateDeployPlan(planId, {
+              status: 'failed',
+              planJson: JSON.stringify(this.preparePlanForStorage(failed)),
+              errorMessage: errMsg,
+            });
+            log.info(
+              { planId, projectId: payload.projectId, error: errMsg },
+              'Plan failed via event',
+            );
+            cleanup();
+          }
+        });
+
         const cleanup = () => {
           unsubSuccess();
           unsubFailed();
+          unsubComposeUp();
+          unsubComposeFailed();
         };
       }
 

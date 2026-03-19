@@ -964,4 +964,129 @@ describe('PlanEngine.executePlan', () => {
       'Plan is already failed. Cannot execute concurrently.',
     );
   });
+
+  it('marks plan completed when compose:up event is received for started project', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+      },
+    });
+
+    const listeners = new Map<string, (payload: unknown) => void>();
+    mockEvents.on.mockImplementation((event: string, handler: (payload: unknown) => void) => {
+      listeners.set(event, handler);
+      return vi.fn();
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'compose_project_1',
+      projectName: 'test-app',
+    });
+
+    await engine.executePlan(plan.plan_id);
+
+    const composeUpHandler = listeners.get('compose:up');
+    expect(composeUpHandler).toBeDefined();
+
+    composeUpHandler?.({ projectId: 'compose_project_1', services: ['web'] });
+
+    const completedCall = mockDb.updateDeployPlan.mock.calls.find((call: any) => {
+      return call[0] === plan.plan_id && call[1].status === 'completed';
+    });
+
+    expect(completedCall).toBeDefined();
+  });
+
+  it('marks plan failed with error message when compose:failed event is received', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      build: {
+        method: 'compose',
+        dockerfile: 'Dockerfile',
+        context: '.',
+      },
+    });
+
+    const listeners = new Map<string, (payload: unknown) => void>();
+    mockEvents.on.mockImplementation((event: string, handler: (payload: unknown) => void) => {
+      listeners.set(event, handler);
+      return vi.fn();
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'compose_project_2',
+      projectName: 'test-app',
+    });
+
+    await engine.executePlan(plan.plan_id);
+
+    const composeFailedHandler = listeners.get('compose:failed');
+    expect(composeFailedHandler).toBeDefined();
+
+    composeFailedHandler?.({ projectId: 'compose_project_2', error: 'compose boot failed' });
+
+    const failedCall = mockDb.updateDeployPlan.mock.calls.find((call: any) => {
+      return call[0] === plan.plan_id && call[1].status === 'failed';
+    });
+
+    expect(failedCall).toBeDefined();
+    expect(failedCall[1].errorMessage).toBe('compose boot failed');
+  });
+
+  it('keeps deploy:success transition behavior for dockerfile deployments', async () => {
+    const plan = createMockDeployPlan({
+      status: 'ready',
+      build: {
+        method: 'dockerfile',
+        dockerfile: 'Dockerfile',
+        context: '.',
+      },
+    });
+
+    const listeners = new Map<string, (payload: unknown) => void>();
+    mockEvents.on.mockImplementation((event: string, handler: (payload: unknown) => void) => {
+      listeners.set(event, handler);
+      return vi.fn();
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      plan_json: JSON.stringify(plan),
+    });
+
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
+      projectId: 'docker_project_1',
+      projectName: 'test-app',
+    });
+
+    await engine.executePlan(plan.plan_id);
+
+    const deploySuccessHandler = listeners.get('deploy:success');
+    expect(deploySuccessHandler).toBeDefined();
+
+    deploySuccessHandler?.({
+      projectId: 'docker_project_1',
+      url: 'http://test.local',
+      totalDurationMs: 1234,
+    });
+
+    const completedCall = mockDb.updateDeployPlan.mock.calls.find((call: any) => {
+      return call[0] === plan.plan_id && call[1].status === 'completed';
+    });
+
+    expect(completedCall).toBeDefined();
+  });
 });
