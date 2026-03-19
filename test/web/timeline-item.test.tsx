@@ -12,6 +12,37 @@ vi.mock('@/lib/time', () => ({
   formatTime: (ts: string) => ts,
 }));
 
+vi.mock('../../web/src/components/timeline/InsightCard.js', () => ({
+  InsightCard: ({ item }: { item: { title: string } }) => item.title,
+}));
+
+vi.mock('../../web/src/components/timeline/DockerfileFixedCard.js', () => ({
+  DockerfileFixedCard: ({ item }: { item: { title: string } }) => item.title,
+}));
+
+vi.mock('../../web/src/components/timeline/ErrorAnalysisCard.js', () => ({
+  ErrorAnalysisCard: () => 'timeline.errorAnalysis.title',
+}));
+
+vi.mock('../../web/src/components/timeline/ToolResultCard.js', () => ({
+  ToolResultCard: ({ item }: { item: { title: string } }) => item.title,
+}));
+
+vi.mock('../../web/src/components/timeline/ComposeErrorCard.js', () => ({
+  ComposeErrorCard: ({ questions }: { questions: Array<{ question: string }> }) =>
+    questions[0]?.question,
+}));
+
+vi.mock('../../web/src/components/timeline/FixProposalCard.js', () => ({
+  FixProposalCard: ({ questions }: { questions: Array<{ question: string }> }) =>
+    questions[0]?.question,
+}));
+
+vi.mock('../../web/src/components/timeline/InputRequestCard.js', () => ({
+  InputRequestCard: ({ questions }: { questions: Array<{ question: string }> }) =>
+    questions[0]?.question,
+}));
+
 vi.mock('lucide-react', () => ({
   ExternalLink: () => 'ExternalLink',
   AlertCircle: () => 'AlertCircle',
@@ -19,6 +50,26 @@ vi.mock('lucide-react', () => ({
   Wrench: () => 'Wrench',
   MessageCircle: () => 'MessageCircle',
   Activity: () => 'Activity',
+  Info: () => 'Info',
+  AlertTriangle: () => 'AlertTriangle',
+  Loader2: () => 'Loader2',
+  Search: () => 'Search',
+  FileCode2: () => 'FileCode2',
+  Check: () => 'Check',
+  X: () => 'X',
+  MessageCircleQuestion: () => 'MessageCircleQuestion',
+  Send: () => 'Send',
+  SkipForward: () => 'SkipForward',
+  Terminal: () => 'Terminal',
+  ChevronUp: () => 'ChevronUp',
+  ChevronDown: () => 'ChevronDown',
+  FileText: () => 'FileText',
+  GitPullRequest: () => 'GitPullRequest',
+  Trash2: () => 'Trash2',
+  Clock: () => 'Clock',
+  Copy: () => 'Copy',
+  Brain: () => 'Brain',
+  ArrowDown: () => 'ArrowDown',
 }));
 
 // Helper to find text in the React element tree

@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import { createSharedToolRegistry } from './shared-tool-registry.js';
 
-const mockCloneRepo = vi.fn();
+const { mockCloneRepo } = vi.hoisted(() => ({
+  mockCloneRepo: vi.fn(),
+}));
 
 vi.mock('../../src/pipeline/git.js', () => ({
   cloneRepo: mockCloneRepo,

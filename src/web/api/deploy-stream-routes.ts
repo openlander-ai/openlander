@@ -40,9 +40,6 @@ async function emitTerminalMessage(
   });
 }
 
-// Mark helpers as used for Task 2 consumption (no-op at runtime)
-void [emitTerminalMessage];
-
 export function createDeployStreamRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 

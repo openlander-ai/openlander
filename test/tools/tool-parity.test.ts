@@ -11,10 +11,13 @@ type MockServerInstance = {
 };
 
 const mockServerInstances: MockServerInstance[] = [];
-const mockLoadConfig = vi.fn();
-const mockCreateGitProvider = vi.fn();
-const mockGithubListRepos = vi.fn();
-const mockBuildDiagnose = vi.fn();
+const { mockLoadConfig, mockCreateGitProvider, mockGithubListRepos, mockBuildDiagnose } =
+  vi.hoisted(() => ({
+    mockLoadConfig: vi.fn(),
+    mockCreateGitProvider: vi.fn(),
+    mockGithubListRepos: vi.fn(),
+    mockBuildDiagnose: vi.fn(),
+  }));
 
 vi.mock('../../src/config/index.js', () => ({
   loadConfig: mockLoadConfig,
@@ -102,6 +105,11 @@ function createMockContext(): AppContext {
         complexity: 'simple',
         app: { name: 'demo-app' },
         services: [],
+        env: {
+          required: [],
+          auto: [],
+          provided: {},
+        },
         missing: [],
         warnings: [],
       })),
@@ -384,6 +392,14 @@ describe('Tool parity baseline snapshots', () => {
                 "description": "Branch to deploy (default: repo default branch)",
                 "type": "string",
               },
+              "docker_target": {
+                "description": "Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)",
+                "type": "string",
+              },
+              "dockerfile_path": {
+                "description": "Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)",
+                "type": "string",
+              },
               "env_vars": {
                 "description": "JSON object of environment variables to include in the plan (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})",
                 "type": "string",
@@ -534,6 +550,13 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "deploy_only": {
+                "description": "For compose projects: deploy only these service names (e.g., ["backend", "worker"]). Omit to deploy all services.",
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
               "plan_id": {
                 "description": "Plan ID to execute. Plan must be in "ready" status.",
                 "type": "string",
@@ -853,6 +876,10 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "no_cache": {
+                "description": "Force fresh Docker build without cache. Use when dependencies changed but Docker layers are stale.",
+                "type": "boolean",
+              },
               "project_name": {
                 "description": "Project name",
                 "type": "string",
@@ -1120,6 +1147,14 @@ describe('Tool parity baseline snapshots', () => {
                 "description": "Branch to deploy (default: repo default branch)",
                 "type": "string",
               },
+              "docker_target": {
+                "description": "Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)",
+                "type": "string",
+              },
+              "dockerfile_path": {
+                "description": "Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)",
+                "type": "string",
+              },
               "env_vars": {
                 "description": "JSON object of environment variables to include in the plan (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})",
                 "type": "string",
@@ -1293,6 +1328,10 @@ describe('Tool parity baseline snapshots', () => {
                 ],
                 "type": "string",
               },
+              "no_cache": {
+                "description": "Force fresh Docker build without cache. Use when dependencies changed but Docker layers are stale.",
+                "type": "boolean",
+              },
               "project_name": {
                 "description": "Project name",
                 "type": "string",
@@ -1407,6 +1446,13 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "deploy_only": {
+                "description": "For compose projects: deploy only these service names (e.g., ["backend", "worker"]). Omit to deploy all services.",
+                "items": {
+                  "type": "string",
+                },
+                "type": "array",
+              },
               "plan_id": {
                 "description": "Plan ID to execute. Plan must be in "ready" status.",
                 "type": "string",
@@ -1787,6 +1833,10 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "no_cache": {
+                "description": "Force fresh Docker build without cache. Use when dependencies changed but Docker layers are stale.",
+                "type": "boolean",
+              },
               "project_name": {
                 "description": "Project name",
                 "type": "string",
@@ -2231,27 +2281,44 @@ describe('Tool parity baseline snapshots', () => {
         },
         {
           "agentShape": {
-            "app_name": "string",
+            "app": {
+              "name": "string",
+            },
+            "build": "undefined",
             "complexity": "string",
+            "env": {
+              "auto": [],
+              "detected": "undefined",
+              "provided_count": "number",
+              "required": [],
+            },
             "missing": [],
             "plan_id": "string",
-            "services": "number",
+            "services": [],
             "status": "string",
             "warnings": [],
           },
-          "exactTopLevelParity": true,
+          "exactTopLevelParity": false,
           "mcpShape": {
-            "app_name": "string",
+            "app": {
+              "name": "string",
+            },
             "complexity": "string",
+            "env": {
+              "auto": [],
+              "provided_count": "number",
+              "required": [],
+            },
             "missing": [],
             "plan_id": "string",
-            "services": "number",
+            "services": [],
             "status": "string",
             "warnings": [],
           },
           "sharedTopLevelKeys": [
-            "app_name",
+            "app",
             "complexity",
+            "env",
             "missing",
             "plan_id",
             "services",
@@ -2260,8 +2327,10 @@ describe('Tool parity baseline snapshots', () => {
           ],
           "tool": "create_deploy_plan",
           "topLevelAgentKeys": [
-            "app_name",
+            "app",
+            "build",
             "complexity",
+            "env",
             "missing",
             "plan_id",
             "services",
@@ -2269,8 +2338,9 @@ describe('Tool parity baseline snapshots', () => {
             "warnings",
           ],
           "topLevelMcpKeys": [
-            "app_name",
+            "app",
             "complexity",
+            "env",
             "missing",
             "plan_id",
             "services",

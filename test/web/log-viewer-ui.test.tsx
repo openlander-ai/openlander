@@ -73,9 +73,13 @@ function initializeFilters(): SearchState {
   };
 }
 
-vi.mock('@/hooks/use-log-stream', () => ({
-  useLogStream: () => currentStreamResult,
-}));
+vi.mock('@/hooks/use-log-stream', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../web/src/hooks/use-log-stream.js')>();
+  return {
+    ...actual,
+    useLogStream: () => currentStreamResult,
+  };
+});
 
 vi.mock('@/lib/utils', () => ({
   cn: (...values: Array<string | false | null | undefined>) =>
@@ -108,8 +112,6 @@ vi.mock('@/lib/ansi', () => ({
   stripAnsi: (line: string) => line,
   normalizeLogText: (line: string) => line,
 }));
-
-vi.mock('@/types', () => ({}));
 
 let LogViewer: typeof import('../../web/src/components/logs/LogViewer.js').LogViewer;
 
