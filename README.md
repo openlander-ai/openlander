@@ -270,15 +270,17 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
 
 ### Available Tools
 
-Once connected, AI agents get 30+ tools including:
+Once connected, AI agents get 60+ tools including:
 
-| Category | Tools                                                                         |
-| -------- | ----------------------------------------------------------------------------- |
-| Deploy   | `deploy_project`, `redeploy_project`, `rollback_project`, `deploy_blue_green` |
-| Services | `create_service`, `get_service_credentials`, `provision_database`             |
-| Config   | `set_env_vars`, `set_global_secret`, `upload_secret_file`                     |
-| Monitor  | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`         |
-| Projects | `list_projects`, `stop_project`, `remove_project`, `scan_project`             |
+| Category | Tools                                                                      |
+| -------- | -------------------------------------------------------------------------- |
+| Deploy   | `create_plan`, `execute_plan`, `rollback_project`, `deploy_blue_green`     |
+| Services | `create_service`, `get_service_credentials`, `provision_database`          |
+| Config   | `set_env_vars`, `list_env_vars`, `set_global_secret`, `upload_secret_file` |
+| Monitor  | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`      |
+| Projects | `list_projects`, `stop_project`, `remove_project`, `scan_project`          |
+| Domains  | `map_domain`, `list_domains`, `verify_domain`                              |
+| Webhooks | `configure_webhook`, `enable_webhook`, `disable_webhook`, `list_webhooks`  |
 
 ## Requirements
 
