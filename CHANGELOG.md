@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.4] - Deploy Plan v2
+
 ### Added
 
 - Non-blocking `execute_deploy_plan` — calls `startDeploy()` instead of blocking `deploy()`, returns immediately with `{ status: "building", estimated_seconds }` so agents can poll via `get_deploy_status`
