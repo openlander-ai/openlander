@@ -16,6 +16,10 @@ const log = createModuleLogger('service-manager');
 const WEB_NETWORK = 'web';
 type BuiltInServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb';
 
+function shouldMarkMissingContainerAsError(status: string): boolean {
+  return status !== 'error' && status !== 'provisioning';
+}
+
 interface ServiceCredentials {
   user: string;
   password: string;
@@ -478,6 +482,13 @@ export class ServiceManager {
 
     for (const service of services) {
       if (!service.container_id && !service.container_name) {
+        if (shouldMarkMissingContainerAsError(service.status)) {
+          this.db.updateService(service.id, { status: 'error' });
+          log.warn(
+            { serviceId: service.id },
+            'Service has no container reference, marking as error',
+          );
+        }
         continue;
       }
 
@@ -491,7 +502,7 @@ export class ServiceManager {
           this.db.updateService(service.id, { status, containerId: containerIdFromDocker });
         }
       } catch (err) {
-        log.debug(
+        log.warn(
           { err, serviceId: service.id, containerId },
           'Failed to inspect service container',
         );
@@ -508,7 +519,15 @@ export class ServiceManager {
     const service = this.getRequiredService(id);
 
     if (!service.container_id && !service.container_name) {
-      return service;
+      if (shouldMarkMissingContainerAsError(service.status)) {
+        this.db.updateService(service.id, { status: 'error' });
+        log.warn({ serviceId: service.id }, 'Service has no container reference, marking as error');
+      }
+      const refreshed = this.db.getService(id);
+      if (!refreshed) {
+        throw new Error(`Service not found: ${id}`);
+      }
+      return refreshed;
     }
 
     const containerId = service.container_id ?? service.container_name;
@@ -521,7 +540,7 @@ export class ServiceManager {
         this.db.updateService(service.id, { status, containerId: containerIdFromDocker });
       }
     } catch (err) {
-      log.debug({ err, serviceId: service.id, containerId }, 'Failed to inspect service container');
+      log.warn({ err, serviceId: service.id, containerId }, 'Failed to inspect service container');
       if (service.status !== 'error') {
         this.db.updateService(service.id, { status: 'error' });
       }

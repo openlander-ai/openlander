@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockServiceManagerLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  warn: vi.fn(),
+  info: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock('../src/lib/logger.js', () => ({
+  createModuleLogger: vi.fn(() => mockServiceManagerLogger),
+}));
+
 import type { Database, ServiceRow } from '../src/db/index.js';
 import { ServiceManager } from '../src/pipeline/service-manager.js';
 import { createMockDockerHarness } from './helpers/docker-mocks.js';
@@ -384,5 +395,81 @@ describe('ServiceManager detail/log/stats operations', () => {
       maxConnections: null,
     });
     expect(dockerHarness.getExecCommands('svc-stopped-container')).toEqual([]);
+  });
+});
+
+describe('ServiceManager reconciliation behavior', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('list() logs warn and marks service error when inspect fails', async () => {
+    const service = createService({
+      id: 'svc-failed-inspect',
+      status: 'running',
+      container_id: 'svc-failed-inspect-container',
+    });
+    const db = createDbMock([service]);
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.client.getContainer.mockReturnValue({
+      inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
+    });
+
+    const manager = new ServiceManager(dockerHarness.docker, db);
+    const list = await manager.list();
+
+    expect(db.updateService).toHaveBeenCalledWith('svc-failed-inspect', { status: 'error' });
+    expect(list[0]?.status).toBe('error');
+    expect(mockServiceManagerLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serviceId: 'svc-failed-inspect',
+        containerId: 'svc-failed-inspect-container',
+      }),
+      'Failed to inspect service container',
+    );
+    expect(mockServiceManagerLogger.debug).not.toHaveBeenCalledWith(
+      expect.any(Object),
+      'Failed to inspect service container',
+    );
+  });
+
+  it('list() marks non-provisioning service without container reference as error', async () => {
+    const service = createService({
+      id: 'svc-missing-container-ref',
+      status: 'stopped',
+    });
+    service.container_id = null;
+    service.container_name = '';
+    const db = createDbMock([service]);
+    const manager = new ServiceManager(createMockDockerHarness().docker, db);
+
+    const list = await manager.list();
+
+    expect(db.updateService).toHaveBeenCalledWith('svc-missing-container-ref', { status: 'error' });
+    expect(list[0]?.status).toBe('error');
+    expect(mockServiceManagerLogger.warn).toHaveBeenCalledWith(
+      { serviceId: 'svc-missing-container-ref' },
+      'Service has no container reference, marking as error',
+    );
+  });
+
+  it('list() sets service status to running when inspect succeeds', async () => {
+    const service = createService({
+      id: 'svc-reconcile-running',
+      status: 'stopped',
+      container_id: 'svc-reconcile-running-container',
+    });
+    const db = createDbMock([service]);
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.setContainerRunning('svc-reconcile-running-container', true);
+
+    const manager = new ServiceManager(dockerHarness.docker, db);
+    const list = await manager.list();
+
+    expect(db.updateService).toHaveBeenCalledWith('svc-reconcile-running', {
+      status: 'running',
+      containerId: 'svc-reconcile-running-container',
+    });
+    expect(list[0]?.status).toBe('running');
   });
 });
