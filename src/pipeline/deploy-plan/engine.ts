@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createModuleLogger } from '../../lib/logger.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
+import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-parser.js';
 import { cloneRepo } from '../git.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import { extractProjectName } from '../helpers.js';
@@ -154,14 +155,14 @@ export class PlanEngine {
           for (const envFileRef of svc.envFile) {
             const fullPath = join(clonePath, envFileRef.path);
             if (!existsSync(fullPath)) {
-              this.scanEnvTemplate(clonePath, envFileRef.path, detectedEnv);
+              detectedEnv.push(...scanEnvTemplate(clonePath, envFileRef.path, detectedEnv));
               if (envFileRef.required) {
                 warnings.push(
                   `Service "${svc.name}" requires env_file "${envFileRef.path}" but file not in repo`,
                 );
               }
             } else {
-              this.scanEnvFile(fullPath, envFileRef.path, detectedEnv);
+              detectedEnv.push(...scanEnvFile(fullPath, envFileRef.path, detectedEnv));
             }
           }
 
@@ -217,11 +218,11 @@ export class PlanEngine {
     for (const envFileName of ENV_TEMPLATE_FILES) {
       const envPath = join(clonePath, envFileName);
       if (existsSync(envPath)) {
-        this.scanEnvFile(envPath, envFileName, detectedEnv);
+        detectedEnv.push(...scanEnvFile(envPath, envFileName, detectedEnv));
       }
     }
 
-    this.scanDockerfileArgs(clonePath, userDockerfile, detectedEnv);
+    detectedEnv.push(...scanDockerfileArgs(clonePath, userDockerfile, detectedEnv));
 
     const requiredEnvVars = new Set(detectedEnv.filter((e) => e.required).map((e) => e.key));
 
@@ -317,66 +318,6 @@ export class PlanEngine {
     });
 
     return plan;
-  }
-
-  private scanEnvFile(filePath: string, source: string, out: PlanEnvEntry[]): void {
-    try {
-      const content = readFileSync(filePath, 'utf8');
-      const seen = new Set(out.map((e) => e.key));
-      const pattern = /^([A-Z_][A-Z0-9_]*)\s*=[ \t]*(.*)?$/gm;
-      let match: RegExpExecArray | null;
-      while ((match = pattern.exec(content)) !== null) {
-        const key = match[1];
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        const rawValue = match[2]?.trim();
-        const hasDefault = rawValue !== undefined && rawValue !== '' && !rawValue.startsWith('#');
-        out.push({
-          key,
-          source,
-          required: !hasDefault,
-          default: hasDefault ? rawValue : undefined,
-        });
-      }
-    } catch {
-      // intentional: skip unreadable env files
-    }
-  }
-
-  private scanEnvTemplate(clonePath: string, envFilePath: string, out: PlanEnvEntry[]): void {
-    const dir = join(clonePath, envFilePath, '..');
-    const templates = ['.env.example', '.env.sample', '.env.template'];
-    for (const tpl of templates) {
-      const tplPath = join(dir, tpl);
-      if (existsSync(tplPath)) {
-        const relativeTpl = relative(clonePath, tplPath);
-        this.scanEnvFile(tplPath, `${envFilePath} → ${relativeTpl}`, out);
-        return;
-      }
-    }
-  }
-
-  private scanDockerfileArgs(clonePath: string, dockerfilePath: string, out: PlanEnvEntry[]): void {
-    try {
-      const content = readFileSync(join(clonePath, dockerfilePath), 'utf8');
-      const seen = new Set(out.map((e) => e.key));
-      const argPattern = /^ARG\s+([A-Z_][A-Z0-9_]*)(?:\s*=[ \t]*(.*))?$/gm;
-      let match: RegExpExecArray | null;
-      while ((match = argPattern.exec(content)) !== null) {
-        const key = match[1];
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        const defaultVal = match[2]?.trim();
-        out.push({
-          key,
-          source: `Dockerfile ARG (${dockerfilePath})`,
-          required: !defaultVal,
-          default: defaultVal || undefined,
-        });
-      }
-    } catch {
-      // intentional: skip when Dockerfile absent
-    }
   }
 
   updatePlan(planId: string, updates: PlanUpdates): DeployPlan {
