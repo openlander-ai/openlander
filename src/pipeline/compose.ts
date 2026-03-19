@@ -131,7 +131,8 @@ interface ParsedComposePsRow {
 const MIN_COMPOSE_VERSION = '2.3.0';
 
 export class ComposePipeline {
-  private versionChecked = false;
+  versionChecked = false;
+  supportsProgress = false;
 
   constructor(
     private readonly docker: Docker,
@@ -155,6 +156,7 @@ export class ComposePipeline {
       );
       const current = (major ?? 0) * 10000 + (minor ?? 0) * 100 + (patch ?? 0);
       const required = (reqMajor ?? 0) * 10000 + (reqMinor ?? 0) * 100 + (reqPatch ?? 0);
+      this.supportsProgress = current >= required;
       if (current < required) {
         log.warn(
           { detected: version, minimum: MIN_COMPOSE_VERSION },
@@ -163,6 +165,7 @@ export class ComposePipeline {
       }
     } catch {
       log.warn('Could not detect Docker Compose version. Compose deploys may fail.');
+      this.supportsProgress = false;
     }
   }
 
@@ -578,21 +581,21 @@ export class ComposePipeline {
         }
       }
 
+      // Check compose version once before deploying any services
+      await this.checkComposeVersion();
+
       const serviceStatusByName = new Map<string, ComposeServiceStatus>();
       const orchestration = await orchestrator.executeOrdered(topology, {
         deployService: async (service) => {
           this.jobManager?.updatePhase(parentProjectId, 'starting');
 
-          await this.checkComposeVersion();
+          const upArgs = ['up', '-d', '--build', '--no-deps'];
+          if (this.supportsProgress) {
+            upArgs.push('--progress=plain');
+          }
+          upArgs.push(service.name);
 
-          const upResult = await this.execCompose(config.composePath, [
-            'up',
-            '-d',
-            '--build',
-            '--no-deps',
-            '--progress=plain',
-            service.name,
-          ]);
+          const upResult = await this.execCompose(config.composePath, upArgs);
           buildLog += `[compose up ${service.name}]\n${upResult.stdout}${upResult.stderr}`;
 
           if (upResult.exitCode !== 0) {

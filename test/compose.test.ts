@@ -779,6 +779,159 @@ describeCompose('ComposePipeline', () => {
       },
     ]);
   });
+
+  it('gates --progress=plain flag when compose version < 2.3.0', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n`,
+      'utf8',
+    );
+
+    const composeCommands: string[] = [];
+    mockSpawnImplementation = (_cmd: string, args: string[]) => {
+      const argText = args.join(' ');
+      composeCommands.push(argText);
+      if (argText.includes(' up ') && argText.includes(' web')) {
+        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
+      }
+      if (argText.includes(' ps ')) {
+        return createMockProcess(
+          JSON.stringify([
+            {
+              Service: 'web',
+              State: 'running',
+              ID: 'web-container',
+              Publishers: [{ PublishedPort: 3000, TargetPort: 3000 }],
+            },
+          ]),
+          '',
+          0,
+        ) as unknown as ChildProcess;
+      }
+      return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
+    };
+
+    // Create a fresh pipeline instance and set supportsProgress to false before deploy
+    const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
+    freshPipeline.supportsProgress = false;
+    // Mark version as checked to prevent checkComposeVersion from overwriting supportsProgress
+    freshPipeline.versionChecked = true;
+
+    const result = await freshPipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    const upCommands = composeCommands.filter((cmd) => cmd.includes(' up '));
+    expect(upCommands).toHaveLength(1);
+    expect(upCommands[0]).not.toContain('--progress=plain');
+  });
+
+  it('includes --progress=plain flag when compose version >= 2.3.0', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n`,
+      'utf8',
+    );
+
+    const composeCommands: string[] = [];
+    mockSpawnImplementation = (_cmd: string, args: string[]) => {
+      const argText = args.join(' ');
+      composeCommands.push(argText);
+      if (argText.includes(' up ') && argText.includes(' web')) {
+        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
+      }
+      if (argText.includes(' ps ')) {
+        return createMockProcess(
+          JSON.stringify([
+            {
+              Service: 'web',
+              State: 'running',
+              ID: 'web-container',
+              Publishers: [{ PublishedPort: 3000, TargetPort: 3000 }],
+            },
+          ]),
+          '',
+          0,
+        ) as unknown as ChildProcess;
+      }
+      return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
+    };
+
+    // Create a fresh pipeline instance to reset version check state
+    const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
+
+    const result = await freshPipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    const upCommands = composeCommands.filter((cmd) => cmd.includes(' up '));
+    expect(upCommands).toHaveLength(1);
+    expect(upCommands[0]).toContain('--progress=plain');
+  });
+
+  it('gates --progress=plain flag when version detection fails', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n`,
+      'utf8',
+    );
+
+    const composeCommands: string[] = [];
+    mockSpawnImplementation = (_cmd: string, args: string[]) => {
+      const argText = args.join(' ');
+      composeCommands.push(argText);
+      if (argText.includes(' up ') && argText.includes(' web')) {
+        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
+      }
+      if (argText.includes(' ps ')) {
+        return createMockProcess(
+          JSON.stringify([
+            {
+              Service: 'web',
+              State: 'running',
+              ID: 'web-container',
+              Publishers: [{ PublishedPort: 3000, TargetPort: 3000 }],
+            },
+          ]),
+          '',
+          0,
+        ) as unknown as ChildProcess;
+      }
+      return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
+    };
+
+    // Create a fresh pipeline instance and set supportsProgress to false before deploy
+    const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
+    freshPipeline.supportsProgress = false;
+    // Mark version as checked to prevent checkComposeVersion from overwriting supportsProgress
+    freshPipeline.versionChecked = true;
+
+    const result = await freshPipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    const upCommands = composeCommands.filter((cmd) => cmd.includes(' up '));
+    expect(upCommands).toHaveLength(1);
+    expect(upCommands[0]).not.toContain('--progress=plain');
+  });
 });
 
 describe('formatEnvValue', () => {
