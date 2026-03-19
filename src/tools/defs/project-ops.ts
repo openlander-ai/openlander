@@ -48,8 +48,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'stop_project',
     description:
       'Stop a running project container gracefully. Use when user wants to pause or shut down a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT remove the project; use remove_project for full cleanup.',
-    mcpDescription:
-      'Stop a running project container. Does NOT remove it — use remove_project for full cleanup. The project can be restarted with restart_project.',
+    mcpDescription: 'Stop a running project container.',
     inputSchema: stopProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
@@ -66,8 +65,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'remove_project',
     description:
       'Permanently remove a project — deletes the container, image, and database record. DESTRUCTIVE — cannot be undone. WARNING: Port assignment is lost; re-deploying the same project name will get a DIFFERENT port, breaking any hardcoded port references (env vars, URLs). To update code and redeploy without losing the port, use restart_project instead. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription:
-      'DESTRUCTIVE: Permanently remove a project — deletes container, image, and database record. Port assignment is lost; re-deploying gets a DIFFERENT port. To update code without losing the port, use restart_project instead.',
+    mcpDescription: 'Remove a project and its container entirely.',
     inputSchema: removeProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
@@ -84,8 +82,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'list_projects',
     description:
       'List all deployed projects with name, status (running/stopped/error), ports, local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
-    mcpDescription:
-      "List all deployed projects with status (running/stopped/error/building), ports, and URLs. Status is reconciled with Docker on each call — if a container was removed externally, status updates to 'error'. Use as first tool to discover project names before other operations.",
+    mcpDescription: 'List all deployed projects with status and URLs.',
     inputSchema: emptySchema,
     execute: async (_args, context) => {
       if (context.target === 'mcp') {
@@ -132,8 +129,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'restart_project',
     description:
       'Restart a running project by stopping and redeploying it with the same configuration. Use when user reports the app is hung, unresponsive, or needs a fresh start after config changes. Returns { status, project } with redeploy result. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription:
-      'Restart a project by stopping and redeploying. Returns IMMEDIATELY — does NOT wait for build to complete. Use get_deploy_status to track progress. Use no_cache=true to force a clean rebuild.',
+    mcpDescription: 'Restart a project by stopping and redeploying it.',
     inputSchema: restartProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;

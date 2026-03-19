@@ -7,8 +7,10 @@ import type { DeployLogRow } from '../types.js';
 export class DeployLogRepo {
   constructor(
     private readonly db: DrizzleClient,
-    _sqlite: SqliteDatabase,
-  ) {}
+    private readonly sqlite: SqliteDatabase,
+  ) {
+    void this.sqlite;
+  }
 
   createDeployLog(log: {
     id: string;

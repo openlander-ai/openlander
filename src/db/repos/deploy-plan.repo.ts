@@ -7,9 +7,9 @@ import type { DeployPlanRow } from '../types.js';
 export class DeployPlanRepo {
   constructor(
     private readonly db: DrizzleClient,
-    _sqlite: SqliteDatabase,
+    private readonly sqlite: SqliteDatabase,
   ) {
-    void _sqlite;
+    void this.sqlite;
   }
 
   createDeployPlan(plan: {

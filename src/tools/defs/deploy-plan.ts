@@ -14,7 +14,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     description:
       'Analyze a repository and create a deployment plan. Returns a plan with detected services, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
     mcpDescription:
-      "PREFERRED way to deploy. Analyzes a repo and creates a deployment plan. Returns plan_id, status ('ready' or 'needs_input'), detected services, and missing env vars. If status is 'needs_input', call update_deploy_plan with missing values. If 'ready', call execute_deploy_plan. For subdirectory Dockerfiles, use dockerfile_path — build context is set automatically. For compose repos needing specific services, execute_deploy_plan supports deploy_only param. Upload secret files via upload_secret_file BEFORE executing the plan.",
+      'Analyze a repository and create a deployment plan. Returns plan_id, status, complexity, and lists of missing environment variables and warnings. If status is "needs_input", call update_deploy_plan to provide missing values.',
     inputSchema: createDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -54,7 +54,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     description:
       'Update a deployment plan with missing values (env vars, Dockerfile selection, service config). Call after create_deploy_plan when status is "needs_input".',
     mcpDescription:
-      'Update a deployment plan to resolve \'needs_input\' status. Pass updates as JSON string: {"env": {"provided": {"KEY": "value"}}} for env vars, {"build": {"dockerfile": "path/to/Dockerfile"}} for Dockerfile selection. Returns updated plan with new status. When status becomes \'ready\', call execute_deploy_plan.',
+      'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). Returns updated plan_id, status, and remaining missing values.',
     inputSchema: updateDeployPlanSchema,
     execute: (args, context) => {
       const appCtx = context.appCtx;
@@ -87,7 +87,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     description:
       'Execute a deployment plan. Plan must be in "ready" status. Provisions services, injects env vars, and deploys the application.',
     mcpDescription:
-      "Execute a deployment plan. Returns IMMEDIATELY with 'building' status — does NOT wait for completion. Use get_deploy_status after estimated_seconds to check result. Use deploy_only param to select specific compose services. Plan must be in 'ready' status — use update_deploy_plan to resolve 'needs_input' first.",
+      'Execute a deployment plan. Plan must be in "ready" status. Provisions required services, injects environment variables, and starts the deployment. Returns success status and project ID on success, or error message on failure.',
     inputSchema: executeDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;

@@ -7,8 +7,10 @@ import type { ServiceRow } from '../types.js';
 export class ServiceRepo {
   constructor(
     private readonly db: DrizzleClient,
-    _sqlite: SqliteDatabase,
-  ) {}
+    private readonly sqlite: SqliteDatabase,
+  ) {
+    void this.sqlite;
+  }
 
   createService(service: {
     id: string;

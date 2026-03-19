@@ -7,9 +7,9 @@ import type { WebhookConfigRow } from '../types.js';
 export class WebhookRepo {
   constructor(
     private readonly db: DrizzleClient,
-    _sqlite: SqliteDatabase,
+    private readonly sqlite: SqliteDatabase,
   ) {
-    void _sqlite;
+    void this.sqlite;
   }
 
   getWebhookConfig(

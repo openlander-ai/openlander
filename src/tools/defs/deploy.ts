@@ -15,8 +15,7 @@ export const deployToolDefs: ToolDef[] = [
     name: 'preview_deploy',
     description:
       'Deploy an ephemeral preview environment for a specific branch. Creates a separate container that does not affect the main deployment. Use when user wants to test a PR or feature branch before merging. Returns { previewId, branch, url, port }. The preview is temporary — clean up with cleanup_preview when done.',
-    mcpDescription:
-      'Deploy an ephemeral preview environment for a specific branch. Creates a separate container that does not affect the main deployment. Returns { previewId, branch, url, port }. Clean up with cleanup_preview when done.',
+    mcpDescription: 'Deploy an ephemeral preview environment for a branch.',
     inputSchema: previewDeploySchema,
     execute: (args, context) => {
       const appCtx = context.appCtx;
@@ -31,8 +30,7 @@ export const deployToolDefs: ToolDef[] = [
     name: 'rollback_project',
     description:
       'Rollback a project to its previous Docker image. Use when a recent deploy broke something and user wants to revert. Returns the rollback result with previous image info. Errors: PROJECT_NOT_FOUND, NO_PREVIOUS_IMAGE if this is the first deploy.',
-    mcpDescription:
-      'Rollback a project to its previous Docker image. Use when a recent deploy broke something. Errors: NO_PREVIOUS_IMAGE if this is the first deploy.',
+    mcpDescription: 'Rollback a project to its previous image when available.',
     inputSchema: rollbackProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
@@ -47,8 +45,7 @@ export const deployToolDefs: ToolDef[] = [
     name: 'deploy_blue_green',
     description:
       'Deploy a project with zero downtime using blue-green strategy. Builds a new version alongside the current one, runs health checks, then switches traffic atomically. Use for production projects where downtime is unacceptable. Returns deployment result with old/new container info. Errors: PROJECT_NOT_FOUND, HEALTH_CHECK_FAILED (new version unhealthy — old version kept running).',
-    mcpDescription:
-      'Deploy with zero downtime using blue-green strategy. Builds a new version alongside the current one, runs health checks, then switches traffic atomically. Use for production projects where downtime is unacceptable.',
+    mcpDescription: 'Deploy with zero downtime using blue-green strategy.',
     inputSchema: deployBlueGreenSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
@@ -63,8 +60,7 @@ export const deployToolDefs: ToolDef[] = [
     name: 'cleanup_preview',
     description:
       'Remove an ephemeral preview deployment created by preview_deploy. Pass the preview_id that was returned. Use when testing is done or to free resources. Returns { status, previewId }. Errors: PREVIEW_NOT_FOUND if the ID is invalid.',
-    mcpDescription:
-      'Remove an ephemeral preview deployment created by preview_deploy. Pass the preview_id returned from preview_deploy. Returns { status, previewId }.',
+    mcpDescription: 'Remove an ephemeral preview deployment.',
     inputSchema: cleanupPreviewSchema,
     execute: async (args, context) => {
       const previewId = args['preview_id'] as string;
@@ -76,8 +72,7 @@ export const deployToolDefs: ToolDef[] = [
     name: 'list_previews',
     description:
       'List all active preview deployments with branch, URL, port, and creation time. Use to check what previews exist before creating new ones or to find a preview URL. Returns { count, previews[] }. Always available, no errors.',
-    mcpDescription:
-      'List all active preview deployments with branch, URL, port, and creation time. Use to check what previews exist before creating new ones. Returns { count, previews[] }.',
+    mcpDescription: 'List all active preview deployments.',
     inputSchema: listPreviewsSchema,
     execute: (_args, context) => {
       const previews = context.appCtx.previewDeployer.list();
@@ -96,8 +91,7 @@ export const deployToolDefs: ToolDef[] = [
     name: 'get_deploy_status',
     description:
       'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed) and timing. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }.',
-    mcpDescription:
-      'Get real-time deployment status. Shows phase: queued → cloning → building → starting → done/failed. Use after execute_deploy_plan or restart_project to track progress. Pass project_name for a specific project, or omit for all active builds. Returns { active, jobs[] } where jobs have phase, elapsed time, and error/URLs on completion.',
+    mcpDescription: 'Get real-time deployment status for active builds.',
     inputSchema: deployStatusSchema,
     execute: (args, context) => {
       const appCtx = context.appCtx;

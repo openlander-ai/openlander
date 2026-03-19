@@ -164,7 +164,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
-  api.get('/projects', async (c) => {
+  api.get('/projects', (c) => {
     const status = c.req.query('status') as
       | 'running'
       | 'stopped'
@@ -172,25 +172,6 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       | 'error'
       | undefined;
     const projects = ctx.db.listProjects(status);
-
-    try {
-      const client = ctx.docker.getClient();
-      for (const p of projects) {
-        if (p.status !== 'running' || !p.container_id) continue;
-        try {
-          const info = await client.getContainer(p.container_id).inspect();
-          if (!info.State.Running) {
-            ctx.db.updateProject(p.id, { status: 'stopped' });
-            p.status = info.State.ExitCode === 0 ? 'stopped' : 'error';
-          }
-        } catch {
-          ctx.db.updateProject(p.id, { status: 'error' });
-          p.status = 'error';
-        }
-      }
-    } catch {
-      log.debug('Docker not available for project reconciliation');
-    }
 
     return c.json({
       count: projects.length,
