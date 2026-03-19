@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **IP override**: `HOST_IP` / `HOST_VPN_IP` env vars override detected IPs for remote Docker host setups
+- **Deploy crash logging**: `startDeploy()` now creates deploy log on crash instead of silent failure (fixes NO_DEPLOY_LOGS)
+- **build_method regression**: Defensive try/catch prevents deploy crash when DB column missing
+
+## [0.6.6] - Operational Fixes & MCP Descriptions
+
+### Added
+
+- Docker inspect reconciliation on `list_projects` (MCP) and `GET /api/projects` (Web API)
+- `build_method` column in projects DB — persists dockerfile/compose preference across redeploys
+- `container:missing` event emitted when AlertMonitor detects externally removed containers
+- `EnvManager.verifyRoundTrip()` — validates env var integrity after storage
+- Compose containers auto-connect to Traefik `web` network after deploy
+- `mcpDescription` added to 40+ MCP tools with workflow guidance and parameter hints
+
+### Fixed
+
+- `getLanIp()` now uses `getAllIps()` filtering — skips Docker bridge and VPN interfaces, prefers LAN IP
+- Ghost state: Projects reported as "running" when containers were externally removed now show "error"
+- Compose fallback: `restart_project` no longer falls back to compose mode when deployed with `prefer_dockerfile=true`
+- MCP timeout: `restart_project` returns immediately (non-blocking)
+- Build error details: `DockerBuildError` now includes image tag and context path
+- Prune resilience: `AlertMonitor.checkContainerCrashes()` updates project status when container missing
+
 ## [0.6.5] - Deploy Plan Bugfixes
 
 ### Added
