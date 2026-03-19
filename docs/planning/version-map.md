@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -747,6 +747,20 @@ Phase 3 — PR Preview:
 | getUsedPorts() environments 테이블 포함                | ✅   |
 | Project detail API camelCase 매핑 (publicUrl, repoUrl) | ✅   |
 | remove_project 도구 설명에 포트 유실 경고 추가         | ✅   |
+
+---
+
+### v0.6.4 — Deploy Plan v2 (Non-blocking Execute + Deep Repo Analysis) ✅
+
+**상태**: 완료
+
+| 항목                                                      | 상태 |
+| --------------------------------------------------------- | ---- |
+| executePlan() 비동기 전환 (startDeploy + event listeners) | ✅   |
+| createPlan() 깊은 레포 분석 (compose/Dockerfiles/env/vol) | ✅   |
+| MCP 응답 전체 plan 상세 노출                              | ✅   |
+| dockerfile_path + docker_target 파라미터 추가             | ✅   |
+| estimated_seconds (이전 배포 기반 폴링 힌트)              | ✅   |
 
 ---
 

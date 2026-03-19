@@ -188,6 +188,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.6.1** | Env Vars Fix          | Done   | Env vars merge (not replace), list_env_vars tool, health monitor Docker fallback                                                                                        |
 | **v0.6.2** | Compose & Traefik     | Done   | Compose service filtering, secret file mount, env escaping, Traefik HTTP Provider, build log detail, redeploy port fix                                                  |
 | **v0.6.3** | Port Stability        | Done   | Port preservation on redeploy, environments port tracking, public URL API fix                                                                                           |
+| **v0.6.4** | Deploy Plan v2        | Done   | Non-blocking execute, deep repo analysis (compose/Dockerfiles/env), dockerfile_path param, estimated_seconds polling hint                                               |
 | **v1.0.0** | Stable Release        | TBD    | Quality hardening, comprehensive testing, production-readiness improvements                                                                                             |
 
 ## MCP Integration (AI Coding Agents)

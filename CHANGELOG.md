@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Non-blocking `execute_deploy_plan` — calls `startDeploy()` instead of blocking `deploy()`, returns immediately with `{ status: "building", estimated_seconds }` so agents can poll via `get_deploy_status`
+- Deep repo analysis in `create_deploy_plan` — parses docker-compose.yml services (name, dockerfile, port), scans multiple Dockerfiles, detects env vars from `.env.example`/`.env.sample`/`.env.template`/Dockerfile `ARG` with source attribution, warns on missing volume mount files
+- Full plan details in `create_deploy_plan` response — exposes `build` (method, compose_services, dockerfiles_found), `services[]`, `env.detected[]` with source info instead of thin summary
+- `dockerfile_path` and `docker_target` parameters for `create_deploy_plan` — supports monorepo and multi-stage Dockerfile builds
+- `estimated_seconds` in `execute_deploy_plan` response — based on previous deploy `duration_ms` from DB, defaults to 60s
+- Event-driven plan status completion — `deploy:success`/`deploy:failed` listeners automatically transition plan status after async deploy finishes
+
+### Fixed
+
+- Pre-existing compose test failures — `--progress=plain` flag assertion mismatch (5 tests)
+- Pre-existing `remove_service` test failure — `warning` field strict equality (1 test)
+
 ## [0.6.3] - Port Stability & API Fix
 
 ### Added
