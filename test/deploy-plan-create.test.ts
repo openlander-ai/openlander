@@ -38,6 +38,7 @@ describe('PlanEngine.createPlan', () => {
       createDeployPlan: vi.fn(),
       getDeployPlan: vi.fn(),
       updateDeployPlan: vi.fn(),
+      listServices: vi.fn().mockReturnValue([]),
     };
 
     mockPipeline = {

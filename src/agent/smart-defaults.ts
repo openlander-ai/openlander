@@ -11,8 +11,8 @@
  * before the deploy proceeds. The user can accept, modify, or skip each suggestion.
  *
  * Architecture:
- *   deploy_project tool → generateSmartDefaults() → QuestionBridge.ask()
- *   → user responds → apply accepted defaults → proceed with deploy
+ *   create_deploy_plan tool → generateSmartDefaults() → QuestionBridge.ask()
+ *   → user responds → apply accepted defaults → execute_deploy_plan
  */
 
 import type { Database, ProjectRow, DeployLogRow } from '../db/index.js';

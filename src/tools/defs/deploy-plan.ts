@@ -1,5 +1,6 @@
 import type { ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
+import type { PlanUpdates } from '../../pipeline/deploy-plan/engine.js';
 
 import {
   createDeployPlanSchema,
@@ -50,7 +51,7 @@ export const deployPlanToolDefs: ToolDef[] = [
       const appCtx = context.appCtx;
       const planId = args['plan_id'] as string;
       const updatesRaw = args['updates'] as string;
-      const updates = JSON.parse(updatesRaw) as Record<string, unknown>;
+      const updates = JSON.parse(updatesRaw) as PlanUpdates;
 
       const plan: DeployPlan = appCtx.planEngine.updatePlan(planId, updates);
 

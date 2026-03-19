@@ -337,7 +337,7 @@ ${plan.agentGuidance}
 
 ## General Recovery Rules
 1. If build log is provided above, analyze it directly. Otherwise call debug_build_error("${projectName}").
-2. After fixing, redeploy with deploy_project("${projectName}").
+2. After fixing, redeploy with create_deploy_plan and execute_deploy_plan.
 3. Do NOT just suggest fixes — execute them.`;
 
         if (isAdvisory) {
@@ -548,6 +548,7 @@ ${plan.agentGuidance}
     serviceManager,
     autoDetector,
     config,
+    events: eventBus,
   });
 
   // Build partial ctx without channelManager, then compose the full AppContext
@@ -590,7 +591,7 @@ ${plan.agentGuidance}
     setPostmortemInstance(postmortem);
   }
 
-  const rollbackWatcher = new RollbackWatcher(eventBus, db);
+  const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline);
   rollbackWatcher.start();
   activeRollbackWatcher = rollbackWatcher;
 

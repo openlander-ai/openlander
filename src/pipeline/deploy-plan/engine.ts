@@ -12,6 +12,7 @@ import type { EnvManager } from '../env.js';
 import type { ServiceManager } from '../service-manager.js';
 import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
+import type { EventBus } from '../../events/index.js';
 
 const log = createModuleLogger('plan-engine');
 
@@ -23,6 +24,13 @@ export interface CreatePlanOptions {
   preferDockerfile?: boolean;
 }
 
+export interface PlanUpdates {
+  env?: { provided?: Record<string, string> } | Record<string, string>;
+  build?: Partial<DeployPlan['build']>;
+  services?: PlanService[];
+  health?: Partial<DeployPlan['health']>;
+}
+
 export interface PlanEngineDeps {
   db: Database;
   pipeline: DeployPipeline;
@@ -30,6 +38,7 @@ export interface PlanEngineDeps {
   serviceManager: ServiceManager;
   autoDetector: AutoDetector;
   config: OpenLanderConfig;
+  events?: EventBus;
 }
 
 const SERVICE_ENV_VARS: Record<string, string> = {
@@ -43,11 +52,25 @@ export class PlanEngine {
   private db: Database;
   private pipeline: DeployPipeline;
   private serviceManager: ServiceManager;
+  private events?: EventBus;
 
   constructor(deps: PlanEngineDeps) {
     this.db = deps.db;
     this.pipeline = deps.pipeline;
     this.serviceManager = deps.serviceManager;
+    this.events = deps.events;
+  }
+
+  private redactPlanForStorage(plan: DeployPlan): DeployPlan {
+    return {
+      ...plan,
+      env: {
+        ...plan.env,
+        provided: Object.fromEntries(
+          Object.entries(plan.env.provided).map(([key]) => [key, '[REDACTED]']),
+        ),
+      },
+    };
   }
 
   async createPlan(opts: CreatePlanOptions): Promise<DeployPlan> {
@@ -74,7 +97,8 @@ export class PlanEngine {
     }
 
     log.info({ clonePath }, 'Analyzing infrastructure');
-    const infraAnalysis = analyzeInfrastructure(clonePath, []);
+    const existingServices = this.db.listServices();
+    const infraAnalysis = analyzeInfrastructure(clonePath, existingServices);
 
     const services: PlanService[] = [];
 
@@ -151,7 +175,7 @@ export class PlanEngine {
     const initialStatus = missing.length > 0 ? 'needs_input' : 'ready';
 
     const now = new Date().toISOString();
-    const planBranch = branch || 'main';
+    const planBranch = branch || 'default';
     const plan: DeployPlan = {
       plan_id: planId,
       status: initialStatus,
@@ -193,14 +217,14 @@ export class PlanEngine {
       projectName,
       status: initialStatus,
       complexity,
-      planJson: JSON.stringify(plan),
+      planJson: JSON.stringify(this.redactPlanForStorage(plan)),
       commitSha,
     });
 
     return plan;
   }
 
-  updatePlan(planId: string, updates: Partial<DeployPlan>): DeployPlan {
+  updatePlan(planId: string, updates: PlanUpdates): DeployPlan {
     const row = this.db.getDeployPlan(planId);
     if (!row) {
       throw new Error(`Deploy plan not found: ${planId}`);
@@ -215,16 +239,36 @@ export class PlanEngine {
 
     const merged: DeployPlan = {
       ...plan,
-      ...updates,
       env: {
         ...plan.env,
-        ...(updates.env || {}),
+        provided: plan.env.provided,
       },
       build: {
         ...plan.build,
         ...(updates.build || {}),
       },
     };
+
+    if (updates.env) {
+      const envUpdate = updates.env;
+      if ('provided' in envUpdate) {
+        // Structured: { provided: { KEY: "val" } }
+        const structured = envUpdate as { provided?: Record<string, string> };
+        if (structured.provided) {
+          merged.env.provided = { ...plan.env.provided, ...structured.provided };
+        }
+      } else {
+        // Flat: { KEY: "val" } → treat as provided
+        merged.env.provided = { ...plan.env.provided, ...(envUpdate as Record<string, string>) };
+      }
+    }
+
+    if (updates.services) {
+      merged.services = updates.services;
+    }
+    if (updates.health) {
+      merged.health = { ...plan.health, ...updates.health };
+    }
 
     const missing: string[] = [];
     for (const varName of merged.env.required) {
@@ -243,7 +287,7 @@ export class PlanEngine {
     log.info({ planId, status: merged.status }, 'Updating deploy plan');
     this.db.updateDeployPlan(planId, {
       status: merged.status,
-      planJson: JSON.stringify(merged),
+      planJson: JSON.stringify(this.redactPlanForStorage(merged)),
     });
 
     return merged;
@@ -252,6 +296,16 @@ export class PlanEngine {
   async executePlan(
     planId: string,
   ): Promise<{ success: boolean; projectId?: string; error?: string }> {
+    // Re-read from DB to prevent race condition
+    const freshRow = this.db.getDeployPlan(planId);
+    if (!freshRow) {
+      throw new Error(`Plan not found: ${planId}`);
+    }
+    const freshPlan = JSON.parse(freshRow.plan_json) as DeployPlan;
+    if (freshPlan.status !== 'ready') {
+      throw new Error(`Plan is already ${freshPlan.status}. Cannot execute concurrently.`);
+    }
+
     const row = this.db.getDeployPlan(planId);
     if (!row) {
       throw new Error(`Deploy plan not found: ${planId}`);
@@ -266,26 +320,35 @@ export class PlanEngine {
     const executingPlan = PlanStateMachine.transition(plan, 'executing');
     this.db.updateDeployPlan(planId, {
       status: 'executing',
-      planJson: JSON.stringify(executingPlan),
+      planJson: JSON.stringify(this.redactPlanForStorage(executingPlan)),
     });
 
     try {
-      for (const service of plan.services) {
-        if (service.action === 'create') {
-          log.info({ serviceType: service.type }, 'Creating service');
-          const serviceName = service.name || `${service.type}-${String(Date.now())}`;
-          await this.serviceManager.create({
-            name: serviceName,
-          });
-        }
-      }
-
       const mergedEnv = {
         ...plan.env.auto,
         ...plan.env.provided,
       };
 
-      log.info({ planId }, 'Starting deployment');
+      for (const service of plan.services) {
+        if (service.action === 'create') {
+          log.info({ serviceType: service.type }, 'Creating service');
+          const serviceName = service.name || `${service.type}-${String(Date.now())}`;
+          const created = await this.serviceManager.create({
+            name: serviceName,
+            template: service.type,
+          });
+          // Use created service's credentials for env injection
+          if (created.credentials) {
+            const creds = JSON.parse(created.credentials) as { connectionString?: string };
+            const envVarName = SERVICE_ENV_VARS[service.type];
+            if (envVarName && creds.connectionString) {
+              mergedEnv[envVarName] = creds.connectionString;
+            }
+          }
+        }
+      }
+
+      log.info({ planId, planCommit: plan.app.source.commit_sha }, 'Executing plan');
       const deployResult = await this.pipeline.deploy({
         repoUrl: plan.app.source.repo_url,
         branch: plan.app.source.branch,
@@ -294,11 +357,35 @@ export class PlanEngine {
         preferDockerfile: !plan.build.generated_dockerfile,
       });
 
+      if (!deployResult.success) {
+        const failedPlan = PlanStateMachine.transition(
+          executingPlan,
+          'failed',
+          deployResult.error || 'Deploy failed',
+        );
+        this.db.updateDeployPlan(planId, {
+          status: 'failed',
+          planJson: JSON.stringify(this.redactPlanForStorage(failedPlan)),
+          errorMessage: deployResult.error || 'Deploy failed',
+        });
+        return { success: false, error: deployResult.error || 'Deploy failed' };
+      }
+
       const completedPlan = PlanStateMachine.transition(executingPlan, 'completed');
       this.db.updateDeployPlan(planId, {
         status: 'completed',
-        planJson: JSON.stringify(completedPlan),
+        planJson: JSON.stringify(this.redactPlanForStorage(completedPlan)),
       });
+
+      // Emit planId-enriched success event for RollbackWatcher
+      if (this.events) {
+        void this.events.emit('deploy:success', {
+          projectId: deployResult.projectId,
+          url: deployResult.url || '',
+          totalDurationMs: 0,
+          planId,
+        });
+      }
 
       return {
         success: true,
@@ -309,7 +396,7 @@ export class PlanEngine {
       const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMsg);
       this.db.updateDeployPlan(planId, {
         status: 'failed',
-        planJson: JSON.stringify(failedPlan),
+        planJson: JSON.stringify(this.redactPlanForStorage(failedPlan)),
       });
 
       log.error({ planId, error }, 'Plan execution failed');

@@ -81,7 +81,7 @@ export const gitToolDefs: ToolDef[] = [
   {
     name: 'scan_dockerfiles',
     description:
-      'Clone a repo and scan for all Dockerfiles. Use BEFORE deploy_project when you suspect a monorepo (multiple services). Returns paths like ["Dockerfile", "frontend/Dockerfile", "backend/Dockerfile"]. If only one Dockerfile is found, use deploy_project normally. If multiple are found, deploy each as a child project with the dockerfile_path parameter. Errors: CLONE_FAILED.',
+      'Clone a repo and scan for all Dockerfiles. Use BEFORE create_deploy_plan when you suspect a monorepo (multiple services). Returns paths like ["Dockerfile", "frontend/Dockerfile", "backend/Dockerfile"]. If only one Dockerfile is found, use create_deploy_plan normally. If multiple are found, deploy each as a child project with the dockerfile_path parameter. Errors: CLONE_FAILED.',
     inputSchema: scanDockerfilesSchema,
     execute: async (args, { appCtx }) => {
       const repoUrl = args['repo_url'] as string;
@@ -220,7 +220,7 @@ export const gitToolDefs: ToolDef[] = [
   {
     name: 'search_github_repos',
     description:
-      'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with clone URLs ready for deploy_project. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call deploy_project with the clone URL.',
+      'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with clone URLs ready for create_deploy_plan. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call create_deploy_plan with the clone URL.',
     inputSchema: searchGithubReposSchema,
     execute: async (args, { target }) => {
       const config = loadConfig();

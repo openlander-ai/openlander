@@ -202,10 +202,15 @@ const RECOVERY_TEMPLATES: Record<RecoveryCategory, RecoveryTemplate> = {
     agentGuidance: `## OpenLander Context (for this failure)
 Category: dockerfile_missing
 What happened: No Dockerfile was found in the repository.
-What you can do: The pipeline can auto-generate Dockerfiles for common frameworks (Next.js, FastAPI, etc.). Call deploy_project to retry - the pipeline will attempt auto-detection. If it fails, ask the user what framework they're using via ask_user_question.
-Allowed tools: ask_user_question, deploy_project, debug_build_error
+What you can do: The pipeline can auto-generate Dockerfiles for common frameworks (Next.js, FastAPI, etc.). Call create_deploy_plan to create a new plan, then execute_deploy_plan to retry - the pipeline will attempt auto-detection. If it fails, ask the user what framework they're using via ask_user_question.
+Allowed tools: ask_user_question, create_deploy_plan, execute_deploy_plan, debug_build_error
 Do NOT: Try to create a Dockerfile manually - you don't have file editing tools.`,
-    allowedTools: ['ask_user_question', 'deploy_project', 'debug_build_error'],
+    allowedTools: [
+      'ask_user_question',
+      'create_deploy_plan',
+      'execute_deploy_plan',
+      'debug_build_error',
+    ],
   },
   env_missing: {
     fixability: 'agent',
@@ -218,10 +223,16 @@ Do NOT: Try to create a Dockerfile manually - you don't have file editing tools.
     agentGuidance: `## OpenLander Context (for this failure)
 Category: env_missing
 What happened: A required environment variable is not set.
-What you can do: Use ask_user_question to ask the user for the missing value, then call set_env_vars to set it, then deploy_project to retry.
-Allowed tools: ask_user_question, set_env_vars, deploy_project, debug_build_error
+What you can do: Use ask_user_question to ask the user for the missing value, then call set_env_vars to set it, then create_deploy_plan and execute_deploy_plan to retry.
+Allowed tools: ask_user_question, set_env_vars, create_deploy_plan, execute_deploy_plan, debug_build_error
 Do NOT: Retry the deploy without getting the missing value first.`,
-    allowedTools: ['ask_user_question', 'set_env_vars', 'deploy_project', 'debug_build_error'],
+    allowedTools: [
+      'ask_user_question',
+      'set_env_vars',
+      'create_deploy_plan',
+      'execute_deploy_plan',
+      'debug_build_error',
+    ],
   },
   build_error: {
     fixability: 'agent',
@@ -234,14 +245,15 @@ Do NOT: Retry the deploy without getting the missing value first.`,
     agentGuidance: `## OpenLander Context (for this failure)
 Category: build_error
 What happened: Docker build failed. The build log may contain the root cause.
-What you can do: Call debug_build_error to get AI diagnosis of the build failure. If it's a missing env var, use ask_user_question + set_env_vars. If it's a Dockerfile issue, the pipeline will auto-fix on retry. Call deploy_project to retry after fixing.
-Allowed tools: debug_build_error, ask_user_question, set_env_vars, deploy_project, get_logs
+What you can do: Call debug_build_error to get AI diagnosis of the build failure. If it's a missing env var, use ask_user_question + set_env_vars. If it's a Dockerfile issue, the pipeline will auto-fix on retry. Call create_deploy_plan and execute_deploy_plan to retry after fixing.
+Allowed tools: debug_build_error, ask_user_question, set_env_vars, create_deploy_plan, execute_deploy_plan, get_logs
 Do NOT: Retry blindly without diagnosing first.`,
     allowedTools: [
       'debug_build_error',
       'ask_user_question',
       'set_env_vars',
-      'deploy_project',
+      'create_deploy_plan',
+      'execute_deploy_plan',
       'get_logs',
     ],
   },
@@ -292,15 +304,16 @@ Do NOT: Retry blindly without diagnosing first.`,
     agentGuidance: `## OpenLander Context (for this failure)
 Category: runtime_crash
 What happened: The app crashed after container start or keeps restarting.
-What you can do: Inspect logs with get_logs, diagnose probable cause, then call deploy_project to retry after adjustments. If config is missing, ask the user and set values first.
-Allowed tools: get_logs, debug_build_error, ask_user_question, set_env_vars, deploy_project
-Do NOT: Keep retrying deploy_project without identifying the crash trigger.`,
+What you can do: Inspect logs with get_logs, diagnose probable cause, then call create_deploy_plan and execute_deploy_plan to retry after adjustments. If config is missing, ask the user and set values first.
+Allowed tools: get_logs, debug_build_error, ask_user_question, set_env_vars, create_deploy_plan, execute_deploy_plan
+Do NOT: Keep retrying without identifying the crash trigger.`,
     allowedTools: [
       'get_logs',
       'debug_build_error',
       'ask_user_question',
       'set_env_vars',
-      'deploy_project',
+      'create_deploy_plan',
+      'execute_deploy_plan',
     ],
   },
   runtime_generic: {
@@ -314,10 +327,16 @@ Do NOT: Keep retrying deploy_project without identifying the crash trigger.`,
     agentGuidance: `## OpenLander Context (for this failure)
 Category: runtime_generic
 What happened: A runtime-stage failure occurred but the specific crash type is unclear.
-What you can do: Collect recent logs via get_logs, ask focused follow-up questions if needed, and retry with deploy_project only after diagnosis.
-Allowed tools: get_logs, ask_user_question, debug_build_error, deploy_project
+What you can do: Collect recent logs via get_logs, ask focused follow-up questions if needed, and retry with create_deploy_plan and execute_deploy_plan only after diagnosis.
+Allowed tools: get_logs, ask_user_question, debug_build_error, create_deploy_plan, execute_deploy_plan
 Do NOT: Assume Docker infrastructure is broken unless logs clearly indicate daemon issues.`,
-    allowedTools: ['get_logs', 'ask_user_question', 'debug_build_error', 'deploy_project'],
+    allowedTools: [
+      'get_logs',
+      'ask_user_question',
+      'debug_build_error',
+      'create_deploy_plan',
+      'execute_deploy_plan',
+    ],
   },
   unknown: {
     fixability: 'agent',
@@ -330,10 +349,16 @@ Do NOT: Assume Docker infrastructure is broken unless logs clearly indicate daem
     agentGuidance: `## OpenLander Context (for this failure)
 Category: unknown
 What happened: The failure did not match known recovery categories.
-What you can do: Gather logs and context, diagnose likely root cause, and choose the safest next action before retrying deploy_project.
-Allowed tools: get_logs, debug_build_error, ask_user_question, deploy_project
+What you can do: Gather logs and context, diagnose likely root cause, and choose the safest next action before retrying with create_deploy_plan and execute_deploy_plan.
+Allowed tools: get_logs, debug_build_error, ask_user_question, create_deploy_plan, execute_deploy_plan
 Do NOT: Retry repeatedly without new evidence.`,
-    allowedTools: ['get_logs', 'debug_build_error', 'ask_user_question', 'deploy_project'],
+    allowedTools: [
+      'get_logs',
+      'debug_build_error',
+      'ask_user_question',
+      'create_deploy_plan',
+      'execute_deploy_plan',
+    ],
   },
 };
 

@@ -43,8 +43,9 @@ CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTT
 ## Tools by Category
 
 ### Deploy
-- deploy_project — Deploy from git URL. Key params: name (project name override — NOT "project_name"), dockerfile_path, docker_target (multi-stage), env_vars (JSON string), prefer_dockerfile (skip compose detection — use for monorepos), force (auto-clean conflicts), dry_run (preview plan without deploying). Returns immediately; poll with get_deploy_status.
-- redeploy_project — Redeploy existing project (picks up new env vars, pulls latest code).
+- create_deploy_plan — Create a deployment plan from git URL. Key params: name (project name override — NOT "project_name"), dockerfile_path, docker_target (multi-stage), env_vars (JSON string), prefer_dockerfile (skip compose detection — use for monorepos), force (auto-clean conflicts), dry_run (preview plan without deploying). Returns planId immediately.
+- update_deploy_plan — Update an existing deployment plan with new parameters.
+- execute_deploy_plan — Execute a deployment plan. Returns immediately; poll with get_deploy_status.
 - rollback_project — Revert to previous Docker image.
 - deploy_blue_green — Zero-downtime deploy with health check before traffic switch. Use for production projects where downtime is unacceptable.
 - preview_deploy / cleanup_preview / list_previews — Ephemeral branch previews for PR testing.
@@ -107,14 +108,15 @@ Before deploying any new project, run this planning sequence:
 
 1. scan_project({ repo_url }) — Detect project type, Dockerfiles, compose files, env requirements.
 2. Classify the result:
-   - Single Dockerfile → deploy_project
-   - Multiple Dockerfiles (monorepo) → ask user which services to deploy, then deploy each with deploy_project
-   - Has compose file → deploy_project with the primary service's Dockerfile
+    - Single Dockerfile → create_deploy_plan + execute_deploy_plan
+    - Multiple Dockerfiles (monorepo) → ask user which services to deploy, then create_deploy_plan + execute_deploy_plan for each
+    - Has compose file → create_deploy_plan + execute_deploy_plan with the primary service's Dockerfile
 3. Check service dependencies:
    - If app needs a database: list_services to check if one exists, or create_service to provision one
    - Map discovered env requirements to service connection strings
 4. Deploy with env vars pre-configured:
-   - deploy_project({ repo_url, env_vars: '{"DATABASE_URL": "...", "REDIS_URL": "..."}' })
+    - create_deploy_plan({ repo_url, env_vars: '{"DATABASE_URL": "...", "REDIS_URL": "..."}' })
+    - execute_deploy_plan({ plan_id: "..." })
 5. Monitor: get_deploy_status until done or failed.
 
 ## Deploy Failure Recovery
@@ -124,7 +126,7 @@ When a deploy fails, do NOT stop. Follow this fallback chain:
 1. get_build_log to get raw output → debug_build_error for AI analysis
 2. If build error (Dockerfile issue): explain the error, suggest a fix
 3. If runtime crash: get_logs → check for missing env vars or config issues
-4. If port/name conflict: redeploy with deploy_project({ force: true })
+4. If port/name conflict: create_deploy_plan + execute_deploy_plan with force: true
 5. If all else fails: explain what went wrong, what you tried, give a clear next step
 
 Common failure patterns:
@@ -139,20 +141,23 @@ Common failure patterns:
 1. scan_project({ repo_url: "..." }) — understand what we're deploying
 2. create_service({ name: "mydb", template: "postgresql" })
    → Response includes suggested_env: [{ key: "DATABASE_URL", value: "postgresql://..." }]
-3. deploy_project({ repo_url: "...", env_vars: '{"DATABASE_URL": "postgresql://..."}' })
-4. get_deploy_status({ project_name: "..." }) — poll until done
-5. If failed: get_build_log → debug_build_error
+3. create_deploy_plan({ repo_url: "...", env_vars: '{"DATABASE_URL": "postgresql://..."}' })
+4. execute_deploy_plan({ plan_id: "..." })
+5. get_deploy_status({ project_name: "..." }) — poll until done
+6. If failed: get_build_log → debug_build_error
 
 ### Quick database for a project (no service management needed)
 1. provision_database({ project_name: "myapp" })
    → Auto-creates PostgreSQL, sets DATABASE_URL, returns connection details
-2. redeploy_project({ project_name: "myapp" })
+2. create_deploy_plan({ project_name: "myapp" })
+3. execute_deploy_plan({ plan_id: "..." })
 
 ### Add service to existing project
 1. create_service({ name: "cache", template: "redis" })
    → suggested_env: [{ key: "REDIS_URL", value: "redis://ol-svc-cache:6379" }]
 2. set_env_vars({ project_name: "myapp", variables: '{"REDIS_URL": "redis://ol-svc-cache:6379"}' })
-3. redeploy_project({ project_name: "myapp" })
+3. create_deploy_plan({ project_name: "myapp" })
+4. execute_deploy_plan({ plan_id: "..." })
 
 ### Shared database for multiple projects
 1. create_service({ name: "shared-pg", template: "postgresql" }) — one database service
@@ -165,14 +170,15 @@ Common failure patterns:
 1. upload_secret_file({ project_name: "myapp", filename: "firebase-sa.json", content: '{"type":"service_account",...}' })
    → Encrypted, mounted at /run/secrets/firebase-sa.json
 2. set_env_vars({ project_name: "myapp", variables: '{"GOOGLE_APPLICATION_CREDENTIALS": "/run/secrets/firebase-sa.json"}' })
-3. redeploy_project({ project_name: "myapp" })
+3. create_deploy_plan({ project_name: "myapp" })
+4. execute_deploy_plan({ plan_id: "..." })
 
 ### TLS certificate (global, all projects)
 1. upload_secret_file({ filename: "ca-cert.pem", content: "-----BEGIN CERTIFICATE-----..." })
    → Global: available to all projects at /run/secrets/ca-cert.pem
 
 ### Deploy with stale container conflict
-- deploy_project({ repo_url: "...", force: true }) — auto-removes conflicting containers
+- create_deploy_plan({ repo_url: "...", force: true }) then execute_deploy_plan — auto-removes conflicting containers
 
 ### Zero-downtime production update
 1. deploy_blue_green({ project_name: "production-app" })
@@ -189,10 +195,10 @@ Common failure patterns:
    - URL: YOUR_OPENLANDER_HOST + webhookPath
    - Secret: the returned secret
    - Events: Push events (and optionally Pull request events for previews)
-3. Now every push to main auto-triggers redeploy_project
+3. Now every push to main auto-triggers create_deploy_plan + execute_deploy_plan
 
 ### Deploy to multiple environments
-1. deploy_project({ repo_url: "...", env_vars: '...' }) — auto-creates production env
+1. create_deploy_plan({ repo_url: "...", env_vars: '...' }) then execute_deploy_plan — auto-creates production env
 2. create_environment({ project_name: "myapp", type: "development", branch: "develop" })
 3. deploy_environment({ project_name: "myapp", environment_type: "development" })
 4. Each environment has its own container, port, and URL
@@ -207,11 +213,11 @@ When a user provides env vars (pasted .env file or key=value pairs):
    - Regular config values → keep as-is
 
 2. For localhost URLs, call list_services and replace with container hostnames:
-   - postgresql://localhost:5432 → postgresql://ol-svc-SERVICENAME:5432
-   - redis://127.0.0.1:6379 → redis://ol-svc-SERVICENAME:6379
-   - http://192.168.1.100:8080 → http://host.docker.internal:8080 (host service)
+    - postgresql://localhost:5432 → postgresql://ol-svc-SERVICENAME:5432
+    - redis://127.0.0.1:6379 → redis://ol-svc-SERVICENAME:6379
+    - http://192.168.1.100:8080 → http://host.docker.internal:8080 (host service)
 
-3. Apply all vars in one set_env_vars call, then redeploy_project.
+3. Apply all vars in one set_env_vars call, then create_deploy_plan + execute_deploy_plan.
 
 ### Build-Time Variables (Automatic)
 Environment variables with these prefixes are automatically injected as Docker build args:
@@ -221,16 +227,16 @@ Environment variables with these prefixes are automatically injected as Docker b
 - NUXT_PUBLIC_* (Nuxt)
 - PUBLIC_* (SvelteKit/general)
 - GATSBY_* (Gatsby)
-No extra configuration needed. Pass them via env_vars in deploy_project or set_env_vars — they'll be available at both build time and runtime.
+No extra configuration needed. Pass them via env_vars in create_deploy_plan or set_env_vars — they'll be available at both build time and runtime.
 
 ## Key Rules
 - Connection strings use Docker container names (ol-svc-*) as hostnames, NEVER localhost or 127.0.0.1.
 - For services running on the host machine (outside Docker), use host.docker.internal as hostname.
-- env_vars in deploy_project and set_env_vars both take a JSON string: '{"KEY": "value"}'.
-- set_env_vars requires redeploy_project afterward to take effect.
-- deploy_project runs preflight checks automatically. Use force=true to bypass name conflicts.
+- env_vars in create_deploy_plan and set_env_vars both take a JSON string: '{"KEY": "value"}'.
+- set_env_vars requires create_deploy_plan + execute_deploy_plan afterward to take effect.
+- create_deploy_plan runs preflight checks automatically. Use force=true to bypass name conflicts.
 - Second service of the same type gets a prefixed env key (e.g. ANALYTICS_DATABASE_URL instead of DATABASE_URL).
-- Deploys are non-blocking — deploy_project returns immediately. ALWAYS poll get_deploy_status afterward.
+- Deploys are non-blocking — execute_deploy_plan returns immediately. ALWAYS poll get_deploy_status afterward.
 - list_projects and get_deploy_status return a urls array with LAN and VPN access URLs (type: "lan" or "vpn"). Use these to tell the user how to access from other devices on the network.
 - provision_database is a shortcut for "create PostgreSQL + auto-set DATABASE_URL". Use create_service for more control (MySQL, Redis, MongoDB, custom images).
 - scan_project before first deploy is strongly recommended — it reveals framework, required env vars, and monorepo structure.
