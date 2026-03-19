@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.5] - Deploy Plan Bugfixes
+
+### Added
+
+- `deploy_only` parameter for `execute_deploy_plan` — deploy specific compose services (e.g., `["backend"]`)
+- `build_log_tail` in `get_deploy_status` — last 30 lines of build output included when phase is `failed`, for both single Dockerfile and compose builds
+- `update_deploy_plan` now returns full plan details (build, services, env, warnings) matching `create_deploy_plan` response
+- Auto-detect build context from `dockerfile_path` — `backend/Dockerfile` sets context to `backend/` instead of repo root
+- `buildContext` field in `ProjectConfig` for explicit Docker build context control
+- Docker Compose minimum version requirement (V2.3.0) with startup warning for older versions
+- Explicit system requirements in README (Docker Engine 20.10+, Compose V2.3.0+, Git 2.x)
+
+### Fixed
+
+- Compose plan routing — compose plans (`build.method: "compose"`) now correctly set `preferDockerfile: false`, preventing fallback to root Dockerfile
+- Env var regex — `\s*` after `=` consumed newlines across lines, causing multi-line capture; changed to `[ \t]*`
+- Required env filtering — `missing[]` now only includes `required: true` vars; optional vars with defaults no longer block deployment
+- Env var redaction bug — `redactPlanForStorage()` replaced env values with `[REDACTED]` in DB, then `executePlan()` passed masked values to containers; removed redaction entirely
+- `deploy_environment` mode switching — now passes `dockerfile_path` and `docker_target` from project record, preventing unexpected compose/dockerfile mode changes on redeploy
+- Compose `--progress=plain` compatibility — flag now requires Compose V2.3.0+; older versions skip it instead of failing
+
 ## [0.6.4] - Deploy Plan v2
 
 ### Added

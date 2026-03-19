@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -761,6 +761,24 @@ Phase 3 — PR Preview:
 | MCP 응답 전체 plan 상세 노출                              | ✅   |
 | dockerfile_path + docker_target 파라미터 추가             | ✅   |
 | estimated_seconds (이전 배포 기반 폴링 힌트)              | ✅   |
+
+---
+
+### v0.6.5 — Deploy Plan Bugfixes ✅
+
+**상태**: 완료
+
+| 항목                                                     | 상태 |
+| -------------------------------------------------------- | ---- |
+| deploy_only compose 서비스 선택 배포                     | ✅   |
+| get_deploy_status에 build_log_tail 포함 (failed 시 30줄) | ✅   |
+| update_deploy_plan 전체 plan 반환                        | ✅   |
+| compose plan 라우팅 수정 (preferDockerfile 버그)         | ✅   |
+| env regex 버그 수정 (\s\*가 \n 삼킴)                     | ✅   |
+| env redaction 버그 수정 ([REDACTED] → 실제 값 저장)      | ✅   |
+| deploy_environment 모드 전환 방지 (dockerfile_path 보존) | ✅   |
+| 서브디렉토리 Dockerfile build context 자동 감지          | ✅   |
+| Docker Compose 최소 버전 요구 (V2.3.0)                   | ✅   |
 
 ---
 
