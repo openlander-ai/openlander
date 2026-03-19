@@ -28,6 +28,13 @@ import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
 import type { BuildDebugger } from '../agent/debugger.js';
 import { extractProjectName } from './helpers.js';
+import {
+  getRouteName,
+  deriveServiceName,
+  resolveDockerfilePath,
+  detectFailStep,
+  parsePendingFix,
+} from './deploy/helpers.js';
 
 /**
  * Project configuration for a deployment.
@@ -147,11 +154,6 @@ interface PreviewDeployResult {
   error?: string;
 }
 
-interface PendingFixPayload {
-  filePath: string;
-  content: string;
-}
-
 /**
  * Deterministic deployment pipeline.
  *
@@ -168,6 +170,10 @@ interface PendingFixPayload {
  */
 export class DeployPipeline {
   private tunnels = new Map<string, CloudflareTunnel>();
+
+  private get detectFailStep(): (buildLog: string) => string {
+    return detectFailStep;
+  }
 
   constructor(
     private readonly docker: Docker,
@@ -2019,7 +2025,7 @@ export class DeployPipeline {
       return null;
     }
 
-    const parsed = this.parsePendingFix(rawPendingFix);
+    const parsed = parsePendingFix(rawPendingFix);
     if (!parsed) {
       throw new Error('Invalid pending fix payload in database');
     }
@@ -2040,66 +2046,4 @@ export class DeployPipeline {
     log.info({ projectId, filePath: normalizedPath }, 'Applied pending fix before build');
     return normalizedPath;
   }
-
-  private parsePendingFix(rawPendingFix: string): PendingFixPayload | null {
-    try {
-      const parsed = JSON.parse(rawPendingFix) as Record<string, unknown>;
-      if (typeof parsed.filePath !== 'string' || typeof parsed.content !== 'string') {
-        return null;
-      }
-      return {
-        filePath: parsed.filePath,
-        content: parsed.content,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  private detectFailStep(buildLog: string): string {
-    if (!buildLog.includes('[clone]')) return 'clone';
-    if (!buildLog.includes('[dockerfile]')) return 'dockerfile';
-    if (!buildLog.includes('[build]')) return 'build';
-    if (!buildLog.includes('[run]')) return 'run';
-    // If all steps completed but error still occurred, it's a runtime crash
-    if (buildLog.includes('Container crashed after start')) return 'runtime';
-    return 'unknown';
-  }
-}
-
-// --- Helpers ---
-
-function resolveDockerfilePath(clonePath: string, dockerfilePath?: string): string {
-  if (!dockerfilePath || dockerfilePath.trim().length === 0) {
-    return join(clonePath, 'Dockerfile');
-  }
-
-  const normalizedPath = dockerfilePath.trim().replace(/\\/g, '/');
-  if (normalizedPath.startsWith('/')) {
-    throw new Error('Dockerfile path must be relative');
-  }
-
-  const cloneRoot = resolve(clonePath);
-  const targetPath = resolve(clonePath, normalizedPath);
-  if (!targetPath.startsWith(`${cloneRoot}/`) && targetPath !== cloneRoot) {
-    throw new Error('Dockerfile path escaped repository root');
-  }
-
-  return targetPath;
-}
-
-function deriveServiceName(dockerfilePath: string): string {
-  const dir = dirname(dockerfilePath);
-  if (dir === '.' || dir === '') return 'main';
-  return dir.split('/')[0] ?? 'service';
-}
-
-function getRouteName(projectName: string, environmentType: string): string {
-  if (environmentType === 'production') {
-    return projectName;
-  }
-  if (environmentType === 'development') {
-    return `${projectName}-dev`;
-  }
-  return `${projectName}-${environmentType}`;
 }
