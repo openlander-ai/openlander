@@ -222,6 +222,9 @@ describe('MCP environment tools', () => {
       'project-123-development',
       {
         trigger: 'chat',
+        dockerfilePath: undefined,
+        dockerTarget: undefined,
+        _noCacheBuild: false,
       },
     );
     expect(result).toEqual({

@@ -90,6 +90,7 @@ const deployEnvironmentTool: ToolDef = {
     const input = args as {
       project_name: string;
       environment_type: 'production' | 'development';
+      no_cache?: boolean;
     };
 
     const project = getProjectByName(appCtx, input.project_name);
@@ -107,6 +108,7 @@ const deployEnvironmentTool: ToolDef = {
       trigger: 'chat',
       dockerfilePath: project.dockerfile_path || undefined,
       dockerTarget: project.docker_target ?? undefined,
+      _noCacheBuild: input.no_cache === true,
     });
 
     return {

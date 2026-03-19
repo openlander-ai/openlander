@@ -486,11 +486,29 @@ export class DeployPipeline {
     const routeName = getRouteName(projectName, environment.type);
     const shouldSyncProjectState = environment.type === 'production';
 
+    if (environment.container_id) {
+      try {
+        await this.docker.removeContainer(environment.container_id);
+      } catch {
+        // container may already be removed
+      }
+    }
+
     await eventBus.emit('deploy:start', { projectId, repoUrl });
 
-    this.db.updateEnvironment(environmentId, { status: 'building' });
+    this.db.updateEnvironment(environmentId, {
+      status: 'building',
+      containerId: null,
+      imageTag: null,
+      assignedPort: null,
+    });
     if (shouldSyncProjectState) {
-      this.db.updateProject(projectId, { status: 'building' });
+      this.db.updateProject(projectId, {
+        status: 'building',
+        containerId: null,
+        imageTag: null,
+        assignedPort: null,
+      });
     }
 
     let buildLog = '';
@@ -1497,7 +1515,7 @@ export class DeployPipeline {
   }
 
   /** Redeploy an existing project (pull latest, rebuild, swap containers). */
-  async redeploy(projectId: string): Promise<DeployResult> {
+  async redeploy(projectId: string, options?: { noCache?: boolean }): Promise<DeployResult> {
     const project = this.db.getProject(projectId);
     if (!project) {
       return {
@@ -1542,6 +1560,7 @@ export class DeployPipeline {
         project.dockerfile_path !== 'Dockerfile' ? project.dockerfile_path : undefined,
       _projectId: projectId,
       _preferredPort: previousPort,
+      _noCacheBuild: options?.noCache === true,
     });
   }
 

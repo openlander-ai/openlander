@@ -94,13 +94,14 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: restartProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
+      const noCache = (args['no_cache'] as boolean | undefined) === true;
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
       await context.appCtx.pipeline.stop(project.id);
-      const result = await context.appCtx.pipeline.redeploy(project.id);
+      const result = await context.appCtx.pipeline.redeploy(project.id, { noCache });
       return { status: 'restarted', project: projectName, ...result };
     },
   },

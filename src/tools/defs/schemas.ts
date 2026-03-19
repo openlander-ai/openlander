@@ -259,6 +259,12 @@ export const deployBlueGreenSchema = z.object({
 // Restart project schema
 export const restartProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  no_cache: z
+    .boolean()
+    .optional()
+    .describe(
+      'Force fresh Docker build without cache. Use when dependencies changed but Docker layers are stale.',
+    ),
 });
 
 // Stop project schema
@@ -379,6 +385,12 @@ export const listEnvironmentsSchema = z.object({
 export const deployEnvironmentSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
   environment_type: z.enum(['production', 'development']).describe('Environment to deploy'),
+  no_cache: z
+    .boolean()
+    .optional()
+    .describe(
+      'Force fresh Docker build without cache. Use when dependencies changed but Docker layers are stale.',
+    ),
 });
 
 // Deploy Plan Engine schemas
