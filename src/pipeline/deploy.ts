@@ -10,7 +10,7 @@ import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
 import { allocatePort, scanUsedPorts } from './port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname, getProjectUrl } from './traefik.js';
-import { CloudflareTunnel } from './tunnel.js';
+import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery, type BuildContext } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Database } from '../db/index.js';
@@ -35,6 +35,7 @@ import {
   detectFailStep,
   parsePendingFix,
 } from './deploy/helpers.js';
+import { TunnelManager } from './deploy/tunnel.js';
 
 /**
  * Project configuration for a deployment.
@@ -169,7 +170,7 @@ interface PreviewDeployResult {
  * Docker commands directly.
  */
 export class DeployPipeline {
-  private tunnels = new Map<string, CloudflareTunnel>();
+  private readonly tunnelManager: TunnelManager;
 
   private get detectFailStep(): (buildLog: string) => string {
     return detectFailStep;
@@ -184,6 +185,7 @@ export class DeployPipeline {
     private readonly autoDetector?: AutoDetector,
     private readonly buildDebugger?: BuildDebugger,
   ) {
+    this.tunnelManager = new TunnelManager(this.db);
     this.cleanupStaleTunnels();
     void this.cleanupOrphanContainers();
   }
@@ -193,16 +195,7 @@ export class DeployPipeline {
    * (the cloudflared child process doesn't survive restarts). Reset to internal.
    */
   private cleanupStaleTunnels(): void {
-    const projects = this.db.listProjects();
-    for (const project of projects) {
-      if (project.visibility === 'quick-share' || project.visibility === 'shared') {
-        log.info({ projectId: project.id, name: project.name }, 'Clearing stale tunnel state');
-        this.db.updateProject(project.id, {
-          visibility: 'internal',
-          publicUrl: null,
-        });
-      }
-    }
+    this.tunnelManager.cleanupStale();
   }
 
   private async cleanupOrphanContainers(): Promise<void> {
@@ -1975,39 +1968,16 @@ export class DeployPipeline {
 
   /** Create a TryCloudflare tunnel for a project. */
   async exposeTunnel(projectId: string, _port: number): Promise<string> {
-    const project = this.db.getProject(projectId);
-    if (!project) {
-      throw new Error(`Project not found: ${projectId}`);
-    }
-
-    const tunnel = new CloudflareTunnel();
-    const url = await tunnel.start(project.name);
-    this.tunnels.set(projectId, tunnel);
-
-    this.db.updateProject(projectId, {
-      visibility: 'quick-share',
-      publicUrl: url,
-    });
-
-    await eventBus.emit('tunnel:url', { projectId, url });
-    return url;
+    return this.tunnelManager.expose(projectId, _port);
   }
 
   /** Close a project's tunnel. */
   closeTunnel(projectId: string): void {
-    const tunnel = this.tunnels.get(projectId);
-    if (tunnel) {
-      tunnel.stop();
-      this.tunnels.delete(projectId);
-      this.db.updateProject(projectId, {
-        visibility: 'internal',
-        publicUrl: null,
-      });
-    }
+    this.tunnelManager.close(projectId);
   }
 
   getTunnel(projectId: string): CloudflareTunnel | undefined {
-    return this.tunnels.get(projectId);
+    return this.tunnelManager.get(projectId);
   }
 
   /** Get container logs. */

@@ -37,8 +37,8 @@ describe('DeployPipeline deployEnvironment', () => {
   let docker: Docker;
   let env: EnvLike;
   let pipeline: DeployPipeline;
-  let cloneRepoSpy: ReturnType<typeof vi.spyOn<typeof gitPipeline, 'cloneRepo'>>;
-  let ensureDockerfileSpy: ReturnType<typeof vi.spyOn<typeof dockerfileGen, 'ensureDockerfile'>>;
+  let cloneRepoSpy: ReturnType<typeof vi.spyOn>;
+  let ensureDockerfileSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -676,10 +676,11 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     const tunnel = { stop: vi.fn() };
-    (pipeline as unknown as { tunnels: Map<string, { stop: () => void }> }).tunnels.set(
-      'p17',
-      tunnel,
-    );
+    (
+      pipeline as unknown as {
+        tunnelManager: { tunnels: Map<string, { stop: () => void }> };
+      }
+    ).tunnelManager.tunnels.set('p17', tunnel);
 
     pipeline.closeTunnel('p17');
 

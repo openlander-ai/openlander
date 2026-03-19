@@ -604,7 +604,11 @@ describe('DeployPipeline deploy controls', () => {
 
   it('getTunnel returns active tunnel reference when present', () => {
     const tunnel = { stop: vi.fn() };
-    (pipeline as unknown as { tunnels: Map<string, unknown> }).tunnels.set('p18', tunnel);
+    (
+      pipeline as unknown as {
+        tunnelManager: { tunnels: Map<string, unknown> };
+      }
+    ).tunnelManager.tunnels.set('p18', tunnel);
 
     expect(pipeline.getTunnel('p18')).toBe(tunnel);
     expect(pipeline.getTunnel('missing')).toBeUndefined();
