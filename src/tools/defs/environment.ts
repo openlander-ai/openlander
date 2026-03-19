@@ -103,7 +103,11 @@ const deployEnvironmentTool: ToolDef = {
       };
     }
 
-    void appCtx.pipeline.deployEnvironment(project.id, environment.id, { trigger: 'chat' });
+    void appCtx.pipeline.deployEnvironment(project.id, environment.id, {
+      trigger: 'chat',
+      dockerfilePath: project.dockerfile_path || undefined,
+      dockerTarget: project.docker_target ?? undefined,
+    });
 
     return {
       status: 'building',
