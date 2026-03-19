@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -736,6 +736,20 @@ Phase 3 — PR Preview:
 
 ---
 
+### v0.6.3 — Port Stability & API Fix ✅
+
+**상태**: 완료
+
+| 항목                                                   | 상태 |
+| ------------------------------------------------------ | ---- |
+| allocatePort() preferredPort 옵션 추가                 | ✅   |
+| redeploy 시 기존 포트 보존 (preferredPort 전달)        | ✅   |
+| getUsedPorts() environments 테이블 포함                | ✅   |
+| Project detail API camelCase 매핑 (publicUrl, repoUrl) | ✅   |
+| remove_project 도구 설명에 포트 유실 경고 추가         | ✅   |
+
+---
+
 ### v1.0.0 — Stable Release (TBD)
 
 **상태**: TBD — 품질 안정화 진행 중 | **관련 문서**: [`release/v1.0.0-ai-copilot.md`](release/v1.0.0-ai-copilot.md)
@@ -795,7 +809,7 @@ Phase 3 — PR Preview:
 
 **상태**: 품질 안정화 진행 중 — 도그푸딩에서 다수 버그/개선점 발견
 
-v0.6.2까지의 기능을 안정화하고 품질 검증 완료 후 릴리즈 예정. 날짜 미정.
+v0.6.3까지의 기능을 안정화하고 품질 검증 완료 후 릴리즈 예정. 날짜 미정.
 
 #### 필수 품질 항목 (4건 전부 완료) ✅
 
@@ -921,7 +935,7 @@ v0.6.2까지의 기능을 안정화하고 품질 검증 완료 후 릴리즈 예
 
 ## 검증 기준
 
-**2026-03-19 기준 (v0.6.2)**:
+**2026-03-19 기준 (v0.6.3)**:
 
 ```
 ✅ npm run build — 성공
@@ -930,6 +944,7 @@ v0.6.2까지의 기능을 안정화하고 품질 검증 완료 후 릴리즈 예
 ✅ v0.6.1 — env vars merge fix, list_env_vars, healthcheck Docker fallback
 ✅ v0.6.2 — compose service filtering, secret file mount, env escaping,
             build log detail, redeploy port fix, Traefik HTTP Provider
+✅ v0.6.3 — port stability on redeploy, environments port tracking, public URL API fix
 ```
 
 ---

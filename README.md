@@ -187,6 +187,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.6.0** | Architecture Rebuild  | Done   | Deterministic deploy pipeline, unified ToolDef registry (40+ tools), shared infra (PostgreSQL/MySQL/Redis), deploy terminal UI, AI co-pilot (7 features), webhook tools |
 | **v0.6.1** | Env Vars Fix          | Done   | Env vars merge (not replace), list_env_vars tool, health monitor Docker fallback                                                                                        |
 | **v0.6.2** | Compose & Traefik     | Done   | Compose service filtering, secret file mount, env escaping, Traefik HTTP Provider, build log detail, redeploy port fix                                                  |
+| **v0.6.3** | Port Stability        | Done   | Port preservation on redeploy, environments port tracking, public URL API fix                                                                                           |
 | **v1.0.0** | Stable Release        | TBD    | Quality hardening, comprehensive testing, production-readiness improvements                                                                                             |
 
 ## MCP Integration (AI Coding Agents)

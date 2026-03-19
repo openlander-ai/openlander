@@ -12,7 +12,7 @@
   },
   "hooks": {
     "before:bump": "npm run build",
-    "after:bump": "cd web && npm pkg set version=${version}"
+    "after:bump": "cd web && npm pkg set version=${version} && npm install --package-lock-only && cd .. && npm install --package-lock-only"
   },
   "plugins": {
     "@release-it/keep-a-changelog": {
