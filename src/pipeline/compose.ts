@@ -126,6 +126,8 @@ interface ParsedComposePsRow {
 }
 
 export class ComposePipeline {
+  private supportsProgress: boolean | null = null;
+
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
@@ -134,6 +136,22 @@ export class ComposePipeline {
     private readonly env?: EnvManager,
   ) {
     void this.docker;
+  }
+
+  private async checkProgressSupport(): Promise<boolean> {
+    if (this.supportsProgress !== null) return this.supportsProgress;
+    try {
+      const result = await this.execCompose('/dev/null', ['version', '--short']);
+      const version = result.stdout.trim();
+      const parts = version.replace(/^v/i, '').split('.');
+      const major = parseInt(parts[0] ?? '0', 10);
+      const minor = parseInt(parts[1] ?? '0', 10);
+      // --progress added in Compose V2.3.0
+      this.supportsProgress = major > 2 || (major === 2 && minor >= 3);
+    } catch {
+      this.supportsProgress = false;
+    }
+    return this.supportsProgress;
   }
 
   detectComposeFile(projectPath: string): string | null {
@@ -553,14 +571,12 @@ export class ComposePipeline {
         deployService: async (service) => {
           this.jobManager?.updatePhase(parentProjectId, 'starting');
 
-          const upResult = await this.execCompose(config.composePath, [
-            'up',
-            '-d',
-            '--build',
-            '--no-deps',
-            '--progress=plain',
-            service.name,
-          ]);
+          const progressSupported = await this.checkProgressSupport();
+          const upArgs = ['up', '-d', '--build', '--no-deps'];
+          if (progressSupported) upArgs.push('--progress=plain');
+          upArgs.push(service.name);
+
+          const upResult = await this.execCompose(config.composePath, upArgs);
           buildLog += `[compose up ${service.name}]\n${upResult.stdout}${upResult.stderr}`;
 
           if (upResult.exitCode !== 0) {

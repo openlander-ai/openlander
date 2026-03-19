@@ -51,6 +51,9 @@ if (!isBunRuntime) {
       argsOrOptions?: readonly string[] | import('node:child_process').SpawnOptions,
     ) => {
       const args = Array.isArray(argsOrOptions) ? [...argsOrOptions] : [];
+      if (args.includes('version') && args.includes('--short')) {
+        return createMockProcess('2.24.0\n', '', 0);
+      }
       return mockSpawnImplementation(command, args);
     }) as unknown as typeof import('node:child_process').spawn;
     const mockedExec = (() => {
