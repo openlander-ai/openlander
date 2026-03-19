@@ -890,7 +890,7 @@ export class ComposePipeline {
     const allocateUniquePort = async (): Promise<number> => {
       let min = 10001;
       for (;;) {
-        const candidate = await allocatePort(this.db, this.docker, min);
+        const candidate = await allocatePort(this.db, this.docker, { rangeStart: min });
         if (!reservedPorts.has(candidate)) {
           reservedPorts.add(candidate);
           return candidate;

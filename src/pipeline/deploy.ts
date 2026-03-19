@@ -59,6 +59,7 @@ export interface ProjectConfig {
   _projectId?: string;
   _retryCount?: number;
   _noCacheBuild?: boolean;
+  _preferredPort?: number;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
   composeServices?: string[];
 }
@@ -704,7 +705,9 @@ export class DeployPipeline {
       buildLog += `[build] ${imageTag} (${String(buildDuration)}ms)\n`;
 
       // Step 4: docker run
-      const port = await allocatePort(this.db, this.docker);
+      const port = await allocatePort(this.db, this.docker, {
+        preferredPort: config._preferredPort,
+      });
       const containerPort = parseDockerfileExposePort(dockerfilePath) ?? port;
       const envVars = {
         ...config.envVars,
@@ -1503,12 +1506,12 @@ export class DeployPipeline {
 
     await this.cleanupProjectContainers(projectId, 'remove');
 
-    // Save current image for rollback
     if (project.image_tag) {
       this.db.updateProject(projectId, { previousImageTag: project.image_tag });
     }
 
-    // Reset project + environment state for fresh deploy (keep same ID so build/stream listeners work)
+    const previousPort = project.assigned_port ?? undefined;
+
     this.db.updateProject(projectId, {
       status: 'building',
       containerId: null,
@@ -1534,6 +1537,7 @@ export class DeployPipeline {
       dockerfilePath:
         project.dockerfile_path !== 'Dockerfile' ? project.dockerfile_path : undefined,
       _projectId: projectId,
+      _preferredPort: previousPort,
     });
   }
 

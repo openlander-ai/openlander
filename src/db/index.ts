@@ -824,16 +824,27 @@ export class Database {
 
   // ===== Ports =====
 
-  /** Get all ports currently assigned to projects. */
+  /** Get all ports currently assigned to projects and environments. */
   getUsedPorts(): number[] {
-    const rows = this.db
+    const projectPorts = this.db
       .select({ assigned_port: projects.assigned_port })
       .from(projects)
       .where(isNotNull(projects.assigned_port))
-      .all();
-    return rows.flatMap((r: { assigned_port: number | null }) =>
-      r.assigned_port === null ? [] : [r.assigned_port],
-    );
+      .all()
+      .flatMap((r: { assigned_port: number | null }) =>
+        r.assigned_port === null ? [] : [r.assigned_port],
+      );
+
+    const envPorts = this.db
+      .select({ assigned_port: environments.assigned_port })
+      .from(environments)
+      .where(isNotNull(environments.assigned_port))
+      .all()
+      .flatMap((r: { assigned_port: number | null }) =>
+        r.assigned_port === null ? [] : [r.assigned_port],
+      );
+
+    return [...new Set([...projectPorts, ...envPorts])];
   }
 
   // ===== Environment Variables =====

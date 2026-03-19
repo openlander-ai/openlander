@@ -154,20 +154,24 @@ export function clearPortScanCache(): void {
   portScanCache = null;
 }
 
-/**
- * Allocate a unique port for a new container.
- *
- * Scans all port sources (DB, Docker, OS) and returns
- * the next available one in the range.
- */
+export interface AllocatePortOptions {
+  preferredPort?: number;
+  rangeStart?: number;
+  rangeEnd?: number;
+}
+
 export async function allocatePort(
   db: Database,
   docker: Docker,
-  rangeStart = PORT_RANGE_START,
-  rangeEnd = PORT_RANGE_END,
+  options: AllocatePortOptions = {},
 ): Promise<number> {
+  const { preferredPort, rangeStart = PORT_RANGE_START, rangeEnd = PORT_RANGE_END } = options;
   const usedPorts = await scanUsedPorts(db, docker);
   const usedSet = new Set(usedPorts.all);
+
+  if (preferredPort && !usedSet.has(preferredPort)) {
+    return preferredPort;
+  }
 
   for (let port = rangeStart; port <= rangeEnd; port++) {
     if (!usedSet.has(port)) {

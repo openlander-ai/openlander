@@ -29,7 +29,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   {
     name: 'remove_project',
     description:
-      'Permanently remove a project — deletes the container, image, and database record. DESTRUCTIVE — cannot be undone. Use only when user explicitly wants to delete a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND. To just stop without deleting, use stop_project instead.',
+      'Permanently remove a project — deletes the container, image, and database record. DESTRUCTIVE — cannot be undone. WARNING: Port assignment is lost; re-deploying the same project name will get a DIFFERENT port, breaking any hardcoded port references (env vars, URLs). To update code and redeploy without losing the port, use restart_project instead. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Remove a project and its container entirely.',
     inputSchema: removeProjectSchema,
     execute: async (args, context) => {

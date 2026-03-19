@@ -211,6 +211,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       ...project,
       port: project.assigned_port ?? null,
       url: project.assigned_port ? getProjectUrl(project.name) : null,
+      publicUrl: project.public_url ?? null,
+      repoUrl: project.repo_url,
       created_at: normalizeTimestamp(project.created_at),
       updated_at: normalizeTimestamp(project.updated_at),
       environments: environments.map(mapEnvironment),

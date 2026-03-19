@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.3] - Port Stability & API Fix
+
+### Added
+
+- Port preservation on redeploy — `allocatePort()` now accepts `preferredPort` option, and `redeploy()` passes the previous port so projects keep the same port across redeploys
+- `getUsedPorts()` now queries both `projects` and `environments` tables, preventing UNIQUE constraint collisions from orphaned environment port records
+
+### Fixed
+
+- Project detail API (`GET /api/projects/:id`) now returns `publicUrl` and `repoUrl` in camelCase — previously returned raw snake_case (`public_url`, `repo_url`) causing the web UI to lose public URL on browser refresh
+- `remove_project` tool description now warns that port assignment is lost on removal, guiding AI agents to use `restart_project` instead
+
 ## [0.6.2] - Compose, Env Escaping, Traefik HTTP Provider
 
 ### Added

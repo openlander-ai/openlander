@@ -53,7 +53,7 @@ describe('Port Allocation', () => {
   });
 
   it('allocates first port in range', async () => {
-    const port = await allocatePort(db, docker, 10001, 10010);
+    const port = await allocatePort(db, docker, { rangeStart: 10001, rangeEnd: 10010 });
     expect(port).toBe(10001);
   });
 
@@ -62,7 +62,7 @@ describe('Port Allocation', () => {
     db.createProject({ id: 'p1', name: 'project-1', repoUrl: 'https://github.com/test/test' });
     db.updateProject('p1', { assignedPort: 10001 });
 
-    const port = await allocatePort(db, docker, 10001, 10010);
+    const port = await allocatePort(db, docker, { rangeStart: 10001, rangeEnd: 10010 });
     expect(port).toBe(10002);
   });
 
@@ -76,8 +76,29 @@ describe('Port Allocation', () => {
     db.createProject({ id: 'p3', name: 'project-3', repoUrl: 'https://github.com/test/c' });
     db.updateProject('p3', { assignedPort: 10003 });
 
-    const port = await allocatePort(db, docker, 10001, 10010);
+    const port = await allocatePort(db, docker, { rangeStart: 10001, rangeEnd: 10010 });
     expect(port).toBe(10004);
+  });
+
+  it('returns preferred port when available', async () => {
+    const port = await allocatePort(db, docker, {
+      preferredPort: 10005,
+      rangeStart: 10001,
+      rangeEnd: 10010,
+    });
+    expect(port).toBe(10005);
+  });
+
+  it('falls back to range when preferred port is taken', async () => {
+    db.createProject({ id: 'p1', name: 'project-1', repoUrl: 'https://github.com/test/a' });
+    db.updateProject('p1', { assignedPort: 10005 });
+
+    const port = await allocatePort(db, docker, {
+      preferredPort: 10005,
+      rangeStart: 10001,
+      rangeEnd: 10010,
+    });
+    expect(port).toBe(10001);
   });
 
   it('throws when all ports exhausted', async () => {
@@ -91,7 +112,9 @@ describe('Port Allocation', () => {
     db.createProject({ id: 'p3', name: 'project-3', repoUrl: 'https://github.com/test/c' });
     db.updateProject('p3', { assignedPort: 10003 });
 
-    await expect(allocatePort(db, docker, 10001, 10003)).rejects.toThrow('No available ports');
+    await expect(allocatePort(db, docker, { rangeStart: 10001, rangeEnd: 10003 })).rejects.toThrow(
+      'No available ports',
+    );
   });
 
   it('isPortAvailable returns true for unused port', () => {
