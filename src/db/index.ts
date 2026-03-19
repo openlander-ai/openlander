@@ -1,40 +1,23 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
-import { ProjectAlreadyExistsError } from '../errors.js';
-
+import { isNotNull } from 'drizzle-orm';
 import { createDrizzleDatabase, type DrizzleClient, type SqliteDatabase } from './drizzle.js';
 import { initializeDatabase } from './migration.js';
-import {
-  chatHistory,
-  deployLogs,
-  deployPlans,
-  domainMappings,
-  environments,
-  envVars,
-  globalSecrets,
-  oauthTokens,
-  projects,
-  secretFiles,
-  services,
-  timelineEvents,
-  webhookConfigs,
-} from './schema.drizzle.js';
-import type {
-  ProjectRow,
-  EnvironmentRow,
-  DeployLogRow,
-  TimelineEventRow,
-  ChatHistoryRow,
-  DomainMappingRow,
-  OAuthTokenRow,
-  WebhookConfigRow,
-  ServiceRow,
-  PendingFixRow,
-  DeployPlanRow,
-} from './types.js';
-
-// --- Row types (match DB schema) ---
+import { environments, projects } from './schema.drizzle.js';
+import { ProjectRepo } from './repos/project.repo.js';
+import { EnvironmentRepo } from './repos/environment.repo.js';
+import { EnvVarRepo } from './repos/env-var.repo.js';
+import { GlobalSecretRepo } from './repos/global-secret.repo.js';
+import { SecretFileRepo } from './repos/secret-file.repo.js';
+import { ServiceRepo } from './repos/service.repo.js';
+import { DeployLogRepo } from './repos/deploy-log.repo.js';
+import { TimelineRepo } from './repos/timeline.repo.js';
+import { ChatRepo } from './repos/chat.repo.js';
+import { DomainMappingRepo } from './repos/domain-mapping.repo.js';
+import { OAuthRepo } from './repos/oauth.repo.js';
+import { WebhookRepo } from './repos/webhook.repo.js';
+import { DeployPlanRepo } from './repos/deploy-plan.repo.js';
+import type { ProjectRow } from './types.js';
 
 export type {
   EnvironmentType,
@@ -51,1207 +34,113 @@ export type {
   DeployPlanRow,
 } from './types.js';
 
-// --- Database class ---
-
-/**
- * SQLite database for OpenLander state.
- *
- * Stores: projects, env vars, deploy logs, chat history, domain mappings.
- * Uses WAL mode for better concurrent read performance.
- */
+// prettier-ignore
 export class Database {
   private sqlite: SqliteDatabase;
   private db: DrizzleClient;
+  private readonly projectRepo: ProjectRepo;
+  private readonly environmentRepo: EnvironmentRepo;
+  private readonly envVarRepo: EnvVarRepo;
+  private readonly globalSecretRepo: GlobalSecretRepo;
+  private readonly secretFileRepo: SecretFileRepo;
+  private readonly serviceRepo: ServiceRepo;
+  private readonly deployLogRepo: DeployLogRepo;
+  private readonly timelineRepo: TimelineRepo;
+  private readonly chatRepo: ChatRepo;
+  private readonly domainMappingRepo: DomainMappingRepo;
+  private readonly oauthRepo: OAuthRepo;
+  private readonly webhookRepo: WebhookRepo;
+  private readonly deployPlanRepo: DeployPlanRepo;
 
   constructor(dbPath: string) {
-    // Ensure directory exists
     mkdirSync(dirname(dbPath), { recursive: true });
-
     const { sqlite, db } = createDrizzleDatabase(dbPath);
     this.sqlite = sqlite;
     this.db = db;
-
     initializeDatabase(this.sqlite);
-  }
-
-  // ===== Projects =====
-
-  /** Create a new project. */
-  createProject(project: {
-    id: string;
-    name: string;
-    repoUrl: string;
-    branch?: string;
-    parentProjectId?: string;
-    dockerfilePath?: string;
-    dockerTarget?: string;
-  }): ProjectRow {
-    try {
-      this.db
-        .insert(projects)
-        .values({
-          id: project.id,
-          name: project.name,
-          repo_url: project.repoUrl,
-          branch: project.branch ?? 'main',
-          parent_project_id: project.parentProjectId ?? null,
-          dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
-          docker_target: project.dockerTarget ?? null,
-        })
-        .run();
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('UNIQUE constraint failed')) {
-        throw new ProjectAlreadyExistsError(project.name);
-      }
-      throw error;
-    }
-
-    this.createEnvironment({
-      id: `${project.id}-production`,
-      projectId: project.id,
-      type: 'production',
-      branch: project.branch ?? 'main',
-    });
-
-    const created = this.getProject(project.id);
-    if (!created) throw new Error(`Failed to create project ${project.id}`);
-    return created;
-  }
-
-  /** Get a project by ID. */
-  getProject(id: string): ProjectRow | undefined {
-    return this.db.select().from(projects).where(eq(projects.id, id)).get() as
-      | ProjectRow
-      | undefined;
-  }
-
-  /** Get a project by name. */
-  getProjectByName(name: string): ProjectRow | undefined {
-    return this.db.select().from(projects).where(eq(projects.name, name)).get() as
-      | ProjectRow
-      | undefined;
-  }
-
-  /** List all projects, optionally filtered by status. */
-  listProjects(status?: ProjectRow['status']): ProjectRow[] {
-    if (status) {
-      return this.db
-        .select()
-        .from(projects)
-        .where(eq(projects.status, status))
-        .orderBy(desc(projects.updated_at))
-        .all() as ProjectRow[];
-    }
-    return this.db.select().from(projects).orderBy(desc(projects.updated_at)).all() as ProjectRow[];
-  }
-
-  /** Update project fields. Only provided fields are updated. */
-  updateProject(
-    id: string,
-    updates: Partial<{
-      status: ProjectRow['status'];
-      visibility: ProjectRow['visibility'];
-      assignedPort: number | null;
-      containerId: string | null;
-      imageTag: string | null;
-      previousImageTag: string | null;
-      publicUrl: string | null;
-      parentProjectId: string | null;
-      dockerfilePath: string;
-      dockerTarget: string | null;
-      buildMethod: ProjectRow['build_method'];
-      pendingFix: string | null;
-      accessCode: string | null;
-      accessCodeIv: string | null;
-      isPreview: 0 | 1;
-      prNumber: number | null;
-      branch: string;
-    }>,
-  ): void {
-    const setValues: Partial<typeof projects.$inferInsert> = {};
-
-    if (updates.status !== undefined) {
-      setValues.status = updates.status;
-    }
-    if (updates.visibility !== undefined) {
-      setValues.visibility = updates.visibility;
-    }
-    if (updates.assignedPort !== undefined) {
-      setValues.assigned_port = updates.assignedPort;
-    }
-    if (updates.containerId !== undefined) {
-      setValues.container_id = updates.containerId;
-    }
-    if (updates.imageTag !== undefined) {
-      setValues.image_tag = updates.imageTag;
-    }
-    if (updates.previousImageTag !== undefined) {
-      setValues.previous_image_tag = updates.previousImageTag;
-    }
-    if (updates.publicUrl !== undefined) {
-      setValues.public_url = updates.publicUrl;
-    }
-    if (updates.parentProjectId !== undefined) {
-      setValues.parent_project_id = updates.parentProjectId;
-    }
-    if (updates.dockerfilePath !== undefined) {
-      setValues.dockerfile_path = updates.dockerfilePath;
-    }
-    if (updates.dockerTarget !== undefined) {
-      setValues.docker_target = updates.dockerTarget;
-    }
-    if (updates.buildMethod !== undefined) {
-      setValues.build_method = updates.buildMethod;
-    }
-    if (updates.pendingFix !== undefined) {
-      setValues.pending_fix = updates.pendingFix;
-    }
-    if (updates.accessCode !== undefined) {
-      setValues.access_code = updates.accessCode;
-    }
-    if (updates.accessCodeIv !== undefined) {
-      setValues.access_code_iv = updates.accessCodeIv;
-    }
-    if (updates.isPreview !== undefined) {
-      setValues.is_preview = updates.isPreview;
-    }
-    if (updates.prNumber !== undefined) {
-      setValues.pr_number = updates.prNumber;
-    }
-    if (updates.branch !== undefined) {
-      setValues.branch = updates.branch;
-    }
-
-    if (Object.keys(setValues).length === 0) return;
-
-    this.db
-      .update(projects)
-      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(projects.id, id))
-      .run();
-  }
-
-  setPendingFix(projectId: string, pendingFix: PendingFixRow): void {
-    this.updateProject(projectId, {
-      pendingFix: JSON.stringify(pendingFix),
-    });
-  }
-
-  consumePendingFix(projectId: string): string | null {
-    return this.transaction(() => {
-      const project = this.getProject(projectId);
-      const rawPendingFix = project?.pending_fix ?? null;
-      if (!rawPendingFix) {
-        return null;
-      }
-      this.updateProject(projectId, { pendingFix: null });
-      return rawPendingFix;
-    });
-  }
-
-  /** Delete a project and all associated data (cascading). */
-  deleteProject(id: string): void {
-    this.db.delete(projects).where(eq(projects.id, id)).run();
-  }
-
-  /** Get child projects (services) of a parent project. */
-  getChildProjects(parentId: string): ProjectRow[] {
-    return this.db
-      .select()
-      .from(projects)
-      .where(eq(projects.parent_project_id, parentId))
-      .orderBy(asc(projects.name))
-      .all() as ProjectRow[];
-  }
-
-  getPreviewProjects(parentProjectId: string): ProjectRow[] {
-    return this.db
-      .select()
-      .from(projects)
-      .where(and(eq(projects.parent_project_id, parentProjectId), eq(projects.is_preview, 1)))
-      .orderBy(desc(projects.updated_at))
-      .all() as ProjectRow[];
-  }
-
-  /** Check if a project is a parent (has children). */
-  isParentProject(id: string): boolean {
-    const row = this.db
-      .select({ cnt: count() })
-      .from(projects)
-      .where(eq(projects.parent_project_id, id))
-      .get();
-    return (row?.cnt ?? 0) > 0;
-  }
-
-  createEnvironment(environment: {
-    id: string;
-    projectId: string;
-    type: EnvironmentRow['type'];
-    branch: string;
-    status?: EnvironmentRow['status'];
-    assignedPort?: number | null;
-    containerId?: string | null;
-    imageTag?: string | null;
-    previousImageTag?: string | null;
-    publicUrl?: string | null;
-  }): EnvironmentRow {
-    this.db
-      .insert(environments)
-      .values({
-        id: environment.id,
-        project_id: environment.projectId,
-        type: environment.type,
-        branch: environment.branch,
-        status: environment.status ?? 'idle',
-        assigned_port: environment.assignedPort ?? null,
-        container_id: environment.containerId ?? null,
-        image_tag: environment.imageTag ?? null,
-        previous_image_tag: environment.previousImageTag ?? null,
-        public_url: environment.publicUrl ?? null,
-      })
-      .run();
-
-    const created = this.getEnvironment(environment.id);
-    if (!created) throw new Error(`Failed to create environment ${environment.id}`);
-    return created;
-  }
-
-  getEnvironment(id: string): EnvironmentRow | undefined {
-    return this.db.select().from(environments).where(eq(environments.id, id)).get() as
-      | EnvironmentRow
-      | undefined;
-  }
-
-  getEnvironmentsByProject(projectId: string): EnvironmentRow[] {
-    return this.db
-      .select()
-      .from(environments)
-      .where(eq(environments.project_id, projectId))
-      .orderBy(asc(environments.created_at))
-      .all() as EnvironmentRow[];
-  }
-
-  updateEnvironment(
-    id: string,
-    updates: Partial<{
-      branch: string;
-      status: EnvironmentRow['status'];
-      assignedPort: number | null;
-      containerId: string | null;
-      imageTag: string | null;
-      previousImageTag: string | null;
-      publicUrl: string | null;
-    }>,
-  ): void {
-    const setValues: Partial<typeof environments.$inferInsert> = {};
-
-    if (updates.branch !== undefined) {
-      setValues.branch = updates.branch;
-    }
-    if (updates.status !== undefined) {
-      setValues.status = updates.status;
-    }
-    if (updates.assignedPort !== undefined) {
-      setValues.assigned_port = updates.assignedPort;
-    }
-    if (updates.containerId !== undefined) {
-      setValues.container_id = updates.containerId;
-    }
-    if (updates.imageTag !== undefined) {
-      setValues.image_tag = updates.imageTag;
-    }
-    if (updates.previousImageTag !== undefined) {
-      setValues.previous_image_tag = updates.previousImageTag;
-    }
-    if (updates.publicUrl !== undefined) {
-      setValues.public_url = updates.publicUrl;
-    }
-
-    if (Object.keys(setValues).length === 0) return;
-
-    this.db
-      .update(environments)
-      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(environments.id, id))
-      .run();
-  }
-
-  deleteEnvironment(id: string): void {
-    this.db.delete(environments).where(eq(environments.id, id)).run();
-  }
-
-  // ===== Ports =====
-
-  /** Get all ports currently assigned to projects and environments. */
-  getUsedPorts(): number[] {
-    const projectPorts = this.db
-      .select({ assigned_port: projects.assigned_port })
-      .from(projects)
-      .where(isNotNull(projects.assigned_port))
-      .all()
-      .flatMap((r: { assigned_port: number | null }) =>
-        r.assigned_port === null ? [] : [r.assigned_port],
-      );
-
-    const envPorts = this.db
-      .select({ assigned_port: environments.assigned_port })
-      .from(environments)
-      .where(isNotNull(environments.assigned_port))
-      .all()
-      .flatMap((r: { assigned_port: number | null }) =>
-        r.assigned_port === null ? [] : [r.assigned_port],
-      );
-
-    return [...new Set([...projectPorts, ...envPorts])];
-  }
-
-  // ===== Environment Variables =====
-
-  getEnvVars(projectId: string, environmentId?: string): Record<string, string> {
-    const whereClause =
-      environmentId === undefined
-        ? and(eq(envVars.project_id, projectId), isNull(envVars.environment_id))
-        : and(eq(envVars.project_id, projectId), eq(envVars.environment_id, environmentId));
-
-    const rows = this.db
-      .select({ key: envVars.key, value: envVars.value })
-      .from(envVars)
-      .where(whereClause)
-      .all();
-
-    const result: Record<string, string> = {};
-    for (const row of rows) {
-      result[row.key] = row.value;
-    }
-    return result;
-  }
-
-  setEnvVar(projectId: string, key: string, value: string, environmentId?: string): void {
-    const whereClause =
-      environmentId === undefined
-        ? and(
-            eq(envVars.project_id, projectId),
-            isNull(envVars.environment_id),
-            eq(envVars.key, key),
-          )
-        : and(
-            eq(envVars.project_id, projectId),
-            eq(envVars.environment_id, environmentId),
-            eq(envVars.key, key),
-          );
-
-    const existing = this.db.select({ id: envVars.id }).from(envVars).where(whereClause).get() as
-      | { id: string }
-      | undefined;
-
-    if (existing) {
-      this.db.update(envVars).set({ value }).where(eq(envVars.id, existing.id)).run();
-      return;
-    }
-
-    this.db
-      .insert(envVars)
-      .values({
-        id: sql<string>`lower(hex(randomblob(8)))`,
-        project_id: projectId,
-        environment_id: environmentId ?? null,
-        key,
-        value,
-      })
-      .run();
-  }
-
-  setEnvVarsBulk(projectId: string, vars: Record<string, string>, environmentId?: string): void {
-    const transaction = this.sqlite.transaction(() => {
-      const existing = this.getEnvVars(projectId, environmentId);
-      for (const key of Object.keys(existing)) {
-        if (!(key in vars)) {
-          this.deleteEnvVar(projectId, key, environmentId);
-        }
-      }
-      for (const [key, value] of Object.entries(vars)) {
-        this.setEnvVar(projectId, key, value, environmentId);
-      }
-    });
-
-    transaction();
-  }
-
-  /** Merge env vars into existing ones (UPSERT only, no DELETE). Existing keys not in `vars` are preserved. */
-  mergeEnvVars(projectId: string, vars: Record<string, string>, environmentId?: string): void {
-    const transaction = this.sqlite.transaction(() => {
-      for (const [key, value] of Object.entries(vars)) {
-        this.setEnvVar(projectId, key, value, environmentId);
-      }
-    });
-
-    transaction();
-  }
-
-  deleteEnvVar(projectId: string, key: string, environmentId?: string): void {
-    const whereClause =
-      environmentId === undefined
-        ? and(
-            eq(envVars.project_id, projectId),
-            isNull(envVars.environment_id),
-            eq(envVars.key, key),
-          )
-        : and(
-            eq(envVars.project_id, projectId),
-            eq(envVars.environment_id, environmentId),
-            eq(envVars.key, key),
-          );
-
-    this.db.delete(envVars).where(whereClause).run();
-  }
-
-  /** Find all projects that have a specific env var key. */
-  findProjectsByEnvKey(key: string): string[] {
-    const rows = this.db
-      .selectDistinct({ project_id: envVars.project_id })
-      .from(envVars)
-      .where(eq(envVars.key, key))
-      .all();
-    return rows.map((r: { project_id: string }) => r.project_id);
-  }
-
-  // ===== Global Secrets =====
-
-  /** Get all global secrets (encrypted values — caller must decrypt). */
-  getGlobalSecrets(): Array<{
-    id: string;
-    key: string;
-    encrypted_value: string;
-    iv: string;
-    description: string | null;
-    created_at: string | null;
-    updated_at: string | null;
-  }> {
-    return this.db.select().from(globalSecrets).orderBy(asc(globalSecrets.key)).all();
-  }
-
-  /** Get a single global secret by key. */
-  getGlobalSecret(key: string):
-    | {
-        id: string;
-        key: string;
-        encrypted_value: string;
-        iv: string;
-        description: string | null;
-      }
-    | undefined {
-    return this.db.select().from(globalSecrets).where(eq(globalSecrets.key, key)).get();
-  }
-
-  /** Upsert a global secret (values must already be encrypted). */
-  setGlobalSecret(key: string, encryptedValue: string, iv: string, description?: string): void {
-    this.db
-      .insert(globalSecrets)
-      .values({
-        id: sql<string>`lower(hex(randomblob(8)))`,
-        key,
-        encrypted_value: encryptedValue,
-        iv,
-        description: description ?? null,
-        updated_at: sql`CURRENT_TIMESTAMP`,
-      })
-      .onConflictDoUpdate({
-        target: globalSecrets.key,
-        set: {
-          encrypted_value: encryptedValue,
-          iv,
-          description: description ?? null,
-          updated_at: sql`CURRENT_TIMESTAMP`,
-        },
-      })
-      .run();
-  }
-
-  /** Delete a global secret by key. Returns true if it existed. */
-  deleteGlobalSecret(key: string): boolean {
-    const existing = this.getGlobalSecret(key);
-    if (!existing) return false;
-    this.db.delete(globalSecrets).where(eq(globalSecrets.key, key)).run();
-    return true;
-  }
-
-  // ===== Secret Files =====
-
-  getSecretFiles(projectId: string | null): Array<{
-    id: string;
-    project_id: string | null;
-    filename: string;
-    encrypted_content: string;
-    iv: string;
-    mount_path: string;
-  }> {
-    const condition =
-      projectId === null ? isNull(secretFiles.project_id) : eq(secretFiles.project_id, projectId);
-    return this.db.select().from(secretFiles).where(condition).all();
-  }
-
-  getSecretFilesForDeploy(projectId: string): Array<{
-    filename: string;
-    encrypted_content: string;
-    iv: string;
-    mount_path: string;
-  }> {
-    return this.db
-      .select({
-        filename: secretFiles.filename,
-        encrypted_content: secretFiles.encrypted_content,
-        iv: secretFiles.iv,
-        mount_path: secretFiles.mount_path,
-      })
-      .from(secretFiles)
-      .where(or(eq(secretFiles.project_id, projectId), isNull(secretFiles.project_id)))
-      .all();
-  }
-
-  upsertSecretFile(
-    projectId: string | null,
-    filename: string,
-    encryptedContent: string,
-    iv: string,
-    mountPath: string = '/run/secrets',
-  ): void {
-    this.db
-      .insert(secretFiles)
-      .values({
-        id: sql<string>`lower(hex(randomblob(8)))`,
-        project_id: projectId,
-        filename,
-        encrypted_content: encryptedContent,
-        iv,
-        mount_path: mountPath,
-        updated_at: sql`CURRENT_TIMESTAMP`,
-      })
-      .onConflictDoUpdate({
-        target: [secretFiles.project_id, secretFiles.filename],
-        set: {
-          encrypted_content: encryptedContent,
-          iv,
-          mount_path: mountPath,
-          updated_at: sql`CURRENT_TIMESTAMP`,
-        },
-      })
-      .run();
-  }
-
-  deleteSecretFile(projectId: string | null, filename: string): boolean {
-    const existing = this.db
-      .select({ id: secretFiles.id })
-      .from(secretFiles)
-      .where(
-        projectId === null
-          ? and(isNull(secretFiles.project_id), eq(secretFiles.filename, filename))
-          : and(eq(secretFiles.project_id, projectId), eq(secretFiles.filename, filename)),
-      )
-      .get();
-    if (!existing) return false;
-    this.db.delete(secretFiles).where(eq(secretFiles.id, existing.id)).run();
-    return true;
-  }
-
-  createService(service: {
-    id: string;
-    name: string;
-    type: string;
-    image: string;
-    containerName: string;
-    port: number;
-    envVars?: string;
-    credentials?: string;
-  }): ServiceRow {
-    this.db
-      .insert(services)
-      .values({
-        id: service.id,
-        name: service.name,
-        type: service.type,
-        image: service.image,
-        container_name: service.containerName,
-        port: service.port,
-        env_vars: service.envVars ?? null,
-        credentials: service.credentials ?? null,
-      })
-      .run();
-
-    const created = this.getService(service.id);
-    if (!created) throw new Error(`Failed to create service ${service.id}`);
-    return created;
-  }
-
-  getService(id: string): ServiceRow | undefined {
-    return this.db.select().from(services).where(eq(services.id, id)).get() as
-      | ServiceRow
-      | undefined;
-  }
-
-  listServices(): ServiceRow[] {
-    return this.db.select().from(services).orderBy(desc(services.updated_at)).all() as ServiceRow[];
-  }
-
-  updateService(
-    id: string,
-    updates: Partial<{
-      status: ServiceRow['status'];
-      containerId: string | null;
-    }>,
-  ): void {
-    const setValues: Partial<typeof services.$inferInsert> = {};
-
-    if (updates.status !== undefined) {
-      setValues.status = updates.status;
-    }
-    if (updates.containerId !== undefined) {
-      setValues.container_id = updates.containerId;
-    }
-
-    if (Object.keys(setValues).length === 0) return;
-
-    this.db
-      .update(services)
-      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(services.id, id))
-      .run();
-  }
-
-  deleteService(id: string): void {
-    this.db.delete(services).where(eq(services.id, id)).run();
-  }
-
-  // ===== Deploy Logs =====
-
-  /** Record a deployment log entry. */
-  createDeployLog(log: {
-    id: string;
-    projectId: string;
-    environmentId?: string;
-    status: DeployLogRow['status'];
-    trigger: DeployLogRow['trigger'];
-    commitSha?: string;
-    buildLog?: string;
-    durationMs?: number;
-  }): void {
-    this.db
-      .insert(deployLogs)
-      .values({
-        id: log.id,
-        project_id: log.projectId,
-        environment_id: log.environmentId ?? null,
-        status: log.status,
-        trigger: log.trigger,
-        commit_sha: log.commitSha ?? null,
-        build_log: log.buildLog ?? null,
-        duration_ms: log.durationMs ?? null,
-      })
-      .run();
-  }
-
-  /** Get deploy logs for a project, most recent first. */
-  getDeployLogs(projectId: string, limit = 20, environmentId?: string): DeployLogRow[] {
-    const whereClause = environmentId
-      ? and(eq(deployLogs.project_id, projectId), eq(deployLogs.environment_id, environmentId))
-      : eq(deployLogs.project_id, projectId);
-
-    return this.db
-      .select()
-      .from(deployLogs)
-      .where(whereClause)
-      .orderBy(desc(sql`rowid`))
-      .limit(limit)
-      .all() as DeployLogRow[];
-  }
-
-  /** Get the most recent deploy log for a project. */
-  getLastDeployLog(projectId: string, environmentId?: string): DeployLogRow | undefined {
-    const whereClause = environmentId
-      ? and(eq(deployLogs.project_id, projectId), eq(deployLogs.environment_id, environmentId))
-      : eq(deployLogs.project_id, projectId);
-
-    return this.db
-      .select()
-      .from(deployLogs)
-      .where(whereClause)
-      .orderBy(desc(sql`rowid`))
-      .limit(1)
-      .get() as DeployLogRow | undefined;
-  }
-
-  /** Get a single deploy log by ID. */
-  getDeployLog(deployId: string): DeployLogRow | undefined {
-    return this.db.select().from(deployLogs).where(eq(deployLogs.id, deployId)).get() as
-      | DeployLogRow
-      | undefined;
-  }
-
-  createTimelineEvent(event: {
-    id: string;
-    projectId: string;
-    deployId?: string;
-    type: string;
-    message: string;
-    detail?: string;
-    severity?: string;
-    percent?: number;
-    toolName?: string;
-    actionButtons?: string;
-    createdAt?: string;
-  }): void {
-    this.db
-      .insert(timelineEvents)
-      .values({
-        id: event.id,
-        project_id: event.projectId,
-        deploy_id: event.deployId ?? null,
-        type: event.type,
-        message: event.message,
-        detail: event.detail ?? null,
-        severity: event.severity ?? null,
-        percent: event.percent ?? null,
-        tool_name: event.toolName ?? null,
-        action_buttons: event.actionButtons ?? null,
-        created_at: event.createdAt ?? new Date().toISOString(),
-      })
-      .onConflictDoNothing({ target: timelineEvents.id })
-      .run();
-
-    this.sqlite
-      .prepare(
-        `DELETE FROM timeline_events
-         WHERE project_id = ?
-           AND id NOT IN (
-             SELECT id
-             FROM timeline_events
-             WHERE project_id = ?
-             ORDER BY datetime(created_at) DESC, rowid DESC
-             LIMIT 200
-           )`,
-      )
-      .run(event.projectId, event.projectId);
-  }
-
-  getTimelineEvents(projectId: string, limit = 200): TimelineEventRow[] {
-    return this.db
-      .select()
-      .from(timelineEvents)
-      .where(eq(timelineEvents.project_id, projectId))
-      .orderBy(desc(sql`datetime(${timelineEvents.created_at})`), desc(sql`rowid`))
-      .limit(limit)
-      .all() as TimelineEventRow[];
-  }
-
-  deleteTimelineEvents(projectId: string): void {
-    this.db.delete(timelineEvents).where(eq(timelineEvents.project_id, projectId)).run();
-  }
-
-  // ===== Chat History =====
-
-  /** Save a chat message. */
-  saveChatMessage(msg: {
-    id: string;
-    sessionId: string;
-    role: ChatHistoryRow['role'];
-    content: string;
-    toolCalls?: unknown;
-  }): void {
-    this.db
-      .insert(chatHistory)
-      .values({
-        id: msg.id,
-        session_id: msg.sessionId,
-        role: msg.role,
-        content: msg.content,
-        tool_calls: msg.toolCalls ? JSON.stringify(msg.toolCalls) : null,
-      })
-      .run();
-  }
-
-  /** Get chat history for a session. */
-  getChatHistory(sessionId: string, limit = 50): ChatHistoryRow[] {
-    return this.db
-      .select()
-      .from(chatHistory)
-      .where(eq(chatHistory.session_id, sessionId))
-      .orderBy(asc(chatHistory.created_at))
-      .limit(limit)
-      .all() as ChatHistoryRow[];
-  }
-
-  /** List active chat sessions. */
-  listChatSessions(): Array<{ session_id: string; message_count: number; last_message: string }> {
-    return this.db
-      .select({
-        session_id: chatHistory.session_id,
-        message_count: count(),
-        last_message: sql<string>`max(${chatHistory.created_at})`,
-      })
-      .from(chatHistory)
-      .groupBy(chatHistory.session_id)
-      .orderBy(desc(sql`max(${chatHistory.created_at})`))
-      .all() as Array<{
-      session_id: string;
-      message_count: number;
-      last_message: string;
-    }>;
-  }
-
-  // ===== Domain Mappings (v0.2 forward-compat) =====
-
-  /** Create a domain mapping. */
-  createDomainMapping(mapping: {
-    id: string;
-    projectId: string;
-    domain: string;
-    cloudflareZoneId?: string;
-    cloudflareDnsRecordId?: string;
-  }): void {
-    this.db
-      .insert(domainMappings)
-      .values({
-        id: mapping.id,
-        project_id: mapping.projectId,
-        domain: mapping.domain,
-        cloudflare_zone_id: mapping.cloudflareZoneId ?? null,
-        cloudflare_dns_record_id: mapping.cloudflareDnsRecordId ?? null,
-      })
-      .run();
-  }
-
-  /** Get domain mappings for a project. */
-  getDomainMappings(projectId: string): DomainMappingRow[] {
-    return this.db
-      .select()
-      .from(domainMappings)
-      .where(eq(domainMappings.project_id, projectId))
-      .all() as DomainMappingRow[];
-  }
-
-  /** Get all domain mappings. */
-  listDomainMappings(): DomainMappingRow[] {
-    return this.db
-      .select({
-        id: domainMappings.id,
-        project_id: domainMappings.project_id,
-        domain: domainMappings.domain,
-        cloudflare_zone_id: domainMappings.cloudflare_zone_id,
-        cloudflare_dns_record_id: domainMappings.cloudflare_dns_record_id,
-        status: domainMappings.status,
-        created_at: domainMappings.created_at,
-        project_name: projects.name,
-      })
-      .from(domainMappings)
-      .innerJoin(projects, eq(domainMappings.project_id, projects.id))
-      .orderBy(desc(domainMappings.created_at))
-      .all() as DomainMappingRow[];
-  }
-
-  /** Delete a domain mapping. */
-  deleteDomainMapping(id: string): void {
-    this.db.delete(domainMappings).where(eq(domainMappings.id, id)).run();
-  }
-
-  getOAuthTokens(provider: string): OAuthTokenRow | undefined {
-    return this.db.select().from(oauthTokens).where(eq(oauthTokens.provider, provider)).get() as
-      | OAuthTokenRow
-      | undefined;
-  }
-
-  upsertOAuthTokens(token: {
-    id: string;
-    provider: string;
-    accessToken: string;
-    refreshToken: string | null;
-    expiresAt: string | null;
-    tokenType: string;
-    authMethod?: string;
-    userEmail?: string | null;
-    iv?: string;
-  }): void {
-    this.db
-      .insert(oauthTokens)
-      .values({
-        id: token.id,
-        provider: token.provider,
-        access_token: token.accessToken,
-        refresh_token: token.refreshToken,
-        expires_at: token.expiresAt,
-        token_type: token.tokenType,
-        auth_method: token.authMethod ?? 'manual',
-        user_email: token.userEmail ?? null,
-        iv: token.iv ?? null,
-      })
-      .onConflictDoUpdate({
-        target: oauthTokens.provider,
-        set: {
-          access_token: token.accessToken,
-          refresh_token: token.refreshToken,
-          expires_at: token.expiresAt,
-          token_type: token.tokenType,
-          auth_method: token.authMethod ?? 'manual',
-          user_email: token.userEmail ?? null,
-          iv: token.iv ?? null,
-          updated_at: sql`CURRENT_TIMESTAMP`,
-        },
-      })
-      .run();
-  }
-
-  deleteOAuthTokens(provider: string): void {
-    this.db.delete(oauthTokens).where(eq(oauthTokens.provider, provider)).run();
-  }
-
-  getWebhookConfig(
-    projectId: string,
-    source: WebhookConfigRow['source'],
-  ): WebhookConfigRow | undefined {
-    return this.db
-      .select()
-      .from(webhookConfigs)
-      .where(and(eq(webhookConfigs.project_id, projectId), eq(webhookConfigs.source, source)))
-      .limit(1)
-      .get() as WebhookConfigRow | undefined;
-  }
-
-  setWebhookConfig(config: {
-    id: string;
-    projectId: string;
-    source: WebhookConfigRow['source'];
-    secret: string;
-    branchFilter?: string;
-    enabled?: boolean;
-  }): void {
-    this.db
-      .insert(webhookConfigs)
-      .values({
-        id: config.id,
-        project_id: config.projectId,
-        source: config.source,
-        secret: config.secret,
-        branch_filter: config.branchFilter ?? 'main',
-        enabled: config.enabled === false ? 0 : 1,
-      })
-      .onConflictDoUpdate({
-        target: [webhookConfigs.project_id, webhookConfigs.source],
-        set: {
-          secret: config.secret,
-          branch_filter: config.branchFilter ?? 'main',
-          enabled: config.enabled === false ? 0 : 1,
-        },
-      })
-      .run();
-  }
-
-  setWebhookEnabled(id: string, enabled: boolean): void {
-    this.db
-      .update(webhookConfigs)
-      .set({ enabled: enabled ? 1 : 0 })
-      .where(eq(webhookConfigs.id, id))
-      .run();
-  }
-
-  getWebhookConfigs(projectId: string): WebhookConfigRow[] {
-    return this.db
-      .select()
-      .from(webhookConfigs)
-      .where(eq(webhookConfigs.project_id, projectId))
-      .all() as WebhookConfigRow[];
-  }
-
-  deleteWebhookConfig(projectId: string, source: WebhookConfigRow['source']): void {
-    this.db
-      .delete(webhookConfigs)
-      .where(and(eq(webhookConfigs.project_id, projectId), eq(webhookConfigs.source, source)))
-      .run();
-  }
-
-  // ===== Deploy Lock =====
-
-  /** Acquire a deploy lock for a project. Returns true if lock was acquired. */
-  acquireDeployLock(projectId: string, sessionId: string): boolean {
-    this.cleanExpiredDeployLocks();
-    const project = this.getProject(projectId);
-    if (!project) return false;
-    if (project.deploy_lock_session && project.deploy_lock_session !== sessionId) {
-      return false;
-    }
-    this.db
-      .update(projects)
-      .set({
-        deploy_lock_session: sessionId,
-        deploy_lock_at: sql`CURRENT_TIMESTAMP`,
-        updated_at: sql`CURRENT_TIMESTAMP`,
-      })
-      .where(eq(projects.id, projectId))
-      .run();
-    return true;
-  }
-
-  /** Release a deploy lock for a project. */
-  releaseDeployLock(projectId: string): void {
-    this.db
-      .update(projects)
-      .set({ deploy_lock_session: null, deploy_lock_at: null, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(projects.id, projectId))
-      .run();
-  }
-
-  /** Get deploy lock info for a project. */
-  getDeployLockInfo(projectId: string): { session: string; lockedAt: string } | null {
-    const project = this.getProject(projectId);
-    if (!project?.deploy_lock_session || !project.deploy_lock_at) return null;
-    return { session: project.deploy_lock_session, lockedAt: project.deploy_lock_at };
-  }
-
-  /** Clean expired deploy locks (default: 10 min timeout). Returns count of cleaned locks. */
-  cleanExpiredDeployLocks(timeoutMinutes = 10): number {
-    this.db
-      .update(projects)
-      .set({ deploy_lock_session: null, deploy_lock_at: null })
-      .where(
-        sql`${projects.deploy_lock_session} IS NOT NULL AND ${projects.deploy_lock_at} < datetime('now', '-' || ${timeoutMinutes} || ' minutes')`,
-      )
-      .run();
-    const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
-      changes: number;
-    } | null;
-    return row?.changes ?? 0;
-  }
-  // ===== Deploy Plans =====
-
-  /** Create a new deploy plan. */
-  createDeployPlan(plan: {
-    id: string;
-    projectName?: string;
-    projectId?: string;
-    status: string;
-    complexity?: string;
-    planJson: string;
-    commitSha?: string;
-  }): DeployPlanRow {
-    this.db
-      .insert(deployPlans)
-      .values({
-        id: plan.id,
-        project_name: plan.projectName ?? null,
-        project_id: plan.projectId ?? null,
-        status: plan.status,
-        complexity: plan.complexity ?? null,
-        plan_json: plan.planJson,
-        commit_sha: plan.commitSha ?? null,
-      })
-      .run();
-
-    const created = this.getDeployPlan(plan.id);
-    if (!created) throw new Error(`Failed to create deploy plan ${plan.id}`);
-    return created;
-  }
-
-  /** Get a deploy plan by ID. */
-  getDeployPlan(planId: string): DeployPlanRow | undefined {
-    return this.db.select().from(deployPlans).where(eq(deployPlans.id, planId)).get() as
-      | DeployPlanRow
-      | undefined;
-  }
-
-  /** Update deploy plan fields. Only provided fields are updated. */
-  updateDeployPlan(
-    planId: string,
-    updates: Partial<{
-      status: string;
-      complexity: string | null;
-      errorMessage: string | null;
-      executedAt: string | null;
-      completedAt: string | null;
-      planJson: string;
-      projectName: string | null;
-      projectId: string | null;
-    }>,
-  ): void {
-    const setValues: Partial<typeof deployPlans.$inferInsert> = {};
-
-    if (updates.status !== undefined) {
-      setValues.status = updates.status;
-    }
-    if (updates.complexity !== undefined) {
-      setValues.complexity = updates.complexity;
-    }
-    if (updates.errorMessage !== undefined) {
-      setValues.error_message = updates.errorMessage;
-    }
-    if (updates.executedAt !== undefined) {
-      setValues.executed_at = updates.executedAt;
-    }
-    if (updates.completedAt !== undefined) {
-      setValues.completed_at = updates.completedAt;
-    }
-    if (updates.planJson !== undefined) {
-      setValues.plan_json = updates.planJson;
-    }
-    if (updates.projectName !== undefined) {
-      setValues.project_name = updates.projectName;
-    }
-    if (updates.projectId !== undefined) {
-      setValues.project_id = updates.projectId;
-    }
-
-    if (Object.keys(setValues).length === 0) return;
-
-    this.db
-      .update(deployPlans)
-      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(deployPlans.id, planId))
-      .run();
-  }
-
-  /** Update deploy plan status only. */
-  updateDeployPlanStatus(planId: string, status: string): void {
-    this.db
-      .update(deployPlans)
-      .set({ status, updated_at: sql`CURRENT_TIMESTAMP` })
-      .where(eq(deployPlans.id, planId))
-      .run();
-  }
-
-  /** List deploy plans, optionally filtered by project name. Ordered by created_at desc. */
-  listDeployPlans(projectName?: string): DeployPlanRow[] {
-    if (projectName) {
-      return this.db
-        .select()
-        .from(deployPlans)
-        .where(eq(deployPlans.project_name, projectName))
-        .orderBy(desc(deployPlans.created_at))
-        .all() as DeployPlanRow[];
-    }
-    return this.db
-      .select()
-      .from(deployPlans)
-      .orderBy(desc(deployPlans.created_at))
-      .all() as DeployPlanRow[];
-  }
-
-  /** Get the most recent deploy plan for a project. */
-  getLatestPlanForProject(projectName: string): DeployPlanRow | undefined {
-    return this.db
-      .select()
-      .from(deployPlans)
-      .where(eq(deployPlans.project_name, projectName))
-      .orderBy(desc(deployPlans.created_at), desc(sql`rowid`))
-      .limit(1)
-      .get() as DeployPlanRow | undefined;
-  }
-
-  // ===== Utility =====
-
-  /** Run a function inside a transaction. */
-  transaction<T>(fn: () => T): T {
-    return this.sqlite.transaction(fn)();
-  }
-
-  /** Close the database connection. */
-  close(): void {
-    this.sqlite.close();
-  }
+    this.projectRepo = new ProjectRepo(this.db, this.sqlite);
+    this.environmentRepo = new EnvironmentRepo(this.db, this.sqlite);
+    this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);
+    this.globalSecretRepo = new GlobalSecretRepo(this.db, this.sqlite);
+    this.secretFileRepo = new SecretFileRepo(this.db, this.sqlite);
+    this.serviceRepo = new ServiceRepo(this.db, this.sqlite);
+    this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
+    this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
+    this.chatRepo = new ChatRepo(this.db, this.sqlite);
+    this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
+    this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
+    this.webhookRepo = new WebhookRepo(this.db, this.sqlite);
+    this.deployPlanRepo = new DeployPlanRepo(this.db, this.sqlite);
+  }
+
+  createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
+  getProject(id: string) { return this.projectRepo.getProject(id); }
+  getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
+  listProjects(status?: ProjectRow['status']) { return this.projectRepo.listProjects(status); }
+  updateProject(id: string, updates: Parameters<ProjectRepo['updateProject']>[1]) { this.projectRepo.updateProject(id, updates); }
+  setPendingFix(projectId: string, pendingFix: Parameters<ProjectRepo['setPendingFix']>[1]) { this.projectRepo.setPendingFix(projectId, pendingFix); }
+  consumePendingFix(projectId: string) { return this.projectRepo.consumePendingFix(projectId); }
+  deleteProject(id: string) { this.projectRepo.deleteProject(id); }
+  getChildProjects(parentId: string) { return this.projectRepo.getChildProjects(parentId); }
+  getPreviewProjects(parentProjectId: string) { return this.projectRepo.getPreviewProjects(parentProjectId); }
+  isParentProject(id: string) { return this.projectRepo.isParentProject(id); }
+  acquireDeployLock(projectId: string, sessionId: string) { return this.projectRepo.acquireDeployLock(projectId, sessionId); }
+  releaseDeployLock(projectId: string) { this.projectRepo.releaseDeployLock(projectId); }
+  getDeployLockInfo(projectId: string) { return this.projectRepo.getDeployLockInfo(projectId); }
+  cleanExpiredDeployLocks(timeoutMinutes = 10) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
+  createEnvironment(environment: Parameters<EnvironmentRepo['createEnvironment']>[0]) { return this.environmentRepo.createEnvironment(environment); }
+  getEnvironment(id: string) { return this.environmentRepo.getEnvironment(id); }
+  getEnvironmentsByProject(projectId: string) { return this.environmentRepo.getEnvironmentsByProject(projectId); }
+  updateEnvironment(id: string, updates: Parameters<EnvironmentRepo['updateEnvironment']>[1]) { this.environmentRepo.updateEnvironment(id, updates); }
+  deleteEnvironment(id: string) { this.environmentRepo.deleteEnvironment(id); }
+  getEnvVars(projectId: string, environmentId?: string) { return this.envVarRepo.getEnvVars(projectId, environmentId); }
+  setEnvVar(projectId: string, key: string, value: string, environmentId?: string) { this.envVarRepo.setEnvVar(projectId, key, value, environmentId); }
+  setEnvVarsBulk(projectId: string, vars: Record<string, string>, environmentId?: string) { this.envVarRepo.setEnvVarsBulk(projectId, vars, environmentId); }
+  mergeEnvVars(projectId: string, vars: Record<string, string>, environmentId?: string) { this.envVarRepo.mergeEnvVars(projectId, vars, environmentId); }
+  deleteEnvVar(projectId: string, key: string, environmentId?: string) { this.envVarRepo.deleteEnvVar(projectId, key, environmentId); }
+  findProjectsByEnvKey(key: string) { return this.envVarRepo.findProjectsByEnvKey(key); }
+  getGlobalSecrets() { return this.globalSecretRepo.getGlobalSecrets(); }
+  getGlobalSecret(key: string) { return this.globalSecretRepo.getGlobalSecret(key); }
+  setGlobalSecret(key: string, encryptedValue: string, iv: string, description?: string) { this.globalSecretRepo.setGlobalSecret(key, encryptedValue, iv, description); }
+  deleteGlobalSecret(key: string) { return this.globalSecretRepo.deleteGlobalSecret(key); }
+  getSecretFiles(projectId: string | null) { return this.secretFileRepo.getSecretFiles(projectId); }
+  getSecretFilesForDeploy(projectId: string) { return this.secretFileRepo.getSecretFilesForDeploy(projectId); }
+  upsertSecretFile(projectId: string | null, filename: string, encryptedContent: string, iv: string, mountPath: string = '/run/secrets') { this.secretFileRepo.upsertSecretFile(projectId, filename, encryptedContent, iv, mountPath); }
+  deleteSecretFile(projectId: string | null, filename: string) { return this.secretFileRepo.deleteSecretFile(projectId, filename); }
+  createService(service: Parameters<ServiceRepo['createService']>[0]) { return this.serviceRepo.createService(service); }
+  getService(id: string) { return this.serviceRepo.getService(id); }
+  listServices() { return this.serviceRepo.listServices(); }
+  updateService(id: string, updates: Parameters<ServiceRepo['updateService']>[1]) { this.serviceRepo.updateService(id, updates); }
+  deleteService(id: string) { this.serviceRepo.deleteService(id); }
+  createDeployLog(log: Parameters<DeployLogRepo['createDeployLog']>[0]) { this.deployLogRepo.createDeployLog(log); }
+  getDeployLogs(projectId: string, limit = 20, environmentId?: string) { return this.deployLogRepo.getDeployLogs(projectId, limit, environmentId); }
+  getLastDeployLog(projectId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLog(projectId, environmentId); }
+  getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }
+  createTimelineEvent(event: Parameters<TimelineRepo['createTimelineEvent']>[0]) { this.timelineRepo.createTimelineEvent(event); }
+  getTimelineEvents(projectId: string, limit = 200) { return this.timelineRepo.getTimelineEvents(projectId, limit); }
+  deleteTimelineEvents(projectId: string) { this.timelineRepo.deleteTimelineEvents(projectId); }
+  saveChatMessage(msg: Parameters<ChatRepo['saveChatMessage']>[0]) { this.chatRepo.saveChatMessage(msg); }
+  getChatHistory(sessionId: string, limit = 50) { return this.chatRepo.getChatHistory(sessionId, limit); }
+  listChatSessions() { return this.chatRepo.listChatSessions(); }
+  createDomainMapping(mapping: Parameters<DomainMappingRepo['createDomainMapping']>[0]) { this.domainMappingRepo.createDomainMapping(mapping); }
+  getDomainMappings(projectId: string) { return this.domainMappingRepo.getDomainMappings(projectId); }
+  listDomainMappings() { return this.domainMappingRepo.listDomainMappings(); }
+  deleteDomainMapping(id: string) { this.domainMappingRepo.deleteDomainMapping(id); }
+  getOAuthTokens(provider: string) { return this.oauthRepo.getOAuthTokens(provider); }
+  upsertOAuthTokens(token: Parameters<OAuthRepo['upsertOAuthTokens']>[0]) { this.oauthRepo.upsertOAuthTokens(token); }
+  deleteOAuthTokens(provider: string) { this.oauthRepo.deleteOAuthTokens(provider); }
+  getWebhookConfig(projectId: string, source: Parameters<WebhookRepo['getWebhookConfig']>[1]) { return this.webhookRepo.getWebhookConfig(projectId, source); }
+  setWebhookConfig(config: Parameters<WebhookRepo['setWebhookConfig']>[0]) { this.webhookRepo.setWebhookConfig(config); }
+  setWebhookEnabled(id: string, enabled: boolean) { this.webhookRepo.setWebhookEnabled(id, enabled); }
+  getWebhookConfigs(projectId: string) { return this.webhookRepo.getWebhookConfigs(projectId); }
+  deleteWebhookConfig(projectId: string, source: Parameters<WebhookRepo['deleteWebhookConfig']>[1]) { this.webhookRepo.deleteWebhookConfig(projectId, source); }
+  createDeployPlan(plan: Parameters<DeployPlanRepo['createDeployPlan']>[0]) { return this.deployPlanRepo.createDeployPlan(plan); }
+  getDeployPlan(planId: string) { return this.deployPlanRepo.getDeployPlan(planId); }
+  updateDeployPlan(planId: string, updates: Parameters<DeployPlanRepo['updateDeployPlan']>[1]) { this.deployPlanRepo.updateDeployPlan(planId, updates); }
+  updateDeployPlanStatus(planId: string, status: string) { this.deployPlanRepo.updateDeployPlanStatus(planId, status); }
+  listDeployPlans(projectName?: string) { return this.deployPlanRepo.listDeployPlans(projectName); }
+  getLatestPlanForProject(projectName: string) { return this.deployPlanRepo.getLatestPlanForProject(projectName); }
+  getUsedPorts(): number[] { const projectPorts = this.db.select({ assigned_port: projects.assigned_port }).from(projects).where(isNotNull(projects.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...projectPorts, ...envPorts])]; }
+  transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
+  close() { this.sqlite.close(); }
 }
