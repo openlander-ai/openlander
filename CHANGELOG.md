@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-03-20
+
+### Changed
+
+- **Database refactor**: Decomposed 1708-line God Object (`src/db/index.ts`) into 13 domain-specific Repository classes + 146-line delegation facade
+  - Extracted `ProjectRepo`, `EnvironmentRepo`, `EnvVarRepo`, `GlobalSecretRepo`, `SecretFileRepo`, `ServiceRepo`, `DeployLogRepo`, `TimelineRepo`, `ChatRepo`, `DomainMappingRepo`, `OAuthRepo`, `WebhookRepo`, `DeployPlanRepo`
+  - Consolidated Row types into `src/db/types.ts`
+  - Extracted migration logic into `src/db/migration.ts`
+  - 100% backward compatible — zero consumer file changes, zero API changes
+
 ### Fixed
 
 - **IP override**: `HOST_IP` / `HOST_VPN_IP` env vars override detected IPs for remote Docker host setups

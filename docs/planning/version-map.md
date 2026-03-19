@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -779,6 +779,27 @@ Phase 3 — PR Preview:
 | deploy_environment 모드 전환 방지 (dockerfile_path 보존) | ✅   |
 | 서브디렉토리 Dockerfile build context 자동 감지          | ✅   |
 | Docker Compose 최소 버전 요구 (V2.3.0)                   | ✅   |
+
+---
+
+### v0.6.8 — Database Refactor ✅
+
+**상태**: 완료 | **관련 문서**: `.sisyphus/plans/db-refactor.md`
+
+> **핵심 가치**: 1708줄 God Object (`src/db/index.ts`) → 13개 도메인별 Repository 클래스 + 146줄 위임 파사드. 100% 하위호환성 유지.
+
+| 항목                                               | 상태 |
+| -------------------------------------------------- | ---- |
+| ProjectRepo, EnvironmentRepo, EnvVarRepo 추출      | ✅   |
+| GlobalSecretRepo, SecretFileRepo, ServiceRepo 추출 | ✅   |
+| DeployLogRepo, TimelineRepo, ChatRepo 추출         | ✅   |
+| DomainMappingRepo, OAuthRepo, WebhookRepo 추출     | ✅   |
+| DeployPlanRepo 추출                                | ✅   |
+| Row 타입 통합 (src/db/types.ts)                    | ✅   |
+| 마이그레이션 로직 추출 (src/db/migration.ts)       | ✅   |
+| 위임 파사드 (src/db/index.ts 146줄)                | ✅   |
+| 소비자 파일 변경 없음 (100% 하위호환성)            | ✅   |
+| 테스트 1419개 통과, 빌드 성공, tsc 성공            | ✅   |
 
 ---
 
