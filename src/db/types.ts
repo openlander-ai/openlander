@@ -1,3 +1,7 @@
+// --- Row types (match DB schema) ---
+
+export type EnvironmentType = 'production' | 'development';
+
 export interface ProjectRow {
   id: string;
   name: string;
@@ -13,17 +17,37 @@ export interface ProjectRow {
   parent_project_id: string | null;
   dockerfile_path: string;
   docker_target: string | null;
+  build_method: 'dockerfile' | 'compose' | null;
+  pending_fix: string | null;
   created_at: string;
   updated_at: string;
   deploy_lock_session: string | null;
   deploy_lock_at: string | null;
   access_code: string | null;
   access_code_iv: string | null;
+  is_preview: 0 | 1;
+  pr_number: number | null;
+}
+
+export interface EnvironmentRow {
+  id: string;
+  project_id: string;
+  type: EnvironmentType;
+  branch: string;
+  status: 'running' | 'stopped' | 'building' | 'error' | 'idle';
+  assigned_port: number | null;
+  container_id: string | null;
+  image_tag: string | null;
+  previous_image_tag: string | null;
+  public_url: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DeployLogRow {
   id: string;
   project_id: string;
+  environment_id: string | null;
   status: 'success' | 'failed' | 'cancelled';
   trigger: 'chat' | 'webhook' | 'api';
   commit_sha: string | null;
@@ -31,6 +55,21 @@ export interface DeployLogRow {
   duration_ms: number | null;
   created_at: string;
 }
+
+export interface TimelineEventRow {
+  id: string;
+  project_id: string;
+  deploy_id: string | null;
+  type: string;
+  message: string;
+  detail: string | null;
+  severity: string | null;
+  percent: number | null;
+  tool_name: string | null;
+  action_buttons: string | null;
+  created_at: string;
+}
+
 export interface ChatHistoryRow {
   id: string;
   session_id: string;
@@ -39,6 +78,7 @@ export interface ChatHistoryRow {
   tool_calls: string | null;
   created_at: string;
 }
+
 export interface DomainMappingRow {
   id: string;
   project_id: string;
@@ -48,6 +88,7 @@ export interface DomainMappingRow {
   status: 'active' | 'pending' | 'error';
   created_at: string;
 }
+
 export interface OAuthTokenRow {
   id: string;
   provider: string;
@@ -60,4 +101,49 @@ export interface OAuthTokenRow {
   iv: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface WebhookConfigRow {
+  id: string;
+  project_id: string;
+  source: 'github' | 'gitlab' | 'bitbucket';
+  secret: string;
+  branch_filter: string;
+  enabled: 0 | 1;
+  created_at: string;
+}
+
+export interface ServiceRow {
+  id: string;
+  name: string;
+  type: string;
+  image: string;
+  status: 'running' | 'stopped' | 'error';
+  container_id: string | null;
+  container_name: string;
+  port: number;
+  env_vars: string | null;
+  credentials: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PendingFixRow {
+  filePath: string;
+  content: string;
+}
+
+export interface DeployPlanRow {
+  id: string;
+  project_name: string | null;
+  project_id: string | null;
+  status: string;
+  complexity: string | null;
+  plan_json: string;
+  commit_sha: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  executed_at: string | null;
+  completed_at: string | null;
 }

@@ -7,6 +7,8 @@ export const debugToolDefs: ToolDef[] = [
     name: 'get_build_log',
     description:
       'Get the raw build log for a project deployment. Returns the full unprocessed build output. Use this instead of debug_build_error when you need to parse the log yourself. Returns { status, build_log, duration_ms, created_at }. Errors: PROJECT_NOT_FOUND, NO_DEPLOY_LOGS.',
+    mcpDescription:
+      "Get raw build log for a project's deployment. Use after get_deploy_status shows 'failed' to diagnose build errors. Returns { status, build_log, duration_ms }. Use deploy_index param (0=latest, 1=previous) to access older builds. For AI-powered diagnosis, use debug_build_error instead.",
     inputSchema: getBuildLogSchema,
     execute: (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
@@ -32,6 +34,8 @@ export const debugToolDefs: ToolDef[] = [
     name: 'debug_build_error',
     description:
       'Analyze a failed build and suggest fixes using AI. Matches against known error patterns first (fast), then uses LLM analysis (thorough). Use when a deployment failed or user reports a build error. Returns { summary, rootCause, suggestedFixes[] }. Errors: PROJECT_NOT_FOUND, NO_FAILED_BUILD if the last deploy succeeded, NO_LLM if build debugger is not configured.',
+    mcpDescription:
+      'Analyze a failed build using AI and suggest fixes. Matches known error patterns first (fast path), then falls back to LLM analysis. Use after get_build_log when you need actionable fix suggestions. Returns { summary, rootCause, suggestedFixes[] }.',
     inputSchema: debugBuildErrorSchema,
     execute: async (args, { target, appCtx }) => {
       if (!appCtx.buildDebugger) {

@@ -24,6 +24,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'list_env_vars',
     description:
       'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription:
+      "List environment variables for a project. Values are masked for security (e.g., 'sk-****7890'). Use to verify what's set before adding or modifying variables.",
     inputSchema: listEnvVarsSchema,
     execute: (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
@@ -36,6 +38,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_env_vars',
     description:
       'Set environment variables for a project and trigger a redeploy if running. Use when user needs to configure DATABASE_URL, API keys, or other env vars. The variables parameter must be a JSON string of key-value pairs, e.g. {"DATABASE_URL": "postgresql://user:pass@ol-svc-pg:5432/db", "REDIS_URL": "redis://ol-svc-redis:6379"}. For host services use host.docker.internal as hostname. For OpenLander services use the container name (ol-svc-*). Returns { status, project, keys[] }. Errors: PROJECT_NOT_FOUND, JSON parse error if variables is malformed.',
+    mcpDescription:
+      'Set environment variables for a project. Pass variables as JSON string: {"KEY": "value"}. Automatically triggers redeploy if project is running. For OpenLander-managed services, use container name as host (e.g., ol-svc-postgresql-myapp). For host machine services, use host.docker.internal. Round-trip verification ensures values are stored correctly.',
     inputSchema: setEnvVarsSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
@@ -73,6 +77,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_global_secret',
     description:
       'Set a global secret that is available to all projects (stored encrypted). Use for shared API keys, database credentials, etc. that multiple projects need. Returns { status, key }.',
+    mcpDescription:
+      'Set a global secret available to all projects (stored encrypted). Use for shared API keys or credentials that multiple projects need. Returns { status, key }.',
     inputSchema: setGlobalSecretSchema,
     execute: (args, { appCtx, target }) => {
       const key = args['key'] as string;
