@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createModuleLogger } from '../../lib/logger.js';
+import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { cloneRepo } from '../git.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import { extractProjectName } from '../helpers.js';
@@ -16,35 +17,6 @@ import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
 
 const log = createModuleLogger('plan-engine');
-
-function findDockerfiles(dir: string, maxDepth = 3): string[] {
-  const results: string[] = [];
-  function walk(current: string, depth: number): void {
-    if (depth > maxDepth) return;
-    let entries: string[];
-    try {
-      entries = readdirSync(current).sort((a, b) => a.localeCompare(b));
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.startsWith('.') || entry === 'node_modules' || entry === 'vendor') continue;
-      const fullPath = join(current, entry);
-      try {
-        const stat = statSync(fullPath);
-        if (stat.isFile() && entry === 'Dockerfile') {
-          results.push(fullPath);
-        } else if (stat.isDirectory()) {
-          walk(fullPath, depth + 1);
-        }
-      } catch {
-        continue;
-      }
-    }
-  }
-  walk(dir, 0);
-  return results;
-}
 
 export interface CreatePlanOptions {
   repoUrl: string;
