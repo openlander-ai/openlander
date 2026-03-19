@@ -605,16 +605,21 @@ export class DeployPipeline {
         typeof config.dockerfilePath === 'string' && config.dockerfilePath.trim().length > 0;
       const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
 
+      const composePipeline = this.composePipeline;
       const composePath = preferDockerfile
         ? null
-        : this.composePipeline?.detectComposeFile(cloneResult.path);
+        : composePipeline?.detectComposeFile(cloneResult.path);
+      const isCompose = Boolean(composePath && composePipeline);
+      this.db.updateProject(projectId, {
+        buildMethod: isCompose ? 'compose' : 'dockerfile',
+      });
       const composeEnvVars = {
         ...(config.envVars ?? {}),
         ...this.env.getMergedForDeploy(projectId, environmentId),
       };
-      if (composePath && this.composePipeline) {
+      if (isCompose && composePath && composePipeline) {
         log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
-        const result = await this.composePipeline.deployCompose({
+        const result = await composePipeline.deployCompose({
           repoUrl,
           branch: environment.branch,
           clonePath: cloneResult.path,
@@ -1466,6 +1471,7 @@ export class DeployPipeline {
       dockerTarget: project.docker_target ?? undefined,
       dockerfilePath:
         project.dockerfile_path !== 'Dockerfile' ? project.dockerfile_path : undefined,
+      preferDockerfile: project.build_method === 'dockerfile',
       _projectId: projectId,
       _preferredPort: previousPort,
       _noCacheBuild: options?.noCache === true,

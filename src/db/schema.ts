@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS projects (
   parent_project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
   dockerfile_path TEXT DEFAULT 'Dockerfile',
   docker_target TEXT DEFAULT NULL,
+  build_method TEXT DEFAULT NULL CHECK(build_method IN ('dockerfile', 'compose')),
   pending_fix TEXT DEFAULT NULL,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP,

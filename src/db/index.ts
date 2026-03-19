@@ -40,6 +40,7 @@ export interface ProjectRow {
   parent_project_id: string | null;
   dockerfile_path: string;
   docker_target: string | null;
+  build_method: 'dockerfile' | 'compose' | null;
   pending_fix: string | null;
   created_at: string;
   updated_at: string;
@@ -215,6 +216,11 @@ export class Database {
     }
     if (!colNames.has('docker_target')) {
       this.sqlite.exec('ALTER TABLE projects ADD COLUMN docker_target TEXT DEFAULT NULL');
+    }
+    if (!colNames.has('build_method')) {
+      this.sqlite.exec(
+        "ALTER TABLE projects ADD COLUMN build_method TEXT DEFAULT NULL CHECK(build_method IN ('dockerfile', 'compose'))",
+      );
     }
     if (!colNames.has('pending_fix')) {
       this.sqlite.exec('ALTER TABLE projects ADD COLUMN pending_fix TEXT DEFAULT NULL');
@@ -605,6 +611,7 @@ export class Database {
       parentProjectId: string | null;
       dockerfilePath: string;
       dockerTarget: string | null;
+      buildMethod: ProjectRow['build_method'];
       pendingFix: string | null;
       accessCode: string | null;
       accessCodeIv: string | null;
@@ -644,6 +651,9 @@ export class Database {
     }
     if (updates.dockerTarget !== undefined) {
       setValues.docker_target = updates.dockerTarget;
+    }
+    if (updates.buildMethod !== undefined) {
+      setValues.build_method = updates.buildMethod;
     }
     if (updates.pendingFix !== undefined) {
       setValues.pending_fix = updates.pendingFix;
