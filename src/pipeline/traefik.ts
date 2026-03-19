@@ -234,6 +234,7 @@ export interface NetworkIp {
 export function getAllIps(): NetworkIp[] {
   const hostIp = process.env['HOST_IP'];
   const hostVpnIp = process.env['HOST_VPN_IP'];
+  const dockerHost = process.env['DOCKER_HOST'];
 
   const nets = networkInterfaces();
   const detected: NetworkIp[] = [];
@@ -254,9 +255,26 @@ export function getAllIps(): NetworkIp[] {
   }
 
   const result: NetworkIp[] = [];
+  let dockerHostIp: string | undefined;
+
+  if (dockerHost) {
+    try {
+      const url = new URL(dockerHost);
+      if (url.protocol === 'tcp:' || url.protocol === 'ssh:') {
+        const host = url.hostname;
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+          dockerHostIp = host;
+        }
+      }
+    } catch (error) {
+      void error;
+    }
+  }
 
   if (hostIp) {
     result.push({ address: hostIp, interface: 'HOST_IP', type: 'lan' });
+  } else if (dockerHostIp) {
+    result.push({ address: dockerHostIp, interface: 'DOCKER_HOST', type: 'lan' });
   } else {
     result.push(...detected.filter((ip) => ip.type === 'lan'));
   }

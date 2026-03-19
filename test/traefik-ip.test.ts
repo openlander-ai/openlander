@@ -131,11 +131,13 @@ describe('HOST_IP / HOST_VPN_IP env override', () => {
     mockNetworkInterfaces.mockReset();
     delete process.env['HOST_IP'];
     delete process.env['HOST_VPN_IP'];
+    delete process.env['DOCKER_HOST'];
   });
 
   afterEach(() => {
     delete process.env['HOST_IP'];
     delete process.env['HOST_VPN_IP'];
+    delete process.env['DOCKER_HOST'];
   });
 
   it('HOST_IP overrides detected LAN IP', () => {
@@ -201,11 +203,72 @@ describe('HOST_IP / HOST_VPN_IP env override', () => {
   });
 });
 
+describe('DOCKER_HOST env override', () => {
+  beforeEach(() => {
+    mockNetworkInterfaces.mockReset();
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+    delete process.env['DOCKER_HOST'];
+  });
+
+  afterEach(() => {
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+    delete process.env['DOCKER_HOST'];
+  });
+
+  it('uses tcp DOCKER_HOST IP as LAN IP', () => {
+    process.env['DOCKER_HOST'] = 'tcp://192.168.1.50:2375';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.1.100')],
+    });
+
+    expect(getLanIp()).toBe('192.168.1.50');
+  });
+
+  it('uses ssh DOCKER_HOST host as LAN IP', () => {
+    process.env['DOCKER_HOST'] = 'ssh://user@10.0.0.5';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.1.100')],
+    });
+
+    expect(getLanIp()).toBe('10.0.0.5');
+  });
+
+  it('ignores unix DOCKER_HOST and falls back to interface detection', () => {
+    process.env['DOCKER_HOST'] = 'unix:///var/run/docker.sock';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.1.100')],
+    });
+
+    expect(getLanIp()).toBe('192.168.1.100');
+  });
+
+  it('keeps HOST_IP precedence over DOCKER_HOST', () => {
+    process.env['HOST_IP'] = '10.0.0.5';
+    process.env['DOCKER_HOST'] = 'tcp://192.168.1.50:2375';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.1.100')],
+    });
+
+    expect(getLanIp()).toBe('10.0.0.5');
+  });
+
+  it('keeps existing behavior when neither HOST_IP nor DOCKER_HOST is set', () => {
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.1.100')],
+    });
+
+    expect(getLanIp()).toBe('192.168.1.100');
+  });
+});
+
 describe('getAllIps', () => {
   beforeEach(() => {
     mockNetworkInterfaces.mockReset();
     delete process.env['HOST_IP'];
     delete process.env['HOST_VPN_IP'];
+    delete process.env['DOCKER_HOST'];
   });
 
   it('sorts LAN IPs before VPN IPs', () => {
