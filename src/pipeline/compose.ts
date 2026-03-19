@@ -567,10 +567,16 @@ export class ComposePipeline {
             const childId = childrenByService.get(service.name);
             if (childId) {
               this.db.updateProject(childId, { status: 'error' });
+              const composeLogTail = (upResult.stdout + upResult.stderr)
+                .split('\n')
+                .filter(Boolean)
+                .slice(-30)
+                .join('\n');
               this.jobManager?.updatePhase(
                 childId,
                 'failed',
                 upResult.stderr || upResult.stdout || `docker compose failed for ${service.name}`,
+                composeLogTail,
               );
             }
             return {
@@ -744,7 +750,15 @@ export class ComposePipeline {
         });
       }
 
-      this.jobManager?.updatePhase(parentProjectId, hasError ? 'failed' : 'done');
+      const parentLogTail = hasError
+        ? buildLog.split('\n').filter(Boolean).slice(-30).join('\n')
+        : undefined;
+      this.jobManager?.updatePhase(
+        parentProjectId,
+        hasError ? 'failed' : 'done',
+        hasError ? (errorMessage ?? 'One or more services failed to start') : undefined,
+        parentLogTail,
+      );
 
       return {
         success: !hasError,
