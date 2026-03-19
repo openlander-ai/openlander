@@ -329,9 +329,30 @@ export class DeployPipeline {
       this.db.updateProject(existing.id, { status: 'building' });
       this.jobManager?.trackJob(existing.id, projectName);
 
-      void this.deploy({ ...config, name: projectName, _projectId: existing.id }).catch(() => {
-        // Error handling is done inside deploy()
-      });
+      void this.deploy({ ...config, name: projectName, _projectId: existing.id }).catch(
+        (err: unknown) => {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const projectId = existing.id;
+          log.error({ err, projectId }, 'Background deploy failed');
+          this.jobManager?.updatePhase(projectId, 'failed', errMsg);
+          this.db.updateProject(projectId, { status: 'error' });
+          try {
+            const environments = this.db.getEnvironmentsByProject(projectId);
+            const envId = environments[0]?.id;
+            this.db.createDeployLog({
+              id: nanoid(12),
+              projectId,
+              environmentId: envId,
+              status: 'failed',
+              trigger: config.trigger ?? 'chat',
+              buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
+              durationMs: 0,
+            });
+          } catch {
+            // DB write may also fail — nothing more we can do
+          }
+        },
+      );
 
       return { projectId: existing.id, projectName, status: 'building' };
     }
@@ -349,9 +370,29 @@ export class DeployPipeline {
     this.jobManager?.trackJob(projectId, projectName);
 
     // Fire-and-forget: run the deploy pipeline in background
-    void this.deploy({ ...config, name: projectName, _projectId: projectId }).catch(() => {
-      // Error handling is done inside deploy()
-    });
+    void this.deploy({ ...config, name: projectName, _projectId: projectId }).catch(
+      (err: unknown) => {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        log.error({ err, projectId }, 'Background deploy failed');
+        this.jobManager?.updatePhase(projectId, 'failed', errMsg);
+        this.db.updateProject(projectId, { status: 'error' });
+        try {
+          const environments = this.db.getEnvironmentsByProject(projectId);
+          const envId = environments[0]?.id;
+          this.db.createDeployLog({
+            id: nanoid(12),
+            projectId,
+            environmentId: envId,
+            status: 'failed',
+            trigger: config.trigger ?? 'chat',
+            buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
+            durationMs: 0,
+          });
+        } catch {
+          // DB write may also fail — nothing more we can do
+        }
+      },
+    );
 
     return { projectId, projectName, status: 'building' };
   }
@@ -610,9 +651,13 @@ export class DeployPipeline {
         ? null
         : composePipeline?.detectComposeFile(cloneResult.path);
       const isCompose = Boolean(composePath && composePipeline);
-      this.db.updateProject(projectId, {
-        buildMethod: isCompose ? 'compose' : 'dockerfile',
-      });
+      try {
+        this.db.updateProject(projectId, {
+          buildMethod: isCompose ? 'compose' : 'dockerfile',
+        });
+      } catch (err) {
+        log.debug({ err, projectId }, 'Failed to store build_method - column may not exist');
+      }
       const composeEnvVars = {
         ...(config.envVars ?? {}),
         ...this.env.getMergedForDeploy(projectId, environmentId),

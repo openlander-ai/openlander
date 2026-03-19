@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { mockNetworkInterfaces } = vi.hoisted(() => ({
   mockNetworkInterfaces: vi.fn(),
@@ -126,9 +126,86 @@ describe('getLanIp', () => {
   });
 });
 
+describe('HOST_IP / HOST_VPN_IP env override', () => {
+  beforeEach(() => {
+    mockNetworkInterfaces.mockReset();
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+  });
+
+  afterEach(() => {
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
+  });
+
+  it('HOST_IP overrides detected LAN IP', () => {
+    process.env['HOST_IP'] = '192.168.50.118';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.219.133')],
+    });
+
+    expect(getLanIp()).toBe('192.168.50.118');
+  });
+
+  it('HOST_IP + HOST_VPN_IP override both LAN and VPN', () => {
+    process.env['HOST_IP'] = '192.168.50.118';
+    process.env['HOST_VPN_IP'] = '100.92.129.118';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.219.133')],
+      tailscale0: [ipv4('100.75.249.124')],
+    });
+
+    const ips = getAllIps();
+    expect(ips).toHaveLength(2);
+    expect(ips[0]).toMatchObject({ address: '192.168.50.118', type: 'lan' });
+    expect(ips[1]).toMatchObject({ address: '100.92.129.118', type: 'vpn' });
+  });
+
+  it('HOST_IP alone replaces all LAN IPs, keeps detected VPN', () => {
+    process.env['HOST_IP'] = '10.0.0.50';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.219.133')],
+      wlan0: [ipv4('192.168.1.100')],
+      tailscale0: [ipv4('100.75.249.124')],
+    });
+
+    const ips = getAllIps();
+    const lanIps = ips.filter((ip) => ip.type === 'lan');
+    const vpnIps = ips.filter((ip) => ip.type === 'vpn');
+    expect(lanIps).toHaveLength(1);
+    expect(lanIps[0]?.address).toBe('10.0.0.50');
+    expect(vpnIps[0]?.address).toBe('100.75.249.124');
+  });
+
+  it('HOST_VPN_IP alone replaces all VPN IPs, keeps detected LAN', () => {
+    process.env['HOST_VPN_IP'] = '100.92.129.118';
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.50.118')],
+      tailscale0: [ipv4('100.75.249.124')],
+    });
+
+    const ips = getAllIps();
+    const lanIps = ips.filter((ip) => ip.type === 'lan');
+    const vpnIps = ips.filter((ip) => ip.type === 'vpn');
+    expect(lanIps[0]?.address).toBe('192.168.50.118');
+    expect(vpnIps).toHaveLength(1);
+    expect(vpnIps[0]?.address).toBe('100.92.129.118');
+  });
+
+  it('falls back to detection when env vars not set', () => {
+    mockNetworkInterfaces.mockReturnValue({
+      eth0: [ipv4('192.168.1.5')],
+    });
+
+    expect(getLanIp()).toBe('192.168.1.5');
+  });
+});
+
 describe('getAllIps', () => {
   beforeEach(() => {
     mockNetworkInterfaces.mockReset();
+    delete process.env['HOST_IP'];
+    delete process.env['HOST_VPN_IP'];
   });
 
   it('sorts LAN IPs before VPN IPs', () => {

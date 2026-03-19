@@ -232,26 +232,42 @@ export interface NetworkIp {
  * Detects LAN IPs and VPN IPs (Tailscale, ZeroTier, WireGuard).
  */
 export function getAllIps(): NetworkIp[] {
+  const hostIp = process.env['HOST_IP'];
+  const hostVpnIp = process.env['HOST_VPN_IP'];
+
   const nets = networkInterfaces();
-  const ips: NetworkIp[] = [];
+  const detected: NetworkIp[] = [];
   const vpnPatterns = /^(tailscale|ts|zt|zerotier|wg|tun|utun)/i;
   const dockerPatterns = /^(br-|docker|veth)/i;
 
   for (const name of Object.keys(nets)) {
     for (const net of nets[name] ?? []) {
       if (net.internal || net.family !== 'IPv4') continue;
-      // Skip Docker bridge networks
       if (dockerPatterns.test(name)) continue;
       const isVpn = vpnPatterns.test(name) || net.address.startsWith('100.');
-      ips.push({
+      detected.push({
         address: net.address,
         interface: name,
         type: isVpn ? 'vpn' : 'lan',
       });
     }
   }
-  // LAN first, then VPN
-  return ips.sort((a, b) => (a.type === 'lan' ? -1 : 1) - (b.type === 'lan' ? -1 : 1));
+
+  const result: NetworkIp[] = [];
+
+  if (hostIp) {
+    result.push({ address: hostIp, interface: 'HOST_IP', type: 'lan' });
+  } else {
+    result.push(...detected.filter((ip) => ip.type === 'lan'));
+  }
+
+  if (hostVpnIp) {
+    result.push({ address: hostVpnIp, interface: 'HOST_VPN_IP', type: 'vpn' });
+  } else {
+    result.push(...detected.filter((ip) => ip.type === 'vpn'));
+  }
+
+  return result.sort((a, b) => (a.type === 'lan' ? -1 : 1) - (b.type === 'lan' ? -1 : 1));
 }
 
 export interface ProjectUrl {

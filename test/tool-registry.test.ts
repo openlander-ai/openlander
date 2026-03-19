@@ -90,6 +90,7 @@ function createMockContext(opts?: {
   const env = {
     setBulk: vi.fn().mockReturnValue(false),
     getAllMasked: vi.fn().mockReturnValue({}),
+    verifyRoundTrip: vi.fn().mockReturnValue([]),
   };
 
   const planEngine = {
