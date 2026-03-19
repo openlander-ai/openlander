@@ -118,6 +118,20 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(developmentEnvironment?.container_id).toBe('container-abc123456789');
     expect(developmentEnvironment?.assigned_port).toBeGreaterThanOrEqual(10001);
     expect(developmentEnvironment?.image_tag).toBe('openlander/demo-app-dev:latest');
+
+    // Verify passive Docker mocks were called
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      clonePath,
+      'openlander/demo-app-dev:latest',
+      expect.any(Object),
+    );
+    expect(docker.waitForHealthy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'container-abc123456789',
+      expect.any(Number),
+    );
+    // Verify env mocks were called
+    expect(env.getAll as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('p1', 'p1-development');
+    expect(env.getSecretFilesForDeploy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('p1');
   });
 
   it('deploy() stays backward compatible by routing through production environment', async () => {
@@ -169,6 +183,15 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(project?.status).toBe('running');
     expect(refreshedProductionEnvironment?.container_id).toBe('container-abc123456789');
     expect(project?.container_id).toBe('container-abc123456789');
+
+    // Verify Docker and env mocks were called
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+    expect(docker.waitForHealthy as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+    expect(env.getAll as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'p2',
+      productionEnvironment!.id,
+    );
+    expect(env.getSecretFilesForDeploy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('p2');
   });
 
   it('deployEnvironment uses dev suffix for development container naming', async () => {
@@ -414,6 +437,10 @@ describe('DeployPipeline deployEnvironment', () => {
         containerPort: 8080,
       }),
     );
+
+    // Verify Docker build and health check mocks were called
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+    expect(docker.waitForHealthy as ReturnType<typeof vi.fn>).toHaveBeenCalled();
   });
 
   it('injects filtered build-time env vars as docker build args', async () => {
@@ -459,6 +486,13 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(dockerfileContent).toContain('ARG NEXT_PUBLIC_API_URL');
     expect(dockerfileContent).not.toContain('ARG SERVER_ONLY_TOKEN');
     expect(dockerfileContent).not.toContain('ARG INTERNAL_SECRET');
+
+    // Verify Docker health check and env mocks were called
+    expect(docker.waitForHealthy as ReturnType<typeof vi.fn>).toHaveBeenCalled();
+    expect(env.getAll as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'p7',
+      productionEnvironment!.id,
+    );
   });
 
   it('returns guard error for environment that does not belong to project', async () => {
