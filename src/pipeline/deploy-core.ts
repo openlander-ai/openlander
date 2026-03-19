@@ -1,7 +1,7 @@
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
 
@@ -11,10 +11,11 @@ import { cloneRepo } from './git.js';
 import { scanUsedPorts } from './port.js';
 import { getProjectUrl } from './traefik.js';
 import type { CloudflareTunnel } from './tunnel.js';
-import { BuildRecovery, type BuildContext as RecoveryBuildContext } from './build-recovery.js';
+import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
+import type { EventPayload } from '../events/index.js';
 import { ContainerNotFoundError, DockerfileNotFoundError, PreflightCheckError } from '../errors.js';
 import { detectFramework, ensureDockerfile, parseDockerfileExposePort } from './dockerfile-gen.js';
 import { preflightCheckOrThrow } from './preflight.js';
@@ -40,6 +41,7 @@ import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
 import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
+import { RecoveryOrchestrator } from './deploy/recovery.js';
 
 /**
  * Project configuration for a deployment.
@@ -879,113 +881,38 @@ export class DeployPipeline {
 
       try {
         const recovery = new BuildRecovery(this.docker, this.db, eventBus);
-        const failedStep: RecoveryBuildContext['failedStep'] =
-          failStep === 'clone' ||
-          failStep === 'dockerfile' ||
-          failStep === 'build' ||
-          failStep === 'run' ||
-          failStep === 'runtime'
-            ? failStep
-            : 'build';
-
-        const recoveryContext: RecoveryBuildContext = {
+        const recoveryOrchestrator = new RecoveryOrchestrator(this.buildDebugger);
+        const action = await recoveryOrchestrator.handleBuildFailure({
           projectId,
           projectName,
           imageTag,
           clonePath,
-          buildLog: buildLogWithError,
-          failedStep,
-        };
+          buildLogWithError,
+          failedStep: failStep,
+          retryCount,
+          buildRecovery: recovery,
+          emit: async <T extends 'build:inform' | 'build:dockerfile-fixed' | 'build:suggest'>(
+            eventName: T,
+            payload: EventPayload[T],
+          ) => {
+            await eventBus.emit(eventName, payload);
+          },
+        });
 
-        const classification = recovery.classify(buildLogWithError, recoveryContext);
-
-        if (classification.tier === 1 && classification.autoFixable && retryCount < 2) {
-          const fixResult = await recovery.attemptTier1Fix(classification, recoveryContext);
-
-          if (fixResult.fixed && fixResult.retryNeeded) {
-            const nextRetryCount = retryCount + 1;
-            const retryConfig: ProjectConfig = {
-              ...config,
-              repoUrl,
-              name: projectName,
-              _projectId: projectId,
-              _retryCount: nextRetryCount,
-            };
-
-            if (classification.category === 'cache-corrupt') {
-              retryConfig._noCacheBuild = true;
-            }
-
-            buildLog += `[recovery] Tier 1 auto-fix: ${fixResult.action}\n`;
-            return await this.deployEnvironment(projectId, environmentId, retryConfig);
+        if (action.type === 'retry') {
+          const retryConfig: ProjectConfig = {
+            ...config,
+            repoUrl,
+            name: projectName,
+            _projectId: projectId,
+            _retryCount: action.retryCount,
+          };
+          if (action.noCacheBuild) {
+            retryConfig._noCacheBuild = true;
           }
-        }
 
-        // Tier 2.5: Dockerfile content auto-fix loop
-        if (classification.tier === 2.5 && classification.autoFixable && retryCount < 3) {
-          if (!this.buildDebugger) {
-            await eventBus.emit('build:inform', {
-              projectId,
-              summary: 'Dockerfile error detected but no LLM configured. Fix Dockerfile manually.',
-              tier: 3,
-            });
-          } else if (clonePath) {
-            buildLog += '[recovery] Dockerfile content error detected. Attempting fix...\n';
-
-            const dockerfilePath = join(clonePath, 'Dockerfile');
-            const currentDockerfile = existsSync(dockerfilePath)
-              ? readFileSync(dockerfilePath, 'utf8')
-              : 'Not available';
-
-            const fixResult = await this.buildDebugger.fixDockerfile({
-              projectPath: clonePath,
-              currentDockerfile,
-              buildError: buildLogWithError,
-              projectName,
-            });
-
-            // Write fixed Dockerfile
-            writeFileSync(dockerfilePath, fixResult.dockerfileContent + '\n', 'utf8');
-
-            buildLog += `[recovery] Fixed Dockerfile:\n${fixResult.changes.map((c) => `  - ${c}`).join('\n')}\n`;
-
-            // Emit event for timeline display
-            await eventBus.emit('build:dockerfile-fixed', {
-              projectId,
-              changes: fixResult.changes,
-              explanation: fixResult.explanation,
-              retryCount: retryCount + 1,
-            });
-
-            // Retry deploy with fixed Dockerfile
-            const nextRetryCount = retryCount + 1;
-            const retryConfig: ProjectConfig = {
-              ...config,
-              repoUrl,
-              name: projectName,
-              _projectId: projectId,
-              _retryCount: nextRetryCount,
-              _noCacheBuild: true,
-            };
-
-            return await this.deployEnvironment(projectId, environmentId, retryConfig);
-          }
-        }
-
-        if (
-          classification.tier === 2 &&
-          classification.suggestible &&
-          classification.suggestedAction
-        ) {
-          await eventBus.emit('build:suggest', {
-            projectId,
-            suggestion: classification.suggestedAction,
-          });
-        }
-
-        if (classification.tier === 3) {
-          const summary = recovery.extractErrorSummary(buildLogWithError);
-          await eventBus.emit('build:inform', { projectId, summary, tier: 3 });
+          buildLog += `${action.logMessage}\n`;
+          return await this.deployEnvironment(projectId, environmentId, retryConfig);
         }
       } catch (recoveryError) {
         log.warn(
