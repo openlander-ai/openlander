@@ -212,9 +212,11 @@ export function createMockContext(db: Database): AppContext {
       disconnectAll: vi.fn().mockResolvedValue(undefined),
     } as unknown as AppContext['mcpClientManager'],
     planEngine: {
-      createPlan: vi.fn(),
+      createPlan: vi.fn().mockResolvedValue({ plan_id: 'plan-test', status: 'ready' }),
       updatePlan: vi.fn(),
-      executePlan: vi.fn(),
+      executePlan: vi
+        .fn()
+        .mockResolvedValue({ status: 'building', plan_id: 'plan-test', project_id: 'p1' }),
     } as unknown as AppContext['planEngine'],
   };
 }
