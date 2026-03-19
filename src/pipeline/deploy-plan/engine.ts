@@ -259,7 +259,7 @@ export class PlanEngine {
 
     this.scanDockerfileArgs(clonePath, userDockerfile, detectedEnv);
 
-    const requiredEnvVars = new Set(detectedEnv.map((e) => e.key));
+    const requiredEnvVars = new Set(detectedEnv.filter((e) => e.required).map((e) => e.key));
 
     const missing: string[] = [];
     const autoEnvVars: Record<string, string> = {};
@@ -355,7 +355,7 @@ export class PlanEngine {
     try {
       const content = readFileSync(filePath, 'utf8');
       const seen = new Set(out.map((e) => e.key));
-      const pattern = /^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)?$/gm;
+      const pattern = /^([A-Z_][A-Z0-9_]*)\s*=[ \t]*(.*)?$/gm;
       let match: RegExpExecArray | null;
       while ((match = pattern.exec(content)) !== null) {
         const key = match[1];
@@ -392,7 +392,7 @@ export class PlanEngine {
     try {
       const content = readFileSync(join(clonePath, dockerfilePath), 'utf8');
       const seen = new Set(out.map((e) => e.key));
-      const argPattern = /^ARG\s+([A-Z_][A-Z0-9_]*)(?:\s*=\s*(.*))?$/gm;
+      const argPattern = /^ARG\s+([A-Z_][A-Z0-9_]*)(?:\s*=[ \t]*(.*))?$/gm;
       let match: RegExpExecArray | null;
       while ((match = argPattern.exec(content)) !== null) {
         const key = match[1];
@@ -562,13 +562,15 @@ export class PlanEngine {
         };
       }
 
+      const isCompose = plan.build.method === 'compose';
       const startResult = await this.pipeline.startDeploy({
         repoUrl: plan.app.source.repo_url,
         branch: plan.app.source.branch,
         name: plan.app.name,
         envVars: mergedEnv,
-        preferDockerfile: !plan.build.generated_dockerfile,
-        dockerfilePath: plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,
+        preferDockerfile: isCompose ? false : !plan.build.generated_dockerfile,
+        dockerfilePath:
+          !isCompose && plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,
         dockerTarget: plan.build.target,
         composeServices: deployOnly,
       });
