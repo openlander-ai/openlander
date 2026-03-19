@@ -1,0 +1,110 @@
+import { asc, eq, sql } from 'drizzle-orm';
+import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { environments } from '../schema.drizzle.js';
+import type { EnvironmentRow } from '../types.js';
+
+export class EnvironmentRepo {
+  constructor(
+    private readonly db: DrizzleClient,
+    private readonly sqlite: SqliteDatabase,
+  ) {
+    void this.sqlite;
+  }
+
+  createEnvironment(environment: {
+    id: string;
+    projectId: string;
+    type: EnvironmentRow['type'];
+    branch: string;
+    status?: EnvironmentRow['status'];
+    assignedPort?: number | null;
+    containerId?: string | null;
+    imageTag?: string | null;
+    previousImageTag?: string | null;
+    publicUrl?: string | null;
+  }): EnvironmentRow {
+    this.db
+      .insert(environments)
+      .values({
+        id: environment.id,
+        project_id: environment.projectId,
+        type: environment.type,
+        branch: environment.branch,
+        status: environment.status ?? 'idle',
+        assigned_port: environment.assignedPort ?? null,
+        container_id: environment.containerId ?? null,
+        image_tag: environment.imageTag ?? null,
+        previous_image_tag: environment.previousImageTag ?? null,
+        public_url: environment.publicUrl ?? null,
+      })
+      .run();
+
+    const created = this.getEnvironment(environment.id);
+    if (!created) throw new Error(`Failed to create environment ${environment.id}`);
+    return created;
+  }
+
+  getEnvironment(id: string): EnvironmentRow | undefined {
+    return this.db.select().from(environments).where(eq(environments.id, id)).get() as
+      | EnvironmentRow
+      | undefined;
+  }
+
+  getEnvironmentsByProject(projectId: string): EnvironmentRow[] {
+    return this.db
+      .select()
+      .from(environments)
+      .where(eq(environments.project_id, projectId))
+      .orderBy(asc(environments.created_at))
+      .all() as EnvironmentRow[];
+  }
+
+  updateEnvironment(
+    id: string,
+    updates: Partial<{
+      branch: string;
+      status: EnvironmentRow['status'];
+      assignedPort: number | null;
+      containerId: string | null;
+      imageTag: string | null;
+      previousImageTag: string | null;
+      publicUrl: string | null;
+    }>,
+  ): void {
+    const setValues: Partial<typeof environments.$inferInsert> = {};
+
+    if (updates.branch !== undefined) {
+      setValues.branch = updates.branch;
+    }
+    if (updates.status !== undefined) {
+      setValues.status = updates.status;
+    }
+    if (updates.assignedPort !== undefined) {
+      setValues.assigned_port = updates.assignedPort;
+    }
+    if (updates.containerId !== undefined) {
+      setValues.container_id = updates.containerId;
+    }
+    if (updates.imageTag !== undefined) {
+      setValues.image_tag = updates.imageTag;
+    }
+    if (updates.previousImageTag !== undefined) {
+      setValues.previous_image_tag = updates.previousImageTag;
+    }
+    if (updates.publicUrl !== undefined) {
+      setValues.public_url = updates.publicUrl;
+    }
+
+    if (Object.keys(setValues).length === 0) return;
+
+    this.db
+      .update(environments)
+      .set({ ...setValues, updated_at: sql`CURRENT_TIMESTAMP` })
+      .where(eq(environments.id, id))
+      .run();
+  }
+
+  deleteEnvironment(id: string): void {
+    this.db.delete(environments).where(eq(environments.id, id)).run();
+  }
+}
