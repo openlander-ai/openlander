@@ -396,4 +396,4 @@ describe('Clone Config Matrix', () => {
 - [ ] Q-2: `test/event-wiring.test.ts` 통과, 갭 이벤트 처리 방향 결정
 - [ ] Q-3: `test/clone-matrix.test.ts` 통과, C1~C12 중 최소 핵심 8개 커버
 - [ ] Q-1: 시나리오 1, 2, 4 수동 실행 완료 + 결과 기록
-- [ ] 전체 `bun test` 통과
+- [ ] 전체 `npm test` 통과

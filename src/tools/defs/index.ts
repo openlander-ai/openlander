@@ -3,6 +3,7 @@ export * as schemas from './schemas.js';
 export { composeToolDefs } from './compose.js';
 export { debugToolDefs } from './debug.js';
 export { deployToolDefs } from './deploy.js';
+export { deployPlanToolDefs } from './deploy-plan.js';
 export { envToolDefs } from './env.js';
 export { gitToolDefs } from './git.js';
 export { infraToolDefs } from './infra.js';

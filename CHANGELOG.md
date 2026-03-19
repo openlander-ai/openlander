@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.2] - Compose, Env Escaping, Traefik HTTP Provider
+
 ### Added
 
 - `compose_services` parameter for `deploy_project` — deploy specific docker-compose services (e.g., `["backend"]`) instead of all

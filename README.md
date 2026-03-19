@@ -170,20 +170,24 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 
 ## Roadmap
 
-| Version    | Focus                 | Status | Highlights                                                                                                                                                                 |
-| ---------- | --------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **v0.1.0** | MVP                   | Done   | Chat-driven deployment, Docker + Traefik, MCP server (23 tools)                                                                                                            |
-| **v0.2.0** | Web Dashboard         | Done   | React SPA, Vercel-inspired UI, real-time timeline, NDJSON streaming                                                                                                        |
-| **v0.2.1** | i18n + Bugfixes       | Done   | Korean/English i18n, build error reporting, OAuth callback fix                                                                                                             |
-| **v0.2.2** | Deploy Controls       | Done   | Blue-green deploy UI, webhook settings, rollback button                                                                                                                    |
-| **v0.2.3** | Domains & Visibility  | Done   | Domain CRUD UI, server scan dashboard, public URL management                                                                                                               |
-| **v0.2.4** | Services              | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images                                                                                                      |
-| **v0.2.5** | Release Preparation   | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                                                                                               |
-| **v0.2.6** | Shared Mode & Preview | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys                                                                             |
-| **v0.3.0** | Developer Experience  | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure                                                                |
-| **v0.3.1** | UI Polish & Stability | Done   | Terminal shell probing for Alpine/slim images, log-first console layout, overview summary dashboard, v0.3.1 ship                                                           |
-| **v0.4.0** | Deployments UX        | Done   | Deployments filters, richer history rows, detail metadata cards, API UTC normalization, safer browser time parsing                                                         |
-| **v1.0.0** | First Stable Release  | Next   | TUI removed, code quality hardened (error handling, dead code, coverage gates), 23-framework auto-detect (Rails, Spring Boot, Laravel, ASP.NET), enhanced preflight checks |
+| Version    | Focus                 | Status | Highlights                                                                                                                                                              |
+| ---------- | --------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **v0.1.0** | MVP                   | Done   | Chat-driven deployment, Docker + Traefik, MCP server (23 tools)                                                                                                         |
+| **v0.2.0** | Web Dashboard         | Done   | React SPA, Vercel-inspired UI, real-time timeline, NDJSON streaming                                                                                                     |
+| **v0.2.1** | i18n + Bugfixes       | Done   | Korean/English i18n, build error reporting, OAuth callback fix                                                                                                          |
+| **v0.2.2** | Deploy Controls       | Done   | Blue-green deploy UI, webhook settings, rollback button                                                                                                                 |
+| **v0.2.3** | Domains & Visibility  | Done   | Domain CRUD UI, server scan dashboard, public URL management                                                                                                            |
+| **v0.2.4** | Services              | Done   | Shared infrastructure (PostgreSQL, Redis, etc.), custom Docker images                                                                                                   |
+| **v0.2.5** | Release Preparation   | Done   | Code review fixes, Cloudflare config UI, i18n simplification                                                                                                            |
+| **v0.2.6** | Shared Mode & Preview | Done   | Traefik File Provider, Quick Share via Traefik, access codes (Shared mode), PR preview deploys                                                                          |
+| **v0.3.0** | Developer Experience  | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure                                                             |
+| **v0.3.1** | UI Polish & Stability | Done   | Terminal shell probing for Alpine/slim images, log-first console layout, overview summary dashboard                                                                     |
+| **v0.4.0** | Deployments UX        | Done   | Deployments filters, richer history rows, detail metadata cards, API UTC normalization                                                                                  |
+| **v0.5.1** | Multi-Environment     | Done   | Environment schema, multi-branch deploys, environment-aware orchestration                                                                                               |
+| **v0.6.0** | Architecture Rebuild  | Done   | Deterministic deploy pipeline, unified ToolDef registry (40+ tools), shared infra (PostgreSQL/MySQL/Redis), deploy terminal UI, AI co-pilot (7 features), webhook tools |
+| **v0.6.1** | Env Vars Fix          | Done   | Env vars merge (not replace), list_env_vars tool, health monitor Docker fallback                                                                                        |
+| **v0.6.2** | Compose & Traefik     | Done   | Compose service filtering, secret file mount, env escaping, Traefik HTTP Provider, build log detail, redeploy port fix                                                  |
+| **v1.0.0** | Stable Release        | TBD    | Quality hardening, comprehensive testing, production-readiness improvements                                                                                             |
 
 ## MCP Integration (AI Coding Agents)
 

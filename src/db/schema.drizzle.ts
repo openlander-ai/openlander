@@ -284,6 +284,28 @@ export const secretFiles = sqliteTable(
   ],
 );
 
+export const deployPlans = sqliteTable(
+  'deploy_plans',
+  {
+    id: text('id').primaryKey(),
+    project_name: text('project_name'),
+    project_id: text('project_id'),
+    status: text('status').notNull(),
+    complexity: text('complexity'),
+    plan_json: text('plan_json').notNull(),
+    commit_sha: text('commit_sha'),
+    error_message: text('error_message'),
+    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+    updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    executed_at: text('executed_at'),
+    completed_at: text('completed_at'),
+  },
+  (table) => [
+    index('idx_deploy_plans_project_name').on(table.project_name),
+    index('idx_deploy_plans_created_at').on(table.created_at),
+  ],
+);
+
 export const drizzleSchema = {
   projects,
   environments,
@@ -297,4 +319,5 @@ export const drizzleSchema = {
   globalSecrets,
   services,
   secretFiles,
+  deployPlans,
 };

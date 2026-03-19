@@ -46,10 +46,10 @@ const PROMPTS: PromptDef[] = [
 
 1. **Preflight** — Call \`get_system_stats\` to check disk/memory.
 2. **Create services first** — If the app needs a database or cache:
-   - \`create_service\` with template (postgresql/mysql/redis/mongodb).
-   - The response includes \`suggested_env\` with the recommended env var key and connection string.
-   - Call \`set_env_vars\` on the project with the suggested key/value to link the service.
-3. **Deploy** — \`deploy_project\` with the repo URL. Add \`env_vars\` for any additional config.
+    - \`create_service\` with template (postgresql/mysql/redis/mongodb).
+    - The response includes \`suggested_env\` with the recommended env var key and connection string.
+    - Call \`set_env_vars\` on the project with the suggested key/value to link the service.
+3. **Deploy** — \`create_deploy_plan\` with the repo URL, then \`execute_deploy_plan\`. Add \`env_vars\` for any additional config.
 4. **Monitor** — \`get_deploy_status\` to poll build progress. \`get_build_log\` for raw output if it fails.
 5. **Debug failures** — \`debug_build_error\` for AI analysis. \`get_build_log\` for raw logs.
 
@@ -64,7 +64,8 @@ create_service({ name: "mydb", template: "postgresql" })
 set_env_vars({ project_name: "myapp", variables: '{"DATABASE_URL": "postgresql://..."}' })
 
 // 3. Redeploy to pick up new env
-redeploy_project({ project_name: "myapp" })
+create_deploy_plan({ project_name: "myapp" })
+execute_deploy_plan({ plan_id: "..." })
 \`\`\`
 
 ## Env Var Conventions
@@ -85,7 +86,7 @@ redeploy_project({ project_name: "myapp" })
 1. **Using localhost in connection strings** — Containers can't reach the host via localhost. Use the container name (\`ol-svc-*\`) for OpenLander services.
 2. **Forgetting to redeploy after set_env_vars** — Env changes only take effect on next deploy.
 3. **Deploying without Dockerfile** — OpenLander auto-generates one for known frameworks, but custom projects need a Dockerfile.
-4. **Ignoring preflight failures** — \`deploy_project\` runs preflight checks. If port or name conflicts exist, resolve them first.
+4. **Ignoring preflight failures** — \`create_deploy_plan\` runs preflight checks. If port or name conflicts exist, resolve them first.
 5. **Not checking build logs on failure** — Always call \`get_build_log\` before asking the user to debug.
 
 ## Build-Time Environment Variables
@@ -99,7 +100,7 @@ Variables with these prefixes are automatically injected as Docker build args:
 - PUBLIC_* (SvelteKit/general)
 - GATSBY_* (Gatsby)
 
-No special configuration needed — just pass them via env_vars in deploy_project or set_env_vars.
+No special configuration needed — just pass them via env_vars in create_deploy_plan or set_env_vars.
 
 ## Webhook Auto-Deploy
 

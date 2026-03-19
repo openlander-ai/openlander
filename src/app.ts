@@ -31,6 +31,7 @@ import {
 } from './monitor/postmortem.js';
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
 import { McpClientManager } from './mcp/client-manager.js';
+import { PlanEngine } from './pipeline/deploy-plan/engine.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
@@ -77,6 +78,7 @@ export interface AppContext {
   serviceManager: ServiceManager;
   // v1.0 modules
   mcpClientManager: McpClientManager;
+  planEngine: PlanEngine;
 }
 
 /** Create the application context from config. */
@@ -335,7 +337,7 @@ ${plan.agentGuidance}
 
 ## General Recovery Rules
 1. If build log is provided above, analyze it directly. Otherwise call debug_build_error("${projectName}").
-2. After fixing, redeploy with deploy_project("${projectName}").
+2. After fixing, redeploy with create_deploy_plan and execute_deploy_plan.
 3. Do NOT just suggest fixes — execute them.`;
 
         if (isAdvisory) {
@@ -538,6 +540,17 @@ ${plan.agentGuidance}
   // Connection and tool merging handled by callers (cli/index.ts, setup-routes.ts)
   const mcpClientManager = new McpClientManager();
 
+  // v1.0: Plan engine (deployment planning and execution)
+  const planEngine = new PlanEngine({
+    db,
+    pipeline,
+    env,
+    serviceManager,
+    autoDetector,
+    config,
+    events: eventBus,
+  });
+
   // Build partial ctx without channelManager, then compose the full AppContext
   const partialCtx = {
     config,
@@ -562,6 +575,7 @@ ${plan.agentGuidance}
     questionBridge,
     serviceManager,
     mcpClientManager,
+    planEngine,
   };
 
   // v0.4: ChannelManager needs AppContext but never self-references channelManager.
@@ -577,7 +591,7 @@ ${plan.agentGuidance}
     setPostmortemInstance(postmortem);
   }
 
-  const rollbackWatcher = new RollbackWatcher(eventBus, db);
+  const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline);
   rollbackWatcher.start();
   activeRollbackWatcher = rollbackWatcher;
 
