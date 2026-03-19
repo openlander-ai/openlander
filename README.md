@@ -288,7 +288,8 @@ Once connected, AI agents get 60+ tools including:
 
 - **Platform**: Linux or macOS (Windows is not supported, but WSL2 on Windows works)
 - **[Node.js](https://nodejs.org/)** >= 22 (includes npm)
-- **Docker** installed and running (see below)
+- **[Docker Engine](https://docs.docker.com/engine/)** >= 20.10 with **[Compose V2](https://docs.docker.com/compose/)** >= 2.3.0
+- **Git** >= 2.x
 - **LLM API key** (configured during setup) — one of:
   - [Google Gemini](https://ai.google.dev/) (free tier available)
   - [OpenRouter](https://openrouter.ai/) (free tier, no credit card)

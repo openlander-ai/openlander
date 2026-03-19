@@ -125,8 +125,12 @@ interface ParsedComposePsRow {
   containerId?: string;
 }
 
+// Minimum supported Docker Compose version.
+// Features used: up --progress=plain (V2.3.0+), ps --format json (V2.1.0+)
+const MIN_COMPOSE_VERSION = '2.3.0';
+
 export class ComposePipeline {
-  private supportsProgress: boolean | null = null;
+  private versionChecked = false;
 
   constructor(
     private readonly docker: Docker,
@@ -138,20 +142,27 @@ export class ComposePipeline {
     void this.docker;
   }
 
-  private async checkProgressSupport(): Promise<boolean> {
-    if (this.supportsProgress !== null) return this.supportsProgress;
+  private async checkComposeVersion(): Promise<void> {
+    if (this.versionChecked) return;
+    this.versionChecked = true;
     try {
       const result = await this.execCompose('/dev/null', ['version', '--short']);
-      const version = result.stdout.trim();
-      const parts = version.replace(/^v/i, '').split('.');
-      const major = parseInt(parts[0] ?? '0', 10);
-      const minor = parseInt(parts[1] ?? '0', 10);
-      // --progress added in Compose V2.3.0
-      this.supportsProgress = major > 2 || (major === 2 && minor >= 3);
+      const version = result.stdout.trim().replace(/^v/i, '');
+      const [major, minor, patch] = version.split('.').map((n) => parseInt(n, 10));
+      const [reqMajor, reqMinor, reqPatch] = MIN_COMPOSE_VERSION.split('.').map((n) =>
+        parseInt(n, 10),
+      );
+      const current = (major ?? 0) * 10000 + (minor ?? 0) * 100 + (patch ?? 0);
+      const required = (reqMajor ?? 0) * 10000 + (reqMinor ?? 0) * 100 + (reqPatch ?? 0);
+      if (current < required) {
+        log.warn(
+          { detected: version, minimum: MIN_COMPOSE_VERSION },
+          `Docker Compose ${version} is below minimum ${MIN_COMPOSE_VERSION}. Compose deploys may fail.`,
+        );
+      }
     } catch {
-      this.supportsProgress = false;
+      log.warn('Could not detect Docker Compose version. Compose deploys may fail.');
     }
-    return this.supportsProgress;
   }
 
   detectComposeFile(projectPath: string): string | null {
@@ -571,12 +582,16 @@ export class ComposePipeline {
         deployService: async (service) => {
           this.jobManager?.updatePhase(parentProjectId, 'starting');
 
-          const progressSupported = await this.checkProgressSupport();
-          const upArgs = ['up', '-d', '--build', '--no-deps'];
-          if (progressSupported) upArgs.push('--progress=plain');
-          upArgs.push(service.name);
+          await this.checkComposeVersion();
 
-          const upResult = await this.execCompose(config.composePath, upArgs);
+          const upResult = await this.execCompose(config.composePath, [
+            'up',
+            '-d',
+            '--build',
+            '--no-deps',
+            '--progress=plain',
+            service.name,
+          ]);
           buildLog += `[compose up ${service.name}]\n${upResult.stdout}${upResult.stderr}`;
 
           if (upResult.exitCode !== 0) {
