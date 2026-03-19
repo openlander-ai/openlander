@@ -35,6 +35,7 @@ import {
   detectFailStep,
   parsePendingFix,
 } from './deploy/helpers.js';
+import { ContainerLifecycle } from './deploy/lifecycle.js';
 import { TunnelManager } from './deploy/tunnel.js';
 
 /**
@@ -171,6 +172,7 @@ interface PreviewDeployResult {
  */
 export class DeployPipeline {
   private readonly tunnelManager: TunnelManager;
+  private readonly lifecycle: ContainerLifecycle;
 
   private get detectFailStep(): (buildLog: string) => string {
     return detectFailStep;
@@ -186,6 +188,7 @@ export class DeployPipeline {
     private readonly buildDebugger?: BuildDebugger,
   ) {
     this.tunnelManager = new TunnelManager(this.db);
+    this.lifecycle = new ContainerLifecycle(this.docker, this.db);
     this.cleanupStaleTunnels();
     void this.cleanupOrphanContainers();
   }
@@ -1798,39 +1801,12 @@ export class DeployPipeline {
     projectId: string,
     mode: 'stop' | 'remove',
   ): Promise<void> {
-    const project = this.db.getProject(projectId);
-    if (!project) return;
-
-    const action =
-      mode === 'remove'
-        ? (id: string) => this.docker.removeContainer(id)
-        : (id: string) => this.docker.stopContainer(id);
-
-    const tryCleanup = async (identifier: string) => {
-      try {
-        await action(identifier);
-      } catch (err) {
-        log.debug({ err, identifier, mode }, 'Container cleanup failed — may not exist');
-      }
-    };
-
-    const environments = this.db.getEnvironmentsByProject(projectId);
-    for (const env of environments) {
-      if (env.container_id) {
-        await tryCleanup(env.container_id);
-      }
-      const envRouteName = getRouteName(project.name, env.type);
-      await tryCleanup(`ol-${envRouteName}`);
+    if (mode === 'stop') {
+      await this.lifecycle.stop(projectId);
+      return;
     }
 
-    if (project.container_id) {
-      await tryCleanup(project.container_id);
-    }
-    await tryCleanup(`ol-${project.name}`);
-
-    if (mode === 'remove') {
-      this.docker.cleanupSecretFiles(`ol-${project.name}`);
-    }
+    await this.lifecycle.cleanupProjectContainers(projectId);
   }
 
   private async forceCleanConflicts(
@@ -1841,16 +1817,7 @@ export class DeployPipeline {
 
     if (!error.result.checks.nameAvailable.pass) {
       log.info({ containerName }, 'Force mode: removing conflicting container');
-      try {
-        await this.docker.stopContainer(containerName);
-      } catch (_) {
-        /* best-effort */
-      }
-      try {
-        await this.docker.removeContainer(containerName);
-      } catch (_) {
-        /* best-effort */
-      }
+      await this.lifecycle.forceCleanConflicts(containerName);
     }
   }
 
@@ -1872,16 +1839,13 @@ export class DeployPipeline {
 
     const children = this.db.getChildProjects(projectId);
     if (children.length > 0) {
-      await Promise.all(children.map((c) => this.stop(c.id)));
-      this.db.updateProject(projectId, { status: 'stopped' });
+      await this.lifecycle.stop(projectId);
+      this.closeTunnel(projectId);
       return;
     }
 
-    await this.cleanupProjectContainers(projectId, 'stop');
-    this.db.updateProject(projectId, { status: 'stopped' });
+    await this.lifecycle.stop(projectId);
     this.closeTunnel(projectId);
-    const project = this.db.getProject(projectId);
-    await eventBus.emit('container:stop', { projectId, containerId: project?.container_id ?? '' });
   }
 
   /** Start a stopped project's container. */
@@ -1907,63 +1871,52 @@ export class DeployPipeline {
       return;
     }
 
-    const children = this.db.getChildProjects(projectId);
-    if (children.length > 0) {
-      await Promise.all(children.map((c) => this.start(c.id)));
-      this.db.updateProject(projectId, { status: 'running' });
-      return;
-    }
-
-    const project = this.db.getProject(projectId);
-    if (!project?.container_id) return;
-
-    try {
-      await this.docker.startContainer(project.container_id);
-    } catch (err) {
-      if (err instanceof ContainerNotFoundError) {
-        log.warn(
-          { projectId },
-          'Container not found during start — may have been removed externally',
-        );
-        this.db.updateProject(projectId, { status: 'error' });
-        throw new Error(`Container for project ${project.name} no longer exists. Please redeploy.`);
-      }
-      throw err;
-    }
-    this.db.updateProject(projectId, { status: 'running' });
-    await eventBus.emit('container:start', { projectId, containerId: project.container_id });
+    await this.lifecycle.start(projectId);
   }
 
   /** Remove a project entirely. */
   async remove(projectId: string, cloudflare?: CloudflareTunnelManager): Promise<void> {
-    const children = this.db.getChildProjects(projectId);
-    if (children.length > 0) {
-      await Promise.all(children.map((c) => this.remove(c.id, cloudflare)));
-    }
-
     const project = this.db.getProject(projectId);
     if (!project) return;
 
-    await this.cleanupProjectContainers(projectId, 'remove');
+    if (this.composePipeline) {
+      try {
+        await this.composePipeline.stopCompose(projectId);
+      } catch (err) {
+        log.debug({ err, projectId }, 'Compose stop during project delete skipped');
+      }
+    }
 
-    // Clean up Cloudflare DNS records and tunnel routes for production domains
+    const descendants = new Set<string>([projectId]);
+    const queue = [projectId];
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      const children = this.db.getChildProjects(current);
+      for (const child of children) {
+        if (descendants.has(child.id)) continue;
+        descendants.add(child.id);
+        queue.push(child.id);
+      }
+    }
+
     if (cloudflare) {
-      const domains = this.db.getDomainMappings(projectId);
-      for (const mapping of domains) {
-        try {
-          await cloudflare.removeTunnel(projectId, mapping.domain);
-        } catch (err) {
-          log.debug(
-            { err, domain: mapping.domain },
-            'Domain cleanup during project delete failed — may already be removed',
-          );
+      for (const targetId of descendants) {
+        const domains = this.db.getDomainMappings(targetId);
+        for (const mapping of domains) {
+          try {
+            await cloudflare.removeTunnel(targetId, mapping.domain);
+          } catch (err) {
+            log.debug(
+              { err, domain: mapping.domain },
+              'Domain cleanup during project delete failed — may already be removed',
+            );
+          }
         }
       }
     }
 
-    this.closeTunnel(projectId);
-    this.db.deleteProject(projectId);
-    await eventBus.emit('container:remove', { projectId, containerId: project.container_id ?? '' });
+    await this.lifecycle.remove(projectId, this.tunnelManager);
   }
 
   /** Create a TryCloudflare tunnel for a project. */
@@ -1982,11 +1935,7 @@ export class DeployPipeline {
 
   /** Get container logs. */
   async getLogs(projectId: string, lines = 50): Promise<string> {
-    const project = this.db.getProject(projectId);
-    if (!project?.container_id) {
-      return 'No container running for this project.';
-    }
-    return this.docker.getLogs(project.container_id, lines);
+    return this.lifecycle.getLogs(projectId, lines);
   }
 
   private applyPendingFix(projectId: string, clonePath: string): string | null {
