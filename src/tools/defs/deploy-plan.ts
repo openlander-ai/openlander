@@ -67,7 +67,18 @@ export const deployPlanToolDefs: ToolDef[] = [
       return {
         plan_id: plan.plan_id,
         status: plan.status,
+        complexity: plan.complexity,
+        app: plan.app,
+        build: plan.build,
+        services: plan.services,
+        env: {
+          required: plan.env.required,
+          auto: plan.env.auto,
+          provided_count: Object.keys(plan.env.provided).length,
+          detected: plan.env.detected,
+        },
         missing: plan.missing,
+        warnings: plan.warnings,
       };
     },
   },
@@ -82,7 +93,8 @@ export const deployPlanToolDefs: ToolDef[] = [
       const appCtx = context.appCtx;
       const planId = args['plan_id'] as string;
 
-      const result: ExecutePlanResult = await appCtx.planEngine.executePlan(planId);
+      const deployOnly = (args['deploy_only'] as string[] | undefined) ?? undefined;
+      const result: ExecutePlanResult = await appCtx.planEngine.executePlan(planId, deployOnly);
 
       if (result.status === 'building') {
         return {

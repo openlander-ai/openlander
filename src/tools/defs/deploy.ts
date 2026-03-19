@@ -102,12 +102,14 @@ export const deployToolDefs: ToolDef[] = [
         phase: string;
         startedAt: Date;
         errorSummary?: string;
+        buildLogTail?: string;
       }) => ({
         name: job.projectName,
         phase: job.phase,
         elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
         error: job.errorSummary,
         ...(job.phase === 'done' ? { urls: getProjectUrls(job.projectName) } : {}),
+        ...(job.phase === 'failed' && job.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
       });
 
       if (projectName) {

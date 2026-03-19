@@ -418,4 +418,10 @@ export const updateDeployPlanSchema = z.object({
 
 export const executeDeployPlanSchema = z.object({
   plan_id: z.string().min(1).describe('Plan ID to execute. Plan must be in "ready" status.'),
+  deploy_only: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'For compose projects: deploy only these service names (e.g., ["backend", "worker"]). Omit to deploy all services.',
+    ),
 });

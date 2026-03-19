@@ -5,6 +5,7 @@ export interface JobStatus {
   projectName: string;
   phase: JobPhase;
   errorSummary?: string;
+  buildLogTail?: string;
   startedAt: Date;
   completedAt?: Date;
 }
@@ -21,11 +22,17 @@ export class JobManager {
     });
   }
 
-  updatePhase(projectId: string, phase: JobPhase, errorSummary?: string): void {
+  updatePhase(
+    projectId: string,
+    phase: JobPhase,
+    errorSummary?: string,
+    buildLogTail?: string,
+  ): void {
     const job = this.jobs.get(projectId);
     if (!job) return;
     job.phase = phase;
     if (errorSummary) job.errorSummary = errorSummary;
+    if (buildLogTail) job.buildLogTail = buildLogTail;
     if (phase === 'done' || phase === 'failed') {
       job.completedAt = new Date();
     }

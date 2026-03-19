@@ -1007,6 +1007,8 @@ export class DeployPipeline {
       const logLines = buildLogWithError.split('\n').filter(Boolean);
       const buildLogTail = logLines.slice(-30).join('\n');
 
+      this.jobManager?.updatePhase(projectId, 'failed', errorMsg, buildLogTail);
+
       return {
         success: false,
         projectId,

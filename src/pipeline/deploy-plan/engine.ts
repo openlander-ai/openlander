@@ -480,7 +480,7 @@ export class PlanEngine {
     return merged;
   }
 
-  async executePlan(planId: string): Promise<ExecutePlanResult> {
+  async executePlan(planId: string, deployOnly?: string[]): Promise<ExecutePlanResult> {
     // Re-read from DB to prevent race condition
     const freshRow = this.db.getDeployPlan(planId);
     if (!freshRow) {
@@ -568,6 +568,9 @@ export class PlanEngine {
         name: plan.app.name,
         envVars: mergedEnv,
         preferDockerfile: !plan.build.generated_dockerfile,
+        dockerfilePath: plan.build.dockerfile !== 'Dockerfile' ? plan.build.dockerfile : undefined,
+        dockerTarget: plan.build.target,
+        composeServices: deployOnly,
       });
 
       if (startResult.status === 'preflight_failed') {

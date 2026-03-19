@@ -106,7 +106,16 @@ describe('deploy-plan integration', () => {
     const mockPlan = {
       plan_id: 'plan_123',
       status: 'ready',
+      complexity: 'simple',
+      app: {
+        name: 'test-app',
+        source: { repo_url: 'https://github.com/test/repo', branch: 'main', commit_sha: 'abc123' },
+      },
+      build: { method: 'dockerfile', dockerfile: 'Dockerfile', context: '.' },
+      services: [],
+      env: { required: [], auto: {}, provided: {}, detected: [] },
       missing: [],
+      warnings: [],
     };
 
     (ctx.planEngine.updatePlan as any).mockReturnValue(mockPlan);
@@ -120,7 +129,7 @@ describe('deploy-plan integration', () => {
       env: { DATABASE_URL: 'postgres://...' },
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       plan_id: 'plan_123',
       status: 'ready',
       missing: [],
@@ -144,7 +153,7 @@ describe('deploy-plan integration', () => {
 
     const result = await tool!.execute({ plan_id: 'plan_123' }, { target: 'mcp' });
 
-    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith('plan_123');
+    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith('plan_123', undefined);
 
     expect(result).toEqual({
       plan_id: 'plan_123',
