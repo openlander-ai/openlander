@@ -2,7 +2,7 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
 
 import type { Docker } from './docker.js';
@@ -11,7 +11,7 @@ import { cloneRepo } from './git.js';
 import { allocatePort, scanUsedPorts } from './port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname, getProjectUrl } from './traefik.js';
 import type { CloudflareTunnel } from './tunnel.js';
-import { BuildRecovery, type BuildContext } from './build-recovery.js';
+import { BuildRecovery, type BuildContext as RecoveryBuildContext } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
@@ -19,7 +19,7 @@ import { ContainerNotFoundError, DockerfileNotFoundError, PreflightCheckError } 
 import { detectFramework, ensureDockerfile, parseDockerfileExposePort } from './dockerfile-gen.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { detectNewEnvKeys } from './env-inject.js';
-import { filterBuildTimeVars, injectBuildArgs } from './build-args.js';
+import { filterBuildTimeVars } from './build-args.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from './diff-analysis.js';
 import { scanForSecrets } from './secret-scan.js';
 import type { JobManager } from './job-manager.js';
@@ -38,6 +38,7 @@ import {
 import { ContainerLifecycle } from './deploy/lifecycle.js';
 import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
+import { BuildExecutor } from './deploy/build-step.js';
 
 /**
  * Project configuration for a deployment.
@@ -175,6 +176,7 @@ export class DeployPipeline {
   private readonly tunnelManager: TunnelManager;
   private readonly lifecycle: ContainerLifecycle;
   private readonly rollbackExecutor: RollbackExecutor;
+  private readonly buildExecutor: BuildExecutor;
 
   private get detectFailStep(): (buildLog: string) => string {
     return detectFailStep;
@@ -192,6 +194,7 @@ export class DeployPipeline {
     this.tunnelManager = new TunnelManager(this.db);
     this.lifecycle = new ContainerLifecycle(this.docker, this.db);
     this.rollbackExecutor = new RollbackExecutor(this.docker, this.db);
+    this.buildExecutor = new BuildExecutor(this.docker);
     this.cleanupStaleTunnels();
     void this.cleanupOrphanContainers();
   }
@@ -671,38 +674,27 @@ export class DeployPipeline {
         buildLog += '[dockerfile] Found Dockerfile\n';
       }
 
-      // Inject build-time ARGs into Dockerfile before building
       const allEnvVarsForBuild = {
         ...config.envVars,
         ...this.env.getMergedForDeploy(projectId, environmentId),
       };
       const buildTimeVars = filterBuildTimeVars(allEnvVarsForBuild);
-      if (Object.keys(buildTimeVars).length > 0) {
-        const dfContent = readFileSync(dockerfilePath, 'utf8');
-        writeFileSync(
-          dockerfilePath,
-          injectBuildArgs(dfContent, Object.keys(buildTimeVars)),
-          'utf8',
-        );
-      }
-
-      const buildContextPath = config.buildContext
-        ? join(cloneResult.path, config.buildContext)
-        : cloneResult.path;
-      const relativeDockerfile = relative(buildContextPath, dockerfilePath);
       const buildStart = Date.now();
       let lastBuildOutputEmit = 0;
       let dockerBuildOutput = '';
       this.jobManager?.updatePhase(projectId, 'building');
-      await this.docker.buildImage(buildContextPath, imageTag, {
-        noCache: config._noCacheBuild === true,
-        buildArgs: buildTimeVars,
-        target: config.dockerTarget,
-        dockerfile: relativeDockerfile,
-        onProgress: (event) => {
-          const line = event.stream?.trim() ?? event.error ?? '';
-          if (!line) return;
-
+      await this.buildExecutor.build(
+        {
+          clonePath: cloneResult.path,
+          projectId,
+          imageTag,
+          dockerfilePath: config.dockerfilePath,
+          buildArgs: buildTimeVars,
+          noCache: config._noCacheBuild === true,
+          buildContext: config.buildContext,
+          dockerTarget: config.dockerTarget,
+        },
+        (line) => {
           dockerBuildOutput += line + '\n';
 
           const now = Date.now();
@@ -712,10 +704,10 @@ export class DeployPipeline {
           void eventBus.emit('build:output', {
             projectId,
             line,
-            stream: event.error ? 'error' : 'stdout',
+            stream: 'stdout',
           });
         },
-      });
+      );
       if (dockerBuildOutput) {
         buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
       }
@@ -891,7 +883,7 @@ export class DeployPipeline {
 
       try {
         const recovery = new BuildRecovery(this.docker, this.db, eventBus);
-        const failedStep: BuildContext['failedStep'] =
+        const failedStep: RecoveryBuildContext['failedStep'] =
           failStep === 'clone' ||
           failStep === 'dockerfile' ||
           failStep === 'build' ||
@@ -900,7 +892,7 @@ export class DeployPipeline {
             ? failStep
             : 'build';
 
-        const recoveryContext: BuildContext = {
+        const recoveryContext: RecoveryBuildContext = {
           projectId,
           projectName,
           imageTag,
@@ -1225,30 +1217,22 @@ export class DeployPipeline {
 
         try {
           this.jobManager?.updatePhase(childId, 'building');
-          const contextPath = config.clonePath;
           const envVars = {
             ...config.envVars,
             ...service.envVars,
             ...this.env.getMergedForDeploy(childId),
           };
           const buildTimeVarsForChild = filterBuildTimeVars(envVars);
-          if (Object.keys(buildTimeVarsForChild).length > 0) {
-            const childDfPath = join(config.clonePath, dockerfilePath);
-            const dfContent = readFileSync(childDfPath, 'utf8');
-            writeFileSync(
-              childDfPath,
-              injectBuildArgs(dfContent, Object.keys(buildTimeVarsForChild)),
-              'utf8',
-            );
-          }
           let lastBuildOutputEmit = 0;
-          await this.docker.buildImage(contextPath, imageTag, {
-            buildArgs: buildTimeVarsForChild,
-            dockerfile: dockerfilePath,
-            onProgress: (event) => {
-              const line = event.stream?.trim() ?? event.error ?? '';
-              if (!line) return;
-
+          await this.buildExecutor.build(
+            {
+              clonePath: config.clonePath,
+              projectId: childId,
+              imageTag,
+              dockerfilePath,
+              buildArgs: buildTimeVarsForChild,
+            },
+            (line) => {
               const now = Date.now();
               if (now - lastBuildOutputEmit <= 50) return;
               lastBuildOutputEmit = now;
@@ -1257,7 +1241,7 @@ export class DeployPipeline {
                 projectId: childId,
                 parentProjectId: parentId,
                 line,
-                stream: event.error ? 'error' : 'stdout',
+                stream: 'stdout',
                 phase: 'build',
                 scope: service.name,
                 status: 'in_progress',
@@ -1265,7 +1249,7 @@ export class DeployPipeline {
                 logChunk: line,
               });
             },
-          });
+          );
 
           await eventBus.emit('deploy:build', {
             projectId: childId,
