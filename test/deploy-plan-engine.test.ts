@@ -72,6 +72,7 @@ describe('PlanEngine.updatePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
       missing: ['DATABASE_URL'],
     });
@@ -100,6 +101,7 @@ describe('PlanEngine.updatePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
       missing: ['DATABASE_URL'],
     });
@@ -167,6 +169,7 @@ describe('PlanEngine.updatePlan', () => {
         },
       },
       build: {
+        method: 'dockerfile',
         dockerfile: 'Dockerfile',
         context: '.',
       },
@@ -174,6 +177,7 @@ describe('PlanEngine.updatePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
       missing: ['DATABASE_URL'],
     });
@@ -199,6 +203,7 @@ describe('PlanEngine.updatePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
       missing: ['DATABASE_URL'],
     });
@@ -232,6 +237,7 @@ describe('PlanEngine.updatePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
       missing: ['DATABASE_URL'],
     });
@@ -261,6 +267,7 @@ describe('PlanEngine.updatePlan', () => {
         auto: {},
         required: ['DATABASE_URL', 'API_KEY', 'SECRET_TOKEN'],
         provided: {},
+        detected: [],
       },
       missing: ['DATABASE_URL', 'API_KEY', 'SECRET_TOKEN'],
     });
@@ -295,6 +302,7 @@ describe('PlanEngine.updatePlan', () => {
         provided: {
           API_KEY: 'existing_key',
         },
+        detected: [],
       },
       missing: ['DATABASE_URL'],
     });
@@ -318,6 +326,7 @@ describe('PlanEngine.updatePlan', () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       build: {
+        method: 'dockerfile',
         dockerfile: 'Dockerfile',
         context: '.',
       },
@@ -414,12 +423,14 @@ describe('PlanEngine.executePlan', () => {
       getDeployPlan: vi.fn(),
       updateDeployPlan: vi.fn(),
       listServices: vi.fn().mockReturnValue([]),
+      getProjectByName: vi.fn().mockReturnValue(null),
+      getLastDeployLog: vi.fn().mockReturnValue(null),
     };
 
     mockPipeline = {
-      deploy: vi
+      startDeploy: vi
         .fn()
-        .mockResolvedValue({ success: true, projectId: 'p1', url: 'http://localhost' }),
+        .mockResolvedValue({ status: 'building', projectId: 'p1', projectName: 'test-app' }),
     };
 
     mockEnv = {
@@ -436,6 +447,7 @@ describe('PlanEngine.executePlan', () => {
     mockConfig = {};
     mockEvents = {
       emit: vi.fn(),
+      on: vi.fn(() => vi.fn()),
     };
 
     const deps: PlanEngineDeps = {
@@ -455,7 +467,7 @@ describe('PlanEngine.executePlan', () => {
     vi.clearAllMocks();
   });
 
-  it('executes ready plan and calls pipeline.deploy with correct ProjectConfig', async () => {
+  it('executes ready plan and calls pipeline.startDeploy with correct ProjectConfig', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       app: {
@@ -470,6 +482,7 @@ describe('PlanEngine.executePlan', () => {
         auto: { DATABASE_URL: 'postgres://localhost' },
         required: ['DATABASE_URL'],
         provided: { API_KEY: 'key123' },
+        detected: [],
       },
       services: [],
     });
@@ -480,10 +493,10 @@ describe('PlanEngine.executePlan', () => {
 
     const result = await engine.executePlan(plan.plan_id);
 
-    expect(result.success).toBe(true);
-    expect(result.projectId).toBe('p1');
+    expect(result.status).toBe('building');
+    expect(result.project_id).toBe('p1');
 
-    expect(mockPipeline.deploy).toHaveBeenCalledWith({
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith({
       repoUrl: 'https://github.com/test/repo',
       branch: 'main',
       name: 'test-app',
@@ -495,7 +508,7 @@ describe('PlanEngine.executePlan', () => {
     });
   });
 
-  it('returns error when pipeline.deploy returns success: false', async () => {
+  it('returns failure result when pipeline.startDeploy returns preflight_failed', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
     });
@@ -504,14 +517,16 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    mockPipeline.deploy.mockResolvedValue({
-      success: false,
-      error: 'build failed',
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'preflight_failed',
+      projectId: 'p1',
+      projectName: 'test-app',
+      preflightError: 'build failed',
     });
 
     const result = await engine.executePlan(plan.plan_id);
 
-    expect(result.success).toBe(false);
+    expect(result.status).toBe('failed');
     expect(result.error).toBe('build failed');
   });
 
@@ -524,11 +539,11 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    mockPipeline.deploy.mockImplementation(async () => {
+    mockPipeline.startDeploy.mockImplementation(async () => {
       const updateCalls = mockDb.updateDeployPlan.mock.calls;
       const executingCall = updateCalls.find((call: any) => call[1].status === 'executing');
       expect(executingCall).toBeDefined();
-      return { success: true, projectId: 'p1' };
+      return { status: 'building', projectId: 'p1', projectName: 'test-app' };
     });
 
     await engine.executePlan(plan.plan_id);
@@ -541,7 +556,7 @@ describe('PlanEngine.executePlan', () => {
     );
   });
 
-  it('persists status to completed after successful deployment', async () => {
+  it('registers deploy event listeners after starting deployment', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
     });
@@ -552,12 +567,11 @@ describe('PlanEngine.executePlan', () => {
 
     await engine.executePlan(plan.plan_id);
 
-    const updateCalls = mockDb.updateDeployPlan.mock.calls;
-    const completedCall = updateCalls.find((call: any) => call[1].status === 'completed');
-    expect(completedCall).toBeDefined();
+    expect(mockEvents.on).toHaveBeenCalledWith('deploy:success', expect.any(Function));
+    expect(mockEvents.on).toHaveBeenCalledWith('deploy:failed', expect.any(Function));
   });
 
-  it('persists status to failed after deployment failure', async () => {
+  it('persists status to failed after preflight failure', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
     });
@@ -566,9 +580,11 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    mockPipeline.deploy.mockResolvedValue({
-      success: false,
-      error: 'build failed',
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'preflight_failed',
+      projectId: 'p1',
+      projectName: 'test-app',
+      preflightError: 'build failed',
     });
 
     await engine.executePlan(plan.plan_id);
@@ -620,6 +636,7 @@ describe('PlanEngine.executePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
     });
 
@@ -649,6 +666,7 @@ describe('PlanEngine.executePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
     });
 
@@ -662,7 +680,7 @@ describe('PlanEngine.executePlan', () => {
 
     await engine.executePlan(plan.plan_id);
 
-    expect(mockPipeline.deploy).toHaveBeenCalledWith(
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         envVars: expect.objectContaining({
           DATABASE_URL: 'postgres://service-host/db',
@@ -671,7 +689,7 @@ describe('PlanEngine.executePlan', () => {
     );
   });
 
-  it('emits deploy:success event with planId on successful execution', async () => {
+  it('registers deploy:success event listener on execution', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
     });
@@ -680,21 +698,9 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    mockPipeline.deploy.mockResolvedValue({
-      success: true,
-      projectId: 'proj_123',
-      url: 'http://localhost:3000',
-    });
-
     await engine.executePlan(plan.plan_id);
 
-    expect(mockEvents.emit).toHaveBeenCalledWith(
-      'deploy:success',
-      expect.objectContaining({
-        projectId: 'proj_123',
-        planId: plan.plan_id,
-      }),
-    );
+    expect(mockEvents.on).toHaveBeenCalledWith('deploy:success', expect.any(Function));
   });
 
   it('throws error when plan not found', async () => {
@@ -719,6 +725,7 @@ describe('PlanEngine.executePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
     });
 
@@ -730,7 +737,7 @@ describe('PlanEngine.executePlan', () => {
 
     const result = await engine.executePlan(plan.plan_id);
 
-    expect(result.success).toBe(false);
+    expect(result.status).toBe('failed');
     expect(result.error).toContain('Service creation failed');
   });
 
@@ -738,6 +745,7 @@ describe('PlanEngine.executePlan', () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       build: {
+        method: 'dockerfile',
         dockerfile: 'Dockerfile',
         context: '.',
         generated_dockerfile: 'auto-generated',
@@ -750,7 +758,7 @@ describe('PlanEngine.executePlan', () => {
 
     await engine.executePlan(plan.plan_id);
 
-    expect(mockPipeline.deploy).toHaveBeenCalledWith(
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         preferDockerfile: false,
       }),
@@ -761,6 +769,7 @@ describe('PlanEngine.executePlan', () => {
     const plan = createMockDeployPlan({
       status: 'ready',
       build: {
+        method: 'dockerfile',
         dockerfile: 'Dockerfile',
         context: '.',
       },
@@ -772,7 +781,7 @@ describe('PlanEngine.executePlan', () => {
 
     await engine.executePlan(plan.plan_id);
 
-    expect(mockPipeline.deploy).toHaveBeenCalledWith(
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         preferDockerfile: true,
       }),
@@ -792,6 +801,7 @@ describe('PlanEngine.executePlan', () => {
           API_KEY: 'key123',
           DATABASE_URL: 'postgres://override',
         },
+        detected: [],
       },
     });
 
@@ -801,7 +811,7 @@ describe('PlanEngine.executePlan', () => {
 
     await engine.executePlan(plan.plan_id);
 
-    expect(mockPipeline.deploy).toHaveBeenCalledWith(
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
       expect.objectContaining({
         envVars: {
           DATABASE_URL: 'postgres://override',
@@ -831,6 +841,7 @@ describe('PlanEngine.executePlan', () => {
         auto: {},
         required: ['DATABASE_URL', 'REDIS_URL'],
         provided: {},
+        detected: [],
       },
     });
 
@@ -870,6 +881,7 @@ describe('PlanEngine.executePlan', () => {
         auto: {},
         required: ['DATABASE_URL'],
         provided: {},
+        detected: [],
       },
     });
 
@@ -882,7 +894,7 @@ describe('PlanEngine.executePlan', () => {
     expect(mockServiceManager.create).not.toHaveBeenCalled();
   });
 
-  it('returns projectId from successful deployment', async () => {
+  it('returns project_id from successful deployment', async () => {
     const plan = createMockDeployPlan({
       status: 'ready',
     });
@@ -891,14 +903,15 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    mockPipeline.deploy.mockResolvedValue({
-      success: true,
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'building',
       projectId: 'proj_abc123',
+      projectName: 'test-app',
     });
 
     const result = await engine.executePlan(plan.plan_id);
 
-    expect(result.projectId).toBe('proj_abc123');
+    expect(result.project_id).toBe('proj_abc123');
   });
 
   it('persists error message to database on failure', async () => {
@@ -910,9 +923,11 @@ describe('PlanEngine.executePlan', () => {
       plan_json: JSON.stringify(plan),
     });
 
-    mockPipeline.deploy.mockResolvedValue({
-      success: false,
-      error: 'Docker build failed: out of memory',
+    mockPipeline.startDeploy.mockResolvedValue({
+      status: 'preflight_failed',
+      projectId: 'p1',
+      projectName: 'test-app',
+      preflightError: 'Docker build failed: out of memory',
     });
 
     await engine.executePlan(plan.plan_id);

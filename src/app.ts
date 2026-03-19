@@ -549,6 +549,7 @@ ${plan.agentGuidance}
     autoDetector,
     config,
     events: eventBus,
+    composePipeline,
   });
 
   // Build partial ctx without channelManager, then compose the full AppContext

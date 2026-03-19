@@ -53,16 +53,18 @@ export interface PlanSecret {
   status: 'provided' | 'missing';
 }
 
-/**
- * Environment variable configuration.
- */
+export interface PlanEnvEntry {
+  key: string;
+  source: string;
+  required: boolean;
+  default?: string;
+}
+
 export interface PlanEnv {
-  /** Auto-detected environment variables */
   auto: Record<string, string>;
-  /** Required environment variables */
   required: string[];
-  /** User-provided environment variables */
   provided: Record<string, string>;
+  detected: PlanEnvEntry[];
 }
 
 /**
@@ -89,66 +91,48 @@ export interface DryRunResult {
   errors?: string[];
 }
 
-/**
- * Complete deployment plan structure.
- */
+export interface PlanBuildService {
+  name: string;
+  dockerfile?: string;
+  port?: number;
+  image?: string;
+  depends_on?: string[];
+}
+
 export interface DeployPlan {
-  /** Unique plan identifier */
   plan_id: string;
-  /** Current status in the lifecycle */
   status: DeployPlanStatus;
-  /** Complexity classification */
   complexity: DeployPlanComplexity;
-  /** Application information */
   app: {
-    /** Application name */
     name: string;
-    /** Source repository information */
     source: {
-      /** Repository URL */
       repo_url: string;
-      /** Branch to deploy */
       branch: string;
-      /** Commit SHA */
       commit_sha: string;
     };
   };
-  /** Build configuration */
   build: {
-    /** Dockerfile path */
+    method: 'dockerfile' | 'compose';
     dockerfile: string;
-    /** Build context directory */
     context: string;
-    /** Optional build target (for multi-stage builds) */
     target?: string;
-    /** Generated Dockerfile content if auto-generated */
     generated_dockerfile?: string;
+    compose_file?: string;
+    compose_services?: PlanBuildService[];
+    dockerfiles_found?: string[];
   };
-  /** Services to provision or reuse */
   services: PlanService[];
-  /** Secrets required by the application */
   secrets: PlanSecret[];
-  /** Environment variable configuration */
   env: PlanEnv;
-  /** Health check configuration */
   health: PlanHealth;
-  /** Missing items that need to be provided */
   missing: string[];
-  /** Warnings about the plan */
   warnings: string[];
-  /** Dry run result if plan was validated */
   dry_run_result?: DryRunResult;
-  /** Timestamp when plan was created */
   created_at: string;
-  /** Timestamp when plan was last updated */
   updated_at: string;
-  /** Timestamp when plan execution started */
   executed_at?: string;
-  /** Timestamp when plan execution completed */
   completed_at?: string;
-  /** Associated project ID */
   project_id?: string;
-  /** Error message if plan failed */
   error_message?: string;
 }
 

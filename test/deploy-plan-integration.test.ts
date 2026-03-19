@@ -59,7 +59,9 @@ describe('deploy-plan integration', () => {
       status: 'ready',
       complexity: 'simple',
       app: { name: 'test-app' },
+      build: { method: 'dockerfile', dockerfile: 'Dockerfile', context: '.' },
       services: [],
+      env: { required: [], auto: {}, provided: {}, detected: [] },
       missing: [],
       warnings: [],
     };
@@ -77,14 +79,18 @@ describe('deploy-plan integration', () => {
       name: undefined,
       envVars: undefined,
       preferDockerfile: undefined,
+      dockerfilePath: undefined,
+      dockerTarget: undefined,
     });
 
     expect(result).toEqual({
       plan_id: 'plan_123',
       status: 'ready',
       complexity: 'simple',
-      app_name: 'test-app',
-      services: 0,
+      app: { name: 'test-app' },
+      build: { method: 'dockerfile', dockerfile: 'Dockerfile', context: '.' },
+      services: [],
+      env: { required: [], auto: {}, provided_count: 0, detected: [] },
       missing: [],
       warnings: [],
     });
@@ -129,8 +135,11 @@ describe('deploy-plan integration', () => {
     expect(tool).toBeDefined();
 
     (ctx.planEngine.executePlan as any).mockResolvedValue({
-      success: true,
-      projectId: 'proj_456',
+      status: 'building',
+      plan_id: 'plan_123',
+      project_name: 'test-app',
+      project_id: 'proj_456',
+      estimated_seconds: 60,
     });
 
     const result = await tool!.execute({ plan_id: 'plan_123' }, { target: 'mcp' });
@@ -139,8 +148,10 @@ describe('deploy-plan integration', () => {
 
     expect(result).toEqual({
       plan_id: 'plan_123',
-      status: 'completed',
+      status: 'building',
+      project_name: 'test-app',
       project_id: 'proj_456',
+      estimated_seconds: 60,
     });
   });
 
@@ -152,7 +163,9 @@ describe('deploy-plan integration', () => {
     expect(tool).toBeDefined();
 
     (ctx.planEngine.executePlan as any).mockResolvedValue({
-      success: false,
+      status: 'failed',
+      plan_id: 'plan_123',
+      project_name: 'test-app',
       error: 'Service creation failed',
     });
 

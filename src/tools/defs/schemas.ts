@@ -396,6 +396,14 @@ export const createDeployPlanSchema = z.object({
     .boolean()
     .optional()
     .describe('Prefer Dockerfile flow and skip compose detection'),
+  dockerfile_path: z
+    .string()
+    .optional()
+    .describe('Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)'),
+  docker_target: z
+    .string()
+    .optional()
+    .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
 });
 
 export const updateDeployPlanSchema = z.object({

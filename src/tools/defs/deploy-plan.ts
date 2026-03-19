@@ -1,6 +1,6 @@
 import type { ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
-import type { PlanUpdates } from '../../pipeline/deploy-plan/engine.js';
+import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
 
 import {
   createDeployPlanSchema,
@@ -27,14 +27,23 @@ export const deployPlanToolDefs: ToolDef[] = [
         name: (args['name'] as string | undefined) ?? undefined,
         envVars,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
+        dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
+        dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
       });
 
       return {
         plan_id: plan.plan_id,
         status: plan.status,
         complexity: plan.complexity,
-        app_name: plan.app.name,
-        services: plan.services.length,
+        app: plan.app,
+        build: plan.build,
+        services: plan.services,
+        env: {
+          required: plan.env.required,
+          auto: plan.env.auto,
+          provided_count: Object.keys(plan.env.provided).length,
+          detected: plan.env.detected,
+        },
         missing: plan.missing,
         warnings: plan.warnings,
       };
@@ -73,17 +82,19 @@ export const deployPlanToolDefs: ToolDef[] = [
       const appCtx = context.appCtx;
       const planId = args['plan_id'] as string;
 
-      const result = await appCtx.planEngine.executePlan(planId);
+      const result: ExecutePlanResult = await appCtx.planEngine.executePlan(planId);
 
-      if (result.success) {
+      if (result.status === 'building') {
         return {
-          plan_id: planId,
-          status: 'completed',
-          project_id: result.projectId,
+          plan_id: result.plan_id,
+          status: 'building',
+          project_name: result.project_name,
+          project_id: result.project_id,
+          estimated_seconds: result.estimated_seconds,
         };
       } else {
         return {
-          plan_id: planId,
+          plan_id: result.plan_id,
           status: 'failed',
           error: result.error,
         };

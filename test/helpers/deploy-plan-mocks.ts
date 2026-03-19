@@ -18,7 +18,13 @@ export function createMockPlanEngine(overrides?: Record<string, unknown>) {
       status: 'ready',
     }),
     updatePlan: vi.fn().mockResolvedValue(undefined),
-    executePlan: vi.fn().mockResolvedValue({ success: true }),
+    executePlan: vi.fn().mockResolvedValue({
+      status: 'building',
+      plan_id: 'plan_test123',
+      project_name: 'test-app',
+      project_id: 'p1',
+      estimated_seconds: 60,
+    }),
     getPlan: vi.fn().mockResolvedValue(null),
     listPlans: vi.fn().mockResolvedValue([]),
     ...overrides,
@@ -44,6 +50,7 @@ export function createMockDeployPlan(overrides?: Record<string, unknown>) {
       },
     },
     build: {
+      method: 'dockerfile' as const,
       dockerfile: 'Dockerfile',
       context: '.',
     },
@@ -53,6 +60,7 @@ export function createMockDeployPlan(overrides?: Record<string, unknown>) {
       auto: {},
       required: [],
       provided: {},
+      detected: [],
     },
     health: {
       path: '/',

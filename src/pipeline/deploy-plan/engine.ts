@@ -1,10 +1,10 @@
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { createModuleLogger } from '../../lib/logger.js';
 import { cloneRepo } from '../git.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import { extractProjectName } from '../helpers.js';
-import type { DeployPlan, PlanService } from './types.js';
+import type { DeployPlan, PlanService, PlanEnvEntry, PlanBuildService } from './types.js';
 import { PlanStateMachine } from './types.js';
 import type { Database } from '../../db/index.js';
 import type { DeployPipeline } from '../deploy.js';
@@ -13,8 +13,38 @@ import type { ServiceManager } from '../service-manager.js';
 import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
+import type { ComposePipeline } from '../compose.js';
 
 const log = createModuleLogger('plan-engine');
+
+function findDockerfiles(dir: string, maxDepth = 3): string[] {
+  const results: string[] = [];
+  function walk(current: string, depth: number): void {
+    if (depth > maxDepth) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(current).sort((a, b) => a.localeCompare(b));
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith('.') || entry === 'node_modules' || entry === 'vendor') continue;
+      const fullPath = join(current, entry);
+      try {
+        const stat = statSync(fullPath);
+        if (stat.isFile() && entry === 'Dockerfile') {
+          results.push(fullPath);
+        } else if (stat.isDirectory()) {
+          walk(fullPath, depth + 1);
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+  walk(dir, 0);
+  return results;
+}
 
 export interface CreatePlanOptions {
   repoUrl: string;
@@ -22,6 +52,8 @@ export interface CreatePlanOptions {
   name?: string;
   envVars?: Record<string, string>;
   preferDockerfile?: boolean;
+  dockerfilePath?: string;
+  dockerTarget?: string;
 }
 
 export interface PlanUpdates {
@@ -39,6 +71,7 @@ export interface PlanEngineDeps {
   autoDetector: AutoDetector;
   config: OpenLanderConfig;
   events?: EventBus;
+  composePipeline?: ComposePipeline;
 }
 
 const SERVICE_ENV_VARS: Record<string, string> = {
@@ -48,17 +81,28 @@ const SERVICE_ENV_VARS: Record<string, string> = {
   mongodb: 'MONGODB_URI',
 };
 
+export interface ExecutePlanResult {
+  status: 'building' | 'failed';
+  plan_id: string;
+  project_name: string;
+  project_id?: string;
+  estimated_seconds?: number;
+  error?: string;
+}
+
 export class PlanEngine {
   private db: Database;
   private pipeline: DeployPipeline;
   private serviceManager: ServiceManager;
   private events?: EventBus;
+  private composePipeline?: ComposePipeline;
 
   constructor(deps: PlanEngineDeps) {
     this.db = deps.db;
     this.pipeline = deps.pipeline;
     this.serviceManager = deps.serviceManager;
     this.events = deps.events;
+    this.composePipeline = deps.composePipeline;
   }
 
   private redactPlanForStorage(plan: DeployPlan): DeployPlan {
@@ -86,12 +130,98 @@ export class PlanEngine {
     const clonePath = cloneResult.path;
     const commitSha = cloneResult.commitSha;
 
-    const dockerfilePath = 'Dockerfile';
-    const dockerfileExists = existsSync(join(clonePath, dockerfilePath));
-    let generatedDockerfile: string | undefined;
     const warnings: string[] = [];
+    const detectedEnv: PlanEnvEntry[] = [];
 
-    if (!dockerfileExists) {
+    const dockerfiles = findDockerfiles(clonePath);
+    const relativeDockerfiles = dockerfiles.map((d) => relative(clonePath, d));
+
+    const userDockerfile = opts.dockerfilePath ?? 'Dockerfile';
+    const dockerfileExists = existsSync(join(clonePath, userDockerfile));
+    let generatedDockerfile: string | undefined;
+
+    if (relativeDockerfiles.length > 1) {
+      warnings.push(
+        `${String(relativeDockerfiles.length)} Dockerfiles found: ${relativeDockerfiles.join(', ')}`,
+      );
+    }
+
+    let buildMethod: 'dockerfile' | 'compose' = 'dockerfile';
+    let composeFilePath: string | undefined;
+    let composeBuildServices: PlanBuildService[] | undefined;
+
+    if (!opts.preferDockerfile && this.composePipeline) {
+      const detected = this.composePipeline.detectComposeFile(clonePath);
+      if (detected) {
+        buildMethod = 'compose';
+        composeFilePath = relative(clonePath, detected);
+        const parsed = this.composePipeline.parseComposeFile(detected);
+
+        composeBuildServices = parsed.services.map((svc) => {
+          let dockerfile: string | undefined;
+          if (typeof svc.build === 'string') {
+            const candidate = join(svc.build, 'Dockerfile');
+            dockerfile = existsSync(join(clonePath, candidate)) ? candidate : svc.build;
+          } else if (svc.build && typeof svc.build === 'object') {
+            dockerfile = svc.build.dockerfile
+              ? join(svc.build.context, svc.build.dockerfile)
+              : join(svc.build.context, 'Dockerfile');
+          }
+
+          let port: number | undefined;
+          if (svc.ports?.[0]) {
+            const portMatch = svc.ports[0].match(/:(\d+)/);
+            if (portMatch?.[1]) {
+              port = parseInt(portMatch[1], 10);
+            }
+          }
+
+          return {
+            name: svc.name,
+            dockerfile,
+            port,
+            image: svc.image,
+            depends_on: svc.dependsOn,
+          };
+        });
+
+        for (const svc of parsed.services) {
+          if (!svc.envFile) continue;
+          for (const envFileRef of svc.envFile) {
+            const fullPath = join(clonePath, envFileRef.path);
+            if (!existsSync(fullPath)) {
+              this.scanEnvTemplate(clonePath, envFileRef.path, detectedEnv);
+              if (envFileRef.required) {
+                warnings.push(
+                  `Service "${svc.name}" requires env_file "${envFileRef.path}" but file not in repo`,
+                );
+              }
+            } else {
+              this.scanEnvFile(fullPath, envFileRef.path, detectedEnv);
+            }
+          }
+
+          if (svc.volumes) {
+            for (const vol of svc.volumes) {
+              const bindParts = vol.split(':');
+              const hostPath = bindParts[0];
+              if (bindParts.length >= 2 && hostPath) {
+                if (hostPath.startsWith('.') || hostPath.startsWith('/')) {
+                  const absHost = hostPath.startsWith('.') ? join(clonePath, hostPath) : hostPath;
+                  if (!existsSync(absHost) && hostPath.startsWith('.')) {
+                    warnings.push(
+                      `Service "${svc.name}" mounts "${hostPath}" but file not in repo`,
+                    );
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (buildMethod === 'dockerfile' && !dockerfileExists) {
       generatedDockerfile = 'auto-generated';
       warnings.push('No Dockerfile found; will auto-generate one during build');
     }
@@ -102,11 +232,11 @@ export class PlanEngine {
 
     const services: PlanService[] = [];
 
-    for (const missing of infraAnalysis.missing) {
+    for (const m of infraAnalysis.missing) {
       services.push({
-        type: missing.type,
+        type: m.type,
         action: 'create',
-        connect_via: SERVICE_ENV_VARS[missing.type] || `${missing.type.toUpperCase()}_URL`,
+        connect_via: SERVICE_ENV_VARS[m.type] || `${m.type.toUpperCase()}_URL`,
       });
     }
 
@@ -119,27 +249,17 @@ export class PlanEngine {
       });
     }
 
-    const requiredEnvVars = new Set<string>();
-    const envFileNames = ['.env.example', '.env.sample'];
-
-    for (const envFileName of envFileNames) {
-      try {
-        const { readFileSync } = await import('node:fs');
-        const envPath = join(clonePath, envFileName);
-        const envContent = readFileSync(envPath, 'utf8');
-
-        const envVarPattern = /^([A-Z_][A-Z0-9_]*)\s*=/gm;
-        let match: RegExpExecArray | null;
-        while ((match = envVarPattern.exec(envContent)) !== null) {
-          const envKey = match[1];
-          if (envKey) {
-            requiredEnvVars.add(envKey);
-          }
-        }
-      } catch {
-        // File doesn't exist or can't be read, continue
+    const ENV_TEMPLATE_FILES = ['.env.example', '.env.sample', '.env.template'];
+    for (const envFileName of ENV_TEMPLATE_FILES) {
+      const envPath = join(clonePath, envFileName);
+      if (existsSync(envPath)) {
+        this.scanEnvFile(envPath, envFileName, detectedEnv);
       }
     }
+
+    this.scanDockerfileArgs(clonePath, userDockerfile, detectedEnv);
+
+    const requiredEnvVars = new Set(detectedEnv.map((e) => e.key));
 
     const missing: string[] = [];
     const autoEnvVars: Record<string, string> = {};
@@ -162,11 +282,12 @@ export class PlanEngine {
 
     const serviceCount = services.length;
     const missingCount = missing.length;
+    const composeServiceCount = composeBuildServices?.length ?? 0;
     let complexity: 'simple' | 'standard' | 'complex';
 
-    if (serviceCount === 0 && missingCount === 0) {
+    if (serviceCount === 0 && missingCount === 0 && composeServiceCount <= 1) {
       complexity = 'simple';
-    } else if (serviceCount >= 2 && missingCount > 0) {
+    } else if (serviceCount >= 2 || composeServiceCount >= 3 || missingCount > 3) {
       complexity = 'complex';
     } else {
       complexity = 'standard';
@@ -189,9 +310,14 @@ export class PlanEngine {
         },
       },
       build: {
-        dockerfile: dockerfilePath,
+        method: buildMethod,
+        dockerfile: userDockerfile,
         context: '.',
+        target: opts.dockerTarget,
         generated_dockerfile: generatedDockerfile,
+        compose_file: composeFilePath,
+        compose_services: composeBuildServices,
+        dockerfiles_found: relativeDockerfiles.length > 0 ? relativeDockerfiles : undefined,
       },
       services,
       secrets: [],
@@ -199,6 +325,7 @@ export class PlanEngine {
         auto: autoEnvVars,
         required: Array.from(requiredEnvVars),
         provided: envVars,
+        detected: detectedEnv,
       },
       health: {
         path: '/',
@@ -211,7 +338,7 @@ export class PlanEngine {
       updated_at: now,
     };
 
-    log.info({ planId, status: initialStatus }, 'Creating deploy plan');
+    log.info({ planId, status: initialStatus, buildMethod }, 'Creating deploy plan');
     this.db.createDeployPlan({
       id: planId,
       projectName,
@@ -222,6 +349,66 @@ export class PlanEngine {
     });
 
     return plan;
+  }
+
+  private scanEnvFile(filePath: string, source: string, out: PlanEnvEntry[]): void {
+    try {
+      const content = readFileSync(filePath, 'utf8');
+      const seen = new Set(out.map((e) => e.key));
+      const pattern = /^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)?$/gm;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(content)) !== null) {
+        const key = match[1];
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        const rawValue = match[2]?.trim();
+        const hasDefault = rawValue !== undefined && rawValue !== '' && !rawValue.startsWith('#');
+        out.push({
+          key,
+          source,
+          required: !hasDefault,
+          default: hasDefault ? rawValue : undefined,
+        });
+      }
+    } catch {
+      // intentional: skip unreadable env files
+    }
+  }
+
+  private scanEnvTemplate(clonePath: string, envFilePath: string, out: PlanEnvEntry[]): void {
+    const dir = join(clonePath, envFilePath, '..');
+    const templates = ['.env.example', '.env.sample', '.env.template'];
+    for (const tpl of templates) {
+      const tplPath = join(dir, tpl);
+      if (existsSync(tplPath)) {
+        const relativeTpl = relative(clonePath, tplPath);
+        this.scanEnvFile(tplPath, `${envFilePath} → ${relativeTpl}`, out);
+        return;
+      }
+    }
+  }
+
+  private scanDockerfileArgs(clonePath: string, dockerfilePath: string, out: PlanEnvEntry[]): void {
+    try {
+      const content = readFileSync(join(clonePath, dockerfilePath), 'utf8');
+      const seen = new Set(out.map((e) => e.key));
+      const argPattern = /^ARG\s+([A-Z_][A-Z0-9_]*)(?:\s*=\s*(.*))?$/gm;
+      let match: RegExpExecArray | null;
+      while ((match = argPattern.exec(content)) !== null) {
+        const key = match[1];
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        const defaultVal = match[2]?.trim();
+        out.push({
+          key,
+          source: `Dockerfile ARG (${dockerfilePath})`,
+          required: !defaultVal,
+          default: defaultVal || undefined,
+        });
+      }
+    } catch {
+      // intentional: skip when Dockerfile absent
+    }
   }
 
   updatePlan(planId: string, updates: PlanUpdates): DeployPlan {
@@ -293,9 +480,7 @@ export class PlanEngine {
     return merged;
   }
 
-  async executePlan(
-    planId: string,
-  ): Promise<{ success: boolean; projectId?: string; error?: string }> {
+  async executePlan(planId: string): Promise<ExecutePlanResult> {
     // Re-read from DB to prevent race condition
     const freshRow = this.db.getDeployPlan(planId);
     if (!freshRow) {
@@ -306,16 +491,7 @@ export class PlanEngine {
       throw new Error(`Plan is already ${freshPlan.status}. Cannot execute concurrently.`);
     }
 
-    const row = this.db.getDeployPlan(planId);
-    if (!row) {
-      throw new Error(`Deploy plan not found: ${planId}`);
-    }
-
-    const plan = JSON.parse(row.plan_json) as DeployPlan;
-
-    if (plan.status !== 'ready') {
-      throw new Error(`Plan must be in 'ready' status to execute, current: ${plan.status}`);
-    }
+    const plan = freshPlan;
 
     const executingPlan = PlanStateMachine.transition(plan, 'executing');
     this.db.updateDeployPlan(planId, {
@@ -348,8 +524,45 @@ export class PlanEngine {
         }
       }
 
-      log.info({ planId, planCommit: plan.app.source.commit_sha }, 'Executing plan');
-      const deployResult = await this.pipeline.deploy({
+      log.info({ planId, planCommit: plan.app.source.commit_sha }, 'Executing plan (non-blocking)');
+
+      if (this.events) {
+        const unsubSuccess = this.events.on('deploy:success', (payload) => {
+          if (payload.projectId === startResult.projectId) {
+            const completed = PlanStateMachine.transition(executingPlan, 'completed');
+            this.db.updateDeployPlan(planId, {
+              status: 'completed',
+              planJson: JSON.stringify(this.redactPlanForStorage(completed)),
+            });
+            log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
+            cleanup();
+          }
+        });
+
+        const unsubFailed = this.events.on('deploy:failed', (payload) => {
+          if (payload.projectId === startResult.projectId) {
+            const errMsg = payload.error || 'Deploy failed';
+            const failed = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
+            this.db.updateDeployPlan(planId, {
+              status: 'failed',
+              planJson: JSON.stringify(this.redactPlanForStorage(failed)),
+              errorMessage: errMsg,
+            });
+            log.info(
+              { planId, projectId: payload.projectId, error: errMsg },
+              'Plan failed via event',
+            );
+            cleanup();
+          }
+        });
+
+        const cleanup = () => {
+          unsubSuccess();
+          unsubFailed();
+        };
+      }
+
+      const startResult = await this.pipeline.startDeploy({
         repoUrl: plan.app.source.repo_url,
         branch: plan.app.source.branch,
         name: plan.app.name,
@@ -357,39 +570,37 @@ export class PlanEngine {
         preferDockerfile: !plan.build.generated_dockerfile,
       });
 
-      if (!deployResult.success) {
-        const failedPlan = PlanStateMachine.transition(
-          executingPlan,
-          'failed',
-          deployResult.error || 'Deploy failed',
-        );
+      if (startResult.status === 'preflight_failed') {
+        const errMsg = startResult.preflightError || 'Preflight check failed';
+        const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
         this.db.updateDeployPlan(planId, {
           status: 'failed',
           planJson: JSON.stringify(this.redactPlanForStorage(failedPlan)),
-          errorMessage: deployResult.error || 'Deploy failed',
+          errorMessage: errMsg,
         });
-        return { success: false, error: deployResult.error || 'Deploy failed' };
+        return {
+          status: 'failed',
+          plan_id: planId,
+          project_name: startResult.projectName,
+          error: errMsg,
+        };
       }
 
-      const completedPlan = PlanStateMachine.transition(executingPlan, 'completed');
-      this.db.updateDeployPlan(planId, {
-        status: 'completed',
-        planJson: JSON.stringify(this.redactPlanForStorage(completedPlan)),
-      });
-
-      // Emit planId-enriched success event for RollbackWatcher
-      if (this.events) {
-        void this.events.emit('deploy:success', {
-          projectId: deployResult.projectId,
-          url: deployResult.url || '',
-          totalDurationMs: 0,
-          planId,
-        });
+      const existingProject = this.db.getProjectByName(startResult.projectName);
+      let estimatedSeconds = 60;
+      if (existingProject) {
+        const lastLog = this.db.getLastDeployLog(existingProject.id);
+        if (lastLog?.duration_ms != null && lastLog.status === 'success') {
+          estimatedSeconds = Math.ceil(lastLog.duration_ms / 1000);
+        }
       }
 
       return {
-        success: true,
-        projectId: deployResult.projectId,
+        status: 'building',
+        plan_id: planId,
+        project_name: startResult.projectName,
+        project_id: startResult.projectId,
+        estimated_seconds: estimatedSeconds,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -397,11 +608,14 @@ export class PlanEngine {
       this.db.updateDeployPlan(planId, {
         status: 'failed',
         planJson: JSON.stringify(this.redactPlanForStorage(failedPlan)),
+        errorMessage: errorMsg,
       });
 
       log.error({ planId, error }, 'Plan execution failed');
       return {
-        success: false,
+        status: 'failed',
+        plan_id: planId,
+        project_name: plan.app.name,
         error: errorMsg,
       };
     }
