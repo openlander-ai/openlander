@@ -201,6 +201,7 @@ export class EnvManager {
   /**
    * Get merged env vars for deployment.
    * Global secrets form the base, project-level env vars override.
+   * @deprecated Use resolveEnvVars() instead.
    */
   getMergedForDeploy(projectId: string, environmentId?: string): Record<string, string> {
     const globalVars = this.getGlobalSecrets();

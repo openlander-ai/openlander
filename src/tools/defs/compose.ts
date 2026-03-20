@@ -6,6 +6,7 @@ import { cloneRepo } from '../../pipeline/git.js';
 import { scanUsedPorts } from '../../pipeline/port.js';
 import { filterServicesByProfiles } from '../../pipeline/compose.js';
 import { DeployOrchestrator, type ServiceNode } from '../../pipeline/orchestrator.js';
+import { resolveEnvVars } from '../../pipeline/resolve-env.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { ToolDef } from './types.js';
 import {
@@ -59,7 +60,7 @@ export const composeToolDefs: ToolDef[] = [
 
       const existingProject = name ? appCtx.db.getProjectByName(name) : undefined;
       const envVars = existingProject
-        ? appCtx.env.getMergedForDeploy(existingProject.id)
+        ? resolveEnvVars({ projectId: existingProject.id }, { env: appCtx.env })
         : appCtx.env.getGlobalSecrets();
 
       const result = await appCtx.composePipeline.deployCompose({
