@@ -37,7 +37,8 @@ describe('DeployPipeline — non-blocking deploy', () => {
       createMockDocker(),
       db,
       {
-        getEnvVars: vi.fn().mockReturnValue({}),
+        getGlobalSecrets: vi.fn().mockReturnValue({}),
+        getAll: vi.fn().mockReturnValue({}),
         getMergedForDeploy: vi.fn().mockResolvedValue({}),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
@@ -258,7 +259,8 @@ describe('DeployPipeline — non-blocking deploy', () => {
         docker,
         db,
         {
-          getEnvVars: vi.fn().mockReturnValue({}),
+          getGlobalSecrets: vi.fn().mockReturnValue({}),
+          getAll: vi.fn().mockReturnValue({}),
           getMergedForDeploy: vi.fn().mockReturnValue({}),
           getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
         } as never,

@@ -21,6 +21,7 @@ import { detectFramework, ensureDockerfile, parseDockerfileExposePort } from './
 import { preflightCheckOrThrow } from './preflight.js';
 import { detectNewEnvKeys } from './env-inject.js';
 import { filterBuildTimeVars } from './build-args.js';
+import { resolveEnvVars, resolveEnvVarsForBuild } from './resolve-env.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from './diff-analysis.js';
 import { scanForSecrets } from './secret-scan.js';
 import { persistDeployConfig } from './config-snapshot.js';
@@ -672,10 +673,10 @@ export class DeployPipeline {
       } catch (err) {
         log.debug({ err, projectId }, 'Failed to store build_method - column may not exist');
       }
-      const composeEnvVars = {
-        ...(config.envVars ?? {}),
-        ...this.env.getMergedForDeploy(projectId, environmentId),
-      };
+      const composeEnvVars = resolveEnvVars(
+        { projectId, environmentId, inlineEnvVars: config.envVars },
+        { env: this.env },
+      );
       if (isCompose && composePath && composePipeline) {
         log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
         const result = await composePipeline.deployCompose({
@@ -743,11 +744,11 @@ export class DeployPipeline {
         buildLog += '[dockerfile] Found Dockerfile\n';
       }
 
-      const allEnvVarsForBuild = {
-        ...config.envVars,
-        ...this.env.getMergedForDeploy(projectId, environmentId),
-      };
-      const buildTimeVars = filterBuildTimeVars(allEnvVarsForBuild);
+      const allEnvVarsForBuild = resolveEnvVarsForBuild(
+        { projectId, environmentId, inlineEnvVars: config.envVars },
+        { env: this.env },
+      );
+      const buildTimeVars = allEnvVarsForBuild;
       const buildStart = Date.now();
       let lastBuildOutputEmit = 0;
       let dockerBuildOutput = '';
@@ -792,10 +793,10 @@ export class DeployPipeline {
 
       // Step 4: docker run
       const containerPort = parseDockerfileExposePort(dockerfilePath) ?? undefined;
-      const envVars = {
-        ...config.envVars,
-        ...this.env.getMergedForDeploy(projectId, environmentId),
-      };
+      const envVars = resolveEnvVars(
+        { projectId, environmentId, inlineEnvVars: config.envVars },
+        { env: this.env },
+      );
 
       this.jobManager?.updatePhase(projectId, 'starting');
       const secretFilesMounts = this.env.getSecretFilesForDeploy(projectId);
@@ -1211,11 +1212,14 @@ export class DeployPipeline {
 
         try {
           this.jobManager?.updatePhase(childId, 'building');
-          const envVars = {
-            ...config.envVars,
-            ...service.envVars,
-            ...this.env.getMergedForDeploy(childId),
-          };
+          const envVars = resolveEnvVars(
+            {
+              projectId: childId,
+              inlineEnvVars: config.envVars,
+              serviceEnvVars: service.envVars,
+            },
+            { env: this.env },
+          );
           const buildTimeVarsForChild = filterBuildTimeVars(envVars);
           let lastBuildOutputEmit = 0;
           await this.buildExecutor.build(

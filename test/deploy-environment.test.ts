@@ -11,6 +11,7 @@ import * as gitPipeline from '../src/pipeline/git.js';
 import * as dockerfileGen from '../src/pipeline/dockerfile-gen.js';
 
 type EnvLike = {
+  getGlobalSecrets: () => Record<string, string>;
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
   getMergedForDeploy: (projectId: string, environmentId?: string) => Record<string, string>;
   getSecretFilesForDeploy: (
@@ -50,6 +51,7 @@ describe('DeployPipeline deployEnvironment', () => {
     db = new Database(join(tmpDir, 'test.db'));
     docker = createMockDocker();
     env = {
+      getGlobalSecrets: vi.fn().mockReturnValue({}),
       getAll: vi.fn().mockReturnValue({}),
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
@@ -98,7 +100,6 @@ describe('DeployPipeline deployEnvironment', () => {
         branch: 'develop',
       }),
     );
-    expect(env.getMergedForDeploy).toHaveBeenCalledWith('p1', 'p1-development');
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'ol-demo-app-dev',
@@ -162,7 +163,6 @@ describe('DeployPipeline deployEnvironment', () => {
         branch: 'release',
       }),
     );
-    expect(env.getMergedForDeploy).toHaveBeenCalledWith('p2', productionEnvironment!.id);
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'ol-prod-app',
@@ -455,11 +455,18 @@ describe('DeployPipeline deployEnvironment', () => {
       .find((environment) => environment.type === 'production');
     expect(productionEnvironment).toBeDefined();
 
-    (env.getMergedForDeploy as ReturnType<typeof vi.fn>).mockReturnValue({
-      NODE_ENV: 'test',
-      NEXT_PUBLIC_API_URL: 'https://api.example.com',
-      INTERNAL_SECRET: 'do-not-forward',
-    });
+    (env.getAll as ReturnType<typeof vi.fn>).mockImplementation(
+      (_projectId: string, environmentId?: string) => {
+        if (environmentId !== undefined) {
+          return {};
+        }
+        return {
+          NODE_ENV: 'test',
+          NEXT_PUBLIC_API_URL: 'https://api.example.com',
+          INTERNAL_SECRET: 'do-not-forward',
+        };
+      },
+    );
 
     const result = await pipeline.deployEnvironment('p7', productionEnvironment!.id, {
       repoUrl: 'https://github.com/openlander/build-args-app',

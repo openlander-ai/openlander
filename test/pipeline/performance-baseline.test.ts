@@ -14,6 +14,7 @@ const BASELINE_TIME_MS = 100;
 const TOLERANCE_PERCENT = 10;
 
 type EnvLike = {
+  getGlobalSecrets: () => Record<string, string>;
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
   getMergedForDeploy: (projectId: string, environmentId?: string) => Record<string, string>;
   getSecretFilesForDeploy: (
@@ -53,6 +54,7 @@ describe('DeployPipeline performance baseline', () => {
     db = new Database(join(tmpDir, 'test.db'));
     docker = createMockDocker();
     env = {
+      getGlobalSecrets: vi.fn().mockReturnValue({}),
       getAll: vi.fn().mockReturnValue({}),
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),

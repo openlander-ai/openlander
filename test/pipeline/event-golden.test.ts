@@ -13,6 +13,7 @@ import * as gitPipeline from '../../src/pipeline/git.js';
 import * as dockerfileGen from '../../src/pipeline/dockerfile-gen.js';
 
 type EnvLike = {
+  getGlobalSecrets: () => Record<string, string>;
   getAll: (projectId: string, environmentId?: string) => Record<string, string>;
   getMergedForDeploy: (projectId: string, environmentId?: string) => Record<string, string>;
   getSecretFilesForDeploy: (
@@ -128,6 +129,7 @@ describe('pipeline event golden snapshots', () => {
     db = new Database(join(tmpDir, 'test.db'));
     docker = createMockDocker();
     env = {
+      getGlobalSecrets: vi.fn().mockReturnValue({}),
       getAll: vi.fn().mockReturnValue({}),
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),

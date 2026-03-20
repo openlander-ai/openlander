@@ -60,6 +60,7 @@ describe('DeployPipeline build_method fallback', () => {
     });
 
     const pipeline = new DeployPipeline(docker, db, {
+      getGlobalSecrets: vi.fn().mockReturnValue({}),
       getAll: vi.fn().mockReturnValue({}),
       getMergedForDeploy: vi.fn().mockReturnValue({}),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
