@@ -193,6 +193,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.6.9**  | MCP Bugfixes          | Done   | Compose deploy completion, --progress version gating, DOCKER_HOST IP detection, service status reconciliation                                                           |
 | **v0.6.10** | Deploy Bugfixes       | Done   | Dockerfile path routing fix, container conflict recipe, env var optional detection, agent/fallback race fix, BuildDebugger i18n, question event handling                |
 | **v0.6.11** | Deploy Hardening & QA | Done   | Monorepo routing fix, build context persistence, disk preflight, container names, service health check, env var debug, build progress                                   |
+| **v0.6.15** | Deploy UX Quick Wins  | Done   | Build step progress in status, env source tracking, deploy-plan internal URLs, MCP HTTP session cleanup, richer MCP tool descriptions                                   |
 | **v1.0.0**  | Stable Release        | TBD    | Quality hardening, comprehensive testing, production-readiness improvements                                                                                             |
 
 ## MCP Integration (AI Coding Agents)

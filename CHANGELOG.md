@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.15] - 2026-03-21
+
+### Added
+
+- **Build step progress in MCP status**: `get_deploy_status` now exposes `build_step`, `build_step_total`, and `build_step_desc` during active Docker builds
+- **Env var source tracking**: `list_env_vars(environment_name=...)` can now return masked values with source metadata (`global`, `project`, `production`, `environment`)
+- **Deploy plan internal URLs**: `create_deploy_plan` now includes `internal_url` guidance for standard deploys and compose services
+
+### Changed
+
+- **MCP HTTP session lifecycle**: Added heartbeat/TTL tracking and shutdown cleanup to reduce stale MCP HTTP sessions during long-running operations
+- **MCP tool descriptions**: Expanded core tool descriptions with compose support scope, internal URL guidance, env priority, and polling hints for agents
+
 ## [0.6.14] - 2026-03-20
 
 ### Fixed
