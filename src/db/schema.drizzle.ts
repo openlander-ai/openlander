@@ -269,6 +269,18 @@ export const services = sqliteTable(
   ],
 );
 
+export const deploy_configs = sqliteTable('deploy_configs', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id')
+    .notNull()
+    .unique()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  config_json: text('config_json').notNull(),
+  config_version: integer('config_version').notNull().default(1),
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const secretFiles = sqliteTable(
   'secret_files',
   {
@@ -321,6 +333,7 @@ export const drizzleSchema = {
   webhookConfigs,
   globalSecrets,
   services,
+  deploy_configs,
   secretFiles,
   deployPlans,
 };

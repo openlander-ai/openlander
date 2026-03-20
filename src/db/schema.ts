@@ -154,6 +154,17 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS deploy_configs (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+  config_json TEXT NOT NULL,
+  config_version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_deploy_configs_project ON deploy_configs(project_id);
+
 CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id);
 CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id);
 CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id);

@@ -129,6 +129,15 @@ export interface ServiceRow {
   updated_at: string;
 }
 
+export interface DeployConfigRow {
+  id: string;
+  project_id: string;
+  config_json: string;
+  config_version: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PendingFixRow {
   filePath: string;
   content: string;

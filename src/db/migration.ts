@@ -328,4 +328,16 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     'CREATE INDEX IF NOT EXISTS idx_deploy_plans_project_name ON deploy_plans(project_name)',
   );
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_deploy_plans_created_at ON deploy_plans(created_at)');
+
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS deploy_configs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+    config_json TEXT NOT NULL,
+    config_version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_deploy_configs_project ON deploy_configs(project_id)',
+  );
 }
