@@ -98,6 +98,16 @@ export interface PlanBuildService {
   image?: string;
   depends_on?: string[];
   internal_url?: string;
+  command?: string | string[];
+  entrypoint?: string | string[];
+  restart?: string;
+  healthcheck?: {
+    test: string | string[];
+    interval?: string;
+    timeout?: string;
+    retries?: number;
+    start_period?: string;
+  };
 }
 
 export interface DeployPlan {

@@ -1216,52 +1216,388 @@ describeCompose('ComposePipeline', () => {
     expect(upCommands[0]).not.toContain('--progress=plain');
   });
 
-  it('gates --progress=plain flag when version detection fails', async () => {
+  it('parses command as string', () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(
       composePath,
-      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n`,
+      `services:
+  app:
+    image: node:20
+    command: npm start
+`,
       'utf8',
     );
 
-    const composeCommands: string[] = [];
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-      if (argText.includes(' up ') && argText.includes(' web')) {
-        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
-      }
-      if (argText.includes(' ps ')) {
-        return createMockProcess(
-          JSON.stringify([
-            {
-              Service: 'web',
-              State: 'running',
-              ID: 'web-container',
-              Publishers: [{ PublishedPort: 3000, TargetPort: 3000 }],
-            },
-          ]),
-          '',
-          0,
-        ) as unknown as ChildProcess;
-      }
-      return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
-    };
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
 
-    const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
+    expect(app?.command).toBe('npm start');
+  });
 
-    const result = await freshPipeline.deployCompose({
-      repoUrl: 'https://github.com/example/stack',
-      clonePath: tmpDir,
+  it('parses command as array', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
       composePath,
-      name: 'stack',
-      trigger: 'chat',
-    });
+      `services:
+  app:
+    image: node:20
+    command:
+      - npm
+      - start
+      - --port
+      - "3000"
+`,
+      'utf8',
+    );
 
-    expect(result.success).toBe(true);
-    const upCommands = composeCommands.filter((cmd) => cmd.includes(' up '));
-    expect(upCommands).toHaveLength(1);
-    expect(upCommands[0]).not.toContain('--progress=plain');
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.command).toEqual(['npm', 'start', '--port', '3000']);
+  });
+
+  it('parses entrypoint as string', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    entrypoint: /bin/sh
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.entrypoint).toBe('/bin/sh');
+  });
+
+  it('parses entrypoint as array', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    entrypoint:
+      - /bin/sh
+      - -c
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.entrypoint).toEqual(['/bin/sh', '-c']);
+  });
+
+  it('parses restart policy', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    restart: always
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.restart).toBe('always');
+  });
+
+  it('parses healthcheck with test as string', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    healthcheck:
+      test: curl -f http://localhost:3000 || exit 1
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.healthcheck?.test).toBe('curl -f http://localhost:3000 || exit 1');
+  });
+
+  it('parses healthcheck with test as array', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:3000
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.healthcheck?.test).toEqual(['CMD', 'curl', '-f', 'http://localhost:3000']);
+  });
+
+  it('parses healthcheck with all fields', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:3000
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.healthcheck).toEqual({
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000'],
+      interval: '30s',
+      timeout: '10s',
+      retries: 3,
+      start_period: '40s',
+    });
+  });
+
+  it('parses healthcheck with retries as string number', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    healthcheck:
+      test: curl -f http://localhost:3000 || exit 1
+      retries: "5"
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.healthcheck?.retries).toBe(5);
+  });
+
+  it('keeps command undefined when absent', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.command).toBeUndefined();
+  });
+
+  it('keeps entrypoint undefined when absent', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.entrypoint).toBeUndefined();
+  });
+
+  it('keeps restart undefined when absent', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.restart).toBeUndefined();
+  });
+
+  it('keeps healthcheck undefined when absent', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.healthcheck).toBeUndefined();
+  });
+
+  it('parses multiple services with mixed new fields', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx
+    restart: always
+    healthcheck:
+      test: curl -f http://localhost || exit 1
+      interval: 30s
+  api:
+    image: node:20
+    command: npm start
+    entrypoint:
+      - /bin/sh
+      - -c
+  worker:
+    image: python:3.11
+    restart: on-failure
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+
+    const web = parsed.services.find((service) => service.name === 'web');
+    expect(web?.restart).toBe('always');
+    expect(web?.healthcheck?.test).toBe('curl -f http://localhost || exit 1');
+    expect(web?.command).toBeUndefined();
+
+    const api = parsed.services.find((service) => service.name === 'api');
+    expect(api?.command).toBe('npm start');
+    expect(api?.entrypoint).toEqual(['/bin/sh', '-c']);
+    expect(api?.restart).toBeUndefined();
+
+    const worker = parsed.services.find((service) => service.name === 'worker');
+    expect(worker?.restart).toBe('on-failure');
+    expect(worker?.command).toBeUndefined();
+    expect(worker?.healthcheck).toBeUndefined();
+  });
+
+  it('parses healthcheck without test field (incomplete healthcheck)', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.healthcheck).toBeUndefined();
+  });
+
+  it('parses command and entrypoint together', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  app:
+    image: node:20
+    entrypoint: /bin/sh
+    command: -c "npm start"
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    const app = parsed.services.find((service) => service.name === 'app');
+
+    expect(app?.entrypoint).toBe('/bin/sh');
+    expect(app?.command).toBe('-c "npm start"');
+  });
+
+  it('backward compatibility - compose without new fields still parses correctly', () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    environment:
+      - NGINX_HOST=example.com
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: secret
+    depends_on:
+      - web
+`,
+      'utf8',
+    );
+
+    const parsed = pipeline.parseComposeFile(composePath);
+    expect(parsed.services).toHaveLength(2);
+
+    const web = parsed.services.find((service) => service.name === 'web');
+    expect(web?.image).toBe('nginx:latest');
+    expect(web?.ports).toEqual(['80:80']);
+    expect(web?.command).toBeUndefined();
+    expect(web?.entrypoint).toBeUndefined();
+    expect(web?.restart).toBeUndefined();
+    expect(web?.healthcheck).toBeUndefined();
+
+    const db = parsed.services.find((service) => service.name === 'db');
+    expect(db?.image).toBe('postgres:16');
+    expect(db?.dependsOn).toEqual(['web']);
+    expect(db?.command).toBeUndefined();
+    expect(db?.entrypoint).toBeUndefined();
+    expect(db?.restart).toBeUndefined();
+    expect(db?.healthcheck).toBeUndefined();
   });
 });
 

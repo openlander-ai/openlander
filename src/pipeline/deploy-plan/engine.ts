@@ -164,6 +164,10 @@ export class PlanEngine {
             port,
             image: svc.image,
             depends_on: svc.dependsOn,
+            command: svc.command,
+            entrypoint: svc.entrypoint,
+            restart: svc.restart,
+            healthcheck: svc.healthcheck,
           };
         });
 
@@ -346,9 +350,17 @@ export class PlanEngine {
       : '.';
 
     const composeBuildServicesWithUrls = params.composeBuildServices?.map((service) => ({
-      ...service,
+      name: service.name,
+      dockerfile: service.dockerfile,
+      port: service.port,
+      image: service.image,
+      depends_on: service.depends_on,
+      command: service.command,
+      entrypoint: service.entrypoint,
+      restart: service.restart,
+      healthcheck: service.healthcheck,
       internal_url: service.port
-        ? `http://ol-${params.projectName}-${service.name}:${service.port}`
+        ? `http://ol-${params.projectName}-${service.name}:${String(service.port)}`
         : `http://ol-${params.projectName}-${service.name}`,
     }));
 

@@ -40,6 +40,16 @@ export interface ComposeService {
   envFile?: ComposeEnvFile[];
   dependsOn?: string[];
   volumes?: string[];
+  command?: string | string[];
+  entrypoint?: string | string[];
+  restart?: string;
+  healthcheck?: {
+    test: string | string[];
+    interval?: string;
+    timeout?: string;
+    retries?: number;
+    start_period?: string;
+  };
 }
 
 export interface ComposeEnvFile {
@@ -344,6 +354,56 @@ export class ComposePipeline {
       const imageRaw = serviceObj['image'];
       const envFileRaw = serviceObj['env_file'];
       const profilesRaw = serviceObj['profiles'];
+      const commandRaw = serviceObj['command'];
+      const entrypointRaw = serviceObj['entrypoint'];
+      const restartRaw = serviceObj['restart'];
+      const healthcheckRaw = serviceObj['healthcheck'];
+
+      let command: ComposeService['command'];
+      if (typeof commandRaw === 'string') {
+        command = commandRaw;
+      } else if (Array.isArray(commandRaw)) {
+        command = commandRaw.map((item) => String(item));
+      }
+
+      let entrypoint: ComposeService['entrypoint'];
+      if (typeof entrypointRaw === 'string') {
+        entrypoint = entrypointRaw;
+      } else if (Array.isArray(entrypointRaw)) {
+        entrypoint = entrypointRaw.map((item) => String(item));
+      }
+
+      let restart: string | undefined;
+      if (typeof restartRaw === 'string') {
+        restart = restartRaw;
+      }
+
+      let healthcheck: ComposeService['healthcheck'] | undefined;
+      if (healthcheckRaw && typeof healthcheckRaw === 'object' && !Array.isArray(healthcheckRaw)) {
+        const hcObj = healthcheckRaw as Record<string, unknown>;
+        const testRaw = hcObj['test'];
+        let test: string | string[] | undefined;
+        if (typeof testRaw === 'string') {
+          test = testRaw;
+        } else if (Array.isArray(testRaw)) {
+          test = testRaw.map((item) => String(item));
+        }
+        if (test) {
+          healthcheck = {
+            test,
+            interval: typeof hcObj['interval'] === 'string' ? hcObj['interval'] : undefined,
+            timeout: typeof hcObj['timeout'] === 'string' ? hcObj['timeout'] : undefined,
+            retries:
+              typeof hcObj['retries'] === 'number'
+                ? hcObj['retries']
+                : typeof hcObj['retries'] === 'string'
+                  ? parseInt(hcObj['retries'], 10)
+                  : undefined,
+            start_period:
+              typeof hcObj['start_period'] === 'string' ? hcObj['start_period'] : undefined,
+          };
+        }
+      }
 
       let envFile: ComposeEnvFile[] | undefined;
       if (typeof envFileRaw === 'string') {
@@ -392,6 +452,10 @@ export class ComposePipeline {
         envFile,
         dependsOn,
         volumes: Array.isArray(volumesRaw) ? volumesRaw.map((volume) => String(volume)) : undefined,
+        command,
+        entrypoint,
+        restart,
+        healthcheck,
       });
     }
 
