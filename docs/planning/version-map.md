@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -839,6 +839,27 @@ Phase 3 — PR Preview:
 | get_deploy_status 빌드 중 buildLogTail 노출                | ✅   |
 | get_build_log DEPLOY_IN_PROGRESS 상태 반환                 | ✅   |
 | 빌드 실패 로그 30줄 → 100줄 확대                           | ✅   |
+
+---
+
+### v0.7.1 — MCP Response Guidance Hints ✅
+
+**상태**: 완료
+
+> **핵심 가치**: AI 에이전트가 MCP 도구 실행 후 docker CLI나 curl localhost로 빠지는 문제 해결. 도구 응답에 `verify`, `action_required`, `recovery_hint` 필드를 추가하여 에이전트를 올바른 다음 행동으로 유도.
+
+| 항목                                                                         | 상태 |
+| ---------------------------------------------------------------------------- | ---- |
+| `get_deploy_status` done 응답에 `verify`, `internal_host` 추가               | ✅   |
+| `get_deploy_status` failed 응답에 `recovery_hint` 추가                       | ✅   |
+| `execute_deploy_plan` building/failed 응답에 `verify`/`recovery_hint`        | ✅   |
+| `deploy_compose` BUILD_FAILED 응답에 `recovery_hint` 추가                    | ✅   |
+| `map_domain` 응답에 `action_required` 추가                                   | ✅   |
+| `set_env_vars`, `upload_secret_file` 응답에 `action_required` 추가           | ✅   |
+| `expose_public` 응답에 `verify` 추가                                         | ✅   |
+| `enable_webhook` 응답에 `action_required` 추가                               | ✅   |
+| `get_logs`, `stop_project`, `restart_project` description에 원격 Docker 경고 | ✅   |
+| `get_system_stats` 응답에 `note` (원격 Docker 안내) 추가                     | ✅   |
 
 ---
 

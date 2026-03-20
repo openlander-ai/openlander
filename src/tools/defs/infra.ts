@@ -30,6 +30,9 @@ export const infraToolDefs: ToolDef[] = [
         project: projectName,
         domain,
         url: `https://${domain}`,
+        action_required: [
+          'If other projects reference this project via env vars (e.g., NEXT_PUBLIC_API_URL, API_URL), update them with the new URL and redeploy.',
+        ],
       };
     },
   },

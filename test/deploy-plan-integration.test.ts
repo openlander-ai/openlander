@@ -161,6 +161,8 @@ describe('deploy-plan integration', () => {
       project_name: 'test-app',
       project_id: 'proj_456',
       estimated_seconds: 60,
+      verify:
+        'Poll get_deploy_status to monitor progress. Do NOT use docker CLI or curl — Docker host may be remote.',
     });
   });
 
@@ -184,6 +186,8 @@ describe('deploy-plan integration', () => {
       plan_id: 'plan_123',
       status: 'failed',
       error: 'Service creation failed',
+      recovery_hint:
+        'Use get_build_log + debug_build_error for diagnosis, then create_deploy_plan + execute_deploy_plan to retry. Do NOT use docker CLI — Docker host may be remote.',
     });
   });
 });

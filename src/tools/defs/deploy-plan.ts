@@ -105,12 +105,16 @@ export const deployPlanToolDefs: ToolDef[] = [
           project_name: result.project_name,
           project_id: result.project_id,
           estimated_seconds: result.estimated_seconds,
+          verify:
+            'Poll get_deploy_status to monitor progress. Do NOT use docker CLI or curl — Docker host may be remote.',
         };
       } else {
         return {
           plan_id: result.plan_id,
           status: 'failed',
           error: result.error,
+          recovery_hint:
+            'Use get_build_log + debug_build_error for diagnosis, then create_deploy_plan + execute_deploy_plan to retry. Do NOT use docker CLI — Docker host may be remote.',
         };
       }
     },

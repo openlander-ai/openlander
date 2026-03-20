@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-03-21
+
+### Added
+
+- **MCP response guidance hints**: Tool responses now include `verify`, `action_required`, and `recovery_hint` fields to guide AI agents toward correct next actions instead of falling back to docker CLI or curl
+- **Deploy success verification**: `get_deploy_status` (done) returns `verify` and `internal_host` fields directing agents to use `get_logs` instead of curl localhost
+- **Deploy failure recovery**: `get_deploy_status` (failed), `execute_deploy_plan` (failed), and `deploy_compose` (BUILD_FAILED) return `recovery_hint` with correct recovery path
+- **Post-action guidance**: `map_domain`, `set_env_vars`, `upload_secret_file`, and `enable_webhook` return `action_required` arrays with next steps
+- **Remote Docker warnings**: `get_logs`, `stop_project`, `restart_project`, and `get_system_stats` descriptions warn that Docker host may be remote — do not use docker CLI directly
+
 ## [0.7.0] - 2026-03-21
 
 ### Changed

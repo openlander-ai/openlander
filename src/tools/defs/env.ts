@@ -115,6 +115,9 @@ export const envToolDefs: ToolDef[] = [
         status: 'updated',
         project: projectName,
         keys: Object.keys(vars),
+        action_required: [
+          'Project must be redeployed for env var changes to take effect. Use create_deploy_plan + execute_deploy_plan.',
+        ],
       };
     },
   },
@@ -159,7 +162,13 @@ export const envToolDefs: ToolDef[] = [
       }
 
       const url = await appCtx.pipeline.exposeTunnel(project.id, project.assigned_port);
-      return { status: 'exposed', project: projectName, publicUrl: url };
+      return {
+        status: 'exposed',
+        project: projectName,
+        publicUrl: url,
+        verify:
+          'Access via the publicUrl above. Do NOT curl localhost — Docker host may be remote.',
+      };
     },
   },
   {
@@ -198,6 +207,9 @@ export const envToolDefs: ToolDef[] = [
         filename,
         mountPath: `${mountPath}/${filename}`,
         scope: projectId ? 'project' : 'global',
+        action_required: [
+          'Redeploy required for the secret file to be mounted in the container. Use create_deploy_plan + execute_deploy_plan.',
+        ],
       };
     },
     targets: ['mcp'],

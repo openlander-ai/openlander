@@ -112,7 +112,20 @@ export const deployToolDefs: ToolDef[] = [
         phase: job.phase,
         elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
         error: job.errorSummary,
-        ...(job.phase === 'done' ? { urls: getProjectUrls(job.projectName) } : {}),
+        ...(job.phase === 'done'
+          ? {
+              urls: getProjectUrls(job.projectName),
+              internal_host: `ol-${job.projectName}`,
+              verify:
+                'Use get_logs to check container health. Do NOT use curl or docker commands — Docker host may be remote.',
+            }
+          : {}),
+        ...(job.phase === 'failed'
+          ? {
+              recovery_hint:
+                'Use get_build_log + debug_build_error for diagnosis, then create_deploy_plan + execute_deploy_plan to retry. Do NOT use docker CLI — Docker host may be remote.',
+            }
+          : {}),
         ...(job.buildLogTail && (job.phase === 'building' || job.phase === 'failed')
           ? { build_log_tail: job.buildLogTail }
           : {}),

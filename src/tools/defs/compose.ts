@@ -87,6 +87,8 @@ export const composeToolDefs: ToolDef[] = [
           message: result.error ?? 'Compose deploy failed.',
           composePath,
           composeContent,
+          recovery_hint:
+            'Check the composeContent for issues. Use get_build_log + debug_build_error for AI analysis, then create_deploy_plan + execute_deploy_plan to retry. Do NOT use docker compose CLI — Docker host may be remote.',
         };
       }
 
@@ -99,14 +101,14 @@ export const composeToolDefs: ToolDef[] = [
     description:
       'List services in a Docker Compose project with per-service status, ports, and container IDs.',
     inputSchema: listComposeServicesSchema,
-    execute: async (args, { appCtx }) => {
+    execute: (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
       const project = appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      const services = await appCtx.composePipeline.getServiceStatuses(project.id);
+      const services = appCtx.composePipeline.getServiceStatuses(project.id);
       return {
         project: projectName,
         count: services.length,
