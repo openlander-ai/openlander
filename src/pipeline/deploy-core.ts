@@ -24,6 +24,7 @@ import { filterBuildTimeVars } from './build-args.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from './diff-analysis.js';
 import { scanForSecrets } from './secret-scan.js';
 import { persistDeployConfig } from './config-snapshot.js';
+import { buildDeployConfig } from './build-deploy-config.js';
 import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
@@ -1528,27 +1529,17 @@ export class DeployPipeline {
     }
     this.jobManager?.trackJob(projectId, project.name);
 
-    const isCompose = project.build_method === 'compose';
-    const storedPath = project.dockerfile_path;
-    const isValidDockerfilePath =
-      storedPath !== 'Dockerfile' &&
-      !storedPath.startsWith('/') &&
-      !storedPath.endsWith('.yml') &&
-      !storedPath.endsWith('.yaml');
-
-    return this.deploy({
-      repoUrl: project.repo_url ?? '',
-      branch: project.branch,
-      name: project.name,
-      visibility: project.visibility,
-      dockerTarget: isCompose ? undefined : (project.docker_target ?? undefined),
-      dockerfilePath: !isCompose && isValidDockerfilePath ? storedPath : undefined,
-      buildContext: project.build_context ?? undefined,
-      preferDockerfile: !isCompose,
-      _projectId: projectId,
-      _preferredPort: previousPort,
-      _noCacheBuild: options?.noCache === true,
+    const config = buildDeployConfig({
+      projectId,
+      runtimeOverrides: {
+        _projectId: projectId,
+        _preferredPort: previousPort,
+        _noCacheBuild: options?.noCache,
+      },
+      db: this.db,
     });
+
+    return this.deploy(config);
   }
 
   async deployPreview(options: PreviewDeployOptions): Promise<PreviewDeployResult> {
