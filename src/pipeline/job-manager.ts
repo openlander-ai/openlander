@@ -52,17 +52,25 @@ export class JobManager {
     job.buildStepDesc = desc;
   }
 
-  /** Parse Docker build step from output line. Returns undefined if not a step line. */
+  /** Parse Docker build step from output line (classic + BuildKit). Returns undefined if not a step line. */
   static parseDockerBuildStep(
     line: string,
   ): { step: number; total: number; desc: string } | undefined {
-    const match = line.match(/^Step (\d+)\/(\d+)\s*:\s*(.+)/);
-    if (!match || !match[1] || !match[2] || !match[3]) return undefined;
-    return {
-      step: parseInt(match[1], 10),
-      total: parseInt(match[2], 10),
-      desc: match[3],
-    };
+    // Classic format: "Step 3/11 : RUN pip install -r requirements.txt"
+    const classic = line.match(/^Step (\d+)\/(\d+)\s*:\s*(.+)/);
+    if (classic?.[1] && classic[2] && classic[3]) {
+      return { step: parseInt(classic[1], 10), total: parseInt(classic[2], 10), desc: classic[3] };
+    }
+    // BuildKit format: "#5 [stage-0 3/7] RUN apt-get update" or "#8 [2/5] COPY ."
+    const buildkit = line.match(/^#\d+\s+\[.*?(\d+)\/(\d+)\]\s+(.+)/);
+    if (buildkit?.[1] && buildkit[2] && buildkit[3]) {
+      return {
+        step: parseInt(buildkit[1], 10),
+        total: parseInt(buildkit[2], 10),
+        desc: buildkit[3],
+      };
+    }
+    return undefined;
   }
 
   getStatus(projectId: string): JobStatus | undefined {

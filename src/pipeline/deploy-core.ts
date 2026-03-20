@@ -799,8 +799,6 @@ export class DeployPipeline {
               stepInfo.desc,
             );
           }
-          // TODO: BuildKit format (#N [stage M/N]) not supported yet
-
           const now = Date.now();
           if (now - lastBuildOutputEmit <= 50) return;
           lastBuildOutputEmit = now;
@@ -1329,8 +1327,6 @@ export class DeployPipeline {
                   stepInfo.desc,
                 );
               }
-              // TODO: BuildKit format (#N [stage M/N]) not supported yet
-
               const now = Date.now();
               if (now - lastBuildOutputEmit <= 50) return;
               lastBuildOutputEmit = now;

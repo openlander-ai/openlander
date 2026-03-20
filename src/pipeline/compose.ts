@@ -894,7 +894,9 @@ export class ComposePipeline {
     const composePath = this.resolveComposePath(parent);
     const projectName = sanitizeComposeProjectName(parent.name);
 
-    const result = await this.execCompose(composePath, ['down'], { projectName });
+    const result = await this.execCompose(composePath, ['down', '--remove-orphans'], {
+      projectName,
+    });
     if (result.exitCode !== 0) {
       throw new Error(`docker compose down failed: ${result.stderr || result.stdout}`);
     }

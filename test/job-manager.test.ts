@@ -197,10 +197,23 @@ describe('JobManager', () => {
       expect(result).toBeUndefined();
     });
 
-    it('parseDockerBuildStep returns undefined for BuildKit format', () => {
+    it('parseDockerBuildStep parses BuildKit format with stage name', () => {
       const line = '#5 [stage-0 3/7] RUN apt-get update';
       const result = JobManager.parseDockerBuildStep(line);
-      expect(result).toBeUndefined();
+      expect(result).toEqual({ step: 3, total: 7, desc: 'RUN apt-get update' });
+    });
+
+    it('parseDockerBuildStep parses BuildKit format without stage name', () => {
+      const result = JobManager.parseDockerBuildStep('#8 [2/5] COPY package.json .');
+      expect(result).toEqual({ step: 2, total: 5, desc: 'COPY package.json .' });
+    });
+
+    it('parseDockerBuildStep returns undefined for BuildKit internal lines', () => {
+      expect(
+        JobManager.parseDockerBuildStep('#1 [internal] load build definition'),
+      ).toBeUndefined();
+      expect(JobManager.parseDockerBuildStep('#3 exporting layers')).toBeUndefined();
+      expect(JobManager.parseDockerBuildStep('#2 [auth] docker.io/library/node')).toBeUndefined();
     });
 
     it('parseDockerBuildStep handles whitespace in description', () => {
