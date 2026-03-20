@@ -63,6 +63,12 @@ export const setEnvVarsSchema = z.object({
 
 export const listEnvVarsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  environment_name: z
+    .string()
+    .optional()
+    .describe(
+      'Environment name to show source tracking (global/project/production/environment). Omit for backward-compatible response.',
+    ),
 });
 
 export const getEnvVarSchema = z.object({

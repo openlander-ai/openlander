@@ -7,7 +7,13 @@ import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import { extractProjectName } from '../helpers.js';
-import type { DeployPlan, PlanService, PlanEnvEntry, PlanBuildService } from './types.js';
+import type {
+  DeployPlan,
+  PlanService,
+  PlanEnvEntry,
+  PlanBuildService,
+  DeployPlanComplexity,
+} from './types.js';
 import { PlanStateMachine } from './types.js';
 import { computeComplexity, computeMissingEnvVars } from './plan-utils.js';
 import type { Database } from '../../db/index.js';
@@ -314,7 +320,7 @@ export class PlanEngine {
   private assemblePlan(params: {
     planId: string;
     status: DeployPlan['status'];
-    complexity: DeployPlan['complexity'];
+    complexity: DeployPlanComplexity;
     projectName: string;
     repoUrl: string;
     planBranch: string;
@@ -339,6 +345,16 @@ export class PlanEngine {
       ? params.userDockerfile.substring(0, params.userDockerfile.lastIndexOf('/'))
       : '.';
 
+    const composeBuildServicesWithUrls = params.composeBuildServices?.map((service) => ({
+      ...service,
+      internal_url: service.port
+        ? `http://ol-${params.projectName}-${service.name}:${service.port}`
+        : `http://ol-${params.projectName}-${service.name}`,
+    }));
+
+    const internalUrl = `http://ol-${params.projectName}`;
+    const internalUrlNote = 'Port determined after build. Set EXPOSE in Dockerfile.';
+
     return {
       plan_id: params.planId,
       status: params.status,
@@ -358,7 +374,7 @@ export class PlanEngine {
         target: params.dockerTarget,
         generated_dockerfile: params.generatedDockerfile,
         compose_file: params.composeFilePath,
-        compose_services: params.composeBuildServices,
+        compose_services: composeBuildServicesWithUrls,
         dockerfiles_found:
           params.relativeDockerfiles.length > 0 ? params.relativeDockerfiles : undefined,
       },
@@ -379,6 +395,8 @@ export class PlanEngine {
       warnings: params.warnings,
       created_at: now,
       updated_at: now,
+      internal_url: internalUrl,
+      internal_url_note: internalUrlNote,
     };
   }
 

@@ -1,5 +1,6 @@
 import type { ToolDef } from './types.js';
 import { ProjectNotFoundError } from '../../errors.js';
+import { EnvManager } from '../../pipeline/env.js';
 import {
   getEnvVarSchema,
   listEnvVarsSchema,
@@ -24,12 +25,39 @@ export const envToolDefs: ToolDef[] = [
   {
     name: 'list_env_vars',
     description:
-      'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count }. Errors: PROJECT_NOT_FOUND.',
+      'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count } or with source tracking { variables: { KEY: { value: "sk-****7890", source: "project" } }, count }. Errors: PROJECT_NOT_FOUND, ENVIRONMENT_NOT_FOUND.',
     inputSchema: listEnvVarsSchema,
     execute: (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
+      const environmentName = _args['environment_name'] as string | undefined;
       const project = getProjectByName(appCtx, projectName);
-      const masked = appCtx.env.getAllMasked(project.id);
+
+      // Backward compatibility: if no environment_name, return simple masked format
+      if (!environmentName) {
+        const masked = appCtx.env.getAllMasked(project.id);
+        return Promise.resolve({ variables: masked, count: Object.keys(masked).length });
+      }
+
+      // With environment_name: return source tracking
+      const environments = appCtx.db.getEnvironmentsByProject(project.id);
+      const environment = environments.find((e) => e.type === environmentName);
+
+      if (!environment) {
+        return Promise.resolve({
+          error: `ENVIRONMENT_NOT_FOUND: No environment named "${environmentName}" found for project "${projectName}"`,
+        });
+      }
+
+      const inheritanceInfo = appCtx.env.getInheritanceInfo(project.id, environment.id);
+      const masked: Record<string, { value: string; source: string }> = {};
+
+      for (const [key, info] of Object.entries(inheritanceInfo)) {
+        masked[key] = {
+          value: EnvManager.mask(info.value),
+          source: info.source,
+        };
+      }
+
       return Promise.resolve({ variables: masked, count: Object.keys(masked).length });
     },
   },

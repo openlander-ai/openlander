@@ -46,6 +46,8 @@ export const deployPlanToolDefs: ToolDef[] = [
         },
         missing: plan.missing,
         warnings: plan.warnings,
+        internal_url: plan.internal_url,
+        internal_url_note: plan.internal_url_note,
       };
     },
   },

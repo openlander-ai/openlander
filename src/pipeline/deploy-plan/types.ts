@@ -97,6 +97,7 @@ export interface PlanBuildService {
   port?: number;
   image?: string;
   depends_on?: string[];
+  internal_url?: string;
 }
 
 export interface DeployPlan {
@@ -134,6 +135,8 @@ export interface DeployPlan {
   completed_at?: string;
   project_id?: string;
   error_message?: string;
+  internal_url?: string;
+  internal_url_note?: string;
 }
 
 /**

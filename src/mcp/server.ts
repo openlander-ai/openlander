@@ -267,9 +267,12 @@ export async function startMcpServer(ctx: AppContext): Promise<void> {
 interface McpSession {
   server: Server; // eslint-disable-line @typescript-eslint/no-deprecated
   transport: WebStandardStreamableHTTPServerTransport;
+  lastActivity: number;
+  heartbeatInterval?: ReturnType<typeof setInterval>;
+  ttlTimeout?: ReturnType<typeof setTimeout>;
 }
 
-export function createMcpHttpRoutes(ctx: AppContext): Hono {
+export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => void } {
   const app = new Hono();
   const sessions = new Map<string, McpSession>();
 
@@ -307,12 +310,36 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono {
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       onsessioninitialized: (sid) => {
-        sessions.set(sid, { server, transport });
+        const session: McpSession = {
+          server,
+          transport,
+          lastActivity: Date.now(),
+        };
+
+        session.heartbeatInterval = setInterval(() => {
+          session.lastActivity = Date.now();
+        }, 30_000);
+
+        sessions.set(sid, session);
         log.info({ sessionId: sid }, 'MCP HTTP session created');
       },
       onsessionclosed: (sid) => {
-        sessions.delete(sid);
-        log.info({ sessionId: sid }, 'MCP HTTP session closed');
+        const session = sessions.get(sid);
+        if (session) {
+          if (session.heartbeatInterval) {
+            clearInterval(session.heartbeatInterval);
+          }
+
+          session.ttlTimeout = setTimeout(
+            () => {
+              sessions.delete(sid);
+              log.info({ sessionId: sid }, 'MCP HTTP session TTL expired, removed from map');
+            },
+            5 * 60 * 1000,
+          );
+
+          log.info({ sessionId: sid }, 'MCP HTTP session closed, TTL cleanup scheduled');
+        }
       },
     });
 
@@ -320,5 +347,18 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono {
     return transport.handleRequest(c.req.raw);
   });
 
-  return app;
+  (app as Hono & { cleanup: () => void }).cleanup = () => {
+    for (const [sid, session] of sessions.entries()) {
+      if (session.heartbeatInterval) {
+        clearInterval(session.heartbeatInterval);
+      }
+      if (session.ttlTimeout) {
+        clearTimeout(session.ttlTimeout);
+      }
+      sessions.delete(sid);
+    }
+    log.info('MCP HTTP sessions cleanup completed');
+  };
+
+  return app as Hono & { cleanup: () => void };
 }
