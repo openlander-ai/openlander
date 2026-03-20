@@ -136,6 +136,13 @@ interface ParsedComposePsRow {
 // Features used: ps --format json (V2.1.0+)
 const MIN_COMPOSE_VERSION = '2.1.0';
 
+function sanitizeComposeProjectName(name: string): string {
+  return name
+    .replace(/\//g, '-')
+    .replace(/[^a-z0-9_-]/gi, '')
+    .toLowerCase();
+}
+
 export class ComposePipeline {
   versionChecked = false;
 
@@ -429,6 +436,7 @@ export class ComposePipeline {
     const startTime = Date.now();
     const trigger = config.trigger ?? 'chat';
     const parentName = config.name ?? extractProjectName(config.repoUrl);
+    const projectName = sanitizeComposeProjectName(parentName);
     const parentProjectId = config._parentId ?? nanoid(12);
     let buildLog = '';
 
@@ -487,6 +495,15 @@ export class ComposePipeline {
         const secretMounts = this.writeComposeSecretFiles(parentName, secretFiles);
         this.writeSecretOverride(config.composePath, filteredComposeProject.services, secretMounts);
       }
+    }
+
+    try {
+      await this.execCompose(config.composePath, ['down', '--remove-orphans'], { projectName });
+    } catch (err) {
+      log.debug(
+        { err, composePath: config.composePath },
+        'Compose pre-cleanup skipped before deploy',
+      );
     }
 
     if (!config._parentId) {
@@ -610,7 +627,7 @@ export class ComposePipeline {
 
           const upArgs = ['up', '-d', '--build', '--force-recreate', '--no-deps', service.name];
 
-          const upResult = await this.execCompose(config.composePath, upArgs);
+          const upResult = await this.execCompose(config.composePath, upArgs, { projectName });
           buildLog += `[compose up ${service.name}]\n${upResult.stdout}${upResult.stderr}`;
 
           if (upResult.exitCode !== 0) {
@@ -675,10 +692,14 @@ export class ComposePipeline {
           return { healthy: true };
         },
         rollbackService: async (service) => {
-          const stopResult = await this.execCompose(config.composePath, ['stop', service.name]);
+          const stopResult = await this.execCompose(config.composePath, ['stop', service.name], {
+            projectName,
+          });
           buildLog += `[compose rollback stop ${service.name}]\n${stopResult.stdout}${stopResult.stderr}`;
 
-          const rmResult = await this.execCompose(config.composePath, ['rm', '-f', service.name]);
+          const rmResult = await this.execCompose(config.composePath, ['rm', '-f', service.name], {
+            projectName,
+          });
           buildLog += `[compose rollback rm ${service.name}]\n${rmResult.stdout}${rmResult.stderr}`;
 
           const childId = childrenByService.get(service.name);
@@ -871,8 +892,9 @@ export class ComposePipeline {
   async stopCompose(projectId: string): Promise<void> {
     const parent = this.resolveParentProject(projectId);
     const composePath = this.resolveComposePath(parent);
+    const projectName = sanitizeComposeProjectName(parent.name);
 
-    const result = await this.execCompose(composePath, ['down']);
+    const result = await this.execCompose(composePath, ['down'], { projectName });
     if (result.exitCode !== 0) {
       throw new Error(`docker compose down failed: ${result.stderr || result.stdout}`);
     }
@@ -888,13 +910,14 @@ export class ComposePipeline {
   async getServiceLogs(projectId: string, service?: string, lines = 100): Promise<string> {
     const parent = this.resolveParentProject(projectId);
     const composePath = this.resolveComposePath(parent);
+    const projectName = sanitizeComposeProjectName(parent.name);
 
     const args = ['logs', `--tail=${String(lines)}`];
     if (service) {
       args.push(service);
     }
 
-    const result = await this.execCompose(composePath, args);
+    const result = await this.execCompose(composePath, args, { projectName });
     if (result.exitCode !== 0) {
       throw new Error(`docker compose logs failed: ${result.stderr || result.stdout}`);
     }
@@ -905,8 +928,9 @@ export class ComposePipeline {
   async getServiceStatuses(projectId: string): Promise<ComposeServiceStatus[]> {
     const parent = this.resolveParentProject(projectId);
     const composePath = this.resolveComposePath(parent);
+    const projectName = sanitizeComposeProjectName(parent.name);
 
-    const result = await this.execCompose(composePath, ['ps', '--format', 'json']);
+    const result = await this.execCompose(composePath, ['ps', '--format', 'json'], { projectName });
     if (result.exitCode !== 0) {
       throw new Error(`docker compose ps failed: ${result.stderr || result.stdout}`);
     }
@@ -1121,11 +1145,18 @@ export class ComposePipeline {
   private async execCompose(
     composePath: string,
     args: string[],
+    options?: { projectName?: string },
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve, reject) => {
+      const env = { ...process.env };
+      if (options?.projectName) {
+        env.COMPOSE_PROJECT_NAME = options.projectName;
+      }
+
       const proc = spawn('docker', ['compose', '-f', composePath, ...args], {
         cwd: dirname(composePath),
         stdio: ['ignore', 'pipe', 'pipe'],
+        env,
       });
 
       const stdoutChunks: Buffer[] = [];
