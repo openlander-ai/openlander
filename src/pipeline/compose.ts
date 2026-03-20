@@ -506,17 +506,31 @@ export class ComposePipeline {
     });
 
     const childrenByService = new Map<string, string>();
+    // Look up existing children to reuse on redeploy
+    const existingChildren = this.db.getChildProjects(parentProjectId);
+    const existingByName = new Map(existingChildren.map((c) => [c.name, c]));
+
     for (const service of filteredComposeProject.services) {
-      const childId = nanoid(12);
       const childName = `${parentName}/${service.name}`;
+      const existing = existingByName.get(childName);
+
+      let childId: string;
+      if (existing) {
+        // Reuse existing child project on redeploy
+        childId = existing.id;
+      } else {
+        // Create new child project on first deploy
+        childId = nanoid(12);
+        this.db.createProject({
+          id: childId,
+          name: childName,
+          repoUrl: config.repoUrl,
+          branch: config.branch,
+          parentProjectId,
+        });
+      }
+
       childrenByService.set(service.name, childId);
-      this.db.createProject({
-        id: childId,
-        name: childName,
-        repoUrl: config.repoUrl,
-        branch: config.branch,
-        parentProjectId,
-      });
       this.db.updateProject(childId, { status: 'building' });
       this.jobManager?.trackJob(childId, childName);
     }
