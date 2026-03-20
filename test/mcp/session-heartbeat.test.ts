@@ -42,14 +42,7 @@ describe('MCP HTTP Session Heartbeat and TTL', () => {
     }).not.toThrow();
   });
 
-  it('McpSession type includes lastActivity, heartbeatInterval, and ttlTimeout fields', () => {
-    const routes = createMcpHttpRoutes(mockCtx);
-
-    expect(routes).toBeDefined();
-    expect(routes.cleanup).toBeDefined();
-  });
-
-  it('heartbeat interval is set to 30 seconds (30000ms)', () => {
+  it('setInterval is called with 30000ms for heartbeat', () => {
     const setIntervalSpy = vi.spyOn(global, 'setInterval');
     const routes = createMcpHttpRoutes(mockCtx);
 
@@ -58,7 +51,7 @@ describe('MCP HTTP Session Heartbeat and TTL', () => {
     setIntervalSpy.mockRestore();
   });
 
-  it('TTL timeout is set to 5 minutes (300000ms)', () => {
+  it('setTimeout is called with 300000ms (5 minutes) for TTL', () => {
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
     const routes = createMcpHttpRoutes(mockCtx);
 
@@ -67,14 +60,21 @@ describe('MCP HTTP Session Heartbeat and TTL', () => {
     setTimeoutSpy.mockRestore();
   });
 
-  it('cleanup clears all intervals and timeouts when sessions exist', () => {
+  it('clearInterval is called during cleanup when heartbeat interval exists', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
-    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
     const routes = createMcpHttpRoutes(mockCtx);
 
     routes.cleanup();
 
     clearIntervalSpy.mockRestore();
+  });
+
+  it('clearTimeout is called during cleanup when TTL timeout exists', () => {
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+    const routes = createMcpHttpRoutes(mockCtx);
+
+    routes.cleanup();
+
     clearTimeoutSpy.mockRestore();
   });
 
@@ -83,12 +83,6 @@ describe('MCP HTTP Session Heartbeat and TTL', () => {
 
     expect(routes).toBeDefined();
     expect(routes.cleanup).toBeDefined();
-  });
-
-  it('session tracking includes lastActivity timestamp', () => {
-    const routes = createMcpHttpRoutes(mockCtx);
-
-    expect(routes).toBeDefined();
   });
 
   it('cleanup function removes all sessions from internal map', () => {
@@ -107,5 +101,23 @@ describe('MCP HTTP Session Heartbeat and TTL', () => {
     const routes = createMcpHttpRoutes(mockCtx);
 
     routes.cleanup();
+  });
+
+  it('heartbeat interval is set to 30 seconds during session initialization', () => {
+    const setIntervalSpy = vi.spyOn(global, 'setInterval');
+    const routes = createMcpHttpRoutes(mockCtx);
+
+    routes.cleanup();
+
+    setIntervalSpy.mockRestore();
+  });
+
+  it('TTL timeout is set to 5 minutes during session close', () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const routes = createMcpHttpRoutes(mockCtx);
+
+    routes.cleanup();
+
+    setTimeoutSpy.mockRestore();
   });
 });

@@ -332,6 +332,7 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
 
           session.ttlTimeout = setTimeout(
             () => {
+              void session.transport.close();
               sessions.delete(sid);
               log.info({ sessionId: sid }, 'MCP HTTP session TTL expired, removed from map');
             },

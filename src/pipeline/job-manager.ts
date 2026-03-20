@@ -38,6 +38,9 @@ export class JobManager {
     if (buildLogTail) job.buildLogTail = buildLogTail;
     if (phase === 'done' || phase === 'failed') {
       job.completedAt = new Date();
+      job.buildStep = undefined;
+      job.buildStepTotal = undefined;
+      job.buildStepDesc = undefined;
     }
   }
 
