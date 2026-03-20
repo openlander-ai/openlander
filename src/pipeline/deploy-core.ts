@@ -587,339 +587,54 @@ export class DeployPipeline {
     const imageTag = `openlander/${routeName}:latest`;
 
     try {
-      const cloneResult = await cloneRepo({
+      const cloneResult = await this.cloneAndAnalyze({
+        projectId,
+        projectName,
+        environmentId,
         repoUrl,
         branch: environment.branch,
         sshKeyPath: config.sshKeyPath,
       });
-      clonePath = cloneResult.path;
+      clonePath = cloneResult.clonePath;
+      diffContext = cloneResult.diffContext;
+      buildLog = cloneResult.buildLog;
 
-      await eventBus.emit('deploy:clone', {
+      const buildResult = await this.buildProject({
         projectId,
-        path: cloneResult.path,
-        commitSha: cloneResult.commitSha,
-      });
-
-      buildLog += `[clone] ${repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
-
-      const pendingFixFile = this.applyPendingFix(projectId, cloneResult.path);
-      if (pendingFixFile) {
-        buildLog += `[pending-fix] Applied ${pendingFixFile}\n`;
-      }
-
-      const previousDeploy = this.db.getLastDeployLog(projectId, environmentId);
-      const previousSha = previousDeploy?.commit_sha;
-
-      if (previousSha && previousSha !== cloneResult.commitSha) {
-        const diffAnalysis = await analyzeBuildDiff(cloneResult.path, previousSha);
-        if (diffAnalysis) {
-          diffContext = formatDiffForPrompt(diffAnalysis);
-          buildLog += `[diff] ${diffAnalysis.summary}\n`;
-          log.info(
-            {
-              projectId,
-              totalChanged: diffAnalysis.totalChangedFiles,
-              buildImpact: diffAnalysis.buildImpactFiles.length,
-            },
-            'Pre-build diff analysis complete',
-          );
-          await eventBus.emit('deploy:diff-analyzed', {
-            projectId,
-            previousSha: diffAnalysis.previousSha,
-            currentSha: diffAnalysis.currentSha,
-            totalChanged: diffAnalysis.totalChangedFiles,
-            buildImpactFiles: diffAnalysis.buildImpactFiles,
-            envTemplateChanged: diffAnalysis.envTemplateChanged,
-            dockerChanged: diffAnalysis.dockerChanged,
-            depsChanged: diffAnalysis.depsChanged,
-          });
-        }
-      }
-
-      const storedVars = this.env.getAll(projectId, environmentId);
-      const storedKeys = Object.keys(storedVars);
-      const detection = detectNewEnvKeys(cloneResult.path, storedKeys);
-
-      if (detection) {
-        await eventBus.emit('env:new-keys-detected', {
-          projectId,
-          projectName,
-          newKeys: detection.newKeys,
-          templateFile: detection.templateFile,
-        });
-      }
-
-      const secretFindings = scanForSecrets(cloneResult.path);
-      if (secretFindings.length > 0) {
-        await eventBus.emit('secret:detected', {
-          projectId,
-          projectName,
-          secrets: secretFindings,
-        });
-      }
-
-      const hasExplicitDockerfilePath =
-        typeof config.dockerfilePath === 'string' && config.dockerfilePath.trim().length > 0;
-      const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
-
-      const composePipeline = this.composePipeline;
-      const composePath = preferDockerfile
-        ? null
-        : composePipeline?.detectComposeFile(cloneResult.path);
-      const isCompose = Boolean(composePath && composePipeline);
-      try {
-        this.db.updateProject(projectId, {
-          buildMethod: isCompose ? 'compose' : 'dockerfile',
-        });
-      } catch (err) {
-        log.debug({ err, projectId }, 'Failed to store build_method - column may not exist');
-      }
-      const composeEnvVars = resolveEnvVars(
-        { projectId, environmentId, inlineEnvVars: config.envVars },
-        { env: this.env },
-      );
-      if (isCompose && composePath && composePipeline) {
-        log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
-        const result = await composePipeline.deployCompose({
-          repoUrl,
-          branch: environment.branch,
-          clonePath: cloneResult.path,
-          composePath,
-          profiles: [],
-          services: config.composeServices,
-          name: routeName,
-          trigger,
-          envVars: composeEnvVars,
-          _parentId: projectId,
-        });
-
-        if (result.success) {
-          await this.handlePostDeploy({
-            projectId,
-            environmentId,
-            config,
-            repoUrl,
-            trigger,
-            startTime,
-            buildLog,
-            commitSha: cloneResult.commitSha,
-            shouldSyncProjectState,
-            skipDeployLog: true,
-            skipSuccessEvent: true,
-            skipPhaseUpdate: true,
-          });
-        }
-
-        // TODO: BuildRecovery is not applicable to compose deployments.
-        // Compose uses `docker compose up` (no single Dockerfile to fix).
-        // compose.ts handles failures internally with its own error flow.
-        // If compose-specific recovery is needed, implement a separate ComposeRecovery class.
-
-        return {
-          success: result.success,
-          projectId: result.parentProjectId,
-          projectName: result.parentName,
-          buildDurationMs: result.buildDurationMs,
-          error: result.error,
-        };
-      }
-
-      const dockerfilePath = resolveDockerfilePath(cloneResult.path, config.dockerfilePath);
-      const usingExplicitDockerfile = hasExplicitDockerfilePath;
-
-      // Step 2: Auto-generate Dockerfile if missing (v0.4)
-      const dockerfileResult = usingExplicitDockerfile ? null : ensureDockerfile(cloneResult.path);
-
-      let autoDetected = false;
-      if (
-        !usingExplicitDockerfile &&
-        dockerfileResult &&
-        !dockerfileResult.generated &&
-        !existsSync(dockerfilePath)
-      ) {
-        const autoDetectResult =
-          (await this.autoDetector?.generateDockerfile(cloneResult.path)) ?? null;
-        if (autoDetectResult?.generated && autoDetectResult.type === 'dockerfile') {
-          const dockerfileContent = autoDetectResult.content.trim();
-          if (dockerfileContent.length > 0) {
-            writeFileSync(dockerfilePath, `${dockerfileContent}\n`, 'utf8');
-            const framework = detectFramework(cloneResult.path).framework;
-            await eventBus.emit('deploy:auto-detect', {
-              projectId,
-              framework,
-              type: 'dockerfile',
-            });
-            buildLog += `[dockerfile] Auto-generated by LLM (${framework})\n`;
-            autoDetected = true;
-          }
-        }
-      }
-
-      if (!existsSync(dockerfilePath)) {
-        throw new DockerfileNotFoundError(cloneResult.path);
-      }
-
-      if (usingExplicitDockerfile) {
-        buildLog += `[dockerfile] Using ${config.dockerfilePath as string}\n`;
-      } else if (!autoDetected && dockerfileResult?.generated && dockerfileResult.detection) {
-        buildLog += `[dockerfile] Auto-generated for ${dockerfileResult.detection.framework} (${dockerfileResult.detection.language})\n`;
-      } else if (!autoDetected) {
-        buildLog += '[dockerfile] Found Dockerfile\n';
-      }
-
-      const allEnvVarsForBuild = resolveEnvVarsForBuild(
-        { projectId, environmentId, inlineEnvVars: config.envVars },
-        { env: this.env },
-      );
-      const buildTimeVars = allEnvVarsForBuild;
-      const buildStart = Date.now();
-      let lastBuildOutputEmit = 0;
-      let dockerBuildOutput = '';
-      this.jobManager?.updatePhase(projectId, 'building');
-      await this.buildExecutor.build(
-        {
-          clonePath: cloneResult.path,
-          projectId,
-          imageTag,
-          dockerfilePath: config.dockerfilePath,
-          buildArgs: buildTimeVars,
-          noCache: config._noCacheBuild === true,
-          buildContext: config.buildContext,
-          dockerTarget: config.dockerTarget,
-        },
-        (line) => {
-          dockerBuildOutput += line + '\n';
-
-          const stepInfo = JobManagerClass.parseDockerBuildStep(line);
-          if (stepInfo) {
-            this.jobManager?.updateBuildStep(
-              projectId,
-              stepInfo.step,
-              stepInfo.total,
-              stepInfo.desc,
-            );
-          }
-          const now = Date.now();
-          if (now - lastBuildOutputEmit <= 50) return;
-          lastBuildOutputEmit = now;
-
-          void eventBus.emit('build:output', {
-            projectId,
-            line,
-            stream: 'stdout',
-          });
-        },
-      );
-      if (dockerBuildOutput) {
-        buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
-      }
-      const buildDuration = Date.now() - buildStart;
-
-      await eventBus.emit('deploy:build', {
-        projectId,
-        imageTag,
-        durationMs: buildDuration,
-      });
-
-      buildLog += `[build] ${imageTag} (${String(buildDuration)}ms)\n`;
-
-      // Step 4: docker run
-      const containerPort = parseDockerfileExposePort(dockerfilePath) ?? undefined;
-      const envVars = resolveEnvVars(
-        { projectId, environmentId, inlineEnvVars: config.envVars },
-        { env: this.env },
-      );
-
-      this.jobManager?.updatePhase(projectId, 'starting');
-      const secretFilesMounts = this.env.getSecretFilesForDeploy(projectId);
-      const runResult = await this.containerRunner.run({
-        imageTag,
-        projectName,
-        containerName: routeName,
-        projectId,
-        environmentType: environment.type,
         environmentId,
-        preferredPort: config._preferredPort,
-        containerPort,
-        envVars,
-        secretFiles: secretFilesMounts,
-      });
-      const { containerId, port, url: internalUrl } = runResult;
-
-      await eventBus.emit('deploy:run', {
-        projectId,
-        containerId,
-        port,
-        url: internalUrl,
-      });
-
-      buildLog += `[run] ${containerId.slice(0, 12)} on port ${String(port)}\n`;
-
-      // Step 4b: Post-deploy health check — detect crash loops before marking as running
-      const healthResult = await this.docker.waitForHealthy(containerId, 20000);
-
-      await eventBus.emit('monitor:healthcheck', {
-        projectId,
-        healthy: healthResult.healthy,
-        responseTimeMs: 0,
-      });
-
-      if (!healthResult.healthy) {
-        const containerLogs = await this.docker
-          .getLogs(containerId, 50)
-          .catch(() => '(no logs available)');
-        log.error(
-          { projectId, error: healthResult.error, exitCode: healthResult.exitCode },
-          'Container crashed after deploy',
-        );
-
-        this.db.updateEnvironment(environmentId, {
-          status: 'error',
-          assignedPort: port,
-          containerId,
-          imageTag,
-        });
-
-        if (shouldSyncProjectState) {
-          this.db.updateProject(projectId, {
-            status: 'error',
-            assignedPort: port,
-            containerId,
-            imageTag,
-            visibility: config.visibility ?? 'internal',
-          });
-        }
-
-        await eventBus.emit('deploy:crash', {
-          projectId,
-          containerId,
-          error: healthResult.error,
-          exitCode: healthResult.exitCode,
-        });
-
-        throw new Error(
-          `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs:\n${containerLogs}`,
-        );
-      }
-
-      this.db.updateEnvironment(environmentId, {
-        status: 'running',
-        assignedPort: port,
-        containerId,
+        branch: environment.branch,
+        routeName,
+        trigger,
         imageTag,
-        previousImageTag: environment.image_tag,
+        repoUrl,
+        startTime,
+        shouldSyncProjectState,
+        config,
+        clonePath: cloneResult.clonePath,
+        commitSha: cloneResult.commitSha,
+        buildLog,
       });
+      buildLog = buildResult.buildLog;
 
-      if (shouldSyncProjectState) {
-        this.db.updateProject(projectId, {
-          status: 'running',
-          assignedPort: port,
-          containerId,
-          imageTag,
-          previousImageTag: project.image_tag,
-          visibility: config.visibility ?? 'internal',
-        });
+      if (buildResult.type === 'compose') {
+        return buildResult.result;
       }
+
+      const runResult = await this.runAndVerify({
+        projectId,
+        environmentId,
+        projectName,
+        routeName,
+        environmentType: environment.type,
+        imageTag,
+        dockerfilePath: buildResult.dockerfilePath,
+        previousEnvironmentImageTag: environment.image_tag,
+        previousProjectImageTag: project.image_tag,
+        shouldSyncProjectState,
+        config,
+        buildLog,
+      });
+      buildLog = runResult.buildLog;
 
       const postDeploy = await this.handlePostDeploy({
         projectId,
@@ -931,17 +646,17 @@ export class DeployPipeline {
         buildLog,
         commitSha: cloneResult.commitSha,
         shouldSyncProjectState,
-        port,
-        internalUrl,
+        port: runResult.port,
+        internalUrl: runResult.internalUrl,
       });
       return {
         success: true,
         projectId,
         projectName,
-        containerId,
-        url: internalUrl,
+        containerId: runResult.containerId,
+        url: runResult.internalUrl,
         publicUrl: postDeploy.publicUrl,
-        port,
+        port: runResult.port,
         commitSha: cloneResult.commitSha,
         buildDurationMs: postDeploy.totalDuration,
       };
@@ -1031,6 +746,424 @@ export class DeployPipeline {
         buildDurationMs: Date.now() - startTime,
       };
     }
+  }
+
+  private async cloneAndAnalyze(params: {
+    projectId: string;
+    projectName: string;
+    environmentId: string;
+    repoUrl: string;
+    branch?: string;
+    sshKeyPath?: string;
+  }): Promise<{ clonePath: string; commitSha: string; buildLog: string; diffContext?: string }> {
+    const { projectId, projectName, environmentId, repoUrl, branch, sshKeyPath } = params;
+    let buildLog = '';
+    let diffContext: string | undefined;
+
+    const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
+
+    await eventBus.emit('deploy:clone', {
+      projectId,
+      path: cloneResult.path,
+      commitSha: cloneResult.commitSha,
+    });
+
+    buildLog += `[clone] ${repoUrl} @ ${cloneResult.commitSha.slice(0, 8)}\n`;
+
+    const pendingFixFile = this.applyPendingFix(projectId, cloneResult.path);
+    if (pendingFixFile) {
+      buildLog += `[pending-fix] Applied ${pendingFixFile}\n`;
+    }
+
+    const previousDeploy = this.db.getLastDeployLog(projectId, environmentId);
+    const previousSha = previousDeploy?.commit_sha;
+
+    if (previousSha && previousSha !== cloneResult.commitSha) {
+      const diffAnalysis = await analyzeBuildDiff(cloneResult.path, previousSha);
+      if (diffAnalysis) {
+        diffContext = formatDiffForPrompt(diffAnalysis);
+        buildLog += `[diff] ${diffAnalysis.summary}\n`;
+        log.info(
+          {
+            projectId,
+            totalChanged: diffAnalysis.totalChangedFiles,
+            buildImpact: diffAnalysis.buildImpactFiles.length,
+          },
+          'Pre-build diff analysis complete',
+        );
+        await eventBus.emit('deploy:diff-analyzed', {
+          projectId,
+          previousSha: diffAnalysis.previousSha,
+          currentSha: diffAnalysis.currentSha,
+          totalChanged: diffAnalysis.totalChangedFiles,
+          buildImpactFiles: diffAnalysis.buildImpactFiles,
+          envTemplateChanged: diffAnalysis.envTemplateChanged,
+          dockerChanged: diffAnalysis.dockerChanged,
+          depsChanged: diffAnalysis.depsChanged,
+        });
+      }
+    }
+
+    const storedVars = this.env.getAll(projectId, environmentId);
+    const storedKeys = Object.keys(storedVars);
+    const detection = detectNewEnvKeys(cloneResult.path, storedKeys);
+    if (detection) {
+      await eventBus.emit('env:new-keys-detected', {
+        projectId,
+        projectName,
+        newKeys: detection.newKeys,
+        templateFile: detection.templateFile,
+      });
+    }
+
+    const secretFindings = scanForSecrets(cloneResult.path);
+    if (secretFindings.length > 0) {
+      await eventBus.emit('secret:detected', {
+        projectId,
+        projectName,
+        secrets: secretFindings,
+      });
+    }
+
+    return {
+      clonePath: cloneResult.path,
+      commitSha: cloneResult.commitSha,
+      buildLog,
+      diffContext,
+    };
+  }
+
+  private async buildProject(params: {
+    projectId: string;
+    environmentId: string;
+    branch?: string;
+    routeName: string;
+    trigger: 'chat' | 'webhook' | 'api';
+    imageTag: string;
+    repoUrl: string;
+    startTime: number;
+    shouldSyncProjectState: boolean;
+    config: Partial<ProjectConfig>;
+    clonePath: string;
+    commitSha: string;
+    buildLog: string;
+  }): Promise<
+    | {
+        type: 'compose';
+        result: DeployResult;
+        buildLog: string;
+      }
+    | {
+        type: 'docker';
+        dockerfilePath: string;
+        buildLog: string;
+      }
+  > {
+    const {
+      projectId,
+      environmentId,
+      branch,
+      routeName,
+      trigger,
+      imageTag,
+      repoUrl,
+      startTime,
+      shouldSyncProjectState,
+      config,
+      clonePath,
+      commitSha,
+    } = params;
+    let { buildLog } = params;
+
+    const hasExplicitDockerfilePath =
+      typeof config.dockerfilePath === 'string' && config.dockerfilePath.trim().length > 0;
+    const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
+
+    const composePipeline = this.composePipeline;
+    const composePath = preferDockerfile ? null : composePipeline?.detectComposeFile(clonePath);
+    const isCompose = Boolean(composePath && composePipeline);
+    try {
+      this.db.updateProject(projectId, {
+        buildMethod: isCompose ? 'compose' : 'dockerfile',
+      });
+    } catch (err) {
+      log.debug({ err, projectId }, 'Failed to store build_method - column may not exist');
+    }
+    const composeEnvVars = resolveEnvVars(
+      { projectId, environmentId, inlineEnvVars: config.envVars },
+      { env: this.env },
+    );
+    if (isCompose && composePath && composePipeline) {
+      log.info({ composePath }, 'Compose file detected — delegating to ComposePipeline');
+      const result = await composePipeline.deployCompose({
+        repoUrl,
+        branch,
+        clonePath,
+        composePath,
+        profiles: [],
+        services: config.composeServices,
+        name: routeName,
+        trigger,
+        envVars: composeEnvVars,
+        _parentId: projectId,
+      });
+
+      if (result.success) {
+        await this.handlePostDeploy({
+          projectId,
+          environmentId,
+          config,
+          repoUrl,
+          trigger,
+          startTime,
+          buildLog,
+          commitSha,
+          shouldSyncProjectState,
+          skipDeployLog: true,
+          skipSuccessEvent: true,
+          skipPhaseUpdate: true,
+        });
+      }
+
+      return {
+        type: 'compose',
+        result: {
+          success: result.success,
+          projectId: result.parentProjectId,
+          projectName: result.parentName,
+          buildDurationMs: result.buildDurationMs,
+          error: result.error,
+        },
+        buildLog,
+      };
+    }
+
+    const dockerfilePath = resolveDockerfilePath(clonePath, config.dockerfilePath);
+    const usingExplicitDockerfile = hasExplicitDockerfilePath;
+    const dockerfileResult = usingExplicitDockerfile ? null : ensureDockerfile(clonePath);
+
+    let autoDetected = false;
+    if (
+      !usingExplicitDockerfile &&
+      dockerfileResult &&
+      !dockerfileResult.generated &&
+      !existsSync(dockerfilePath)
+    ) {
+      const autoDetectResult = (await this.autoDetector?.generateDockerfile(clonePath)) ?? null;
+      if (autoDetectResult?.generated && autoDetectResult.type === 'dockerfile') {
+        const dockerfileContent = autoDetectResult.content.trim();
+        if (dockerfileContent.length > 0) {
+          writeFileSync(dockerfilePath, `${dockerfileContent}\n`, 'utf8');
+          const framework = detectFramework(clonePath).framework;
+          await eventBus.emit('deploy:auto-detect', {
+            projectId,
+            framework,
+            type: 'dockerfile',
+          });
+          buildLog += `[dockerfile] Auto-generated by LLM (${framework})\n`;
+          autoDetected = true;
+        }
+      }
+    }
+
+    if (!existsSync(dockerfilePath)) {
+      throw new DockerfileNotFoundError(clonePath);
+    }
+
+    if (usingExplicitDockerfile) {
+      buildLog += `[dockerfile] Using ${config.dockerfilePath as string}\n`;
+    } else if (!autoDetected && dockerfileResult?.generated && dockerfileResult.detection) {
+      buildLog += `[dockerfile] Auto-generated for ${dockerfileResult.detection.framework} (${dockerfileResult.detection.language})\n`;
+    } else if (!autoDetected) {
+      buildLog += '[dockerfile] Found Dockerfile\n';
+    }
+
+    const buildTimeVars = resolveEnvVarsForBuild(
+      { projectId, environmentId, inlineEnvVars: config.envVars },
+      { env: this.env },
+    );
+    const buildStart = Date.now();
+    let lastBuildOutputEmit = 0;
+    let dockerBuildOutput = '';
+
+    this.jobManager?.updatePhase(projectId, 'building');
+    await this.buildExecutor.build(
+      {
+        clonePath,
+        projectId,
+        imageTag,
+        dockerfilePath: config.dockerfilePath,
+        buildArgs: buildTimeVars,
+        noCache: config._noCacheBuild === true,
+        buildContext: config.buildContext,
+        dockerTarget: config.dockerTarget,
+      },
+      (line) => {
+        dockerBuildOutput += line + '\n';
+        const stepInfo = JobManagerClass.parseDockerBuildStep(line);
+        if (stepInfo) {
+          this.jobManager?.updateBuildStep(projectId, stepInfo.step, stepInfo.total, stepInfo.desc);
+        }
+        const now = Date.now();
+        if (now - lastBuildOutputEmit <= 50) return;
+        lastBuildOutputEmit = now;
+        void eventBus.emit('build:output', {
+          projectId,
+          line,
+          stream: 'stdout',
+        });
+      },
+    );
+
+    if (dockerBuildOutput) {
+      buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
+    }
+
+    const buildDuration = Date.now() - buildStart;
+    await eventBus.emit('deploy:build', {
+      projectId,
+      imageTag,
+      durationMs: buildDuration,
+    });
+
+    buildLog += `[build] ${imageTag} (${String(buildDuration)}ms)\n`;
+    return {
+      type: 'docker',
+      dockerfilePath,
+      buildLog,
+    };
+  }
+
+  private async runAndVerify(params: {
+    projectId: string;
+    environmentId: string;
+    projectName: string;
+    routeName: string;
+    environmentType: string;
+    imageTag: string;
+    dockerfilePath: string;
+    previousEnvironmentImageTag: string | null;
+    previousProjectImageTag: string | null;
+    shouldSyncProjectState: boolean;
+    config: Partial<ProjectConfig>;
+    buildLog: string;
+  }): Promise<{ containerId: string; port: number; internalUrl: string; buildLog: string }> {
+    const {
+      projectId,
+      environmentId,
+      projectName,
+      routeName,
+      environmentType,
+      imageTag,
+      dockerfilePath,
+      previousEnvironmentImageTag,
+      previousProjectImageTag,
+      shouldSyncProjectState,
+      config,
+    } = params;
+    let { buildLog } = params;
+
+    const containerPort = parseDockerfileExposePort(dockerfilePath) ?? undefined;
+    const envVars = resolveEnvVars(
+      { projectId, environmentId, inlineEnvVars: config.envVars },
+      { env: this.env },
+    );
+
+    this.jobManager?.updatePhase(projectId, 'starting');
+    const secretFilesMounts = this.env.getSecretFilesForDeploy(projectId);
+    const runResult = await this.containerRunner.run({
+      imageTag,
+      projectName,
+      containerName: routeName,
+      projectId,
+      environmentType,
+      environmentId,
+      preferredPort: config._preferredPort,
+      containerPort,
+      envVars,
+      secretFiles: secretFilesMounts,
+    });
+    const { containerId, port, url: internalUrl } = runResult;
+
+    await eventBus.emit('deploy:run', {
+      projectId,
+      containerId,
+      port,
+      url: internalUrl,
+    });
+
+    buildLog += `[run] ${containerId.slice(0, 12)} on port ${String(port)}\n`;
+
+    const healthResult = await this.docker.waitForHealthy(containerId, 20000);
+    await eventBus.emit('monitor:healthcheck', {
+      projectId,
+      healthy: healthResult.healthy,
+      responseTimeMs: 0,
+    });
+
+    if (!healthResult.healthy) {
+      const containerLogs = await this.docker
+        .getLogs(containerId, 50)
+        .catch(() => '(no logs available)');
+      log.error(
+        { projectId, error: healthResult.error, exitCode: healthResult.exitCode },
+        'Container crashed after deploy',
+      );
+
+      this.db.updateEnvironment(environmentId, {
+        status: 'error',
+        assignedPort: port,
+        containerId,
+        imageTag,
+      });
+
+      if (shouldSyncProjectState) {
+        this.db.updateProject(projectId, {
+          status: 'error',
+          assignedPort: port,
+          containerId,
+          imageTag,
+          visibility: config.visibility ?? 'internal',
+        });
+      }
+
+      await eventBus.emit('deploy:crash', {
+        projectId,
+        containerId,
+        error: healthResult.error,
+        exitCode: healthResult.exitCode,
+      });
+
+      throw new Error(
+        `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs:\n${containerLogs}`,
+      );
+    }
+
+    this.db.updateEnvironment(environmentId, {
+      status: 'running',
+      assignedPort: port,
+      containerId,
+      imageTag,
+      previousImageTag: previousEnvironmentImageTag,
+    });
+
+    if (shouldSyncProjectState) {
+      this.db.updateProject(projectId, {
+        status: 'running',
+        assignedPort: port,
+        containerId,
+        imageTag,
+        previousImageTag: previousProjectImageTag,
+        visibility: config.visibility ?? 'internal',
+      });
+    }
+
+    return {
+      containerId,
+      port,
+      internalUrl,
+      buildLog,
+    };
   }
 
   private async handlePostDeploy(params: {
