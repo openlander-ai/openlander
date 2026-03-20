@@ -1,6 +1,6 @@
 import { stream } from 'hono/streaming';
 import { nanoid } from 'nanoid';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import type { ProjectRow } from '../../db/types.js';
@@ -74,6 +74,49 @@ type FallbackTimerRef = {
   fallbackTimer: ReturnType<typeof setTimeout> | null;
 };
 
+type StreamTimeoutRef = {
+  streamTimeout: ReturnType<typeof setTimeout> | null;
+};
+
+type ScopedProject = {
+  scope: string;
+  sourceProjectId: string;
+  isChild: boolean;
+};
+
+type TimelineEvent = {
+  type: string;
+  message: string;
+  projectId: string;
+  id?: string;
+  timestamp?: string;
+  percent?: number;
+  detail?: string | null;
+  severity?: 'info' | 'warning' | 'error';
+  toolName?: string;
+  actionButtons?: unknown;
+  deployId?: string;
+  [key: string]: unknown;
+};
+
+type ResolveScopedProject = (
+  sourceProjectId: string,
+  explicitScope?: unknown,
+  explicitParentProjectId?: unknown,
+) => ScopedProject | null;
+
+type StreamHandlerContext = {
+  project: ProjectRow;
+  ctx: AppContext;
+  write: (data: TimelineEvent) => void;
+  emitTimelineEvent: (data: TimelineEvent) => void;
+  resolveScopedProject: ResolveScopedProject;
+  deployState: DeployAgentState;
+  fallbackTimerRef: FallbackTimerRef;
+  clearStreamTimeout: () => void;
+  closeStream: () => void;
+};
+
 const AGENT_START_EVENT_TYPES = new Set(['thinking', 'tool_call', 'question', 'message']);
 
 export function markAgentStarted(
@@ -94,6 +137,597 @@ export function markAgentStarted(
 
 export function shouldSuppressAgentEvent(deployState: DeployAgentState): boolean {
   return deployState.fallbackTriggered;
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${String(diffSec)}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${String(diffMin)}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${String(diffHr)}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${String(diffDay)}d ago`;
+}
+
+function createScopedProjectResolver(
+  project: ProjectRow,
+  ctx: AppContext,
+  childProjectCache: Map<string, ProjectRow | null>,
+): ResolveScopedProject {
+  return (sourceProjectId, explicitScope, explicitParentProjectId) => {
+    if (sourceProjectId === project.id) {
+      const scope =
+        typeof explicitScope === 'string' && explicitScope.trim().length > 0
+          ? explicitScope
+          : 'project';
+      return { scope, sourceProjectId, isChild: false };
+    }
+
+    if (explicitParentProjectId === project.id) {
+      const scope =
+        typeof explicitScope === 'string' && explicitScope.trim().length > 0
+          ? explicitScope
+          : sourceProjectId;
+      return { scope, sourceProjectId, isChild: true };
+    }
+
+    if (!childProjectCache.has(sourceProjectId)) {
+      childProjectCache.set(sourceProjectId, ctx.db.getProject(sourceProjectId) ?? null);
+    }
+
+    const childProject = childProjectCache.get(sourceProjectId);
+    if (!childProject || childProject.parent_project_id !== project.id) {
+      return null;
+    }
+
+    const inferredScope =
+      childProject.name.startsWith(`${project.name}/`) &&
+      childProject.name.length > `${project.name}/`.length
+        ? childProject.name.slice(project.name.length + 1)
+        : childProject.name;
+    const scope =
+      typeof explicitScope === 'string' && explicitScope.trim().length > 0
+        ? explicitScope
+        : inferredScope;
+
+    return { scope, sourceProjectId, isChild: true };
+  };
+}
+
+function registerDeployLifecycleHandlers(handlerCtx: StreamHandlerContext): Array<() => void> {
+  const { project, ctx, emitTimelineEvent, resolveScopedProject, clearStreamTimeout, closeStream } =
+    handlerCtx;
+
+  return [
+    eventBus.on('deploy:start', (payload) => {
+      const scoped = resolveScopedProject(
+        payload.projectId,
+        payload.scope,
+        payload.parentProjectId,
+      );
+      if (!scoped) return;
+      emitTimelineEvent({
+        type: scoped.isChild ? 'log' : 'status',
+        message: payload.message ?? 'Starting deployment...',
+        projectId: project.id,
+        percent: scoped.isChild ? undefined : 0,
+        phase: payload.phase,
+        scope: scoped.scope,
+        status: payload.status,
+        sourceProjectId: scoped.sourceProjectId,
+      });
+    }),
+    eventBus.on('deploy:clone', (payload) => {
+      const scoped = resolveScopedProject(
+        payload.projectId,
+        payload.scope,
+        payload.parentProjectId,
+      );
+      if (!scoped) return;
+      emitTimelineEvent({
+        type: scoped.isChild ? 'log' : 'status',
+        message: payload.message ?? `Cloning repository (${payload.commitSha.slice(0, 7)})`,
+        projectId: project.id,
+        percent: scoped.isChild ? undefined : 15,
+        phase: payload.phase,
+        scope: scoped.scope,
+        status: payload.status,
+        sourceProjectId: scoped.sourceProjectId,
+      });
+    }),
+    eventBus.on('deploy:build', (payload) => {
+      const scoped = resolveScopedProject(
+        payload.projectId,
+        payload.scope,
+        payload.parentProjectId,
+      );
+      if (!scoped) return;
+      emitTimelineEvent({
+        type: scoped.isChild ? 'log' : 'status',
+        message:
+          payload.message ??
+          `Docker image built (${String(Math.round(payload.durationMs / 1000))}s)`,
+        projectId: project.id,
+        percent: scoped.isChild ? undefined : 60,
+        phase: payload.phase,
+        scope: scoped.scope,
+        status: payload.status,
+        durationMs: payload.durationMs,
+        sourceProjectId: scoped.sourceProjectId,
+      });
+    }),
+    eventBus.on('deploy:run', (payload) => {
+      const scoped = resolveScopedProject(
+        payload.projectId,
+        payload.scope,
+        payload.parentProjectId,
+      );
+      if (!scoped) return;
+      emitTimelineEvent({
+        type: scoped.isChild ? 'log' : 'status',
+        message: payload.message ?? `Starting container on port ${String(payload.port)}`,
+        projectId: project.id,
+        percent: scoped.isChild ? undefined : 90,
+        phase: payload.phase,
+        scope: scoped.scope,
+        status: payload.status,
+        sourceProjectId: scoped.sourceProjectId,
+      });
+    }),
+    eventBus.on('deploy:success', (payload) => {
+      const scoped = resolveScopedProject(
+        payload.projectId,
+        payload.scope,
+        payload.parentProjectId,
+      );
+      if (!scoped) return;
+
+      if (scoped.isChild) {
+        emitTimelineEvent({
+          type: 'log',
+          message:
+            payload.message ??
+            `Service complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
+          projectId: project.id,
+          phase: payload.phase,
+          scope: scoped.scope,
+          status: payload.status,
+          durationMs: payload.totalDurationMs,
+          sourceProjectId: scoped.sourceProjectId,
+        });
+        return;
+      }
+
+      void (async () => {
+        try {
+          const insights = await generatePostDeployInsights(
+            {
+              projectId: payload.projectId,
+              totalDurationMs: payload.totalDurationMs,
+              url: payload.url,
+            },
+            ctx.docker,
+            ctx.db,
+            ctx.config.language,
+          );
+
+          for (const insight of insights) {
+            emitTimelineEvent({
+              type: 'insight',
+              message: insight.title,
+              detail: insight.detail ?? null,
+              severity: insight.severity,
+              actionButtons: insight.actions.length > 0 ? insight.actions : undefined,
+              projectId: project.id,
+            });
+          }
+        } catch (err) {
+          log.warn({ err }, 'Post-deploy insight generation failed');
+        }
+
+        emitTimelineEvent({
+          type: 'complete',
+          message:
+            payload.message ??
+            `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
+          projectId: project.id,
+          percent: 100,
+          phase: payload.phase,
+          scope: scoped.scope,
+          status: payload.status,
+          durationMs: payload.totalDurationMs,
+          sourceProjectId: scoped.sourceProjectId,
+        });
+        clearStreamTimeout();
+        closeStream();
+      })();
+    }),
+    eventBus.on('deploy:failed', (payload) => {
+      const scoped = resolveScopedProject(
+        payload.projectId,
+        payload.scope,
+        payload.parentProjectId,
+      );
+      if (!scoped) return;
+      emitTimelineEvent({
+        type: 'error',
+        message: payload.message ?? `Deploy failed at ${payload.step}: ${payload.error}`,
+        detail: payload.buildLog ?? null,
+        projectId: project.id,
+        percent: -1,
+        phase: payload.phase,
+        scope: scoped.scope,
+        status: payload.status,
+        durationMs: payload.durationMs,
+        sourceProjectId: scoped.sourceProjectId,
+      });
+    }),
+  ];
+}
+
+function registerBuildEventHandlers(handlerCtx: StreamHandlerContext): Array<() => void> {
+  const { project, write, emitTimelineEvent, resolveScopedProject } = handlerCtx;
+
+  return [
+    eventBus.on('build:autofix', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'status',
+        message: `Auto-fix applied: ${payload.action} (${payload.category})`,
+        projectId: project.id,
+      });
+    }),
+    eventBus.on('build:suggest', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'status',
+        message: `Suggestion: ${payload.suggestion}`,
+        projectId: project.id,
+      });
+    }),
+    eventBus.on('build:inform', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'status',
+        message: `Build analysis: ${payload.summary}`,
+        projectId: project.id,
+      });
+    }),
+    eventBus.on('build:dockerfile-fixed', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'status',
+        message: `Dockerfile fixed (attempt ${String(payload.retryCount)}/3): ${payload.changes.join(', ')}`,
+        projectId: project.id,
+      });
+    }),
+    eventBus.on('build:output', (payload) => {
+      const scoped = resolveScopedProject(
+        payload.projectId,
+        payload.scope,
+        payload.parentProjectId,
+      );
+      if (!scoped) return;
+      write({
+        type: 'log',
+        message: payload.message ?? payload.line,
+        projectId: project.id,
+        phase: payload.phase,
+        scope: scoped.scope,
+        status: payload.status,
+        durationMs: payload.durationMs,
+        logChunk: payload.logChunk ?? payload.line,
+        sourceProjectId: scoped.sourceProjectId,
+      });
+    }),
+  ];
+}
+
+function registerComposeEventHandlers(handlerCtx: StreamHandlerContext): Array<() => void> {
+  const { project, emitTimelineEvent, deployState, fallbackTimerRef, closeStream } = handlerCtx;
+
+  const markComposeFallback = () => {
+    deployState.fallbackTriggered = true;
+    if (fallbackTimerRef.fallbackTimer) {
+      clearTimeout(fallbackTimerRef.fallbackTimer);
+      fallbackTimerRef.fallbackTimer = null;
+    }
+  };
+
+  return [
+    eventBus.on('compose:start', (payload) => {
+      if (payload.projectId !== project.id) return;
+      markComposeFallback();
+      emitTimelineEvent({
+        type: 'status',
+        message: `Compose build starting (${String(payload.serviceCount)} service${payload.serviceCount > 1 ? 's' : ''})`,
+        projectId: project.id,
+      });
+    }),
+    eventBus.on('compose:up', (payload) => {
+      if (payload.projectId !== project.id) return;
+      markComposeFallback();
+      emitTimelineEvent({
+        type: 'complete',
+        message: `Compose deploy complete — ${String(payload.services.length)} service${payload.services.length > 1 ? 's' : ''} running`,
+        projectId: project.id,
+      });
+      closeStream();
+    }),
+    eventBus.on('compose:failed', (payload) => {
+      if (payload.projectId !== project.id) return;
+      markComposeFallback();
+      emitTimelineEvent({
+        type: 'error',
+        message: `Compose deploy failed: ${payload.error}`,
+        projectId: project.id,
+      });
+    }),
+  ];
+}
+
+function registerAgentEventHandlers(handlerCtx: StreamHandlerContext): Array<() => void> {
+  const { project, emitTimelineEvent, deployState, fallbackTimerRef } = handlerCtx;
+
+  return [
+    eventBus.on('agent:event', (payload) => {
+      if (payload.projectId !== project.id) return;
+      if (shouldSuppressAgentEvent(deployState)) return;
+
+      const ev = payload.event;
+      markAgentStarted(deployState, ev.type, fallbackTimerRef);
+      const base = { projectId: project.id, timestamp: ev.timestamp };
+
+      switch (ev.type) {
+        case 'thinking':
+          emitTimelineEvent({
+            ...base,
+            type: 'agent_thinking',
+            message: 'Agent is analyzing...',
+          });
+          break;
+        case 'tool_call':
+          emitTimelineEvent({
+            ...base,
+            type: 'agent_tool_call',
+            message: `Calling ${ev.toolName}...`,
+            toolName: ev.toolName,
+            toolArguments: ev.arguments,
+          });
+          break;
+        case 'tool_result':
+          emitTimelineEvent({
+            ...base,
+            type: 'agent_tool_result',
+            message: ev.success
+              ? `${ev.toolName} completed`
+              : `${ev.toolName} failed: ${ev.error ?? 'unknown'}`,
+            toolName: ev.toolName,
+            toolResult: ev.result === undefined ? null : sanitizeToolResultForStream(ev.result),
+            toolSuccess: ev.success,
+            toolError: ev.error ?? null,
+          });
+          break;
+        case 'message':
+          emitTimelineEvent({ ...base, type: 'agent_message', message: ev.content });
+          break;
+        case 'question':
+          break;
+        case 'error':
+          emitTimelineEvent({ ...base, type: 'error', message: ev.error || 'Agent error' });
+          break;
+        default:
+          emitTimelineEvent({ ...base, type: 'status', message: `Agent: ${ev.type}` });
+      }
+    }),
+    eventBus.on('question:pending', (payload) => {
+      if (payload.projectId !== project.id) return;
+      const firstQuestion = payload.questions[0];
+      emitTimelineEvent({
+        id: payload.requestId,
+        type: 'question_pending',
+        message: firstQuestion?.question ?? 'Agent needs input',
+        questionId: payload.requestId,
+        questions: payload.questions,
+        projectId: project.id,
+      });
+    }),
+    eventBus.on('deploy:needs-user-action', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'error',
+        message: payload.title,
+        detail: payload.description,
+        projectId: project.id,
+      });
+    }),
+  ];
+}
+
+function handleInitialStatusCheck(
+  ctx: AppContext,
+  project: ProjectRow,
+  write: (data: TimelineEvent) => void,
+  closeStream: () => void,
+): boolean {
+  const fresh = ctx.db.getProject(project.id);
+  if (!fresh) {
+    return false;
+  }
+
+  if (fresh.status === 'running' || fresh.status === 'error' || fresh.status === 'stopped') {
+    const lastDeploy = ctx.db.getLastDeployLog(project.id);
+    if (lastDeploy) {
+      const ago = formatRelativeTime(lastDeploy.created_at);
+      const duration = lastDeploy.duration_ms
+        ? `${String(Math.round(lastDeploy.duration_ms / 1000))}s`
+        : '';
+      const trigger = lastDeploy.trigger;
+      const commitInfo = lastDeploy.commit_sha ? ` (${lastDeploy.commit_sha.slice(0, 7)})` : '';
+
+      write({
+        id: `last-deploy-${lastDeploy.id}`,
+        type: 'status',
+        message: `Last deploy: ${trigger}${commitInfo} — ${ago}${duration ? `, took ${duration}` : ''}`,
+        projectId: project.id,
+      });
+    }
+
+    if (fresh.status === 'running') {
+      write({
+        id: 'current-running',
+        type: 'complete',
+        message: 'Currently running',
+        projectId: project.id,
+      });
+    } else if (fresh.status === 'error') {
+      write({
+        id: 'current-error',
+        type: 'error',
+        message: 'Build failed',
+        projectId: project.id,
+      });
+    } else {
+      write({
+        id: 'current-stopped',
+        type: 'status',
+        message: 'Stopped',
+        projectId: project.id,
+      });
+    }
+
+    closeStream();
+    return true;
+  }
+
+  write({
+    id: 'current-building',
+    type: 'status',
+    message: `Build in progress (${fresh.status})...`,
+    projectId: project.id,
+  });
+  return false;
+}
+
+function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow) {
+  const unsubscribers: Array<() => void> = [];
+
+  return stream(c, async (s) => {
+    c.header('Content-Type', 'application/x-ndjson');
+
+    const cleanup = () => {
+      for (const unsub of unsubscribers) {
+        unsub();
+      }
+    };
+
+    const closeStream = () => {
+      cleanup();
+      void s.close();
+    };
+
+    const childProjectCache = new Map<string, ProjectRow | null>();
+    const deployState: DeployAgentState = {
+      agentStarted: false,
+      fallbackTriggered: false,
+    };
+    const fallbackTimerRef: FallbackTimerRef = {
+      fallbackTimer: null,
+    };
+    const streamTimeoutRef: StreamTimeoutRef = {
+      streamTimeout: null,
+    };
+
+    const resolveScopedProject = createScopedProjectResolver(project, ctx, childProjectCache);
+
+    const write = (data: TimelineEvent) => {
+      void s.write(
+        JSON.stringify({
+          ...data,
+          timestamp: data.timestamp ?? new Date().toISOString(),
+        }) + '\n',
+      );
+    };
+
+    const emitTimelineEvent = (data: TimelineEvent) => {
+      const eventId = data.id ?? nanoid(16);
+      const eventTimestamp = data.timestamp ?? new Date().toISOString();
+
+      ctx.db.createTimelineEvent({
+        id: eventId,
+        projectId: data.projectId,
+        deployId: data.deployId,
+        type: data.type,
+        message: data.message,
+        detail: typeof data.detail === 'string' ? data.detail : undefined,
+        severity: data.severity,
+        percent: data.percent,
+        toolName: data.toolName,
+        actionButtons: data.actionButtons ? JSON.stringify(data.actionButtons) : undefined,
+        createdAt: eventTimestamp,
+      });
+
+      write({
+        ...data,
+        id: eventId,
+        timestamp: eventTimestamp,
+      });
+    };
+
+    const clearStreamTimeout = () => {
+      if (streamTimeoutRef.streamTimeout) {
+        clearTimeout(streamTimeoutRef.streamTimeout);
+        streamTimeoutRef.streamTimeout = null;
+      }
+    };
+
+    const handlerCtx: StreamHandlerContext = {
+      project,
+      ctx,
+      write,
+      emitTimelineEvent,
+      resolveScopedProject,
+      deployState,
+      fallbackTimerRef,
+      clearStreamTimeout,
+      closeStream,
+    };
+
+    unsubscribers.push(...registerDeployLifecycleHandlers(handlerCtx));
+    unsubscribers.push(...registerBuildEventHandlers(handlerCtx));
+    unsubscribers.push(...registerComposeEventHandlers(handlerCtx));
+    unsubscribers.push(...registerAgentEventHandlers(handlerCtx));
+
+    streamTimeoutRef.streamTimeout = setTimeout(
+      () => {
+        closeStream();
+      },
+      5 * 60 * 1000,
+    );
+
+    fallbackTimerRef.fallbackTimer = setTimeout(() => {
+      if (!deployState.agentStarted && !deployState.fallbackTriggered) {
+        deployState.fallbackTriggered = true;
+      }
+    }, 5000);
+
+    s.onAbort(() => {
+      if (fallbackTimerRef.fallbackTimer) {
+        clearTimeout(fallbackTimerRef.fallbackTimer);
+        fallbackTimerRef.fallbackTimer = null;
+      }
+      clearStreamTimeout();
+      cleanup();
+    });
+
+    if (handleInitialStatusCheck(ctx, project, write, closeStream)) {
+      return;
+    }
+
+    await new Promise(() => undefined);
+  });
 }
 
 export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): void {
@@ -133,597 +767,6 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
     const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
     if (!project) throw new ProjectNotFoundError(id);
 
-    const unsubscribers: Array<() => void> = [];
-
-    return stream(c, async (s) => {
-      c.header('Content-Type', 'application/x-ndjson');
-
-      const cleanup = () => {
-        for (const unsub of unsubscribers) {
-          unsub();
-        }
-      };
-
-      const childProjectCache = new Map<string, ProjectRow | null>();
-      const deployState = {
-        agentStarted: false,
-        fallbackTriggered: false,
-      };
-      const fallbackTimerRef: FallbackTimerRef = {
-        fallbackTimer: null,
-      };
-
-      const resolveScopedProject = (
-        sourceProjectId: string,
-        explicitScope?: unknown,
-        explicitParentProjectId?: unknown,
-      ): { scope: string; sourceProjectId: string; isChild: boolean } | null => {
-        if (sourceProjectId === project.id) {
-          const scope =
-            typeof explicitScope === 'string' && explicitScope.trim().length > 0
-              ? explicitScope
-              : 'project';
-          return { scope, sourceProjectId, isChild: false };
-        }
-
-        if (explicitParentProjectId === project.id) {
-          const scope =
-            typeof explicitScope === 'string' && explicitScope.trim().length > 0
-              ? explicitScope
-              : sourceProjectId;
-          return { scope, sourceProjectId, isChild: true };
-        }
-
-        if (!childProjectCache.has(sourceProjectId)) {
-          childProjectCache.set(sourceProjectId, ctx.db.getProject(sourceProjectId) ?? null);
-        }
-
-        const childProject = childProjectCache.get(sourceProjectId);
-        if (!childProject || childProject.parent_project_id !== project.id) {
-          return null;
-        }
-
-        const inferredScope =
-          childProject.name.startsWith(`${project.name}/`) &&
-          childProject.name.length > `${project.name}/`.length
-            ? childProject.name.slice(project.name.length + 1)
-            : childProject.name;
-        const scope =
-          typeof explicitScope === 'string' && explicitScope.trim().length > 0
-            ? explicitScope
-            : inferredScope;
-
-        return { scope, sourceProjectId, isChild: true };
-      };
-
-      const write = (data: {
-        type: string;
-        message: string;
-        projectId: string;
-        id?: string;
-        timestamp?: string;
-        percent?: number;
-        detail?: string | null;
-        severity?: 'info' | 'warning' | 'error';
-        toolName?: string;
-        actionButtons?: unknown;
-        [key: string]: unknown;
-      }) => {
-        void s.write(
-          JSON.stringify({
-            ...data,
-            timestamp: data.timestamp ?? new Date().toISOString(),
-          }) + '\n',
-        );
-      };
-
-      const emitTimelineEvent = (data: {
-        id?: string;
-        type: string;
-        message: string;
-        projectId: string;
-        timestamp?: string;
-        detail?: string | null;
-        severity?: 'info' | 'warning' | 'error';
-        percent?: number;
-        toolName?: string;
-        actionButtons?: unknown;
-        deployId?: string;
-        [key: string]: unknown;
-      }) => {
-        const eventId = data.id ?? nanoid(16);
-        const eventTimestamp = data.timestamp ?? new Date().toISOString();
-
-        ctx.db.createTimelineEvent({
-          id: eventId,
-          projectId: data.projectId,
-          deployId: data.deployId,
-          type: data.type,
-          message: data.message,
-          detail: typeof data.detail === 'string' ? data.detail : undefined,
-          severity: data.severity,
-          percent: data.percent,
-          toolName: data.toolName,
-          actionButtons: data.actionButtons ? JSON.stringify(data.actionButtons) : undefined,
-          createdAt: eventTimestamp,
-        });
-
-        write({
-          ...data,
-          id: eventId,
-          timestamp: eventTimestamp,
-        });
-      };
-
-      function formatRelativeTime(dateStr: string): string {
-        const diffMs = Date.now() - new Date(dateStr).getTime();
-        const diffSec = Math.floor(diffMs / 1000);
-        if (diffSec < 60) return `${String(diffSec)}s ago`;
-        const diffMin = Math.floor(diffSec / 60);
-        if (diffMin < 60) return `${String(diffMin)}m ago`;
-        const diffHr = Math.floor(diffMin / 60);
-        if (diffHr < 24) return `${String(diffHr)}h ago`;
-        const diffDay = Math.floor(diffHr / 24);
-        return `${String(diffDay)}d ago`;
-      }
-
-      unsubscribers.push(
-        eventBus.on('deploy:start', (payload) => {
-          const scoped = resolveScopedProject(
-            payload.projectId,
-            payload.scope,
-            payload.parentProjectId,
-          );
-          if (!scoped) return;
-          emitTimelineEvent({
-            type: scoped.isChild ? 'log' : 'status',
-            message: payload.message ?? 'Starting deployment...',
-            projectId: project.id,
-            percent: scoped.isChild ? undefined : 0,
-            phase: payload.phase,
-            scope: scoped.scope,
-            status: payload.status,
-            sourceProjectId: scoped.sourceProjectId,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('deploy:clone', (payload) => {
-          const scoped = resolveScopedProject(
-            payload.projectId,
-            payload.scope,
-            payload.parentProjectId,
-          );
-          if (!scoped) return;
-          emitTimelineEvent({
-            type: scoped.isChild ? 'log' : 'status',
-            message: payload.message ?? `Cloning repository (${payload.commitSha.slice(0, 7)})`,
-            projectId: project.id,
-            percent: scoped.isChild ? undefined : 15,
-            phase: payload.phase,
-            scope: scoped.scope,
-            status: payload.status,
-            sourceProjectId: scoped.sourceProjectId,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('deploy:build', (payload) => {
-          const scoped = resolveScopedProject(
-            payload.projectId,
-            payload.scope,
-            payload.parentProjectId,
-          );
-          if (!scoped) return;
-          emitTimelineEvent({
-            type: scoped.isChild ? 'log' : 'status',
-            message:
-              payload.message ??
-              `Docker image built (${String(Math.round(payload.durationMs / 1000))}s)`,
-            projectId: project.id,
-            percent: scoped.isChild ? undefined : 60,
-            phase: payload.phase,
-            scope: scoped.scope,
-            status: payload.status,
-            durationMs: payload.durationMs,
-            sourceProjectId: scoped.sourceProjectId,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('deploy:run', (payload) => {
-          const scoped = resolveScopedProject(
-            payload.projectId,
-            payload.scope,
-            payload.parentProjectId,
-          );
-          if (!scoped) return;
-          emitTimelineEvent({
-            type: scoped.isChild ? 'log' : 'status',
-            message: payload.message ?? `Starting container on port ${String(payload.port)}`,
-            projectId: project.id,
-            percent: scoped.isChild ? undefined : 90,
-            phase: payload.phase,
-            scope: scoped.scope,
-            status: payload.status,
-            sourceProjectId: scoped.sourceProjectId,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('deploy:success', (payload) => {
-          const scoped = resolveScopedProject(
-            payload.projectId,
-            payload.scope,
-            payload.parentProjectId,
-          );
-          if (!scoped) return;
-
-          if (scoped.isChild) {
-            emitTimelineEvent({
-              type: 'log',
-              message:
-                payload.message ??
-                `Service complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
-              projectId: project.id,
-              phase: payload.phase,
-              scope: scoped.scope,
-              status: payload.status,
-              durationMs: payload.totalDurationMs,
-              sourceProjectId: scoped.sourceProjectId,
-            });
-            return;
-          }
-
-          void (async () => {
-            try {
-              const insights = await generatePostDeployInsights(
-                {
-                  projectId: payload.projectId,
-                  totalDurationMs: payload.totalDurationMs,
-                  url: payload.url,
-                },
-                ctx.docker,
-                ctx.db,
-                ctx.config.language,
-              );
-
-              for (const insight of insights) {
-                emitTimelineEvent({
-                  type: 'insight',
-                  message: insight.title,
-                  detail: insight.detail ?? null,
-                  severity: insight.severity,
-                  actionButtons: insight.actions.length > 0 ? insight.actions : undefined,
-                  projectId: project.id,
-                });
-              }
-            } catch (err) {
-              log.warn({ err }, 'Post-deploy insight generation failed');
-            }
-
-            emitTimelineEvent({
-              type: 'complete',
-              message:
-                payload.message ??
-                `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
-              projectId: project.id,
-              percent: 100,
-              phase: payload.phase,
-              scope: scoped.scope,
-              status: payload.status,
-              durationMs: payload.totalDurationMs,
-              sourceProjectId: scoped.sourceProjectId,
-            });
-            clearTimeout(streamTimeout);
-            cleanup();
-            void s.close();
-          })();
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('deploy:failed', (payload) => {
-          const scoped = resolveScopedProject(
-            payload.projectId,
-            payload.scope,
-            payload.parentProjectId,
-          );
-          if (!scoped) return;
-          emitTimelineEvent({
-            type: 'error',
-            message: payload.message ?? `Deploy failed at ${payload.step}: ${payload.error}`,
-            detail: payload.buildLog ?? null,
-            projectId: project.id,
-            percent: -1,
-            phase: payload.phase,
-            scope: scoped.scope,
-            status: payload.status,
-            durationMs: payload.durationMs,
-            sourceProjectId: scoped.sourceProjectId,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('build:autofix', (payload) => {
-          if (payload.projectId !== project.id) return;
-          emitTimelineEvent({
-            type: 'status',
-            message: `Auto-fix applied: ${payload.action} (${payload.category})`,
-            projectId: project.id,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('build:suggest', (payload) => {
-          if (payload.projectId !== project.id) return;
-          emitTimelineEvent({
-            type: 'status',
-            message: `Suggestion: ${payload.suggestion}`,
-            projectId: project.id,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('build:inform', (payload) => {
-          if (payload.projectId !== project.id) return;
-          emitTimelineEvent({
-            type: 'status',
-            message: `Build analysis: ${payload.summary}`,
-            projectId: project.id,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('build:dockerfile-fixed', (payload) => {
-          if (payload.projectId !== project.id) return;
-          emitTimelineEvent({
-            type: 'status',
-            message: `Dockerfile fixed (attempt ${String(payload.retryCount)}/3): ${payload.changes.join(', ')}`,
-            projectId: project.id,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('deploy:needs-user-action', (payload) => {
-          if (payload.projectId !== project.id) return;
-          emitTimelineEvent({
-            type: 'error',
-            message: payload.title,
-            detail: payload.description,
-            projectId: project.id,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('compose:start', (payload) => {
-          if (payload.projectId !== project.id) return;
-          deployState.fallbackTriggered = true;
-          if (fallbackTimerRef.fallbackTimer) {
-            clearTimeout(fallbackTimerRef.fallbackTimer);
-            fallbackTimerRef.fallbackTimer = null;
-          }
-          emitTimelineEvent({
-            type: 'status',
-            message: `Compose build starting (${String(payload.serviceCount)} service${payload.serviceCount > 1 ? 's' : ''})`,
-            projectId: project.id,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('compose:up', (payload) => {
-          if (payload.projectId !== project.id) return;
-          deployState.fallbackTriggered = true;
-          if (fallbackTimerRef.fallbackTimer) {
-            clearTimeout(fallbackTimerRef.fallbackTimer);
-            fallbackTimerRef.fallbackTimer = null;
-          }
-          emitTimelineEvent({
-            type: 'complete',
-            message: `Compose deploy complete — ${String(payload.services.length)} service${payload.services.length > 1 ? 's' : ''} running`,
-            projectId: project.id,
-          });
-          cleanup();
-          void s.close();
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('compose:failed', (payload) => {
-          if (payload.projectId !== project.id) return;
-          deployState.fallbackTriggered = true;
-          if (fallbackTimerRef.fallbackTimer) {
-            clearTimeout(fallbackTimerRef.fallbackTimer);
-            fallbackTimerRef.fallbackTimer = null;
-          }
-          emitTimelineEvent({
-            type: 'error',
-            message: `Compose deploy failed: ${payload.error}`,
-            projectId: project.id,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('agent:event', (payload) => {
-          if (payload.projectId !== project.id) return;
-          if (shouldSuppressAgentEvent(deployState)) return;
-          const ev = payload.event;
-          markAgentStarted(deployState, ev.type, fallbackTimerRef);
-          const base = { projectId: project.id, timestamp: ev.timestamp };
-
-          switch (ev.type) {
-            case 'thinking':
-              emitTimelineEvent({
-                ...base,
-                type: 'agent_thinking',
-                message: 'Agent is analyzing...',
-              });
-              break;
-            case 'tool_call':
-              emitTimelineEvent({
-                ...base,
-                type: 'agent_tool_call',
-                message: `Calling ${ev.toolName}...`,
-                toolName: ev.toolName,
-                toolArguments: ev.arguments,
-              });
-              break;
-            case 'tool_result':
-              emitTimelineEvent({
-                ...base,
-                type: 'agent_tool_result',
-                message: ev.success
-                  ? `${ev.toolName} completed`
-                  : `${ev.toolName} failed: ${ev.error ?? 'unknown'}`,
-                toolName: ev.toolName,
-                toolResult: ev.result === undefined ? null : sanitizeToolResultForStream(ev.result),
-                toolSuccess: ev.success,
-                toolError: ev.error ?? null,
-              });
-              break;
-            case 'message':
-              emitTimelineEvent({ ...base, type: 'agent_message', message: ev.content });
-              break;
-            case 'question':
-              break;
-            case 'error':
-              emitTimelineEvent({ ...base, type: 'error', message: ev.error || 'Agent error' });
-              break;
-            default:
-              emitTimelineEvent({ ...base, type: 'status', message: `Agent: ${ev.type}` });
-          }
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('question:pending', (payload) => {
-          if (payload.projectId !== project.id) return;
-          const firstQuestion = payload.questions[0];
-          emitTimelineEvent({
-            id: payload.requestId,
-            type: 'question_pending',
-            message: firstQuestion?.question ?? 'Agent needs input',
-            questionId: payload.requestId,
-            questions: payload.questions,
-            projectId: project.id,
-          });
-        }),
-      );
-
-      unsubscribers.push(
-        eventBus.on('build:output', (payload) => {
-          const scoped = resolveScopedProject(
-            payload.projectId,
-            payload.scope,
-            payload.parentProjectId,
-          );
-          if (!scoped) return;
-          write({
-            type: 'log',
-            message: payload.message ?? payload.line,
-            projectId: project.id,
-            phase: payload.phase,
-            scope: scoped.scope,
-            status: payload.status,
-            durationMs: payload.durationMs,
-            logChunk: payload.logChunk ?? payload.line,
-            sourceProjectId: scoped.sourceProjectId,
-          });
-        }),
-      );
-
-      const streamTimeout = setTimeout(
-        () => {
-          cleanup();
-          void s.close();
-        },
-        5 * 60 * 1000,
-      );
-
-      fallbackTimerRef.fallbackTimer = setTimeout(() => {
-        if (!deployState.agentStarted && !deployState.fallbackTriggered) {
-          deployState.fallbackTriggered = true;
-        }
-      }, 5000);
-
-      s.onAbort(() => {
-        if (fallbackTimerRef.fallbackTimer) {
-          clearTimeout(fallbackTimerRef.fallbackTimer);
-          fallbackTimerRef.fallbackTimer = null;
-        }
-        clearTimeout(streamTimeout);
-        cleanup();
-      });
-
-      const fresh = ctx.db.getProject(project.id);
-      if (fresh) {
-        if (fresh.status === 'running' || fresh.status === 'error' || fresh.status === 'stopped') {
-          const lastDeploy = ctx.db.getLastDeployLog(project.id);
-          if (lastDeploy) {
-            const ago = formatRelativeTime(lastDeploy.created_at);
-            const duration = lastDeploy.duration_ms
-              ? `${String(Math.round(lastDeploy.duration_ms / 1000))}s`
-              : '';
-            const trigger = lastDeploy.trigger;
-            const commitInfo = lastDeploy.commit_sha
-              ? ` (${lastDeploy.commit_sha.slice(0, 7)})`
-              : '';
-
-            write({
-              id: `last-deploy-${lastDeploy.id}`,
-              type: 'status',
-              message: `Last deploy: ${trigger}${commitInfo} — ${ago}${duration ? `, took ${duration}` : ''}`,
-              projectId: project.id,
-            });
-          }
-
-          if (fresh.status === 'running') {
-            write({
-              id: 'current-running',
-              type: 'complete',
-              message: 'Currently running',
-              projectId: project.id,
-            });
-          } else if (fresh.status === 'error') {
-            write({
-              id: 'current-error',
-              type: 'error',
-              message: 'Build failed',
-              projectId: project.id,
-            });
-          } else {
-            write({
-              id: 'current-stopped',
-              type: 'status',
-              message: 'Stopped',
-              projectId: project.id,
-            });
-          }
-          cleanup();
-          void s.close();
-          return;
-        }
-        write({
-          id: 'current-building',
-          type: 'status',
-          message: `Build in progress (${fresh.status})...`,
-          projectId: project.id,
-        });
-      }
-
-      await new Promise(() => undefined);
-    });
+    return handleBuildStreamRoute(c, ctx, project);
   });
 }
