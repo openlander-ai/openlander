@@ -692,14 +692,27 @@ export class DeployPipeline {
           _parentId: projectId,
         });
 
-        // Save config snapshot for compose projects (same as docker path)
         if (result.success) {
-          try {
-            persistDeployConfig({ projectId, config: { ...config, repoUrl }, db: this.db });
-          } catch (err) {
-            log.debug({ err, projectId }, 'Failed to persist deploy config snapshot');
-          }
+          await this.handlePostDeploy({
+            projectId,
+            environmentId,
+            config,
+            repoUrl,
+            trigger,
+            startTime,
+            buildLog,
+            commitSha: cloneResult.commitSha,
+            shouldSyncProjectState,
+            skipDeployLog: true,
+            skipSuccessEvent: true,
+            skipPhaseUpdate: true,
+          });
         }
+
+        // TODO: BuildRecovery is not applicable to compose deployments.
+        // Compose uses `docker compose up` (no single Dockerfile to fix).
+        // compose.ts handles failures internally with its own error flow.
+        // If compose-specific recovery is needed, implement a separate ComposeRecovery class.
 
         return {
           success: result.success,
@@ -898,60 +911,29 @@ export class DeployPipeline {
         });
       }
 
-      // Merge env vars into DB (preserves previously set vars)
-      if (config.envVars) {
-        if (shouldSyncProjectState) {
-          this.db.mergeEnvVars(projectId, config.envVars);
-        } else {
-          this.db.mergeEnvVars(projectId, config.envVars, environmentId);
-        }
-      }
-
-      // Step 5: Expose publicly if requested
-      let publicUrl: string | undefined;
-      if (config.visibility === 'quick-share' && shouldSyncProjectState) {
-        publicUrl = await this.exposeTunnel(projectId, port);
-        buildLog += `[tunnel] ${publicUrl}\n`;
-      }
-
-      const totalDuration = Date.now() - startTime;
-
-      // Record deploy log
-      this.db.createDeployLog({
-        id: nanoid(12),
+      const postDeploy = await this.handlePostDeploy({
         projectId,
         environmentId,
-        status: 'success',
+        config,
+        repoUrl,
         trigger,
-        commitSha: cloneResult.commitSha,
+        startTime,
         buildLog,
-        durationMs: totalDuration,
+        commitSha: cloneResult.commitSha,
+        shouldSyncProjectState,
+        port,
+        internalUrl,
       });
-
-      // Best-effort: save deploy config for future redeploys
-      try {
-        persistDeployConfig({ projectId, config: { ...config, repoUrl }, db: this.db });
-      } catch (err) {
-        log.debug({ err, projectId }, 'Failed to persist deploy config snapshot');
-      }
-
-      await eventBus.emit('deploy:success', {
-        projectId,
-        url: publicUrl ?? internalUrl,
-        totalDurationMs: totalDuration,
-      });
-
-      this.jobManager?.updatePhase(projectId, 'done');
       return {
         success: true,
         projectId,
         projectName,
         containerId,
         url: internalUrl,
-        publicUrl,
+        publicUrl: postDeploy.publicUrl,
         port,
         commitSha: cloneResult.commitSha,
-        buildDurationMs: totalDuration,
+        buildDurationMs: postDeploy.totalDuration,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -1039,6 +1021,92 @@ export class DeployPipeline {
         buildDurationMs: Date.now() - startTime,
       };
     }
+  }
+
+  private async handlePostDeploy(params: {
+    projectId: string;
+    environmentId: string;
+    config: Partial<ProjectConfig>;
+    repoUrl: string;
+    trigger: 'chat' | 'webhook' | 'api';
+    startTime: number;
+    buildLog: string;
+    commitSha?: string;
+    shouldSyncProjectState: boolean;
+    port?: number;
+    internalUrl?: string;
+    skipDeployLog?: boolean;
+    skipSuccessEvent?: boolean;
+    skipPhaseUpdate?: boolean;
+  }): Promise<{ publicUrl?: string; totalDuration: number; buildLog: string }> {
+    const {
+      projectId,
+      environmentId,
+      config,
+      repoUrl,
+      trigger,
+      startTime,
+      commitSha,
+      shouldSyncProjectState,
+      port,
+      internalUrl,
+      skipDeployLog,
+      skipSuccessEvent,
+      skipPhaseUpdate,
+    } = params;
+    let { buildLog } = params;
+
+    if (config.envVars) {
+      if (shouldSyncProjectState) {
+        this.db.mergeEnvVars(projectId, config.envVars);
+      } else {
+        this.db.mergeEnvVars(projectId, config.envVars, environmentId);
+      }
+    }
+
+    let publicUrl: string | undefined;
+    if (config.visibility === 'quick-share' && shouldSyncProjectState && port !== undefined) {
+      publicUrl = await this.exposeTunnel(projectId, port);
+      buildLog += `[tunnel] ${publicUrl}\n`;
+    }
+
+    const totalDuration = Date.now() - startTime;
+
+    if (!skipDeployLog) {
+      this.db.createDeployLog({
+        id: nanoid(12),
+        projectId,
+        environmentId,
+        status: 'success',
+        trigger,
+        commitSha,
+        buildLog,
+        durationMs: totalDuration,
+      });
+    }
+
+    try {
+      persistDeployConfig({ projectId, config: { ...config, repoUrl }, db: this.db });
+    } catch (err) {
+      log.debug({ err, projectId }, 'Failed to persist deploy config snapshot');
+    }
+
+    if (!skipSuccessEvent) {
+      const successUrl = publicUrl ?? internalUrl;
+      if (successUrl) {
+        await eventBus.emit('deploy:success', {
+          projectId,
+          url: successUrl,
+          totalDurationMs: totalDuration,
+        });
+      }
+    }
+
+    if (!skipPhaseUpdate) {
+      this.jobManager?.updatePhase(projectId, 'done');
+    }
+
+    return { publicUrl, totalDuration, buildLog };
   }
 
   async deployMonorepo(config: MonorepoConfig): Promise<MonorepoResult> {
