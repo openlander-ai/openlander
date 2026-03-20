@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.12] - 2026-03-20
+
+### Added
+
+- **deploy_configs table**: Persist deploy configuration snapshots per project for reliable redeploy/restart
+- **buildDeployConfig()**: Single 3-tier config assembly function (runtime > stored snapshot > DB columns)
+- **resolveEnvVars()**: Unified 7-layer env var merge function (auto < global < project < prod < env < service < inline)
+
+### Changed
+
+- **redeploy()**: Uses buildDeployConfig() instead of manual DB field reconstruction — restores sshKeyPath, composeServices on redeploy
+- **deployEnvironment()**: All env assembly routes through resolveEnvVars() (4 inline merge sites consolidated)
+- **PlanEngine.executePlan()**: Env merge now uses resolveEnvVars()
+- **blue-green deploy**: Env assembly unified through resolveEnvVars()
+- **formatEnvValue**: Consolidated compose and env-inject duplicated escaping functions
+
+### Deprecated
+
+- **EnvManager.getMergedForDeploy()**: Use resolveEnvVars() instead
+
 ## [0.6.11] - 2026-03-20
 
 ### Fixed
