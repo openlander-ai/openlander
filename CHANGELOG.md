@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.16] - 2026-03-21
+
+### Changed
+
+- **Compose deploy via dockerode**: Replaced `docker compose up/down` CLI calls with direct dockerode API (buildImage, runContainer, network management). Removes child_process dependency for compose operations.
+- **Override hacks removed**: Deleted `writeOverride()`, `writeSecretOverride()`, `touchMissingEnvFiles()` — env vars, secrets, and ports now injected directly via dockerode container config.
+- **Compose service logs/status via dockerode**: `getServiceLogs()` and `getServiceStatuses()` now use dockerode/DB instead of `docker compose ps/logs`.
+
+### Added
+
+- **Orphan child project cleanup**: Redeploys that remove services now automatically detect and clean up orphan child projects (stop container, delete DB record).
+- **Compose YAML parsing extensions**: `command`, `entrypoint`, `restart`, `healthcheck` fields now parsed from compose.yml and included in deploy plan responses.
+- **Project-scoped Docker networks**: Each compose project creates `ol-{name}` bridge network for service DNS resolution.
+- **`compose:orphans-cleaned` event**: New event emitted when orphan services are detected and removed during redeploy.
+
 ## [0.6.15] - 2026-03-21
 
 ### Added
