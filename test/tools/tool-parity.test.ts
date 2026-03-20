@@ -727,6 +727,10 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "environment_name": {
+                "description": "Environment name to show source tracking (global/project/production/environment). Omit for backward-compatible response.",
+                "type": "string",
+              },
               "project_name": {
                 "description": "Project name",
                 "type": "string",
@@ -1654,6 +1658,10 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "environment_name": {
+                "description": "Environment name to show source tracking (global/project/production/environment). Omit for backward-compatible response.",
+                "type": "string",
+              },
               "project_name": {
                 "description": "Project name",
                 "type": "string",
@@ -2334,6 +2342,8 @@ describe('Tool parity baseline snapshots', () => {
               "provided_count": "number",
               "required": [],
             },
+            "internal_url": "undefined",
+            "internal_url_note": "undefined",
             "missing": [],
             "plan_id": "string",
             "services": [],
@@ -2373,6 +2383,8 @@ describe('Tool parity baseline snapshots', () => {
             "build",
             "complexity",
             "env",
+            "internal_url",
+            "internal_url_note",
             "missing",
             "plan_id",
             "services",
