@@ -2,9 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { join } from 'node:path';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { EventEmitter } from 'node:events';
-import { Readable } from 'node:stream';
-import type { ChildProcess } from 'node:child_process';
 
 import {
   ComposePipeline,
@@ -15,8 +12,6 @@ import { Database } from '../src/db/index.js';
 import { EventBus } from '../src/events/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { formatEnvValue } from '../src/pipeline/env-inject.js';
-
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
 function createMockDocker(): Docker {
   return {
@@ -31,71 +26,11 @@ function createMockDocker(): Docker {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
     removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
+    getLogs: vi.fn().mockResolvedValue(''),
   } as unknown as Docker;
 }
 
-interface MockChildProcess extends EventEmitter {
-  stdout: Readable;
-  stderr: Readable;
-}
-
-function createMockProcess(stdout: string, stderr: string, exitCode: number): MockChildProcess {
-  const proc = new EventEmitter() as MockChildProcess;
-  // Create Readable streams that emit Buffer chunks (matching real child_process.spawn behavior)
-  proc.stdout = Readable.from([Buffer.from(stdout)]);
-  proc.stderr = Readable.from([Buffer.from(stderr)]);
-  // Emit 'close' event asynchronously
-  setImmediate(() => {
-    proc.emit('close', exitCode);
-  });
-  return proc;
-}
-
-// Track the mock implementation
-let mockSpawnImplementation: (cmd: string, args: string[]) => ChildProcess = () => {
-  throw new Error('spawn mock not set up');
-};
-
-if (!isBunRuntime) {
-  vi.mock(import('node:child_process'), () => {
-    const mockedSpawn = ((
-      command: string,
-      argsOrOptions?: readonly string[] | import('node:child_process').SpawnOptions,
-    ) => {
-      const args = Array.isArray(argsOrOptions) ? [...argsOrOptions] : [];
-      if (args.includes('version') && args.includes('--short')) {
-        return createMockProcess('2.24.0\n', '', 0);
-      }
-      return mockSpawnImplementation(command, args);
-    }) as unknown as typeof import('node:child_process').spawn;
-    const mockedExec = ((
-      _command: string,
-      optionsOrCallback?:
-        | import('node:child_process').ExecOptions
-        | ((
-            error: import('node:child_process').ExecException | null,
-            stdout: string,
-            stderr: string,
-          ) => void),
-      maybeCallback?: (
-        error: import('node:child_process').ExecException | null,
-        stdout: string,
-        stderr: string,
-      ) => void,
-    ) => {
-      const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-      callback?.(null, '', '');
-      return {} as ChildProcess;
-    }) as unknown as typeof import('node:child_process').exec;
-    return {
-      spawn: mockedSpawn,
-      exec: mockedExec,
-    };
-  });
-}
-const describeCompose = isBunRuntime ? describe.skip : describe;
-
-describeCompose('ComposePipeline', () => {
+describe('ComposePipeline', () => {
   let tmpDir: string;
   let db: Database;
   let events: EventBus;
@@ -110,9 +45,6 @@ describeCompose('ComposePipeline', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    mockSpawnImplementation = () => {
-      throw new Error('spawn mock not set up');
-    };
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -788,7 +720,7 @@ describeCompose('ComposePipeline', () => {
     expect(runComposeServiceMock.mock.calls.map((call) => call[0]?.name)).toEqual(['ol-stack-db']);
   });
 
-  it('parses service status output from compose ps json lines', async () => {
+  it('reads service statuses from compose child projects', async () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(composePath, 'services: {}\n', 'utf8');
 
@@ -799,19 +731,38 @@ describeCompose('ComposePipeline', () => {
       dockerfilePath: composePath,
     });
 
-    mockSpawnImplementation = () =>
-      createMockProcess(
-        `{"Service":"api","State":"running","ID":"api-id","Ports":"0.0.0.0:8080->8080/tcp"}\n{"Service":"worker","State":"dead","ID":"worker-id"}\n`,
-        '',
-        0,
-      ) as unknown as ChildProcess;
+    db.createProject({
+      id: 'child-api',
+      name: 'stack/api',
+      repoUrl: 'https://github.com/example/stack',
+      parentProjectId: 'parent-project',
+      dockerfilePath: composePath,
+    });
+    db.updateProject('child-api', {
+      status: 'running',
+      assignedPort: 8080,
+      containerId: 'api-id',
+    });
+
+    db.createProject({
+      id: 'child-worker',
+      name: 'stack/worker',
+      repoUrl: 'https://github.com/example/stack',
+      parentProjectId: 'parent-project',
+      dockerfilePath: composePath,
+    });
+    db.updateProject('child-worker', {
+      status: 'stopped',
+      assignedPort: null,
+      containerId: 'worker-id',
+    });
 
     const statuses = await pipeline.getServiceStatuses('parent-project');
     expect(statuses).toEqual([
       {
         name: 'api',
         status: 'running',
-        ports: ['0.0.0.0:8080->8080/tcp'],
+        ports: ['8080'],
         containerId: 'api-id',
       },
       {

@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { createModuleLogger } from '../lib/logger.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import {
@@ -9,7 +8,7 @@ import {
   formatEnvValue,
 } from './env-inject.js';
 import { join, dirname } from 'node:path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml } from 'yaml';
 import { nanoid } from 'nanoid';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
@@ -121,24 +120,11 @@ export interface ComposeServiceStatus {
   containerId?: string;
 }
 
-export interface PortConflict {
-  service: string;
-  requestedPort: number;
-  conflictsWith: string;
-}
-
 export interface EnvFileReferenceError {
   service: string;
   envFilePath: string;
   requiredVars: string[];
   templatePath: string | null;
-}
-
-interface ParsedComposePsRow {
-  service: string;
-  status: 'running' | 'stopped' | 'error';
-  ports: string[];
-  containerId?: string;
 }
 
 function sanitizeComposeProjectName(name: string): string {
@@ -149,8 +135,6 @@ function sanitizeComposeProjectName(name: string): string {
 }
 
 export class ComposePipeline {
-  versionChecked = false;
-
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
@@ -494,8 +478,6 @@ export class ComposePipeline {
     }
 
     const envVars = { ...(config.envVars ?? {}) };
-
-    this.touchMissingEnvFiles(composeProject);
 
     const envFileErrors = this.checkEnvFileReferences(filteredComposeProject, envVars);
     if (envFileErrors.length > 0) {
@@ -1095,147 +1077,53 @@ export class ComposePipeline {
 
   async getServiceLogs(projectId: string, service?: string, lines = 100): Promise<string> {
     const parent = this.resolveParentProject(projectId);
-    const composePath = this.resolveComposePath(parent);
-    const projectName = sanitizeComposeProjectName(parent.name);
+    const children = this.db.getChildProjects(parent.id);
 
-    const args = ['logs', `--tail=${String(lines)}`];
     if (service) {
-      args.push(service);
-    }
-
-    const result = await this.execCompose(composePath, args, { projectName });
-    if (result.exitCode !== 0) {
-      throw new Error(`docker compose logs failed: ${result.stderr || result.stdout}`);
-    }
-
-    return `${result.stdout}${result.stderr}`;
-  }
-
-  async getServiceStatuses(projectId: string): Promise<ComposeServiceStatus[]> {
-    const parent = this.resolveParentProject(projectId);
-    const composePath = this.resolveComposePath(parent);
-    const projectName = sanitizeComposeProjectName(parent.name);
-
-    const result = await this.execCompose(composePath, ['ps', '--format', 'json'], { projectName });
-    if (result.exitCode !== 0) {
-      throw new Error(`docker compose ps failed: ${result.stderr || result.stdout}`);
-    }
-
-    const rows = parseComposePsOutput(result.stdout);
-    return rows.map((row) => ({
-      name: row.service,
-      status: row.status,
-      ports: row.ports.length > 0 ? row.ports : undefined,
-      containerId: row.containerId,
-    }));
-  }
-
-  detectPortConflicts(composeProject: ComposeProject): PortConflict[] {
-    const runningProjects = this.db.listProjects('running');
-    const projectByPort = new Map<number, ProjectRow>();
-    for (const project of runningProjects) {
-      if (project.assigned_port !== null) {
-        projectByPort.set(project.assigned_port, project);
+      const child = children.find((entry) => entry.name === `${parent.name}/${service}`);
+      if (!child) {
+        throw new Error(`Compose service not found: ${service}`);
       }
-    }
-
-    const conflicts: PortConflict[] = [];
-
-    for (const service of composeProject.services) {
-      for (const mapping of service.ports ?? []) {
-        const parsed = parseComposePortMapping(mapping);
-        if (!parsed || parsed.hostPort === null) {
-          continue;
-        }
-
-        const conflictingProject = projectByPort.get(parsed.hostPort);
-        if (!conflictingProject) {
-          continue;
-        }
-
-        conflicts.push({
-          service: service.name,
-          requestedPort: parsed.hostPort,
-          conflictsWith: conflictingProject.name || 'system',
-        });
+      if (!child.container_id) {
+        throw new Error(`Compose service ${service} has no running container`);
       }
+      return this.docker.getLogs(child.container_id, lines);
     }
 
-    return conflicts;
-  }
-
-  async generateOverride(
-    composeProject: ComposeProject,
-    conflicts: PortConflict[],
-  ): Promise<string> {
-    const requestedByService = new Map<string, Set<number>>();
-    for (const conflict of conflicts) {
-      const current = requestedByService.get(conflict.service) ?? new Set<number>();
-      current.add(conflict.requestedPort);
-      requestedByService.set(conflict.service, current);
-    }
-
-    const reservedPorts = new Set<number>();
-    const allocateUniquePort = async (): Promise<number> => {
-      let min = 10001;
-      for (;;) {
-        const candidate = await allocatePort(this.db, this.docker, { rangeStart: min });
-        if (!reservedPorts.has(candidate)) {
-          reservedPorts.add(candidate);
-          return candidate;
-        }
-        min = candidate + 1;
-      }
-    };
-
-    const overrideServices: Record<string, { ports: string[] }> = {};
-
-    for (const service of composeProject.services) {
-      const requestedPorts = requestedByService.get(service.name);
-      if (!requestedPorts || requestedPorts.size === 0) {
+    const chunks: string[] = [];
+    for (const child of children) {
+      if (!child.container_id) {
         continue;
       }
 
-      const remappedPorts: string[] = [];
-      for (const mapping of service.ports ?? []) {
-        const parsed = parseComposePortMapping(mapping);
-        if (!parsed || parsed.hostPort === null || !requestedPorts.has(parsed.hostPort)) {
-          continue;
-        }
-
-        const newHostPort = await allocateUniquePort();
-        remappedPorts.push(`${String(newHostPort)}:${String(parsed.containerPort)}`);
-      }
-
-      if (remappedPorts.length > 0) {
-        overrideServices[service.name] = { ports: remappedPorts };
-      }
+      const serviceName = child.name.startsWith(`${parent.name}/`)
+        ? child.name.slice(parent.name.length + 1)
+        : child.name;
+      const logs = await this.docker.getLogs(child.container_id, lines);
+      chunks.push(`=== ${serviceName} ===\n${logs}`);
     }
 
-    return stringifyYaml({ services: overrideServices });
+    return chunks.join('\n');
   }
 
-  writeOverride(composePath: string, overrideContent: string): string {
-    const overridePath = join(dirname(composePath), 'docker-compose.override.yml');
-    writeFileSync(overridePath, overrideContent, 'utf8');
-    return overridePath;
-  }
+  getServiceStatuses(projectId: string): ComposeServiceStatus[] {
+    const parent = this.resolveParentProject(projectId);
+    const children = this.db.getChildProjects(parent.id);
+    return children.map((child) => {
+      const serviceName = child.name.startsWith(`${parent.name}/`)
+        ? child.name.slice(parent.name.length + 1)
+        : child.name;
+      const status: ComposeServiceStatus['status'] =
+        child.status === 'running' ? 'running' : child.status === 'stopped' ? 'stopped' : 'error';
+      const ports = child.assigned_port !== null ? [String(child.assigned_port)] : undefined;
 
-  private touchMissingEnvFiles(composeProject: ComposeProject): void {
-    for (const service of composeProject.services) {
-      if (!service.envFile) continue;
-      for (const envFileRef of service.envFile) {
-        const fullPath = join(composeProject.projectPath, envFileRef.path);
-        if (!existsSync(fullPath)) {
-          mkdirSync(dirname(fullPath), { recursive: true });
-          writeFileSync(fullPath, '', 'utf8');
-          log.debug(
-            { path: envFileRef.path, service: service.name },
-            'Created empty env_file placeholder for compose validation',
-          );
-        }
-      }
-    }
+      return {
+        name: serviceName,
+        status,
+        ports,
+        containerId: child.container_id ?? undefined,
+      };
+    });
   }
 
   private createComposeEnvFileIfMissing(
@@ -1276,41 +1164,6 @@ export class ComposePipeline {
     );
   }
 
-  private async execCompose(
-    composePath: string,
-    args: string[],
-    options?: { projectName?: string },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    return new Promise((resolve, reject) => {
-      const env = { ...process.env };
-      if (options?.projectName) {
-        env.COMPOSE_PROJECT_NAME = options.projectName;
-      }
-
-      const proc = spawn('docker', ['compose', '-f', composePath, ...args], {
-        cwd: dirname(composePath),
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env,
-      });
-
-      const stdoutChunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
-
-      proc.stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
-      proc.stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-
-      proc.on('close', (code) => {
-        resolve({
-          stdout: Buffer.concat(stdoutChunks).toString(),
-          stderr: Buffer.concat(stderrChunks).toString(),
-          exitCode: code ?? 1,
-        });
-      });
-
-      proc.on('error', reject);
-    });
-  }
-
   private resolveParentProject(projectId: string): ProjectRow {
     const project = this.db.getProject(projectId);
     if (!project) {
@@ -1325,14 +1178,6 @@ export class ComposePipeline {
       throw new Error(`Parent project not found: ${project.parent_project_id}`);
     }
     return parent;
-  }
-
-  private resolveComposePath(project: ProjectRow): string {
-    const composePath = project.dockerfile_path;
-    if (!composePath || !existsSync(composePath)) {
-      throw new Error(`Compose file not found for project ${project.id}`);
-    }
-    return composePath;
   }
 
   private resolveServicePortMapping(
@@ -1487,107 +1332,6 @@ function parseComposeDurationSeconds(value?: string): number | undefined {
   }
 
   return Number.isFinite(seconds) ? seconds : undefined;
-}
-
-function parseComposePsOutput(output: string): ParsedComposePsRow[] {
-  const trimmed = output.trim();
-  if (!trimmed) return [];
-
-  const parsedRows = tryParseComposeRows(trimmed);
-  return parsedRows.map((row) => toParsedComposePsRow(row)).filter((row) => row.service.length > 0);
-}
-
-function tryParseComposeRows(output: string): Array<Record<string, unknown>> {
-  try {
-    const parsed = JSON.parse(output) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed.filter(
-        (row): row is Record<string, unknown> => !!row && typeof row === 'object',
-      );
-    }
-    if (parsed && typeof parsed === 'object') {
-      return [parsed as Record<string, unknown>];
-    }
-  } catch (error) {
-    log.debug({ err: error }, 'Failed to parse compose ps output as a single JSON payload');
-  }
-
-  const rows: Array<Record<string, unknown>> = [];
-  for (const line of output.split('\n')) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) continue;
-    try {
-      const parsed = JSON.parse(trimmedLine) as unknown;
-      if (parsed && typeof parsed === 'object') {
-        rows.push(parsed as Record<string, unknown>);
-      }
-    } catch (error) {
-      log.debug({ err: error, line: trimmedLine }, 'Ignoring non-JSON compose ps output line');
-    }
-  }
-
-  return rows;
-}
-
-function toParsedComposePsRow(row: Record<string, unknown>): ParsedComposePsRow {
-  const service =
-    (typeof row['Service'] === 'string' && row['Service']) ||
-    (typeof row['Name'] === 'string' && row['Name']) ||
-    '';
-
-  const stateRaw =
-    (typeof row['State'] === 'string' && row['State']) ||
-    (typeof row['Status'] === 'string' && row['Status']) ||
-    '';
-  const stateNormalized = stateRaw.toLowerCase();
-
-  let status: ParsedComposePsRow['status'];
-  if (stateNormalized.includes('running') || stateNormalized.includes('up')) {
-    status = 'running';
-  } else if (
-    stateNormalized.includes('exited') ||
-    stateNormalized.includes('stopped') ||
-    stateNormalized.includes('dead') ||
-    stateNormalized.includes('created')
-  ) {
-    status = 'stopped';
-  } else {
-    status = 'error';
-  }
-
-  const ports: string[] = [];
-  const publishers = row['Publishers'];
-  if (Array.isArray(publishers)) {
-    for (const publisher of publishers) {
-      if (!publisher || typeof publisher !== 'object') continue;
-      const item = publisher as Record<string, unknown>;
-      const publishedPort = item['PublishedPort'];
-      const targetPort = item['TargetPort'];
-      if (typeof publishedPort === 'number' && typeof targetPort === 'number') {
-        ports.push(`${String(publishedPort)}:${String(targetPort)}`);
-      }
-    }
-  }
-
-  if (ports.length === 0 && typeof row['Ports'] === 'string') {
-    const portsText = row['Ports']
-      .split(',')
-      .map((port) => port.trim())
-      .filter((port) => port.length > 0);
-    ports.push(...portsText);
-  }
-
-  const containerId =
-    (typeof row['ID'] === 'string' && row['ID']) ||
-    (typeof row['ContainerID'] === 'string' && row['ContainerID']) ||
-    undefined;
-
-  return {
-    service,
-    status,
-    ports,
-    containerId,
-  };
 }
 
 function extractProjectName(repoUrl: string): string {
