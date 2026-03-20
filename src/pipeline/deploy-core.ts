@@ -27,6 +27,7 @@ import { scanForSecrets } from './secret-scan.js';
 import { persistDeployConfig } from './config-snapshot.js';
 import { buildDeployConfig } from './build-deploy-config.js';
 import type { JobManager } from './job-manager.js';
+import { JobManager as JobManagerClass } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
@@ -789,6 +790,17 @@ export class DeployPipeline {
         (line) => {
           dockerBuildOutput += line + '\n';
 
+          const stepInfo = JobManagerClass.parseDockerBuildStep(line);
+          if (stepInfo) {
+            this.jobManager?.updateBuildStep(
+              projectId,
+              stepInfo.step,
+              stepInfo.total,
+              stepInfo.desc,
+            );
+          }
+          // TODO: BuildKit format (#N [stage M/N]) not supported yet
+
           const now = Date.now();
           if (now - lastBuildOutputEmit <= 50) return;
           lastBuildOutputEmit = now;
@@ -1308,6 +1320,17 @@ export class DeployPipeline {
               buildArgs: buildTimeVarsForChild,
             },
             (line) => {
+              const stepInfo = JobManagerClass.parseDockerBuildStep(line);
+              if (stepInfo) {
+                this.jobManager?.updateBuildStep(
+                  childId,
+                  stepInfo.step,
+                  stepInfo.total,
+                  stepInfo.desc,
+                );
+              }
+              // TODO: BuildKit format (#N [stage M/N]) not supported yet
+
               const now = Date.now();
               if (now - lastBuildOutputEmit <= 50) return;
               lastBuildOutputEmit = now;

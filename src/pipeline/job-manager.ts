@@ -6,6 +6,9 @@ export interface JobStatus {
   phase: JobPhase;
   errorSummary?: string;
   buildLogTail?: string;
+  buildStep?: number;
+  buildStepTotal?: number;
+  buildStepDesc?: string;
   startedAt: Date;
   completedAt?: Date;
 }
@@ -36,6 +39,27 @@ export class JobManager {
     if (phase === 'done' || phase === 'failed') {
       job.completedAt = new Date();
     }
+  }
+
+  updateBuildStep(projectId: string, step: number, total: number, desc: string): void {
+    const job = this.jobs.get(projectId);
+    if (!job) return;
+    job.buildStep = step;
+    job.buildStepTotal = total;
+    job.buildStepDesc = desc;
+  }
+
+  /** Parse Docker build step from output line. Returns undefined if not a step line. */
+  static parseDockerBuildStep(
+    line: string,
+  ): { step: number; total: number; desc: string } | undefined {
+    const match = line.match(/^Step (\d+)\/(\d+)\s*:\s*(.+)/);
+    if (!match || !match[1] || !match[2] || !match[3]) return undefined;
+    return {
+      step: parseInt(match[1], 10),
+      total: parseInt(match[2], 10),
+      desc: match[3],
+    };
   }
 
   getStatus(projectId: string): JobStatus | undefined {

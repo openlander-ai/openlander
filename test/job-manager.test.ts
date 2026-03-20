@@ -137,4 +137,101 @@ describe('JobManager', () => {
     expect(jm.getStatus('p3')!.phase).toBe('failed');
     expect(jm.getStatus('p3')!.errorSummary).toBe('timeout');
   });
+
+  describe('Docker build step tracking', () => {
+    it('updateBuildStep sets step, total, and desc fields', () => {
+      jm.trackJob('p1', 'my-app');
+      jm.updateBuildStep('p1', 3, 11, 'RUN pip install -r requirements.txt');
+
+      const status = jm.getStatus('p1')!;
+      expect(status.buildStep).toBe(3);
+      expect(status.buildStepTotal).toBe(11);
+      expect(status.buildStepDesc).toBe('RUN pip install -r requirements.txt');
+    });
+
+    it('updateBuildStep ignores unknown project', () => {
+      jm.updateBuildStep('nonexistent', 1, 5, 'FROM node');
+      expect(jm.getStatus('nonexistent')).toBeUndefined();
+    });
+
+    it('updateBuildStep overwrites previous step values', () => {
+      jm.trackJob('p1', 'my-app');
+      jm.updateBuildStep('p1', 1, 5, 'FROM node:22');
+      jm.updateBuildStep('p1', 2, 5, 'WORKDIR /app');
+
+      const status = jm.getStatus('p1')!;
+      expect(status.buildStep).toBe(2);
+      expect(status.buildStepDesc).toBe('WORKDIR /app');
+    });
+
+    it('parseDockerBuildStep parses standard Docker step format', () => {
+      const line = 'Step 3/11 : RUN pip install -r requirements.txt';
+      const result = JobManager.parseDockerBuildStep(line);
+
+      expect(result).toEqual({
+        step: 3,
+        total: 11,
+        desc: 'RUN pip install -r requirements.txt',
+      });
+    });
+
+    it('parseDockerBuildStep parses FROM step', () => {
+      const line = 'Step 1/5 : FROM node:22-alpine';
+      const result = JobManager.parseDockerBuildStep(line);
+
+      expect(result).toEqual({
+        step: 1,
+        total: 5,
+        desc: 'FROM node:22-alpine',
+      });
+    });
+
+    it('parseDockerBuildStep returns undefined for cache lines', () => {
+      const line = ' ---> Using cache';
+      const result = JobManager.parseDockerBuildStep(line);
+      expect(result).toBeUndefined();
+    });
+
+    it('parseDockerBuildStep returns undefined for empty string', () => {
+      const result = JobManager.parseDockerBuildStep('');
+      expect(result).toBeUndefined();
+    });
+
+    it('parseDockerBuildStep returns undefined for BuildKit format', () => {
+      const line = '#5 [stage-0 3/7] RUN apt-get update';
+      const result = JobManager.parseDockerBuildStep(line);
+      expect(result).toBeUndefined();
+    });
+
+    it('parseDockerBuildStep handles whitespace in description', () => {
+      const line = 'Step 5/10 : RUN   npm   install   --legacy-peer-deps';
+      const result = JobManager.parseDockerBuildStep(line);
+
+      expect(result).toEqual({
+        step: 5,
+        total: 10,
+        desc: 'RUN   npm   install   --legacy-peer-deps',
+      });
+    });
+
+    it('build step fields are undefined when not set', () => {
+      jm.trackJob('p1', 'my-app');
+      const status = jm.getStatus('p1')!;
+
+      expect(status.buildStep).toBeUndefined();
+      expect(status.buildStepTotal).toBeUndefined();
+      expect(status.buildStepDesc).toBeUndefined();
+    });
+
+    it('build step fields persist across phase changes', () => {
+      jm.trackJob('p1', 'my-app');
+      jm.updateBuildStep('p1', 5, 10, 'RUN npm build');
+      jm.updatePhase('p1', 'building');
+
+      const status = jm.getStatus('p1')!;
+      expect(status.buildStep).toBe(5);
+      expect(status.buildStepTotal).toBe(10);
+      expect(status.buildStepDesc).toBe('RUN npm build');
+    });
+  });
 });

@@ -103,6 +103,9 @@ export const deployToolDefs: ToolDef[] = [
         startedAt: Date;
         errorSummary?: string;
         buildLogTail?: string;
+        buildStep?: number;
+        buildStepTotal?: number;
+        buildStepDesc?: string;
       }) => ({
         name: job.projectName,
         phase: job.phase,
@@ -111,6 +114,13 @@ export const deployToolDefs: ToolDef[] = [
         ...(job.phase === 'done' ? { urls: getProjectUrls(job.projectName) } : {}),
         ...(job.buildLogTail && (job.phase === 'building' || job.phase === 'failed')
           ? { build_log_tail: job.buildLogTail }
+          : {}),
+        ...(job.buildStep !== undefined && job.buildStepTotal !== undefined
+          ? {
+              build_step: job.buildStep,
+              build_step_total: job.buildStepTotal,
+              ...(job.buildStepDesc ? { build_step_desc: job.buildStepDesc } : {}),
+            }
           : {}),
       });
 
