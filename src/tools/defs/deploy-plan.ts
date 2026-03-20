@@ -14,7 +14,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     description:
       'Analyze a repository and create a deployment plan. Returns a plan with detected services, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
     mcpDescription:
-      'Analyze a repository and create a deployment plan. Compose support: build, ports, environment, depends_on (keys), env_file, volumes, profiles, image. Not supported: command, entrypoint, healthcheck, restart, networks, top-level secrets. Returns plan_id, status, complexity, missing vars, and warnings.',
+      'Create deployment plan. Compose: build, ports, environment, depends_on, env_file, volumes, profiles, image. Not: command, entrypoint, healthcheck, restart, networks, secrets. Returns plan_id, status, complexity, missing vars, warnings.',
     inputSchema: createDeployPlanSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
