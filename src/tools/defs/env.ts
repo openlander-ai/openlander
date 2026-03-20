@@ -1,6 +1,7 @@
 import type { ToolDef } from './types.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import {
+  getEnvVarSchema,
   listEnvVarsSchema,
   listGlobalSecretsSchema,
   listSecretFilesSchema,
@@ -30,6 +31,22 @@ export const envToolDefs: ToolDef[] = [
       const project = getProjectByName(appCtx, projectName);
       const masked = appCtx.env.getAllMasked(project.id);
       return Promise.resolve({ variables: masked, count: Object.keys(masked).length });
+    },
+  },
+  {
+    name: 'get_env_var',
+    description:
+      'Get the unmasked value of a single environment variable for debugging. Use when you need to verify the exact value was set correctly (e.g., connection strings with special characters). Returns { key, value } or { error: "NOT_FOUND" }. Errors: PROJECT_NOT_FOUND.',
+    inputSchema: getEnvVarSchema,
+    execute: (_args, { appCtx }) => {
+      const projectName = _args['project_name'] as string;
+      const key = _args['key'] as string;
+      const project = getProjectByName(appCtx, projectName);
+      const vars = appCtx.env.getAll(project.id);
+      if (key in vars) {
+        return Promise.resolve({ key, value: vars[key] });
+      }
+      return Promise.resolve({ error: 'NOT_FOUND', key });
     },
   },
   {

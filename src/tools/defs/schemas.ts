@@ -65,6 +65,11 @@ export const listEnvVarsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
+export const getEnvVarSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  key: z.string().min(1).describe('Environment variable key to retrieve'),
+});
+
 export const setGlobalSecretSchema = z.object({
   key: z.string().min(1).describe('Secret key'),
   value: z.string().min(1).describe('Secret value'),

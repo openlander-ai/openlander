@@ -17,6 +17,7 @@ import {
 } from './schemas.js';
 
 const log = createModuleLogger('tools-defs-service');
+const SERVICE_CRASH_LOG_PATTERN = /PANIC|FATAL|OOM|Segmentation fault|out of memory|No space left/i;
 
 function parseServiceCredentials(credentials: string | null): Record<string, unknown> | null {
   if (!credentials) {
@@ -178,15 +179,56 @@ export const serviceToolDefs: ToolDef[] = [
   {
     name: 'get_service_status',
     description:
-      'Get the current status of a specific service. Returns { id, name, status, type, port, credentials }. Errors: SERVICE_NOT_FOUND if the service name is invalid.',
+      'Get the current status of a specific service. Returns { id, name, status, health, type, port, ... } where status is running/stopped and health reflects container health (healthy/unhealthy/unknown/degraded). healthDetail may be included when crash-like log patterns are detected. Errors: SERVICE_NOT_FOUND if the service name is invalid.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
       const service = await getServiceByName(appCtx, args['service_name'] as string);
+      let health: 'healthy' | 'unhealthy' | 'unknown' | 'degraded' = 'unknown';
+      let healthDetail: string | undefined;
+
+      const containerId = service.container_id ?? service.container_name;
+      if (containerId) {
+        try {
+          const info = (await appCtx.docker.getClient().getContainer(containerId).inspect()) as {
+            State?: { Health?: { Status?: string } };
+          };
+          const dockerHealth = info.State?.Health?.Status;
+
+          if (dockerHealth === 'healthy') {
+            health = 'healthy';
+          } else if (dockerHealth === 'unhealthy') {
+            health = 'unhealthy';
+          } else if (dockerHealth) {
+            health = 'unknown';
+          } else {
+            const logs = await appCtx.docker.getLogs(containerId, 20);
+            const matchedLine = logs
+              .split(/\r?\n/)
+              .find((line) => SERVICE_CRASH_LOG_PATTERN.test(line));
+
+            if (matchedLine) {
+              health = 'degraded';
+              healthDetail = matchedLine.trim();
+            } else {
+              health = 'healthy';
+            }
+          }
+        } catch (error) {
+          log.warn(
+            { err: error, serviceId: service.id, containerId },
+            'Failed to derive container health for service status',
+          );
+          health = 'unknown';
+        }
+      }
+
       return {
         id: service.id,
         name: service.name,
         type: service.type,
         status: service.status,
+        health,
+        ...(healthDetail ? { healthDetail } : {}),
         port: service.port,
         image: service.image,
         containerName: service.container_name,

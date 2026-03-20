@@ -90,8 +90,8 @@ export const deployToolDefs: ToolDef[] = [
   {
     name: 'get_deploy_status',
     description:
-      'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed) and timing. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }.',
-    mcpDescription: 'Get real-time deployment status for active builds.',
+      'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed), timing, and build progress details. When building, includes current phase and last few lines of build output. When failed, includes error summary and build log tail. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }.',
+    mcpDescription: 'Get real-time deployment status with build progress details.',
     inputSchema: deployStatusSchema,
     execute: (args, context) => {
       const appCtx = context.appCtx;
@@ -109,7 +109,9 @@ export const deployToolDefs: ToolDef[] = [
         elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
         error: job.errorSummary,
         ...(job.phase === 'done' ? { urls: getProjectUrls(job.projectName) } : {}),
-        ...(job.phase === 'failed' && job.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
+        ...(job.buildLogTail && (job.phase === 'building' || job.phase === 'failed')
+          ? { build_log_tail: job.buildLogTail }
+          : {}),
       });
 
       if (projectName) {

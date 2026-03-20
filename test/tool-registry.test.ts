@@ -222,6 +222,7 @@ describe('Tool Registry', () => {
           status: 'running',
           visibility: 'internal',
           port: 10001,
+          containerName: null,
           url: getProjectUrl('my-app'),
           publicUrl: null,
           repoUrl: 'https://github.com/user/my-app',

@@ -642,6 +642,26 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "key": {
+                "description": "Environment variable key to retrieve",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "key",
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "get_env_var",
+        },
+        {
+          "inputSchema": {
+            "properties": {
               "lines": {
                 "description": "Number of log lines to retrieve",
                 "type": "integer",
@@ -1515,6 +1535,26 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "key": {
+                "description": "Environment variable key to retrieve",
+                "type": "string",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "key",
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "get_env_var",
+        },
+        {
+          "inputSchema": {
+            "properties": {
               "lines": {
                 "description": "Number of log lines to retrieve",
                 "type": "integer",
@@ -2153,6 +2193,7 @@ describe('Tool parity baseline snapshots', () => {
             "count": "number",
             "projects": [
               {
+                "containerName": "null",
                 "name": "string",
                 "port": "number",
                 "publicUrl": "null",
@@ -2169,6 +2210,7 @@ describe('Tool parity baseline snapshots', () => {
             "projects": [
               {
                 "branch": "string",
+                "containerName": "null",
                 "createdAt": "string",
                 "id": "string",
                 "name": "string",

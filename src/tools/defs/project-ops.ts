@@ -81,7 +81,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   {
     name: 'list_projects',
     description:
-      'List all deployed projects with name, status (running/stopped/error), ports, local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
+      'List all deployed projects with name, status (running/stopped/error), ports, containerName (for inter-project communication via Docker network, e.g. http://ol-myapp:3000), local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
     mcpDescription: 'List all deployed projects with status and URLs.',
     inputSchema: emptySchema,
     execute: async (_args, context) => {
@@ -102,6 +102,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             repoUrl: project.repo_url,
             branch: project.branch,
             port: project.assigned_port,
+            containerName: project.container_id ? `ol-${project.name}` : null,
             url: project.assigned_port ? getProjectUrl(project.name) : null,
             urls: project.assigned_port ? getProjectUrls(project.name) : [],
             publicUrl: project.public_url,
@@ -118,6 +119,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           status: project.status,
           visibility: project.visibility,
           port: project.assigned_port,
+          containerName: project.container_id ? `ol-${project.name}` : null,
           url: project.assigned_port ? getProjectUrl(project.name) : null,
           publicUrl: project.public_url,
           repoUrl: project.repo_url,

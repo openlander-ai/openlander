@@ -35,6 +35,7 @@ export interface PreflightOptions {
   configuredEnvVars?: Record<string, string>;
 }
 
+const DISK_FAIL_THRESHOLD_GB = 0.5;
 const DISK_WARNING_THRESHOLD_GB = 1;
 const MEMORY_WARNING_THRESHOLD_PERCENT = 90;
 
@@ -222,10 +223,12 @@ export async function preflightCheck(
       );
     }
 
+    const diskCritical = diskFreeGB < DISK_FAIL_THRESHOLD_GB;
     const resourceCheck: PreflightCheck = {
-      pass: true,
-      detail:
-        resourceWarnings.length > 0
+      pass: !diskCritical,
+      detail: diskCritical
+        ? `Disk space critically low: ${diskFreeGB.toFixed(1)}GB free (need ${String(DISK_FAIL_THRESHOLD_GB)}GB minimum). Run 'docker system prune' to free space.`
+        : resourceWarnings.length > 0
           ? resourceWarnings.join('; ')
           : `Disk: ${diskFreeGB.toFixed(1)}GB free, Memory: ${memUsedGB}GB / ${memTotalGB}GB (${memoryUsagePercent.toFixed(0)}%) - ${memFreeGB}GB available`,
     };
@@ -272,7 +275,7 @@ export async function preflightCheck(
       );
     }
 
-    const allPassed = portCheck.pass && nameCheck.pass;
+    const allPassed = portCheck.pass && nameCheck.pass && resourceCheck.pass;
     const result: PreflightResult = {
       pass: allPassed,
       checks: {
