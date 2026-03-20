@@ -575,7 +575,6 @@ describe('Agent tools — fix approval flow', () => {
         setGlobalSecret: vi.fn(),
         getGlobalSecretsMasked: vi.fn().mockReturnValue([]),
         getGlobalSecrets: vi.fn().mockReturnValue({}),
-        getMergedForDeploy: vi.fn().mockReturnValue({}),
       },
       cloudflare: {},
       docker: {},

@@ -105,6 +105,12 @@ export class ContainerLifecycle {
     if (project.container_id) ids.add(project.container_id);
     names.add(`ol-${project.name}`);
 
+    const children = this.db.getChildProjects(projectId);
+    for (const child of children) {
+      if (child.container_id) ids.add(child.container_id);
+      names.add(`ol-${child.name}`);
+    }
+
     for (const environment of environments) {
       if (environment.container_id) ids.add(environment.container_id);
       names.add(`ol-${getRouteName(project.name, environment.type)}`);
@@ -135,13 +141,13 @@ export class ContainerLifecycle {
       try {
         await this.docker.stopContainer(identifier);
       } catch (err) {
-        log.debug({ err, identifier }, 'Container stop during cleanup failed');
+        log.warn({ err, identifier }, 'Container stop during cleanup failed');
       }
 
       try {
         await this.docker.removeContainer(identifier);
       } catch (err) {
-        log.debug({ err, identifier }, 'Container removal during cleanup failed');
+        log.warn({ err, identifier }, 'Container removal during cleanup failed');
       }
     }
 

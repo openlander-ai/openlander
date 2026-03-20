@@ -39,7 +39,6 @@ describe('DeployPipeline — non-blocking deploy', () => {
       {
         getGlobalSecrets: vi.fn().mockReturnValue({}),
         getAll: vi.fn().mockReturnValue({}),
-        getMergedForDeploy: vi.fn().mockResolvedValue({}),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
       jobManager,
@@ -261,7 +260,6 @@ describe('DeployPipeline — non-blocking deploy', () => {
         {
           getGlobalSecrets: vi.fn().mockReturnValue({}),
           getAll: vi.fn().mockReturnValue({}),
-          getMergedForDeploy: vi.fn().mockReturnValue({}),
           getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
         } as never,
         jobManager,

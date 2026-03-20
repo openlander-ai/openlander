@@ -40,7 +40,6 @@ describe('DeployPipeline — dockerfilePath persistence', () => {
       db,
       {
         getEnvVars: vi.fn().mockReturnValue({}),
-        getMergedForDeploy: vi.fn().mockResolvedValue({}),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
       jobManager,

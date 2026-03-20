@@ -42,7 +42,6 @@ describe('DeployPipeline crash logging from startDeploy', () => {
       db,
       {
         getEnvVars: vi.fn().mockReturnValue({}),
-        getMergedForDeploy: vi.fn().mockReturnValue({}),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
       jobManager,

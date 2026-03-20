@@ -48,7 +48,6 @@ services:
     docker.cleanupSecretFiles = vi.fn();
     const env = {
       getAll: vi.fn().mockReturnValue({}),
-      getMergedForDeploy: vi.fn().mockReturnValue({}),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
     pipeline = new DeployPipeline(docker, db, env as never);
