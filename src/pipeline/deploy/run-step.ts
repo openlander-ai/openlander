@@ -1,6 +1,6 @@
 import type { Database } from '../../db/index.js';
 import type { Docker } from '../docker.js';
-import { allocatePort, clearPortScanCache } from '../port.js';
+import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname } from '../traefik.js';
 
 export interface RunConfig {
@@ -51,6 +51,7 @@ export class ContainerRunner {
           secretFiles: config.secretFiles,
         });
 
+        releasePortReservation(port);
         const url = `http://${getEnvironmentProjectHostname(config.projectName, environmentType)}`;
         return {
           containerId,
@@ -63,10 +64,12 @@ export class ContainerRunner {
           message.includes('port is already allocated') ||
           message.includes('address already in use');
         if (attempt === 0 && isPortConflict) {
+          releasePortReservation(port);
           clearPortScanCache();
           port = await allocatePort(this.db, this.docker);
           continue;
         }
+        releasePortReservation(port);
         throw error;
       }
     }

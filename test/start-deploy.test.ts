@@ -7,7 +7,7 @@ import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
 import { JobManager } from '../src/pipeline/job-manager.js';
 import type { Docker } from '../src/pipeline/docker.js';
-import { clearPortScanCache } from '../src/pipeline/port.js';
+import { clearPortScanCache, clearPortReservations } from '../src/pipeline/port.js';
 
 // Minimal Docker mock — just enough to not crash
 function createMockDocker(): Docker {
@@ -59,6 +59,7 @@ describe('DeployPipeline — non-blocking deploy', () => {
 
   afterEach(() => {
     clearPortScanCache();
+    clearPortReservations();
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -246,8 +247,8 @@ describe('DeployPipeline — non-blocking deploy', () => {
 
       const docker = createMockDocker();
       (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementation(
-        async (contextPath: string) => {
-          if (contextPath.endsWith('/backend')) {
+        async (contextPath: string, tag: string, options?: { dockerfile?: string }) => {
+          if (options?.dockerfile?.includes('backend')) {
             throw new Error('backend build failed');
           }
           return undefined;

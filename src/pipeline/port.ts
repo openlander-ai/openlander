@@ -34,6 +34,9 @@ export interface PortScanResult {
 let portScanCache: { result: PortScanResult; timestamp: number } | null = null;
 const PORT_SCAN_CACHE_TTL_MS = 1000;
 
+/** In-memory port reservations for concurrent deploy coordination. */
+const reservedPorts = new Set<number>();
+
 /**
  * Scan OS-level ports using platform-specific commands.
  * Linux: ss -tln (sudo not required)
@@ -154,6 +157,11 @@ export function clearPortScanCache(): void {
   portScanCache = null;
 }
 
+/** Clear port reservations (useful for testing). */
+export function clearPortReservations(): void {
+  reservedPorts.clear();
+}
+
 export interface AllocatePortOptions {
   preferredPort?: number;
   rangeStart?: number;
@@ -169,17 +177,29 @@ export async function allocatePort(
   const usedPorts = await scanUsedPorts(db, docker);
   const usedSet = new Set(usedPorts.all);
 
+  // Also exclude ports reserved by concurrent deployments
+  for (const reserved of reservedPorts) {
+    usedSet.add(reserved);
+  }
+
   if (preferredPort && !usedSet.has(preferredPort)) {
+    reservedPorts.add(preferredPort); // Reserve immediately
     return preferredPort;
   }
 
   for (let port = rangeStart; port <= rangeEnd; port++) {
     if (!usedSet.has(port)) {
+      reservedPorts.add(port); // Reserve immediately
       return port;
     }
   }
 
   throw new PortExhaustedError(rangeStart, rangeEnd, usedPorts.all.length);
+}
+
+/** Release a port reservation after container creation or on failure. */
+export function releasePortReservation(port: number): void {
+  reservedPorts.delete(port);
 }
 
 /** Check if a specific port is available. */

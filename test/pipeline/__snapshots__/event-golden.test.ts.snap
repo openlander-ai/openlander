@@ -59,8 +59,8 @@ exports[`pipeline event golden snapshots > captures monorepo deploy event sequen
   "deploy:run",
   "deploy:run",
   "deploy:success",
-  "deploy:failed",
-  "deploy:failed",
+  "deploy:success",
+  "deploy:success",
 ]
 `;
 
@@ -182,30 +182,28 @@ exports[`pipeline event golden snapshots > captures monorepo deploy event sequen
   },
   {
     "payloadShape": {
-      "durationMs": "number",
-      "error": "string",
       "message": "string",
       "parentProjectId": "string",
       "phase": "string",
       "projectId": "string",
       "scope": "string",
       "status": "string",
-      "step": "string",
+      "totalDurationMs": "number",
+      "url": "string",
     },
-    "type": "deploy:failed",
+    "type": "deploy:success",
   },
   {
     "payloadShape": {
-      "durationMs": "number",
-      "error": "string",
       "message": "string",
       "phase": "string",
       "projectId": "string",
       "scope": "string",
       "status": "string",
-      "step": "string",
+      "totalDurationMs": "number",
+      "url": "string",
     },
-    "type": "deploy:failed",
+    "type": "deploy:success",
   },
 ]
 `;

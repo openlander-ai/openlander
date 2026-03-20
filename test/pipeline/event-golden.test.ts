@@ -7,7 +7,7 @@ import { DeployPipeline } from '../../src/pipeline/deploy.js';
 import { ComposePipeline } from '../../src/pipeline/compose.js';
 import { Database } from '../../src/db/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
-import { clearPortScanCache } from '../../src/pipeline/port.js';
+import { clearPortScanCache, clearPortReservations } from '../../src/pipeline/port.js';
 import { eventBus } from '../../src/events/index.js';
 import * as gitPipeline from '../../src/pipeline/git.js';
 import * as dockerfileGen from '../../src/pipeline/dockerfile-gen.js';
@@ -148,6 +148,7 @@ describe('pipeline event golden snapshots', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     clearPortScanCache();
+    clearPortReservations();
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
   });

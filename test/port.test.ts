@@ -9,6 +9,7 @@ import {
   getAvailablePortCount,
   scanUsedPorts,
   clearPortScanCache,
+  clearPortReservations,
 } from '../src/pipeline/port.js';
 import { Database } from '../src/db/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
@@ -45,11 +46,13 @@ describe('Port Allocation', () => {
     db = new Database(join(tmpDir, 'test.db'));
     docker = createMockDocker();
     clearPortScanCache();
+    clearPortReservations();
   });
 
   afterEach(() => {
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
+    clearPortReservations();
   });
 
   it('allocates first port in range', async () => {
