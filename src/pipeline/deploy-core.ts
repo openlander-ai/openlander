@@ -692,6 +692,15 @@ export class DeployPipeline {
           _parentId: projectId,
         });
 
+        // Save config snapshot for compose projects (same as docker path)
+        if (result.success) {
+          try {
+            persistDeployConfig({ projectId, config: { ...config, repoUrl }, db: this.db });
+          } catch (err) {
+            log.debug({ err, projectId }, 'Failed to persist deploy config snapshot');
+          }
+        }
+
         return {
           success: result.success,
           projectId: result.parentProjectId,
