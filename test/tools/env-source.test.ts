@@ -181,7 +181,7 @@ describe('list_env_vars tool with source tracking', () => {
     it('throws error when project not found', async () => {
       await expect(
         listEnvVarsTool.execute({ project_name: 'nonexistent' }, { appCtx: ctx, target: 'mcp' }),
-      ).rejects.toThrow('PROJECT_NOT_FOUND');
+      ).rejects.toThrow('Project not found: nonexistent');
     });
 
     it('returns error when environment not found', async () => {
