@@ -78,7 +78,10 @@ interface CreateAppOptions {
 
 export type UpgradeWebSocketHandler = NodeWebSocket['upgradeWebSocket'];
 
-function createApp(ctx: AppContext, options: CreateAppOptions = {}): Hono {
+function createApp(
+  ctx: AppContext,
+  options: CreateAppOptions = {},
+): { app: Hono; mcpRoutes: ReturnType<typeof createMcpHttpRoutes> } {
   const app = options.app ?? new Hono();
 
   app.use('*', logger());
@@ -242,7 +245,7 @@ function createApp(ctx: AppContext, options: CreateAppOptions = {}): Hono {
     );
   });
 
-  return app;
+  return { app, mcpRoutes };
 }
 
 // --- TCP Server (existing behavior) ---
@@ -262,9 +265,9 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   const wsAdapter = createNodeWebSocket({ app });
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const { injectWebSocket, upgradeWebSocket } = wsAdapter;
-  createApp(ctx, { app, upgradeWebSocket });
+  const { app: appWithRoutes } = createApp(ctx, { app, upgradeWebSocket });
 
-  const server = createAdaptorServer(app);
+  const server = createAdaptorServer(appWithRoutes);
 
   server.listen(options.port, options.host, () => {
     log.info({ port: options.port }, 'Server listening');
@@ -293,7 +296,7 @@ export interface DaemonOptions {
  */
 export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<void> {
   serverStartTime = Date.now();
-  const app = createApp(ctx);
+  const { app, mcpRoutes } = createApp(ctx);
 
   // Ensure socket directory exists
   mkdirSync(dirname(options.socketPath), { recursive: true });
@@ -324,6 +327,7 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
   // Handle graceful shutdown
   const cleanup = (): void => {
     log.info('Daemon shutting down');
+    mcpRoutes.cleanup();
     server.close();
     if (existsSync(options.socketPath)) {
       unlinkSync(options.socketPath);
