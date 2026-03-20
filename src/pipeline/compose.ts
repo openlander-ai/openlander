@@ -447,7 +447,11 @@ export class ComposePipeline {
 
     const envVars = { ...(config.envVars ?? {}) };
 
-    // Check env_file references first - fail fast if missing
+    // Create empty placeholders for ALL services' env_file entries first
+    // This prevents docker compose validation failures for non-deploy_only services
+    this.touchMissingEnvFiles(composeProject);
+
+    // Check env_file references for filtered (deploy_only) services
     const envFileErrors = this.checkEnvFileReferences(filteredComposeProject, envVars);
     if (envFileErrors.length > 0) {
       const errorMessages = envFileErrors.map((err) => {
@@ -476,7 +480,6 @@ export class ComposePipeline {
     }
 
     this.createComposeEnvFileIfMissing(filteredComposeProject.projectPath, envVars);
-    this.touchMissingEnvFiles(composeProject);
 
     if (this.env) {
       const secretFiles = this.env.getSecretFilesForDeploy(parentProjectId);
