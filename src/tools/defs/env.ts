@@ -26,6 +26,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'list_env_vars',
     description:
       'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count } or with source tracking { variables: { KEY: { value: "sk-****7890", source: "project" } }, count }. Errors: PROJECT_NOT_FOUND, ENVIRONMENT_NOT_FOUND.',
+    mcpDescription:
+      'List environment variables with optional source tracking. Priority: global < project < production < environment. Pass environment_name to see source (global/project/production/environment) for each var. Values always masked.',
     inputSchema: listEnvVarsSchema,
     execute: (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
@@ -81,6 +83,8 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_env_vars',
     description:
       'Set environment variables for a project and trigger a redeploy if running. Use when user needs to configure DATABASE_URL, API keys, or other env vars. The variables parameter must be a JSON string of key-value pairs, e.g. {"DATABASE_URL": "postgresql://user:pass@ol-svc-pg:5432/db", "REDIS_URL": "redis://ol-svc-redis:6379"}. For host services use host.docker.internal as hostname. For OpenLander services use the container name (ol-svc-*). Returns { status, project, keys[] }. Errors: PROJECT_NOT_FOUND, JSON parse error if variables is malformed.',
+    mcpDescription:
+      'Set environment variables at project level (priority: global < project < production < environment). Triggers redeploy if project running. Use for DATABASE_URL, API keys, etc. For services: ol-svc-* for OpenLander, host.docker.internal for host.',
     inputSchema: setEnvVarsSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;

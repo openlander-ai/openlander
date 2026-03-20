@@ -82,7 +82,8 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'list_projects',
     description:
       'List all deployed projects with name, status (running/stopped/error), ports, containerName (for inter-project communication via Docker network, e.g. http://ol-myapp:3000), local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
-    mcpDescription: 'List all deployed projects with status and URLs.',
+    mcpDescription:
+      'List all deployed projects with status, ports, and URLs. For container-to-container communication, use http://ol-{name}:{port}. containerName field shows Docker internal DNS name.',
     inputSchema: emptySchema,
     execute: async (_args, context) => {
       if (context.target === 'mcp') {
@@ -131,7 +132,8 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'restart_project',
     description:
       'Restart a running project by stopping and redeploying it with the same configuration. Use when user reports the app is hung, unresponsive, or needs a fresh start after config changes. Returns { status, project } with redeploy result. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription: 'Restart a project by stopping and redeploying it.',
+    mcpDescription:
+      'Restart a project by stopping and redeploying. Pass no_cache=true to rebuild from scratch (use when dependencies changed but Docker layers stale).',
     inputSchema: restartProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;

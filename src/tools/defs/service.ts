@@ -373,6 +373,8 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'get_service_credentials',
     description:
       'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { id, name, credentials } with full connection details. Errors: SERVICE_NOT_FOUND.',
+    mcpDescription:
+      'Get service connection credentials. Host is Docker internal DNS (e.g., ol-svc-pg), not localhost. Use for DATABASE_URL, REDIS_URL, etc. in projects.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
