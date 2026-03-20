@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.11] - 2026-03-20
+
+### Fixed
+
+- **Dockerfile monorepo routing**: Specific dockerfile (e.g. `Dockerfile.api`) no longer triggers monorepo mode — prevents unwanted child projects
+- **Compose --progress flag**: Removed `--progress=plain` entirely for Docker Compose compatibility
+- **Restart build context**: `build_context` persisted in DB so restart/redeploy preserves Dockerfile context directory
+- **Compose redeploy crash**: Child projects no longer store absolute compose path as `dockerfile_path` (caused "path must be relative" on restart)
+- **Deploy resolved-failure gap**: Background deploys that resolve with `success:false` now create deploy logs (previously only `.catch()` handled)
+- **Disk full preflight**: Deploys now fail preflight when disk < 0.5GB instead of proceeding with a warning
+
+### Added
+
+- **Container name in list_projects**: `containerName` field (`ol-{name}`) for inter-project Docker network communication
+- **Service health detection**: `get_service_status` returns `health` field via Docker health check or log PANIC/ERROR/FATAL scan
+- **get_env_var tool**: Single-key unmasked env var lookup for debugging connection strings
+- **Build progress in status**: `get_deploy_status` shows `buildLogTail` during active builds (not just on failure)
+- **DEPLOY_IN_PROGRESS status**: `get_build_log` returns informative status when build is active instead of confusing `NO_DEPLOY_LOGS`
+- **Build failure log expansion**: Failure log tail increased from 30 to 100 lines
+
 ## [0.6.10] - 2026-03-20
 
 ### Fixed
