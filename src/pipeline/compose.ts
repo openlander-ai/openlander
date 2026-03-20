@@ -608,7 +608,7 @@ export class ComposePipeline {
         deployService: async (service) => {
           this.jobManager?.updatePhase(parentProjectId, 'starting');
 
-          const upArgs = ['up', '-d', '--build', '--no-deps', service.name];
+          const upArgs = ['up', '-d', '--build', '--force-recreate', '--no-deps', service.name];
 
           const upResult = await this.execCompose(config.composePath, upArgs);
           buildLog += `[compose up ${service.name}]\n${upResult.stdout}${upResult.stderr}`;

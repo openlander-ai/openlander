@@ -459,9 +459,11 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(1);
     expect(children[0]?.name).toBe('stack/web');
 
-    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps web'));
+    expect(composeCommands).toContainEqual(
+      expect.stringContaining('up -d --build --force-recreate --no-deps web'),
+    );
     expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --no-deps db'),
+      expect.stringContaining('up -d --build --force-recreate --no-deps db'),
     );
   });
 
@@ -532,8 +534,12 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(2);
     expect(children.map((child) => child.name).sort()).toEqual(['stack/db', 'stack/web']);
 
-    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps web'));
-    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
+    expect(composeCommands).toContainEqual(
+      expect.stringContaining('up -d --build --force-recreate --no-deps web'),
+    );
+    expect(composeCommands).toContainEqual(
+      expect.stringContaining('up -d --build --force-recreate --no-deps db'),
+    );
   });
 
   it('deployCompose handles depends_on targeting filtered-out profiled services', async () => {
@@ -584,9 +590,11 @@ describeCompose('ComposePipeline', () => {
     expect(result.error).toBeUndefined();
     expect(result.services.map((service) => service.name)).toEqual(['api']);
 
-    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps api'));
+    expect(composeCommands).toContainEqual(
+      expect.stringContaining('up -d --build --force-recreate --no-deps api'),
+    );
     expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --no-deps cache'),
+      expect.stringContaining('up -d --build --force-recreate --no-deps cache'),
     );
   });
 
@@ -660,8 +668,12 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(2);
     expect(children.map((child) => child.status).sort()).toEqual(['error', 'error']);
 
-    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
-    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps api'));
+    expect(composeCommands).toContainEqual(
+      expect.stringContaining('up -d --build --force-recreate --no-deps db'),
+    );
+    expect(composeCommands).toContainEqual(
+      expect.stringContaining('up -d --build --force-recreate --no-deps api'),
+    );
     expect(composeCommands).toContainEqual(expect.stringContaining('stop db'));
     expect(composeCommands).toContainEqual(expect.stringContaining('rm -f db'));
   });
@@ -728,9 +740,11 @@ describeCompose('ComposePipeline', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('db is stopped');
-    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
+    expect(composeCommands).toContainEqual(
+      expect.stringContaining('up -d --build --force-recreate --no-deps db'),
+    );
     expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --no-deps api'),
+      expect.stringContaining('up -d --build --force-recreate --no-deps api'),
     );
   });
 

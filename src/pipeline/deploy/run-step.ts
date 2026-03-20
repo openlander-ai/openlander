@@ -35,10 +35,12 @@ export class ContainerRunner {
       undefined,
       environmentType,
     );
+    const containerName = `ol-${config.containerName ?? config.projectName}`;
+    await this.docker.removeContainer(containerName);
 
     const containerId = await this.docker.runContainer({
       imageTag: config.imageTag,
-      name: `ol-${config.containerName ?? config.projectName}`,
+      name: containerName,
       port,
       containerPort,
       envVars: config.envVars,
