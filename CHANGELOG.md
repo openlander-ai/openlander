@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.14] - 2026-03-20
+
+### Fixed
+
+- **Compose child project duplicate**: Reuse existing child projects on redeploy instead of duplicate INSERT
+- **remove_project container cleanup**: Include compose child containers + upgrade log level to warn for failures
+- **Compose force-recreate**: Added `--force-recreate` to `docker compose up` for hardcoded `container_name` handling
+- **Compose project name**: Set deterministic `COMPOSE_PROJECT_NAME` from OpenLander project name for stable container cleanup across deploys
+- **Concurrent deploy port conflict**: In-memory port reservation prevents multiple simultaneous deploys from picking the same port
+- **Port binding retry**: Auto-retry with different port on "port already allocated" error
+- **Port scan cache**: Invalidate after container removal to prevent stale data
+
 ## [0.6.13] - 2026-03-20
 
 ### Fixed
