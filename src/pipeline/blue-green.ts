@@ -8,6 +8,7 @@ import type { EventBus } from '../events/index.js';
 import { cloneRepo } from './git.js';
 import { allocatePort } from './port.js';
 import { buildTraefikLabels, getProjectUrl } from './traefik.js';
+import { resolveEnvVars } from './resolve-env.js';
 
 export interface BlueGreenResult {
   success: boolean;
@@ -129,7 +130,7 @@ export class BlueGreenDeployer {
 
       newPort = await allocatePort(this.db, this.docker);
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? newPort;
-      const envVars = this.env.getMergedForDeploy(projectId);
+      const envVars = resolveEnvVars({ projectId }, { env: this.env });
       const traefikLabels = buildTraefikLabels(projectName, containerPort);
 
       greenContainerId = await this.docker.runContainer({
