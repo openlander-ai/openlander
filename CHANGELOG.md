@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.13] - 2026-03-20
+
+### Fixed
+
+- **Compose restart env_file**: Create placeholder env files before validation (ordering bug — placeholders were created after validation threw)
+- **Compose child project duplicate**: Reuse existing child projects on redeploy instead of duplicate INSERT (was causing "Project already exists" error)
+- **remove_project container cleanup**: Include compose child containers in cleanup + upgrade log level from debug to warn for removal failures
+- **Compose force-recreate**: Added `--force-recreate` flag to `docker compose up` for hardcoded `container_name` handling
+- **Concurrent deploy 409**: Pre-clean existing container before `runContainer` to prevent "container name already in use" on simultaneous deploys
+
+### Changed
+
+- **Deprecated getMergedForDeploy cleanup**: Removed from 9 test mock objects that no longer call it
+
 ## [0.6.12] - 2026-03-20
 
 ### Added
