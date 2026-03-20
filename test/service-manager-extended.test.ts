@@ -472,4 +472,31 @@ describe('ServiceManager reconciliation behavior', () => {
     });
     expect(list[0]?.status).toBe('running');
   });
+
+  it('list() marks all services error when Docker daemon is unavailable', async () => {
+    const services = [
+      createService({
+        id: 'svc-daemon-1',
+        status: 'running',
+        container_id: 'svc-daemon-1-container',
+      }),
+      createService({
+        id: 'svc-daemon-2',
+        status: 'stopped',
+        container_id: 'svc-daemon-2-container',
+      }),
+    ];
+    const db = createDbMock(services);
+    const dockerHarness = createMockDockerHarness();
+    dockerHarness.docker.getClient = vi.fn(() => {
+      throw new Error('Docker daemon unavailable');
+    });
+
+    const manager = new ServiceManager(dockerHarness.docker, db);
+    const list = await manager.list();
+
+    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-1', { status: 'error' });
+    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-2', { status: 'error' });
+    expect(list.map((service) => service.status)).toEqual(['error', 'error']);
+  });
 });

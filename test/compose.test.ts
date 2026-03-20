@@ -334,6 +334,9 @@ describeCompose('ComposePipeline', () => {
     mockSpawnImplementation = (_cmd: string, args: string[]) => {
       const argText = args.join(' ');
       composeCommands.push(argText);
+      if (argText.includes(' version ')) {
+        return createMockProcess('', 'version detection failed', 1) as unknown as ChildProcess;
+      }
       if (argText.includes(' up ') && argText.includes(' web')) {
         return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
       }
@@ -812,10 +815,11 @@ describeCompose('ComposePipeline', () => {
       return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
     };
 
-    // Create a fresh pipeline instance and set supportsProgress to false before deploy
+    // Simulate old compose version: supportsProgress=false bypasses the global
+    // vi.mock version handler (which always returns 2.24.0) to test the
+    // conditional --progress arg construction in isolation.
     const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
     freshPipeline.supportsProgress = false;
-    // Mark version as checked to prevent checkComposeVersion from overwriting supportsProgress
     freshPipeline.versionChecked = true;
 
     const result = await freshPipeline.deployCompose({
@@ -913,10 +917,9 @@ describeCompose('ComposePipeline', () => {
       return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
     };
 
-    // Create a fresh pipeline instance and set supportsProgress to false before deploy
+    // Same bypass as the "< 2.3.0" test above — see comment there.
     const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
     freshPipeline.supportsProgress = false;
-    // Mark version as checked to prevent checkComposeVersion from overwriting supportsProgress
     freshPipeline.versionChecked = true;
 
     const result = await freshPipeline.deployCompose({

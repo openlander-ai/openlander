@@ -16,10 +16,6 @@ const log = createModuleLogger('service-manager');
 const WEB_NETWORK = 'web';
 type BuiltInServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb';
 
-function shouldMarkMissingContainerAsError(status: string): boolean {
-  return status !== 'error' && status !== 'provisioning';
-}
-
 interface ServiceCredentials {
   user: string;
   password: string;
@@ -478,11 +474,10 @@ export class ServiceManager {
 
   async list(): Promise<ServiceRow[]> {
     const services = this.db.listServices();
-    const client = this.docker.getClient();
 
     for (const service of services) {
       if (!service.container_id && !service.container_name) {
-        if (shouldMarkMissingContainerAsError(service.status)) {
+        if (service.status !== 'error') {
           this.db.updateService(service.id, { status: 'error' });
           log.warn(
             { serviceId: service.id },
@@ -494,7 +489,7 @@ export class ServiceManager {
 
       const containerId = service.container_id ?? service.container_name;
       try {
-        const info = await client.getContainer(containerId).inspect();
+        const info = await this.docker.getClient().getContainer(containerId).inspect();
         const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
         const containerIdFromDocker = info.Id;
 
@@ -519,7 +514,7 @@ export class ServiceManager {
     const service = this.getRequiredService(id);
 
     if (!service.container_id && !service.container_name) {
-      if (shouldMarkMissingContainerAsError(service.status)) {
+      if (service.status !== 'error') {
         this.db.updateService(service.id, { status: 'error' });
         log.warn({ serviceId: service.id }, 'Service has no container reference, marking as error');
       }

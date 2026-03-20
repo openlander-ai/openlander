@@ -43,6 +43,18 @@ describe('DeployPipeline — non-blocking deploy', () => {
       } as never,
       jobManager,
     );
+    vi.spyOn(pipeline, 'deploy').mockResolvedValue({
+      success: true,
+      projectId: 'background-project',
+      projectName: 'background-project',
+    });
+    vi.spyOn(pipeline, 'deployMonorepo').mockResolvedValue({
+      success: true,
+      parentProjectId: 'background-parent',
+      parentName: 'background-parent',
+      children: [],
+      buildDurationMs: 0,
+    });
   });
 
   afterEach(() => {

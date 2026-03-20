@@ -581,7 +581,6 @@ export class ComposePipeline {
         }
       }
 
-      // Check compose version once before deploying any services
       await this.checkComposeVersion();
 
       const serviceStatusByName = new Map<string, ComposeServiceStatus>();
