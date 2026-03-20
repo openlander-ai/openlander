@@ -34,6 +34,27 @@ export interface RunContainerOptions {
   secretFiles?: SecretFileMount[];
 }
 
+export interface RunComposeServiceOptions {
+  imageTag: string;
+  name: string;
+  port: number;
+  containerPort?: number;
+  envVars: Record<string, string>;
+  traefikLabels: Record<string, string>;
+  secretFiles?: SecretFileMount[];
+  command?: string | string[];
+  entrypoint?: string | string[];
+  restart?: string;
+  healthcheck?: {
+    test: string | string[];
+    interval?: number;
+    timeout?: number;
+    retries?: number;
+    start_period?: number;
+  };
+  networks?: string[];
+}
+
 export interface ContainerInfo {
   id: string;
   name: string;
@@ -68,6 +89,16 @@ export interface BuildImageOptions {
   buildArgs?: Record<string, string>;
   target?: string;
   dockerfile?: string;
+  onProgress?: (event: { stream?: string; error?: string }) => void;
+}
+
+export interface BuildComposeServiceOptions {
+  contextPath: string;
+  dockerfile?: string;
+  tag: string;
+  buildArgs?: Record<string, string>;
+  target?: string;
+  noCache?: boolean;
   onProgress?: (event: { stream?: string; error?: string }) => void;
 }
 
@@ -256,6 +287,67 @@ export class Docker {
     });
   }
 
+  async buildComposeService(opts: BuildComposeServiceOptions): Promise<void> {
+    const dockerfile = opts.dockerfile ?? 'Dockerfile';
+
+    let stream: NodeJS.ReadableStream;
+    try {
+      stream = await this.client.buildImage(
+        { context: opts.contextPath, src: ['.'] },
+        {
+          t: opts.tag,
+          dockerfile,
+          buildargs: opts.buildArgs,
+          target: opts.target,
+          nocache: opts.noCache === true,
+        },
+      );
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      throw new DockerBuildError(
+        opts.tag,
+        `Build failed for ${opts.tag} (context: ${opts.contextPath}): ${errMsg}`,
+      );
+    }
+
+    let buildLog = '';
+    let buildError = '';
+    await new Promise<void>((resolve, reject) => {
+      this.client.modem.followProgress(
+        stream,
+        (err: Error | null) => {
+          if (err) {
+            const reason = [buildLog, buildError, err.message].filter(Boolean).join('\n');
+            reject(
+              new DockerBuildError(
+                opts.tag,
+                `Build failed for ${opts.tag} (context: ${opts.contextPath}): ${reason}`,
+              ),
+            );
+          } else if (buildError) {
+            const reason = [buildLog, buildError].filter(Boolean).join('\n');
+            reject(
+              new DockerBuildError(
+                opts.tag,
+                `Build failed for ${opts.tag} (context: ${opts.contextPath}): ${reason}`,
+              ),
+            );
+          } else {
+            resolve();
+          }
+        },
+        (event: { stream?: string; error?: string }) => {
+          if (event.stream) buildLog += event.stream;
+          if (event.error) {
+            buildError += event.error + '\n';
+            buildLog += `ERROR: ${event.error}\n`;
+          }
+          opts.onProgress?.(event);
+        },
+      );
+    });
+  }
+
   /** Create and start a container. */
   async runContainer(options: RunContainerOptions): Promise<string> {
     const envArray = Object.entries(options.envVars).map(([k, v]) => `${k}=${v}`);
@@ -287,6 +379,79 @@ export class Docker {
     });
 
     await container.start();
+    return container.id;
+  }
+
+  async runComposeService(opts: RunComposeServiceOptions): Promise<string> {
+    const envArray = Object.entries(opts.envVars).map(([k, v]) => `${k}=${v}`);
+    const cPort = opts.containerPort ?? opts.port;
+    const extraHosts = await this.resolveExtraHosts();
+    const binds = this.writeSecretFiles(opts.name, opts.secretFiles ?? []);
+    const networkMode = opts.networks?.[0] ?? this.networkName;
+
+    const command = typeof opts.command === 'string' ? ['sh', '-c', opts.command] : opts.command;
+    const restartPolicyName =
+      opts.restart === 'no' ||
+      opts.restart === 'always' ||
+      opts.restart === 'on-failure' ||
+      opts.restart === 'unless-stopped'
+        ? opts.restart
+        : 'unless-stopped';
+    const healthcheck = opts.healthcheck
+      ? {
+          Test:
+            typeof opts.healthcheck.test === 'string'
+              ? ['CMD-SHELL', opts.healthcheck.test]
+              : opts.healthcheck.test,
+          ...(opts.healthcheck.interval !== undefined
+            ? { Interval: opts.healthcheck.interval * 1_000_000_000 }
+            : {}),
+          ...(opts.healthcheck.timeout !== undefined
+            ? { Timeout: opts.healthcheck.timeout * 1_000_000_000 }
+            : {}),
+          ...(opts.healthcheck.retries !== undefined ? { Retries: opts.healthcheck.retries } : {}),
+          ...(opts.healthcheck.start_period !== undefined
+            ? { StartPeriod: opts.healthcheck.start_period * 1_000_000_000 }
+            : {}),
+        }
+      : undefined;
+
+    const container = await this.client.createContainer({
+      Image: opts.imageTag,
+      name: opts.name,
+      Env: envArray,
+      Labels: {
+        'openlander.managed': 'true',
+        'openlander.project': opts.name.replace(/^ol-/, ''),
+        ...opts.traefikLabels,
+      },
+      ExposedPorts: {
+        [`${String(cPort)}/tcp`]: {},
+      },
+      Cmd: command,
+      Entrypoint: opts.entrypoint,
+      Healthcheck: healthcheck,
+      HostConfig: {
+        PortBindings: {
+          [`${String(cPort)}/tcp`]: [{ HostPort: String(opts.port) }],
+        },
+        Binds: binds.length > 0 ? binds : undefined,
+        NetworkMode: networkMode,
+        RestartPolicy: { Name: restartPolicyName },
+        ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
+      },
+    });
+
+    await container.start();
+
+    const additionalNetworks =
+      opts.networks
+        ?.slice(1)
+        .filter((networkName, index, arr) => arr.indexOf(networkName) === index) ?? [];
+    for (const networkName of additionalNetworks) {
+      await this.client.getNetwork(networkName).connect({ Container: container.id });
+    }
+
     return container.id;
   }
 
