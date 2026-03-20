@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Compose deploy completion**: `executePlan()` now listens to `compose:up`/`compose:failed` events — compose deployments no longer hang indefinitely
+- **Compose version gating**: `--progress=plain` flag only added when Docker Compose >= 2.3.0 (older versions no longer fail)
+- **Remote Docker IP**: Auto-detect host IP from `DOCKER_HOST` env var (tcp/ssh URLs) for correct service URLs
+- **Service reconciliation**: Services without containers now correctly marked as 'error' status; Docker inspect failures logged at `warn` level
+
 ## [0.6.8] - 2026-03-20
 
 ### Changed

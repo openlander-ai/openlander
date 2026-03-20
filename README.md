@@ -190,6 +190,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.6.3** | Port Stability        | Done   | Port preservation on redeploy, environments port tracking, public URL API fix                                                                                           |
 | **v0.6.4** | Deploy Plan v2        | Done   | Non-blocking execute, deep repo analysis (compose/Dockerfiles/env), dockerfile_path param, estimated_seconds polling hint                                               |
 | **v0.6.5** | Deploy Plan Bugfixes  | Done   | Compose routing fix, env redaction fix, deploy_only service selection, build log in status, auto build context, version requirements                                    |
+| **v0.6.9** | MCP Bugfixes          | Done   | Compose deploy completion, --progress version gating, DOCKER_HOST IP detection, service status reconciliation                                                           |
 | **v1.0.0** | Stable Release        | TBD    | Quality hardening, comprehensive testing, production-readiness improvements                                                                                             |
 
 ## MCP Integration (AI Coding Agents)
