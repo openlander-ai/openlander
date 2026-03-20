@@ -40,6 +40,7 @@ describe('PlanEngine.updatePlan', () => {
 
     mockEnv = {
       getAll: vi.fn().mockReturnValue({}),
+      getGlobalSecrets: vi.fn().mockReturnValue({}),
     };
 
     mockServiceManager = {
@@ -435,6 +436,7 @@ describe('PlanEngine.executePlan', () => {
 
     mockEnv = {
       getAll: vi.fn().mockReturnValue({}),
+      getGlobalSecrets: vi.fn().mockReturnValue({}),
     };
 
     mockServiceManager = {

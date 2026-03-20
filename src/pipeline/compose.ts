@@ -2,7 +2,13 @@ import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
 import { createModuleLogger } from '../lib/logger.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { checkEnvRequirements, classifyVar, detectEnvFile, parseEnvFile } from './env-inject.js';
+import {
+  checkEnvRequirements,
+  classifyVar,
+  detectEnvFile,
+  parseEnvFile,
+  formatEnvValue,
+} from './env-inject.js';
 import { join, dirname } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { nanoid } from 'nanoid';
@@ -232,7 +238,7 @@ export class ComposePipeline {
                 envLines.push(`# TODO: Set ${key}`);
                 envLines.push(`${key}=`);
               } else {
-                envLines.push(`${key}=${this.formatComposeEnvValue(value)}`);
+                envLines.push(`${key}=${formatEnvValue(value)}`);
               }
             }
           }
@@ -240,7 +246,7 @@ export class ComposePipeline {
           // Append any providedVars not already covered by template
           for (const [key, value] of Object.entries(providedVars)) {
             if (usedKeys.has(key)) continue;
-            envLines.push(`${key}=${this.formatComposeEnvValue(value)}`);
+            envLines.push(`${key}=${formatEnvValue(value)}`);
           }
 
           // Write the file
@@ -1085,7 +1091,7 @@ export class ComposePipeline {
       }
 
       const resolvedValue = providedValue === undefined ? templateValue : providedValue;
-      envLines.push(key + '=' + this.formatComposeEnvValue(resolvedValue));
+      envLines.push(key + '=' + formatEnvValue(resolvedValue));
     }
 
     writeFileSync(envFilePath, envLines.join('\n') + '\n', 'utf8');
@@ -1093,25 +1099,6 @@ export class ComposePipeline {
       { envFilePath, templateFile: envTemplatePath },
       'Generated compose .env file from template',
     );
-  }
-
-  private formatComposeEnvValue(value: string): string {
-    if (!value) {
-      return '';
-    }
-
-    if (/[\s#"'$`\\=\n\r]/.test(value)) {
-      const escaped = value
-        .replace(/\\/g, '\\\\')
-        .replace(/"/g, '\\"')
-        .replace(/\n/g, '\\n')
-        .replace(/\r/g, '\\r')
-        .replace(/\$/g, '\\$')
-        .replace(/`/g, '\\`');
-      return '"' + escaped + '"';
-    }
-
-    return value;
   }
 
   private async execCompose(

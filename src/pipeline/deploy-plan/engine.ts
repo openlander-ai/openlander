@@ -4,6 +4,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-parser.js';
 import { cloneRepo } from '../git.js';
+import { resolveEnvVars } from '../resolve-env.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import { extractProjectName } from '../helpers.js';
 import type { DeployPlan, PlanService, PlanEnvEntry, PlanBuildService } from './types.js';
@@ -78,6 +79,7 @@ export interface ExecutePlanResult {
 export class PlanEngine {
   private db: Database;
   private pipeline: DeployPipeline;
+  private env: EnvManager;
   private serviceManager: ServiceManager;
   private events?: EventBus;
   private composePipeline?: ComposePipeline;
@@ -85,6 +87,7 @@ export class PlanEngine {
   constructor(deps: PlanEngineDeps) {
     this.db = deps.db;
     this.pipeline = deps.pipeline;
+    this.env = deps.env;
     this.serviceManager = deps.serviceManager;
     this.events = deps.events;
     this.composePipeline = deps.composePipeline;
@@ -556,10 +559,14 @@ export class PlanEngine {
     });
 
     try {
-      const mergedEnv = {
-        ...plan.env.auto,
-        ...plan.env.provided,
-      };
+      const mergedEnv = resolveEnvVars(
+        {
+          projectId: plan.project_id ?? plan.app.name,
+          autoEnvVars: plan.env.auto,
+          inlineEnvVars: plan.env.provided,
+        },
+        { env: this.env },
+      );
 
       for (const service of plan.services) {
         if (service.action === 'create') {
