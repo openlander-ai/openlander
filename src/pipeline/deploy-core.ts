@@ -23,6 +23,7 @@ import { detectNewEnvKeys } from './env-inject.js';
 import { filterBuildTimeVars } from './build-args.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from './diff-analysis.js';
 import { scanForSecrets } from './secret-scan.js';
+import { persistDeployConfig } from './config-snapshot.js';
 import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
@@ -915,6 +916,13 @@ export class DeployPipeline {
         buildLog,
         durationMs: totalDuration,
       });
+
+      // Best-effort: save deploy config for future redeploys
+      try {
+        persistDeployConfig({ projectId, config: { ...config, repoUrl }, db: this.db });
+      } catch (err) {
+        log.debug({ err, projectId }, 'Failed to persist deploy config snapshot');
+      }
 
       await eventBus.emit('deploy:success', {
         projectId,

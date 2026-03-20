@@ -1,4 +1,5 @@
 import type { ProjectConfig } from './deploy-core.js';
+import type { Database } from '../db/index.js';
 
 /**
  * Version of the config snapshot format.
@@ -157,4 +158,14 @@ export function deserializeConfig(json: string): StoredDeployConfig | null {
  */
 export function validateStoredConfig(json: string): StoredDeployConfig | null {
   return deserializeConfig(json);
+}
+
+export function persistDeployConfig(params: {
+  projectId: string;
+  config: ProjectConfig;
+  db: Database;
+}): void {
+  const snapshot = createSnapshot(params.config);
+  const json = serializeConfig(snapshot);
+  params.db.saveDeployConfig(params.projectId, json, CONFIG_VERSION);
 }
