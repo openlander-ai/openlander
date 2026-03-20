@@ -286,6 +286,10 @@ export class PlanEngine {
       return 'compose';
     }
 
+    if (plan.build.dockerfile !== 'Dockerfile') {
+      return 'single';
+    }
+
     if ((plan.build.dockerfiles_found?.length ?? 0) > 1) {
       return 'monorepo';
     }

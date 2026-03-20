@@ -1089,4 +1089,72 @@ describe('PlanEngine.executePlan', () => {
 
     expect(completedCall).toBeDefined();
   });
+
+  it('uses single mode (startDeploy) when dockerfile is non-default, even with multiple dockerfiles found', async () => {
+    mockPipeline.startMonorepoDeploy = vi.fn().mockReturnValue({
+      parentProjectId: 'mono-1',
+      parentName: 'test-app',
+      status: 'building',
+    });
+
+    const plan = createMockDeployPlan({
+      build: {
+        method: 'dockerfile',
+        dockerfile: 'Dockerfile.api',
+        context: '.',
+        dockerfiles_found: ['Dockerfile', 'Dockerfile.api', 'apps/Dockerfile'],
+      },
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      id: plan.plan_id,
+      status: 'ready',
+      plan_json: JSON.stringify(plan),
+    });
+
+    await engine.executePlan(plan.plan_id);
+
+    expect(mockPipeline.startDeploy).toHaveBeenCalled();
+    expect(mockPipeline.startMonorepoDeploy).not.toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferDockerfile: true,
+        dockerfilePath: 'Dockerfile.api',
+      }),
+    );
+  });
+
+  it('uses monorepo mode when default Dockerfile and multiple dockerfiles found', async () => {
+    const { cloneRepo } = await import('../src/pipeline/git.js');
+    (cloneRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      path: '/tmp/test-clone',
+      commitSha: 'mono-sha',
+    });
+
+    mockPipeline.startMonorepoDeploy = vi.fn().mockReturnValue({
+      parentProjectId: 'mono-1',
+      parentName: 'test-app',
+      status: 'building',
+    });
+
+    const plan = createMockDeployPlan({
+      build: {
+        method: 'dockerfile',
+        dockerfile: 'Dockerfile',
+        context: '.',
+        dockerfiles_found: ['Dockerfile', 'apps/Dockerfile'],
+      },
+    });
+
+    mockDb.getDeployPlan.mockReturnValue({
+      id: plan.plan_id,
+      status: 'ready',
+      plan_json: JSON.stringify(plan),
+    });
+
+    await engine.executePlan(plan.plan_id);
+
+    expect(mockPipeline.startMonorepoDeploy).toHaveBeenCalled();
+    expect(mockPipeline.startDeploy).not.toHaveBeenCalled();
+  });
 });
