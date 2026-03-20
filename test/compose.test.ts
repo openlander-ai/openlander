@@ -322,6 +322,62 @@ describe('ComposePipeline', () => {
     expect((docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
   });
 
+  it('deployCompose single-service build deploy calls both build and run', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    build: .\n    ports:\n      - "3000:3000"\n`,
+      'utf8',
+    );
+
+    const docker = createMockDocker();
+    pipeline = new ComposePipeline(docker, db, events);
+
+    const result = await pipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.services).toEqual([expect.objectContaining({ name: 'web', status: 'running' })]);
+    expect((docker.buildComposeService as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    expect((docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it('deployCompose retries once and succeeds on port conflict', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(
+      composePath,
+      `services:\n  web:\n    image: nginx\n    ports:\n      - "3000:3000"\n`,
+      'utf8',
+    );
+
+    const runComposeServiceMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Bind for 0.0.0.0:3000 failed: port is already allocated'))
+      .mockResolvedValueOnce('container-ol-stack-web');
+    const docker = {
+      ...createMockDocker(),
+      runComposeService: runComposeServiceMock,
+    } as unknown as Docker;
+    pipeline = new ComposePipeline(docker, db, events);
+
+    const result = await pipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.services).toEqual([expect.objectContaining({ name: 'web', status: 'running' })]);
+    expect(runComposeServiceMock.mock.calls).toHaveLength(2);
+  });
+
   it('deployCompose excludes profiled services when profiles is omitted', async () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(

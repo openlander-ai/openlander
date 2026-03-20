@@ -448,8 +448,24 @@ export class Docker {
       opts.networks
         ?.slice(1)
         .filter((networkName, index, arr) => arr.indexOf(networkName) === index) ?? [];
-    for (const networkName of additionalNetworks) {
-      await this.client.getNetwork(networkName).connect({ Container: container.id });
+    try {
+      for (const networkName of additionalNetworks) {
+        await this.client.getNetwork(networkName).connect({ Container: container.id });
+      }
+    } catch (error) {
+      try {
+        await container.stop();
+      } catch {
+        /* best-effort */
+      }
+
+      try {
+        await container.remove({ force: true });
+      } catch {
+        /* best-effort */
+      }
+
+      throw error;
     }
 
     return container.id;

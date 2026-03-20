@@ -141,9 +141,7 @@ export class ComposePipeline {
     private readonly events: EventBus,
     private readonly jobManager?: JobManager,
     private readonly env?: EnvManager,
-  ) {
-    void this.docker;
-  }
+  ) {}
 
   detectComposeFile(projectPath: string): string | null {
     for (const filename of COMPOSE_FILES) {
