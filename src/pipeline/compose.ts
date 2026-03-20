@@ -470,6 +470,7 @@ export class ComposePipeline {
     }
 
     this.createComposeEnvFileIfMissing(filteredComposeProject.projectPath, envVars);
+    this.touchMissingEnvFiles(composeProject);
 
     if (this.env) {
       const secretFiles = this.env.getSecretFilesForDeploy(parentProjectId);
@@ -1037,6 +1038,23 @@ export class ComposePipeline {
       stringifyYaml({ ...existingOverride, services: overrideServices }),
       'utf8',
     );
+  }
+
+  private touchMissingEnvFiles(composeProject: ComposeProject): void {
+    for (const service of composeProject.services) {
+      if (!service.envFile) continue;
+      for (const envFileRef of service.envFile) {
+        const fullPath = join(composeProject.projectPath, envFileRef.path);
+        if (!existsSync(fullPath)) {
+          mkdirSync(dirname(fullPath), { recursive: true });
+          writeFileSync(fullPath, '', 'utf8');
+          log.debug(
+            { path: envFileRef.path, service: service.name },
+            'Created empty env_file placeholder for compose validation',
+          );
+        }
+      }
+    }
   }
 
   private createComposeEnvFileIfMissing(
