@@ -297,6 +297,9 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
                     <div key={v.key} className="flex items-center gap-2">
                       <label className="text-xs font-mono text-muted-foreground min-w-0 shrink-0 max-w-[140px] truncate">
                         {v.key}
+                        {v.optional && (
+                          <span className="text-muted-foreground ml-1">(optional)</span>
+                        )}
                       </label>
                       <Input
                         className="h-7 text-xs font-mono flex-1"
@@ -323,6 +326,9 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
                     <div key={v.key} className="flex items-center gap-2">
                       <label className="text-xs font-mono text-muted-foreground min-w-0 shrink-0 max-w-[140px] truncate">
                         {v.key}
+                        {v.optional && (
+                          <span className="text-muted-foreground ml-1">(optional)</span>
+                        )}
                       </label>
                       <Input
                         className="h-7 text-xs font-mono flex-1"
@@ -350,6 +356,9 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
                     <div key={v.key} className="flex items-center gap-2">
                       <label className="text-xs font-mono text-muted-foreground min-w-0 shrink-0 max-w-[140px] truncate">
                         {v.key}
+                        {v.optional && (
+                          <span className="text-muted-foreground ml-1">(optional)</span>
+                        )}
                       </label>
                       <span className="text-xs font-mono text-muted-foreground truncate flex-1">
                         {v.value || '(empty)'}

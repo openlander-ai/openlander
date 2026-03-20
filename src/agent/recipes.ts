@@ -161,6 +161,14 @@ export const BUILD_RECIPES: Recipe[] = [
     fix: 'OpenLander auto-assigns ports — ensure your app reads the PORT environment variable: `const port = process.env.PORT || 3000`.',
   },
   {
+    pattern:
+      /container name.*already in use|Conflict.*container name|container.*already exists.*You have to remove/i,
+    title: 'Docker container name conflict',
+    diagnosis:
+      'A container with the same name already exists. This happens when redeploying without removing the previous container first.',
+    fix: 'Either: (1) Remove the old container: `docker rm -f <container_name>` then retry. (2) Use `docker compose down` before redeploying. (3) Use `docker compose up --force-recreate` to replace the existing container.',
+  },
+  {
     pattern: /env_file.*not found|No such file.*\.env|env_file.*does not exist/i,
     title: 'Docker Compose env_file missing',
     diagnosis:
@@ -182,19 +190,19 @@ export const BUILD_RECIPES: Recipe[] = [
     fix: 'Either: (1) Stop the conflicting container: `docker ps` to find it, then `docker stop <container>`. (2) Change the port mapping in docker-compose.yml: `ports: ["8080:3000"]` instead of `"3000:3000"`. (3) Let OpenLander auto-assign ports by removing explicit port mappings.',
   },
   {
-    pattern: /version.*obsolete|Compose file version.*is not supported|version.*deprecated/i,
-    title: 'Docker Compose file version obsolete',
-    diagnosis:
-      'The docker-compose.yml specifies a version that is no longer supported by the installed Docker Compose.',
-    fix: 'Update the `version:` field in docker-compose.yml to a supported version (3.8, 3.9, or omit it entirely for latest). Run `docker compose version` to check your installed version, then update the compose file accordingly.',
-  },
-  {
     pattern:
       /build.*context.*not found|unable to prepare context|build context.*does not exist|COPY.*build context/i,
     title: 'Docker Compose build context not found',
     diagnosis:
       'The `build.context` path in docker-compose.yml does not exist or is outside the allowed build context.',
     fix: 'Verify the `build.context` path in docker-compose.yml is relative to the compose file location. For example, if docker-compose.yml is in `./services/backend/`, then `build: { context: . }` refers to `./services/backend/`, not the repo root. Use `build: { context: ../.. }` to reference the repo root if needed.',
+  },
+  {
+    pattern: /version.*obsolete|Compose file version.*is not supported|version.*deprecated/i,
+    title: 'Docker Compose file version obsolete',
+    diagnosis:
+      'The docker-compose.yml specifies a version that is no longer supported by the installed Docker Compose.',
+    fix: 'Update the `version:` field in docker-compose.yml to a supported version (3.8, 3.9, or omit it entirely for latest). Run `docker compose version` to check your installed version, then update the compose file accordingly.',
   },
 ];
 

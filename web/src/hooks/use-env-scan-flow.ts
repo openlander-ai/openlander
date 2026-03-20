@@ -8,11 +8,13 @@ export interface MatchedVar {
   key: string;
   value: string;
   files: Array<{ path: string; line: number }>;
+  optional?: boolean;
 }
 
 export interface ExtraVar {
   key: string;
   value: string;
+  optional?: boolean;
 }
 
 export function useEnvScanFlow() {
@@ -71,7 +73,7 @@ export function useEnvScanFlow() {
     setMatchedVars(
       envVars
         .filter((v) => parsedMap.has(v.key))
-        .map((v) => ({ ...v, value: parsedMap.get(v.key)! })),
+        .map((v) => ({ ...v, value: parsedMap.get(v.key)!, optional: v.optional })),
     );
     setMissingVars(envVars.filter((v) => !parsedMap.has(v.key)));
     setExtraVars(parsed.filter((p) => !scannedKeys.has(p.key)));

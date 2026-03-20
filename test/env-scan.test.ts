@@ -103,4 +103,78 @@ describe('scanForEnvUsage', () => {
     expect(r.vars.map((v) => v.key)).not.toContain('GIT_SECRET');
     expect(r.vars.map((v) => v.key)).toContain('REAL_VAR');
   });
+
+  // Optional detection tests
+  it('detects optional: true for process.env.KEY || "default"', () => {
+    writeFileSync(join(tmp, 'app.ts'), "const x = process.env.DATABASE_URL || 'localhost';");
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'DATABASE_URL');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(true);
+  });
+
+  it('detects optional: true for process.env.KEY ?? "fallback"', () => {
+    writeFileSync(join(tmp, 'app.ts'), "const x = process.env.API_KEY ?? 'default-key';");
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'API_KEY');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(true);
+  });
+
+  it('detects optional: true for process.env.KEY || 3000 (numeric literal)', () => {
+    writeFileSync(join(tmp, 'app.ts'), 'const port = process.env.SERVER_PORT || 3000;');
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'SERVER_PORT');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(true);
+  });
+
+  it('detects optional: false for bare process.env.KEY', () => {
+    writeFileSync(join(tmp, 'app.ts'), 'const x = process.env.REQUIRED_VAR;');
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'REQUIRED_VAR');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(false);
+  });
+
+  it('detects optional: false for process.env.KEY || functionCall()', () => {
+    writeFileSync(join(tmp, 'app.ts'), 'const x = process.env.CONFIG || getDefault();');
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'CONFIG');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(false);
+  });
+
+  it('detects optional: true for os.environ.get("KEY", "default")', () => {
+    writeFileSync(join(tmp, 'app.py'), "val = os.environ.get('REDIS_URL', 'localhost')");
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'REDIS_URL');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(true);
+  });
+
+  it('detects optional: false for os.environ.get("KEY") without default', () => {
+    writeFileSync(join(tmp, 'app.py'), "val = os.environ.get('SECRET_KEY')");
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'SECRET_KEY');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(false);
+  });
+
+  it('detects optional: true for const { KEY = "default" } = process.env', () => {
+    writeFileSync(join(tmp, 'app.ts'), "const { DB_HOST = 'localhost' } = process.env;");
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'DB_HOST');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(true);
+  });
+
+  it('detects optional: false when ANY usage lacks fallback', () => {
+    writeFileSync(join(tmp, 'a.ts'), "const x = process.env.MIXED_VAR || 'default';");
+    writeFileSync(join(tmp, 'b.ts'), 'const y = process.env.MIXED_VAR;');
+    const r = scanForEnvUsage(tmp);
+    const v = r.vars.find((v) => v.key === 'MIXED_VAR');
+    expect(v).toBeDefined();
+    expect(v?.optional).toBe(false);
+  });
 });

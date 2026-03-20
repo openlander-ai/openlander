@@ -196,6 +196,30 @@ describe('matchRecipe', () => {
     expect(recipe).not.toBeNull();
     expect(recipe!.title).toContain('node-gyp');
   });
+
+  it('matches container name conflict errors', () => {
+    const log =
+      'Error response from daemon: Conflict. The container name "/sumgod-backend" is already in use by container "9da0abbf..."';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('container name conflict');
+  });
+
+  it('matches container name conflict over version warning when both present', () => {
+    const log =
+      'Error response from daemon: Conflict. The container name "/app" is already in use\nCompose file version 2.0 is deprecated';
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('container name conflict');
+  });
+
+  it('matches version obsolete when it is the only error', () => {
+    const log =
+      "docker-compose.yml: version '2.0' is not supported\nCompose file version 2.0 is deprecated";
+    const recipe = matchRecipe(log);
+    expect(recipe).not.toBeNull();
+    expect(recipe!.title).toContain('version');
+  });
 });
 
 describe('matchAllRecipes', () => {
@@ -222,8 +246,8 @@ describe('matchAllRecipes', () => {
 });
 
 describe('BUILD_RECIPES', () => {
-  it('has 24 recipes', () => {
-    expect(BUILD_RECIPES).toHaveLength(24);
+  it('has 25 recipes', () => {
+    expect(BUILD_RECIPES).toHaveLength(25);
   });
 
   it('all recipes have required fields', () => {

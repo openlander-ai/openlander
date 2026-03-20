@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-03-20
+
+### Fixed
+
+- **Dockerfile path routing**: `create_deploy_plan(dockerfile_path=...)` now correctly uses Dockerfile build even when repo has a compose file (no longer silently falls back to compose mode)
+- **Container name conflict**: AI error diagnosis correctly identifies container name conflicts instead of misdiagnosing as "version obsolete" warning
+- **Agent/fallback race condition**: `thinking` event now prevents premature fallback; agent events suppressed after fallback triggers; no more double-deploys
+- **Question event rendering**: Agent question events no longer render as plain XML text — properly handled via QuestionBridge interactive cards
+- **BuildDebugger locale**: AI error analysis now respects user's language setting (Korean/English); hot-reloads on language change
+
+### Added
+
+- **Env var optional detection**: `env-scan` distinguishes required vs optional env vars by detecting fallback values (`|| 'default'`, `?? 'fallback'`, `os.environ.get('KEY', 'default')`)
+- **Optional badge in deploy dialog**: Env vars with code defaults show "(optional)" label in the deploy UI
+
 ## [0.6.9] - 2026-03-20
 
 ### Fixed

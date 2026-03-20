@@ -598,6 +598,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         const { Agent } = await import('../../agent/index.js');
         const { createTools } = await import('../../agent/tools.js');
         const { buildContextSnapshot } = await import('../../agent/prompts.js');
+        const { BuildDebugger } = await import('../../agent/debugger.js');
 
         const llmModel = createModel({
           provider: ctx.config.llm.provider,
@@ -622,6 +623,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         agent.setTools(tools);
         agent.setQuestionBridge(ctx.questionBridge);
         (ctx as { agent: typeof agent }).agent = agent;
+
+        // Recreate BuildDebugger with new locale
+        if (ctx.buildDebugger) {
+          ctx.buildDebugger = new BuildDebugger(llmModel, lang);
+        }
       } catch (err) {
         log.error({ err, language: lang }, 'Agent hot-reload failed');
         // Agent hot-reload failed — language saved but agent uses old locale until restart

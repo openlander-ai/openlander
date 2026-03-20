@@ -8,6 +8,7 @@ const log = createModuleLogger('env-scan');
 export interface EnvVarUsage {
   key: string;
   files: Array<{ path: string; line: number }>;
+  optional: boolean;
 }
 
 export interface EnvScanResult {
@@ -91,6 +92,39 @@ interface Finding {
   key: string;
   path: string;
   line: number;
+  optional: boolean;
+}
+
+function detectNodeFallback(content: string, key: string, matchIndex: number): boolean {
+  const contextStart = Math.max(0, matchIndex - 10);
+  const contextEnd = Math.min(content.length, matchIndex + 150);
+  const context = content.slice(contextStart, contextEnd);
+
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const fallbackRegex = new RegExp(
+    `process\\.env\\.${escapedKey}\\s*(?:\\|\\||\\?\\?)\\s*(?:['"][^'"]*['"]|\\d+|true|false|null)`,
+  );
+
+  return fallbackRegex.test(context);
+}
+
+function detectNodeDestructureFallback(destructureMatch: string, key: string): boolean {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const keyPattern = new RegExp(`\\b${escapedKey}\\s*=\\s*['"][^'"]*['"]`);
+  return keyPattern.test(destructureMatch);
+}
+
+function detectPythonFallback(content: string, key: string, matchIndex: number): boolean {
+  const contextStart = Math.max(0, matchIndex - 10);
+  const contextEnd = Math.min(content.length, matchIndex + 150);
+  const context = content.slice(contextStart, contextEnd);
+
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const fallbackRegex = new RegExp(
+    `os\\.environ\\.get\\(['"]${escapedKey}['"],\\s*['"][^'"]*['"]\\)|os\\.getenv\\(['"]${escapedKey}['"],\\s*['"][^'"]*['"]\\)`,
+  );
+
+  return fallbackRegex.test(context);
 }
 
 export function scanForEnvUsage(projectPath: string): EnvScanResult {
@@ -150,7 +184,10 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
           const key = match[1];
           if (!key || SYSTEM_VARS.has(key)) continue;
           const line = content.slice(0, match.index).split('\n').length;
-          findings.push({ key, path: relPath, line });
+          const optional = isNode
+            ? detectNodeFallback(content, key, match.index)
+            : detectPythonFallback(content, key, match.index);
+          findings.push({ key, path: relPath, line, optional });
         }
       }
 
@@ -161,9 +198,12 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
           const raw = match[1] ?? '';
           const line = content.slice(0, match.index).split('\n').length;
           for (const part of raw.split(',')) {
-            const key = part.trim().split(':')[0]?.trim();
+            let key = part.trim().split(':')[0]?.trim();
+            if (!key) continue;
+            key = key.split('=')[0]?.trim() ?? key;
             if (!key || SYSTEM_VARS.has(key)) continue;
-            findings.push({ key, path: relPath, line });
+            const optional = detectNodeDestructureFallback(raw, key);
+            findings.push({ key, path: relPath, line, optional });
           }
         }
       }
@@ -176,19 +216,26 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
     log.warn({ err }, 'Error during env scan');
   }
 
-  // Deduplicate: group by key, merge file references
-  const byKey = new Map<string, Array<{ path: string; line: number }>>();
-  for (const { key, path, line } of findings) {
-    const list = byKey.get(key) ?? [];
-    if (!list.some((e) => e.path === path && e.line === line)) {
-      list.push({ path, line });
+  const byKey = new Map<
+    string,
+    { files: Array<{ path: string; line: number }>; optionalFlags: boolean[] }
+  >();
+  for (const { key, path, line, optional } of findings) {
+    const entry = byKey.get(key) ?? { files: [], optionalFlags: [] };
+    if (!entry.files.some((e) => e.path === path && e.line === line)) {
+      entry.files.push({ path, line });
+      entry.optionalFlags.push(optional);
     }
-    byKey.set(key, list);
+    byKey.set(key, entry);
   }
 
   const vars: EnvVarUsage[] = Array.from(byKey.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, files]) => ({ key, files }));
+    .map(([key, { files, optionalFlags }]) => ({
+      key,
+      files,
+      optional: optionalFlags.every((flag) => flag),
+    }));
 
   const language =
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition

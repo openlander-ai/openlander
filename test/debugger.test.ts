@@ -53,7 +53,130 @@ const baseContext = {
   failedStep: 'build',
 };
 
+describe('BuildDebugger — locale parameter', () => {
+  beforeEach(() => {
+    mockGenerateText.mockClear();
+  });
+
+  it('accepts locale parameter in constructor', () => {
+    const model = createMockModel();
+    const debuggerEn = new BuildDebugger(model, 'en');
+    const debuggerKo = new BuildDebugger(model, 'ko');
+    const debuggerDefault = new BuildDebugger(model);
+    // All should construct without error
+    expect(debuggerEn).toBeDefined();
+    expect(debuggerKo).toBeDefined();
+    expect(debuggerDefault).toBeDefined();
+  });
+
+  it('appends English locale directive to diagnose system prompt', async () => {
+    const validJson = JSON.stringify({
+      summary: 'Build failed',
+      rootCause: 'Missing dependency',
+      suggestedFixes: [{ description: 'Install it', confidence: 'high' }],
+    });
+
+    const model = createMockModel();
+    mockLLMResponse(validJson);
+    const debugger_ = new BuildDebugger(model, 'en');
+
+    await debugger_.diagnose({
+      ...baseContext,
+      buildLog: 'unique error no recipe matches locale_en_test',
+    });
+
+    expect(mockGenerateText).toHaveBeenCalledOnce();
+    const callArgs = mockGenerateText.mock.calls[0]?.[0];
+    const systemPrompt = callArgs?.messages?.[0]?.content;
+    expect(systemPrompt).toContain('Respond in English');
+  });
+
+  it('appends Korean locale directive to diagnose system prompt', async () => {
+    const validJson = JSON.stringify({
+      summary: 'Build failed',
+      rootCause: 'Missing dependency',
+      suggestedFixes: [{ description: 'Install it', confidence: 'high' }],
+    });
+
+    const model = createMockModel();
+    mockLLMResponse(validJson);
+    const debugger_ = new BuildDebugger(model, 'ko');
+
+    await debugger_.diagnose({
+      ...baseContext,
+      buildLog: 'unique error no recipe matches locale_ko_test',
+    });
+
+    expect(mockGenerateText).toHaveBeenCalledOnce();
+    const callArgs = mockGenerateText.mock.calls[0]?.[0];
+    const systemPrompt = callArgs?.messages?.[0]?.content;
+    expect(systemPrompt).toContain('모든 응답을 한국어로 작성하세요');
+  });
+
+  it('uses English locale by default when not specified', async () => {
+    const validJson = JSON.stringify({
+      summary: 'Build failed',
+      rootCause: 'Missing dependency',
+      suggestedFixes: [{ description: 'Install it', confidence: 'high' }],
+    });
+
+    const model = createMockModel();
+    mockLLMResponse(validJson);
+    const debugger_ = new BuildDebugger(model);
+
+    await debugger_.diagnose({
+      ...baseContext,
+      buildLog: 'unique error no recipe matches locale_default_test',
+    });
+
+    expect(mockGenerateText).toHaveBeenCalledOnce();
+    const callArgs = mockGenerateText.mock.calls[0]?.[0];
+    const systemPrompt = callArgs?.messages?.[0]?.content;
+    expect(systemPrompt).toContain('Respond in English');
+  });
+
+  it('appends locale directive to fixDockerfile system prompt', async () => {
+    const llmResponse = 'FROM node:20\nWORKDIR /app\nCOPY . .\nRUN npm ci\nCMD ["npm", "start"]';
+
+    const model = createMockModel();
+    mockLLMResponse(llmResponse);
+    const debugger_ = new BuildDebugger(model, 'ko');
+
+    await debugger_.fixDockerfile({
+      projectPath: '/tmp/test',
+      currentDockerfile: 'FROM node:18',
+      buildError: 'some build error',
+      projectName: 'test-app',
+    });
+
+    expect(mockGenerateText).toHaveBeenCalledOnce();
+    const callArgs = mockGenerateText.mock.calls[0]?.[0];
+    const systemPrompt = callArgs?.messages?.[0]?.content;
+    expect(systemPrompt).toContain('모든 응답을 한국어로 작성하세요');
+  });
+
+  it('recipe fast-path returns English regardless of locale', async () => {
+    const model = createMockModel();
+    const debugger_ = new BuildDebugger(model, 'ko');
+
+    const result = await debugger_.diagnose({
+      ...baseContext,
+      buildLog: 'npm ERR! gyp ERR! build error\nnode-gyp rebuild failed',
+    });
+
+    // Recipe fast-path should return without calling LLM
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    // Recipe content is always in English
+    expect(result.summary).toContain('node-gyp');
+    expect(result.rawAnalysis).toContain('Matched recipe');
+  });
+});
+
 describe('BuildDebugger — recipe shortcircuit', () => {
+  beforeEach(() => {
+    mockGenerateText.mockClear();
+  });
+
   it('returns recipe diagnosis for node-gyp errors without calling LLM', async () => {
     const model = createMockModel();
     const debugger_ = new BuildDebugger(model);
@@ -98,6 +221,10 @@ describe('BuildDebugger — recipe shortcircuit', () => {
 });
 
 describe('BuildDebugger — LLM fallback', () => {
+  beforeEach(() => {
+    mockGenerateText.mockClear();
+  });
+
   it('calls LLM when no recipe matches', async () => {
     const validJson = JSON.stringify({
       summary: 'Unknown build error',

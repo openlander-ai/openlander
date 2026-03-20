@@ -310,6 +310,119 @@ describe('PlanEngine.createPlan', () => {
     expect(plan.status).toBe('ready');
   });
 
+  it('skips compose detection when dockerfilePath is explicitly provided', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),
+      parseComposeFile: vi.fn().mockReturnValue({
+        services: [{ name: 'web', build: '.', ports: ['3000:3000'] }],
+      }),
+    };
+
+    const depsWithCompose: PlanEngineDeps = {
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    };
+    const engineWithCompose = new PlanEngine(depsWithCompose);
+
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'dockerfile-path-test',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('FROM node:22\n');
+
+    const plan = await engineWithCompose.createPlan({
+      repoUrl: 'https://github.com/test/monorepo',
+      branch: 'main',
+      dockerfilePath: 'backend/Dockerfile',
+    });
+
+    expect(plan.build.method).toBe('dockerfile');
+    expect(plan.build.dockerfile).toBe('backend/Dockerfile');
+    expect(plan.build.context).toBe('backend');
+    expect(mockComposePipeline.detectComposeFile).not.toHaveBeenCalled();
+  });
+
+  it('uses compose when no dockerfilePath and compose file exists', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),
+      parseComposeFile: vi.fn().mockReturnValue({
+        services: [{ name: 'web', build: '.', ports: ['3000:3000'] }],
+      }),
+    };
+
+    const depsWithCompose: PlanEngineDeps = {
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    };
+    const engineWithCompose = new PlanEngine(depsWithCompose);
+
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'compose-test',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('FROM node:22\n');
+
+    const plan = await engineWithCompose.createPlan({
+      repoUrl: 'https://github.com/test/compose-app',
+      branch: 'main',
+    });
+
+    expect(plan.build.method).toBe('compose');
+    expect(mockComposePipeline.detectComposeFile).toHaveBeenCalled();
+  });
+
+  it('skips compose detection when preferDockerfile is true (even without dockerfilePath)', async () => {
+    const mockComposePipeline = {
+      detectComposeFile: vi.fn().mockReturnValue('/tmp/test-repo/docker-compose.yml'),
+      parseComposeFile: vi.fn(),
+    };
+
+    const depsWithCompose: PlanEngineDeps = {
+      db: mockDb,
+      pipeline: mockPipeline,
+      env: mockEnv,
+      serviceManager: mockServiceManager,
+      autoDetector: mockAutoDetector,
+      config: mockConfig,
+      composePipeline: mockComposePipeline as unknown as PlanEngineDeps['composePipeline'],
+    };
+    const engineWithCompose = new PlanEngine(depsWithCompose);
+
+    mockCloneRepo.mockResolvedValue({
+      path: '/tmp/test-repo',
+      commitSha: 'prefer-df-test',
+    });
+
+    mockAnalyzeInfra.mockReturnValue({ needs: [], available: [], missing: [] });
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('FROM node:22\n');
+
+    const plan = await engineWithCompose.createPlan({
+      repoUrl: 'https://github.com/test/prefer-app',
+      branch: 'main',
+      preferDockerfile: true,
+    });
+
+    expect(plan.build.method).toBe('dockerfile');
+    expect(mockComposePipeline.detectComposeFile).not.toHaveBeenCalled();
+  });
+
   it('classifies complexity as complex with 2+ services and missing env vars', async () => {
     mockCloneRepo.mockResolvedValue({
       path: '/tmp/test-repo',

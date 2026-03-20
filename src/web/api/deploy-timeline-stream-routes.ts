@@ -65,6 +65,37 @@ function sanitizeToolResultForStream(value: unknown): unknown {
   return sanitized;
 }
 
+type DeployAgentState = {
+  agentStarted: boolean;
+  fallbackTriggered: boolean;
+};
+
+type FallbackTimerRef = {
+  fallbackTimer: ReturnType<typeof setTimeout> | null;
+};
+
+const AGENT_START_EVENT_TYPES = new Set(['thinking', 'tool_call', 'question', 'message']);
+
+export function markAgentStarted(
+  deployState: DeployAgentState,
+  eventType: string,
+  fallbackTimerRef: FallbackTimerRef,
+): void {
+  if (!AGENT_START_EVENT_TYPES.has(eventType)) return;
+
+  if (!deployState.agentStarted) {
+    deployState.agentStarted = true;
+    if (fallbackTimerRef.fallbackTimer) {
+      clearTimeout(fallbackTimerRef.fallbackTimer);
+      fallbackTimerRef.fallbackTimer = null;
+    }
+  }
+}
+
+export function shouldSuppressAgentEvent(deployState: DeployAgentState): boolean {
+  return deployState.fallbackTriggered;
+}
+
 export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): void {
   api.get('/projects/:id/timeline', (c) => {
     const id = c.req.param('id');
@@ -114,6 +145,13 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
       };
 
       const childProjectCache = new Map<string, ProjectRow | null>();
+      const deployState = {
+        agentStarted: false,
+        fallbackTriggered: false,
+      };
+      const fallbackTimerRef: FallbackTimerRef = {
+        fallbackTimer: null,
+      };
 
       const resolveScopedProject = (
         sourceProjectId: string,
@@ -470,6 +508,11 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
       unsubscribers.push(
         eventBus.on('compose:start', (payload) => {
           if (payload.projectId !== project.id) return;
+          deployState.fallbackTriggered = true;
+          if (fallbackTimerRef.fallbackTimer) {
+            clearTimeout(fallbackTimerRef.fallbackTimer);
+            fallbackTimerRef.fallbackTimer = null;
+          }
           emitTimelineEvent({
             type: 'status',
             message: `Compose build starting (${String(payload.serviceCount)} service${payload.serviceCount > 1 ? 's' : ''})`,
@@ -481,6 +524,11 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
       unsubscribers.push(
         eventBus.on('compose:up', (payload) => {
           if (payload.projectId !== project.id) return;
+          deployState.fallbackTriggered = true;
+          if (fallbackTimerRef.fallbackTimer) {
+            clearTimeout(fallbackTimerRef.fallbackTimer);
+            fallbackTimerRef.fallbackTimer = null;
+          }
           emitTimelineEvent({
             type: 'complete',
             message: `Compose deploy complete — ${String(payload.services.length)} service${payload.services.length > 1 ? 's' : ''} running`,
@@ -494,6 +542,11 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
       unsubscribers.push(
         eventBus.on('compose:failed', (payload) => {
           if (payload.projectId !== project.id) return;
+          deployState.fallbackTriggered = true;
+          if (fallbackTimerRef.fallbackTimer) {
+            clearTimeout(fallbackTimerRef.fallbackTimer);
+            fallbackTimerRef.fallbackTimer = null;
+          }
           emitTimelineEvent({
             type: 'error',
             message: `Compose deploy failed: ${payload.error}`,
@@ -505,7 +558,9 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
       unsubscribers.push(
         eventBus.on('agent:event', (payload) => {
           if (payload.projectId !== project.id) return;
+          if (shouldSuppressAgentEvent(deployState)) return;
           const ev = payload.event;
+          markAgentStarted(deployState, ev.type, fallbackTimerRef);
           const base = { projectId: project.id, timestamp: ev.timestamp };
 
           switch (ev.type) {
@@ -540,6 +595,8 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
               break;
             case 'message':
               emitTimelineEvent({ ...base, type: 'agent_message', message: ev.content });
+              break;
+            case 'question':
               break;
             case 'error':
               emitTimelineEvent({ ...base, type: 'error', message: ev.error || 'Agent error' });
@@ -595,7 +652,17 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
         5 * 60 * 1000,
       );
 
+      fallbackTimerRef.fallbackTimer = setTimeout(() => {
+        if (!deployState.agentStarted && !deployState.fallbackTriggered) {
+          deployState.fallbackTriggered = true;
+        }
+      }, 5000);
+
       s.onAbort(() => {
+        if (fallbackTimerRef.fallbackTimer) {
+          clearTimeout(fallbackTimerRef.fallbackTimer);
+          fallbackTimerRef.fallbackTimer = null;
+        }
         clearTimeout(streamTimeout);
         cleanup();
       });

@@ -123,7 +123,7 @@ export class PlanEngine {
     let composeBuildServices: PlanBuildService[] | undefined;
     let generatedDockerfile: string | undefined;
 
-    if (!opts.preferDockerfile && this.composePipeline) {
+    if (!opts.preferDockerfile && !opts.dockerfilePath && this.composePipeline) {
       const detectedComposeFile = this.composePipeline.detectComposeFile(clonePath);
       if (detectedComposeFile) {
         buildMethod = 'compose';

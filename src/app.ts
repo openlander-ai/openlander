@@ -111,7 +111,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   let buildDebugger: BuildDebugger | null = null;
   if (model) {
     try {
-      buildDebugger = new BuildDebugger(model);
+      buildDebugger = new BuildDebugger(model, config.language);
     } catch (err) {
       log.debug({ err }, 'Build debugger creation failed');
     }

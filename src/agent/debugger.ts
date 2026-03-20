@@ -59,6 +59,15 @@ RESPONSE FORMAT (you MUST respond in this exact JSON format):
   ]
 }`;
 
+const LOCALE_DIRECTIVES: Record<string, string> = {
+  en: 'Respond in English.',
+  ko: '모든 응답을 한국어로 작성하세요.',
+};
+
+function getLocaleDirective(locale: string): string {
+  return LOCALE_DIRECTIVES[locale] ?? LOCALE_DIRECTIVES['en'] ?? 'Respond in English.';
+}
+
 const VALID_CONFIDENCE = new Set(['high', 'medium', 'low']);
 
 function truncateBuildLog(buildLog: string): string {
@@ -157,7 +166,10 @@ export function readDockerfile(repoPath: string): string | null {
 }
 
 export class BuildDebugger {
-  constructor(private readonly model: LanguageModel) {}
+  constructor(
+    private readonly model: LanguageModel,
+    private readonly locale: string = 'en',
+  ) {}
 
   /**
    * Analyze a build failure and return diagnosis.
@@ -206,8 +218,11 @@ ${buildLog}
 
 Diagnose this build failure. Respond ONLY with the JSON format specified.`;
 
+    const localeDirective = getLocaleDirective(this.locale);
+    const systemPromptWithLocale = `${systemPrompt}\n\n${localeDirective}`;
+
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: systemPromptWithLocale },
       { role: 'user', content: userPrompt },
     ];
 
@@ -256,6 +271,9 @@ Rules:
 3. Keep the same structure (multi-stage build, EXPOSE port, etc.) unless it causes the error.
 4. After the Dockerfile, on a new line starting with "CHANGES:", summarize what you changed in 1-3 bullet points.`;
 
+    const localeDirective = getLocaleDirective(this.locale);
+    const fixSystemPromptWithLocale = `${fixSystemPrompt}\n\n${localeDirective}`;
+
     const userPrompt = `Project name: ${input.projectName}
 Project path: ${input.projectPath}
 
@@ -271,7 +289,7 @@ ${context}`;
     const response = await generateText({
       model: this.model,
       messages: [
-        { role: 'system', content: fixSystemPrompt },
+        { role: 'system', content: fixSystemPromptWithLocale },
         { role: 'user', content: userPrompt },
       ],
     });

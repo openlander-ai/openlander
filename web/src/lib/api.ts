@@ -1056,6 +1056,7 @@ export async function chatWithAgent(
 export interface EnvVarInfo {
   key: string;
   files: Array<{ path: string; line: number }>;
+  optional?: boolean;
 }
 
 export interface EnvScanResult {

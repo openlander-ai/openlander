@@ -591,6 +591,123 @@ describe('Web API Routes', () => {
     expect(toolResult.services).toEqual([{ name: 'web', status: 'running' }]);
   });
 
+  it('GET /api/projects/:id/build/stream ignores agent:event question rendering', async () => {
+    db.createProject({
+      id: 'stream-question-p1',
+      name: 'stream-question-app',
+      repoUrl: 'https://github.com/user/stream-question-app',
+    });
+    db.updateProject('stream-question-p1', { status: 'building' });
+
+    const res = await app.request('/api/projects/stream-question-p1/build/stream');
+    expect(res.status).toBe(200);
+
+    await eventBus.emit('agent:event', {
+      projectId: 'stream-question-p1',
+      event: {
+        type: 'question',
+        request: {
+          id: 'req-1',
+          questions: [
+            {
+              question: 'Choose deploy strategy',
+              options: [{ label: 'Blue-Green' }],
+            },
+          ],
+        },
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    await eventBus.emit('compose:up', {
+      projectId: 'stream-question-p1',
+      services: ['web'],
+    });
+
+    const body = await res.text();
+    const events = body
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(events.some((event) => event.message === 'Agent: question')).toBe(false);
+  });
+
+  it('GET /api/projects/:id/build/stream suppresses agent:event emissions after compose fallback', async () => {
+    db.createProject({
+      id: 'stream-fallback-p1',
+      name: 'stream-fallback-app',
+      repoUrl: 'https://github.com/user/stream-fallback-app',
+    });
+    db.updateProject('stream-fallback-p1', { status: 'building' });
+
+    const res = await app.request('/api/projects/stream-fallback-p1/build/stream');
+    expect(res.status).toBe(200);
+
+    await eventBus.emit('compose:start', {
+      projectId: 'stream-fallback-p1',
+      composePath: '/tmp/docker-compose.yml',
+      serviceCount: 1,
+    });
+
+    await eventBus.emit('agent:event', {
+      projectId: 'stream-fallback-p1',
+      event: {
+        type: 'message',
+        content: 'This should be suppressed after fallback',
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    await eventBus.emit('agent:event', {
+      projectId: 'stream-fallback-p1',
+      event: {
+        type: 'question',
+        request: {
+          id: 'req-2',
+          questions: [
+            {
+              question: 'Proceed with compose deploy?',
+              options: [{ label: 'Continue' }],
+            },
+          ],
+        },
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    await eventBus.emit('question:pending', {
+      projectId: 'stream-fallback-p1',
+      requestId: 'req-2',
+      questions: [
+        {
+          question: 'Proceed with compose deploy?',
+          options: [{ label: 'Continue' }],
+        },
+      ],
+    });
+
+    await eventBus.emit('compose:up', {
+      projectId: 'stream-fallback-p1',
+      services: ['web'],
+    });
+
+    const body = await res.text();
+    const events = body
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(
+      events.some((event) => event.message === 'This should be suppressed after fallback'),
+    ).toBe(false);
+    expect(events.some((event) => event.message === 'Agent: question')).toBe(false);
+
+    const questionPendingEvent = events.find((event) => event.type === 'question_pending');
+    expect(questionPendingEvent).toBeDefined();
+    expect(questionPendingEvent?.message).toBe('Proceed with compose deploy?');
+  });
+
   // ---------------------------------------------------------------------------
   // GET /api/projects/:id
   // ---------------------------------------------------------------------------
