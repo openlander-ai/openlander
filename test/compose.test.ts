@@ -459,11 +459,9 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(1);
     expect(children[0]?.name).toBe('stack/web');
 
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain web'),
-    );
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps web'));
     expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain db'),
+      expect.stringContaining('up -d --build --no-deps db'),
     );
   });
 
@@ -534,12 +532,8 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(2);
     expect(children.map((child) => child.name).sort()).toEqual(['stack/db', 'stack/web']);
 
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain web'),
-    );
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain db'),
-    );
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps web'));
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
   });
 
   it('deployCompose handles depends_on targeting filtered-out profiled services', async () => {
@@ -590,11 +584,9 @@ describeCompose('ComposePipeline', () => {
     expect(result.error).toBeUndefined();
     expect(result.services.map((service) => service.name)).toEqual(['api']);
 
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain api'),
-    );
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps api'));
     expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain cache'),
+      expect.stringContaining('up -d --build --no-deps cache'),
     );
   });
 
@@ -668,12 +660,8 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(2);
     expect(children.map((child) => child.status).sort()).toEqual(['error', 'error']);
 
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain db'),
-    );
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain api'),
-    );
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps api'));
     expect(composeCommands).toContainEqual(expect.stringContaining('stop db'));
     expect(composeCommands).toContainEqual(expect.stringContaining('rm -f db'));
   });
@@ -740,11 +728,9 @@ describeCompose('ComposePipeline', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('db is stopped');
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain db'),
-    );
+    expect(composeCommands).toContainEqual(expect.stringContaining('up -d --build --no-deps db'));
     expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --no-deps --progress=plain api'),
+      expect.stringContaining('up -d --build --no-deps api'),
     );
   });
 
@@ -815,12 +801,7 @@ describeCompose('ComposePipeline', () => {
       return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
     };
 
-    // Simulate old compose version: supportsProgress=false bypasses the global
-    // vi.mock version handler (which always returns 2.24.0) to test the
-    // conditional --progress arg construction in isolation.
     const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
-    freshPipeline.supportsProgress = false;
-    freshPipeline.versionChecked = true;
 
     const result = await freshPipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
@@ -836,7 +817,7 @@ describeCompose('ComposePipeline', () => {
     expect(upCommands[0]).not.toContain('--progress=plain');
   });
 
-  it('includes --progress=plain flag when compose version >= 2.3.0', async () => {
+  it('never includes --progress=plain flag (removed for compatibility)', async () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(
       composePath,
@@ -882,7 +863,7 @@ describeCompose('ComposePipeline', () => {
     expect(result.success).toBe(true);
     const upCommands = composeCommands.filter((cmd) => cmd.includes(' up '));
     expect(upCommands).toHaveLength(1);
-    expect(upCommands[0]).toContain('--progress=plain');
+    expect(upCommands[0]).not.toContain('--progress=plain');
   });
 
   it('gates --progress=plain flag when version detection fails', async () => {
@@ -917,10 +898,7 @@ describeCompose('ComposePipeline', () => {
       return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
     };
 
-    // Same bypass as the "< 2.3.0" test above — see comment there.
     const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
-    freshPipeline.supportsProgress = false;
-    freshPipeline.versionChecked = true;
 
     const result = await freshPipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
