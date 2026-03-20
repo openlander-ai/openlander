@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { homedir } from 'node:os';
 import { createModuleLogger } from '../lib/logger.js';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import {
@@ -14,7 +13,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { nanoid } from 'nanoid';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
-import { buildTraefikLabels, connectToTraefikNetwork } from './traefik.js';
+import { buildTraefikLabels } from './traefik.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
@@ -142,10 +141,6 @@ interface ParsedComposePsRow {
   containerId?: string;
 }
 
-// Minimum supported Docker Compose version.
-// Features used: ps --format json (V2.1.0+)
-const MIN_COMPOSE_VERSION = '2.1.0';
-
 function sanitizeComposeProjectName(name: string): string {
   return name
     .replace(/\//g, '-')
@@ -164,29 +159,6 @@ export class ComposePipeline {
     private readonly env?: EnvManager,
   ) {
     void this.docker;
-  }
-
-  private async checkComposeVersion(): Promise<void> {
-    if (this.versionChecked) return;
-    this.versionChecked = true;
-    try {
-      const result = await this.execCompose('/dev/null', ['version', '--short']);
-      const version = result.stdout.trim().replace(/^v/i, '');
-      const [major, minor, patch] = version.split('.').map((n) => parseInt(n, 10));
-      const [reqMajor, reqMinor, reqPatch] = MIN_COMPOSE_VERSION.split('.').map((n) =>
-        parseInt(n, 10),
-      );
-      const current = (major ?? 0) * 10000 + (minor ?? 0) * 100 + (patch ?? 0);
-      const required = (reqMajor ?? 0) * 10000 + (reqMinor ?? 0) * 100 + (reqPatch ?? 0);
-      if (current < required) {
-        log.warn(
-          { detected: version, minimum: MIN_COMPOSE_VERSION },
-          `Docker Compose ${version} is below minimum ${MIN_COMPOSE_VERSION}. Compose deploys may fail.`,
-        );
-      }
-    } catch {
-      log.warn('Could not detect Docker Compose version. Compose deploys may fail.');
-    }
   }
 
   detectComposeFile(projectPath: string): string | null {
@@ -497,513 +469,7 @@ export class ComposePipeline {
   }
 
   async deployCompose(config: ComposeDeployConfig): Promise<ComposeDeployResult> {
-    const startTime = Date.now();
-    const trigger = config.trigger ?? 'chat';
-    const parentName = config.name ?? extractProjectName(config.repoUrl);
-    const projectName = sanitizeComposeProjectName(parentName);
-    const parentProjectId = config._parentId ?? nanoid(12);
-    let buildLog = '';
-
-    const composeProject = this.parseComposeFile(config.composePath);
-    const filteredComposeProject: ComposeProject = {
-      ...composeProject,
-      services: filterServicesByProfiles(composeProject.services, config.profiles),
-    };
-
-    if (config.services && config.services.length > 0) {
-      const requestedServices = new Set(config.services);
-      filteredComposeProject.services = filteredComposeProject.services.filter((s) =>
-        requestedServices.has(s.name),
-      );
-    }
-
-    const envVars = { ...(config.envVars ?? {}) };
-
-    // Create empty placeholders for ALL services' env_file entries first
-    // This prevents docker compose validation failures for non-deploy_only services
-    this.touchMissingEnvFiles(composeProject);
-
-    // Check env_file references for filtered (deploy_only) services
-    const envFileErrors = this.checkEnvFileReferences(filteredComposeProject, envVars);
-    if (envFileErrors.length > 0) {
-      const errorMessages = envFileErrors.map((err) => {
-        let msg = `env_file '${err.envFilePath}' referenced by service '${err.service}' not found`;
-        if (err.templatePath) {
-          const relativeTemplate = err.templatePath
-            .replace(filteredComposeProject.projectPath, '')
-            .replace(/^\//, '');
-          msg += `. Template '${relativeTemplate}' defines variables: ${err.requiredVars.join(', ')}`;
-        } else {
-          msg += '. Please provide required environment variables.';
-        }
-        return msg;
-      });
-      throw new Error(`Missing env_file(s) in docker-compose:\n${errorMessages.join('\n')}`);
-    }
-
-    const envCheckResult = checkEnvRequirements(filteredComposeProject.projectPath, envVars);
-    if (envCheckResult.missing.length > 0) {
-      throw new Error(
-        'compose env validation failed: ' +
-          (envCheckResult.templateFile ?? '.env file') +
-          ' is missing required variables: ' +
-          envCheckResult.missing.join(', '),
-      );
-    }
-
-    this.createComposeEnvFileIfMissing(filteredComposeProject.projectPath, envVars);
-
-    if (this.env) {
-      const secretFiles = this.env.getSecretFilesForDeploy(parentProjectId);
-      if (secretFiles.length > 0) {
-        const secretMounts = this.writeComposeSecretFiles(parentName, secretFiles);
-        this.writeSecretOverride(config.composePath, filteredComposeProject.services, secretMounts);
-      }
-    }
-
-    try {
-      await this.execCompose(config.composePath, ['down', '--remove-orphans'], { projectName });
-    } catch (err) {
-      log.debug(
-        { err, composePath: config.composePath },
-        'Compose pre-cleanup skipped before deploy',
-      );
-    }
-
-    if (!config._parentId) {
-      this.db.createProject({
-        id: parentProjectId,
-        name: parentName,
-        repoUrl: config.repoUrl,
-        branch: config.branch,
-        dockerfilePath: config.composePath,
-      });
-      this.jobManager?.trackJob(parentProjectId, parentName);
-    }
-
-    this.db.updateProject(parentProjectId, {
-      status: 'building',
-      dockerfilePath: config.composePath,
-    });
-
-    const childrenByService = new Map<string, string>();
-    // Look up existing children to reuse on redeploy
-    const existingChildren = this.db.getChildProjects(parentProjectId);
-    const existingByName = new Map(existingChildren.map((c) => [c.name, c]));
-
-    for (const service of filteredComposeProject.services) {
-      const childName = `${parentName}/${service.name}`;
-      const existing = existingByName.get(childName);
-
-      let childId: string;
-      if (existing) {
-        // Reuse existing child project on redeploy
-        childId = existing.id;
-      } else {
-        // Create new child project on first deploy
-        childId = nanoid(12);
-        this.db.createProject({
-          id: childId,
-          name: childName,
-          repoUrl: config.repoUrl,
-          branch: config.branch,
-          parentProjectId,
-        });
-      }
-
-      childrenByService.set(service.name, childId);
-      this.db.updateProject(childId, { status: 'building' });
-      this.jobManager?.trackJob(childId, childName);
-    }
-
-    const deployOnlyActive = Boolean(config.services && config.services.length > 0);
-    if (!deployOnlyActive) {
-      const composeServiceNames = new Set(composeProject.services.map((service) => service.name));
-      const orphanChildren = existingChildren
-        .map((child) => {
-          const prefix = `${parentName}/`;
-          if (!child.name.startsWith(prefix)) {
-            return null;
-          }
-
-          const serviceName = child.name.slice(prefix.length);
-          if (serviceName.length === 0 || composeServiceNames.has(serviceName)) {
-            return null;
-          }
-
-          return { child, serviceName };
-        })
-        .filter((entry): entry is { child: ProjectRow; serviceName: string } => entry !== null);
-
-      if (orphanChildren.length > 0) {
-        const removed: string[] = [];
-        log.warn(
-          {
-            projectId: parentProjectId,
-            removed: orphanChildren.map((entry) => entry.serviceName),
-          },
-          'Detected orphan compose child projects; cleaning up',
-        );
-
-        for (const { child, serviceName } of orphanChildren) {
-          if (child.container_id) {
-            try {
-              await this.docker.stopContainer(child.container_id);
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              if (!msg.includes('not found') && !msg.includes('No such container')) {
-                throw err;
-              }
-            }
-            await this.docker.removeContainer(child.container_id);
-          }
-
-          this.db.deleteProject(child.id);
-          removed.push(serviceName);
-        }
-
-        await this.events.emit('compose:orphans-cleaned', {
-          projectId: parentProjectId,
-          removed,
-        });
-      }
-    }
-
-    await this.events.emit('compose:start', {
-      projectId: parentProjectId,
-      composePath: config.composePath,
-      serviceCount: filteredComposeProject.services.length,
-    });
-
-    try {
-      this.jobManager?.updatePhase(parentProjectId, 'building');
-
-      const conflicts = this.detectPortConflicts(filteredComposeProject);
-      if (conflicts.length > 0) {
-        const override = await this.generateOverride(filteredComposeProject, conflicts);
-        this.writeOverride(config.composePath, override);
-        log.info({ conflicts: conflicts.length }, 'Generated port conflict override');
-      }
-
-      const conflictedPortsByService = new Map<string, Set<number>>();
-      for (const conflict of conflicts) {
-        const ports = conflictedPortsByService.get(conflict.service) ?? new Set<number>();
-        ports.add(conflict.requestedPort);
-        conflictedPortsByService.set(conflict.service, ports);
-      }
-
-      const services: ServiceNode[] = filteredComposeProject.services.map((service) => {
-        const requestedPort = (service.ports ?? [])
-          .map((mapping) => parseComposePortMapping(mapping))
-          .find((parsed) => parsed?.hostPort !== null && parsed?.hostPort !== undefined)?.hostPort;
-        const hasConflictedRequestedPort =
-          requestedPort !== undefined &&
-          requestedPort !== null &&
-          (conflictedPortsByService.get(service.name)?.has(requestedPort) ?? false);
-
-        return {
-          name: service.name,
-          composePath: config.composePath,
-          dependsOn: service.dependsOn ?? [],
-          port:
-            requestedPort !== undefined && requestedPort !== null && !hasConflictedRequestedPort
-              ? requestedPort
-              : undefined,
-          envVars,
-        };
-      });
-
-      const orchestrator = new DeployOrchestrator(this.events);
-      const topology = orchestrator.buildTopology(
-        services,
-        config.repoUrl,
-        config.clonePath,
-        'compose',
-        config.branch,
-      );
-      const topologyValidation = orchestrator.validateTopology(topology, []);
-      if (!topologyValidation.valid) {
-        throw new Error(
-          `Compose topology validation failed: ${topologyValidation.errors.join('; ')}`,
-        );
-      }
-
-      const servicesWithDependents = new Set<string>();
-      for (const service of topology.services) {
-        for (const dependency of service.dependsOn) {
-          servicesWithDependents.add(dependency);
-        }
-      }
-
-      await this.checkComposeVersion();
-
-      const serviceStatusByName = new Map<string, ComposeServiceStatus>();
-      const orchestration = await orchestrator.executeOrdered(topology, {
-        deployService: async (service) => {
-          this.jobManager?.updatePhase(parentProjectId, 'starting');
-
-          const upArgs = ['up', '-d', '--build', '--force-recreate', '--no-deps', service.name];
-
-          const upResult = await this.execCompose(config.composePath, upArgs, { projectName });
-          buildLog += `[compose up ${service.name}]\n${upResult.stdout}${upResult.stderr}`;
-
-          if (upResult.exitCode !== 0) {
-            const childId = childrenByService.get(service.name);
-            if (childId) {
-              this.db.updateProject(childId, { status: 'error' });
-              const composeLogTail = (upResult.stdout + upResult.stderr)
-                .split('\n')
-                .filter(Boolean)
-                .slice(-30)
-                .join('\n');
-              this.jobManager?.updatePhase(
-                childId,
-                'failed',
-                upResult.stderr || upResult.stdout || `docker compose failed for ${service.name}`,
-                composeLogTail,
-              );
-            }
-            return {
-              success: false,
-              projectId: childId,
-              error: `docker compose up failed for ${service.name}: ${upResult.stderr || upResult.stdout}`,
-            };
-          }
-
-          return {
-            success: true,
-            projectId: childrenByService.get(service.name),
-          };
-        },
-        waitForHealthy: async (service) => {
-          const statuses = await this.getServiceStatuses(parentProjectId);
-          for (const status of statuses) {
-            serviceStatusByName.set(status.name, status);
-          }
-          const status = statuses.find((entry) => entry.name === service.name);
-          if (!status) {
-            return {
-              healthy: false,
-              error: `Service ${service.name} status not found after compose up`,
-            };
-          }
-
-          if (status.status === 'running') {
-            return { healthy: true };
-          }
-
-          if (status.status === 'error') {
-            return {
-              healthy: false,
-              error: `Service ${service.name} reported error state`,
-            };
-          }
-
-          if (servicesWithDependents.has(service.name)) {
-            return {
-              healthy: false,
-              error: `Service ${service.name} is ${status.status} and required by dependent services`,
-            };
-          }
-
-          return { healthy: true };
-        },
-        rollbackService: async (service) => {
-          const stopResult = await this.execCompose(config.composePath, ['stop', service.name], {
-            projectName,
-          });
-          buildLog += `[compose rollback stop ${service.name}]\n${stopResult.stdout}${stopResult.stderr}`;
-
-          const rmResult = await this.execCompose(config.composePath, ['rm', '-f', service.name], {
-            projectName,
-          });
-          buildLog += `[compose rollback rm ${service.name}]\n${rmResult.stdout}${rmResult.stderr}`;
-
-          const childId = childrenByService.get(service.name);
-          if (childId) {
-            this.db.updateProject(childId, {
-              status: 'error',
-              containerId: null,
-              assignedPort: null,
-            });
-            this.jobManager?.updatePhase(
-              childId,
-              'failed',
-              'Rolled back due to compose dependency deployment failure',
-            );
-          }
-        },
-      });
-
-      const statuses = await this.getServiceStatuses(parentProjectId);
-      for (const status of statuses) {
-        serviceStatusByName.set(status.name, status);
-      }
-
-      const orchestrationByService = new Map(
-        orchestration.services.map((service) => [service.name, service]),
-      );
-      const reconciledStatuses = filteredComposeProject.services.map((service) => {
-        const status = serviceStatusByName.get(service.name);
-        const orchestrationStatus = orchestrationByService.get(service.name)?.status;
-
-        if (!status) {
-          return {
-            name: service.name,
-            status:
-              orchestrationStatus === 'failed' ||
-              orchestrationStatus === 'rolled_back' ||
-              orchestrationStatus === 'skipped'
-                ? ('error' as const)
-                : ('stopped' as const),
-          };
-        }
-
-        if (orchestrationStatus === 'rolled_back' || orchestrationStatus === 'failed') {
-          return {
-            ...status,
-            status: 'error' as const,
-          };
-        }
-
-        if (orchestrationStatus === 'skipped') {
-          return {
-            ...status,
-            status: 'stopped' as const,
-          };
-        }
-
-        return status;
-      });
-
-      for (const status of reconciledStatuses) {
-        const childId = childrenByService.get(status.name);
-        if (!childId) continue;
-        this.db.updateProject(childId, {
-          status:
-            status.status === 'running'
-              ? 'running'
-              : status.status === 'stopped'
-                ? 'stopped'
-                : 'error',
-          containerId: status.containerId ?? null,
-          assignedPort: status.ports?.[0] ? parseHostPort(status.ports[0]) : null,
-        });
-
-        if (status.status === 'running') {
-          this.jobManager?.updatePhase(childId, 'done');
-        } else if (status.status === 'stopped') {
-          this.jobManager?.updatePhase(childId, 'failed', 'Service stopped after compose deploy');
-        } else {
-          this.jobManager?.updatePhase(childId, 'failed', 'Service failed during compose deploy');
-        }
-      }
-
-      const failedOrchestration = orchestration.services
-        .filter((service) => service.status === 'failed')
-        .map((service) => `${service.name}: ${service.error ?? 'unknown error'}`);
-      const hasError =
-        !orchestration.success ||
-        reconciledStatuses.some((status) => status.status === 'error') ||
-        failedOrchestration.length > 0;
-      const errorMessage =
-        failedOrchestration.length > 0
-          ? `One or more services failed to start (${failedOrchestration.join('; ')})`
-          : hasError
-            ? 'One or more services failed to start'
-            : undefined;
-
-      this.db.updateProject(parentProjectId, {
-        status: hasError ? 'error' : 'running',
-      });
-
-      this.db.createDeployLog({
-        id: nanoid(12),
-        projectId: parentProjectId,
-        status: hasError ? 'failed' : 'success',
-        trigger,
-        buildLog,
-        durationMs: Date.now() - startTime,
-      });
-
-      if (hasError) {
-        await this.events.emit('compose:failed', {
-          projectId: parentProjectId,
-          error: errorMessage ?? 'One or more services failed to start',
-        });
-      } else {
-        await this.events.emit('compose:up', {
-          projectId: parentProjectId,
-          services: reconciledStatuses.map((status) => status.name),
-        });
-      }
-
-      const parentLogTail = hasError
-        ? buildLog.split('\n').filter(Boolean).slice(-30).join('\n')
-        : undefined;
-      this.jobManager?.updatePhase(
-        parentProjectId,
-        hasError ? 'failed' : 'done',
-        hasError ? (errorMessage ?? 'One or more services failed to start') : undefined,
-        parentLogTail,
-      );
-
-      for (const status of reconciledStatuses) {
-        if (status.status !== 'running' || !status.containerId) {
-          continue;
-        }
-
-        try {
-          await connectToTraefikNetwork(this.docker, status.containerId, 'web');
-        } catch (err) {
-          log.debug(
-            { err, service: status.name, containerId: status.containerId },
-            'Failed to connect compose service container to web network',
-          );
-        }
-      }
-
-      return {
-        success: !hasError,
-        parentProjectId,
-        parentName,
-        services: reconciledStatuses,
-        buildDurationMs: Date.now() - startTime,
-        error: hasError ? (errorMessage ?? 'One or more services failed to start') : undefined,
-      };
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-
-      this.db.updateProject(parentProjectId, { status: 'error' });
-      for (const childId of childrenByService.values()) {
-        this.db.updateProject(childId, { status: 'error' });
-      }
-
-      this.db.createDeployLog({
-        id: nanoid(12),
-        projectId: parentProjectId,
-        status: 'failed',
-        trigger,
-        buildLog: `${buildLog}[error] ${errorMsg}\n`,
-        durationMs: Date.now() - startTime,
-      });
-
-      await this.events.emit('compose:failed', {
-        projectId: parentProjectId,
-        error: errorMsg,
-      });
-
-      this.jobManager?.updatePhase(parentProjectId, 'failed', errorMsg);
-
-      return {
-        success: false,
-        parentProjectId,
-        parentName,
-        services: [],
-        buildDurationMs: Date.now() - startTime,
-        error: errorMsg,
-      };
-    }
+    return this.deployComposeViaDockerode(config);
   }
 
   async deployComposeViaDockerode(config: ComposeDeployConfig): Promise<ComposeDeployResult> {
@@ -1595,19 +1061,33 @@ export class ComposePipeline {
 
   async stopCompose(projectId: string): Promise<void> {
     const parent = this.resolveParentProject(projectId);
-    const composePath = this.resolveComposePath(parent);
-    const projectName = sanitizeComposeProjectName(parent.name);
+    const children = this.db.getChildProjects(parent.id);
 
-    const result = await this.execCompose(composePath, ['down', '--remove-orphans'], {
-      projectName,
-    });
-    if (result.exitCode !== 0) {
-      throw new Error(`docker compose down failed: ${result.stderr || result.stdout}`);
-    }
+    for (const child of children) {
+      if (child.container_id) {
+        try {
+          await this.docker.stopContainer(child.container_id);
+        } catch (error) {
+          log.debug(
+            { err: error, childProjectId: child.id, containerId: child.container_id },
+            'Failed to stop compose child container',
+          );
+        }
 
-    for (const child of this.db.getChildProjects(parent.id)) {
+        try {
+          await this.docker.removeContainer(child.container_id);
+        } catch (error) {
+          log.debug(
+            { err: error, childProjectId: child.id, containerId: child.container_id },
+            'Failed to remove compose child container',
+          );
+        }
+      }
+
       this.db.updateProject(child.id, { status: 'stopped' });
     }
+
+    await this.docker.removeProjectNetwork(parent.name);
     this.db.updateProject(parent.id, { status: 'stopped' });
 
     await this.events.emit('compose:down', { projectId: parent.id });
@@ -1739,58 +1219,6 @@ export class ComposePipeline {
     const overridePath = join(dirname(composePath), 'docker-compose.override.yml');
     writeFileSync(overridePath, overrideContent, 'utf8');
     return overridePath;
-  }
-
-  private writeComposeSecretFiles(
-    projectName: string,
-    files: Array<{ filename: string; content: string; mountPath: string }>,
-  ): Array<{ hostPath: string; containerPath: string }> {
-    const secretDir = join(homedir(), '.openlander', 'container-secrets', projectName);
-    mkdirSync(secretDir, { recursive: true });
-    const mounts: Array<{ hostPath: string; containerPath: string }> = [];
-    for (const file of files) {
-      const hostPath = join(secretDir, file.filename);
-      writeFileSync(hostPath, file.content, { mode: 0o600 });
-      mounts.push({ hostPath, containerPath: file.mountPath });
-    }
-    return mounts;
-  }
-
-  private writeSecretOverride(
-    composePath: string,
-    services: ComposeService[],
-    mounts: Array<{ hostPath: string; containerPath: string }>,
-  ): void {
-    if (mounts.length === 0) return;
-    const overridePath = join(dirname(composePath), 'docker-compose.override.yml');
-
-    let existingOverride: Record<string, unknown> = {};
-    if (existsSync(overridePath)) {
-      const parsed = parseYaml(readFileSync(overridePath, 'utf8')) as Record<
-        string,
-        unknown
-      > | null;
-      existingOverride = parsed ?? {};
-    }
-
-    const overrideServices = (existingOverride['services'] ?? {}) as Record<
-      string,
-      { volumes?: string[]; ports?: string[] }
-    >;
-    for (const service of services) {
-      const existing = overrideServices[service.name] ?? {};
-      const volumes = [...(existing.volumes ?? [])];
-      for (const mount of mounts) {
-        volumes.push(`${mount.hostPath}:${mount.containerPath}:ro`);
-      }
-      overrideServices[service.name] = { ...existing, volumes };
-    }
-
-    writeFileSync(
-      overridePath,
-      stringifyYaml({ ...existingOverride, services: overrideServices }),
-      'utf8',
-    );
   }
 
   private touchMissingEnvFiles(composeProject: ComposeProject): void {

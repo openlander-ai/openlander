@@ -19,7 +19,19 @@ import { formatEnvValue } from '../src/pipeline/env-inject.js';
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
 function createMockDocker(): Docker {
-  return {} as unknown as Docker;
+  return {
+    listAllContainers: vi.fn().mockResolvedValue([]),
+    ensureProjectNetwork: vi.fn().mockImplementation(async (projectName: string) => projectName),
+    buildComposeService: vi.fn().mockResolvedValue(undefined),
+    pullImage: vi.fn().mockResolvedValue(undefined),
+    runComposeService: vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`),
+    waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
+    stopContainer: vi.fn().mockResolvedValue(undefined),
+    removeContainer: vi.fn().mockResolvedValue(undefined),
+    removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
+  } as unknown as Docker;
 }
 
 interface MockChildProcess extends EventEmitter {
@@ -56,8 +68,24 @@ if (!isBunRuntime) {
       }
       return mockSpawnImplementation(command, args);
     }) as unknown as typeof import('node:child_process').spawn;
-    const mockedExec = (() => {
-      // exec is imported by port.ts but not directly tested here
+    const mockedExec = ((
+      _command: string,
+      optionsOrCallback?:
+        | import('node:child_process').ExecOptions
+        | ((
+            error: import('node:child_process').ExecException | null,
+            stdout: string,
+            stderr: string,
+          ) => void),
+      maybeCallback?: (
+        error: import('node:child_process').ExecException | null,
+        stdout: string,
+        stderr: string,
+      ) => void,
+    ) => {
+      const callback = typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
+      callback?.(null, '', '');
+      return {} as ChildProcess;
     }) as unknown as typeof import('node:child_process').exec;
     return {
       spawn: mockedSpawn,
@@ -322,7 +350,7 @@ describeCompose('ComposePipeline', () => {
     expect(() => pipeline.parseComposeFile(composePath)).toThrow();
   });
 
-  it('detects and deploys compose project using docker compose CLI', async () => {
+  it('detects and deploys compose project via dockerode', async () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(
       composePath,
@@ -330,41 +358,8 @@ describeCompose('ComposePipeline', () => {
       'utf8',
     );
 
-    const composeCommands: string[] = [];
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-      if (argText.includes(' version ')) {
-        return createMockProcess('', 'version detection failed', 1) as unknown as ChildProcess;
-      }
-      if (argText.includes(' up ') && argText.includes(' web')) {
-        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
-      }
-      if (argText.includes(' up ') && argText.includes(' db')) {
-        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
-      }
-      if (argText.includes(' ps ')) {
-        return createMockProcess(
-          JSON.stringify([
-            {
-              Service: 'web',
-              State: 'running',
-              ID: 'web-container',
-              Publishers: [{ PublishedPort: 3000, TargetPort: 3000 }],
-            },
-            {
-              Service: 'db',
-              State: 'exited',
-              ID: 'db-container',
-              Publishers: [],
-            },
-          ]),
-          '',
-          0,
-        ) as unknown as ChildProcess;
-      }
-      return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
-    };
+    const docker = createMockDocker();
+    pipeline = new ComposePipeline(docker, db, events);
 
     const detectedComposePath = pipeline.detectComposeFile(tmpDir);
     expect(detectedComposePath).toBe(composePath);
@@ -382,7 +377,7 @@ describeCompose('ComposePipeline', () => {
     expect(result.services).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'web', status: 'running' }),
-        expect.objectContaining({ name: 'db', status: 'stopped' }),
+        expect.objectContaining({ name: 'db', status: 'running' }),
       ]),
     );
 
@@ -391,16 +386,8 @@ describeCompose('ComposePipeline', () => {
 
     const children = db.getChildProjects(result.parentProjectId);
     expect(children).toHaveLength(2);
-    expect(children.map((child) => child.status).sort()).toEqual(['running', 'stopped']);
-    expect(composeCommands.filter((cmd) => cmd.includes(' up '))).toHaveLength(2);
-    expect(
-      composeCommands.every((cmd) => {
-        if (!cmd.includes(' up ')) {
-          return true;
-        }
-        return cmd.includes('--no-deps');
-      }),
-    ).toBe(true);
+    expect(children.map((child) => child.status).sort()).toEqual(['running', 'running']);
+    expect((docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(2);
   });
 
   it('deployCompose excludes profiled services when profiles is omitted', async () => {
@@ -411,37 +398,12 @@ describeCompose('ComposePipeline', () => {
       'utf8',
     );
 
-    const composeCommands: string[] = [];
+    const docker = createMockDocker();
+    pipeline = new ComposePipeline(docker, db, events);
     const startEvents: Array<{ serviceCount: number }> = [];
     events.on('compose:start', (payload) => {
       startEvents.push({ serviceCount: payload.serviceCount });
     });
-
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-
-      if (argText.includes(' up ') && argText.includes(' web')) {
-        return createMockProcess('web started\n', '', 0) as unknown as ChildProcess;
-      }
-
-      if (argText.includes(' ps ')) {
-        return createMockProcess(
-          JSON.stringify([
-            {
-              Service: 'web',
-              State: 'running',
-              ID: 'web-container',
-              Publishers: [],
-            },
-          ]),
-          '',
-          0,
-        ) as unknown as ChildProcess;
-      }
-
-      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
-    };
 
     const result = await pipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
@@ -459,12 +421,9 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(1);
     expect(children[0]?.name).toBe('stack/web');
 
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps web'),
-    );
-    expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps db'),
-    );
+    const runCalls = (docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls;
+    expect(runCalls).toHaveLength(1);
+    expect(runCalls[0]?.[0]).toMatchObject({ name: 'ol-stack-web' });
   });
 
   it('deployCompose includes matching profiled services', async () => {
@@ -475,47 +434,12 @@ describeCompose('ComposePipeline', () => {
       'utf8',
     );
 
-    const composeCommands: string[] = [];
+    const docker = createMockDocker();
+    pipeline = new ComposePipeline(docker, db, events);
     const startEvents: Array<{ serviceCount: number }> = [];
     events.on('compose:start', (payload) => {
       startEvents.push({ serviceCount: payload.serviceCount });
     });
-
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-
-      if (argText.includes(' up ') && argText.includes(' web')) {
-        return createMockProcess('web started\n', '', 0) as unknown as ChildProcess;
-      }
-
-      if (argText.includes(' up ') && argText.includes(' db')) {
-        return createMockProcess('db started\n', '', 0) as unknown as ChildProcess;
-      }
-
-      if (argText.includes(' ps ')) {
-        return createMockProcess(
-          JSON.stringify([
-            {
-              Service: 'web',
-              State: 'running',
-              ID: 'web-container',
-              Publishers: [],
-            },
-            {
-              Service: 'db',
-              State: 'running',
-              ID: 'db-container',
-              Publishers: [],
-            },
-          ]),
-          '',
-          0,
-        ) as unknown as ChildProcess;
-      }
-
-      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
-    };
 
     const result = await pipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
@@ -534,12 +458,10 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(2);
     expect(children.map((child) => child.name).sort()).toEqual(['stack/db', 'stack/web']);
 
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps web'),
+    const deployedServices = (docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0]?.name,
     );
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps db'),
-    );
+    expect(deployedServices.sort()).toEqual(['ol-stack-db', 'ol-stack-web']);
   });
 
   it('deployCompose handles depends_on targeting filtered-out profiled services', async () => {
@@ -550,32 +472,8 @@ describeCompose('ComposePipeline', () => {
       'utf8',
     );
 
-    const composeCommands: string[] = [];
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-
-      if (argText.includes(' up ') && argText.includes(' api')) {
-        return createMockProcess('api started\n', '', 0) as unknown as ChildProcess;
-      }
-
-      if (argText.includes(' ps ')) {
-        return createMockProcess(
-          JSON.stringify([
-            {
-              Service: 'api',
-              State: 'running',
-              ID: 'api-container',
-              Publishers: [],
-            },
-          ]),
-          '',
-          0,
-        ) as unknown as ChildProcess;
-      }
-
-      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
-    };
+    const docker = createMockDocker();
+    pipeline = new ComposePipeline(docker, db, events);
 
     const result = await pipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
@@ -590,12 +488,10 @@ describeCompose('ComposePipeline', () => {
     expect(result.error).toBeUndefined();
     expect(result.services.map((service) => service.name)).toEqual(['api']);
 
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps api'),
+    const deployedServices = (docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0]?.name,
     );
-    expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps cache'),
-    );
+    expect(deployedServices).toEqual(['ol-stack-api']);
   });
 
   describe('orphan child project cleanup', () => {
@@ -609,53 +505,17 @@ describeCompose('ComposePipeline', () => {
 
       const stopContainerMock = vi.fn().mockResolvedValue(undefined);
       const removeContainerMock = vi.fn().mockResolvedValue(undefined);
-      pipeline = new ComposePipeline(
-        {
-          stopContainer: stopContainerMock,
-          removeContainer: removeContainerMock,
-        } as unknown as Docker,
-        db,
-        events,
-      );
+      const docker = {
+        ...createMockDocker(),
+        stopContainer: stopContainerMock,
+        removeContainer: removeContainerMock,
+      } as unknown as Docker;
+      pipeline = new ComposePipeline(docker, db, events);
 
       const orphanEvents: Array<{ projectId: string; removed: string[] }> = [];
       events.on('compose:orphans-cleaned', (payload) => {
         orphanEvents.push(payload);
       });
-
-      let currentStatuses = [
-        { Service: 'web', State: 'running', ID: 'web-container', Publishers: [] },
-        { Service: 'api', State: 'running', ID: 'api-container', Publishers: [] },
-        { Service: 'worker', State: 'running', ID: 'worker-container', Publishers: [] },
-      ];
-
-      mockSpawnImplementation = (_cmd: string, args: string[]) => {
-        const argText = args.join(' ');
-        if (argText.includes(' down --remove-orphans')) {
-          return createMockProcess('compose down ok\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' web')) {
-          return createMockProcess('web started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' api')) {
-          return createMockProcess('api started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' worker')) {
-          return createMockProcess('worker started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' ps ')) {
-          return createMockProcess(
-            JSON.stringify(currentStatuses),
-            '',
-            0,
-          ) as unknown as ChildProcess;
-        }
-        return createMockProcess(
-          '',
-          `unexpected command: ${argText}`,
-          1,
-        ) as unknown as ChildProcess;
-      };
 
       const firstDeploy = await pipeline.deployCompose({
         repoUrl: 'https://github.com/example/stack',
@@ -670,7 +530,7 @@ describeCompose('ComposePipeline', () => {
       expect(firstChildren).toHaveLength(3);
       const workerChild = firstChildren.find((child) => child.name === 'stack/worker');
       expect(workerChild).toBeDefined();
-      expect(workerChild?.container_id).toBe('worker-container');
+      expect(workerChild?.container_id).toBe('container-ol-stack-worker');
 
       const originalGetChildProjects = db.getChildProjects.bind(db);
       const getChildProjectsMock = vi
@@ -683,11 +543,6 @@ describeCompose('ComposePipeline', () => {
         `services:\n  web:\n    image: nginx\n  api:\n    image: node:20\n`,
         'utf8',
       );
-      currentStatuses = [
-        { Service: 'web', State: 'running', ID: 'web-container', Publishers: [] },
-        { Service: 'api', State: 'running', ID: 'api-container', Publishers: [] },
-      ];
-
       const secondDeploy = await pipeline.deployCompose({
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
@@ -700,8 +555,8 @@ describeCompose('ComposePipeline', () => {
       expect(secondDeploy.success).toBe(true);
       expect(getChildProjectsMock).toHaveBeenCalledWith(firstDeploy.parentProjectId);
       expect(deleteProjectMock).toHaveBeenCalledWith(workerChild!.id);
-      expect(stopContainerMock).toHaveBeenCalledWith('worker-container');
-      expect(removeContainerMock).toHaveBeenCalledWith('worker-container');
+      expect(stopContainerMock).toHaveBeenCalledWith('container-ol-stack-worker');
+      expect(removeContainerMock).toHaveBeenCalledWith('container-ol-stack-worker');
       expect(orphanEvents).toEqual([
         {
           projectId: firstDeploy.parentProjectId,
@@ -723,50 +578,12 @@ describeCompose('ComposePipeline', () => {
 
       const stopContainerMock = vi.fn().mockResolvedValue(undefined);
       const removeContainerMock = vi.fn().mockResolvedValue(undefined);
-      pipeline = new ComposePipeline(
-        {
-          stopContainer: stopContainerMock,
-          removeContainer: removeContainerMock,
-        } as unknown as Docker,
-        db,
-        events,
-      );
-
-      const composeCommands: string[] = [];
-      let currentStatuses = [
-        { Service: 'web', State: 'running', ID: 'web-container', Publishers: [] },
-        { Service: 'api', State: 'running', ID: 'api-container', Publishers: [] },
-        { Service: 'worker', State: 'running', ID: 'worker-container', Publishers: [] },
-      ];
-
-      mockSpawnImplementation = (_cmd: string, args: string[]) => {
-        const argText = args.join(' ');
-        composeCommands.push(argText);
-        if (argText.includes(' down --remove-orphans')) {
-          return createMockProcess('compose down ok\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' web')) {
-          return createMockProcess('web started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' api')) {
-          return createMockProcess('api started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' worker')) {
-          return createMockProcess('worker started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' ps ')) {
-          return createMockProcess(
-            JSON.stringify(currentStatuses),
-            '',
-            0,
-          ) as unknown as ChildProcess;
-        }
-        return createMockProcess(
-          '',
-          `unexpected command: ${argText}`,
-          1,
-        ) as unknown as ChildProcess;
-      };
+      const docker = {
+        ...createMockDocker(),
+        stopContainer: stopContainerMock,
+        removeContainer: removeContainerMock,
+      } as unknown as Docker;
+      pipeline = new ComposePipeline(docker, db, events);
 
       const firstDeploy = await pipeline.deployCompose({
         repoUrl: 'https://github.com/example/stack',
@@ -783,8 +600,7 @@ describeCompose('ComposePipeline', () => {
       );
       const deleteProjectMock = vi.spyOn(db, 'deleteProject');
 
-      currentStatuses = [{ Service: 'web', State: 'running', ID: 'web-container', Publishers: [] }];
-      const commandCountBeforeSecondDeploy = composeCommands.length;
+      const runComposeServiceMock = docker.runComposeService as ReturnType<typeof vi.fn>;
       const secondDeploy = await pipeline.deployCompose({
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
@@ -797,8 +613,8 @@ describeCompose('ComposePipeline', () => {
 
       expect(secondDeploy.success).toBe(true);
       expect(deleteProjectMock).not.toHaveBeenCalled();
-      expect(stopContainerMock).not.toHaveBeenCalled();
-      expect(removeContainerMock).not.toHaveBeenCalled();
+      expect(stopContainerMock).not.toHaveBeenCalledWith('container-ol-stack-worker');
+      expect(removeContainerMock).not.toHaveBeenCalledWith('container-ol-stack-worker');
 
       const children = db.getChildProjects(firstDeploy.parentProjectId);
       expect(children.map((child) => child.name).sort()).toEqual([
@@ -806,17 +622,10 @@ describeCompose('ComposePipeline', () => {
         'stack/web',
         'stack/worker',
       ]);
-
-      const secondDeployCommands = composeCommands.slice(commandCountBeforeSecondDeploy);
-      expect(secondDeployCommands).toContainEqual(
-        expect.stringContaining('up -d --build --force-recreate --no-deps web'),
-      );
-      expect(secondDeployCommands).not.toContainEqual(
-        expect.stringContaining('up -d --build --force-recreate --no-deps api'),
-      );
-      expect(secondDeployCommands).not.toContainEqual(
-        expect.stringContaining('up -d --build --force-recreate --no-deps worker'),
-      );
+      const secondDeployServices = runComposeServiceMock.mock.calls
+        .slice(3)
+        .map((call) => call[0]?.name);
+      expect(secondDeployServices).toEqual(['ol-stack-web']);
     });
 
     it('creates a new child project when services are added without orphan cleanup', async () => {
@@ -831,6 +640,7 @@ describeCompose('ComposePipeline', () => {
       const removeContainerMock = vi.fn().mockResolvedValue(undefined);
       pipeline = new ComposePipeline(
         {
+          ...createMockDocker(),
           stopContainer: stopContainerMock,
           removeContainer: removeContainerMock,
         } as unknown as Docker,
@@ -842,39 +652,6 @@ describeCompose('ComposePipeline', () => {
       events.on('compose:orphans-cleaned', (payload) => {
         orphanEvents.push(payload);
       });
-
-      let currentStatuses = [
-        { Service: 'web', State: 'running', ID: 'web-container', Publishers: [] },
-        { Service: 'api', State: 'running', ID: 'api-container', Publishers: [] },
-      ];
-
-      mockSpawnImplementation = (_cmd: string, args: string[]) => {
-        const argText = args.join(' ');
-        if (argText.includes(' down --remove-orphans')) {
-          return createMockProcess('compose down ok\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' web')) {
-          return createMockProcess('web started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' api')) {
-          return createMockProcess('api started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' up ') && argText.includes(' worker')) {
-          return createMockProcess('worker started\n', '', 0) as unknown as ChildProcess;
-        }
-        if (argText.includes(' ps ')) {
-          return createMockProcess(
-            JSON.stringify(currentStatuses),
-            '',
-            0,
-          ) as unknown as ChildProcess;
-        }
-        return createMockProcess(
-          '',
-          `unexpected command: ${argText}`,
-          1,
-        ) as unknown as ChildProcess;
-      };
 
       const firstDeploy = await pipeline.deployCompose({
         repoUrl: 'https://github.com/example/stack',
@@ -900,12 +677,6 @@ describeCompose('ComposePipeline', () => {
         `services:\n  web:\n    image: nginx\n  api:\n    image: node:20\n  worker:\n    image: busybox\n`,
         'utf8',
       );
-      currentStatuses = [
-        { Service: 'web', State: 'running', ID: 'web-container', Publishers: [] },
-        { Service: 'api', State: 'running', ID: 'api-container', Publishers: [] },
-        { Service: 'worker', State: 'running', ID: 'worker-container', Publishers: [] },
-      ];
-
       const secondDeploy = await pipeline.deployCompose({
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
@@ -917,8 +688,8 @@ describeCompose('ComposePipeline', () => {
 
       expect(secondDeploy.success).toBe(true);
       expect(deleteProjectMock).not.toHaveBeenCalled();
-      expect(stopContainerMock).not.toHaveBeenCalled();
-      expect(removeContainerMock).not.toHaveBeenCalled();
+      expect(stopContainerMock).not.toHaveBeenCalledWith('container-ol-stack-worker');
+      expect(removeContainerMock).not.toHaveBeenCalledWith('container-ol-stack-worker');
       expect(orphanEvents).toEqual([]);
 
       const afterChildren = db.getChildProjects(firstDeploy.parentProjectId);
@@ -942,49 +713,21 @@ describeCompose('ComposePipeline', () => {
       'utf8',
     );
 
-    const composeCommands: string[] = [];
-    let psCallCount = 0;
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-
-      if (argText.includes(' up ') && argText.includes(' db')) {
-        return createMockProcess('db started\n', '', 0) as unknown as ChildProcess;
+    const runComposeServiceMock = vi.fn().mockImplementation(async (config: { name: string }) => {
+      if (config.name.endsWith('-api')) {
+        throw new Error('api failed to start');
       }
-
-      if (argText.includes(' up ') && argText.includes(' api')) {
-        return createMockProcess('', 'api failed to start', 1) as unknown as ChildProcess;
-      }
-
-      if (argText.includes(' ps ')) {
-        psCallCount += 1;
-        if (psCallCount === 1) {
-          return createMockProcess(
-            JSON.stringify([
-              {
-                Service: 'db',
-                State: 'running',
-                ID: 'db-container',
-                Publishers: [],
-              },
-            ]),
-            '',
-            0,
-          ) as unknown as ChildProcess;
-        }
-        return createMockProcess('[]', '', 0) as unknown as ChildProcess;
-      }
-
-      if (argText.includes(' stop db')) {
-        return createMockProcess('db stopped\n', '', 0) as unknown as ChildProcess;
-      }
-
-      if (argText.includes(' rm -f db')) {
-        return createMockProcess('db removed\n', '', 0) as unknown as ChildProcess;
-      }
-
-      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
-    };
+      return 'container-ol-stack-db';
+    });
+    const stopContainerMock = vi.fn().mockResolvedValue(undefined);
+    const removeContainerMock = vi.fn().mockResolvedValue(undefined);
+    const docker = {
+      ...createMockDocker(),
+      runComposeService: runComposeServiceMock,
+      stopContainer: stopContainerMock,
+      removeContainer: removeContainerMock,
+    } as unknown as Docker;
+    pipeline = new ComposePipeline(docker, db, events);
 
     const result = await pipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
@@ -1004,14 +747,11 @@ describeCompose('ComposePipeline', () => {
     expect(children).toHaveLength(2);
     expect(children.map((child) => child.status).sort()).toEqual(['error', 'error']);
 
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps db'),
-    );
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps api'),
-    );
-    expect(composeCommands).toContainEqual(expect.stringContaining('stop db'));
-    expect(composeCommands).toContainEqual(expect.stringContaining('rm -f db'));
+    const deployedServices = runComposeServiceMock.mock.calls.map((call) => call[0]?.name);
+    expect(deployedServices).toContain('ol-stack-db');
+    expect(deployedServices).toContain('ol-stack-api');
+    expect(stopContainerMock).toHaveBeenCalledWith('container-ol-stack-db');
+    expect(removeContainerMock).toHaveBeenCalledWith('container-ol-stack-db');
   });
 
   it('blocks dependent service start when dependency is stopped', async () => {
@@ -1022,49 +762,18 @@ describeCompose('ComposePipeline', () => {
       'utf8',
     );
 
-    const composeCommands: string[] = [];
-    let psCallCount = 0;
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-
-      if (argText.includes(' up ') && argText.includes(' db')) {
-        return createMockProcess('db started\n', '', 0) as unknown as ChildProcess;
-      }
-
-      if (argText.includes(' ps ')) {
-        psCallCount += 1;
-        if (psCallCount === 1) {
-          return createMockProcess(
-            JSON.stringify([
-              {
-                Service: 'db',
-                State: 'exited',
-                ID: 'db-container',
-                Publishers: [],
-              },
-            ]),
-            '',
-            0,
-          ) as unknown as ChildProcess;
-        }
-
-        return createMockProcess(
-          JSON.stringify([
-            {
-              Service: 'db',
-              State: 'exited',
-              ID: 'db-container',
-              Publishers: [],
-            },
-          ]),
-          '',
-          0,
-        ) as unknown as ChildProcess;
-      }
-
-      return createMockProcess('', `unexpected command: ${argText}`, 1) as unknown as ChildProcess;
-    };
+    const runComposeServiceMock = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `container-${config.name}`);
+    const waitForHealthyMock = vi
+      .fn()
+      .mockResolvedValue({ healthy: false, error: 'db is stopped' });
+    const docker = {
+      ...createMockDocker(),
+      runComposeService: runComposeServiceMock,
+      waitForHealthy: waitForHealthyMock,
+    } as unknown as Docker;
+    pipeline = new ComposePipeline(docker, db, events);
 
     const result = await pipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
@@ -1076,12 +785,7 @@ describeCompose('ComposePipeline', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('db is stopped');
-    expect(composeCommands).toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps db'),
-    );
-    expect(composeCommands).not.toContainEqual(
-      expect.stringContaining('up -d --build --force-recreate --no-deps api'),
-    );
+    expect(runComposeServiceMock.mock.calls.map((call) => call[0]?.name)).toEqual(['ol-stack-db']);
   });
 
   it('parses service status output from compose ps json lines', async () => {
@@ -1127,31 +831,8 @@ describeCompose('ComposePipeline', () => {
       'utf8',
     );
 
-    const composeCommands: string[] = [];
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-      if (argText.includes(' up ') && argText.includes(' web')) {
-        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
-      }
-      if (argText.includes(' ps ')) {
-        return createMockProcess(
-          JSON.stringify([
-            {
-              Service: 'web',
-              State: 'running',
-              ID: 'web-container',
-              Publishers: [{ PublishedPort: 3000, TargetPort: 3000 }],
-            },
-          ]),
-          '',
-          0,
-        ) as unknown as ChildProcess;
-      }
-      return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
-    };
-
-    const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
+    const docker = createMockDocker();
+    const freshPipeline = new ComposePipeline(docker, db, events);
 
     const result = await freshPipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
@@ -1162,9 +843,7 @@ describeCompose('ComposePipeline', () => {
     });
 
     expect(result.success).toBe(true);
-    const upCommands = composeCommands.filter((cmd) => cmd.includes(' up '));
-    expect(upCommands).toHaveLength(1);
-    expect(upCommands[0]).not.toContain('--progress=plain');
+    expect((docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
   it('never includes --progress=plain flag (removed for compatibility)', async () => {
@@ -1175,32 +854,8 @@ describeCompose('ComposePipeline', () => {
       'utf8',
     );
 
-    const composeCommands: string[] = [];
-    mockSpawnImplementation = (_cmd: string, args: string[]) => {
-      const argText = args.join(' ');
-      composeCommands.push(argText);
-      if (argText.includes(' up ') && argText.includes(' web')) {
-        return createMockProcess('compose up ok\n', '', 0) as unknown as ChildProcess;
-      }
-      if (argText.includes(' ps ')) {
-        return createMockProcess(
-          JSON.stringify([
-            {
-              Service: 'web',
-              State: 'running',
-              ID: 'web-container',
-              Publishers: [{ PublishedPort: 3000, TargetPort: 3000 }],
-            },
-          ]),
-          '',
-          0,
-        ) as unknown as ChildProcess;
-      }
-      return createMockProcess('', 'unexpected command', 1) as unknown as ChildProcess;
-    };
-
-    // Create a fresh pipeline instance to reset version check state
-    const freshPipeline = new ComposePipeline(createMockDocker(), db, events);
+    const docker = createMockDocker();
+    const freshPipeline = new ComposePipeline(docker, db, events);
 
     const result = await freshPipeline.deployCompose({
       repoUrl: 'https://github.com/example/stack',
@@ -1211,9 +866,7 @@ describeCompose('ComposePipeline', () => {
     });
 
     expect(result.success).toBe(true);
-    const upCommands = composeCommands.filter((cmd) => cmd.includes(' up '));
-    expect(upCommands).toHaveLength(1);
-    expect(upCommands[0]).not.toContain('--progress=plain');
+    expect((docker.runComposeService as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
   it('parses command as string', () => {

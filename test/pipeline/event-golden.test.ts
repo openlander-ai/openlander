@@ -73,6 +73,11 @@ function createMockDocker(): Docker {
     startContainer: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     cleanupSecretFiles: vi.fn(),
+    ensureProjectNetwork: vi.fn().mockResolvedValue('compose-network'),
+    pullImage: vi.fn().mockResolvedValue(undefined),
+    buildComposeService: vi.fn().mockResolvedValue(undefined),
+    runComposeService: vi.fn().mockImplementation(async (config: { name: string }) => config.name),
+    removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }
 
@@ -266,42 +271,6 @@ describe('pipeline event golden snapshots', () => {
     );
     const composePipeline = new ComposePipeline(docker, db, eventBus);
 
-    const execComposeSpy = vi.spyOn(
-      composePipeline as unknown as {
-        execCompose: (
-          composeFile: string,
-          args: string[],
-        ) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
-      },
-      'execCompose',
-    );
-    execComposeSpy.mockImplementation(async (_composeFile, args) => {
-      if (args[0] === 'version') {
-        return { stdout: '2.30.0\n', stderr: '', exitCode: 0 };
-      }
-      if (args[0] === 'up') {
-        return { stdout: 'up ok\n', stderr: '', exitCode: 0 };
-      }
-      if (args[0] === 'ps') {
-        return {
-          stdout: JSON.stringify([
-            {
-              Service: 'web',
-              State: 'running',
-              Publishers: [{ PublishedPort: 18080, TargetPort: 80 }],
-              ID: 'compose-web-id',
-            },
-          ]),
-          stderr: '',
-          exitCode: 0,
-        };
-      }
-      if (args[0] === 'down') {
-        return { stdout: 'down ok\n', stderr: '', exitCode: 0 };
-      }
-      return { stdout: '', stderr: '', exitCode: 0 };
-    });
-
     const events = await capturePipelineEvents(async () => {
       const deployResult = await composePipeline.deployCompose({
         repoUrl: 'https://github.com/openlander/compose-app',
@@ -326,29 +295,11 @@ describe('pipeline event golden snapshots', () => {
       'services:\n  web:\n    image: nginx:latest\n    ports:\n      - "19090:80"\n',
       'utf8',
     );
-    const composePipeline = new ComposePipeline(docker, db, eventBus);
-
-    const execComposeSpy = vi.spyOn(
-      composePipeline as unknown as {
-        execCompose: (
-          composeFile: string,
-          args: string[],
-        ) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
-      },
-      'execCompose',
-    );
-    execComposeSpy.mockImplementation(async (_composeFile, args) => {
-      if (args[0] === 'version') {
-        return { stdout: '2.30.0\n', stderr: '', exitCode: 0 };
-      }
-      if (args[0] === 'up') {
-        return { stdout: '', stderr: 'build failed', exitCode: 1 };
-      }
-      if (args[0] === 'ps') {
-        return { stdout: '[]', stderr: '', exitCode: 0 };
-      }
-      return { stdout: '', stderr: '', exitCode: 0 };
-    });
+    const composeDocker = {
+      ...docker,
+      runComposeService: vi.fn().mockRejectedValue(new Error('build failed')),
+    } as unknown as Docker;
+    const composePipeline = new ComposePipeline(composeDocker, db, eventBus);
 
     const events = await capturePipelineEvents(async () => {
       const deployResult = await composePipeline.deployCompose({
