@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-03-20
+
 ### Fixed
 
 - **Compose deploy completion**: `executePlan()` now listens to `compose:up`/`compose:failed` events — compose deployments no longer hang indefinitely
