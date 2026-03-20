@@ -506,7 +506,6 @@ export class ComposePipeline {
         repoUrl: config.repoUrl,
         branch: config.branch,
         parentProjectId,
-        dockerfilePath: config.composePath,
       });
       this.db.updateProject(childId, { status: 'building' });
       this.jobManager?.trackJob(childId, childName);

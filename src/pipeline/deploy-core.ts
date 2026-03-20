@@ -325,8 +325,12 @@ export class DeployPipeline {
     // Check if project with this name already exists
     const existing = this.db.getProjectByName(projectName);
     if (existing) {
-      // Reuse existing project — redeploy instead of creating duplicate
-      this.db.updateProject(existing.id, { status: 'building' });
+      this.db.updateProject(existing.id, {
+        status: 'building',
+        ...(config.buildContext ? { buildContext: config.buildContext } : {}),
+        ...(config.dockerfilePath ? { dockerfilePath: config.dockerfilePath } : {}),
+        ...(config.dockerTarget ? { dockerTarget: config.dockerTarget } : {}),
+      });
       this.jobManager?.trackJob(existing.id, projectName);
 
       this.fireAndForgetDeploy(
@@ -1516,16 +1520,23 @@ export class DeployPipeline {
     }
     this.jobManager?.trackJob(projectId, project.name);
 
+    const isCompose = project.build_method === 'compose';
+    const storedPath = project.dockerfile_path;
+    const isValidDockerfilePath =
+      storedPath !== 'Dockerfile' &&
+      !storedPath.startsWith('/') &&
+      !storedPath.endsWith('.yml') &&
+      !storedPath.endsWith('.yaml');
+
     return this.deploy({
       repoUrl: project.repo_url ?? '',
       branch: project.branch,
       name: project.name,
       visibility: project.visibility,
-      dockerTarget: project.docker_target ?? undefined,
-      dockerfilePath:
-        project.dockerfile_path !== 'Dockerfile' ? project.dockerfile_path : undefined,
+      dockerTarget: isCompose ? undefined : (project.docker_target ?? undefined),
+      dockerfilePath: !isCompose && isValidDockerfilePath ? storedPath : undefined,
       buildContext: project.build_context ?? undefined,
-      preferDockerfile: project.build_method === 'dockerfile',
+      preferDockerfile: !isCompose,
       _projectId: projectId,
       _preferredPort: previousPort,
       _noCacheBuild: options?.noCache === true,
