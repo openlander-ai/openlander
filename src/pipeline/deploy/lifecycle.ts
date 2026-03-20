@@ -5,6 +5,7 @@ import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import { ContainerNotFoundError } from '../../errors.js';
 import type { Docker } from '../docker.js';
+import { clearPortScanCache } from '../port.js';
 import type { TunnelManager } from './tunnel.js';
 
 const log = createModuleLogger('deploy:lifecycle');
@@ -150,6 +151,8 @@ export class ContainerLifecycle {
         log.warn({ err, identifier }, 'Container removal during cleanup failed');
       }
     }
+
+    clearPortScanCache();
 
     for (const name of secretNames) {
       this.docker.cleanupSecretFiles(name);
