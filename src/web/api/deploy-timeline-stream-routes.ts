@@ -28,7 +28,7 @@ function isSecretLikeKey(key: string): boolean {
   return SECRET_FIELD_PATTERN.test(normalized);
 }
 
-function sanitizeToolResultForStream(value: unknown): unknown {
+export function sanitizeToolResultForStream(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => sanitizeToolResultForStream(item));
   }
