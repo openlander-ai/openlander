@@ -562,7 +562,7 @@
 **회의 근거 문서**: `docs/planning/meetings/2026-03-09-architecture-direction.md` (TL 기술 검증 반영)
 **재검토 조건**: File Provider 동적 라우팅의 운영 안정성 이슈(지연/누락)가 반복될 때
 
-### DEC-036: Beyond Docker — 비(非) 도커 배포 방식 점진적 도입
+### DEC-036: Beyond Docker — 비(非) 도커 배포 방식 점진적 도입 (보류)
 
 **날짜**: 2026-03
 **결정**: Docker 의존을 선택적으로 만들고, 비(非) 도커 배포를 점진적으로 추가한다. Phase 0(Traefik File Provider) → Phase 1(정적 호스팅) → Phase 2(Native Process) → Phase 3(Serverless, 보류).
@@ -587,6 +587,97 @@
 **정체성**: "실패를 스스로 고치는 셀프호스트 배포 플랫폼" — 변경 없음. 추가 포지셔닝: "Docker 강박 없는 초경량 배포"
 **회의록**: `docs/planning/meetings/2026-03-09-architecture-direction.md`
 **재검토 조건**: Phase 1 완료 후 사용자 피드백으로 Phase 2 진행 여부 판단. Phase 3은 출시 후 재평가.
+
+**DEC-036 UPDATE (2026-03-21)**: v1.0.0 로드맵에서 제외. Docker-only 유지로 결정. 출시 후 재평가.
+
+---
+
+### DEC-037: MCP-first 전환 — 웹은 모니터링 대시보드
+
+**날짜**: 2026-03
+**결정**: 제품 정체성을 "AI와 함께 배포하는 플랫폼"에서 **"MCP-first 셀프호스트 배포 플랫폼"**으로 전환. 웹은 모니터링/관리 전용 대시보드로 재정의.
+**거부한 대안**: 웹 AI 어시스턴트 UI 유지 (기존 v1.0.0 계획)
+**이유**:
+
+- User: "MCP 테스트하면서 느낀 점 — 결국 MCP만 쓸 것 같다"
+- 코딩 에이전트(Claude Code, Cursor 등)가 이미 더 나은 AI 경험 제공
+- 웹에서 AI 어시스턴트 수준으로 만드는 것은 불가능 — 리소스 낭비
+- MCP 연동이 훨씬 만족스러움 — 에이전트가 직접 배포 제어
+- 웹 AI UI 제거로 프론트엔드 복잡도 대폭 감소 (1인 메인테이너 유리)
+- Auto-recovery는 백엔드에서 조용히 유지 (킬러 피처)
+
+**영향 범위**:
+
+- v1.0.0 AI Co-pilot UI (7개 카드) 전체 취소
+- RecoveryReportCard, PostmortemCard, SecretScanCard 제거
+- TimelineFeed의 AI 이벤트 렌더링 제거
+- AI analysis inline 표시 제거
+- Agent assistant 관련 컴포넌트 제거
+
+**재검토 조건**: 사용자가 웹 AI 어시스턴트를 명시적으로 요청할 때
+
+---
+
+### DEC-038: AI 어시스턴트 웹 UI 제거 — 백엔드 auto-recovery 유지
+
+**날짜**: 2026-03
+**결정**: 웹 프론트엔드의 AI 어시스턴트 UI를 전부 제거. 백엔드 auto-recovery 기능은 유지하되, 웹에서는 조용히 동작하고 MCP로만 결과 확인.
+**거부한 대안**: AI UI 유지 + 개선
+**이유**:
+
+- DEC-037의 MCP-first 전환에 따른 자연스러운 결과
+- 웹은 배포 상태 모니터링, 도메인/환경변수 관리 등 운영 기능에 집중
+- AI 분석 결과는 필요시 MCP 도구로 조회 가능
+- 프론트엔드 코드 간소화 → 유지보수 비용 감소
+
+**구체적 제거 대상**:
+
+- `web/src/components/timeline/RecoveryReportCard.tsx`
+- `web/src/components/timeline/PostmortemCard.tsx`
+- `web/src/components/timeline/SecretScanCard.tsx`
+- TimelineFeed의 AI 이벤트 렌더링 로직
+- TimelineItem의 AI 인사이트 카드 타입
+
+**재검토 조건**: 사용자가 웹에서 AI 분석 결과를 직접 보고 싶다는 피드백 반복 시
+
+---
+
+### DEC-039: Beyond Docker 로드맵 제외 — Docker-only 유지
+
+**날짜**: 2026-03
+**결정**: DEC-036(Beyond Docker)을 v1.0.0 로드맵에서 제외. Docker-only 유지로 결정.
+**거부한 대안**: Phase 1(정적 호스팅) 구현 후 v1.0.0 릴리즈
+**이유**:
+
+- 1인 메인테이너 리소스 제약 — v1.0.0까지 거리를 최소화해야 함
+- Docker는 이미 충분히 성숙한 표준 — 대부분 사용자가 Docker 환경 보유
+- 정적 호스팅/Native Process는 출시 후 사용자 피드백으로 우선순위 재평가
+- 현재 MCP-first 전환(DEC-037)이 더 시급한 전략적 변화
+
+**재검토 조건**: v1.0.0 출시 후 사용자 피드백에서 "Docker 없이 배포하고 싶다"는 요청 반복 시
+
+---
+
+### DEC-040: v1.0.0 품질 게이트 — AI Co-pilot UI 미포함
+
+**날짜**: 2026-03
+**결정**: v1.0.0 릴리즈 기준을 "품질 게이트 통과"로 확정. AI Co-pilot UI(7개 카드)는 미포함.
+**거부한 대안**: AI Co-pilot UI 완성 후 릴리즈
+**이유**:
+
+- DEC-037(MCP-first 전환)에 따라 AI UI는 더 이상 필요 없음
+- v1.0.0은 "안정적인 MCP-first 배포 플랫폼"으로 정의
+- 품질 게이트: 핵심 배포 플로우 E2E 검증, 60+ MCP 도구 안정성, 웹 모니터링 기능 완성
+- 출시 후 사용자 피드백 기반 다음 버전 계획
+
+**품질 게이트 기준**:
+
+- Q-1: E2E 배포 시나리오 (Git → Build → Run → URL) 수동 검증
+- Q-2: 60+ MCP 도구 응답 검증 (verify/action_required/recovery_hint)
+- Q-3: 웹 모니터링 기능 (프로젝트/배포/도메인/환경변수/서비스 관리)
+- 테스트 커버리지: 60% 이상
+
+**재검토 조건**: 없음 (확정)
 
 ---
 

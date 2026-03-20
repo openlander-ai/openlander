@@ -9,9 +9,9 @@
 
 ## 제품 한 줄 정의
 
-**"서버 상태를 알고, 먼저 말해주는 배포 에이전트"** — repo URL 하나 주면 clone → build → run → URL 완성.
+**"MCP-first 셀프호스트 배포 플랫폼. 웹은 모니터링."** — 코딩 에이전트(Cursor, Claude Code)에서 직접 배포 제어. 웹은 상태 모니터링 전용.
 
-핵심 차별점: 서버의 전체 상태를 인식하고, MCP를 통해 코딩 에이전트(Cursor/Claude Code)와 직접 통합. 빌드 실패 시 AI가 자동으로 분석하고 Dockerfile을 수정하여 재배포. 1차 타겟: 배포 볼륨에 압도당하는 DevOps/백엔드 엔지니어 (DEC-008).
+핵심 차별점: MCP 프로토콜로 IDE 에이전트와 직접 통합. 60+ 도구로 배포/관리/모니터링 자동화. 빌드 실패 시 AI가 자동으로 분석하고 복구 (백엔드에서 조용히). 1차 타겟: 배포 자동화를 원하는 DevOps/백엔드 엔지니어 (DEC-008, DEC-037).
 
 ---
 
@@ -19,13 +19,13 @@
 
 | 채널              | 파일                                                 | 사용자                                | 특징                                                          |
 | ----------------- | ---------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------- |
-| **Web Dashboard** | `src/web/` + `web/`                                  | 브라우저 접속                         | React 19 SPA. **v0.2.0부터 메인 인터페이스.** Vercel-inspired |
-| **MCP**           | `src/mcp/server.ts`                                  | IDE 에이전트 (Cursor, Claude Code 등) | 30개 도구를 MCP 프로토콜로 노출                               |
+| **MCP**           | `src/mcp/server.ts`                                  | IDE 에이전트 (Cursor, Claude Code 등) | **메인 인터페이스.** 60+ 도구를 MCP 프로토콜로 노출           |
+| **Web Dashboard** | `src/web/` + `web/`                                  | 브라우저 접속                         | React 19 SPA. 모니터링/관리 전용. Vercel-inspired 라이트 모드 |
 | **Bot**           | `src/channels/slack.ts`, `discord.ts`, `telegram.ts` | 팀 원격 관리                          | Slack/Discord/Telegram에서 자연어로 배포/관리                 |
 | **REST API**      | `src/web/api/`                                       | 커스텀 통합                           | Hono 기반 HTTP API                                            |
 | ~~**TUI**~~       | `src/tui/`                                           | ~~터미널 접속~~                       | ⚠️ v0.2.0에서 Web으로 피봇. **프리즈 상태** (신규 기능 없음)  |
 
-**기획 시 고려**: 새 기능은 Web + MCP + Bot 채널에 영향. TUI는 프리즈.
+**기획 시 고려**: MCP가 메인 인터페이스. 새 기능은 MCP 도구 우선, Web 모니터링 UI 보조. TUI는 프리즈.
 
 ---
 
@@ -60,7 +60,7 @@ AI 자동 복구 — 분석 → Dockerfile 수정 → 재배포 (최대 3회)
 
 ---
 
-## 도구 목록 (30개)
+## 도구 목록 (60+개)
 
 ### 배포 & 라이프사이클 (9개)
 
@@ -141,10 +141,10 @@ v0.2.0에서 TUI → Web으로 피봇. Vercel-inspired 라이트 모드 대시�
 
 **AI 통합 (v1.0.0)**:
 
-- 빌드 실패 → AI 자동 분석 → Dockerfile 수정 → 재배포 (최대 3회)
+- 빌드 실패 → AI 자동 분석 → Dockerfile 수정 → 재배포 (최대 3회) — **백엔드에서 조용히 동작**
 - 배포 후 60초 헬스 감시 → 연속 실패 시 롤백 제안
 - 시크릿 스캔, 포스트모템 자동 생성
-- 에이전트 분석이 타임라인에 인라인 렌더링
+- **웹 AI UI 제거** — MCP로 결과 조회 (DEC-037, DEC-038)
 
 ---
 
@@ -265,10 +265,11 @@ Tier 3: 사용자 개입 (자동 복구도 실패 시)
 ## 주요 수치
 
 - 소스 코드: `src/` 하위 ~20개 디렉토리
-- 도구: 30개 (Web + MCP + Bot 동시 노출)
+- 도구: 60+ (MCP + Web API + Bot 동시 노출)
 - LLM 프로바이더: 5개 (BYOK + OAuth)
-- 테스트: 783개+ (vitest)
+- 테스트: 1600+ (vitest)
 - i18n: 한국어/영어 (~316키)
 - 외부 의존성: ai (Vercel AI SDK), dockerode, drizzle-orm, cloudflare, bcryptjs
 - DB 테이블: 8개 (projects, env_vars, deploy_logs, domain_mappings, preview_deploys, global_secrets, oauth_tokens, services)
 - 파이프라인 파일: 20개+ (`src/pipeline/`)
+- 코드베이스: ~94,800 줄 (백엔드 37,850 + 프론트엔드 22,203 + 테스트 34,731)

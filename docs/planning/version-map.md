@@ -842,6 +842,23 @@ Phase 3 — PR Preview:
 
 ---
 
+### v0.7.0 — Compose Rewrite (dockerode Direct) ✅
+
+**상태**: 완료 | **관련 문서**: `.sisyphus/plans/compose-to-dockerode.md`
+
+> **핵심 가치**: Docker Compose CLI 제거 → dockerode 직접 빌드/실행 전환. 오버헤드 제거, 에러 처리 개선, 고아 컨테이너 정리 자동화.
+
+| 항목                                                | 상태 |
+| --------------------------------------------------- | ---- |
+| dockerode compose 빌드 (docker build + docker run)  | ✅   |
+| Docker Compose CLI 제거 (compose.ts 리팩)           | ✅   |
+| 고아 자식 컨테이너 정리 (orphan cleanup)            | ✅   |
+| Compose YAML 확장 (x-openlander 라벨)               | ✅   |
+| 프로젝트별 Docker 네트워크 격리 (ol-{name}-network) | ✅   |
+| 테스트 1600+ 통과, 빌드 성공, tsc 성공              | ✅   |
+
+---
+
 ### v0.7.1 — MCP Response Guidance Hints ✅
 
 **상태**: 완료

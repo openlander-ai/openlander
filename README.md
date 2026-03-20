@@ -196,7 +196,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.6.15** | Deploy UX Quick Wins  | Done   | Build step progress in status, env source tracking, deploy-plan internal URLs, MCP HTTP session cleanup, richer MCP tool descriptions                                   |
 | **v0.7.0**  | Architecture Rebuild  | Done   | Compose deploy via dockerode, override hacks removed, orphan child cleanup, compose YAML extensions, project-scoped Docker networks                                     |
 | **v0.7.1**  | MCP Response Guidance | Done   | verify/action_required/recovery_hint in tool responses, remote Docker warnings, agent behavior correction for curl/docker CLI fallback                                  |
-| **v1.0.0**  | Stable Release        | TBD    | Quality hardening, comprehensive testing, production-readiness improvements                                                                                             |
+| **v1.0.0**  | Stable Release        | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                         |
 
 ## MCP Integration (AI Coding Agents)
 
