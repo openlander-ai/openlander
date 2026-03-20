@@ -865,3 +865,17 @@ export function resolveDockerSocket(): string | undefined {
 
   return undefined;
 }
+
+export function getDockerHostType(): 'local' | 'remote' {
+  const dockerHost = process.env['DOCKER_HOST'];
+  if (!dockerHost) return 'local';
+  try {
+    const url = new URL(dockerHost);
+    if (url.protocol === 'unix:') return 'local';
+    const host = url.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return 'local';
+    return 'remote';
+  } catch {
+    return 'local';
+  }
+}

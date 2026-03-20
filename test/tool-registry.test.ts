@@ -327,9 +327,11 @@ describe('Tool Registry', () => {
       status: 'updated',
       project: 'my-app',
       keys: ['API_URL'],
-      action_required: [
-        'Project must be redeployed for env var changes to take effect. Use create_deploy_plan + execute_deploy_plan.',
-      ],
+      _agent_guidance: {
+        next_steps: [
+          'Redeploy required: call create_deploy_plan + execute_deploy_plan for changes to take effect',
+        ],
+      },
     });
   });
 

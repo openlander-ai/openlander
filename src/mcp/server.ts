@@ -40,6 +40,8 @@ const SERVER_INSTRUCTIONS = `You are connected to OpenLander, a self-hosted depl
 
 CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTTP requests, curl commands, fetch() calls, or API client code. Every action you need is available as a tool.
 
+IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT use docker CLI, docker compose, or curl localhost to interact with containers. Use OpenLander tools (get_logs, get_deploy_status, restart_project, etc.) instead. Tool responses include docker_host ("local" or "remote") when relevant — check this to determine if local commands would work.
+
 ## Tools by Category
 
 ### Deploy

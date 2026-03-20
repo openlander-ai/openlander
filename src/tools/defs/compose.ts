@@ -87,8 +87,13 @@ export const composeToolDefs: ToolDef[] = [
           message: result.error ?? 'Compose deploy failed.',
           composePath,
           composeContent,
-          recovery_hint:
-            'Check the composeContent for issues. Use get_build_log + debug_build_error for AI analysis, then create_deploy_plan + execute_deploy_plan to retry. Do NOT use docker compose CLI — Docker host may be remote.',
+          _agent_guidance: {
+            next_steps: [
+              'Check composeContent for configuration issues',
+              'Call get_build_log for raw build output',
+              'Call debug_build_error for AI diagnosis',
+            ],
+          },
         };
       }
 
