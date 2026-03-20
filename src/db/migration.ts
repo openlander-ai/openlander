@@ -29,6 +29,9 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   if (!colNames.has('docker_target')) {
     sqlite.exec('ALTER TABLE projects ADD COLUMN docker_target TEXT DEFAULT NULL');
   }
+  if (!colNames.has('build_context')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN build_context TEXT DEFAULT NULL');
+  }
   if (!colNames.has('build_method')) {
     sqlite.exec(
       "ALTER TABLE projects ADD COLUMN build_method TEXT DEFAULT NULL CHECK(build_method IN ('dockerfile', 'compose'))",

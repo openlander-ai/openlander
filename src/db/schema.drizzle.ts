@@ -32,6 +32,7 @@ export const projects = sqliteTable(
     }),
     dockerfile_path: text('dockerfile_path').default('Dockerfile'),
     docker_target: text('docker_target'),
+    build_context: text('build_context'),
     build_method: text('build_method', { enum: ['dockerfile', 'compose'] }),
     pending_fix: text('pending_fix'),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),

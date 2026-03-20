@@ -18,6 +18,7 @@ export class ProjectRepo {
     parentProjectId?: string;
     dockerfilePath?: string;
     dockerTarget?: string;
+    buildContext?: string;
   }): ProjectRow {
     try {
       this.db
@@ -30,6 +31,7 @@ export class ProjectRepo {
           parent_project_id: project.parentProjectId ?? null,
           dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
           docker_target: project.dockerTarget ?? null,
+          build_context: project.buildContext ?? null,
         })
         .run();
     } catch (error) {
@@ -82,6 +84,7 @@ export class ProjectRepo {
       parentProjectId: string | null;
       dockerfilePath: string;
       dockerTarget: string | null;
+      buildContext: string | null;
       buildMethod: ProjectRow['build_method'];
       pendingFix: string | null;
       accessCode: string | null;
@@ -122,6 +125,9 @@ export class ProjectRepo {
     }
     if (updates.dockerTarget !== undefined) {
       setValues.docker_target = updates.dockerTarget;
+    }
+    if (updates.buildContext !== undefined) {
+      setValues.build_context = updates.buildContext;
     }
     if (updates.buildMethod !== undefined) {
       setValues.build_method = updates.buildMethod;

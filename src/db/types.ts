@@ -17,6 +17,7 @@ export interface ProjectRow {
   parent_project_id: string | null;
   dockerfile_path: string;
   docker_target: string | null;
+  build_context: string | null;
   build_method: 'dockerfile' | 'compose' | null;
   pending_fix: string | null;
   created_at: string;

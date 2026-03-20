@@ -346,6 +346,7 @@ export class DeployPipeline {
       branch: config.branch,
       dockerfilePath: config.dockerfilePath,
       dockerTarget: config.dockerTarget,
+      buildContext: config.buildContext,
     });
     this.db.updateProject(projectId, { status: 'building' });
     this.jobManager?.trackJob(projectId, projectName);
@@ -1002,7 +1003,7 @@ export class DeployPipeline {
       });
 
       const logLines = buildLogWithError.split('\n').filter(Boolean);
-      const buildLogTail = logLines.slice(-30).join('\n');
+      const buildLogTail = logLines.slice(-100).join('\n');
 
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg, buildLogTail);
 
@@ -1523,6 +1524,7 @@ export class DeployPipeline {
       dockerTarget: project.docker_target ?? undefined,
       dockerfilePath:
         project.dockerfile_path !== 'Dockerfile' ? project.dockerfile_path : undefined,
+      buildContext: project.build_context ?? undefined,
       preferDockerfile: project.build_method === 'dockerfile',
       _projectId: projectId,
       _preferredPort: previousPort,
