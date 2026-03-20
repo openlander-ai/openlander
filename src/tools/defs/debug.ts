@@ -17,6 +17,14 @@ export const debugToolDefs: ToolDef[] = [
       const logs = appCtx.db.getDeployLogs(project.id, index + 1);
       const log = logs[index];
       if (!log) {
+        const activeJob = appCtx.jobManager.getStatus(project.id);
+        if (activeJob && activeJob.phase !== 'done' && activeJob.phase !== 'failed') {
+          return Promise.resolve({
+            error: 'DEPLOY_IN_PROGRESS',
+            message: `Deploy is currently ${activeJob.phase}. Logs will be available after completion.`,
+            phase: activeJob.phase,
+          });
+        }
         return Promise.resolve({ error: 'NO_DEPLOY_LOGS', message: 'No deploy logs found.' });
       }
 

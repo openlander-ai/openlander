@@ -329,29 +329,10 @@ export class DeployPipeline {
       this.db.updateProject(existing.id, { status: 'building' });
       this.jobManager?.trackJob(existing.id, projectName);
 
-      void this.deploy({ ...config, name: projectName, _projectId: existing.id }).catch(
-        (err: unknown) => {
-          const errMsg = err instanceof Error ? err.message : String(err);
-          const projectId = existing.id;
-          log.error({ err, projectId }, 'Background deploy failed');
-          this.jobManager?.updatePhase(projectId, 'failed', errMsg);
-          this.db.updateProject(projectId, { status: 'error' });
-          try {
-            const environments = this.db.getEnvironmentsByProject(projectId);
-            const envId = environments[0]?.id;
-            this.db.createDeployLog({
-              id: nanoid(12),
-              projectId,
-              environmentId: envId,
-              status: 'failed',
-              trigger: config.trigger ?? 'chat',
-              buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
-              durationMs: 0,
-            });
-          } catch {
-            // DB write may also fail — nothing more we can do
-          }
-        },
+      this.fireAndForgetDeploy(
+        { ...config, name: projectName, _projectId: existing.id },
+        existing.id,
+        config.trigger,
       );
 
       return { projectId: existing.id, projectName, status: 'building' };
@@ -369,38 +350,64 @@ export class DeployPipeline {
     this.db.updateProject(projectId, { status: 'building' });
     this.jobManager?.trackJob(projectId, projectName);
 
-    // Fire-and-forget: run the deploy pipeline in background
-    void this.deploy({ ...config, name: projectName, _projectId: projectId }).catch(
-      (err: unknown) => {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        log.error({ err, projectId }, 'Background deploy failed');
-        this.jobManager?.updatePhase(projectId, 'failed', errMsg);
-        this.db.updateProject(projectId, { status: 'error' });
-        try {
-          const environments = this.db.getEnvironmentsByProject(projectId);
-          const envId = environments[0]?.id;
-          this.db.createDeployLog({
-            id: nanoid(12),
-            projectId,
-            environmentId: envId,
-            status: 'failed',
-            trigger: config.trigger ?? 'chat',
-            buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
-            durationMs: 0,
-          });
-        } catch {
-          // DB write may also fail — nothing more we can do
-        }
-      },
+    this.fireAndForgetDeploy(
+      { ...config, name: projectName, _projectId: projectId },
+      projectId,
+      config.trigger,
     );
 
     return { projectId, projectName, status: 'building' };
   }
 
-  /**
-   * Start a monorepo deployment in the background (non-blocking).
-   * Returns immediately with the parent project ID.
-   */
+  private fireAndForgetDeploy(
+    config: ProjectConfig,
+    projectId: string,
+    trigger?: 'chat' | 'webhook' | 'api',
+  ): void {
+    void this.deploy(config)
+      .then((result) => {
+        if (!result.success) {
+          this.recordBackgroundFailure(
+            projectId,
+            result.error ?? 'Deploy returned failure',
+            trigger,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        this.recordBackgroundFailure(
+          projectId,
+          err instanceof Error ? err.message : String(err),
+          trigger,
+        );
+      });
+  }
+
+  private recordBackgroundFailure(
+    projectId: string,
+    errMsg: string,
+    trigger: 'chat' | 'webhook' | 'api' = 'chat',
+  ): void {
+    log.error({ projectId, error: errMsg }, 'Background deploy failed');
+    this.jobManager?.updatePhase(projectId, 'failed', errMsg);
+    this.db.updateProject(projectId, { status: 'error' });
+    try {
+      const environments = this.db.getEnvironmentsByProject(projectId);
+      const envId = environments[0]?.id;
+      this.db.createDeployLog({
+        id: nanoid(12),
+        projectId,
+        environmentId: envId,
+        status: 'failed',
+        trigger,
+        buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
+        durationMs: 0,
+      });
+    } catch {
+      // best-effort — outer catch already logged the error
+    }
+  }
+
   startMonorepoDeploy(config: MonorepoConfig): StartMonorepoResult {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const parentId = nanoid(12);
