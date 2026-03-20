@@ -552,6 +552,59 @@ export class ComposePipeline {
       this.jobManager?.trackJob(childId, childName);
     }
 
+    const deployOnlyActive = Boolean(config.services && config.services.length > 0);
+    if (!deployOnlyActive) {
+      const composeServiceNames = new Set(composeProject.services.map((service) => service.name));
+      const orphanChildren = existingChildren
+        .map((child) => {
+          const prefix = `${parentName}/`;
+          if (!child.name.startsWith(prefix)) {
+            return null;
+          }
+
+          const serviceName = child.name.slice(prefix.length);
+          if (serviceName.length === 0 || composeServiceNames.has(serviceName)) {
+            return null;
+          }
+
+          return { child, serviceName };
+        })
+        .filter((entry): entry is { child: ProjectRow; serviceName: string } => entry !== null);
+
+      if (orphanChildren.length > 0) {
+        const removed: string[] = [];
+        log.warn(
+          {
+            projectId: parentProjectId,
+            removed: orphanChildren.map((entry) => entry.serviceName),
+          },
+          'Detected orphan compose child projects; cleaning up',
+        );
+
+        for (const { child, serviceName } of orphanChildren) {
+          if (child.container_id) {
+            try {
+              await this.docker.stopContainer(child.container_id);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              if (!msg.includes('not found') && !msg.includes('No such container')) {
+                throw err;
+              }
+            }
+            await this.docker.removeContainer(child.container_id);
+          }
+
+          this.db.deleteProject(child.id);
+          removed.push(serviceName);
+        }
+
+        await this.events.emit('compose:orphans-cleaned', {
+          projectId: parentProjectId,
+          removed,
+        });
+      }
+    }
+
     await this.events.emit('compose:start', {
       projectId: parentProjectId,
       composePath: config.composePath,

@@ -38,6 +38,7 @@ export type EventType =
   | 'compose:start'
   | 'compose:up'
   | 'compose:down'
+  | 'compose:orphans-cleaned'
   | 'compose:failed'
   | 'orchestration:plan'
   | 'orchestration:service-start'
@@ -183,6 +184,7 @@ export interface EventPayload {
   'compose:start': { projectId: string; composePath: string; serviceCount: number };
   'compose:up': { projectId: string; services: string[] };
   'compose:down': { projectId: string };
+  'compose:orphans-cleaned': { projectId: string; removed: string[] };
   'compose:failed': { projectId: string; error: string };
   'orchestration:plan': {
     topology: {
