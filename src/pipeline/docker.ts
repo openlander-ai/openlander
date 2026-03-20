@@ -575,6 +575,52 @@ export class Docker {
     }
   }
 
+  async ensureProjectNetwork(projectName: string): Promise<string> {
+    const networkName = `ol-${projectName}`;
+
+    try {
+      await this.client.getNetwork(networkName).inspect();
+      return networkName;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (!msg.includes('not found') && !msg.includes('No such network')) {
+        throw error;
+      }
+    }
+
+    try {
+      await this.client.createNetwork({ Name: networkName, Driver: 'bridge' });
+      return networkName;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('already exists')) {
+        return networkName;
+      }
+      throw error;
+    }
+  }
+
+  async removeProjectNetwork(projectName: string): Promise<void> {
+    const networkName = `ol-${projectName}`;
+
+    try {
+      await this.client.getNetwork(networkName).remove();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('not found') || msg.includes('No such network')) {
+        return;
+      }
+      if (msg.includes('active endpoints')) {
+        log.warn(
+          { projectName, networkName, error: msg },
+          'Cannot remove project network with active endpoints',
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
   /** Get container logs as a string. */
   async getLogs(containerId: string, tail = 100): Promise<string> {
     try {
