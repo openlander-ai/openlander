@@ -4,38 +4,41 @@
 
 @layer base {
   :root {
-    /* ── OpenLander Design Tokens (Light Mode) ── */
-    --bg-app: #ffffff;
-    --bg-panel: #fafafa;
-    --bg-subtle: #f4f4f5;
-    --color-accent: #2563eb;
-    --color-success: #16a34a;
-    --color-warning: #d97706;
-    --color-error: #dc2626;
-    --text-primary: #09090b;
-    --text-secondary: #71717a;
-    --text-muted: #a1a1aa;
+    /* ── OpenLander Design Tokens (Dark Zinc) ── */
+    --bg-app: #09090b; /* zinc-950 — deepest background */
+    --bg-panel: #18181b; /* zinc-900 — card/panel backgrounds */
+    --bg-subtle: #27272a; /* zinc-800 — subtle backgrounds, hover states */
+    --bg-surface: #121214; /* between app and panel — card surface */
+    --bg-terminal: #000000; /* pure black for terminals */
+    --color-accent: #2563eb; /* blue-600 — primary accent (keep) */
+    --color-ai: #06b6d4; /* cyan-500 — AI identity color */
+    --color-success: #34d399; /* emerald-400 — brighter for dark bg */
+    --color-warning: #fbbf24; /* amber-400 — brighter for dark bg */
+    --color-error: #f87171; /* red-400 — brighter for dark bg */
+    --text-primary: #fafafa; /* zinc-50 — primary text */
+    --text-secondary: #a1a1aa; /* zinc-400 — secondary text */
+    --text-muted: #71717a; /* zinc-500 — muted/dim text */
 
-    /* ── shadcn/ui — Clean Light palette ── */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 98%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 221 83% 53%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 10%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 6% 10%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 221 83% 53%;
+    /* ── shadcn/ui — Dark Zinc palette ── */
+    --background: 240 10% 3.9%; /* zinc-950 */
+    --foreground: 0 0% 98%; /* zinc-50 */
+    --card: 240 6% 10%; /* zinc-900 */
+    --card-foreground: 0 0% 98%; /* zinc-50 */
+    --popover: 240 6% 10%; /* zinc-900 */
+    --popover-foreground: 0 0% 98%; /* zinc-50 */
+    --primary: 221 83% 53%; /* blue-600 — keep accent */
+    --primary-foreground: 0 0% 100%; /* white */
+    --secondary: 240 4% 16%; /* zinc-800 */
+    --secondary-foreground: 0 0% 98%; /* zinc-50 */
+    --muted: 240 4% 16%; /* zinc-800 */
+    --muted-foreground: 240 5% 65%; /* zinc-400 */
+    --accent: 240 4% 16%; /* zinc-800 */
+    --accent-foreground: 0 0% 98%; /* zinc-50 */
+    --destructive: 0 63% 31%; /* dark red for dark mode */
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 16%; /* zinc-800 */
+    --input: 240 4% 16%; /* zinc-800 */
+    --ring: 221 83% 53%; /* blue-600 */
     --radius: 0.5rem;
   }
 }
@@ -79,7 +82,7 @@
   }
   .card-hover:hover {
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
     border-color: hsl(var(--border));
   }
 }
@@ -106,13 +109,18 @@
   }
 }
 @keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
 }
 
-
 @keyframes bounce-dot {
-  0%, 80%, 100% {
+  0%,
+  80%,
+  100% {
     transform: scale(0.6);
     opacity: 0.4;
   }
