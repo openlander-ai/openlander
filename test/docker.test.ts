@@ -81,7 +81,7 @@ type MockContainerHandleOptions = {
   stopError?: Error;
   removeError?: Error;
   logsError?: Error;
-  logsOutput?: string;
+  logsOutput?: string | Buffer;
   inspectResponses?: Array<{
     State: {
       Running: boolean;
@@ -109,7 +109,8 @@ const createDockerContainerHandle = (options: MockContainerHandleOptions = {}) =
     }),
     logs: vi.fn(async () => {
       if (options.logsError) throw options.logsError;
-      return Buffer.from(options.logsOutput ?? 'container-log-line');
+      const output = options.logsOutput ?? 'container-log-line';
+      return Buffer.isBuffer(output) ? output : Buffer.from(output);
     }),
     inspect: vi.fn(async () => {
       const next = inspectResponses[inspectIndex] ??
@@ -342,6 +343,41 @@ describeDocker('Docker core operations', () => {
       tail: 25,
       follow: false,
     });
+  });
+
+  it('strips docker multiplex frame headers from logs buffer', async () => {
+    const buildFrame = (streamType: 1 | 2, text: string): Buffer => {
+      const payload = Buffer.from(text, 'utf8');
+      const frame = Buffer.alloc(8 + payload.length);
+      frame[0] = streamType;
+      frame.writeUInt32BE(payload.length, 4);
+      payload.copy(frame, 8);
+      return frame;
+    };
+
+    const container = createDockerContainerHandle({
+      logsOutput: Buffer.concat([buildFrame(1, 'out line\n'), buildFrame(2, 'err line\n')]),
+    });
+    mockGetContainer.mockReturnValueOnce(container);
+    const docker = new Docker();
+
+    await expect(docker.getLogs('abc123')).resolves.toBe('out line\nerr line\n');
+  });
+
+  it('returns plain text logs when buffer is not multiplexed', async () => {
+    const container = createDockerContainerHandle({ logsOutput: 'plain-line\n' });
+    mockGetContainer.mockReturnValueOnce(container);
+    const docker = new Docker();
+
+    await expect(docker.getLogs('abc123')).resolves.toBe('plain-line\n');
+  });
+
+  it('returns empty string for empty logs buffer', async () => {
+    const container = createDockerContainerHandle({ logsOutput: Buffer.alloc(0) });
+    mockGetContainer.mockReturnValueOnce(container);
+    const docker = new Docker();
+
+    await expect(docker.getLogs('abc123')).resolves.toBe('');
   });
 
   it('maps waitForHealthy crash-loop and success paths', async () => {

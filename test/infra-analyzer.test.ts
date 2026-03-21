@@ -78,6 +78,44 @@ describe('analyzeInfrastructure', () => {
     ]);
   });
 
+  it('detects python dependency needs from requirements.txt', () => {
+    const fixturePath = join(fixturesRoot, 'python-requirements-postgres');
+
+    const result = analyzeInfrastructure(fixturePath, []);
+
+    expect(result.needs.map((need) => need.type)).toEqual(['postgresql']);
+    expect(result.available).toEqual([]);
+    expect(result.missing).toEqual([
+      {
+        type: 'postgresql',
+        suggestion: 'Create a postgresql service to satisfy the detected dependency',
+      },
+    ]);
+  });
+
+  it('detects python dependency needs from pyproject.toml', () => {
+    const fixturePath = join(fixturesRoot, 'python-pyproject-postgres-redis');
+
+    const result = analyzeInfrastructure(fixturePath, []);
+
+    expect(new Set(result.needs.map((need) => need.type))).toEqual(
+      new Set(['postgresql', 'redis']),
+    );
+    expect(result.available).toEqual([]);
+    expect(result.missing).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'postgresql',
+          suggestion: 'Create a postgresql service to satisfy the detected dependency',
+        },
+        {
+          type: 'redis',
+          suggestion: 'Create a redis service to satisfy the detected dependency',
+        },
+      ]),
+    );
+  });
+
   it('returns empty analysis for an empty repository input', () => {
     const fixturePath = join(fixturesRoot, 'empty-repo');
 

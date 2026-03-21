@@ -56,17 +56,24 @@ const DEPENDENCY_PATTERNS: Record<string, DetectedServiceType> = {
   'drizzle-orm': 'postgresql',
   sequelize: 'postgresql',
   typeorm: 'postgresql',
+  asyncpg: 'postgresql',
+  psycopg2: 'postgresql',
+  psycopg: 'postgresql',
+  sqlalchemy: 'postgresql',
 
-  // MySQL: mysql2
   mysql2: 'mysql',
+  asyncmy: 'mysql',
+  aiomysql: 'mysql',
+  pymysql: 'mysql',
 
-  // Redis: ioredis, redis
   ioredis: 'redis',
   redis: 'redis',
+  aioredis: 'redis',
 
-  // MongoDB: mongoose, mongodb
   mongoose: 'mongodb',
   mongodb: 'mongodb',
+  motor: 'mongodb',
+  pymongo: 'mongodb',
 };
 
 /**
@@ -148,6 +155,32 @@ export function analyzeInfrastructure(
     }
   } catch (err) {
     log.debug({ err }, 'Could not analyze package.json');
+  }
+
+  try {
+    const requirementsPath = join(repoPath, 'requirements.txt');
+    const requirementsContent = readFileSync(requirementsPath, 'utf8').toLowerCase();
+
+    for (const [pattern, serviceType] of Object.entries(DEPENDENCY_PATTERNS)) {
+      if (requirementsContent.includes(pattern) && !detectedTypes.has(serviceType)) {
+        detectedTypes.set(serviceType, pattern);
+      }
+    }
+  } catch (err) {
+    log.debug({ err }, 'Could not analyze requirements.txt');
+  }
+
+  try {
+    const pyprojectPath = join(repoPath, 'pyproject.toml');
+    const pyprojectContent = readFileSync(pyprojectPath, 'utf8').toLowerCase();
+
+    for (const [pattern, serviceType] of Object.entries(DEPENDENCY_PATTERNS)) {
+      if (pyprojectContent.includes(pattern) && !detectedTypes.has(serviceType)) {
+        detectedTypes.set(serviceType, pattern);
+      }
+    }
+  } catch (err) {
+    log.debug({ err }, 'Could not analyze pyproject.toml');
   }
 
   // Analyze .env.example and .env.sample files (per plan scope)

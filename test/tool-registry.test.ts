@@ -462,11 +462,13 @@ describe('Tool Registry', () => {
   it('scan_dockerfiles ignores hidden/vendor/node_modules and reports monorepo metadata', async () => {
     const tmpRoot = mkdtempSync(join(tmpdir(), 'registry-scan-'));
     mkdirSync(join(tmpRoot, '.git'), { recursive: true });
-    mkdirSync(join(tmpRoot, 'service-a'), { recursive: true });
+    mkdirSync(join(tmpRoot, 'apps', 'api'), { recursive: true });
     mkdirSync(join(tmpRoot, 'node_modules', 'left-pad'), { recursive: true });
     mkdirSync(join(tmpRoot, 'vendor', 'bin'), { recursive: true });
     writeFileSync(join(tmpRoot, 'Dockerfile'), 'FROM alpine\n');
-    writeFileSync(join(tmpRoot, 'service-a', 'Dockerfile'), 'FROM node:22\n');
+    writeFileSync(join(tmpRoot, 'Dockerfile.api'), 'FROM node:22\n');
+    writeFileSync(join(tmpRoot, 'Dockerfile.web'), 'FROM node:22\n');
+    writeFileSync(join(tmpRoot, 'apps', 'api', 'Dockerfile'), 'FROM node:22\n');
     writeFileSync(join(tmpRoot, '.git', 'Dockerfile'), 'FROM busybox\n');
     writeFileSync(join(tmpRoot, 'node_modules', 'left-pad', 'Dockerfile'), 'FROM busybox\n');
     writeFileSync(join(tmpRoot, 'vendor', 'bin', 'Dockerfile'), 'FROM busybox\n');
@@ -489,7 +491,7 @@ describe('Tool Registry', () => {
       repoUrl: 'https://github.com/user/repo',
       clonePath: tmpRoot,
       commitSha: 'abc123',
-      dockerfiles: ['Dockerfile', 'service-a/Dockerfile'],
+      dockerfiles: ['apps/api/Dockerfile', 'Dockerfile', 'Dockerfile.api', 'Dockerfile.web'],
       isMonorepo: true,
     });
 

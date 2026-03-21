@@ -26,7 +26,7 @@ export function findDockerfiles(dir: string, maxDepth = 3): string[] {
       const fullPath = join(current, entry);
       try {
         const stat = statSync(fullPath);
-        if (stat.isFile() && entry === 'Dockerfile') {
+        if (stat.isFile() && (entry === 'Dockerfile' || entry.startsWith('Dockerfile.'))) {
           results.push(fullPath);
         } else if (stat.isDirectory()) {
           walk(fullPath, depth + 1);

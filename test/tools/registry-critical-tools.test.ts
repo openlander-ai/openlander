@@ -197,7 +197,11 @@ describe('registry critical tool behaviors', () => {
   it('orchestrate_deploy builds service nodes and returns topology validation failure', async () => {
     const tempRepo = mkdtempSync(join(tmpdir(), 'registry-orchestrate-'));
     mkdirSync(join(tempRepo, 'web'), { recursive: true });
+    mkdirSync(join(tempRepo, 'apps', 'api'), { recursive: true });
     writeFileSync(join(tempRepo, 'Dockerfile'), 'FROM node:22\n');
+    writeFileSync(join(tempRepo, 'Dockerfile.api'), 'FROM node:22\n');
+    writeFileSync(join(tempRepo, 'Dockerfile.web'), 'FROM node:22\n');
+    writeFileSync(join(tempRepo, 'apps', 'api', 'Dockerfile'), 'FROM node:22\n');
     writeFileSync(join(tempRepo, 'web', 'Dockerfile'), 'FROM node:22\n');
 
     try {
@@ -230,6 +234,9 @@ describe('registry critical tool behaviors', () => {
       expect(mockBuildTopology.mock.calls[0]?.[0]).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ name: 'app', dockerfile: 'Dockerfile' }),
+          expect.objectContaining({ dockerfile: 'Dockerfile.api' }),
+          expect.objectContaining({ dockerfile: 'Dockerfile.web' }),
+          expect.objectContaining({ dockerfile: 'apps/api/Dockerfile' }),
           expect.objectContaining({
             name: 'web',
             dockerfile: 'web/Dockerfile',

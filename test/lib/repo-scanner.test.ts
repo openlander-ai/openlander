@@ -95,6 +95,30 @@ describe('repo-scanner', () => {
     ]);
   });
 
+  it('detects root Dockerfile variants with dot suffix and nested Dockerfiles', () => {
+    const clonePath = '/repo';
+    const fsMap = createFsMap([
+      [
+        clonePath,
+        { type: 'dir', entries: ['Dockerfile', 'Dockerfile.api', 'Dockerfile.web', 'apps'] },
+      ],
+      ['/repo/Dockerfile', { type: 'file' }],
+      ['/repo/Dockerfile.api', { type: 'file' }],
+      ['/repo/Dockerfile.web', { type: 'file' }],
+      ['/repo/apps', { type: 'dir', entries: ['api'] }],
+      ['/repo/apps/api', { type: 'dir', entries: ['Dockerfile'] }],
+      ['/repo/apps/api/Dockerfile', { type: 'file' }],
+    ]);
+    wireFsMap(fsMap);
+
+    expect(findDockerfiles(clonePath)).toEqual([
+      '/repo/apps/api/Dockerfile',
+      '/repo/Dockerfile',
+      '/repo/Dockerfile.api',
+      '/repo/Dockerfile.web',
+    ]);
+  });
+
   it('respects maxDepth when scanning Dockerfiles', () => {
     const clonePath = '/repo';
     const fsMap = createFsMap([

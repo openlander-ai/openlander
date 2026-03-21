@@ -61,11 +61,13 @@ describe('Server Tools (post-registry cleanup)', () => {
   it('scan_project detects dockerfiles and compose files while excluding hidden/vendor paths', async () => {
     const tempRepo = mkdtempSync(join(tmpdir(), 'server-tools-scan-project-'));
     mkdirSync(join(tempRepo, '.git'), { recursive: true });
-    mkdirSync(join(tempRepo, 'service-a'), { recursive: true });
+    mkdirSync(join(tempRepo, 'apps', 'api'), { recursive: true });
     mkdirSync(join(tempRepo, 'node_modules', 'left-pad'), { recursive: true });
     mkdirSync(join(tempRepo, 'vendor', 'bin'), { recursive: true });
     writeFileSync(join(tempRepo, 'Dockerfile'), 'FROM alpine\n');
-    writeFileSync(join(tempRepo, 'service-a', 'Dockerfile'), 'FROM node:22\n');
+    writeFileSync(join(tempRepo, 'Dockerfile.api'), 'FROM node:22\n');
+    writeFileSync(join(tempRepo, 'Dockerfile.web'), 'FROM node:22\n');
+    writeFileSync(join(tempRepo, 'apps', 'api', 'Dockerfile'), 'FROM node:22\n');
     writeFileSync(join(tempRepo, '.git', 'Dockerfile'), 'FROM busybox\n');
     writeFileSync(join(tempRepo, 'node_modules', 'left-pad', 'Dockerfile'), 'FROM busybox\n');
     writeFileSync(join(tempRepo, 'vendor', 'bin', 'Dockerfile'), 'FROM busybox\n');
@@ -83,7 +85,7 @@ describe('Server Tools (post-registry cleanup)', () => {
 
       expect(result).toEqual({
         isMonorepo: true,
-        dockerfiles: ['Dockerfile', 'service-a/Dockerfile'],
+        dockerfiles: ['apps/api/Dockerfile', 'Dockerfile', 'Dockerfile.api', 'Dockerfile.web'],
         composeFiles: ['docker-compose.yml'],
         clonePath: tempRepo,
       });

@@ -109,6 +109,40 @@ export interface WaitForHealthyResult {
   error?: string;
 }
 
+function stripDockerStreamHeaders(buffer: Buffer): string {
+  if (buffer.length === 0) return '';
+
+  const firstByte = buffer[0];
+  if (firstByte !== 0 && firstByte !== 1 && firstByte !== 2) {
+    return buffer.toString('utf8');
+  }
+
+  const HEADER_SIZE = 8;
+  const chunks: string[] = [];
+  let offset = 0;
+
+  while (offset < buffer.length) {
+    if (offset + HEADER_SIZE > buffer.length) {
+      chunks.push(buffer.subarray(offset).toString('utf8'));
+      break;
+    }
+
+    const payloadSize = buffer.readUInt32BE(offset + 4);
+    const payloadStart = offset + HEADER_SIZE;
+    const payloadEnd = payloadStart + payloadSize;
+
+    if (payloadEnd > buffer.length) {
+      chunks.push(buffer.subarray(payloadStart).toString('utf8'));
+      break;
+    }
+
+    chunks.push(buffer.subarray(payloadStart, payloadEnd).toString('utf8'));
+    offset = payloadEnd;
+  }
+
+  return chunks.join('');
+}
+
 /**
  * Docker control layer using dockerode.
  *
@@ -647,7 +681,8 @@ export class Docker {
         tail,
         follow: false,
       });
-      return logs.toString();
+      const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(logs as string);
+      return stripDockerStreamHeaders(buffer);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('not found') || msg.includes('No such container')) {
