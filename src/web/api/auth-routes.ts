@@ -256,9 +256,9 @@ export function createAuthRoutes(ctx: AppContext): Hono {
       // Hot-reload the agent
       try {
         const { createModel } = await import('../../llm/index.js');
-        const { Agent } = await import('../../agent/index.js');
-        const { createTools } = await import('../../agent/tools.js');
-        const { buildContextSnapshot } = await import('../../agent/prompts.js');
+        const { Agent } = await import('../../llm/agent.js');
+        const { createTools } = await import('../../tools/index.js');
+        const { buildContextSnapshot } = await import('../../llm/prompts.js');
 
         const llmModel = createModel({
           provider: ctx.config.llm.provider,

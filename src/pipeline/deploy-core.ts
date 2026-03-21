@@ -23,7 +23,7 @@ import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
-import type { BuildDebugger } from '../agent/debugger.js';
+import type { BuildDebugger } from './build-debugger.js';
 import { extractProjectName } from './helpers.js';
 import {
   getRouteName,

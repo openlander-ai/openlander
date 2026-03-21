@@ -11,7 +11,7 @@
 
 import { createModuleLogger } from '../lib/logger.js';
 import type { BuildTier } from '../pipeline/build-recovery.js';
-import type { ChatStreamEvent } from '../agent/index.js';
+import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { Question } from '../lib/question-bridge.js';
 import type { Alert } from '../monitor/alerts.js';
 

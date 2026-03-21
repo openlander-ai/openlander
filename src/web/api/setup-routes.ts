@@ -168,10 +168,10 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     // Hot-reload: try to create the agent now so the user doesn't need to restart
     try {
       const { createModel } = await import('../../llm/index.js');
-      const { Agent } = await import('../../agent/index.js');
-      const { createTools } = await import('../../agent/tools.js');
+      const { Agent } = await import('../../llm/agent.js');
+      const { createTools } = await import('../../tools/index.js');
       const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
-      const { buildContextSnapshot } = await import('../../agent/prompts.js');
+      const { buildContextSnapshot } = await import('../../llm/prompts.js');
 
       const llmModel = createModel({
         provider: provider as OpenLanderConfig['llm']['provider'],
@@ -595,10 +595,10 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     if (ctx.agent) {
       try {
         const { createModel } = await import('../../llm/index.js');
-        const { Agent } = await import('../../agent/index.js');
-        const { createTools } = await import('../../agent/tools.js');
-        const { buildContextSnapshot } = await import('../../agent/prompts.js');
-        const { BuildDebugger } = await import('../../agent/debugger.js');
+        const { Agent } = await import('../../llm/agent.js');
+        const { createTools } = await import('../../tools/index.js');
+        const { buildContextSnapshot } = await import('../../llm/prompts.js');
+        const { BuildDebugger } = await import('../../pipeline/build-debugger.js');
 
         const llmModel = createModel({
           provider: ctx.config.llm.provider,
@@ -789,7 +789,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     if (!config.mcp.enabled || config.mcp.servers.length === 0) {
       // Re-set tools without MCP
       if (ctx.agent) {
-        const { createTools } = await import('../../agent/tools.js');
+        const { createTools } = await import('../../tools/index.js');
         ctx.agent.setTools(createTools(ctx, ctx.questionBridge));
       }
       return c.json({ status: 'disconnected', connected: 0 });
@@ -800,7 +800,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     // Re-merge tools
     if (ctx.agent) {
-      const { createTools } = await import('../../agent/tools.js');
+      const { createTools } = await import('../../tools/index.js');
       const { mergeWithMcpTools } = await import('../../mcp/client-manager.js');
       const tools = await mergeWithMcpTools(
         createTools(ctx, ctx.questionBridge),

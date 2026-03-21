@@ -10,21 +10,14 @@ import {
   Activity,
 } from 'lucide-react';
 import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard';
-import { InsightCard } from './InsightCard';
-import { DockerfileFixedCard } from './DockerfileFixedCard';
 import { ToolResultCard } from './ToolResultCard';
-import { ErrorAnalysisCard } from './ErrorAnalysisCard';
-import { FixProposalCard } from './FixProposalCard';
 import { ComposeErrorCard } from './ComposeErrorCard';
 
 interface TimelineItemProps {
   item: TItem;
   isLatest?: boolean;
-  onFixWithAI?: () => void;
-  isFixWithAILoading?: boolean;
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
-  onInsightAction?: (projectId: string, action: string) => Promise<void>;
 }
 function cleanMarkdown(text: string): string {
   if (!text) return '';
@@ -44,40 +37,21 @@ export function TimelineItemCard({
   isLatest,
   onSubmitAnswer,
   onSkipQuestion,
-  onInsightAction,
 }: TimelineItemProps) {
   const isSuccess = item.type === 'success';
   const isError = item.type === 'error';
   const isQuestion = item.type === 'question';
-  const isInsight = item.type === 'insight';
-  const isDockerfileFix = item.type === 'dockerfile_fixed';
   const isAgentThinking = item.type === 'agent_thinking';
   const isAgentToolCall = item.type === 'agent_tool_call';
   const isAgentToolResult = item.type === 'agent_tool_result';
   const isAgentMessage = item.type === 'agent_message';
   const isAgentEvent = isAgentThinking || isAgentToolCall || isAgentToolResult || isAgentMessage;
 
-  if (isInsight) {
-    return <InsightCard item={item} onAction={onInsightAction} />;
-  }
-
-  if (isDockerfileFix) {
-    return <DockerfileFixedCard item={item} />;
-  }
-
   if (isAgentToolResult) {
-    if (
-      item.toolName === 'error-analysis' ||
-      item.toolName === 'error_analysis' ||
-      item.toolName === 'debug_build_error'
-    ) {
-      return <ErrorAnalysisCard item={item} />;
-    }
     return <ToolResultCard item={item} />;
   }
 
   if (isQuestion && item.questionId && item.questions) {
-    const hasFixProposal = item.questions.some((q) => q.metadata?.fixType);
     const isComposeFix = item.questions.some((q) => q.metadata?.fixType === 'compose');
 
     if (isComposeFix) {
@@ -92,17 +66,6 @@ export function TimelineItemCard({
       );
     }
 
-    if (hasFixProposal) {
-      return (
-        <FixProposalCard
-          questionId={item.questionId}
-          questions={item.questions}
-          answered={item.answered}
-          onSubmit={onSubmitAnswer ?? (() => {})}
-          onSkip={onSkipQuestion ?? (() => {})}
-        />
-      );
-    }
     return (
       <InputRequestCard
         questionId={item.questionId}

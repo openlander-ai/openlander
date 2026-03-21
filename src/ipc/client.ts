@@ -1,7 +1,7 @@
 import { request } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { existsSync } from 'node:fs';
-import type { ChatStreamEvent, AgentResponse } from '../agent/index.js';
+import type { ChatStreamEvent, AgentResponse } from '../types/agent-events.js';
 import type { Alert } from '../monitor/alerts.js';
 import type { SystemStats } from '../monitor/stats.js';
 import { createModuleLogger } from '../lib/logger.js';

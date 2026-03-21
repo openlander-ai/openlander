@@ -1,4 +1,4 @@
-import type { Agent } from '../agent/index.js';
+import type { Agent } from '../llm/agent.js';
 import type { Database, DeployLogRow } from '../db/index.js';
 import type { EventBus, EventPayload } from '../events/index.js';
 import type { OpenLanderConfig } from '../config/index.js';

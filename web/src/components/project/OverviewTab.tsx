@@ -1,12 +1,8 @@
 import { useEffect, useState, Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
-import { PostmortemCard } from '@/components/timeline/PostmortemCard';
 import { LogPreview } from '@/components/timeline/LogPreview';
-import { ChatMessageList } from '@/components/assistant/ChatMessageList';
 import { DeployTerminalSession } from '@/components/deploy-terminal/DeployTerminalSession';
-import type { AssistantItem } from '@/hooks/use-assistant';
 import type { TimelineItem } from '@/lib/event-types';
-import type { PostmortemData } from '@/lib/api';
 import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCard';
 import { SummaryDashboard } from '@/components/project/SummaryDashboard';
 import { getProject } from '@/lib/api';
@@ -47,17 +43,10 @@ interface OverviewTabProps {
   // Timeline props
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
-  postmortem: PostmortemData | null;
-  fixingItemId: string | null;
   onSubmitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion: (questionId: string) => void;
   onInsightAction: (projectId: string, action: string) => Promise<void>;
-  onFixWithAI: (errorMessage?: string, timelineItemId?: string) => void;
   onOpenLogs: () => void;
-  // Assistant props
-  assistantItems: AssistantItem[];
-  isAssistantStreaming: boolean;
-  onSendMessage: (message: string) => void;
 }
 
 export function OverviewTab({
@@ -66,15 +55,9 @@ export function OverviewTab({
   displayProject,
   timelineItems,
   isTimelineStreaming,
-  postmortem,
-
   onSubmitAnswer,
   onSkipQuestion,
-
   onOpenLogs,
-  assistantItems,
-  isAssistantStreaming,
-  onSendMessage,
 }: OverviewTabProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [wasBuilding, setWasBuilding] = useState(false);
@@ -110,14 +93,6 @@ export function OverviewTab({
           !showTimeline && 'md:border-r',
         )}
       >
-        {postmortem && (
-          <PostmortemCard
-            projectId={postmortem.projectId}
-            projectName={postmortem.projectName}
-            markdown={postmortem.markdown}
-            generatedAt={postmortem.generatedAt}
-          />
-        )}
         {showTimeline ? (
           <>
             <section className="rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
@@ -128,11 +103,8 @@ export function OverviewTab({
                   projectStatus={projectStatus}
                   timelineItems={timelineItems}
                   isTimelineStreaming={isTimelineStreaming}
-                  assistantItems={assistantItems}
-                  isAssistantStreaming={isAssistantStreaming}
                   onSubmitAnswer={onSubmitAnswer}
                   onSkipQuestion={onSkipQuestion}
-                  onSendMessage={onSendMessage}
                 />
               </LocalErrorBoundary>
             </section>
@@ -157,16 +129,6 @@ export function OverviewTab({
           </section>
         )}
       </div>
-
-      {!showTimeline && (
-        <ChatMessageList
-          assistantItems={assistantItems}
-          isStreaming={isAssistantStreaming}
-          onSendMessage={onSendMessage}
-          onSubmitAnswer={onSubmitAnswer}
-          onSkipQuestion={onSkipQuestion}
-        />
-      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { BuildDebugger } from '../../agent/debugger.js';
+import type { BuildDebugger } from '../build-debugger.js';
 import type { EventPayload } from '../../events/index.js';
 import type {
   BuildContext as RecoveryBuildContext,

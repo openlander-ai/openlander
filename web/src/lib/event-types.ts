@@ -85,6 +85,10 @@ export interface TimelineItem {
     | 'question'
     | 'insight'
     | 'dockerfile_fixed'
+    | 'agent_thinking'
+    | 'agent_tool_call'
+    | 'agent_tool_result'
+    | 'agent_message'
     | 'needs_user_action';
   timestamp: string;
   title: string;
@@ -110,6 +114,11 @@ export interface TimelineItem {
   durationMs?: number;
   logChunk?: string;
   sourceProjectId?: string;
+  toolName?: string;
+  toolArguments?: Record<string, unknown>;
+  toolResult?: unknown;
+  toolError?: string;
+  toolSuccess?: boolean;
 }
 
 /** Message pattern → progress percentage mapping */

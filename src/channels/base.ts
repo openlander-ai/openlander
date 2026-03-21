@@ -1,7 +1,7 @@
 import type { AppContext } from '../app.js';
 import { type EventBus, eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
-import type { ChatStreamEvent } from '../agent/index.js';
+import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { QuestionRequest } from '../lib/question-bridge.js';
 
 const log = createModuleLogger('channels');

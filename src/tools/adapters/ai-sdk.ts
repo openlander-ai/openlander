@@ -106,7 +106,7 @@ export function toAiSdkTools(
       }
 
       const { cloneRepo } = await import('../../pipeline/git.js');
-      const { readDockerfile } = await import('../../agent/debugger.js');
+      const { readDockerfile } = await import('../../pipeline/build-debugger.js');
       const cloneResult = await cloneRepo({
         repoUrl: project.repo_url ?? '',
         branch: project.branch,

@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 
-import type { ChatStreamEvent } from '../agent/index.js';
-import type { BuildDebugger } from '../agent/debugger.js';
+import type { ChatStreamEvent } from '../types/agent-events.js';
+import type { BuildDebugger } from './build-debugger.js';
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import type { QuestionBridge } from '../lib/question-bridge.js';

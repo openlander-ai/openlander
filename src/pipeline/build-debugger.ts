@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { generateText } from 'ai';
 import type { LanguageModel } from 'ai';
 import type { ChatMessage } from '../llm/index.js';
-import { matchRecipe } from '../pipeline/recipes.js';
+import { matchRecipe } from './recipes.js';
 import { createModuleLogger } from '../lib/logger.js';
-import { collectProjectContext } from '../pipeline/auto-detect.js';
+import { collectProjectContext } from './auto-detect.js';
 
 const log = createModuleLogger('debugger');
 

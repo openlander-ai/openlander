@@ -1,4 +1,4 @@
-import { isErrorAnalysisResult, type TimelineItem } from '@/lib/event-types';
+import type { TimelineItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/time';
 import {
@@ -11,7 +11,6 @@ import {
   RotateCcw,
   Layers,
 } from 'lucide-react';
-import { ErrorAnalysisCard } from './ErrorAnalysisCard';
 import { getRendererForTool } from '../shared/ToolResultRenderers';
 
 interface ToolResultCardProps {
@@ -21,10 +20,6 @@ interface ToolResultCardProps {
 export function ToolResultCard({ item }: ToolResultCardProps) {
   const isSuccess = item.toolSuccess !== false; // Default to true if undefined
   const toolName = item.toolName || 'unknown_tool';
-
-  if (toolName === 'debug_build_error' && isErrorAnalysisResult(item.toolResult)) {
-    return <ErrorAnalysisCard item={item} />;
-  }
 
   const bgClass = isSuccess ? 'bg-agent/5' : 'bg-error/5';
   const borderClass = isSuccess ? 'border-agent/10' : 'border-error/10';

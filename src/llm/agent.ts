@@ -1,9 +1,10 @@
 import { generateText, streamText, stepCountIs } from 'ai';
 import type { LanguageModel, ToolSet } from 'ai';
-import type { ChatMessage } from '../llm/index.js';
+import type { ChatMessage } from './index.js';
 import type { QuestionRequest, QuestionBridge } from '../lib/question-bridge.js';
 import type { Database } from '../db/index.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
+import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
 
 /**
  * OpenLander AI Agent.
@@ -316,26 +317,4 @@ export class Agent {
   }
 }
 
-export interface AgentResponse {
-  message: string;
-  toolResults?: ToolResult[];
-}
-
-export interface ToolResult {
-  toolName: string;
-  success: boolean;
-  result?: unknown;
-  error?: string;
-}
-
-// --- SSE Streaming Types ---
-
-export type ChatStreamEvent =
-  | { type: 'session'; sessionId: string }
-  | { type: 'thinking' }
-  | { type: 'tool_call'; toolName: string; arguments: Record<string, unknown> }
-  | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
-  | { type: 'message'; content: string }
-  | { type: 'question'; request: QuestionRequest }
-  | { type: 'done'; toolResults?: ToolResult[] }
-  | { type: 'error'; error: string };
+export type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';

@@ -42,7 +42,7 @@ program
 
     // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
-      const { createTools } = await import('../agent/tools.js');
+      const { createTools } = await import('../tools/index.js');
       const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
       let tools: ToolSet = createTools(ctx, ctx.questionBridge);
       if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
@@ -116,7 +116,7 @@ program
 
     // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
-      const { createTools } = await import('../agent/tools.js');
+      const { createTools } = await import('../tools/index.js');
       const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
       let tools: ToolSet = createTools(ctx, ctx.questionBridge);
       if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
@@ -243,7 +243,7 @@ program
     const ctx = createAppContext(config, getDbPath());
 
     if (ctx.agent) {
-      const { createTools } = await import('../agent/tools.js');
+      const { createTools } = await import('../tools/index.js');
       const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
       let tools: ToolSet = createTools(ctx, ctx.questionBridge);
       if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {
@@ -408,7 +408,7 @@ program
     const ctx = createAppContext(config, getDbPath());
 
     if (ctx.agent) {
-      const { createTools } = await import('../agent/tools.js');
+      const { createTools } = await import('../tools/index.js');
       const { mergeWithMcpTools } = await import('../mcp/client-manager.js');
       let tools: ToolSet = createTools(ctx, ctx.questionBridge);
       if (ctx.config.mcp.enabled && ctx.config.mcp.servers.length > 0) {

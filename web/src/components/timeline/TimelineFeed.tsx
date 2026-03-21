@@ -6,27 +6,21 @@ import { TimelineItemCard } from './TimelineItem';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Brain } from 'lucide-react';
+
 interface TimelineFeedProps {
   items: TimelineItem[];
   isStreaming: boolean;
   projectStatus?: string;
-  onFixWithAI?: (errorMessage?: string, timelineItemId?: string) => void;
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
-  onInsightAction?: (projectId: string, action: string) => Promise<void>;
-  fixingItemId?: string | null;
 }
 
 export function TimelineFeed({
   items,
   isStreaming,
   projectStatus,
-  onFixWithAI,
   onSubmitAnswer,
   onSkipQuestion,
-  onInsightAction,
-  fixingItemId,
 }: TimelineFeedProps) {
   const [autoFollow, setAutoFollow] = useState(true);
   const { t } = useLanguage();
@@ -69,46 +63,7 @@ export function TimelineFeed({
 
   const progressItems = items.filter((item) => item.type === 'progress');
   const latestProgress = progressItems.length > 0 ? progressItems[progressItems.length - 1] : null;
-  const timelineItems = items;
-  const processedItems: (TimelineItem | { type: 'ai_divider'; id: string })[] = [];
-  let hasThinking = false;
-  let inAiSection = false;
 
-  for (let i = 0; i < timelineItems.length; i++) {
-    const item = timelineItems[i];
-    const isAi = [
-      'agent_thinking',
-      'agent_tool_call',
-      'agent_message',
-      'insight',
-      'dockerfile_fixed',
-      'question',
-    ].includes(item.type);
-
-    if (isAi) {
-      if (!inAiSection) {
-        inAiSection = true;
-        processedItems.push({ type: 'ai_divider', id: `divider-${item.id}` });
-      }
-
-      if (item.type === 'agent_thinking') {
-        if (!hasThinking) {
-          processedItems.push(item);
-          hasThinking = true;
-        } else {
-          // Replace the last thinking item
-          processedItems[processedItems.length - 1] = item;
-        }
-      } else {
-        processedItems.push(item);
-        hasThinking = false;
-      }
-    } else {
-      inAiSection = false;
-      processedItems.push(item);
-      hasThinking = false;
-    }
-  }
   return (
     <div className="relative h-full">
       <ScrollArea className="h-full" ref={scrollRef}>
@@ -174,64 +129,17 @@ export function TimelineFeed({
             </div>
           )}
 
-          {processedItems.map((item, index) => {
-            if ('type' in item && item.type === 'ai_divider') {
-              return (
-                <div key={item.id} className="flex items-center gap-3 my-6 px-4">
-                  <div className="h-px bg-gradient-to-r from-transparent via-agent/50 to-agent/50 flex-1" />
-                  <div className="text-xs font-mono font-bold text-agent flex items-center gap-2 uppercase tracking-widest px-3 py-1 rounded-full bg-agent/10 border border-agent/20 shadow-sm shadow-agent/20">
-                    <Brain className="h-4 w-4" />
-                    {'AI Analysis'}
-                  </div>
-                  <div className="h-px bg-gradient-to-l from-transparent via-agent/50 to-agent/50 flex-1" />
-                </div>
-              );
-            }
-
-            const timelineItem = item as TimelineItem;
+          {items.map((timelineItem, index) => {
             return (
               <TimelineItemCard
                 key={timelineItem.id}
                 item={timelineItem}
-                isLatest={index === processedItems.length - 1 && isStreaming}
-                onFixWithAI={
-                  timelineItem.type === 'error'
-                    ? () => onFixWithAI?.(timelineItem.title, timelineItem.id)
-                    : undefined
-                }
-                isFixWithAILoading={fixingItemId === timelineItem.id}
+                isLatest={index === items.length - 1 && isStreaming}
                 onSubmitAnswer={onSubmitAnswer}
                 onSkipQuestion={onSkipQuestion}
-                onInsightAction={onInsightAction}
               />
             );
           })}
-          {/* Streaming indicator */}
-          {isStreaming && items.length > 0 && (
-            <div className="flex items-center gap-4 py-4 px-5 relative overflow-hidden rounded-lg border border-agent/10 bg-agent/5 mt-2 timeline-item-enter">
-              <div className="absolute inset-0 bg-grid-pattern opacity-20" />
-              <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-agent/50 to-transparent scanline" />
-
-              <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-agent/10 border border-agent/20 shrink-0">
-                <div className="absolute inset-0 rounded-full border border-agent/30 animate-[pulse-ring_2s_cubic-bezier(0.215,0.61,0.355,1)_infinite]" />
-                <div className="w-2 h-2 rounded-full bg-agent animate-pulse" />
-              </div>
-
-              <div className="relative flex flex-col">
-                <span className="text-xs font-mono text-agent/90 uppercase tracking-widest flex items-center gap-2">
-                  {'System Active'}
-                  <span className="flex gap-0.5">
-                    <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce" />
-                    <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce [animation-delay:150ms]" />
-                    <span className="w-1 h-1 rounded-full bg-agent/70 animate-bounce [animation-delay:300ms]" />
-                  </span>
-                </span>
-                <span className="text-[10px] font-mono text-muted-ol mt-0.5">
-                  {t('timeline.awaitingInstruction')}
-                </span>
-              </div>
-            </div>
-          )}
 
           <div ref={bottomRef} />
         </div>

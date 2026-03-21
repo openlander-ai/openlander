@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import type { ChatStreamEvent } from '../../agent/index.js';
+import type { ChatStreamEvent } from '../../types/agent-events.js';
 import { createModuleLogger } from '../../lib/logger.js';
 
 const log = createModuleLogger('chat-routes');
