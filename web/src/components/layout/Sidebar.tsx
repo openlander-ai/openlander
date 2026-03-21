@@ -167,7 +167,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             className={cn(
               'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
               isDashboardMode
-                ? 'bg-bg-panel text-primary-ol shadow-sm'
+                ? 'bg-bg-panel text-primary-ol shadow-sm font-semibold'
                 : 'text-muted-ol hover:text-secondary-ol',
             )}
           >
@@ -181,7 +181,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             className={cn(
               'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
               isAgentMode
-                ? 'bg-bg-panel text-primary-ol shadow-sm'
+                ? 'bg-agent/10 text-agent shadow-sm font-semibold border border-agent/20'
                 : 'text-muted-ol hover:text-secondary-ol',
               agentDisabled && 'opacity-50 cursor-not-allowed',
             )}

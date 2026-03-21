@@ -24,13 +24,13 @@ export function EmptyState({ onSendMessage }: EmptyStateProps) {
         <h3 className="text-sm font-medium text-primary-ol">Start a conversation</h3>
         <p className="text-xs text-muted-ol">Ask your deployment agent anything</p>
       </div>
-      <div className="flex flex-wrap gap-2 justify-center max-w-md">
+      <div className="flex flex-wrap gap-2.5 justify-center max-w-md">
         {suggestions.map((s) => (
           <button
             key={s}
             data-testid="suggestion-chip"
             onClick={() => onSendMessage(s)}
-            className="px-3 py-1.5 rounded-full border border-border text-xs text-secondary-ol hover:bg-bg-subtle hover:text-primary-ol transition-colors"
+            className="px-4 py-2 rounded-full border border-border text-sm text-secondary-ol hover:bg-bg-subtle hover:text-primary-ol transition-colors"
           >
             {s}
           </button>

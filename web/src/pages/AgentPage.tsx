@@ -100,6 +100,7 @@ export function AgentPage() {
         error={chat.error}
         pendingQuestion={chat.pendingQuestion}
         onSendMessage={chat.sendMessage}
+        onAbort={chat.abort}
         onReply={handleReply}
         onDismiss={handleDismiss}
       />
