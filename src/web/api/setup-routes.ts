@@ -43,7 +43,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const llmConfigured = ctx.agent !== null;
     const config = loadConfig();
 
-    const ready = dockerOk && llmConfigured;
+    const ready = dockerOk;
 
     let dockerMessage: string;
     if (dockerStatus.state === 'running') {
