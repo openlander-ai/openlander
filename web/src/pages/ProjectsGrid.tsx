@@ -329,7 +329,9 @@ export function ProjectsGrid() {
                       className={cn(
                         'h-2.5 w-2.5 rounded-full shrink-0 shadow-[0_0_8px_rgba(0,0,0,0.2)]',
                         status.dot,
-                        project.status === 'running' && 'shadow-success/40',
+                        project.status === 'running' && 'shadow-[0_0_8px_rgba(52,211,153,0.6)]',
+                        project.status === 'error' && 'shadow-[0_0_8px_rgba(248,113,113,0.6)]',
+                        project.status === 'building' && 'shadow-[0_0_8px_rgba(251,191,36,0.6)]',
                       )}
                     />
                     <h3 className="font-display font-semibold text-base text-primary-ol truncate">
@@ -349,14 +351,18 @@ export function ProjectsGrid() {
                 <div className="p-4 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1">Last Deploy</p>
+                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+                        Last Deploy
+                      </p>
                       <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol">
                         <Clock className="h-3.5 w-3.5" />
                         {formatRelativeTime(project.updatedAt, t)}
                       </div>
                     </div>
                     <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1">Branch</p>
+                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+                        Branch
+                      </p>
                       <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol truncate">
                         <GitBranch className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate">{project.branch || 'main'}</span>
@@ -366,7 +372,9 @@ export function ProjectsGrid() {
 
                   {project.url && (
                     <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1">Endpoint</p>
+                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+                        Endpoint
+                      </p>
                       <a
                         href={project.url}
                         target="_blank"
@@ -390,7 +398,9 @@ export function ProjectsGrid() {
 
                     return (
                       <div className="pt-2 border-t border-[hsl(var(--border))]/50">
-                        <p className="text-[10px] font-mono text-muted-ol mb-2">Environments</p>
+                        <p className="text-[10px] font-mono text-muted-ol mb-2 uppercase tracking-[0.08em]">
+                          Environments
+                        </p>
                         <div className="flex items-center gap-2 flex-wrap">
                           {allEnvs.map((env) => {
                             const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
