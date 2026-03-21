@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-03-21
+
+### Changed
+
+- **MCP-First Web Pivot**: Transformed web dashboard from AI chat interface to monitoring-focused dashboard
+- **LLM now optional**: Server starts with Docker alone; API key enables smart auto-recovery
+- **Auto-recovery dual-mode**: LLM mode (agent-driven analysis) + programmatic mode (recipe matching + single retry)
+
+### Added
+
+- **RecoveryCard timeline component**: Displays auto-recovery events (start, success, failed, exhausted) in deploy timeline
+- **System status bar**: Dashboard shows Docker, Traefik, MCP status at a glance
+- **Optional API key setup**: Settings and Setup flow simplified — Docker check → GitHub (opt) → API Key (opt)
+
+### Removed
+
+- **AI Assistant UI**: Deleted ChatInput, ChatMessageList, ToolCallGroup, ThinkingIndicator and 8 assistant components
+- **AI Timeline Cards**: Deleted ErrorAnalysisCard, InsightCard, PostmortemCard, DockerfileFixedCard, FixProposalCard
+- **AI Web Routes**: Deleted chat-routes.ts (POST /agent/chat), auth-routes.ts (OpenAI/OpenRouter OAuth)
+- **AI API Functions**: Removed debugBuild(), chatWithAgent(), getPostmortem() from frontend api.ts
+- **src/agent/ directory**: Moved Agent class → src/llm/agent.ts, BuildDebugger → src/pipeline/build-debugger.ts, then deleted directory
+
 ## [0.7.3] - 2026-03-21
 
 ### Changed

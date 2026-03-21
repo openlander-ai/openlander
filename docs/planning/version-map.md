@@ -57,6 +57,7 @@ v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ─�
 | 27     | **v0.2.6 Shared Mode & PR Preview**    | `v0.2.6/shared-mode-pr-preview.md`           | v0.2.6         | 100%   | ✅ 3 Phase 구현 완료. Traefik File Provider + Quick Share + Shared 모드 + PR 프리뷰 + 16 bugfix. 535 tests (dead TUI tests 제거).                    |
 | 28     | **Agent Enhancement Sprint**           | `.sisyphus/plans/agent-enhancement.md`       | TBD            | 100%   | ✅ P0-1 questionBridge fix, P0-2 채널 스트리밍, P1-1 MCP agent_execute_goal, P1-2 오케스트레이터. P1-3 UI는 MCP-first 전환(DEC-037)으로 스코프 아웃. |
 | 29     | **v1.0.0 로드맵**                      | `release/v1.0.0-roadmap.md`                  | v1.0.0         | —      | 📋 v1.0까지 6단계 로드맵. MCP-first 전환 반영.                                                                                                       |
+| 30     | **v0.8.0 MCP-First Web Pivot**         | `.sisyphus/plans/web-mcp-pivot.md`           | v0.8.0         | 100%   | ✅ 완료                                                                                                                                              |
 
 ---
 
@@ -1207,5 +1208,25 @@ AI: bugs.md → 해결됨 + gh issue close
 | TUI Freeze (git tag `tui-last` @ e927b30)                   | ✅   |
 
 **의사결정 기록**: [`references/decision-log.md`](../../references/decision-log.md)
+
+---
+
+### v0.8.0 — MCP-First Web Pivot (2026-03-21)
+
+**상태**: ✅ 완료 | **관련 문서**: `.sisyphus/plans/web-mcp-pivot.md`
+
+> **핵심 가치**: 웹 대시보드를 AI 어시스턴트 UI에서 모니터링 중심으로 전환. LLM을 옵셔널화하여 Docker만으로 서버 시작 가능. 자동 복구를 이중 모드(LLM/프로그래밍)로 구현.
+
+| 항목                                | 내용                                                                                         | 상태 |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- | ---- |
+| 웹 AI 어시스턴트 UI 제거            | ChatInput, ChatMessageList, ToolCallGroup, ThinkingIndicator 등 8개 컴포넌트 삭제            | ✅   |
+| AI 타임라인 카드 제거               | ErrorAnalysisCard, InsightCard, PostmortemCard, DockerfileFixedCard, FixProposalCard 삭제    | ✅   |
+| AI 웹 라우트 제거                   | chat-routes.ts (POST /agent/chat), auth-routes.ts (OpenAI/OpenRouter OAuth) 삭제             | ✅   |
+| AI API 함수 제거                    | debugBuild(), chatWithAgent(), getPostmortem() 프론트엔드 api.ts에서 제거                    | ✅   |
+| src/agent/ 디렉토리 정리            | Agent 클래스 → src/llm/agent.ts, BuildDebugger → src/pipeline/build-debugger.ts 이동 후 삭제 | ✅   |
+| RecoveryCard 타임라인 컴포넌트 추가 | 자동 복구 이벤트(start, success, failed, exhausted) 타임라인 표시                            | ✅   |
+| 시스템 상태 바 추가                 | 대시보드에 Docker, Traefik, MCP 상태 표시                                                    | ✅   |
+| 옵셔널 API 키 설정                  | 설정 및 온보딩 플로우 단순화 — Docker 체크 → GitHub(선택) → API 키(선택)                     | ✅   |
+| 자동 복구 이중 모드                 | LLM 모드(에이전트 분석) + 프로그래밍 모드(레시피 매칭 + 단일 재시도)                         | ✅   |
 
 ---
