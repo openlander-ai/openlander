@@ -104,7 +104,7 @@
     "type": "git",
     "url": "https://github.com/openlander-ai/OpenLander.git"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "author": "OpenLander Contributors",
   "homepage": "https://github.com/openlander-ai/OpenLander",
   "bugs": {
