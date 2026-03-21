@@ -10,7 +10,7 @@ function readSource(relativePath: string): string {
 
 describe('deploy-flow unification integration evidence', () => {
   it('keeps QuestionBridge timeout safety for pending ask sessions', () => {
-    const source = readSource('src/agent/question-bridge.ts');
+    const source = readSource('src/lib/question-bridge.ts');
 
     expect(source).toContain('const QUESTION_SESSION_TIMEOUT_MS = 5 * 60 * 1000;');
     expect(source).toContain('Session timed out — user did not respond within 5 minutes');

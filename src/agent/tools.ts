@@ -1,5 +1,5 @@
 import type { AppContext } from '../app.js';
-import type { QuestionBridge } from './question-bridge.js';
+import type { QuestionBridge } from '../lib/question-bridge.js';
 import { toAiSdkTools } from '../tools/adapters/ai-sdk.js';
 import { composeToolDefs } from '../tools/defs/compose.js';
 import { debugToolDefs } from '../tools/defs/debug.js';

@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { Database } from '../src/db/index.js';
 import type { AppContext } from '../src/app.js';
 import { createTools } from '../src/agent/tools.js';
-import type { QuestionBridge } from '../src/agent/question-bridge.js';
+import type { QuestionBridge } from '../src/lib/question-bridge.js';
 import * as gitPipeline from '../src/pipeline/git.js';
 import * as configModule from '../src/config/index.js';
 import * as gitProvidersModule from '../src/git-providers/index.js';
