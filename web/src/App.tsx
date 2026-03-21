@@ -45,7 +45,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 /**
- * Route guard: redirects to /setup when LLM is not configured.
+ * Route guard: redirects to /setup when Docker is not ready.
  * On API error, passes through (don't block existing users).
  */
 function SetupGuard() {
