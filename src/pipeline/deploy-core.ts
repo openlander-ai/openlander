@@ -677,6 +677,23 @@ export class DeployPipeline {
 
       try {
         const recovery = new BuildRecovery(this.docker, this.db, eventBus);
+
+        const classification = recovery.classify(buildLogWithError, {
+          projectId,
+          projectName,
+          imageTag,
+          clonePath,
+          buildLog: buildLogWithError,
+          failedStep: failStep as 'clone' | 'dockerfile' | 'build' | 'run' | 'runtime',
+        });
+        this.jobManager?.setAutoDiagnosis(projectId, {
+          category: classification.category,
+          tier: classification.tier,
+          cause: classification.message,
+          autoFixable: classification.autoFixable,
+          suggestedAction: classification.suggestedAction,
+        });
+
         const recoveryOrchestrator = new RecoveryOrchestrator(this.buildDebugger);
         const action = await recoveryOrchestrator.handleBuildFailure({
           projectId,

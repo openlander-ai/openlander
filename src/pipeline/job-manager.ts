@@ -1,11 +1,20 @@
 export type JobPhase = 'queued' | 'cloning' | 'building' | 'starting' | 'done' | 'failed';
 
+export interface AutoDiagnosis {
+  category: string;
+  tier: number;
+  cause: string;
+  autoFixable: boolean;
+  suggestedAction?: string;
+}
+
 export interface JobStatus {
   projectId: string;
   projectName: string;
   phase: JobPhase;
   errorSummary?: string;
   buildLogTail?: string;
+  autoDiagnosis?: AutoDiagnosis;
   buildStep?: number;
   buildStepTotal?: number;
   buildStepDesc?: string;
@@ -42,6 +51,12 @@ export class JobManager {
       job.buildStepTotal = undefined;
       job.buildStepDesc = undefined;
     }
+  }
+
+  setAutoDiagnosis(projectId: string, diagnosis: AutoDiagnosis): void {
+    const job = this.jobs.get(projectId);
+    if (!job) return;
+    job.autoDiagnosis = diagnosis;
   }
 
   updateBuildStep(projectId: string, step: number, total: number, desc: string): void {
