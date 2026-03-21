@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
 import { useChatSessions } from '@/hooks/use-chat-sessions';
 import { ChatSidebar } from '@/components/agent/ChatSidebar';
+import { formatRelativeTime } from '@/lib/time';
 
 interface SidebarProps {
   projects: Project[];
@@ -95,8 +96,21 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const isActive = (path: string) => location.pathname === path;
   const isProjectActive = (id: string) => location.pathname === `/projects/${id}`;
 
-  const tempGroups = new Map<string, Project[]>();
+  const issueProjects: Project[] = [];
+  const normalProjects: Project[] = [];
+
   for (const p of projects) {
+    if (p.status === 'error' || p.status === 'building') {
+      issueProjects.push(p);
+    } else {
+      normalProjects.push(p);
+    }
+  }
+
+  issueProjects.sort(sortProjects);
+
+  const tempGroups = new Map<string, Project[]>();
+  for (const p of normalProjects) {
     const url = p.repoUrl ? normalizeRepoUrl(p.repoUrl) : 'unknown';
     if (!tempGroups.has(url)) tempGroups.set(url, []);
     tempGroups.get(url)!.push(p);
@@ -129,11 +143,21 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   };
 
   const renderProjectItem = (project: Project) => {
+    let tooltip = project.name;
+    if (project.status === 'error') {
+      const timeStr = project.updatedAt ? formatRelativeTime(project.updatedAt) : '';
+      tooltip = timeStr
+        ? `${project.name} — Error since ${timeStr}. Click to view.`
+        : `${project.name} — Error. Click to view.`;
+    } else if (project.status === 'building') {
+      tooltip = `${project.name} — Building...`;
+    }
+
     return (
       <button
         key={project.id}
         onClick={() => navigate(`/projects/${project.id}`)}
-        title={project.name}
+        title={tooltip}
         className={cn(
           'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150',
           'lg:justify-start justify-center',
@@ -241,6 +265,15 @@ export function Sidebar({ projects, loading }: SidebarProps) {
 
             {/* Grouped list for expanded mode (>= lg) */}
             <div className="hidden lg:block space-y-4">
+              {issueProjects.length > 0 && (
+                <div className="space-y-0.5">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-ol px-3 py-1">
+                    ⚠️ Issues ({issueProjects.length})
+                  </div>
+                  {issueProjects.map(renderProjectItem)}
+                </div>
+              )}
+
               {Array.from(groups.entries()).map(([url, projs]) => {
                 const visibleProjs = projs;
 
