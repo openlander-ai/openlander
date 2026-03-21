@@ -16,6 +16,7 @@ const enableWebhookTool: ToolDef = {
   name: 'enable_webhook',
   description:
     'Enable automatic deploys via webhook for a git provider (GitHub, GitLab, or Bitbucket). When enabled, pushing to the configured branch triggers a redeploy. Returns { id, source, secret, enabled, branchFilter, webhookPath }. The webhookPath is relative - combine with your OpenLander host URL to get the full webhook URL for configuring in your git provider. Errors: PROJECT_NOT_FOUND.',
+  mcpDescription: 'Configure an auto-deploy webhook for GitHub, GitLab, or Bitbucket.',
   inputSchema: enableWebhookSchema,
   execute: (args, { appCtx }) => {
     const projectName = args['project_name'] as string;
@@ -44,6 +45,7 @@ const enableWebhookTool: ToolDef = {
       _agent_guidance: {
         next_steps: [
           'Configure this webhook URL and secret in git provider settings (GitHub → Settings → Webhooks)',
+          'Call get_webhook_config to verify webhook setup is correct.',
         ],
       },
     };
@@ -54,6 +56,7 @@ const disableWebhookTool: ToolDef = {
   name: 'disable_webhook',
   description:
     'Disable webhook auto-deploy for a specific git provider on a project. Does not delete the configuration - re-enable with enable_webhook. Returns { status, project, source }. Errors: PROJECT_NOT_FOUND, WEBHOOK_NOT_FOUND.',
+  mcpDescription: 'Disable auto-deploy webhook while keeping its configuration.',
   inputSchema: disableWebhookSchema,
   execute: (args, { appCtx }) => {
     const projectName = args['project_name'] as string;
@@ -63,10 +66,9 @@ const disableWebhookTool: ToolDef = {
     const config = configs.find((item) => item.source === source);
 
     if (!config) {
-      return {
-        error: 'WEBHOOK_NOT_FOUND',
-        message: `No webhook configured for ${source} on project ${projectName}`,
-      };
+      throw new Error(
+        `WEBHOOK_NOT_FOUND: No webhook configured for ${source} on project ${projectName}`,
+      );
     }
 
     appCtx.db.setWebhookEnabled(config.id, false);
@@ -83,6 +85,7 @@ const getWebhookConfigTool: ToolDef = {
   name: 'get_webhook_config',
   description:
     'Get all webhook configurations for a project. Shows enabled status, git provider, branch filter, and webhook URL path for each configured webhook. Returns { count, webhooks[] }. Errors: PROJECT_NOT_FOUND.',
+  mcpDescription: 'Get webhook configuration and enabled status for a project.',
   inputSchema: getWebhookConfigSchema,
   execute: (args, { appCtx }) => {
     const projectName = args['project_name'] as string;

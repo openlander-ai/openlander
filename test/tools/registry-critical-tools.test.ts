@@ -184,6 +184,13 @@ describe('registry critical tool behaviors', () => {
       parentProjectId: 'parent-1',
       parentName: 'repo',
       hint: 'Use get_deploy_status to check progress.',
+      _agent_guidance: {
+        deprecated: true,
+        next_steps: [
+          'DEPRECATED: Use orchestrate_deploy instead for dependency-ordered deployment with atomic rollback.',
+          'orchestrate_deploy handles service ordering, health checks, and automatic rollback on failure.',
+        ],
+      },
     });
   });
 
@@ -247,29 +254,23 @@ describe('registry critical tool behaviors', () => {
     }
   });
 
-  it('github tools return target-aware GITHUB_NOT_CONFIGURED responses', async () => {
+  it('github tools throw target-aware GITHUB_NOT_CONFIGURED errors', async () => {
     const { ctx } = createMockContext();
     const listRepos = getTool(ctx, 'list_github_repos');
     const searchRepos = getTool(ctx, 'search_github_repos');
 
-    await expect(listRepos.execute({}, { target: 'agent' })).resolves.toEqual({
-      error: 'GITHUB_NOT_CONFIGURED',
-      message: 'No GitHub token configured. Add one in settings to browse repos.',
-    });
-    await expect(listRepos.execute({}, { target: 'mcp' })).resolves.toEqual({
-      error: 'GITHUB_NOT_CONFIGURED',
-      message: 'No GitHub token configured.',
-    });
+    await expect(listRepos.execute({}, { target: 'agent' })).rejects.toThrow(
+      'GITHUB_NOT_CONFIGURED: No GitHub token configured. Add one in settings to browse repos.',
+    );
+    await expect(listRepos.execute({}, { target: 'mcp' })).rejects.toThrow(
+      'GITHUB_NOT_CONFIGURED: No GitHub token configured.',
+    );
 
-    await expect(
-      searchRepos.execute({ query: 'openlander' }, { target: 'agent' }),
-    ).resolves.toEqual({
-      error: 'GITHUB_NOT_CONFIGURED',
-      message: 'No GitHub token configured. Add one in settings to search repos.',
-    });
-    await expect(searchRepos.execute({ query: 'openlander' }, { target: 'mcp' })).resolves.toEqual({
-      error: 'GITHUB_NOT_CONFIGURED',
-      message: 'No GitHub token configured.',
-    });
+    await expect(searchRepos.execute({ query: 'openlander' }, { target: 'agent' })).rejects.toThrow(
+      'GITHUB_NOT_CONFIGURED: No GitHub token configured. Add one in settings to search repos.',
+    );
+    await expect(searchRepos.execute({ query: 'openlander' }, { target: 'mcp' })).rejects.toThrow(
+      'GITHUB_NOT_CONFIGURED: No GitHub token configured.',
+    );
   });
 });

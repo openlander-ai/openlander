@@ -45,9 +45,9 @@ export const envToolDefs: ToolDef[] = [
       const environment = environments.find((e) => e.type === environmentName);
 
       if (!environment) {
-        return Promise.resolve({
-          error: `ENVIRONMENT_NOT_FOUND: No environment named "${environmentName}" found for project "${projectName}"`,
-        });
+        throw new Error(
+          `ENVIRONMENT_NOT_FOUND: No environment named "${environmentName}" found for project "${projectName}"`,
+        );
       }
 
       const inheritanceInfo = appCtx.env.getInheritanceInfo(project.id, environment.id);
@@ -67,6 +67,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'get_env_var',
     description:
       'Get the unmasked value of a single environment variable for debugging. Use when you need to verify the exact value was set correctly (e.g., connection strings with special characters). Returns { key, value } or { error: "NOT_FOUND" }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription: 'Get a single environment variable value for a project.',
     inputSchema: getEnvVarSchema,
     execute: (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
@@ -76,7 +77,7 @@ export const envToolDefs: ToolDef[] = [
       if (key in vars) {
         return Promise.resolve({ key, value: vars[key] });
       }
-      return Promise.resolve({ error: 'NOT_FOUND', key });
+      throw new Error(`NOT_FOUND: Environment variable "${key}" not found`);
     },
   },
   {
@@ -127,6 +128,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'set_global_secret',
     description:
       'Set a global secret that is available to all projects (stored encrypted). Use for shared API keys, database credentials, etc. that multiple projects need. Returns { status, key }.',
+    mcpDescription: 'Set an encrypted global secret shared across all projects.',
     inputSchema: setGlobalSecretSchema,
     execute: (args, { appCtx, target }) => {
       const key = args['key'] as string;
@@ -145,6 +147,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'list_global_secrets',
     description:
       'List all global secrets (values are masked for security). Returns { secrets: [{ key, maskedValue, description }], count }.',
+    mcpDescription: 'List all global secrets with masked values and descriptions.',
     inputSchema: listGlobalSecretsSchema,
     execute: (_args, { appCtx }) => {
       const secrets = appCtx.env.getGlobalSecretsMasked();
@@ -155,12 +158,13 @@ export const envToolDefs: ToolDef[] = [
     name: 'expose_public',
     description:
       'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
+    mcpDescription: 'Generate a temporary public URL for a project via TryCloudflare.',
     inputSchema: projectNameSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
       const project = getProjectByName(appCtx, projectName);
       if (!project.assigned_port) {
-        return { error: 'Project is not running — deploy it first' };
+        throw new Error('Project is not running — deploy it first');
       }
 
       const url = await appCtx.pipeline.exposeTunnel(project.id, project.assigned_port);
@@ -178,6 +182,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'unexpose_public',
     description:
       'Remove the public TryCloudflare tunnel URL for a project. Use when user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription: 'Remove a public URL and stop the TryCloudflare tunnel.',
     inputSchema: projectNameSchema,
     execute: (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
@@ -190,6 +195,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'upload_secret_file',
     description:
       'Upload a secret file that will be mounted into containers at /run/secrets/filename. Use for credential files like Firebase service account JSON, TLS certificates, or any file the app reads from disk. Content is encrypted at rest. Omit project_name to make it global (available to all projects). Requires redeploy to take effect. Returns { status, mountPath }.',
+    mcpDescription: 'Upload an encrypted secret file mounted at /run/secrets/filename.',
     inputSchema: uploadSecretFileSchema,
     execute: (args, { appCtx }) => {
       const projectName = args['project_name'] as string | undefined;
@@ -223,6 +229,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'list_secret_files',
     description:
       'List secret files uploaded for a project or globally. Shows filenames, mount paths, and scope (project/global) — file content is never returned for security. Omit project_name to list global secret files. Returns { files[], count }.',
+    mcpDescription: 'List uploaded secret files; file content is never returned.',
     inputSchema: listSecretFilesSchema,
     execute: (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string | undefined;
@@ -241,6 +248,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'remove_secret_file',
     description:
       'Remove a previously uploaded secret file from a project or global scope. The file will no longer be mounted after the next redeploy. Omit project_name for global secret files. Returns { status: "removed"|"not_found", filename }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription: 'Remove a secret file. Redeploy to stop mounting it in containers.',
     inputSchema: removeSecretFileSchema,
     execute: (args, { appCtx }) => {
       const projectName = args['project_name'] as string | undefined;

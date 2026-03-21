@@ -56,6 +56,7 @@ export const deployPlanToolDefs: ToolDef[] = [
                 next_steps: [
                   `Plan has missing values. Call update_deploy_plan to provide: ${plan.missing.join(', ')}`,
                   'After updating, call execute_deploy_plan to start deployment',
+                  'If DATABASE_URL is missing, call provision_database first to auto-create PostgreSQL.',
                 ],
               },
             }

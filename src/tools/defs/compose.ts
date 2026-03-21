@@ -37,6 +37,7 @@ export const composeToolDefs: ToolDef[] = [
     name: 'deploy_compose',
     description:
       'Deploy a project that uses Docker Compose (multi-service). Auto-detected when compose file exists. Returns parent project with service statuses. Errors: COMPOSE_FILE_NOT_FOUND, BUILD_FAILED.',
+    mcpDescription: 'Deploy services from a Docker Compose repository.',
     inputSchema: deployComposeInputSchema,
     execute: async (args, { appCtx }) => {
       const repoUrl = args['repo_url'] as string;
@@ -52,10 +53,7 @@ export const composeToolDefs: ToolDef[] = [
 
       const composePath = appCtx.composePipeline.detectComposeFile(cloneResult.path);
       if (!composePath) {
-        return {
-          error: 'COMPOSE_FILE_NOT_FOUND',
-          message: 'No compose file found in repository.',
-        };
+        throw new Error('COMPOSE_FILE_NOT_FOUND: No compose file found in repository.');
       }
 
       const existingProject = name ? appCtx.db.getProjectByName(name) : undefined;
@@ -106,6 +104,7 @@ export const composeToolDefs: ToolDef[] = [
     name: 'list_compose_services',
     description:
       'List services in a Docker Compose project with per-service status, ports, and container IDs.',
+    mcpDescription: 'List compose services with per-service status and ports.',
     inputSchema: listComposeServicesSchema,
     execute: (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
@@ -127,6 +126,7 @@ export const composeToolDefs: ToolDef[] = [
     name: 'orchestrate_deploy',
     description:
       'Deploy multiple services with dependency ordering and atomic rollback. Use for monorepos or multi-service repos. Internally scans Dockerfiles, reads compose depends_on when available, deploys in topological order, and rolls back all deployed services if any step fails.',
+    mcpDescription: 'Deploy monorepo services in dependency order with atomic rollback.',
     inputSchema: orchestrateDeployInputSchema,
     execute: async (args, { appCtx }) => {
       const repoUrl = args['repo_url'] as string;

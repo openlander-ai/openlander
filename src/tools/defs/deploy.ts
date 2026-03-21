@@ -22,11 +22,18 @@ export const deployToolDefs: ToolDef[] = [
     inputSchema: previewDeploySchema,
     execute: (args, context) => {
       const appCtx = context.appCtx;
-      return appCtx.previewDeployer.deploy({
-        repoUrl: args['repo_url'] as string,
-        branch: args['branch'] as string,
-        sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
-      });
+      return appCtx.previewDeployer
+        .deploy({
+          repoUrl: args['repo_url'] as string,
+          branch: args['branch'] as string,
+          sshKeyPath: appCtx.config.git.sshKeyPath || undefined,
+        })
+        .then((result) => ({
+          ...result,
+          _agent_guidance: {
+            next_steps: ['Call list_previews to see all active preview deployments.'],
+          },
+        }));
     },
   },
   {
@@ -41,7 +48,16 @@ export const deployToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
-      return context.appCtx.pipeline.rollback(project.id);
+      const result = await context.appCtx.pipeline.rollback(project.id);
+      return {
+        ...result,
+        _agent_guidance: {
+          next_steps: [
+            'Call get_deploy_status to confirm rollback completed successfully.',
+            'Call get_logs to verify the application is running correctly.',
+          ],
+        },
+      };
     },
   },
   {
@@ -56,7 +72,15 @@ export const deployToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
-      return context.appCtx.blueGreen.deploy(project.id);
+      const result = await context.appCtx.blueGreen.deploy(project.id);
+      return {
+        ...result,
+        _agent_guidance: {
+          next_steps: [
+            'Call get_deploy_status with wait=true to monitor blue-green deployment progress.',
+          ],
+        },
+      };
     },
   },
   {
@@ -134,7 +158,10 @@ export const deployToolDefs: ToolDef[] = [
                 }
               })(),
               _agent_guidance: {
-                next_steps: ['Call get_logs to confirm container is healthy'],
+                next_steps: [
+                  'Call get_logs to confirm container is healthy',
+                  'Call get_system_stats if resource issues suspected.',
+                ],
               },
             }
           : {}),
@@ -286,6 +313,7 @@ export const deployToolDefs: ToolDef[] = [
     name: 'get_deploy_history',
     description:
       'Get deployment history for a project. Returns recent deploys with status, trigger, commit, duration. Use to understand why a service is in its current state or to review past deployments.',
+    mcpDescription: 'Get deployment history with status, duration, trigger, and commit details.',
     inputSchema: deployHistorySchema,
     execute: (args, context) => {
       const appCtx = context.appCtx;

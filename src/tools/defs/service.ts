@@ -52,6 +52,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service',
     description:
       'Create a new service (database, cache, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb) or custom image with port. Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL) for connecting a project. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+    mcpDescription: 'Create a PostgreSQL, MySQL, Redis, MongoDB, or custom image service.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const result = await appCtx.serviceManager.create({
@@ -74,6 +75,12 @@ export const serviceToolDefs: ToolDef[] = [
           credentials: parseServiceCredentials(result.credentials),
         },
         suggested_env: suggestedEnv,
+        _agent_guidance: {
+          next_steps: [
+            'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
+            'Then redeploy the project with create_deploy_plan + execute_deploy_plan for changes to take effect.',
+          ],
+        },
       };
     },
     targets: ['mcp'],
@@ -82,6 +89,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'list_services',
     description:
       'List all services (databases, caches, custom containers) with status, type, and connection details. Use to see what services are available and their current state. Returns { count, services[] } with id, name, type, status, port, and credentials.',
+    mcpDescription: 'List infrastructure services with type, status, and exposed port.',
     inputSchema: listServicesSchema,
     execute: async (_args, { appCtx, target }) => {
       const services = await appCtx.serviceManager.list();
@@ -119,13 +127,14 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'list_databases',
     description:
       'List databases for a named PostgreSQL or MySQL service. Use when selecting an existing database during environment setup. Returns { service, count, databases[] }. Errors: SERVICE_NOT_FOUND or unsupported service type.',
+    mcpDescription: 'List databases inside a PostgreSQL or MySQL service.',
     inputSchema: listDatabasesSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
       const services = await appCtx.serviceManager.list();
       const service = services.find((item) => item.name === serviceName);
       if (!service) {
-        return { error: `Service not found: ${serviceName}` };
+        throw new Error(`Service not found: ${serviceName}`);
       }
 
       try {
@@ -140,7 +149,7 @@ export const serviceToolDefs: ToolDef[] = [
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { error: message };
+        throw new Error(message);
       }
     },
     targets: ['agent'],
@@ -149,6 +158,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_database',
     description:
       'Create a database in a named PostgreSQL or MySQL service. Use when provisioning app-specific database credentials. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND or unsupported service type.',
+    mcpDescription: 'Create a database inside an existing PostgreSQL or MySQL service.',
     inputSchema: createDatabaseSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -156,7 +166,7 @@ export const serviceToolDefs: ToolDef[] = [
       const services = await appCtx.serviceManager.list();
       const service = services.find((item) => item.name === serviceName);
       if (!service) {
-        return { error: `Service not found: ${serviceName}` };
+        throw new Error(`Service not found: ${serviceName}`);
       }
 
       try {
@@ -171,7 +181,7 @@ export const serviceToolDefs: ToolDef[] = [
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return { error: message };
+        throw new Error(message);
       }
     },
     targets: ['agent'],
@@ -180,6 +190,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'get_service_status',
     description:
       'Get the current status of a specific service. Returns { id, name, status, health, type, port, ... } where status is running/stopped and health reflects container health (healthy/unhealthy/unknown/degraded). healthDetail may be included when crash-like log patterns are detected. Errors: SERVICE_NOT_FOUND if the service name is invalid.',
+    mcpDescription: 'Get service status, health, container state, and metadata.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
       const service = await getServiceByName(appCtx, args['service_name'] as string);
@@ -243,6 +254,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'start_service',
     description:
       'Start a stopped service. Use when a service is stopped and needs to be running. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+    mcpDescription: 'Start a stopped service container.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -256,6 +268,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'stop_service',
     description:
       'Stop a running service gracefully. Use when a service needs to be paused without deletion. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+    mcpDescription: 'Stop a running service container gracefully.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -269,6 +282,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'remove_service',
     description:
       'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. Returns { status, service, warning }. Errors: SERVICE_NOT_FOUND.',
+    mcpDescription: 'Remove a service container and volume. Data is permanently deleted.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -287,6 +301,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'backup_service',
     description:
       "Create a backup snapshot of a service's persistent data (database files, etc.). Returns { status, backupId, path, sizeBytes }. Use BEFORE remove_service to prevent data loss.",
+    mcpDescription: 'Create a backup snapshot of service data before destructive actions.',
     inputSchema: backupServiceSchema,
     execute: async (args, { appCtx }) => {
       const service = await getServiceByName(appCtx, args['service_name'] as string);
@@ -305,6 +320,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'restore_service',
     description:
       'Restore a service volume from a backup snapshot. Stops the service container, restores the selected backup into the service volume, then starts the service again. Returns { status, service, backupId }.',
+    mcpDescription: 'Restore service data from a selected backup snapshot.',
     inputSchema: restoreServiceSchema,
     execute: async (args, { appCtx }) => {
       const service = await getServiceByName(appCtx, args['service_name'] as string);
@@ -322,6 +338,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'list_service_backups',
     description:
       'List available backup snapshots for a service. Returns { service, count, backups[] } with backupId, createdAt, and sizeBytes for each snapshot.',
+    mcpDescription: 'List available backup snapshots for a service.',
     inputSchema: listServiceBackupsSchema,
     execute: async (args, { appCtx }) => {
       const service = await getServiceByName(appCtx, args['service_name'] as string);
@@ -342,6 +359,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'get_service_logs',
     description:
       'Get recent container logs for a service (database, cache, or custom container). Use when a service is in error state or behaving unexpectedly. Returns { service, logs }. Errors: SERVICE_NOT_FOUND.',
+    mcpDescription: 'Get recent container logs for an infrastructure service.',
     inputSchema: getServiceLogsSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -398,6 +416,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service_database',
     description:
       'Create a new database in a PostgreSQL or MySQL service. Use when a project needs a dedicated database. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
+    mcpDescription: 'Create an additional database in a PostgreSQL or MySQL service.',
     inputSchema: createServiceDatabaseSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -419,6 +438,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service_user',
     description:
       'Create a new user in a PostgreSQL or MySQL service with optional database grants. Use when a project needs a dedicated database user. Returns { status, service, user, password, database, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
+    mcpDescription: 'Create a database user with optional per-database grants.',
     inputSchema: createServiceUserSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
@@ -444,6 +464,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'provision_database',
     description:
       'Provision a database sidecar (PostgreSQL or SQLite) for a project. Automatically sets DATABASE_URL in the project env vars and redeploys. Use when user says they need a database. Defaults to PostgreSQL. Returns { status, connectionUrl, type }. For other services (Redis, MongoDB) use create_service + set_env_vars pattern instead. Errors: PROJECT_NOT_FOUND, ALREADY_PROVISIONED.',
+    mcpDescription: 'Provision PostgreSQL or SQLite and auto-set DATABASE_URL for a project.',
     inputSchema: provisionDbSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;

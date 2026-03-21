@@ -46,6 +46,7 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_alerts',
     description:
       'Get current system alerts for resource issues, inactive projects, and container problems. Returns active alerts with severity, message, and suggested actions. Use when user asks about system health, problems, or "show alerts". Always available.',
+    mcpDescription: 'Get active system alerts and notifications.',
     inputSchema: getAlertsSchema,
     execute: (_args, context) => {
       const alerts = context.appCtx.alertMonitor.getActiveAlerts();
@@ -67,6 +68,7 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'dismiss_alert',
     description:
       'Dismiss a specific alert by ID so it no longer appears in active alerts. Use when user acknowledges an alert. Returns { status, alertId }.',
+    mcpDescription: 'Dismiss an active alert by ID.',
     inputSchema: dismissAlertSchema,
     execute: (args, context) => {
       const alertId = args['alert_id'] as string;

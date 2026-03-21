@@ -184,29 +184,26 @@ describe('list_env_vars tool with source tracking', () => {
       }).toThrow('Project not found: nonexistent');
     });
 
-    it('returns error when environment not found', async () => {
+    it('throws error when environment not found', async () => {
       db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
 
-      const result = (await listEnvVarsTool.execute(
-        { project_name: 'my-app', environment_name: 'nonexistent' },
-        { appCtx: ctx, target: 'mcp' },
-      )) as Record<string, unknown>;
-
-      expect(result).toHaveProperty('error');
-      expect(String(result.error)).toContain('ENVIRONMENT_NOT_FOUND');
-      expect(String(result.error)).toContain('nonexistent');
+      expect(() => {
+        listEnvVarsTool.execute(
+          { project_name: 'my-app', environment_name: 'nonexistent' },
+          { appCtx: ctx, target: 'mcp' },
+        );
+      }).toThrow('ENVIRONMENT_NOT_FOUND');
     });
 
     it('gracefully handles invalid environment_name without crashing', async () => {
       db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
 
-      const result = (await listEnvVarsTool.execute(
-        { project_name: 'my-app', environment_name: 'staging' },
-        { appCtx: ctx, target: 'mcp' },
-      )) as Record<string, unknown>;
-
-      expect(result).toHaveProperty('error');
-      expect(typeof result.error).toBe('string');
+      expect(() => {
+        listEnvVarsTool.execute(
+          { project_name: 'my-app', environment_name: 'staging' },
+          { appCtx: ctx, target: 'mcp' },
+        );
+      }).toThrow('ENVIRONMENT_NOT_FOUND');
     });
   });
 

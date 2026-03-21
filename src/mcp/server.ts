@@ -52,7 +52,7 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - deploy_blue_green — Zero-downtime deploy with health check before traffic switch. Use for production projects where downtime is unacceptable.
 - preview_deploy / cleanup_preview / list_previews — Ephemeral branch previews for PR testing.
 - deploy_environment — Deploy a specific environment (production/development) for a project. Returns immediately.
-- get_deploy_status — Poll build progress. Shows phase (queued/cloning/building/starting/done/failed) and elapsed time.
+- get_deploy_status — Poll build progress. Shows phase (queued/cloning/building/starting/done/failed) and elapsed time. Pass wait=true to block until completion instead of polling.
 
 ### Services (Databases & Caches)
 - create_service — Create PostgreSQL/MySQL/Redis/MongoDB via template, or any Docker image. Returns suggested_env with the recommended env var key and connection string for auto-linking.
@@ -85,7 +85,7 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - list_projects — All projects with status, ports, URLs.
 - stop_project / restart_project / remove_project — Lifecycle control.
 - scan_project — Detect framework, Dockerfiles, compose files, and env requirements from repo. ALWAYS call before first deploy.
-- scan_dockerfiles — Find all Dockerfiles in a monorepo.
+- scan_dockerfiles — Find all Dockerfiles in a monorepo. Use with orchestrate_deploy for multi-service deployment.
 
 ### Domains & Infrastructure
 - map_domain / list_domains — Custom domain management via Traefik.
@@ -111,7 +111,7 @@ Before deploying any new project, run this planning sequence:
 1. scan_project({ repo_url }) — Detect project type, Dockerfiles, compose files, env requirements.
 2. Classify the result:
     - Single Dockerfile → create_deploy_plan + execute_deploy_plan
-    - Multiple Dockerfiles (monorepo) → ask user which services to deploy, then create_deploy_plan + execute_deploy_plan for each
+    - Multiple Dockerfiles (monorepo) → orchestrate_deploy for dependency-ordered deployment with atomic rollback
     - Has compose file → create_deploy_plan + execute_deploy_plan with the primary service's Dockerfile
 3. Check service dependencies:
    - If app needs a database: list_services to check if one exists, or create_service to provision one
@@ -120,16 +120,18 @@ Before deploying any new project, run this planning sequence:
     - create_deploy_plan({ repo_url, env_vars: '{"DATABASE_URL": "...", "REDIS_URL": "..."}' })
     - execute_deploy_plan({ plan_id: "..." })
 5. Monitor: get_deploy_status until done or failed.
+6. If deploy fails: get_deploy_history to review past deployment attempts and outcomes.
 
 ## Deploy Failure Recovery
 
 When a deploy fails, do NOT stop. Follow this fallback chain:
 
 1. get_build_log to get raw output → debug_build_error for AI analysis
-2. If build error (Dockerfile issue): explain the error, suggest a fix
-3. If runtime crash: get_logs → check for missing env vars or config issues
-4. If port/name conflict: create_deploy_plan + execute_deploy_plan with force: true
-5. If all else fails: explain what went wrong, what you tried, give a clear next step
+2. get_deploy_history to check if this failure matches a previous pattern.
+3. If build error (Dockerfile issue): explain the error, suggest a fix
+4. If runtime crash: get_logs → check for missing env vars or config issues
+5. If port/name conflict: create_deploy_plan + execute_deploy_plan with force: true
+6. If all else fails: explain what went wrong, what you tried, give a clear next step
 
 Common failure patterns:
 - "Module not found" / "package not found" → Missing dependency in Dockerfile. Check build stage.

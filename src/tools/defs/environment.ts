@@ -17,6 +17,7 @@ const createEnvironmentTool: ToolDef = {
   name: 'create_environment',
   description:
     'Create a new environment for a project (e.g., development environment on a feature branch). Every project auto-creates a production environment on deploy — use this to add additional environments like development. Returns the created environment with { id, type, branch, status }. If the environment type already exists, returns the existing one. Errors: PROJECT_NOT_FOUND.',
+  mcpDescription: 'Create an environment for a project branch and type.',
   inputSchema: createEnvironmentSchema,
   execute: (args, { appCtx }) => {
     const input = args as {
@@ -61,6 +62,7 @@ const listEnvironmentsTool: ToolDef = {
   name: 'list_environments',
   description:
     'List all environments for a project with type, branch, status, and container info. Every project has at least a production environment. Returns { count, environments[] }. Errors: PROJECT_NOT_FOUND.',
+  mcpDescription: 'List project environments with branch and runtime status.',
   inputSchema: listEnvironmentsSchema,
   execute: (args, { appCtx }) => {
     const input = args as { project_name: string };
@@ -85,6 +87,7 @@ const deployEnvironmentTool: ToolDef = {
   name: 'deploy_environment',
   description:
     "Deploy a specific environment (production or development) for a project. Pulls latest code from the environment's configured branch and builds/runs it. Returns immediately with { status: 'building' } — poll with get_deploy_status. Errors: PROJECT_NOT_FOUND, ENVIRONMENT_NOT_FOUND.",
+  mcpDescription: 'Deploy a specific project environment and start a new build.',
   inputSchema: deployEnvironmentSchema,
   execute: (args, { appCtx }) => {
     const input = args as {
@@ -98,10 +101,9 @@ const deployEnvironmentTool: ToolDef = {
     const environment = environments.find((entry) => entry.type === input.environment_type);
 
     if (!environment) {
-      return {
-        error: 'ENVIRONMENT_NOT_FOUND',
-        message: `No ${input.environment_type} environment found for project ${input.project_name}`,
-      };
+      throw new Error(
+        `ENVIRONMENT_NOT_FOUND: No ${input.environment_type} environment found for project ${input.project_name}`,
+      );
     }
 
     void appCtx.pipeline.deployEnvironment(project.id, environment.id, {

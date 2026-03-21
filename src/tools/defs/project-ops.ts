@@ -58,7 +58,15 @@ export const projectOpsToolDefs: ToolDef[] = [
       }
 
       await context.appCtx.pipeline.stop(project.id);
-      return { status: 'stopped', project: projectName };
+      return {
+        status: 'stopped',
+        project: projectName,
+        _agent_guidance: {
+          next_steps: [
+            'Call restart_project to start the project again, or remove_project to delete it entirely.',
+          ],
+        },
+      };
     },
   },
   {
@@ -75,7 +83,13 @@ export const projectOpsToolDefs: ToolDef[] = [
       }
 
       await context.appCtx.pipeline.remove(project.id, context.appCtx.cloudflare);
-      return { status: 'removed', project: projectName };
+      return {
+        status: 'removed',
+        project: projectName,
+        _agent_guidance: {
+          next_steps: ['Project removed. Use create_deploy_plan to redeploy if needed.'],
+        },
+      };
     },
   },
   {
