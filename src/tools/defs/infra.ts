@@ -76,13 +76,7 @@ export const infraToolDefs: ToolDef[] = [
         });
         const existingServices = await appCtx.serviceManager.list();
         const analysis = analyzeInfrastructure(cloneResult.path, existingServices);
-        return {
-          ...analysis,
-          _debug: {
-            clonePath: cloneResult.path,
-            analysis,
-          },
-        };
+        return analysis;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(message);
