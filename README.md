@@ -197,6 +197,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.7.0**  | Architecture Rebuild  | Done   | Compose deploy via dockerode, override hacks removed, orphan child cleanup, compose YAML extensions, project-scoped Docker networks                                     |
 | **v0.7.1**  | MCP Response Guidance | Done   | verify/action_required/recovery_hint in tool responses, remote Docker warnings, agent behavior correction for curl/docker CLI fallback                                  |
 | **v0.7.2**  | MCP DX Enhancement    | Done   | mcpDescription for all 64 tools, error pattern unification, agent guidance for state-changing tools, orphan tool connections                                            |
+| **v0.7.3**  | AI-Native Deploy      | Done   | One-call `deploy` tool, `validate_deploy_plan` pre-flight checks, `auto_diagnosis` in failure responses                                                                 |
 | **v1.0.0**  | Stable Release        | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                         |
 
 ## MCP Integration (AI Coding Agents)

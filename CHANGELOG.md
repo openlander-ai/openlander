@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-03-21
+
+### Added
+
+- **`deploy` one-call tool**: Single MCP call that chains create_deploy_plan → execute_deploy_plan → wait for completion. Saves 60-70% agent tokens vs the 3-step flow. Supports `wait=true` (default, blocks until done) and `wait=false` (returns immediately).
+- **`validate_deploy_plan` tool**: Pre-flight validation before executing a deploy plan. Detects localhost env vars (DATABASE_URL=localhost), placeholder secrets, missing HEALTHCHECK, and surfaces existing plan warnings in a structured check format.
+- **`auto_diagnosis` in failure responses**: `get_deploy_status` and `deploy` tool now include `auto_diagnosis` (category, tier, cause, auto_fixable, suggested_action) when a deploy fails — no separate `debug_build_error` call needed for initial triage.
+
 ## [0.7.2] - 2026-03-21
 
 ### Changed
