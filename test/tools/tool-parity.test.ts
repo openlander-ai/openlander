@@ -629,9 +629,40 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "environment_name": {
+                "description": "Filter by environment (e.g. "production", "development")",
+                "type": "string",
+              },
+              "limit": {
+                "description": "Max entries to return (default 10)",
+                "type": "number",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "get_deploy_history",
+        },
+        {
+          "inputSchema": {
+            "properties": {
               "project_name": {
                 "description": "Project name (optional, returns all if omitted)",
                 "type": "string",
+              },
+              "timeout": {
+                "description": "Max wait time in seconds (default 300, only used with wait=true)",
+                "type": "number",
+              },
+              "wait": {
+                "description": "If true, block until deploy completes instead of returning current status",
+                "type": "boolean",
               },
             },
             "required": [],
@@ -1526,9 +1557,40 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "environment_name": {
+                "description": "Filter by environment (e.g. "production", "development")",
+                "type": "string",
+              },
+              "limit": {
+                "description": "Max entries to return (default 10)",
+                "type": "number",
+              },
+              "project_name": {
+                "description": "Project name",
+                "type": "string",
+              },
+            },
+            "required": [
+              "project_name",
+            ],
+            "type": "object",
+          },
+          "name": "get_deploy_history",
+        },
+        {
+          "inputSchema": {
+            "properties": {
               "project_name": {
                 "description": "Project name (optional, returns all if omitted)",
                 "type": "string",
+              },
+              "timeout": {
+                "description": "Max wait time in seconds (default 300, only used with wait=true)",
+                "type": "number",
+              },
+              "wait": {
+                "description": "If true, block until deploy completes instead of returning current status",
+                "type": "boolean",
               },
             },
             "required": [],

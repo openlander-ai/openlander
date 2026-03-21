@@ -110,6 +110,14 @@ export const previewIdSchema = z.object({
 // Status & monitoring schemas
 export const deployStatusSchema = z.object({
   project_name: z.string().optional().describe('Project name (optional, returns all if omitted)'),
+  wait: z
+    .boolean()
+    .optional()
+    .describe('If true, block until deploy completes instead of returning current status'),
+  timeout: z
+    .number()
+    .optional()
+    .describe('Max wait time in seconds (default 300, only used with wait=true)'),
 });
 
 // Git & repository schemas
@@ -447,4 +455,14 @@ export const executeDeployPlanSchema = z.object({
     .describe(
       'For compose projects: deploy only these service names (e.g., ["backend", "worker"]). Omit to deploy all services.',
     ),
+});
+
+// Deployment history schema
+export const deployHistorySchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  environment_name: z
+    .string()
+    .optional()
+    .describe('Filter by environment (e.g. "production", "development")'),
+  limit: z.number().optional().describe('Max entries to return (default 10)'),
 });

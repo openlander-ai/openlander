@@ -35,6 +35,7 @@ const EXPECTED_TOOL_NAMES = [
   'map_domain',
   'list_domains',
   'get_deploy_status',
+  'get_deploy_history',
   'scan_dockerfiles',
   'deploy_monorepo',
   'orchestrate_deploy',

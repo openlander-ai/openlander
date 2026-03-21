@@ -1,10 +1,12 @@
 import { ProjectNotFoundError } from '../../errors.js';
+import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
 import type { ToolDef } from './types.js';
 import {
   cleanupPreviewSchema,
   deployBlueGreenSchema,
+  deployHistorySchema,
   deployStatusSchema,
   listPreviewsSchema,
   previewDeploySchema,
@@ -95,14 +97,18 @@ export const deployToolDefs: ToolDef[] = [
     mcpDescription:
       'Get real-time deployment status. During build phase, includes build_step, build_step_total, build_step_desc for progress tracking. Poll this tool to monitor deployment progress.',
     inputSchema: deployStatusSchema,
-    execute: (args, context) => {
+    execute: async (args, context) => {
       const appCtx = context.appCtx;
       const projectName = args['project_name'] as string | undefined;
+      const wait = args['wait'] as boolean | undefined;
+      const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
 
       const formatJob = (job: {
+        projectId: string;
         projectName: string;
         phase: string;
         startedAt: Date;
+        completedAt?: Date;
         errorSummary?: string;
         buildLogTail?: string;
         buildStep?: number;
@@ -118,6 +124,15 @@ export const deployToolDefs: ToolDef[] = [
               urls: getProjectUrls(job.projectName),
               internal_host: `ol-${job.projectName}`,
               docker_host: getDockerHostType(),
+              completed_at: job.completedAt?.toISOString(),
+              health: (() => {
+                try {
+                  const project = appCtx.db.getProjectByName(job.projectName);
+                  return project?.status ?? 'unknown';
+                } catch {
+                  return 'unknown';
+                }
+              })(),
               _agent_guidance: {
                 next_steps: ['Call get_logs to confirm container is healthy'],
               },
@@ -155,12 +170,86 @@ export const deployToolDefs: ToolDef[] = [
           throw new ProjectNotFoundError(projectName);
         }
 
-        const status = appCtx.jobManager.getStatus(project.id);
-        const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
+        const buildProjectResult = (status?: {
+          projectId: string;
+          projectName: string;
+          phase: string;
+          startedAt: Date;
+          completedAt?: Date;
+          errorSummary?: string;
+          buildLogTail?: string;
+          buildStep?: number;
+          buildStepTotal?: number;
+          buildStepDesc?: string;
+        }) => {
+          const isActive = status && status.phase !== 'done' && status.phase !== 'failed';
+          return {
+            active: isActive ? 1 : 0,
+            jobs: status ? [formatJob(status)] : [],
+          };
+        };
 
-        return Promise.resolve({
-          active: isActive ? 1 : 0,
-          jobs: status ? [formatJob(status)] : [],
+        let status = appCtx.jobManager.getStatus(project.id);
+
+        if (!wait) {
+          return buildProjectResult(status);
+        }
+
+        if (status && (status.phase === 'done' || status.phase === 'failed')) {
+          return buildProjectResult(status);
+        }
+
+        return await new Promise((resolve) => {
+          let settled = false;
+
+          const matchesProject = (payload: {
+            projectId: string;
+            parentProjectId?: string;
+          }): boolean => payload.projectId === project.id || payload.parentProjectId === project.id;
+
+          const resolveWithCurrent = (timedOut: boolean): void => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            unsubSuccess();
+            unsubFailed();
+
+            const current = appCtx.jobManager.getStatus(project.id);
+            if (current) {
+              const payload = buildProjectResult(current) as Record<string, unknown>;
+              if (timedOut) payload['timeout'] = true;
+              resolve(payload);
+              return;
+            }
+
+            const dbProject = appCtx.db.getProjectByName(projectName);
+            resolve({
+              project: projectName,
+              status: dbProject?.status ?? 'unknown',
+              phase: 'none',
+              ...(timedOut ? { timeout: true } : {}),
+            });
+          };
+
+          const unsubSuccess = eventBus.on('deploy:success', (payload) => {
+            if (matchesProject(payload)) resolveWithCurrent(false);
+          });
+
+          const unsubFailed = eventBus.on('deploy:failed', (payload) => {
+            if (matchesProject(payload)) resolveWithCurrent(false);
+          });
+
+          const timer = setTimeout(
+            () => {
+              resolveWithCurrent(true);
+            },
+            Math.max(1, timeoutSec) * 1000,
+          );
+
+          status = appCtx.jobManager.getStatus(project.id);
+          if (status && (status.phase === 'done' || status.phase === 'failed')) {
+            resolveWithCurrent(false);
+          }
         });
       }
 
@@ -174,9 +263,47 @@ export const deployToolDefs: ToolDef[] = [
         (j) => j.phase !== 'done' && j.phase !== 'failed',
       ).length;
 
-      return Promise.resolve({
+      return {
         active: activeCount,
         jobs: recentJobs.map(formatJob),
+      };
+    },
+  },
+  {
+    name: 'get_deploy_history',
+    description:
+      'Get deployment history for a project. Returns recent deploys with status, trigger, commit, duration. Use to understand why a service is in its current state or to review past deployments.',
+    inputSchema: deployHistorySchema,
+    execute: (args, context) => {
+      const appCtx = context.appCtx;
+      const projectName = args['project_name'] as string;
+      const environmentName = args['environment_name'] as string | undefined;
+      const limit = (args['limit'] as number | undefined) ?? 10;
+
+      const project = appCtx.db.getProjectByName(projectName);
+      if (!project) throw new ProjectNotFoundError(projectName);
+
+      let environmentId: string | undefined;
+      if (environmentName) {
+        const env = appCtx.db
+          .getEnvironmentsByProject(project.id)
+          .find((e) => e.type === environmentName);
+        if (env) environmentId = env.id;
+      }
+
+      const logs = appCtx.db.getDeployLogs(project.id, limit, environmentId);
+
+      return Promise.resolve({
+        project: projectName,
+        count: logs.length,
+        history: logs.map((log) => ({
+          id: log.id,
+          status: log.status,
+          trigger: log.trigger,
+          commit_sha: log.commit_sha,
+          duration: log.duration_ms ? `${(log.duration_ms / 1000).toFixed(1)}s` : null,
+          created_at: log.created_at,
+        })),
       });
     },
   },
