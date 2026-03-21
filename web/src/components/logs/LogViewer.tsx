@@ -32,9 +32,9 @@ function detectLevel(line: string): ConsoleLogLevel {
 const levelColors: Record<ConsoleLogLevel, string> = {
   error: 'text-error',
   warn: 'text-warning',
-  info: 'text-agent',
+  info: '',
   debug: 'text-muted-ol',
-  plain: 'text-secondary-ol',
+  plain: '',
 };
 
 export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
@@ -406,22 +406,23 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                     transform: `translateY(${virtualItem.start}px)`,
                   }}
                   className={cn(
-                    'flex items-start px-4 py-0.5 hover:bg-bg-subtle/50 group border-b border-transparent hover:border-[hsl(var(--border))]/30 transition-colors',
-                    entry.stream === 'stderr' && 'bg-error/[0.03]',
-                    virtualItem.index % 2 === 0 && 'bg-bg-subtle/20',
+                    'flex items-start px-4 py-0.5 hover:bg-bg-subtle/50 group border-b border-transparent hover:border-[hsl(var(--border))]/30 transition-colors border-l-2',
+                    level === 'error'
+                      ? 'bg-error/10 border-error'
+                      : level === 'warn'
+                        ? 'bg-warning/10 border-warning'
+                        : 'border-l-transparent',
+                    level === 'debug' && 'opacity-60',
+                    level !== 'error' &&
+                      level !== 'warn' &&
+                      entry.stream === 'stderr' &&
+                      'bg-error/[0.03]',
+                    level !== 'error' &&
+                      level !== 'warn' &&
+                      virtualItem.index % 2 === 0 &&
+                      'bg-bg-subtle/20',
                   )}
                 >
-                  <div
-                    className={cn(
-                      'absolute left-0 top-0 bottom-0 w-0.5',
-                      level === 'error'
-                        ? 'bg-error/70'
-                        : level === 'warn'
-                          ? 'bg-warning/70'
-                          : 'bg-transparent group-hover:bg-[hsl(var(--border))]',
-                    )}
-                  />
-
                   {/* Line number */}
                   <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-[10px] leading-5">
                     {virtualItem.index + 1}
