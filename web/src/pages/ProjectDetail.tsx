@@ -406,6 +406,9 @@ export function ProjectDetail() {
                 timelineItems={allTimelineItems}
                 isTimelineStreaming={isStreaming}
                 onOpenLogs={() => setActiveTab('console')}
+                onRedeploy={handleRedeploy}
+                onStop={handleStop}
+                onRollback={handleRollback}
               />
             )}
           </TabsContent>
