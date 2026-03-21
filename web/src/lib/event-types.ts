@@ -21,65 +21,6 @@ export interface FixSuggestion {
   confidence: 'high' | 'medium' | 'low';
 }
 
-export interface ErrorAnalysisResult {
-  summary: string;
-  rootCause: string;
-  suggestedFixes: FixSuggestion[];
-}
-
-export interface DockerfileFixResult {
-  dockerfileContent: string;
-  explanation: string;
-  changes: string[];
-}
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string');
-}
-
-function isFixSuggestion(value: unknown): value is FixSuggestion {
-  if (!isObjectRecord(value)) {
-    return false;
-  }
-  const { description, confidence, location } = value;
-  return (
-    typeof description === 'string' &&
-    (location === undefined || typeof location === 'string') &&
-    (confidence === 'high' || confidence === 'medium' || confidence === 'low')
-  );
-}
-
-export function isErrorAnalysisResult(result: unknown): result is ErrorAnalysisResult {
-  if (!isObjectRecord(result)) {
-    return false;
-  }
-
-  const { summary, rootCause, suggestedFixes } = result;
-  return (
-    typeof summary === 'string' &&
-    typeof rootCause === 'string' &&
-    Array.isArray(suggestedFixes) &&
-    suggestedFixes.every((fix) => isFixSuggestion(fix))
-  );
-}
-
-export function isDockerfileFixResult(result: unknown): result is DockerfileFixResult {
-  if (!isObjectRecord(result)) {
-    return false;
-  }
-
-  const { dockerfileContent, explanation, changes } = result;
-  return (
-    typeof dockerfileContent === 'string' &&
-    typeof explanation === 'string' &&
-    isStringArray(changes)
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Build stream events (NDJSON from backend)
 // ---------------------------------------------------------------------------
@@ -95,10 +36,6 @@ export interface BuildStreamEvent {
     | 'question_pending'
     | 'insight'
     | 'dockerfile_fixed'
-    | 'agent_thinking'
-    | 'agent_tool_call'
-    | 'agent_tool_result'
-    | 'agent_message'
     | 'needs_user_action';
   message: string;
   projectId: string;
@@ -116,13 +53,6 @@ export interface BuildStreamEvent {
   /** Present only for dockerfile_fixed events */
   dockerfileChanges?: string[];
   retryCount?: number;
-  toolName?: string;
-  toolArguments?: Record<string, unknown>;
-  content?: string;
-  /** Present only for agent_tool_result events */
-  toolResult?: unknown;
-  toolSuccess?: boolean;
-  toolError?: string | null;
   category?: string;
   userMessage?: string;
   userDetail?: string;
@@ -155,10 +85,6 @@ export interface TimelineItem {
     | 'question'
     | 'insight'
     | 'dockerfile_fixed'
-    | 'agent_thinking'
-    | 'agent_tool_call'
-    | 'agent_tool_result'
-    | 'agent_message'
     | 'needs_user_action';
   timestamp: string;
   title: string;
@@ -177,13 +103,6 @@ export interface TimelineItem {
   /** Present only for dockerfile_fixed items */
   dockerfileChanges?: string[];
   retryCount?: number;
-  /** Present only for agent_tool_call items */
-  toolName?: string;
-  toolArguments?: Record<string, unknown>;
-  /** Present only for agent_tool_result items */
-  toolResult?: unknown;
-  toolSuccess?: boolean;
-  toolError?: string | null;
   category?: string;
   phase?: string;
   scope?: string;
@@ -296,48 +215,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         retryCount: event.retryCount,
         ...scopedMeta,
       };
-    case 'agent_thinking':
-      return {
-        id,
-        type: 'agent_thinking',
-        timestamp: event.timestamp,
-        title: event.message || 'Agent is analyzing...',
-        percent: -1,
-        ...scopedMeta,
-      };
-    case 'agent_tool_call':
-      return {
-        id,
-        type: 'agent_tool_call',
-        timestamp: event.timestamp,
-        title: `Calling ${event.toolName ?? 'tool'}`,
-        percent: -1,
-        toolName: event.toolName,
-        toolArguments: event.toolArguments ? sanitizeToolArguments(event.toolArguments) : undefined,
-        ...scopedMeta,
-      };
-    case 'agent_tool_result':
-      return {
-        id,
-        type: 'agent_tool_result',
-        timestamp: event.timestamp,
-        title: event.message,
-        percent: -1,
-        toolName: event.toolName,
-        toolResult: event.toolResult,
-        toolSuccess: event.toolSuccess,
-        toolError: event.toolError,
-        ...scopedMeta,
-      };
-    case 'agent_message':
-      return {
-        id,
-        type: 'agent_message',
-        timestamp: event.timestamp,
-        title: event.content ?? event.message,
-        percent: -1,
-        ...scopedMeta,
-      };
+
     case 'needs_user_action':
       return {
         id,
@@ -359,118 +237,5 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         stepName: event.stepName,
         ...scopedMeta,
       };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Secret masking for tool_call arguments (spec §3.1, issue #9)
-// ---------------------------------------------------------------------------
-
-/** Keys whose values should be fully masked */
-const SECRET_VALUE_KEYS = new Set(['env_vars', 'envVars', 'environment_variables']);
-
-/** Keys whose values should be replaced with [redacted] */
-const REDACTED_KEYS = new Set([
-  'ssh_key_path',
-  'sshKeyPath',
-  'ssh_key',
-  'private_key',
-  'token',
-  'api_key',
-  'apiKey',
-  'password',
-  'secret',
-]);
-
-/**
- * Sanitize tool_call arguments for display.
- * - env_vars values → ***
- * - ssh_key_path etc. → [redacted]
- */
-export function sanitizeToolArguments(args: Record<string, unknown>): Record<string, unknown> {
-  const sanitized: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(args)) {
-    if (SECRET_VALUE_KEYS.has(key) && typeof value === 'object' && value !== null) {
-      // Mask all values in env_vars-like objects
-      const masked: Record<string, string> = {};
-      for (const envKey of Object.keys(value as Record<string, unknown>)) {
-        masked[envKey] = '***';
-      }
-      sanitized[key] = masked;
-    } else if (REDACTED_KEYS.has(key)) {
-      sanitized[key] = '[redacted]';
-    } else {
-      sanitized[key] = value;
-    }
-  }
-  return sanitized;
-}
-
-// ---------------------------------------------------------------------------
-// Agent SSE event → Timeline item converter
-// ---------------------------------------------------------------------------
-
-import type { ChatStreamEvent } from '../types';
-export type { ChatStreamEvent };
-
-/** Convert agent SSE event to a timeline item for Phase A display */
-export function agentEventToTimelineItem(
-  event: ChatStreamEvent & { timestamp?: string },
-): TimelineItem | null {
-  idCounter += 1;
-  const ts = ((event as Record<string, unknown>).timestamp as string) ?? new Date().toISOString();
-  const id = `agent-${idCounter}-${ts}`;
-
-  switch (event.type) {
-    case 'thinking':
-      return {
-        id,
-        type: 'agent_thinking',
-        timestamp: ts,
-        title: 'Agent is analyzing...',
-        percent: -1,
-      };
-    case 'tool_call':
-      return {
-        id,
-        type: 'agent_tool_call',
-        timestamp: ts,
-        title: `Calling ${event.toolName}`,
-        percent: -1,
-        toolName: event.toolName,
-        toolArguments: sanitizeToolArguments(event.arguments),
-      };
-    case 'message':
-      return {
-        id,
-        type: 'agent_message',
-        timestamp: ts,
-        title: event.content,
-        percent: -1,
-      };
-    case 'tool_result':
-      return {
-        id,
-        type: 'agent_tool_result',
-        timestamp: ts,
-        title: event.success
-          ? `${event.toolName} completed`
-          : `${event.toolName} failed: ${event.error ?? 'unknown error'}`,
-        percent: -1,
-        toolName: event.toolName,
-        toolResult: event.result,
-        toolSuccess: event.success,
-        toolError: event.error,
-      };
-    case 'error':
-      return {
-        id,
-        type: 'error',
-        timestamp: ts,
-        title: event.error,
-        percent: -1,
-      };
-    default:
-      return null;
   }
 }
