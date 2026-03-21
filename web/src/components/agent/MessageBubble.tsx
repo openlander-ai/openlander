@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { cn } from '@/lib/utils';
+import { ToolCallCard } from './ToolCallCard';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -35,9 +36,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               </div>
             )}
             {message.toolCalls?.map((tc, i) => (
-              <div key={i} className="text-xs text-muted-ol mt-1">
-                🔧 {tc.toolName}
-              </div>
+              <ToolCallCard key={i} toolCall={tc} />
             ))}
           </>
         )}
