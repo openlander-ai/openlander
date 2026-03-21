@@ -66,6 +66,13 @@ export function useChatSessions(): UseChatSessionsReturn {
 
   const createSession = useCallback(() => {
     const newId = `web-${Date.now()}`;
+    const placeholder: ChatSession = {
+      sessionId: newId,
+      messageCount: 0,
+      lastActive: new Date().toISOString(),
+      firstMessage: undefined,
+    };
+    setSessions((prev) => [placeholder, ...prev]);
     setActiveSessionId(newId);
     syncSessionInUrl(newId);
     return newId;
