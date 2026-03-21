@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
+import { useChatSessions } from '@/hooks/use-chat-sessions';
+import { ChatSidebar } from '@/components/agent/ChatSidebar';
 
 interface SidebarProps {
   projects: Project[];
@@ -77,6 +79,9 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const location = useLocation();
   const [groupState, setGroupState] = useState<Record<string, boolean>>({});
   const [agentDisabled, setAgentDisabled] = useState(true);
+
+  const { sessions, activeSessionId, createSession, switchSession, deleteSession } =
+    useChatSessions();
 
   useEffect(() => {
     getSetupStatus()
@@ -207,9 +212,13 @@ export function Sidebar({ projects, loading }: SidebarProps) {
       <Separator className="bg-[hsl(var(--border))]" />
 
       {isAgentMode ? (
-        <div className="flex-1 flex items-center justify-center p-4">
-          <p className="text-xs text-muted-ol">Chat sessions</p>
-        </div>
+        <ChatSidebar
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onNewChat={() => createSession()}
+          onSelectSession={(id) => switchSession(id)}
+          onDeleteSession={(id) => void deleteSession(id)}
+        />
       ) : (
         <ScrollArea className="flex-1">
           <div className="p-2 lg:p-3 space-y-0.5">
