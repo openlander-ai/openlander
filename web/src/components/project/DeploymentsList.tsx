@@ -4,11 +4,22 @@ import {
   formatDeploymentDuration,
   getDeploymentStatusMeta,
   getDeploymentTriggerLabel,
+  getDeploymentTriggerIcon,
   getShortCommitSha,
 } from '@/lib/deployments';
 import { useDeployments } from '@/hooks/use-deployments';
 import { Skeleton } from '@/components/ui/skeleton';
-import { GitBranch, GitCommit, Clock, Activity, History } from 'lucide-react';
+import {
+  GitBranch,
+  GitCommit,
+  Clock,
+  Activity,
+  History,
+  Bot,
+  Webhook,
+  Zap,
+  Rocket,
+} from 'lucide-react';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -99,6 +110,16 @@ export function DeploymentsList({
       {filteredDeployments.map((deploy) => {
         const statusMeta = getDeploymentStatusMeta(deploy.status);
         const shortCommitSha = getShortCommitSha(deploy.commitSha);
+        const triggerIconName = getDeploymentTriggerIcon(deploy.trigger);
+
+        const TriggerIcon =
+          triggerIconName === 'Bot'
+            ? Bot
+            : triggerIconName === 'Webhook'
+              ? Webhook
+              : triggerIconName === 'Zap'
+                ? Zap
+                : Rocket;
 
         return (
           <div
@@ -106,19 +127,20 @@ export function DeploymentsList({
             onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
             className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel hover:border-agent/30 cursor-pointer transition-colors"
           >
-            <div className="flex items-center gap-3">
-              <div className={cn('h-2.5 w-2.5 rounded-full shrink-0', statusMeta.dotClass)} />
-              <div className="flex flex-col">
+            <div className="flex items-center gap-3 w-full">
+              <div className="flex flex-col w-full">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-display font-medium text-primary-ol capitalize">
+                  <span className="flex items-center gap-1.5 text-sm font-display font-medium text-primary-ol">
+                    <TriggerIcon className="h-4 w-4 text-muted-ol" />
                     {getDeploymentTriggerLabel(deploy.trigger)}
                   </span>
                   <span
                     className={cn(
-                      'text-[11px] font-body px-2 py-0.5 rounded-full bg-bg-subtle',
+                      'flex items-center gap-1.5 text-[11px] font-body px-2 py-0.5 rounded-full bg-bg-subtle',
                       statusMeta.textClass,
                     )}
                   >
+                    <div className={cn('h-1.5 w-1.5 rounded-full shrink-0', statusMeta.dotClass)} />
                     {statusMeta.label}
                   </span>
                   {shortCommitSha && (

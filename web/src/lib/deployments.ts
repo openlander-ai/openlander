@@ -13,7 +13,7 @@ export function getDeploymentStatusMeta(status: DeployLogSummary['status']) {
       return {
         dotClass: 'bg-success',
         textClass: 'text-success',
-        label: 'Production',
+        label: 'Success',
       };
     case 'failed':
       return {
@@ -31,7 +31,29 @@ export function getDeploymentStatusMeta(status: DeployLogSummary['status']) {
 }
 
 export function getDeploymentTriggerLabel(trigger: DeployLogSummary['trigger']): string {
-  return `${trigger} Deployment`;
+  switch (trigger) {
+    case 'chat':
+      return 'Agent Deploy';
+    case 'webhook':
+      return 'Webhook';
+    case 'api':
+      return 'API Call';
+    default:
+      return 'Deploy';
+  }
+}
+
+export function getDeploymentTriggerIcon(trigger: DeployLogSummary['trigger']): string {
+  switch (trigger) {
+    case 'chat':
+      return 'Bot';
+    case 'webhook':
+      return 'Webhook';
+    case 'api':
+      return 'Zap';
+    default:
+      return 'Rocket';
+  }
 }
 
 export function getDeploymentTriggerMetaLabel(trigger: DeployLogSummary['trigger']): string {
