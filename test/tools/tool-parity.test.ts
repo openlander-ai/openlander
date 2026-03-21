@@ -446,6 +446,53 @@ describe('Tool parity baseline snapshots', () => {
         {
           "inputSchema": {
             "properties": {
+              "branch": {
+                "description": "Branch to deploy (default: repo default branch)",
+                "type": "string",
+              },
+              "docker_target": {
+                "description": "Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)",
+                "type": "string",
+              },
+              "dockerfile_path": {
+                "description": "Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)",
+                "type": "string",
+              },
+              "env_vars": {
+                "description": "JSON object of environment variables (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})",
+                "type": "string",
+              },
+              "name": {
+                "description": "Project name (auto-generated from repo if not provided)",
+                "type": "string",
+              },
+              "prefer_dockerfile": {
+                "description": "Prefer Dockerfile flow and skip compose detection",
+                "type": "boolean",
+              },
+              "repo_url": {
+                "description": "Git repository URL (e.g., github.com/user/repo)",
+                "type": "string",
+              },
+              "timeout": {
+                "description": "Max seconds to wait for completion when wait=true (default: 300)",
+                "type": "number",
+              },
+              "wait": {
+                "description": "Block until deployment completes or fails (default: true). Set false to return immediately after build starts.",
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "repo_url",
+            ],
+            "type": "object",
+          },
+          "name": "deploy",
+        },
+        {
+          "inputSchema": {
+            "properties": {
               "project_name": {
                 "description": "Project name",
                 "type": "string",
@@ -1113,6 +1160,21 @@ describe('Tool parity baseline snapshots', () => {
           },
           "name": "update_deploy_plan",
         },
+        {
+          "inputSchema": {
+            "properties": {
+              "plan_id": {
+                "description": "Plan ID returned from create_deploy_plan",
+                "type": "string",
+              },
+            },
+            "required": [
+              "plan_id",
+            ],
+            "type": "object",
+          },
+          "name": "validate_deploy_plan",
+        },
       ]
     `);
   });
@@ -1356,6 +1418,53 @@ describe('Tool parity baseline snapshots', () => {
             "type": "object",
           },
           "name": "debug_build_error",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "branch": {
+                "description": "Branch to deploy (default: repo default branch)",
+                "type": "string",
+              },
+              "docker_target": {
+                "description": "Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)",
+                "type": "string",
+              },
+              "dockerfile_path": {
+                "description": "Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)",
+                "type": "string",
+              },
+              "env_vars": {
+                "description": "JSON object of environment variables (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})",
+                "type": "string",
+              },
+              "name": {
+                "description": "Project name (auto-generated from repo if not provided)",
+                "type": "string",
+              },
+              "prefer_dockerfile": {
+                "description": "Prefer Dockerfile flow and skip compose detection",
+                "type": "boolean",
+              },
+              "repo_url": {
+                "description": "Git repository URL (e.g., github.com/user/repo)",
+                "type": "string",
+              },
+              "timeout": {
+                "description": "Max seconds to wait for completion when wait=true (default: 300)",
+                "type": "number",
+              },
+              "wait": {
+                "description": "Block until deployment completes or fails (default: true). Set false to return immediately after build starts.",
+                "type": "boolean",
+              },
+            },
+            "required": [
+              "repo_url",
+            ],
+            "type": "object",
+          },
+          "name": "deploy",
         },
         {
           "inputSchema": {
@@ -2177,6 +2286,21 @@ describe('Tool parity baseline snapshots', () => {
             "type": "object",
           },
           "name": "upload_secret_file",
+        },
+        {
+          "inputSchema": {
+            "properties": {
+              "plan_id": {
+                "description": "Plan ID returned from create_deploy_plan",
+                "type": "string",
+              },
+            },
+            "required": [
+              "plan_id",
+            ],
+            "type": "object",
+          },
+          "name": "validate_deploy_plan",
         },
         {
           "inputSchema": {

@@ -10,6 +10,7 @@ import {
   updateDeployPlanSchema,
   executeDeployPlanSchema,
   deploySchema,
+  validateDeployPlanSchema,
 } from './schemas.js';
 
 export const deployPlanToolDefs: ToolDef[] = [
@@ -267,6 +268,19 @@ export const deployPlanToolDefs: ToolDef[] = [
               project_name: result.project_name,
               error: job.errorSummary,
               ...(job.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
+              ...(job.autoDiagnosis
+                ? {
+                    auto_diagnosis: {
+                      category: job.autoDiagnosis.category,
+                      tier: job.autoDiagnosis.tier,
+                      cause: job.autoDiagnosis.cause,
+                      auto_fixable: job.autoDiagnosis.autoFixable,
+                      ...(job.autoDiagnosis.suggestedAction
+                        ? { suggested_action: job.autoDiagnosis.suggestedAction }
+                        : {}),
+                    },
+                  }
+                : {}),
               docker_host: getDockerHostType(),
               ...(timedOut ? { timeout: true } : {}),
               _agent_guidance: {
@@ -314,6 +328,169 @@ export const deployPlanToolDefs: ToolDef[] = [
         if (currentJob && (currentJob.phase === 'done' || currentJob.phase === 'failed')) {
           finish(false);
         }
+      });
+    },
+  },
+  {
+    name: 'validate_deploy_plan',
+    description:
+      'Validate a deployment plan before executing. Checks for common mistakes: env vars pointing to localhost, placeholder secrets, missing HEALTHCHECK, port conflicts, and Dockerfile issues. Call after create_deploy_plan (or update_deploy_plan) and before execute_deploy_plan to catch problems early.',
+    mcpDescription:
+      'Pre-flight validation for a deploy plan. Returns structured checks with pass/warning/info status for env vars, Dockerfile, ports, and services. Catches DATABASE_URL=localhost, placeholder secrets, missing HEALTHCHECK, and other common mistakes before execution.',
+    inputSchema: validateDeployPlanSchema,
+    execute: (args, context) => {
+      const appCtx = context.appCtx;
+      const planId = args['plan_id'] as string;
+
+      const row = appCtx.db.getDeployPlan(planId);
+      if (!row) {
+        throw new Error(`Deploy plan not found: ${planId}`);
+      }
+      const plan = JSON.parse(row.plan_json) as DeployPlan;
+
+      interface ValidationCheck {
+        name: string;
+        status: 'pass' | 'warning' | 'info' | 'fail';
+        message: string;
+      }
+      const checks: ValidationCheck[] = [];
+
+      const LOCALHOST_PATTERNS = [
+        /localhost/i,
+        /127\.0\.0\.1/,
+        /0\.0\.0\.0/,
+        /host\.docker\.internal/i,
+      ];
+      const PLACEHOLDER_PATTERNS = [
+        /^(changeme|change_me|replace_me|your[_-]?.*here|xxx+|todo|fixme|placeholder)$/i,
+        /^(password|secret|token|key)$/i,
+        /^<.*>$/,
+      ];
+
+      const envEntries = Object.entries(plan.env.provided);
+      const urlKeys = envEntries.filter(([key]) =>
+        /_(URL|URI|HOST|DSN|ENDPOINT|CONNECTION)$/i.test(key),
+      );
+
+      for (const [key, value] of urlKeys) {
+        if (LOCALHOST_PATTERNS.some((p) => p.test(value))) {
+          checks.push({
+            name: 'env_vars',
+            status: 'warning',
+            message: `${key} points to localhost ("${value}") — this won't work inside a container. Use the service hostname (e.g., ol-<project>-postgres) or Docker network address.`,
+          });
+        }
+      }
+
+      for (const [key, value] of envEntries) {
+        if (PLACEHOLDER_PATTERNS.some((p) => p.test(value))) {
+          checks.push({
+            name: 'env_vars',
+            status: 'warning',
+            message: `${key} looks like a placeholder ("${value}") — set the real value before deploying.`,
+          });
+        }
+      }
+
+      if (plan.missing.length > 0) {
+        checks.push({
+          name: 'env_vars',
+          status: 'fail',
+          message: `Missing required env vars: ${plan.missing.join(', ')}`,
+        });
+      }
+
+      const hasEnvIssues = checks.some((c) => c.name === 'env_vars');
+      if (!hasEnvIssues) {
+        checks.push({
+          name: 'env_vars',
+          status: 'pass',
+          message: `${String(envEntries.length)} env var(s) configured, no issues detected`,
+        });
+      }
+
+      if (plan.build.method === 'dockerfile') {
+        const hasExpose = plan.build.compose_services?.some((s) => s.port !== undefined);
+        const hasGeneratedDockerfile = plan.build.generated_dockerfile !== undefined;
+
+        if (!hasExpose && !hasGeneratedDockerfile) {
+          checks.push({
+            name: 'dockerfile',
+            status: 'info',
+            message:
+              'No EXPOSE port detected in plan. OpenLander will auto-detect the port at build time, but adding EXPOSE in your Dockerfile is recommended.',
+          });
+        } else {
+          checks.push({
+            name: 'dockerfile',
+            status: 'pass',
+            message: hasGeneratedDockerfile
+              ? 'Dockerfile will be auto-generated'
+              : 'Dockerfile detected',
+          });
+        }
+      }
+
+      if (plan.build.method === 'compose') {
+        const services = plan.build.compose_services ?? [];
+        const withHealth = services.filter((s) => s.healthcheck);
+        if (withHealth.length === 0 && services.length > 0) {
+          checks.push({
+            name: 'health_endpoint',
+            status: 'info',
+            message: `No HEALTHCHECK defined in any of ${String(services.length)} compose service(s). Consider adding healthchecks for reliability.`,
+          });
+        } else if (withHealth.length > 0) {
+          checks.push({
+            name: 'health_endpoint',
+            status: 'pass',
+            message: `${String(withHealth.length)}/${String(services.length)} service(s) have healthchecks`,
+          });
+        }
+      } else {
+        checks.push({
+          name: 'health_endpoint',
+          status: 'info',
+          message:
+            'No HEALTHCHECK in Dockerfile. Consider adding a /health endpoint and HEALTHCHECK instruction for better monitoring.',
+        });
+      }
+
+      if (plan.services.length > 0) {
+        const needsCreation = plan.services.filter((s) => s.action === 'create');
+        if (needsCreation.length > 0) {
+          checks.push({
+            name: 'services',
+            status: 'info',
+            message: `${String(needsCreation.length)} service(s) will be auto-provisioned: ${needsCreation.map((s) => s.type).join(', ')}`,
+          });
+        }
+        const reusable = plan.services.filter((s) => s.action === 'reuse');
+        if (reusable.length > 0) {
+          checks.push({
+            name: 'services',
+            status: 'pass',
+            message: `${String(reusable.length)} existing service(s) will be reused: ${reusable.map((s) => `${s.type}${s.name ? ` (${s.name})` : ''}`).join(', ')}`,
+          });
+        }
+      }
+
+      const passCount = checks.filter((c) => c.status === 'pass').length;
+      const warnCount = checks.filter((c) => c.status === 'warning').length;
+      const failCount = checks.filter((c) => c.status === 'fail').length;
+
+      return Promise.resolve({
+        plan_id: plan.plan_id,
+        plan_status: plan.status,
+        valid: failCount === 0,
+        summary:
+          failCount > 0
+            ? `${String(failCount)} issue(s) must be resolved before deploying`
+            : warnCount > 0
+              ? `Ready with ${String(warnCount)} warning(s) — review before deploying`
+              : `All ${String(passCount)} check(s) passed`,
+        checks,
+        warnings: plan.warnings,
       });
     },
   },

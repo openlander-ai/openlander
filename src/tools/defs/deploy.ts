@@ -135,6 +135,13 @@ export const deployToolDefs: ToolDef[] = [
         completedAt?: Date;
         errorSummary?: string;
         buildLogTail?: string;
+        autoDiagnosis?: {
+          category: string;
+          tier: number;
+          cause: string;
+          autoFixable: boolean;
+          suggestedAction?: string;
+        };
         buildStep?: number;
         buildStepTotal?: number;
         buildStepDesc?: string;
@@ -168,6 +175,19 @@ export const deployToolDefs: ToolDef[] = [
         ...(job.phase === 'failed'
           ? {
               docker_host: getDockerHostType(),
+              ...(job.autoDiagnosis
+                ? {
+                    auto_diagnosis: {
+                      category: job.autoDiagnosis.category,
+                      tier: job.autoDiagnosis.tier,
+                      cause: job.autoDiagnosis.cause,
+                      auto_fixable: job.autoDiagnosis.autoFixable,
+                      ...(job.autoDiagnosis.suggestedAction
+                        ? { suggested_action: job.autoDiagnosis.suggestedAction }
+                        : {}),
+                    },
+                  }
+                : {}),
               _agent_guidance: {
                 next_steps: [
                   'Call get_build_log for raw build output',

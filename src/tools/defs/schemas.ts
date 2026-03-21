@@ -492,6 +492,10 @@ export const deploySchema = z.object({
     .describe('Max seconds to wait for completion when wait=true (default: 300)'),
 });
 
+export const validateDeployPlanSchema = z.object({
+  plan_id: z.string().min(1).describe('Plan ID returned from create_deploy_plan'),
+});
+
 // Deployment history schema
 export const deployHistorySchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
