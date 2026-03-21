@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { LogViewer } from '@/components/logs/LogViewer';
-import { TerminalPanel } from '@/components/terminal/TerminalPanel';
+import { TerminalPanel } from '@/components/deploy-terminal/TerminalPanel';
 import { SquareTerminal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_CONSOLE_VIEW_STATE } from '@/types';

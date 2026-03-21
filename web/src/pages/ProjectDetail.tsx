@@ -19,7 +19,7 @@ import {
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
-import { ShareDialog } from '@/components/sidebar/ShareDialog';
+import { ShareDialog } from '@/components/layout/ShareDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { EnvironmentType } from '@/types';
 import { parseEnvContent } from '@/lib/parse-env';

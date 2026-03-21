@@ -44,7 +44,11 @@ export function ProjectSidebar({ projects, loading, error, onRefresh }: ProjectS
       <div className="p-4 text-xs text-muted-foreground text-center">
         {projects.length} project{projects.length !== 1 ? 's' : ''} running
       </div>
-      <DeployDialog open={isDeployOpen} onOpenChange={setIsDeployOpen} onDeploySuccess={onRefresh} />
+      <DeployDialog
+        open={isDeployOpen}
+        onOpenChange={setIsDeployOpen}
+        onDeploySuccess={onRefresh}
+      />
     </div>
   );
 }

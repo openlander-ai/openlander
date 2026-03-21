@@ -1,39 +1,16 @@
+import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLanguage } from '@/i18n/context';
+import { LayoutGrid, List, Plus } from 'lucide-react';
+import { ProjectCard } from '@/components/dashboard/ProjectCard';
+import { ProjectTable } from '@/components/dashboard/ProjectTable';
+import { SystemHealthCards } from '@/components/dashboard/SystemHealthCards';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useProjects } from '@/hooks/use-projects';
 import { useSystemStatus } from '@/hooks/use-system-status';
-import { redeployProject } from '@/lib/api';
-import { formatRelativeTime } from '@/lib/time';
+import { useLanguage } from '@/i18n/context';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
+import { redeployProject } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
-import {
-  Plus,
-  ExternalLink,
-  GitBranch,
-  Clock,
-  RotateCw,
-  Settings,
-  Activity,
-  Server,
-  Box,
-  ShieldCheck,
-  AlertCircle,
-  AlertTriangle,
-  CheckCircle2,
-  LayoutGrid,
-  List,
-} from 'lucide-react';
 
 function getStatusConfig(): Record<
   string,
@@ -84,8 +61,8 @@ export function ProjectsGrid() {
     localStorage.setItem('openlander-view-mode', mode);
   };
 
-  const handleRedeploy = async (e: React.MouseEvent, projectId: string) => {
-    e.stopPropagation();
+  const handleRedeploy = async (event: MouseEvent, projectId: string) => {
+    event.stopPropagation();
     if (isMobile) {
       showMobileToast();
       return;
@@ -94,8 +71,8 @@ export function ProjectsGrid() {
     try {
       await redeployProject(projectId);
       refetch();
-    } catch (err) {
-      console.error('Redeploy failed:', err);
+    } catch (error) {
+      console.error('Redeploy failed:', error);
     } finally {
       setRedeployingId(null);
     }
@@ -113,139 +90,28 @@ export function ProjectsGrid() {
           <Skeleton className="h-8 w-28" />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-[140px] w-full rounded-lg" />
+          {[1, 2, 3, 4].map((index) => (
+            <Skeleton key={index} className="h-[140px] w-full rounded-lg" />
           ))}
         </div>
       </div>
     );
   }
 
-  const isDockerOk = setupStatus?.docker?.ok;
-  const isTraefikOk = setupStatus?.traefik?.ok;
-  const isLlmOk = setupStatus?.llm?.ok;
-  const containerCount = serverStatus?.containers?.total ?? 0;
-  const errorProjects = projects.filter((p) => p.status === 'error');
-  const isAllOk = isDockerOk && isTraefikOk && errorProjects.length === 0;
-
   return (
     <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4 hover:bg-bg-subtle/50 transition-colors text-left w-full cursor-pointer">
-              <div className="p-2.5 bg-bg-subtle rounded-md shrink-0">
-                <Activity className="h-5 w-5 text-primary-ol" />
-              </div>
-              <div>
-                <p className="text-xs font-mono text-muted-ol mb-0.5">SYSTEM HEALTH</p>
-                <div className="flex items-center gap-1.5">
-                  <div
-                    className={cn(
-                      'h-2 w-2 rounded-full shrink-0',
-                      isAllOk ? 'bg-success' : 'bg-error',
-                    )}
-                  />
-                  <span className="text-sm font-semibold text-primary-ol">
-                    {isAllOk ? 'All Systems Operational' : 'System Issues Detected'}
-                  </span>
-                </div>
-              </div>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-80" align="start">
-            <DropdownMenuLabel>System Issues</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {!isTraefikOk && (
-              <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer">
-                <AlertTriangle className="h-3.5 w-3.5 text-warning mr-2 shrink-0" />
-                <span>Traefik Proxy: Offline</span>
-              </DropdownMenuItem>
-            )}
-            {errorProjects.map((p) => (
-              <DropdownMenuItem
-                key={p.id}
-                onClick={() => navigate(`/projects/${p.id}`)}
-                className="cursor-pointer"
-              >
-                <AlertCircle className="h-3.5 w-3.5 text-error mr-2 shrink-0" />
-                <span className="truncate">{p.name}: error</span>
-                <span className="text-muted-ol text-[10px] ml-auto shrink-0">
-                  {formatRelativeTime(p.updatedAt, t)}
-                </span>
-              </DropdownMenuItem>
-            ))}
-            {isAllOk && (
-              <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-body text-success">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                All systems operational
-              </div>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4">
-          <div className="p-2.5 bg-bg-subtle rounded-md">
-            <Box className="h-5 w-5 text-primary-ol" />
-          </div>
-          <div>
-            <p className="text-xs font-mono text-muted-ol mb-0.5">DOCKER ENGINE</p>
-            <div className="flex items-center gap-1.5">
-              {isDockerOk ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              ) : (
-                <AlertCircle className="h-3.5 w-3.5 text-error" />
-              )}
-              <span className="text-sm font-semibold text-primary-ol">
-                {isDockerOk ? `${containerCount} Containers` : 'Disconnected'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4">
-          <div className="p-2.5 bg-bg-subtle rounded-md">
-            <Server className="h-5 w-5 text-primary-ol" />
-          </div>
-          <div>
-            <p className="text-xs font-mono text-muted-ol mb-0.5">TRAEFIK PROXY</p>
-            <div className="flex items-center gap-1.5">
-              {isTraefikOk ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              ) : (
-                <AlertCircle className="h-3.5 w-3.5 text-error" />
-              )}
-              <span className="text-sm font-semibold text-primary-ol">
-                {isTraefikOk ? 'Routing Active' : 'Offline'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4">
-          <div className="p-2.5 bg-bg-subtle rounded-md">
-            <ShieldCheck className="h-5 w-5 text-primary-ol" />
-          </div>
-          <div>
-            <p className="text-xs font-mono text-muted-ol mb-0.5">AI RECOVERY</p>
-            <div className="flex items-center gap-1.5">
-              {isLlmOk ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-agent" />
-              ) : (
-                <AlertCircle className="h-3.5 w-3.5 text-warning" />
-              )}
-              <span className="text-sm font-semibold text-primary-ol">
-                {isLlmOk ? 'Armed & Ready' : 'Not Configured'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SystemHealthCards
+        serverStatus={serverStatus}
+        setupStatus={setupStatus}
+        projects={projects}
+        onNavigate={navigate}
+        t={t}
+      />
 
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-primary-ol tracking-tight">
-            {'Project Overview'}
+            Project Overview
           </h1>
           <p className="text-xs font-body text-secondary-ol mt-0.5">
             {projects.length} {projects.length === 1 ? 'project monitored' : 'projects monitored'}
@@ -287,7 +153,7 @@ export function ProjectsGrid() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-foreground text-background hover:bg-foreground/90 transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
-            {'New Project'}
+            New Project
           </button>
         </div>
       </div>
@@ -311,234 +177,20 @@ export function ProjectsGrid() {
         </button>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-          {projects.map((project) => {
-            const status = statusConfig[project.status] ?? statusConfig.stopped;
-
-            return (
-              <div
-                key={project.id}
-                onClick={() => navigate(`/projects/${project.id}`)}
-                className={cn(
-                  'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 hover:shadow-md hover:border-agent/20 transition-all duration-200 cursor-pointer overflow-hidden card-hover',
-                  status.border,
-                )}
-              >
-                <div className="flex items-center justify-between p-4 pb-3 border-b border-[hsl(var(--border))]/50">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={cn(
-                        'h-2.5 w-2.5 rounded-full shrink-0 shadow-[0_0_8px_rgba(0,0,0,0.2)]',
-                        status.dot,
-                        project.status === 'running' && 'shadow-[0_0_8px_rgba(52,211,153,0.6)]',
-                        project.status === 'error' && 'shadow-[0_0_8px_rgba(248,113,113,0.6)]',
-                        project.status === 'building' && 'shadow-[0_0_8px_rgba(251,191,36,0.6)]',
-                      )}
-                    />
-                    <h3 className="font-display font-semibold text-base text-primary-ol truncate">
-                      {project.name}
-                    </h3>
-                  </div>
-                  <span
-                    className={cn(
-                      'px-2 py-0.5 rounded-full text-xs font-medium shrink-0',
-                      status.badge,
-                    )}
-                  >
-                    {status.label}
-                  </span>
-                </div>
-
-                <div className="p-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
-                        Last Deploy
-                      </p>
-                      <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol">
-                        <Clock className="h-3.5 w-3.5" />
-                        {formatRelativeTime(project.updatedAt, t)}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
-                        Branch
-                      </p>
-                      <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol truncate">
-                        <GitBranch className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{project.branch || 'main'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {project.url && (
-                    <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
-                        Endpoint
-                      </p>
-                      <a
-                        href={project.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 text-xs font-mono text-agent hover:text-agent/80 truncate transition-colors"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                        {project.url.replace(/^https?:\/\//, '')}
-                      </a>
-                    </div>
-                  )}
-
-                  {(() => {
-                    if (!project.environments || project.environments.length === 0) return null;
-
-                    const hasProd = project.environments.some((e) => e.type === 'production');
-                    const allEnvs = hasProd
-                      ? project.environments
-                      : [{ type: 'production', status: project.status }, ...project.environments];
-
-                    return (
-                      <div className="pt-2 border-t border-[hsl(var(--border))]/50">
-                        <p className="text-[10px] font-mono text-muted-ol mb-2 uppercase tracking-[0.08em]">
-                          Environments
-                        </p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {allEnvs.map((env) => {
-                            const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
-                            return (
-                              <button
-                                key={env.type}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/projects/${project.id}?env=${env.type}`);
-                                }}
-                                className="flex items-center gap-1.5 px-2 py-1 rounded border border-[hsl(var(--border))] hover:border-agent/30 bg-bg-subtle hover:bg-bg-panel transition-colors group/env"
-                                title={`${env.type} - ${envStatus.label}`}
-                              >
-                                <div className={cn('h-1.5 w-1.5 rounded-full', envStatus.dot)} />
-                                <span className="text-[10px] font-mono text-secondary-ol group-hover/env:text-primary-ol transition-colors">
-                                  {env.type === 'production'
-                                    ? 'prod'
-                                    : env.type === 'development'
-                                      ? 'dev'
-                                      : String(env.type).substring(0, 4)}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 bg-bg-panel/90 backdrop-blur-sm rounded-md p-1 border border-[hsl(var(--border))] shadow-sm">
-                  <button
-                    onClick={(e) => handleRedeploy(e, project.id)}
-                    disabled={redeployingId === project.id}
-                    className="p-1.5 rounded text-secondary-ol hover:text-agent hover:bg-agent/10 transition-colors disabled:opacity-50"
-                    title="Redeploy"
-                  >
-                    {redeployingId === project.id ? (
-                      <Spinner className="h-4 w-4" />
-                    ) : (
-                      <RotateCw className="h-4 w-4" />
-                    )}
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/projects/${project.id}`);
-                    }}
-                    className="p-1.5 rounded text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle transition-colors"
-                    title="Settings"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          {projects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              statusConfig={statusConfig}
+              redeployingId={redeployingId}
+              onNavigate={navigate}
+              onRedeploy={handleRedeploy}
+              t={t}
+            />
+          ))}
         </div>
       ) : (
-        <div className="border border-[hsl(var(--border))] rounded-lg overflow-hidden bg-bg-panel">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[hsl(var(--border))] bg-bg-subtle/50">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol">Name</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol">Status</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden md:table-cell">
-                  Branch
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden md:table-cell">
-                  Last Deploy
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden lg:table-cell">
-                  Endpoint
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden lg:table-cell">
-                  Envs
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((project) => {
-                const status = statusConfig[project.status] ?? statusConfig.stopped;
-                return (
-                  <tr
-                    key={project.id}
-                    onClick={() => navigate(`/projects/${project.id}`)}
-                    className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-bg-subtle/50 cursor-pointer transition-colors"
-                  >
-                    <td className="px-4 py-3 font-medium text-primary-ol">{project.name}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className={cn('h-2 w-2 rounded-full', status.dot)} />
-                        <span className="text-xs font-medium text-secondary-ol">
-                          {status.label}
-                        </span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-secondary-ol hidden md:table-cell">
-                      <span className="text-xs font-mono">{project.branch || 'main'}</span>
-                    </td>
-                    <td className="px-4 py-3 text-secondary-ol hidden md:table-cell">
-                      <span className="text-xs">{formatRelativeTime(project.updatedAt, t)}</span>
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      {project.url && (
-                        <a
-                          href={project.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-agent hover:underline truncate max-w-[200px] block"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {project.url.replace(/^https?:\/\//, '')}
-                        </a>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      <div className="flex gap-1 flex-wrap">
-                        {project.environments?.map((env) => (
-                          <span
-                            key={env.id || env.type}
-                            className="text-[10px] px-1.5 py-0.5 rounded bg-bg-subtle text-muted-ol border border-[hsl(var(--border))]"
-                          >
-                            {env.type === 'production'
-                              ? 'prod'
-                              : env.type === 'development'
-                                ? 'dev'
-                                : String(env.type).substring(0, 4)}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ProjectTable projects={projects} statusConfig={statusConfig} onNavigate={navigate} t={t} />
       )}
     </div>
   );
