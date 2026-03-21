@@ -198,6 +198,8 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.7.1**  | MCP Response Guidance        | Done   | verify/action_required/recovery_hint in tool responses, remote Docker warnings, agent behavior correction for curl/docker CLI fallback                                  |
 | **v0.7.2**  | MCP DX Enhancement           | Done   | mcpDescription for all 64 tools, error pattern unification, agent guidance for state-changing tools, orphan tool connections                                            |
 | **v0.7.3**  | Pipeline Refactor + Bugfixes | Done   | Deploy orchestration extraction (519→251 lines), Dockerfile.\* scan, Python infra detection, Docker log header stripping                                                |
+| **v0.8.0**  | MCP-First Web Pivot          | Done   | Web dashboard monitoring-focused, LLM optional, auto-recovery dual-mode (LLM + programmatic), RecoveryCard timeline                                                     |
+| **v0.9.0**  | Web Agent Mode               | Done   | ChatGPT-style agent chat in web dashboard, NDJSON streaming, multi-session DB persistence, markdown rendering, tool call visualization                                  |
 | **v1.0.0**  | Stable Release               | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                         |
 
 ## MCP Integration (AI Coding Agents)

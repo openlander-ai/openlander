@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-03-21
+
+### Added
+
+- **Web Agent Mode**: ChatGPT-style AI chat interface in the web dashboard
+  - Full-screen agent mode with mode toggle in sidebar (Dashboard/Agent)
+  - NDJSON streaming chat with real-time tool call visualization
+  - Multi-session support with server-side DB persistence
+  - Markdown rendering with code syntax highlighting (react-markdown + rehype-highlight)
+  - Collapsible tool call cards showing arguments and results
+  - Agent question UI with clickable option buttons
+  - LLM-not-configured gate with Settings redirect
+  - Empty state with suggestion chips for quick start
+  - Session management: create, switch, delete sessions
+  - Streaming abort (stop) button
+  - Auto-scroll with "scroll to bottom" indicator
+  - E2E Playwright tests for agent mode navigation
+
+### Changed
+
+- **Agent class**: Added session switching and async mutex for safe concurrent access
+- **Database**: Added `deleteSession()` to ChatRepo, Database, and SessionStore
+- **Web server**: Added 6 new API routes for chat streaming, question handling, and session management
+
 ## [0.8.0] - 2026-03-21
 
 ### Changed
