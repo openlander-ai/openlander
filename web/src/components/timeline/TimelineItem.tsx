@@ -12,6 +12,7 @@ import {
 import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard';
 import { ToolResultCard } from './ToolResultCard';
 import { ComposeErrorCard } from './ComposeErrorCard';
+import { RecoveryCard } from './RecoveryCard';
 
 interface TimelineItemProps {
   item: TItem;
@@ -46,6 +47,11 @@ export function TimelineItemCard({
   const isAgentToolResult = item.type === 'agent_tool_result';
   const isAgentMessage = item.type === 'agent_message';
   const isAgentEvent = isAgentThinking || isAgentToolCall || isAgentToolResult || isAgentMessage;
+  const isRecoveryEvent = item.type.startsWith('recovery_');
+
+  if (isRecoveryEvent) {
+    return <RecoveryCard item={item} isLatest={isLatest} />;
+  }
 
   if (isAgentToolResult) {
     return <ToolResultCard item={item} />;

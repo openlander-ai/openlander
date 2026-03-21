@@ -36,7 +36,11 @@ export interface BuildStreamEvent {
     | 'question_pending'
     | 'insight'
     | 'dockerfile_fixed'
-    | 'needs_user_action';
+    | 'needs_user_action'
+    | 'recovery_start'
+    | 'recovery_success'
+    | 'recovery_failed'
+    | 'recovery_exhausted';
   message: string;
   projectId: string;
   timestamp: string;
@@ -89,7 +93,11 @@ export interface TimelineItem {
     | 'agent_tool_call'
     | 'agent_tool_result'
     | 'agent_message'
-    | 'needs_user_action';
+    | 'needs_user_action'
+    | 'recovery_start'
+    | 'recovery_success'
+    | 'recovery_failed'
+    | 'recovery_exhausted';
   timestamp: string;
   title: string;
   detail?: string;
@@ -234,6 +242,20 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         category: event.category,
         detail: event.userDetail ?? event.detail ?? undefined,
+        ...scopedMeta,
+      };
+    case 'recovery_start':
+    case 'recovery_success':
+    case 'recovery_failed':
+    case 'recovery_exhausted':
+      return {
+        id,
+        type: event.type,
+        timestamp: event.timestamp,
+        title: event.message,
+        detail: event.detail ?? undefined,
+        percent: -1,
+        retryCount: event.retryCount,
         ...scopedMeta,
       };
     default:

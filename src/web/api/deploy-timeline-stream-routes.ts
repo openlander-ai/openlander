@@ -468,6 +468,49 @@ function registerComposeEventHandlers(handlerCtx: StreamHandlerContext): Array<(
   ];
 }
 
+function registerRecoveryEventHandlers(handlerCtx: StreamHandlerContext): Array<() => void> {
+  const { project, emitTimelineEvent } = handlerCtx;
+
+  return [
+    eventBus.on('recovery:start', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'recovery_start',
+        message: `Auto-Recovery Attempt ${String(payload.attempt)}/3`,
+        detail: payload.error,
+        projectId: project.id,
+      });
+    }),
+    eventBus.on('recovery:success', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'recovery_success',
+        message: `Recovery Successful (attempt ${String(payload.attempt)}, ${String(Math.round(payload.durationMs / 1000))}s)`,
+        projectId: project.id,
+        durationMs: payload.durationMs,
+      });
+    }),
+    eventBus.on('recovery:failed', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'recovery_failed',
+        message: `Recovery Failed (attempt ${String(payload.attempt)})`,
+        detail: payload.error,
+        projectId: project.id,
+      });
+    }),
+    eventBus.on('recovery:exhausted', (payload) => {
+      if (payload.projectId !== project.id) return;
+      emitTimelineEvent({
+        type: 'recovery_exhausted',
+        message: `Recovery Exhausted after ${String(payload.totalAttempts)} attempts`,
+        detail: payload.lastError,
+        projectId: project.id,
+      });
+    }),
+  ];
+}
+
 function handleInitialStatusCheck(
   ctx: AppContext,
   project: ProjectRow,
@@ -620,6 +663,7 @@ function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow
     unsubscribers.push(...registerDeployLifecycleHandlers(handlerCtx));
     unsubscribers.push(...registerBuildEventHandlers(handlerCtx));
     unsubscribers.push(...registerComposeEventHandlers(handlerCtx));
+    unsubscribers.push(...registerRecoveryEventHandlers(handlerCtx));
 
     streamTimeoutRef.streamTimeout = setTimeout(
       () => {
