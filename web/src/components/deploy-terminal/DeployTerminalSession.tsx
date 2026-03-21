@@ -2,14 +2,12 @@ import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 import type { TimelineItem } from '@/lib/event-types';
-import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCard';
 
 import { TerminalFrame } from './TerminalFrame';
 import { TerminalHeader } from './TerminalHeader';
 import { TerminalPhaseRail, type Phase } from './TerminalPhaseRail';
 import { TerminalScrollback } from './TerminalScrollback';
 import { TerminalLogBlock } from './TerminalLogBlock';
-import { TerminalQuestion } from './TerminalQuestion';
 import { TerminalLine } from './TerminalLine';
 
 export interface DeployTerminalSessionProps {
@@ -18,8 +16,6 @@ export interface DeployTerminalSessionProps {
   projectStatus?: string;
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
-  onSubmitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => void;
-  onSkipQuestion: (questionId: string) => void;
   className?: string;
 }
 
@@ -60,8 +56,6 @@ export function DeployTerminalSession({
   projectStatus,
   timelineItems,
   isTimelineStreaming,
-  onSubmitAnswer,
-  onSkipQuestion,
   className,
 }: DeployTerminalSessionProps) {
   const groupedItems = useMemo(() => groupLogs(timelineItems), [timelineItems]);
@@ -114,27 +108,6 @@ export function DeployTerminalSession({
                     }
 
                     const item = uItem;
-
-                    if (item.type === 'question' && item.questionId && item.questions) {
-                      const q = item.questions[0];
-                      return (
-                        <TerminalQuestion
-                          key={item.id}
-                          id={item.questionId}
-                          question={q.question}
-                          options={q.options.map((o: { label: string; description?: string }) => ({
-                            id: o.label,
-                            label: o.label,
-                            description: o.description,
-                          }))}
-                          answered={item.answered}
-                          onSubmit={(qId, optId) => {
-                            onSubmitAnswer(qId, [{ questionIndex: 0, selectedLabels: [optId] }]);
-                          }}
-                          onSkip={(qId) => onSkipQuestion(qId)}
-                        />
-                      );
-                    }
 
                     if (item.type === 'error') {
                       return (

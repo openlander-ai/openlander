@@ -60,7 +60,7 @@ export function SummaryDashboard({ projectId, project, recentEvents }: SummaryDa
   const last5Events = recentEvents.slice(-5).reverse();
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {/* Card 1: Status+URL */}
       <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
         <h3 className="text-sm font-display font-medium text-primary-ol mb-3">Status</h3>

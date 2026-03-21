@@ -118,7 +118,7 @@ export function ProjectDetail() {
     return () => clearInterval(interval);
   }, [fetchProject]);
 
-  const { items, isStreaming, submitAnswer, skipQuestion } = useTimeline({
+  const { items, isStreaming } = useTimeline({
     projectId: id,
     enabled: !!id,
     runKey: timelineRunKey,
@@ -405,8 +405,6 @@ export function ProjectDetail() {
                 displayProject={displayProject}
                 timelineItems={allTimelineItems}
                 isTimelineStreaming={isStreaming}
-                onSubmitAnswer={submitAnswer}
-                onSkipQuestion={skipQuestion}
                 onOpenLogs={() => setActiveTab('console')}
               />
             )}

@@ -3,11 +3,9 @@ import type { ErrorInfo, ReactNode } from 'react';
 import { LogPreview } from '@/components/timeline/LogPreview';
 import { DeployTerminalSession } from '@/components/deploy-terminal/DeployTerminalSession';
 import type { TimelineItem } from '@/lib/event-types';
-import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCard';
 import { SummaryDashboard } from '@/components/project/SummaryDashboard';
 import { getProject } from '@/lib/api';
 import type { Project } from '@/types';
-import { cn } from '@/lib/utils';
 
 class LocalErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -43,8 +41,6 @@ interface OverviewTabProps {
   // Timeline props
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
-  onSubmitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => void;
-  onSkipQuestion: (questionId: string) => void;
   onOpenLogs: () => void;
 }
 
@@ -54,18 +50,9 @@ export function OverviewTab({
   displayProject,
   timelineItems,
   isTimelineStreaming,
-  onSubmitAnswer,
-  onSkipQuestion,
   onOpenLogs,
 }: OverviewTabProps) {
   const [project, setProject] = useState<Project | null>(null);
-  const [wasBuilding, setWasBuilding] = useState(false);
-
-  useEffect(() => {
-    if (projectStatus === 'building') {
-      setWasBuilding(true);
-    }
-  }, [projectStatus]);
 
   useEffect(() => {
     let mounted = true;
@@ -79,55 +66,37 @@ export function OverviewTab({
     };
   }, [projectId]);
 
-  const showTimeline =
-    projectStatus === 'building' ||
-    projectStatus === 'error' ||
-    (projectStatus === 'running' && wasBuilding);
-
   return (
-    <div className="flex flex-col md:flex-row h-full min-h-0">
-      <div
-        className={cn(
-          'flex-1 min-w-0 min-h-0 overflow-auto p-4 space-y-4 border-b md:border-b-0 border-[hsl(var(--border))]',
-          !showTimeline && 'md:border-r',
-        )}
-      >
-        {showTimeline ? (
-          <>
-            <section className="rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
-              <LocalErrorBoundary>
-                <DeployTerminalSession
-                  projectName={displayProject?.name || project?.name || projectId}
-                  branchName={displayProject?.branch || project?.branch}
-                  projectStatus={projectStatus}
-                  timelineItems={timelineItems}
-                  isTimelineStreaming={isTimelineStreaming}
-                  onSubmitAnswer={onSubmitAnswer}
-                  onSkipQuestion={onSkipQuestion}
-                />
-              </LocalErrorBoundary>
-            </section>
+    <div className="flex flex-col h-full min-h-0 overflow-auto p-6 space-y-6 bg-bg-app">
+      <section className="shrink-0">
+        <SummaryDashboard
+          projectId={projectId}
+          project={
+            displayProject || project
+              ? { ...(displayProject || project), status: projectStatus }
+              : { status: projectStatus }
+          }
+          recentEvents={timelineItems}
+        />
+      </section>
 
-            {projectId && (
-              <section className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel overflow-hidden">
-                <LogPreview projectId={projectId} status={projectStatus} onOpenLogs={onOpenLogs} />
-              </section>
-            )}
-          </>
-        ) : (
-          <section className="flex flex-col">
-            <SummaryDashboard
-              projectId={projectId}
-              project={
-                displayProject || project
-                  ? { ...(displayProject || project), status: projectStatus }
-                  : { status: projectStatus }
-              }
-              recentEvents={timelineItems}
-            />
-          </section>
-        )}
-      </div>
+      <section className="flex-1 min-h-[400px] flex flex-col rounded-xl border border-[hsl(var(--border))] bg-bg-panel overflow-hidden shadow-sm">
+        <LocalErrorBoundary>
+          <DeployTerminalSession
+            projectName={displayProject?.name || project?.name || projectId}
+            branchName={displayProject?.branch || project?.branch}
+            projectStatus={projectStatus}
+            timelineItems={timelineItems}
+            isTimelineStreaming={isTimelineStreaming}
+          />
+        </LocalErrorBoundary>
+      </section>
+
+      {projectId && (
+        <section className="shrink-0 rounded-xl border border-[hsl(var(--border))] bg-bg-panel overflow-hidden shadow-sm">
+          <LogPreview projectId={projectId} status={projectStatus} onOpenLogs={onOpenLogs} />
+        </section>
+      )}
     </div>
   );
 }
