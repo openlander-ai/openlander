@@ -57,6 +57,7 @@ export type ChatStreamEvent =
 export interface ToolCallInfo {
   toolName: string;
   arguments: Record<string, unknown>;
+  toolResult?: ToolResult;
 }
 
 export interface ChatMessage {

@@ -1001,11 +1001,16 @@ export async function scanProjectEnvVars(
 
 import type { ChatSession, ChatMessage } from './chat-types.js';
 
-export async function streamChat(message: string, sessionId: string): Promise<Response> {
+export async function streamChat(
+  message: string,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<Response> {
   const res = await fetch('/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, session_id: sessionId }),
+    signal,
   });
   if (!res.ok) {
     const error = await res.text();
