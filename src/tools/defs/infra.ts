@@ -33,6 +33,7 @@ export const infraToolDefs: ToolDef[] = [
         _agent_guidance: {
           next_steps: [
             'Update env vars (e.g., NEXT_PUBLIC_API_URL) in other projects that reference this project, then redeploy them',
+            'Call restart_project for any project that needs to pick up the new domain configuration',
           ],
         },
       };

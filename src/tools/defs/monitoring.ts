@@ -12,7 +12,7 @@ export const monitoringToolDefs: ToolDef[] = [
   {
     name: 'get_logs',
     description:
-      'Get recent container stdout/stderr logs for a project. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of the most recent 20 lines. Errors: PROJECT_NOT_FOUND. If logs show a build error, suggest debug_build_error for diagnosis.',
+      'Get recent container stdout/stderr logs for a project. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of the most recent 20 lines. Errors: PROJECT_NOT_FOUND. If logs show a build error, suggest debug_build_error for diagnosis. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
     mcpDescription: 'Get recent container logs for a project.',
     inputSchema: getLogsSchema,
     execute: async (args, context) => {

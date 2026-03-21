@@ -81,7 +81,7 @@ export const gitToolDefs: ToolDef[] = [
   {
     name: 'scan_dockerfiles',
     description:
-      'Clone a repo and scan for all Dockerfiles. Use BEFORE create_deploy_plan when you suspect a monorepo (multiple services). Returns paths like ["Dockerfile", "frontend/Dockerfile", "backend/Dockerfile"]. If only one Dockerfile is found, use create_deploy_plan normally. If multiple are found, deploy each as a child project with the dockerfile_path parameter. Errors: CLONE_FAILED.',
+      'Clone a repo and scan for all Dockerfiles. Use BEFORE deploying when you suspect a monorepo (multiple services). Returns paths like ["Dockerfile", "frontend/Dockerfile", "backend/Dockerfile"]. If only one Dockerfile is found, use create_deploy_plan normally. If multiple are found, use orchestrate_deploy to deploy all services at once with dependency ordering and atomic rollback. Do NOT call create_deploy_plan multiple times for each Dockerfile. Errors: CLONE_FAILED.',
     inputSchema: scanDockerfilesSchema,
     execute: async (args, { appCtx }) => {
       const repoUrl = args['repo_url'] as string;

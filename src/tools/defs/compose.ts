@@ -92,6 +92,7 @@ export const composeToolDefs: ToolDef[] = [
               'Check composeContent for configuration issues',
               'Call get_build_log for raw build output',
               'Call debug_build_error for AI diagnosis',
+              'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
             ],
           },
         };

@@ -145,7 +145,20 @@ export const deployToolDefs: ToolDef[] = [
                 next_steps: [
                   'Call get_build_log for raw build output',
                   'Call debug_build_error for AI diagnosis',
+                  'Call get_deploy_history for deployment history and trends',
                   'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
+                ],
+              },
+            }
+          : {}),
+        ...(job.phase === 'building' ||
+        job.phase === 'cloning' ||
+        job.phase === 'starting' ||
+        job.phase === 'queued'
+          ? {
+              _agent_guidance: {
+                next_steps: [
+                  'Deploy is in progress. Call get_deploy_status with wait=true to block until completion, or poll periodically',
                 ],
               },
             }

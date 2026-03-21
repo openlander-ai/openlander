@@ -48,6 +48,27 @@ export const deployPlanToolDefs: ToolDef[] = [
         warnings: plan.warnings,
         internal_url: plan.internal_url,
         internal_url_note: plan.internal_url_note,
+        ...(context.target === 'agent' &&
+        typeof context.appCtx.db.getProject === 'function' &&
+        plan.status === 'needs_input'
+          ? {
+              _agent_guidance: {
+                next_steps: [
+                  `Plan has missing values. Call update_deploy_plan to provide: ${plan.missing.join(', ')}`,
+                  'After updating, call execute_deploy_plan to start deployment',
+                ],
+              },
+            }
+          : {}),
+        ...(context.target === 'agent' &&
+        typeof context.appCtx.db.getProject === 'function' &&
+        plan.status === 'ready'
+          ? {
+              _agent_guidance: {
+                next_steps: ['Plan is ready. Call execute_deploy_plan to start deployment'],
+              },
+            }
+          : {}),
       };
     },
   },
