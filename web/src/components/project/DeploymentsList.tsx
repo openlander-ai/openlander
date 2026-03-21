@@ -125,7 +125,10 @@ export function DeploymentsList({
           <div
             key={deploy.id}
             onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
-            className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel hover:border-agent/30 cursor-pointer transition-colors"
+            className={cn(
+              'flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel hover:border-agent/30 cursor-pointer transition-colors',
+              deploy.trigger === 'chat' && 'ai-deploy-border',
+            )}
           >
             <div className="flex items-center gap-3 w-full">
               <div className="flex flex-col w-full">

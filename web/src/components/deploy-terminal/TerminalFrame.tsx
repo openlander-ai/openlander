@@ -11,7 +11,10 @@ export interface TerminalFrameProps {
 export function TerminalFrame({ children, className, title }: TerminalFrameProps) {
   return (
     <div
-      className={cn('relative flex flex-col overflow-hidden rounded-xl border', className)}
+      className={cn(
+        'relative flex flex-col overflow-hidden rounded-xl border terminal-dot-grid',
+        className,
+      )}
       style={{
         backgroundColor: terminalTokens.colors.background,
         borderColor: terminalTokens.colors.border,
