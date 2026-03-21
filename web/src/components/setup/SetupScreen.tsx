@@ -6,6 +6,7 @@ import {
   connectGithub,
   startGithubDeviceFlow,
   pollGithubDeviceFlow,
+  configureLLM,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,8 @@ import {
   Rocket,
   ExternalLink,
   Globe,
+  Key,
+  Save,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
@@ -33,7 +36,7 @@ const STORAGE_KEY = 'openlander-setup-step';
 function getStoredStep(): number {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return Math.min(parseInt(stored, 10), 2);
+    if (stored) return Math.min(parseInt(stored, 10), 3);
   } catch {
     // localStorage not available
   }
@@ -77,12 +80,18 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const [deviceFlowPolling, setDeviceFlowPolling] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
+  // LLM Form State
+  const [llmProvider, setLlmProvider] = useState(status?.llm?.provider || 'gemini');
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmSaving, setLlmSaving] = useState(false);
+  const [llmError, setLlmError] = useState('');
+
   // Persist step on change
   useEffect(() => {
     storeStep(step);
   }, [step]);
 
-  const goNext = () => setStep((s) => Math.min(s + 1, 2));
+  const goNext = () => setStep((s) => Math.min(s + 1, 3));
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
 
   const handleStartTraefik = async () => {
@@ -194,6 +203,22 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
     return () => clearInterval(pollInterval);
   }, [deviceFlowPolling, deviceFlow, refetch]);
 
+  const handleSaveApiKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLlmSaving(true);
+    setLlmError('');
+    try {
+      await configureLLM(llmProvider, llmApiKey.trim());
+      await refetch();
+      goNext();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save API Key';
+      setLlmError(message);
+    } finally {
+      setLlmSaving(false);
+    }
+  };
+
   const handleComplete = async () => {
     setCompleting(true);
     try {
@@ -223,7 +248,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       <div className="relative w-full max-w-xl z-10">
         {/* Step indicators */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {[0, 1, 2].map((s) => (
+          {[0, 1, 2, 3].map((s) => (
             <div key={s} className="flex items-center gap-2">
               <div
                 className={cn(
@@ -235,7 +260,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
               >
                 {s < step ? <Check className="h-4 w-4" /> : s + 1}
               </div>
-              {s < 2 && (
+              {s < 3 && (
                 <div
                   className={cn('w-12 h-px transition-colors', s < step ? 'bg-agent' : 'bg-border')}
                 />
@@ -517,6 +542,100 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 )}
               </div>
 
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={goBack}
+                  className="gap-1.5 font-body"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  {'Back'}
+                </Button>
+                <Button
+                  onClick={goNext}
+                  size="lg"
+                  className="flex-1 bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
+                >
+                  {status?.github?.ok ? 'Continue' : 'Skip for now'}
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: API Key */}
+        {step === 3 && (
+          <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="space-y-6">
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-agent/10 flex items-center justify-center">
+                  <Key className="h-8 w-8 text-agent" />
+                </div>
+                <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+                  {'API Key'}
+                </h2>
+                <p className="text-sm font-body text-secondary-ol">
+                  {'Optional: Enables smart auto-recovery'}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
+                <p className="text-xs font-body text-muted-ol">
+                  Provide an LLM API key to enable smart auto-recovery. Without it, programmatic
+                  recovery recipes are used.
+                </p>
+
+                <form onSubmit={handleSaveApiKey} className="space-y-3">
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-body text-muted-ol">Provider</p>
+                    <select
+                      value={llmProvider}
+                      onChange={(e) => setLlmProvider(e.target.value)}
+                      className="w-full rounded-md border border-border bg-bg-app px-3 py-2 text-sm font-mono"
+                    >
+                      <option value="gemini">Google Gemini</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="ollama">Ollama (Local)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-body text-muted-ol">API Key</p>
+                    <Input
+                      type="password"
+                      placeholder={
+                        llmProvider === 'ollama'
+                          ? 'Not required for Ollama'
+                          : status?.llm?.ok
+                            ? '••••••••••••'
+                            : 'sk-...'
+                      }
+                      value={llmApiKey}
+                      onChange={(e) => setLlmApiKey(e.target.value)}
+                      disabled={llmProvider === 'ollama'}
+                      className="font-mono text-sm bg-bg-app border-border"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={llmSaving || (llmProvider !== 'ollama' && !llmApiKey.trim())}
+                    size="sm"
+                    className="w-full gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+                  >
+                    {llmSaving ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )}
+                    Save API Key
+                  </Button>
+                  {llmError && <p className="text-xs font-body text-error">{llmError}</p>}
+                </form>
+              </div>
+
               {/* Summary */}
               <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
                 <p className="text-xs font-body text-muted-ol uppercase tracking-wider">
@@ -532,9 +651,16 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   label="Traefik"
                   detail={status.traefik.ok ? 'Running' : 'Stopped'}
                 />
-                <p className="pt-1 text-[11px] font-body text-muted-ol">
-                  {'API key is optional - enables smart auto-recovery.'}
-                </p>
+                <StatusRow
+                  ok={status.github?.ok || false}
+                  label="GitHub"
+                  detail={status.github?.ok ? 'Connected' : 'Skipped'}
+                />
+                <StatusRow
+                  ok={status.llm?.ok || false}
+                  label="API Key"
+                  detail={status.llm?.ok ? 'Configured' : 'Skipped'}
+                />
               </div>
 
               <div className="flex gap-2">
@@ -561,12 +687,6 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   {'Start Deploying'}
                 </Button>
               </div>
-
-              {!status.docker.ok && (
-                <p className="text-xs font-body text-muted-ol text-center">
-                  Docker must be configured to continue.
-                </p>
-              )}
             </div>
           </div>
         )}
