@@ -859,19 +859,24 @@ Phase 3 — PR Preview:
 
 ---
 
-### v0.7.1 — MCP Agent Guidance System ✅
+### v0.7.1 — MCP Response Guidance Hints ✅
 
 **상태**: 완료
 
-> **핵심 가치**: AI 에이전트가 MCP 도구 실행 후 docker CLI나 curl localhost로 빠지는 문제 해결. `_agent_guidance.next_steps[]` 통합 필드 + `docker_host` 팩트 기반 접근으로 에이전트를 올바른 다음 행동으로 유도.
+> **핵심 가치**: AI 에이전트가 MCP 도구 실행 후 docker CLI나 curl localhost로 빠지는 문제 해결. 도구 응답에 `verify`, `action_required`, `recovery_hint` 필드를 추가하여 에이전트를 올바른 다음 행동으로 유도.
 
-| 항목                                                            | 상태 |
-| --------------------------------------------------------------- | ---- |
-| `getDockerHostType()` 유틸 함수 (`local`/`remote` 감지)         | ✅   |
-| `_agent_guidance.next_steps[]` 통합 가이드 필드 (10개 도구)     | ✅   |
-| `docker_host` 팩트 필드 (`get_deploy_status` done/failed)       | ✅   |
-| `SERVER_INSTRUCTIONS`에 원격 Docker 규칙 한 줄 추가             | ✅   |
-| description에서 "Docker host may be remote" 산문 경고 전부 제거 | ✅   |
+| 항목                                                                         | 상태 |
+| ---------------------------------------------------------------------------- | ---- |
+| `get_deploy_status` done 응답에 `verify`, `internal_host` 추가               | ✅   |
+| `get_deploy_status` failed 응답에 `recovery_hint` 추가                       | ✅   |
+| `execute_deploy_plan` building/failed 응답에 `verify`/`recovery_hint`        | ✅   |
+| `deploy_compose` BUILD_FAILED 응답에 `recovery_hint` 추가                    | ✅   |
+| `map_domain` 응답에 `action_required` 추가                                   | ✅   |
+| `set_env_vars`, `upload_secret_file` 응답에 `action_required` 추가           | ✅   |
+| `expose_public` 응답에 `verify` 추가                                         | ✅   |
+| `enable_webhook` 응답에 `action_required` 추가                               | ✅   |
+| `get_logs`, `stop_project`, `restart_project` description에 원격 Docker 경고 | ✅   |
+| `get_system_stats` 응답에 `note` (원격 Docker 안내) 추가                     | ✅   |
 
 ---
 

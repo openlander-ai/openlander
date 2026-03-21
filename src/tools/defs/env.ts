@@ -115,11 +115,9 @@ export const envToolDefs: ToolDef[] = [
         status: 'updated',
         project: projectName,
         keys: Object.keys(vars),
-        _agent_guidance: {
-          next_steps: [
-            'Redeploy required: call create_deploy_plan + execute_deploy_plan for changes to take effect',
-          ],
-        },
+        action_required: [
+          'Project must be redeployed for env var changes to take effect. Use create_deploy_plan + execute_deploy_plan.',
+        ],
       };
     },
   },
@@ -168,9 +166,8 @@ export const envToolDefs: ToolDef[] = [
         status: 'exposed',
         project: projectName,
         publicUrl: url,
-        _agent_guidance: {
-          next_steps: ['Access the app via the publicUrl above'],
-        },
+        verify:
+          'Access via the publicUrl above. Do NOT curl localhost — Docker host may be remote.',
       };
     },
   },
@@ -210,11 +207,9 @@ export const envToolDefs: ToolDef[] = [
         filename,
         mountPath: `${mountPath}/${filename}`,
         scope: projectId ? 'project' : 'global',
-        _agent_guidance: {
-          next_steps: [
-            'Redeploy required: call create_deploy_plan + execute_deploy_plan for the file to be mounted',
-          ],
-        },
+        action_required: [
+          'Redeploy required for the secret file to be mounted in the container. Use create_deploy_plan + execute_deploy_plan.',
+        ],
       };
     },
     targets: ['mcp'],

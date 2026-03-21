@@ -1,5 +1,4 @@
 import { ProjectNotFoundError } from '../../errors.js';
-import { getDockerHostType } from '../../pipeline/docker.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
 import type { ToolDef } from './types.js';
 import {
@@ -117,22 +116,14 @@ export const deployToolDefs: ToolDef[] = [
           ? {
               urls: getProjectUrls(job.projectName),
               internal_host: `ol-${job.projectName}`,
-              docker_host: getDockerHostType(),
-              _agent_guidance: {
-                next_steps: ['Call get_logs to confirm container is healthy'],
-              },
+              verify:
+                'Use get_logs to check container health. Do NOT use curl or docker commands — Docker host may be remote.',
             }
           : {}),
         ...(job.phase === 'failed'
           ? {
-              docker_host: getDockerHostType(),
-              _agent_guidance: {
-                next_steps: [
-                  'Call get_build_log for raw build output',
-                  'Call debug_build_error for AI diagnosis',
-                  'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
-                ],
-              },
+              recovery_hint:
+                'Use get_build_log + debug_build_error for diagnosis, then create_deploy_plan + execute_deploy_plan to retry. Do NOT use docker CLI — Docker host may be remote.',
             }
           : {}),
         ...(job.buildLogTail && (job.phase === 'building' || job.phase === 'failed')

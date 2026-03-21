@@ -48,7 +48,8 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'stop_project',
     description:
       'Stop a running project container gracefully. Use when user wants to pause or shut down a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT remove the project; use remove_project for full cleanup.',
-    mcpDescription: 'Stop a running project container.',
+    mcpDescription:
+      'Stop a running project container. Docker host may be remote — do NOT use docker CLI directly.',
     inputSchema: stopProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
@@ -133,7 +134,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     description:
       'Restart a running project by stopping and redeploying it with the same configuration. Use when user reports the app is hung, unresponsive, or needs a fresh start after config changes. Returns { status, project } with redeploy result. Errors: PROJECT_NOT_FOUND.',
     mcpDescription:
-      'Restart a project by stopping and redeploying. Pass no_cache=true to rebuild from scratch (use when dependencies changed but Docker layers stale).',
+      'Restart a project by stopping and redeploying. Pass no_cache=true to rebuild from scratch (use when dependencies changed but Docker layers stale). Docker host may be remote — do NOT use docker CLI directly.',
     inputSchema: restartProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;

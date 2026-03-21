@@ -41,11 +41,9 @@ const enableWebhookTool: ToolDef = {
       enabled: true,
       branchFilter: branchFilter ?? 'main',
       webhookPath: `/api/webhooks/${project.id}/${source}`,
-      _agent_guidance: {
-        next_steps: [
-          'Configure this webhook URL and secret in git provider settings (GitHub → Settings → Webhooks)',
-        ],
-      },
+      action_required: [
+        'Configure this webhook URL and secret in your git provider settings (GitHub → Settings → Webhooks → Add webhook).',
+      ],
     };
   },
 };

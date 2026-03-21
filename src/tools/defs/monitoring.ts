@@ -13,7 +13,8 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_logs',
     description:
       'Get recent container stdout/stderr logs for a project. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of the most recent 20 lines. Errors: PROJECT_NOT_FOUND. If logs show a build error, suggest debug_build_error for diagnosis.',
-    mcpDescription: 'Get recent container logs for a project.',
+    mcpDescription:
+      'Get recent container logs for a project. Docker host may be remote — do NOT use docker CLI directly.',
     inputSchema: getLogsSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
@@ -32,13 +33,15 @@ export const monitoringToolDefs: ToolDef[] = [
     name: 'get_system_stats',
     description:
       'Get host system resource usage — CPU load, memory, and disk space. Use when user asks about server health, capacity, or before deploying to check if resources are available. Returns { summary, cpu, memory, disk } with percentage usage and warnings. Always available, no errors.',
-    mcpDescription: 'Get host system resource usage.',
+    mcpDescription:
+      'Get host system resource usage. Docker runs on this host, not on the MCP client machine.',
     inputSchema: getSystemStatsSchema,
     execute: () => {
       const stats = getSystemStats();
       return Promise.resolve({
         summary: formatStatsSummary(stats),
         ...stats,
+        note: 'Docker runs on this host, not on the MCP client machine. Use OpenLander tools, not docker CLI.',
       });
     },
   },
