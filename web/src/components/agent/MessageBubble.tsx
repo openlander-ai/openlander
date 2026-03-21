@@ -2,6 +2,7 @@ import type { ChatMessage } from '@/lib/chat-types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ToolCallCard } from './ToolCallCard';
 
@@ -15,13 +16,21 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   return (
     <div
       data-testid={isUser ? 'message-user' : 'message-assistant'}
-      className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
+      className={cn('flex flex-col', isUser ? 'items-end' : 'items-start')}
       title={message.createdAt ? new Date(message.createdAt).toLocaleString() : undefined}
     >
+      {isUser ? (
+        <p className="text-[10px] text-muted-ol mb-1 text-right">You</p>
+      ) : (
+        <div className="flex items-center gap-1.5 mb-1">
+          <Bot className="h-3 w-3 text-ai" />
+          <p className="text-[10px] text-ai">Agent</p>
+        </div>
+      )}
       <div
         className={cn(
           'max-w-[80%] rounded-lg px-4 py-2',
-          isUser ? 'bg-agent text-white' : 'bg-bg-subtle text-primary-ol',
+          isUser ? 'bg-agent text-white' : 'bg-bg-surface border border-[#27272A] text-primary-ol',
         )}
       >
         {isUser ? (
@@ -29,7 +38,18 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         ) : (
           <>
             {message.content && (
-              <div className="prose prose-sm dark:prose-invert max-w-none">
+              <div
+                className="prose prose-sm prose-invert max-w-none
+                prose-headings:text-primary-ol
+                prose-p:text-secondary-ol
+                prose-a:text-ai prose-a:no-underline hover:prose-a:underline
+                prose-strong:text-primary-ol
+                prose-code:text-ai/80 prose-code:bg-bg-subtle prose-code:px-1 prose-code:py-0.5 prose-code:rounded
+                prose-pre:bg-bg-terminal prose-pre:border prose-pre:border-[#27272A]
+                prose-td:text-secondary-ol prose-th:text-primary-ol
+                prose-blockquote:border-ai/30 prose-blockquote:text-secondary-ol
+              "
+              >
                 <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
                   {message.content}
                 </ReactMarkdown>

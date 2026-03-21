@@ -14,7 +14,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
   return (
     <div
       data-testid="tool-call-card"
-      className="border border-border rounded-md my-2 overflow-hidden"
+      className="border border-[#27272A] rounded-md my-2 overflow-hidden"
     >
       <button
         onClick={() => setExpanded(!expanded)}
@@ -32,7 +32,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
       {expanded && (
-        <div className="px-3 py-2 border-t border-border bg-bg-app text-xs">
+        <div className="px-3 py-2 border-t border-[#27272A] bg-bg-terminal text-xs">
           {Object.keys(toolCall.arguments).length > 0 && (
             <div className="mb-2">
               <span className="text-muted-ol">Arguments:</span>

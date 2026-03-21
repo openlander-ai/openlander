@@ -51,7 +51,7 @@ export function ChatInput({ onSend, isStreaming, onAbort }: ChatInputProps) {
   const canSend = value.trim().length > 0 && !isStreaming;
 
   return (
-    <div className="flex items-end gap-2 p-4 border-t border-border bg-bg-panel">
+    <div className="flex items-end gap-2 p-4 border-t border-[#27272A] bg-bg-panel">
       <textarea
         ref={textareaRef}
         data-testid="chat-input"
@@ -62,8 +62,8 @@ export function ChatInput({ onSend, isStreaming, onAbort }: ChatInputProps) {
         placeholder={isStreaming ? 'Agent is thinking...' : 'Send a message...'}
         rows={1}
         className={cn(
-          'flex-1 resize-none rounded-lg border border-border bg-bg-app px-3 py-2 text-sm text-primary-ol placeholder:text-muted-ol',
-          'focus:outline-none focus:ring-1 focus:ring-agent',
+          'flex-1 resize-none rounded-lg border border-[#27272A] bg-bg-app px-3 py-2 text-sm text-primary-ol placeholder:text-muted-ol',
+          'focus:outline-none focus:ring-1 focus:ring-ai',
           'disabled:opacity-50 disabled:cursor-not-allowed',
         )}
       />
