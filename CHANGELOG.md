@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-03-21
+
+### Changed
+
+- **MCP tool descriptions**: Added `mcpDescription` to all 64 tools (was ~16). MCP clients now see concise, purpose-focused descriptions instead of verbose agent-targeted ones.
+- **Error handling unification**: All tool errors now use `throw` pattern (was mixed `throw`/`return {error}`). MCP responses consistently use `isError: true` for all error cases.
+- **`deploy_monorepo` deprecated**: Description and response now direct agents to `orchestrate_deploy` for monorepo deployments.
+
+### Added
+
+- **`_agent_guidance` for state-changing tools**: `stop_project`, `remove_project`, `rollback_project`, `deploy_blue_green`, `create_service`, `enable_webhook` now return structured next-step guidance.
+- **Orphan tool connections**: `preview_deploy` → `list_previews`, `enable_webhook` → `get_webhook_config`, `map_domain` → `list_domains`, `get_deploy_status` → `get_system_stats`, `create_deploy_plan` → `provision_database` guidance chains added.
+- **SERVER_INSTRUCTIONS updates**: `orchestrate_deploy` as monorepo primary path, `wait=true` for `get_deploy_status`, `get_deploy_history` in deploy planning and failure recovery sections.
+
 ## [0.7.1] - 2026-03-21
 
 ### Added
