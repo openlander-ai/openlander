@@ -10,6 +10,7 @@ import { DeploymentDetail } from '@/pages/DeploymentDetail';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
 import { ServiceDetail } from '@/pages/ServiceDetail';
+import { AgentPage } from '@/pages/AgentPage';
 import './App.css';
 import { getSetupStatus } from '@/lib/api';
 import { Toaster } from 'sonner';
@@ -95,6 +96,7 @@ function App() {
                 <Route path="/services" element={<ServicesPage />} />
                 <Route path="/services/:id" element={<ServiceDetail />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/agent" element={<AgentPage />} />
               </Route>
             </Route>
             <Route path="/" element={<Navigate to="/projects" replace />} />
