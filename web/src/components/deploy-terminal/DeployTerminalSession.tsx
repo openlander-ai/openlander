@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils';
 
 import type { TimelineItem } from '@/lib/event-types';
 import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCard';
-import { mergeUnifiedFeed, type UnifiedItem } from '../project/unified-feed-utils';
 
 import { TerminalFrame } from './TerminalFrame';
 import { TerminalHeader } from './TerminalHeader';
@@ -24,22 +23,27 @@ export interface DeployTerminalSessionProps {
   className?: string;
 }
 
-// Helper to group consecutive log items
-function groupLogs(items: UnifiedItem[]) {
-  const grouped: Array<UnifiedItem | { type: 'log_group'; id: string; logs: string[] }> = [];
-  let currentLogGroup: { type: 'log_group'; id: string; logs: string[] } | null = null;
+type GroupedItem = TimelineItem | { kind: 'log_group'; id: string; logs: string[] };
+
+function isLogGroup(item: GroupedItem): item is { kind: 'log_group'; id: string; logs: string[] } {
+  return 'kind' in item;
+}
+
+function groupLogs(items: TimelineItem[]): GroupedItem[] {
+  const grouped: GroupedItem[] = [];
+  let currentLogGroup: { kind: 'log_group'; id: string; logs: string[] } | null = null;
 
   for (const item of items) {
-    if (item.type === 'timeline' && item.item.type === 'log') {
+    if (item.type === 'log') {
       if (!currentLogGroup) {
         currentLogGroup = {
-          type: 'log_group',
-          id: `log-group-${item.item.id}`,
-          logs: [item.item.title],
+          kind: 'log_group',
+          id: `log-group-${item.id}`,
+          logs: [item.title],
         };
         grouped.push(currentLogGroup);
       } else {
-        currentLogGroup.logs.push(item.item.title);
+        currentLogGroup.logs.push(item.title);
       }
     } else {
       currentLogGroup = null;
@@ -60,9 +64,7 @@ export function DeployTerminalSession({
   onSkipQuestion,
   className,
 }: DeployTerminalSessionProps) {
-  const unifiedItems = useMemo(() => mergeUnifiedFeed(timelineItems), [timelineItems]);
-
-  const groupedItems = useMemo(() => groupLogs(unifiedItems), [unifiedItems]);
+  const groupedItems = useMemo(() => groupLogs(timelineItems), [timelineItems]);
 
   // Derive phases from timeline items
   const phases = useMemo(() => {
@@ -107,62 +109,58 @@ export function DeployTerminalSession({
               <TerminalScrollback>
                 <div className="p-4 flex flex-col gap-1">
                   {groupedItems.map((uItem) => {
-                    if (uItem.type === 'log_group') {
+                    if (isLogGroup(uItem)) {
                       return <TerminalLogBlock key={uItem.id} logs={uItem.logs} />;
                     }
 
-                    if (uItem.type === 'timeline') {
-                      const item = uItem.item;
+                    const item = uItem;
 
-                      if (item.type === 'question' && item.questionId && item.questions) {
-                        const q = item.questions[0];
-                        return (
-                          <TerminalQuestion
-                            key={item.id}
-                            id={item.questionId}
-                            question={q.question}
-                            options={q.options.map((o) => ({
-                              id: o.label,
-                              label: o.label,
-                              description: o.description,
-                            }))}
-                            answered={item.answered}
-                            onSubmit={(qId, optId) => {
-                              onSubmitAnswer(qId, [{ questionIndex: 0, selectedLabels: [optId] }]);
-                            }}
-                            onSkip={(qId) => onSkipQuestion(qId)}
-                          />
-                        );
-                      }
-
-                      if (item.type === 'error') {
-                        return (
-                          <TerminalLine key={item.id} glyphState="error" textColor="error">
-                            {item.title}
-                            {item.detail && <div className="opacity-70 mt-1">{item.detail}</div>}
-                          </TerminalLine>
-                        );
-                      }
-
-                      if (item.type === 'success') {
-                        return (
-                          <TerminalLine key={item.id} glyphState="done" textColor="primary">
-                            {item.title}
-                            {item.url && (
-                              <span className="ml-2 text-blue-400 underline">{item.url}</span>
-                            )}
-                          </TerminalLine>
-                        );
-                      }
-
+                    if (item.type === 'question' && item.questionId && item.questions) {
+                      const q = item.questions[0];
                       return (
-                        <TerminalLine key={item.id} glyphState="pending" textColor="secondary">
+                        <TerminalQuestion
+                          key={item.id}
+                          id={item.questionId}
+                          question={q.question}
+                          options={q.options.map((o: { label: string; description?: string }) => ({
+                            id: o.label,
+                            label: o.label,
+                            description: o.description,
+                          }))}
+                          answered={item.answered}
+                          onSubmit={(qId, optId) => {
+                            onSubmitAnswer(qId, [{ questionIndex: 0, selectedLabels: [optId] }]);
+                          }}
+                          onSkip={(qId) => onSkipQuestion(qId)}
+                        />
+                      );
+                    }
+
+                    if (item.type === 'error') {
+                      return (
+                        <TerminalLine key={item.id} glyphState="error" textColor="error">
                           {item.title}
+                          {item.detail && <div className="opacity-70 mt-1">{item.detail}</div>}
                         </TerminalLine>
                       );
                     }
 
-                    return null;
+                    if (item.type === 'success') {
+                      return (
+                        <TerminalLine key={item.id} glyphState="done" textColor="primary">
+                          {item.title}
+                          {item.url && (
+                            <span className="ml-2 text-blue-400 underline">{item.url}</span>
+                          )}
+                        </TerminalLine>
+                      );
+                    }
+
+                    return (
+                      <TerminalLine key={item.id} glyphState="pending" textColor="secondary">
+                        {item.title}
+                      </TerminalLine>
+                    );
                   })}
 
                   {isTimelineStreaming && (

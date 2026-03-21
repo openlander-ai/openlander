@@ -7,17 +7,13 @@ import type { TimelineItem } from '@/lib/event-types';
 import type { QuestionAnswerPayload } from '@/components/timeline/InputRequestCard';
 
 import { InputRequestCard } from '@/components/timeline/InputRequestCard';
-import { mergeUnifiedFeed } from './unified-feed-utils';
 
 interface UnifiedBriefingFeedProps {
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
   projectStatus?: string;
-  fixingItemId?: string | null;
-  onFixWithAI?: (errorMessage?: string, timelineItemId?: string) => void;
   onSubmitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion: (questionId: string) => void;
-  onInsightAction: (projectId: string, action: string) => Promise<void>;
 }
 
 export function UnifiedBriefingFeed({
@@ -53,8 +49,6 @@ export function UnifiedBriefingFeed({
     viewport.addEventListener('scroll', handleScroll);
     return () => viewport.removeEventListener('scroll', handleScroll);
   }, []);
-
-  const unifiedItems = mergeUnifiedFeed(timelineItems);
 
   const progressItems = timelineItems.filter((item) => item.type === 'progress');
   const latestProgress = progressItems.length > 0 ? progressItems[progressItems.length - 1] : null;
@@ -106,52 +100,46 @@ export function UnifiedBriefingFeed({
             </div>
           )}
 
-          {unifiedItems.map((uItem) => {
-            if (uItem.type === 'timeline') {
-              const item = uItem.item;
-
-              if (item.type === 'question' && item.questionId && item.questions) {
-                return (
-                  <div key={item.id} className="my-2">
-                    <InputRequestCard
-                      questionId={item.questionId}
-                      questions={item.questions}
-                      answered={item.answered}
-                      onSubmit={onSubmitAnswer ?? (() => {})}
-                      onSkip={onSkipQuestion ?? (() => {})}
-                    />
-                  </div>
-                );
-              }
-
-              if (item.type === 'error') {
-                return (
-                  <div key={item.id} className="text-[#ef4444]">
-                    ✗ {item.title}
-                    {item.detail && (
-                      <div className="ml-4 text-[11px] text-[#ef4444]/70">{item.detail}</div>
-                    )}
-                  </div>
-                );
-              }
-
-              if (item.type === 'success') {
-                return (
-                  <div key={item.id} className="text-[#22c55e]">
-                    ✓ {item.title}
-                    {item.url && <span className="ml-2 text-[#60a5fa] underline">{item.url}</span>}
-                  </div>
-                );
-              }
-
+          {timelineItems.map((item) => {
+            if (item.type === 'question' && item.questionId && item.questions) {
               return (
-                <div key={item.id} className="text-[#aaa]">
-                  {item.title}
+                <div key={item.id} className="my-2">
+                  <InputRequestCard
+                    questionId={item.questionId}
+                    questions={item.questions}
+                    answered={item.answered}
+                    onSubmit={onSubmitAnswer}
+                    onSkip={onSkipQuestion}
+                  />
                 </div>
               );
             }
 
-            return null;
+            if (item.type === 'error') {
+              return (
+                <div key={item.id} className="text-[#ef4444]">
+                  ✗ {item.title}
+                  {item.detail && (
+                    <div className="ml-4 text-[11px] text-[#ef4444]/70">{item.detail}</div>
+                  )}
+                </div>
+              );
+            }
+
+            if (item.type === 'success') {
+              return (
+                <div key={item.id} className="text-[#22c55e]">
+                  ✓ {item.title}
+                  {item.url && <span className="ml-2 text-[#60a5fa] underline">{item.url}</span>}
+                </div>
+              );
+            }
+
+            return (
+              <div key={item.id} className="text-[#aaa]">
+                {item.title}
+              </div>
+            );
           })}
 
           {isTimelineStreaming && timelineItems.length > 0 && (
