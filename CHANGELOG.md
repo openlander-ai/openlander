@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-03-22
+
+### Improved
+
+- **Dashboard table view**: Card/table toggle with localStorage persistence for compact project overview
+- **Console log colors**: Error lines highlighted red, warnings yellow, debug dimmed
+- **Sidebar error section**: Error/building projects visually separated with "⚠️ Issues" header and informative tooltips
+- **Deployment trigger labels**: Distinct icons and labels per trigger type (Agent Deploy, Webhook, API Call) instead of generic "chat Deployment"
+- **System Issues dropdown**: Clickable status card showing specific issues (Traefik offline, error projects) with navigation
+- **Deploy terminal**: Reduced empty space when idle, increased build log area during active builds
+- **Visual polish**: Sentence case labels, filled status badges, card hover effects
+
 ## [0.9.0] - 2026-03-21
 
 ### Added
