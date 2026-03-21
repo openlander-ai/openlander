@@ -76,23 +76,11 @@ export const infraToolDefs: ToolDef[] = [
         });
         const existingServices = await appCtx.serviceManager.list();
         const analysis = analyzeInfrastructure(cloneResult.path, existingServices);
-        const { readdirSync, existsSync } = await import('node:fs');
-        const { join } = await import('node:path');
-        const rootFiles = readdirSync(cloneResult.path).filter(
-          (f: string) =>
-            f === 'package.json' ||
-            f === 'requirements.txt' ||
-            f === 'pyproject.toml' ||
-            f.startsWith('.env'),
-        );
         return {
           ...analysis,
           _debug: {
             clonePath: cloneResult.path,
-            depFilesFound: rootFiles,
-            pyprojectExists: existsSync(join(cloneResult.path, 'pyproject.toml')),
-            requirementsExists: existsSync(join(cloneResult.path, 'requirements.txt')),
-            packageJsonExists: existsSync(join(cloneResult.path, 'package.json')),
+            analysis,
           },
         };
       } catch (error) {

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { createModuleLogger } from './logger.js';
 import type { ServiceRow } from '../db/index.js';
@@ -115,6 +115,58 @@ const ENV_VAR_PATTERNS: Record<string, DetectedServiceType> = {
   MONGO_INITDB_ROOT_PASSWORD: 'mongodb',
 };
 
+function findDepFiles(dir: string, filename: string, maxDepth = 3): string[] {
+  const results: string[] = [];
+
+  function walk(current: string, depth: number): void {
+    if (depth > maxDepth) {
+      return;
+    }
+
+    let entries: string[];
+    try {
+      entries = readdirSync(current).sort((left, right) => left.localeCompare(right));
+    } catch (error) {
+      log.debug(
+        { err: error, current, filename },
+        'Could not read directory during dependency scan',
+      );
+      return;
+    }
+
+    for (const entry of entries) {
+      if (
+        entry.startsWith('.') ||
+        entry === 'node_modules' ||
+        entry === 'vendor' ||
+        entry === 'dist' ||
+        entry === 'build'
+      ) {
+        continue;
+      }
+
+      const fullPath = join(current, entry);
+      try {
+        const stat = statSync(fullPath);
+        if (stat.isFile() && entry === filename) {
+          results.push(fullPath);
+        } else if (stat.isDirectory()) {
+          walk(fullPath, depth + 1);
+        }
+      } catch (error) {
+        log.debug(
+          { err: error, fullPath, filename },
+          'Could not stat entry during dependency scan',
+        );
+        continue;
+      }
+    }
+  }
+
+  walk(dir, 0);
+  return results.sort((left, right) => left.localeCompare(right));
+}
+
 /**
  * Analyze infrastructure needs from a repository.
  *
@@ -134,53 +186,59 @@ export function analyzeInfrastructure(
   const detectedTypes = new Map<DetectedServiceType, string>();
 
   // Analyze package.json dependencies
-  try {
-    const packageJsonPath = join(repoPath, 'package.json');
-    const packageJsonContent = readFileSync(packageJsonPath, 'utf8');
-    const packageJson = JSON.parse(packageJsonContent) as {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
+  const packageJsonPaths = findDepFiles(repoPath, 'package.json');
+  for (const packageJsonPath of packageJsonPaths) {
+    try {
+      const packageJsonContent = readFileSync(packageJsonPath, 'utf8');
+      const packageJson = JSON.parse(packageJsonContent) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+      };
 
-    const allDeps = {
-      ...packageJson.dependencies,
-      ...packageJson.devDependencies,
-    };
+      const allDeps = {
+        ...packageJson.dependencies,
+        ...packageJson.devDependencies,
+      };
 
-    for (const depName of Object.keys(allDeps)) {
-      const serviceType = DEPENDENCY_PATTERNS[depName];
-      if (serviceType && !detectedTypes.has(serviceType)) {
-        detectedTypes.set(serviceType, depName);
+      for (const depName of Object.keys(allDeps)) {
+        const serviceType = DEPENDENCY_PATTERNS[depName];
+        if (serviceType && !detectedTypes.has(serviceType)) {
+          detectedTypes.set(serviceType, depName);
+        }
       }
+    } catch (err) {
+      log.debug({ err, packageJsonPath }, 'Could not analyze package.json');
     }
-  } catch (err) {
-    log.debug({ err }, 'Could not analyze package.json');
   }
 
-  try {
-    const requirementsPath = join(repoPath, 'requirements.txt');
-    const requirementsContent = readFileSync(requirementsPath, 'utf8').toLowerCase();
+  const requirementsPaths = findDepFiles(repoPath, 'requirements.txt');
+  for (const requirementsPath of requirementsPaths) {
+    try {
+      const requirementsContent = readFileSync(requirementsPath, 'utf8').toLowerCase();
 
-    for (const [pattern, serviceType] of Object.entries(DEPENDENCY_PATTERNS)) {
-      if (requirementsContent.includes(pattern) && !detectedTypes.has(serviceType)) {
-        detectedTypes.set(serviceType, pattern);
+      for (const [pattern, serviceType] of Object.entries(DEPENDENCY_PATTERNS)) {
+        if (requirementsContent.includes(pattern) && !detectedTypes.has(serviceType)) {
+          detectedTypes.set(serviceType, pattern);
+        }
       }
+    } catch (err) {
+      log.debug({ err, requirementsPath }, 'Could not analyze requirements.txt');
     }
-  } catch (err) {
-    log.debug({ err }, 'Could not analyze requirements.txt');
   }
 
-  try {
-    const pyprojectPath = join(repoPath, 'pyproject.toml');
-    const pyprojectContent = readFileSync(pyprojectPath, 'utf8').toLowerCase();
+  const pyprojectPaths = findDepFiles(repoPath, 'pyproject.toml');
+  for (const pyprojectPath of pyprojectPaths) {
+    try {
+      const pyprojectContent = readFileSync(pyprojectPath, 'utf8').toLowerCase();
 
-    for (const [pattern, serviceType] of Object.entries(DEPENDENCY_PATTERNS)) {
-      if (pyprojectContent.includes(pattern) && !detectedTypes.has(serviceType)) {
-        detectedTypes.set(serviceType, pattern);
+      for (const [pattern, serviceType] of Object.entries(DEPENDENCY_PATTERNS)) {
+        if (pyprojectContent.includes(pattern) && !detectedTypes.has(serviceType)) {
+          detectedTypes.set(serviceType, pattern);
+        }
       }
+    } catch (err) {
+      log.debug({ err, pyprojectPath }, 'Could not analyze pyproject.toml');
     }
-  } catch (err) {
-    log.debug({ err }, 'Could not analyze pyproject.toml');
   }
 
   // Analyze .env.example and .env.sample files (per plan scope)

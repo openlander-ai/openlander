@@ -116,6 +116,16 @@ describe('analyzeInfrastructure', () => {
     );
   });
 
+  it('detects dependencies in monorepo subdirectories', () => {
+    const fixturePath = join(fixturesRoot, 'monorepo-python-api');
+
+    const result = analyzeInfrastructure(fixturePath, []);
+    const types = new Set(result.needs.map((need) => need.type));
+
+    expect(types).toContain('postgresql');
+    expect(types).toContain('redis');
+  });
+
   it('returns empty analysis for an empty repository input', () => {
     const fixturePath = join(fixturesRoot, 'empty-repo');
 
