@@ -908,6 +908,22 @@ Phase 3 — PR Preview:
 
 ---
 
+### v0.7.3 — Deploy Pipeline Refactor + Bugfixes ✅
+
+**상태**: 완료
+
+> **핵심 가치**: deploy-core.ts의 519줄/433줄 거대 함수 분해. scan_dockerfiles/analyze_infrastructure/get_logs 버그 수정.
+
+| 항목                                                  | 상태 |
+| ----------------------------------------------------- | ---- |
+| `deployEnvironment()` 오케스트레이션 추출 (519→251줄) | ✅   |
+| `deployMonorepo()` 오케스트레이션 추출 (433→177줄)    | ✅   |
+| `scan_dockerfiles` Dockerfile.\* 패턴 감지            | ✅   |
+| `analyze_infrastructure` Python + 모노레포 지원       | ✅   |
+| `get_logs` Docker multiplex 헤더 제거                 | ✅   |
+
+---
+
 ### v0.6.15 — Deploy UX Quick Wins ✅
 
 **상태**: 완료 | **관련 문서**: `.sisyphus/plans/deploy-ux-quick-wins.md`

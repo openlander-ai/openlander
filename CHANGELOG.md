@@ -9,11 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.7.3] - 2026-03-21
 
-### Added
+### Changed
 
-- **`deploy` one-call tool**: Single MCP call that chains create_deploy_plan → execute_deploy_plan → wait for completion. Saves 60-70% agent tokens vs the 3-step flow. Supports `wait=true` (default, blocks until done) and `wait=false` (returns immediately).
-- **`validate_deploy_plan` tool**: Pre-flight validation before executing a deploy plan. Detects localhost env vars (DATABASE_URL=localhost), placeholder secrets, missing HEALTHCHECK, and surfaces existing plan warnings in a structured check format.
-- **`auto_diagnosis` in failure responses**: `get_deploy_status` and `deploy` tool now include `auto_diagnosis` (category, tier, cause, auto_fixable, suggested_action) when a deploy fails — no separate `debug_build_error` call needed for initial triage.
+- **Deploy pipeline refactoring**: Extracted `deployEnvironment()` orchestration sequence into `src/pipeline/deploy/orchestrator.ts` (519→251 lines). Extracted `deployMonorepo()` into `src/pipeline/deploy/monorepo-orchestrator.ts` (433→177 lines).
+
+### Fixed
+
+- **`scan_dockerfiles`**: Now detects `Dockerfile.*` variants (e.g., `Dockerfile.api`, `Dockerfile.web`) at any depth.
+- **`analyze_infrastructure`**: Added Python dependency detection (`asyncpg`, `psycopg2`, `redis`, etc.) from `pyproject.toml` and `requirements.txt`. Added recursive subdirectory scanning for monorepo layouts.
+- **`get_logs`**: Stripped Docker multiplexed stream 8-byte headers from container log output.
 
 ## [0.7.2] - 2026-03-21
 
