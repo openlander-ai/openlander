@@ -999,7 +999,7 @@ export async function scanProjectEnvVars(
 
 // --- Chat API ---
 
-import type { ChatSession, ChatMessage } from './chat-types.js';
+import type { ChatSession, ChatMessage, QuestionAnswer } from './chat-types.js';
 
 export async function streamChat(
   message: string,
@@ -1019,10 +1019,7 @@ export async function streamChat(
   return res;
 }
 
-export async function replyQuestion(
-  requestId: string,
-  answers: Record<string, string>,
-): Promise<void> {
+export async function replyQuestion(requestId: string, answers: QuestionAnswer[]): Promise<void> {
   const res = await fetch('/api/question/reply', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

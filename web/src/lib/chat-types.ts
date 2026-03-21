@@ -36,6 +36,12 @@ export interface QuestionRequest {
   questions: Question[];
 }
 
+export interface QuestionAnswer {
+  questionIndex: number;
+  selectedLabels: string[];
+  customText?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Chat Stream Events
 // ---------------------------------------------------------------------------

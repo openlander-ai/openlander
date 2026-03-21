@@ -1,45 +1,51 @@
-import type { ChatMessage } from '@/lib/chat-types';
+import type { ChatMessage, QuestionAnswer, QuestionRequest } from '@/lib/chat-types';
+import { MessageList } from './MessageList';
+import { ChatInput } from './ChatInput';
+import { EmptyState, StreamError } from './EmptyState';
+import { ThinkingIndicator } from './ThinkingIndicator';
+import { ChatQuestion } from './ChatQuestion';
 
 interface ChatLayoutProps {
   messages: ChatMessage[];
   isStreaming: boolean;
   error: string | null;
+  pendingQuestion?: QuestionRequest | null;
   onSendMessage: (message: string) => void;
+  onReply?: (requestId: string, answers: QuestionAnswer[]) => void;
+  onDismiss?: () => void;
 }
 
-export function ChatLayout({ messages, isStreaming, error, onSendMessage }: ChatLayoutProps) {
+export function ChatLayout({
+  messages,
+  isStreaming,
+  error,
+  pendingQuestion,
+  onSendMessage,
+  onReply,
+  onDismiss,
+}: ChatLayoutProps) {
+  const hasMessages = messages.some((message) => message.role !== 'system');
+
   return (
     <div className="flex flex-col h-full">
       <div className="shrink-0 px-4 py-3 border-b border-border">
         <h2 className="text-sm font-medium text-primary-ol">Agent Chat</h2>
       </div>
 
-      <div data-testid="message-list" className="flex-1 overflow-y-auto">
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-muted-ol text-sm">Start a conversation</p>
-          </div>
-        ) : (
-          <div className="p-4 space-y-4">
-            {messages.map((msg, i) => (
-              <div key={msg.id ?? i} className="text-sm">
-                <span className="font-medium">{msg.role}: </span>
-                {msg.content}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {!hasMessages && !isStreaming ? (
+        <EmptyState onSendMessage={onSendMessage} />
+      ) : (
+        <MessageList messages={messages}>
+          {isStreaming ? <ThinkingIndicator /> : null}
+          {pendingQuestion && onReply && onDismiss ? (
+            <ChatQuestion request={pendingQuestion} onReply={onReply} onDismiss={onDismiss} />
+          ) : null}
+        </MessageList>
+      )}
 
-      <div data-testid="chat-input-area" className="shrink-0 border-t border-border p-4">
-        {error && <p className="text-xs text-error mb-2">{error}</p>}
-        <div className="text-xs text-muted-ol">
-          Chat input (Task 9) {isStreaming ? '...' : ''}
-          <button className="hidden" onClick={() => onSendMessage('test')}>
-            test
-          </button>
-        </div>
-      </div>
+      {error ? <StreamError error={error} /> : null}
+
+      <ChatInput onSend={onSendMessage} isStreaming={isStreaming} />
     </div>
   );
 }

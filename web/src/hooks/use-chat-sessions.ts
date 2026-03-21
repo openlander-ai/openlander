@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { listChatSessions, deleteChatSession, getSessionMessages } from '@/lib/api';
 import type { ChatSession, ChatMessage } from '@/lib/chat-types';
 
@@ -14,9 +15,38 @@ interface UseChatSessionsReturn {
 }
 
 export function useChatSessions(): UseChatSessionsReturn {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const syncSessionInUrl = useCallback(
+    (sessionId: string | null) => {
+      setSearchParams(
+        (previousParams) => {
+          const nextParams = new URLSearchParams(previousParams);
+          if (sessionId) {
+            nextParams.set('session', sessionId);
+          } else {
+            nextParams.delete('session');
+          }
+          return nextParams;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  useEffect(() => {
+    const sessionInUrl = searchParams.get('session');
+    setActiveSessionId((current) => {
+      if (sessionInUrl === current) {
+        return current;
+      }
+      return sessionInUrl;
+    });
+  }, [searchParams]);
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -37,12 +67,17 @@ export function useChatSessions(): UseChatSessionsReturn {
   const createSession = useCallback(() => {
     const newId = `web-${Date.now()}`;
     setActiveSessionId(newId);
+    syncSessionInUrl(newId);
     return newId;
-  }, []);
+  }, [syncSessionInUrl]);
 
-  const switchSession = useCallback((id: string) => {
-    setActiveSessionId(id);
-  }, []);
+  const switchSession = useCallback(
+    (id: string) => {
+      setActiveSessionId(id);
+      syncSessionInUrl(id);
+    },
+    [syncSessionInUrl],
+  );
 
   const deleteSession = useCallback(
     async (id: string) => {
@@ -51,13 +86,14 @@ export function useChatSessions(): UseChatSessionsReturn {
         setSessions((prev) => prev.filter((s) => s.sessionId !== id));
         if (activeSessionId === id) {
           setActiveSessionId(null);
+          syncSessionInUrl(null);
         }
       } catch (error) {
         console.error('Failed to delete chat session:', error);
         throw error;
       }
     },
-    [activeSessionId],
+    [activeSessionId, syncSessionInUrl],
   );
 
   const loadSessionMessages = useCallback(async (id: string) => {
