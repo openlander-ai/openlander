@@ -67,6 +67,14 @@ export class SessionStore {
   }
 
   /**
+   * Delete all messages for a session.
+   * Does not throw if the session doesn't exist.
+   */
+  deleteSession(sessionId: string): void {
+    this.db.deleteSession(sessionId);
+  }
+
+  /**
    * Extract username from a session ID.
    * Session IDs follow the format: "username-timestamp"
    * where timestamp is a numeric string (Date.now()).

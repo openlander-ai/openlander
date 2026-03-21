@@ -122,9 +122,10 @@ export class Database {
   createTimelineEvent(event: Parameters<TimelineRepo['createTimelineEvent']>[0]) { this.timelineRepo.createTimelineEvent(event); }
   getTimelineEvents(projectId: string, limit = 200) { return this.timelineRepo.getTimelineEvents(projectId, limit); }
   deleteTimelineEvents(projectId: string) { this.timelineRepo.deleteTimelineEvents(projectId); }
-  saveChatMessage(msg: Parameters<ChatRepo['saveChatMessage']>[0]) { this.chatRepo.saveChatMessage(msg); }
-  getChatHistory(sessionId: string, limit = 50) { return this.chatRepo.getChatHistory(sessionId, limit); }
-  listChatSessions() { return this.chatRepo.listChatSessions(); }
+   saveChatMessage(msg: Parameters<ChatRepo['saveChatMessage']>[0]) { this.chatRepo.saveChatMessage(msg); }
+   getChatHistory(sessionId: string, limit = 50) { return this.chatRepo.getChatHistory(sessionId, limit); }
+   listChatSessions() { return this.chatRepo.listChatSessions(); }
+   deleteSession(sessionId: string) { this.chatRepo.deleteSession(sessionId); }
   createDomainMapping(mapping: Parameters<DomainMappingRepo['createDomainMapping']>[0]) { this.domainMappingRepo.createDomainMapping(mapping); }
   getDomainMappings(projectId: string) { return this.domainMappingRepo.getDomainMappings(projectId); }
   listDomainMappings() { return this.domainMappingRepo.listDomainMappings(); }

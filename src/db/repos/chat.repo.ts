@@ -57,4 +57,8 @@ export class ChatRepo {
       last_message: string;
     }>;
   }
+
+  deleteSession(sessionId: string): void {
+    this.db.delete(chatHistory).where(eq(chatHistory.session_id, sessionId)).run();
+  }
 }
