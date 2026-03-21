@@ -31,6 +31,8 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 
 function getStatusConfig(): Record<
@@ -73,6 +75,14 @@ export function ProjectsGrid() {
   const { t } = useLanguage();
   const statusConfig = getStatusConfig();
   const [redeployingId, setRedeployingId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
+    return (localStorage.getItem('openlander-view-mode') as 'grid' | 'table') || 'grid';
+  });
+
+  const toggleView = (mode: 'grid' | 'table') => {
+    setViewMode(mode);
+    localStorage.setItem('openlander-view-mode', mode);
+  };
 
   const handleRedeploy = async (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();
@@ -241,19 +251,45 @@ export function ProjectsGrid() {
             {projects.length} {projects.length === 1 ? 'project monitored' : 'projects monitored'}
           </p>
         </div>
-        <button
-          onClick={() => {
-            if (isMobile) {
-              showMobileToast();
-              return;
-            }
-            navigate('/projects/new');
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-foreground text-background hover:bg-foreground/90 transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {'New Project'}
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 bg-bg-subtle rounded-lg p-0.5">
+            <button
+              onClick={() => toggleView('grid')}
+              className={cn(
+                'p-1.5 rounded-md transition-colors',
+                viewMode === 'grid'
+                  ? 'bg-bg-panel shadow-sm text-primary-ol'
+                  : 'text-muted-ol hover:text-secondary-ol',
+              )}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => toggleView('table')}
+              className={cn(
+                'p-1.5 rounded-md transition-colors',
+                viewMode === 'table'
+                  ? 'bg-bg-panel shadow-sm text-primary-ol'
+                  : 'text-muted-ol hover:text-secondary-ol',
+              )}
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              if (isMobile) {
+                showMobileToast();
+                return;
+              }
+              navigate('/projects/new');
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-foreground text-background hover:bg-foreground/90 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {'New Project'}
+          </button>
+        </div>
       </div>
 
       {projects.length === 0 ? (
@@ -273,7 +309,7 @@ export function ProjectsGrid() {
             </p>
           </div>
         </button>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
           {projects.map((project) => {
             const status = statusConfig[project.status] ?? statusConfig.stopped;
@@ -374,7 +410,7 @@ export function ProjectsGrid() {
                                     ? 'prod'
                                     : env.type === 'development'
                                       ? 'dev'
-                                      : env.type.substring(0, 4)}
+                                      : String(env.type).substring(0, 4)}
                                 </span>
                               </button>
                             );
@@ -412,6 +448,86 @@ export function ProjectsGrid() {
               </div>
             );
           })}
+        </div>
+      ) : (
+        <div className="border border-[hsl(var(--border))] rounded-lg overflow-hidden bg-bg-panel">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[hsl(var(--border))] bg-bg-subtle/50">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol">Name</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol">Status</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden md:table-cell">
+                  Branch
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden md:table-cell">
+                  Last Deploy
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden lg:table-cell">
+                  Endpoint
+                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden lg:table-cell">
+                  Envs
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map((project) => {
+                const status = statusConfig[project.status] ?? statusConfig.stopped;
+                return (
+                  <tr
+                    key={project.id}
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                    className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-bg-subtle/50 cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-3 font-medium text-primary-ol">{project.name}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={cn('h-2 w-2 rounded-full', status.dot)} />
+                        <span className="text-xs font-medium text-secondary-ol">
+                          {status.label}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-secondary-ol hidden md:table-cell">
+                      <span className="text-xs font-mono">{project.branch || 'main'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-secondary-ol hidden md:table-cell">
+                      <span className="text-xs">{formatRelativeTime(project.updatedAt, t)}</span>
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {project.url && (
+                        <a
+                          href={project.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-agent hover:underline truncate max-w-[200px] block"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {project.url.replace(/^https?:\/\//, '')}
+                        </a>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <div className="flex gap-1 flex-wrap">
+                        {project.environments?.map((env) => (
+                          <span
+                            key={env.id || env.type}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-bg-subtle text-muted-ol border border-[hsl(var(--border))]"
+                          >
+                            {env.type === 'production'
+                              ? 'prod'
+                              : env.type === 'development'
+                                ? 'dev'
+                                : String(env.type).substring(0, 4)}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
