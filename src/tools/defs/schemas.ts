@@ -457,6 +457,41 @@ export const executeDeployPlanSchema = z.object({
     ),
 });
 
+// One-call deploy schema (create plan + execute + optionally wait)
+export const deploySchema = z.object({
+  repo_url: z.string().min(1).describe('Git repository URL (e.g., github.com/user/repo)'),
+  branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
+  name: z.string().optional().describe('Project name (auto-generated from repo if not provided)'),
+  env_vars: z
+    .string()
+    .optional()
+    .describe(
+      'JSON object of environment variables (e.g., {"DATABASE_URL": "...", "API_KEY": "..."})',
+    ),
+  prefer_dockerfile: z
+    .boolean()
+    .optional()
+    .describe('Prefer Dockerfile flow and skip compose detection'),
+  dockerfile_path: z
+    .string()
+    .optional()
+    .describe('Relative Dockerfile path inside the repository (e.g., frontend/Dockerfile)'),
+  docker_target: z
+    .string()
+    .optional()
+    .describe('Docker build target stage for multi-stage Dockerfiles (e.g., api, worker)'),
+  wait: z
+    .boolean()
+    .optional()
+    .describe(
+      'Block until deployment completes or fails (default: true). Set false to return immediately after build starts.',
+    ),
+  timeout: z
+    .number()
+    .optional()
+    .describe('Max seconds to wait for completion when wait=true (default: 300)'),
+});
+
 // Deployment history schema
 export const deployHistorySchema = z.object({
   project_name: z.string().min(1).describe('Project name'),

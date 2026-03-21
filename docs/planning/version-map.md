@@ -56,6 +56,7 @@ v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ─�
 | 26     | **v1.0.0 AI Co-pilot**                 | `release/v1.0.0-ai-copilot.md`               | TBD            | 100%   | ✅ 백엔드 완료. 웹 AI UI는 MCP-first 전환(DEC-037)으로 스코프 아웃.                                                                                  |
 | 27     | **v0.2.6 Shared Mode & PR Preview**    | `v0.2.6/shared-mode-pr-preview.md`           | v0.2.6         | 100%   | ✅ 3 Phase 구현 완료. Traefik File Provider + Quick Share + Shared 모드 + PR 프리뷰 + 16 bugfix. 535 tests (dead TUI tests 제거).                    |
 | 28     | **Agent Enhancement Sprint**           | `.sisyphus/plans/agent-enhancement.md`       | TBD            | 100%   | ✅ P0-1 questionBridge fix, P0-2 채널 스트리밍, P1-1 MCP agent_execute_goal, P1-2 오케스트레이터. P1-3 UI는 MCP-first 전환(DEC-037)으로 스코프 아웃. |
+| 29     | **v1.0.0 로드맵**                      | `release/v1.0.0-roadmap.md`                  | v1.0.0         | —      | 📋 v1.0까지 6단계 로드맵. MCP-first 전환 반영.                                                                                                       |
 
 ---
 

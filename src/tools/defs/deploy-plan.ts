@@ -1,11 +1,15 @@
 import type { ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
+import { eventBus } from '../../events/index.js';
+import { getDockerHostType } from '../../pipeline/docker.js';
+import { getProjectUrls } from '../../pipeline/traefik.js';
 
 import {
   createDeployPlanSchema,
   updateDeployPlanSchema,
   executeDeployPlanSchema,
+  deploySchema,
 } from './schemas.js';
 
 export const deployPlanToolDefs: ToolDef[] = [
@@ -145,6 +149,172 @@ export const deployPlanToolDefs: ToolDef[] = [
           },
         };
       }
+    },
+  },
+  {
+    name: 'deploy',
+    description:
+      'One-call deploy: analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
+    mcpDescription:
+      'One-call deploy: repo analysis → build → deploy → result. Blocks until done by default (wait=true). Returns URL on success, error + diagnosis guidance on failure. Use the 3-step flow (create/execute/status) for finer control.',
+    inputSchema: deploySchema,
+    execute: async (args, context) => {
+      const appCtx = context.appCtx;
+      const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
+      const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
+      const wait = (args['wait'] as boolean | undefined) ?? true;
+      const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
+
+      const plan: DeployPlan = await appCtx.planEngine.createPlan({
+        repoUrl: args['repo_url'] as string,
+        branch: (args['branch'] as string | undefined) ?? undefined,
+        name: (args['name'] as string | undefined) ?? undefined,
+        envVars,
+        preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
+        dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
+        dockerTarget: (args['docker_target'] as string | undefined) ?? undefined,
+      });
+
+      if (plan.status === 'needs_input') {
+        return {
+          plan_id: plan.plan_id,
+          status: 'needs_input',
+          missing: plan.missing,
+          warnings: plan.warnings,
+          _agent_guidance: {
+            next_steps: [
+              `Provide missing values: ${plan.missing.join(', ')}`,
+              'Call update_deploy_plan with the values, then execute_deploy_plan',
+              'Or call deploy again with env_vars including the missing keys',
+            ],
+          },
+        };
+      }
+
+      const result: ExecutePlanResult = await appCtx.planEngine.executePlan(plan.plan_id);
+
+      if (result.status === 'failed') {
+        return {
+          plan_id: plan.plan_id,
+          status: 'failed',
+          project_name: result.project_name,
+          error: result.error,
+          _agent_guidance: {
+            next_steps: [
+              'Call debug_build_error for AI diagnosis',
+              'Fix the issue, then call deploy again to retry',
+            ],
+          },
+        };
+      }
+
+      if (!wait) {
+        return {
+          plan_id: plan.plan_id,
+          status: 'building',
+          project_name: result.project_name,
+          project_id: result.project_id,
+          estimated_seconds: result.estimated_seconds,
+          _agent_guidance: {
+            next_steps: ['Poll get_deploy_status to monitor build progress'],
+          },
+        };
+      }
+
+      const projectId = result.project_id;
+      if (!projectId) {
+        return {
+          plan_id: plan.plan_id,
+          status: 'building',
+          project_name: result.project_name,
+          estimated_seconds: result.estimated_seconds,
+          _agent_guidance: {
+            next_steps: ['Poll get_deploy_status to monitor build progress'],
+          },
+        };
+      }
+
+      return await new Promise((resolve) => {
+        let settled = false;
+
+        const finish = (timedOut: boolean): void => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          unsubSuccess();
+          unsubFailed();
+
+          const job = appCtx.jobManager.getStatus(projectId);
+          if (job?.phase === 'done') {
+            resolve({
+              plan_id: plan.plan_id,
+              status: 'done',
+              project_name: result.project_name,
+              project_id: projectId,
+              urls: getProjectUrls(result.project_name),
+              internal_host: `ol-${result.project_name}`,
+              docker_host: getDockerHostType(),
+              elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
+              ...(timedOut ? { timeout: true } : {}),
+            });
+            return;
+          }
+
+          if (job?.phase === 'failed') {
+            resolve({
+              plan_id: plan.plan_id,
+              status: 'failed',
+              project_name: result.project_name,
+              error: job.errorSummary,
+              ...(job.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
+              docker_host: getDockerHostType(),
+              ...(timedOut ? { timeout: true } : {}),
+              _agent_guidance: {
+                next_steps: [
+                  'Call debug_build_error for AI diagnosis',
+                  'Fix the issue, then call deploy again to retry',
+                ],
+              },
+            });
+            return;
+          }
+
+          resolve({
+            plan_id: plan.plan_id,
+            status: job?.phase ?? 'unknown',
+            project_name: result.project_name,
+            ...(timedOut ? { timeout: true } : {}),
+            _agent_guidance: {
+              next_steps: ['Poll get_deploy_status to check current progress'],
+            },
+          });
+        };
+
+        const matchesProject = (payload: {
+          projectId: string;
+          parentProjectId?: string;
+        }): boolean => payload.projectId === projectId || payload.parentProjectId === projectId;
+
+        const unsubSuccess = eventBus.on('deploy:success', (payload) => {
+          if (matchesProject(payload)) finish(false);
+        });
+
+        const unsubFailed = eventBus.on('deploy:failed', (payload) => {
+          if (matchesProject(payload)) finish(false);
+        });
+
+        const timer = setTimeout(
+          () => {
+            finish(true);
+          },
+          Math.max(1, timeoutSec) * 1000,
+        );
+
+        const currentJob = appCtx.jobManager.getStatus(projectId);
+        if (currentJob && (currentJob.phase === 'done' || currentJob.phase === 'failed')) {
+          finish(false);
+        }
+      });
     },
   },
 ];
