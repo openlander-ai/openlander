@@ -1,5 +1,3 @@
-import { nanoid } from 'nanoid';
-
 import { Database } from './db/index.js';
 import { Docker } from './pipeline/docker.js';
 import { DeployPipeline } from './pipeline/deploy.js';
@@ -21,7 +19,6 @@ import { PreviewDeployer } from './pipeline/preview.js';
 import { JobManager } from './pipeline/job-manager.js';
 import { ComposePipeline } from './pipeline/compose.js';
 import { AutoDetector } from './pipeline/auto-detect.js';
-import { dispatchRecovery, type RecoveryPlan } from './pipeline/recovery-dispatch.js';
 import { AlertMonitor } from './monitor/alerts.js';
 import { IncidentReporter } from './monitor/incident-reporter.js';
 import {
@@ -37,6 +34,7 @@ import type { OpenLanderConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
 import { buildContextSnapshot } from './agent/prompts.js';
 import { createModuleLogger } from './lib/logger.js';
+import { setupAutoRecovery } from './pipeline/auto-recovery.js';
 
 const log = createModuleLogger('app');
 
@@ -164,308 +162,16 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     questionBridge.setActiveProject(null);
   });
 
-  // Auto-recovery: trigger agent on deploy failure
-  if (agent) {
-    let agentChain = Promise.resolve();
-    function enqueueAgentCall(
-      fn: () => Promise<void>,
-      context: { projectId: string; eventType: string },
-    ): void {
-      agentChain = agentChain.then(fn).catch((err: unknown) => {
-        log.error(
-          { err, projectId: context.projectId, eventType: context.eventType },
-          'Agent operation failed in queue',
-        );
-      });
-    }
-
-    function normalizeError(error: string): string {
-      return error
-        .replace(/[0-9a-f]{8,}/gi, '<id>')
-        .replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[^\s]*/g, '<timestamp>')
-        .replace(/:\d{4,5}/g, ':<port>')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    const recoveryAttempts = new Map<string, { count: number; lastError: string }>();
-    const MAX_RECOVERY_ATTEMPTS = 3;
-    const RECOVERY_OUTCOME_TIMEOUT_MS = 300_000;
-
-    const waitForRecoveryOutcome = (projectId: string): Promise<boolean> =>
-      new Promise((resolve) => {
-        let settled = false;
-
-        const finalize = (recovered: boolean): void => {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearTimeout(timer);
-          unsubscribeSuccess();
-          unsubscribeFailed();
-          resolve(recovered);
-        };
-
-        const unsubscribeSuccess = eventBus.on('deploy:success', (payload) => {
-          if (payload.projectId === projectId) {
-            finalize(true);
-          }
-        });
-
-        const unsubscribeFailed = eventBus.on('deploy:failed', (payload) => {
-          if (payload.projectId === projectId) {
-            finalize(false);
-          }
-        });
-
-        const timer = setTimeout(() => {
-          finalize(false);
-        }, RECOVERY_OUTCOME_TIMEOUT_MS);
-      });
-
-    const handleAutoRecovery = async (
-      projectId: string,
-      error: string,
-      step?: string,
-      buildLog?: string,
-    ) => {
-      const attempts = recoveryAttempts.get(projectId) ?? { count: 0, lastError: '' };
-
-      // Guard: max retries
-      if (attempts.count >= MAX_RECOVERY_ATTEMPTS) {
-        await eventBus.emit('recovery:exhausted', {
-          projectId,
-          totalAttempts: attempts.count,
-          lastError: attempts.lastError,
-        });
-        log.info(
-          { projectId, attempts: attempts.count },
-          'Auto-recovery exhausted, manual intervention needed',
-        );
-        return;
-      }
-
-      // Guard: same error repeating (stuck loop)
-      if (attempts.lastError === normalizeError(error) && attempts.count > 0) {
-        log.info({ projectId, error }, 'Same error repeating, stopping auto-recovery');
-        return;
-      }
-
-      // Guard: infrastructure errors (not fixable by agent)
-      const infraPatterns = [
-        /docker daemon/i,
-        /cannot connect to docker/i,
-        /permission denied.*docker/i,
-      ];
-      if (infraPatterns.some((p) => p.test(error))) {
-        log.info({ projectId }, 'Infrastructure error detected, skipping auto-recovery');
-        return;
-      }
-
-      const advisoryPatterns = [/disk space/i, /no space left/i, /out of memory/i, /killed/i];
-      const isAdvisory = advisoryPatterns.some((p) => p.test(error));
-
-      const plan: RecoveryPlan = dispatchRecovery(
-        step ?? 'unknown',
-        error,
-        buildLog,
-        config.language,
-      );
-
-      if (plan.fixability === 'user' || plan.fixability === 'report') {
-        await eventBus.emit('deploy:needs-user-action', {
-          projectId,
-          category: plan.category,
-          title: plan.title,
-          description: plan.description,
-          userSteps: plan.userSteps,
-        });
-        log.info(
-          { projectId, category: plan.category, fixability: plan.fixability },
-          'Recovery dispatch: user action required, skipping agent',
-        );
-        return;
-      }
-
-      attempts.count++;
-      attempts.lastError = normalizeError(error);
-      recoveryAttempts.set(projectId, attempts);
-      const recoveryStartTime = Date.now();
-
-      log.info({ projectId, attempt: attempts.count }, 'Starting auto-recovery');
-      await eventBus.emit('recovery:start', {
-        projectId,
-        error,
-        attempt: attempts.count,
-      });
-
-      // Re-activate question bridge for this project
-      questionBridge.setActiveProject(projectId);
-
-      const project = db.getProject(projectId);
-      const projectName = project?.name ?? projectId;
-
-      // Emit timeline event so user sees activity
-      await eventBus.emit('agent:event', {
-        projectId,
-        event: {
-          type: 'message',
-          content: 'AI is analyzing the failure and attempting to fix it...',
-          timestamp: new Date().toISOString(),
-        },
-      });
-
-      try {
-        const sessionId = nanoid(12);
-        let recoveryMessage = `Deploy of "${projectName}" failed.
-
-## Failure Context
-- Project: ${projectName} (${projectId})
-- Failed Step: ${step ?? 'unknown'}
-- Error: ${error}${
-          buildLog
-            ? `
-
-## Build Log (last 3000 chars)
-${buildLog.slice(-3000)}`
-            : ''
-        }
-
-${plan.agentGuidance}
-
-## General Recovery Rules
-1. If build log is provided above, analyze it directly. Otherwise call debug_build_error("${projectName}").
-2. After fixing, redeploy with create_deploy_plan and execute_deploy_plan.
-3. Do NOT just suggest fixes — execute them.`;
-
-        if (isAdvisory) {
-          recoveryMessage +=
-            "\n\n⚠️ This appears to be an infrastructure resource issue. You likely cannot fix this via tools alone. Diagnose the issue, explain it clearly, and suggest manual steps (e.g., docker system prune, increase memory). Do NOT retry the deploy unless you've confirmed the resource issue is resolved.";
-        }
-
-        log.info({ projectId, sessionId }, 'Auto-recovery: calling agent.chatStream');
-        await agent.chatStream(
-          recoveryMessage,
-          async (event) => {
-            log.info({ projectId, eventType: event.type }, 'Auto-recovery: agent event');
-            await eventBus.emit('agent:event', {
-              projectId,
-              event: { ...event, timestamp: new Date().toISOString() },
-            });
-          },
-          sessionId,
-        );
-        log.info({ projectId }, 'Auto-recovery: agent.chatStream completed');
-
-        const recovered = await waitForRecoveryOutcome(projectId);
-        const durationMs = Date.now() - recoveryStartTime;
-        if (recovered) {
-          await eventBus.emit('recovery:success', {
-            projectId,
-            attempt: attempts.count,
-            durationMs,
-            lastError: attempts.lastError,
-          });
-          recoveryAttempts.delete(projectId);
-        } else {
-          await eventBus.emit('recovery:failed', {
-            projectId,
-            error,
-            attempt: attempts.count,
-          });
-        }
-      } catch (err) {
-        log.error({ err, projectId }, 'Auto-recovery agent call failed');
-        await eventBus.emit('recovery:failed', {
-          projectId,
-          error: err instanceof Error ? err.message : error,
-          attempt: attempts.count,
-        });
-      }
-    };
-
-    eventBus.on('deploy:failed', (payload) => {
-      // Small delay to let deploy log persist before agent reads it
-      setTimeout(() => {
-        enqueueAgentCall(
-          () =>
-            handleAutoRecovery(payload.projectId, payload.error, payload.step, payload.buildLog),
-          { projectId: payload.projectId, eventType: 'deploy:failed' },
-        );
-      }, 2000);
-    });
-
-    eventBus.on('compose:failed', (payload) => {
-      setTimeout(() => {
-        enqueueAgentCall(() => handleAutoRecovery(payload.projectId, payload.error), {
-          projectId: payload.projectId,
-          eventType: 'compose:failed',
-        });
-      }, 2000);
-    });
-
-    eventBus.on('env:new-keys-detected', (payload) => {
-      const message = `New environment variables detected in ${payload.projectName}'s .env.example: ${payload.newKeys.join(', ')}. These keys are not set yet. Ask the user for values.`;
-      enqueueAgentCall(
-        async () => {
-          await agent.chatStream(
-            message,
-            async (event) => {
-              await eventBus.emit('agent:event', {
-                projectId: payload.projectId,
-                event: { ...event, timestamp: new Date().toISOString() },
-              });
-            },
-            `env-detect-${payload.projectId}`,
-          );
-        },
-        { projectId: payload.projectId, eventType: 'env:new-keys-detected' },
-      );
-    });
-
-    eventBus.on('secret:detected', (payload) => {
-      const list = payload.secrets
-        .map((s) => `- ${s.file}:${String(s.line)} — ${s.type} (${s.pattern})`)
-        .join('\n');
-      const message = `Hardcoded secrets detected in ${payload.projectName}:\n${list}\nAdvise user to move these to environment variables using set_env_vars.`;
-      enqueueAgentCall(
-        async () => {
-          await agent.chatStream(
-            message,
-            async (event) => {
-              await eventBus.emit('agent:event', {
-                projectId: payload.projectId,
-                event: { ...event, timestamp: new Date().toISOString() },
-              });
-            },
-            `secret-scan-${payload.projectId}`,
-          );
-        },
-        { projectId: payload.projectId, eventType: 'secret:detected' },
-      );
-    });
-
-    eventBus.on('rollback:suggested', (payload) => {
-      const message = `Health checks are failing for ${payload.projectName} after deployment. ${String(payload.consecutiveFailures)} consecutive failures. Previous version available (${payload.previousImageTag}). Ask the user if they want to rollback.`;
-      enqueueAgentCall(
-        async () => {
-          await agent.chatStream(
-            message,
-            async (event) => {
-              await eventBus.emit('agent:event', {
-                projectId: payload.projectId,
-                event: { ...event, timestamp: new Date().toISOString() },
-              });
-            },
-            `rollback-${payload.projectId}`,
-          );
-        },
-        { projectId: payload.projectId, eventType: 'rollback:suggested' },
-      );
-    });
-  }
+  setupAutoRecovery({
+    eventBus,
+    agent,
+    db,
+    buildDebugger,
+    deployQueue,
+    pipeline,
+    questionBridge,
+    language: config.language,
+  });
 
   // v0.2: Health monitoring
   const healthMonitor = new HealthMonitor(docker, db, eventBus, {
