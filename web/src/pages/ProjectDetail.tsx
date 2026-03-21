@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '@/i18n/context';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   getProject,
   redeployProject,
@@ -20,28 +19,14 @@ import {
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/layout/ShareDialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { EnvironmentType } from '@/types';
 import { parseEnvContent } from '@/lib/parse-env';
 
-import { Activity, History, SquareTerminal, Settings, GitBranch } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
-
-// Wave 2 tab components
-import { OverviewTab } from '@/components/project/OverviewTab';
-import { DeploymentsTab } from '@/components/project/DeploymentsTab';
-import { ConsoleTab } from '@/components/project/ConsoleTab';
-import { SettingsTab } from '@/components/project/SettingsTab';
 import { ProjectHeader } from '@/components/project/ProjectHeader';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ProjectDetailLoading } from '@/components/project/ProjectDetailLoading';
+import { ProjectDetailTabs } from '@/components/project/ProjectDetailTabs';
+import { RedeployEnvDialog } from '@/components/project/RedeployEnvDialog';
+import { AddEnvironmentDialog } from '@/components/project/AddEnvironmentDialog';
 
 export function ProjectDetail() {
   const { id } = useParams();
@@ -185,6 +170,41 @@ export function ProjectDetail() {
     }
   };
 
+  const handleRedeploySkip = async () => {
+    setRedeploySheet(false);
+    setActionLoading('redeploy');
+    setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+    try {
+      await redeployProject(id!, undefined, currentEnvType);
+      setTimelineRunKey((k) => k + 1);
+      toast.success('Project redeploying');
+    } catch (err) {
+      toast.error('Redeploy failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRedeployWithEnv = async () => {
+    const parsed = parseEnvContent(redeployPasteText);
+    const vars: Record<string, string> = {};
+    for (const { key, value } of parsed) {
+      if (value.trim()) vars[key] = value.trim();
+    }
+    setRedeploySheet(false);
+    setActionLoading('redeploy');
+    setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+    try {
+      await redeployProject(id!, Object.keys(vars).length > 0 ? vars : undefined, currentEnvType);
+      setTimelineRunKey((k) => k + 1);
+      toast.success('Project deploying');
+    } catch (err) {
+      toast.error('Deploy failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleStart = async () => {
     if (isMobile) {
       showMobileToast();
@@ -304,35 +324,7 @@ export function ProjectDetail() {
     };
   }, [project, selectedEnv, currentEnvType]);
 
-  if (loading) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-3 w-3 rounded-full" />
-              <div>
-                <Skeleton className="h-6 w-48 mb-2" />
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-7 w-24" />
-              <Skeleton className="h-7 w-24" />
-              <Skeleton className="h-7 w-7" />
-            </div>
-          </div>
-        </div>
-        <div className="flex-1 p-4">
-          <Skeleton className="h-10 w-full max-w-md mb-4" />
-          <Skeleton className="h-[600px] w-full rounded-lg" />
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <ProjectDetailLoading />;
 
   if (!project) {
     return (
@@ -361,219 +353,41 @@ export function ProjectDetail() {
           onDelete={handleDelete}
         />
 
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="flex-1 flex flex-col min-h-0"
-        >
-          <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
-            <TabsTrigger
-              value="overview"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <Activity className="h-3.5 w-3.5" />
-              Overview
-            </TabsTrigger>
-            <TabsTrigger
-              value="deployments"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <History className="h-3.5 w-3.5" />
-              Deployments
-            </TabsTrigger>
-            <TabsTrigger
-              value="console"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <SquareTerminal className="h-3.5 w-3.5" />
-              Console
-            </TabsTrigger>
-            <TabsTrigger
-              value="settings"
-              className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
-            >
-              <Settings className="h-3.5 w-3.5" />
-              Settings
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="flex-1 min-h-0 mt-0">
-            {id && displayProject && (
-              <OverviewTab
-                projectId={id}
-                projectStatus={displayProject.status}
-                displayProject={displayProject}
-                timelineItems={allTimelineItems}
-                isTimelineStreaming={isStreaming}
-                onOpenLogs={() => setActiveTab('console')}
-                onRedeploy={handleRedeploy}
-                onStop={handleStop}
-                onRollback={handleRollback}
-              />
-            )}
-          </TabsContent>
-
-          <TabsContent value="deployments" className="flex-1 min-h-0 mt-0">
-            {id && displayProject && (
-              <DeploymentsTab
-                projectId={id}
-                projectStatus={displayProject.status}
-                projectBranch={displayProject.branch}
-                environmentId={selectedEnv?.id}
-              />
-            )}
-          </TabsContent>
-
-          <TabsContent value="console" className="flex-1 min-h-0 mt-0">
-            {id && displayProject && (
-              <ConsoleTab
-                projectId={id}
-                isActive={activeTab === 'console'}
-                projectStatus={displayProject.status}
-              />
-            )}
-          </TabsContent>
-
-          <TabsContent value="settings" className="flex-1 min-h-0 mt-0">
-            {id && displayProject && (
-              <SettingsTab projectId={id} projectStatus={displayProject.status} />
-            )}
-          </TabsContent>
-        </Tabs>
+        <ProjectDetailTabs
+          id={id}
+          activeTab={activeTab}
+          onActiveTabChange={setActiveTab}
+          displayProject={displayProject}
+          allTimelineItems={allTimelineItems}
+          isStreaming={isStreaming}
+          selectedEnvId={selectedEnv?.id}
+          onRedeploy={handleRedeploy}
+          onStop={handleStop}
+          onRollback={handleRollback}
+        />
       </div>
 
-      <Dialog open={redeploySheet} onOpenChange={setRedeploySheet}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{'Environment Variables'}</DialogTitle>
-            <DialogDescription>
-              {`Found ${String(redeployVars.length)} new environment variable${redeployVars.length !== 1 ? 's' : ''}. Paste your .env file below.`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <textarea
-              className="w-full rounded-md px-3 py-2 text-xs font-mono bg-bg-app border border-border text-primary-ol placeholder:text-muted-ol resize-none focus:outline-none focus:ring-1 focus:ring-agent/40"
-              rows={10}
-              placeholder={redeployVars.map((v) => v.key + '=').join('\n')}
-              value={redeployPasteText}
-              onChange={(e) => setRedeployPasteText(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRedeploySheet(false)}>
-              {'Cancel'}
-            </Button>
-            <button
-              type="button"
-              className="text-xs text-muted-foreground hover:text-primary-ol transition-colors"
-              onClick={async () => {
-                setRedeploySheet(false);
-                setActionLoading('redeploy');
-                setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
-                try {
-                  await redeployProject(id!, undefined, currentEnvType);
-                  setTimelineRunKey((k) => k + 1);
-                  toast.success('Project redeploying');
-                } catch (err) {
-                  toast.error(
-                    'Redeploy failed: ' + (err instanceof Error ? err.message : String(err)),
-                  );
-                } finally {
-                  setActionLoading(null);
-                }
-              }}
-            >
-              {'Skip'}
-            </button>
-            <Button
-              className="bg-foreground text-background hover:bg-foreground/90"
-              onClick={async () => {
-                const parsed = parseEnvContent(redeployPasteText);
-                const vars: Record<string, string> = {};
-                for (const { key, value } of parsed) {
-                  if (value.trim()) vars[key] = value.trim();
-                }
-                setRedeploySheet(false);
-                setActionLoading('redeploy');
-                setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
-                try {
-                  await redeployProject(
-                    id!,
-                    Object.keys(vars).length > 0 ? vars : undefined,
-                    currentEnvType,
-                  );
-                  setTimelineRunKey((k) => k + 1);
-                  toast.success('Project deploying');
-                } catch (err) {
-                  toast.error(
-                    'Deploy failed: ' + (err instanceof Error ? err.message : String(err)),
-                  );
-                } finally {
-                  setActionLoading(null);
-                }
-              }}
-            >
-              {'Deploy'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RedeployEnvDialog
+        open={redeploySheet}
+        onOpenChange={setRedeploySheet}
+        redeployVars={redeployVars}
+        redeployPasteText={redeployPasteText}
+        onRedeployPasteTextChange={setRedeployPasteText}
+        onSkip={handleRedeploySkip}
+        onDeploy={handleRedeployWithEnv}
+      />
 
-      <Dialog
+      <AddEnvironmentDialog
         open={addEnvSheet.open}
+        type={addEnvSheet.type}
+        projectBranch={project?.branch}
+        branchValue={addEnvBranch}
         onOpenChange={(open) => setAddEnvSheet((prev) => ({ ...prev, open }))}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {addEnvSheet.type ? `Create ${addEnvSheet.type} environment` : 'Create environment'}
-            </DialogTitle>
-            <DialogDescription>
-              {'Choose which branch this environment should track.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 pt-2">
-            <label
-              htmlFor="env-branch"
-              className="text-xs font-medium leading-none flex items-center gap-1.5 text-secondary-ol"
-            >
-              <GitBranch className="h-3 w-3" />
-              {'Branch'}
-            </label>
-            <Input
-              id="env-branch"
-              placeholder={project?.branch ?? 'main'}
-              value={addEnvBranch}
-              onChange={(e) => setAddEnvBranch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  void confirmAddEnv();
-                }
-              }}
-              className="h-8 text-sm"
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAddEnvSheet({ open: false, type: null })}
-            >
-              {'Cancel'}
-            </Button>
-            <Button
-              size="sm"
-              className="bg-foreground text-background hover:bg-foreground/90"
-              disabled={actionLoading === 'add-env'}
-              onClick={() => void confirmAddEnv()}
-            >
-              {'Create'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onBranchChange={setAddEnvBranch}
+        onCancel={() => setAddEnvSheet({ open: false, type: null })}
+        onConfirm={() => void confirmAddEnv()}
+        isSubmitting={actionLoading === 'add-env'}
+      />
 
       <ShareDialog
         projectId={id!}
