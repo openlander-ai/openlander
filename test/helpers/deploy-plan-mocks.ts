@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
-import { DeployQueue } from '../../src/agent/deploy-queue.js';
+import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 
 // ---------------------------------------------------------------------------
 // Shared mock factories for deploy-plan tests (T5-T10)

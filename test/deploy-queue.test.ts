@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { DeployQueue } from '../src/agent/deploy-queue.js';
+import { DeployQueue } from '../src/pipeline/deploy-queue.js';
 
 describe('DeployQueue', () => {
   it('acquire returns immediately when queue is empty', async () => {
