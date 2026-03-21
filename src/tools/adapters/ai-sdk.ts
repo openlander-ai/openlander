@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid';
 import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import type { AppContext } from '../../app.js';
-import type { QuestionBridge } from '../../agent/question-bridge.js';
+import type { QuestionBridge } from '../../lib/question-bridge.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import type { ToolDef } from '../defs/types.js';
 

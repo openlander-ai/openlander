@@ -14,9 +14,9 @@ import { FixProposalCard } from '../../web/src/components/timeline/FixProposalCa
 import { ComposeErrorCard } from '../../web/src/components/timeline/ComposeErrorCard.js';
 import { createTools } from '../../src/agent/tools.js';
 import type { AppContext } from '../../src/app.js';
-import type { QuestionBridge } from '../../src/agent/question-bridge.js';
+import type { QuestionBridge } from '../../src/lib/question-bridge.js';
 import { Database } from '../../src/db/index.js';
-import { matchRecipe } from '../../src/agent/recipes.js';
+import { matchRecipe } from '../../src/pipeline/recipes.js';
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
 import { cloneRepo } from '../../src/pipeline/git.js';
 

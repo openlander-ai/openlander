@@ -1,6 +1,6 @@
 import { createPublicKey, verify } from 'node:crypto';
 import type { Context } from 'hono';
-import type { QuestionBridge } from '../agent/question-bridge.js';
+import type { QuestionBridge } from '../lib/question-bridge.js';
 import {
   decodeQuestionComponentValue,
   type Channel,

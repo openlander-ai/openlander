@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { matchRecipe, matchAllRecipes, BUILD_RECIPES } from '../src/agent/recipes.js';
+import { matchRecipe, matchAllRecipes, BUILD_RECIPES } from '../src/pipeline/recipes.js';
 
 describe('matchRecipe', () => {
   it('returns null for a clean build log', () => {

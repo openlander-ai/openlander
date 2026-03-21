@@ -1,7 +1,7 @@
 import { generateText, streamText, stepCountIs } from 'ai';
 import type { LanguageModel, ToolSet } from 'ai';
 import type { ChatMessage } from '../llm/index.js';
-import type { QuestionRequest, QuestionBridge } from './question-bridge.js';
+import type { QuestionRequest, QuestionBridge } from '../lib/question-bridge.js';
 import type { Database } from '../db/index.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
 

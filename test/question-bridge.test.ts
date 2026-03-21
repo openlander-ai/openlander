@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { QuestionBridge, type QuestionRequest } from '../src/agent/question-bridge.js';
+import { QuestionBridge, type QuestionRequest } from '../src/lib/question-bridge.js';
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
