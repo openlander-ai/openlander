@@ -3,6 +3,7 @@ import type { LanguageModel, ToolSet } from 'ai';
 import type { ChatMessage } from './index.js';
 import type { QuestionRequest, QuestionBridge } from '../lib/question-bridge.js';
 import type { Database } from '../db/index.js';
+import type { ChatHistoryRow } from '../db/types.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
 
@@ -35,10 +36,14 @@ const MAX_HISTORY_MESSAGES = 40;
 /** Number of recent messages to keep when trimming. */
 const KEEP_RECENT = 30;
 
+const DEFAULT_CHANNEL_SESSION_ID = 'channel-default';
+
 export class Agent {
   private history: ChatMessage[] = [];
   private tools: ToolSet = {};
   private questionBridge: QuestionBridge | null = null;
+  private currentSessionId: string | null = null;
+  private lockPromise: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly model: LanguageModel,
@@ -70,66 +75,85 @@ export class Agent {
    * The SDK handles the agentic loop: LLM → tool → result → LLM → ...
    */
   async chat(userMessage: string, sessionId?: string): Promise<AgentResponse> {
-    // Rebuild system prompt with fresh context on each turn
-    await this.refreshSystemPrompt();
+    return this.withLock(async () => {
+      const resolvedSessionId = this.resolveSessionId(sessionId);
+      if (resolvedSessionId !== this.currentSessionId) {
+        await this.switchSession(resolvedSessionId);
+      } else {
+        // Rebuild system prompt with fresh context on each turn
+        await this.refreshSystemPrompt();
+      }
 
-    this.history.push({ role: 'user', content: userMessage });
+      this.history.push({ role: 'user', content: userMessage });
 
-    // Save user message to DB
-    if (sessionId) {
+      // Save user message to DB
       const { nanoid } = await import('nanoid');
       this.db.saveChatMessage({
         id: nanoid(12),
-        sessionId,
+        sessionId: resolvedSessionId,
         role: 'user',
         content: userMessage,
       });
-    }
 
-    const result = await generateText({
-      model: this.model,
-      messages: this.history.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
-      tools: this.tools,
-      stopWhen: stepCountIs(MAX_TOOL_STEPS),
-    });
+      const result = await generateText({
+        model: this.model,
+        messages: this.history.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        tools: this.tools,
+        stopWhen: stepCountIs(MAX_TOOL_STEPS),
+      });
 
-    // Extract tool results from all steps
-    const allToolResults: ToolResult[] = [];
-    for (const step of result.steps) {
-      for (const toolResult of step.toolResults) {
-        allToolResults.push({
-          toolName: toolResult.toolName,
-          success: true,
-          result: toolResult.output,
-        });
+      // Extract tool results from all steps
+      const allToolResults: ToolResult[] = [];
+      for (const step of result.steps) {
+        for (const toolResult of step.toolResults) {
+          allToolResults.push({
+            toolName: toolResult.toolName,
+            success: true,
+            result: toolResult.output,
+          });
+        }
       }
-    }
 
-    const responseText = result.text || '⚠️ Reached the maximum number of steps for this request.';
+      const responseText =
+        result.text || '⚠️ Reached the maximum number of steps for this request.';
 
-    // Update history with the final response
-    this.history.push({ role: 'assistant', content: responseText });
-    this.trimHistory();
+      // Update history with the final response
+      this.history.push({ role: 'assistant', content: responseText });
+      this.trimHistory();
 
-    // Save final response to DB
-    if (sessionId) {
-      const { nanoid } = await import('nanoid');
       this.db.saveChatMessage({
         id: nanoid(12),
-        sessionId,
+        sessionId: resolvedSessionId,
         role: 'assistant',
         content: responseText,
         toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
       });
+
+      return {
+        message: responseText,
+        toolResults: allToolResults.length > 0 ? allToolResults : undefined,
+      };
+    });
+  }
+
+  async switchSession(sessionId: string): Promise<void> {
+    if (sessionId === this.currentSessionId) {
+      return;
     }
 
-    return {
-      message: responseText,
-      toolResults: allToolResults.length > 0 ? allToolResults : undefined,
-    };
+    this.history = [];
+    const rows: ChatHistoryRow[] = this.db.getChatHistory(sessionId);
+    this.history = rows.map((row) => ({
+      role: row.role,
+      content: row.content,
+    }));
+    this.currentSessionId = sessionId;
+
+    await this.refreshSystemPrompt();
+    this.trimHistory();
   }
 
   /**
@@ -145,121 +169,127 @@ export class Agent {
     onEvent: (event: ChatStreamEvent) => Promise<void>,
     sessionId?: string,
   ): Promise<void> {
-    const { nanoid } = await import('nanoid');
-    const resolvedSessionId = sessionId ?? nanoid(12);
-
-    // Rebuild system prompt with fresh context
-    await this.refreshSystemPrompt();
-
-    await onEvent({ type: 'session', sessionId: resolvedSessionId });
-
-    this.history.push({ role: 'user', content: userMessage });
-
-    // Save user message to DB
-    this.db.saveChatMessage({
-      id: nanoid(12),
-      sessionId: resolvedSessionId,
-      role: 'user',
-      content: userMessage,
-    });
-
-    await onEvent({ type: 'thinking' });
-
-    // Wire question bridge to emit through this stream's onEvent callback.
-    if (this.questionBridge) {
-      this.questionBridge.setQuestionHandler((request: QuestionRequest) => {
-        void onEvent({ type: 'question', request });
-      });
-    }
-
-    const allToolResults: ToolResult[] = [];
-    let responseText = '';
-
-    try {
-      const result = streamText({
-        model: this.model,
-        messages: this.history.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        tools: this.tools,
-        stopWhen: stepCountIs(MAX_TOOL_STEPS),
-      });
-
-      for await (const part of result.fullStream) {
-        switch (part.type) {
-          case 'text-delta': {
-            responseText += part.text;
-            break;
-          }
-          case 'tool-call': {
-            await onEvent({
-              type: 'tool_call',
-              toolName: part.toolName,
-              arguments: part.input as Record<string, unknown>,
-            });
-            break;
-          }
-          case 'tool-result': {
-            const toolResult: ToolResult = {
-              toolName: part.toolName,
-              success: true,
-              result: part.output,
-            };
-            allToolResults.push(toolResult);
-            await onEvent({ type: 'tool_result', ...toolResult });
-            break;
-          }
-          case 'tool-error': {
-            const errorResult: ToolResult = {
-              toolName: part.toolName,
-              success: false,
-              error: part.error instanceof Error ? part.error.message : String(part.error),
-            };
-            allToolResults.push(errorResult);
-            await onEvent({ type: 'tool_result', ...errorResult });
-            break;
-          }
-          case 'finish-step': {
-            // Emit thinking for next step if there are more steps coming
-            await onEvent({ type: 'thinking' });
-            break;
-          }
-          case 'error': {
-            const errMsg = part.error instanceof Error ? part.error.message : String(part.error);
-            await onEvent({ type: 'error', error: errMsg });
-            return;
-          }
-          default:
-            // Ignore other event types (start, start-step, text-start, text-end, etc.)
-            break;
-        }
+    return this.withLock(async () => {
+      const { nanoid } = await import('nanoid');
+      const resolvedSessionId = this.resolveSessionId(sessionId);
+      if (resolvedSessionId !== this.currentSessionId) {
+        await this.switchSession(resolvedSessionId);
+      } else {
+        // Rebuild system prompt with fresh context
+        await this.refreshSystemPrompt();
       }
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      await onEvent({ type: 'error', error: errMsg });
-      return;
-    }
 
-    const finalText =
-      responseText || '⚠️ Reached the maximum number of steps. Here is what was completed so far.';
+      await onEvent({ type: 'session', sessionId: resolvedSessionId });
 
-    // Update history with the final response
-    this.history.push({ role: 'assistant', content: finalText });
-    this.trimHistory();
+      this.history.push({ role: 'user', content: userMessage });
 
-    this.db.saveChatMessage({
-      id: nanoid(12),
-      sessionId: resolvedSessionId,
-      role: 'assistant',
-      content: finalText,
-      toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
-    });
+      // Save user message to DB
+      this.db.saveChatMessage({
+        id: nanoid(12),
+        sessionId: resolvedSessionId,
+        role: 'user',
+        content: userMessage,
+      });
 
-    await onEvent({ type: 'message', content: finalText });
-    await onEvent({
-      type: 'done',
-      toolResults: allToolResults.length > 0 ? allToolResults : undefined,
+      await onEvent({ type: 'thinking' });
+
+      // Wire question bridge to emit through this stream's onEvent callback.
+      if (this.questionBridge) {
+        this.questionBridge.setQuestionHandler((request: QuestionRequest) => {
+          void onEvent({ type: 'question', request });
+        });
+      }
+
+      const allToolResults: ToolResult[] = [];
+      let responseText = '';
+
+      try {
+        const result = streamText({
+          model: this.model,
+          messages: this.history.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          tools: this.tools,
+          stopWhen: stepCountIs(MAX_TOOL_STEPS),
+        });
+
+        for await (const part of result.fullStream) {
+          switch (part.type) {
+            case 'text-delta': {
+              responseText += part.text;
+              break;
+            }
+            case 'tool-call': {
+              await onEvent({
+                type: 'tool_call',
+                toolName: part.toolName,
+                arguments: part.input as Record<string, unknown>,
+              });
+              break;
+            }
+            case 'tool-result': {
+              const toolResult: ToolResult = {
+                toolName: part.toolName,
+                success: true,
+                result: part.output,
+              };
+              allToolResults.push(toolResult);
+              await onEvent({ type: 'tool_result', ...toolResult });
+              break;
+            }
+            case 'tool-error': {
+              const errorResult: ToolResult = {
+                toolName: part.toolName,
+                success: false,
+                error: part.error instanceof Error ? part.error.message : String(part.error),
+              };
+              allToolResults.push(errorResult);
+              await onEvent({ type: 'tool_result', ...errorResult });
+              break;
+            }
+            case 'finish-step': {
+              // Emit thinking for next step if there are more steps coming
+              await onEvent({ type: 'thinking' });
+              break;
+            }
+            case 'error': {
+              const errMsg = part.error instanceof Error ? part.error.message : String(part.error);
+              await onEvent({ type: 'error', error: errMsg });
+              return;
+            }
+            default:
+              // Ignore other event types (start, start-step, text-start, text-end, etc.)
+              break;
+          }
+        }
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        await onEvent({ type: 'error', error: errMsg });
+        return;
+      }
+
+      const finalText =
+        responseText ||
+        '⚠️ Reached the maximum number of steps. Here is what was completed so far.';
+
+      // Update history with the final response
+      this.history.push({ role: 'assistant', content: finalText });
+      this.trimHistory();
+
+      this.db.saveChatMessage({
+        id: nanoid(12),
+        sessionId: resolvedSessionId,
+        role: 'assistant',
+        content: finalText,
+        toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
+      });
+
+      await onEvent({ type: 'message', content: finalText });
+      await onEvent({
+        type: 'done',
+        toolResults: allToolResults.length > 0 ? allToolResults : undefined,
+      });
     });
   }
 
@@ -271,6 +301,7 @@ export class Agent {
   /** Clear conversation history (keeps system prompt). */
   clearHistory(): void {
     this.history = [];
+    this.currentSessionId = null;
   }
 
   // ---------------------------------------------------------------------------
@@ -314,6 +345,25 @@ export class Agent {
     };
 
     this.history = [system, trimNote, ...recent];
+  }
+
+  private resolveSessionId(sessionId?: string): string {
+    return sessionId ?? DEFAULT_CHANNEL_SESSION_ID;
+  }
+
+  private async withLock<T>(fn: () => Promise<T>): Promise<T> {
+    let release!: () => void;
+    const prev = this.lockPromise;
+    this.lockPromise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
   }
 }
 
