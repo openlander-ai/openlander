@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSetup } from '@/hooks/use-setup';
 import {
-  configureLLM,
   startTraefik,
   completeSetup,
   connectGithub,
@@ -11,13 +10,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { OAuthButton } from './OAuthButton';
-import { ProviderHelp } from './ProviderHelp';
 import {
   CheckCircle2,
   XCircle,
   Loader2,
-  Brain,
   Network,
   ArrowRight,
   ArrowLeft,
@@ -37,7 +33,7 @@ const STORAGE_KEY = 'openlander-setup-step';
 function getStoredStep(): number {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return Math.min(parseInt(stored, 10), 3);
+    if (stored) return Math.min(parseInt(stored, 10), 2);
   } catch {
     // localStorage not available
   }
@@ -64,14 +60,8 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const { status, loading, refetch } = useSetup();
   const { t, language, setLanguage } = useLanguage();
   const [step, setStep] = useState(getStoredStep);
-  const [configuringLLM, setConfiguringLLM] = useState(false);
   const [startingTraefik, setStartingTraefik] = useState(false);
   const [completing, setCompleting] = useState(false);
-
-  // LLM Form State
-  const [llmProvider, setLlmProvider] = useState('gemini');
-  const [apiKey, setApiKey] = useState('');
-  const [llmError, setLlmError] = useState('');
 
   // GitHub Form State
   const [githubToken, setGithubToken] = useState('');
@@ -92,14 +82,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
     storeStep(step);
   }, [step]);
 
-  // If status shows LLM already configured, skip to step 3
-  useEffect(() => {
-    if (status?.llm.ok && step < 3) {
-      setStep(3);
-    }
-  }, [status, step]);
-
-  const goNext = () => setStep((s) => Math.min(s + 1, 3));
+  const goNext = () => setStep((s) => Math.min(s + 1, 2));
   const goBack = () => setStep((s) => Math.max(s - 1, 0));
 
   const handleStartTraefik = async () => {
@@ -111,21 +94,6 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       console.error(err);
     } finally {
       setStartingTraefik(false);
-    }
-  };
-
-  const handleConfigureLLM = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setConfiguringLLM(true);
-    setLlmError('');
-    try {
-      await configureLLM(llmProvider, apiKey);
-      await refetch();
-      goNext();
-    } catch {
-      setLlmError('Failed to configure LLM. Check your API key/token.');
-    } finally {
-      setConfiguringLLM(false);
     }
   };
 
@@ -255,7 +223,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       <div className="relative w-full max-w-xl z-10">
         {/* Step indicators */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {[0, 1, 2, 3].map((s) => (
+          {[0, 1, 2].map((s) => (
             <div key={s} className="flex items-center gap-2">
               <div
                 className={cn(
@@ -267,7 +235,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
               >
                 {s < step ? <Check className="h-4 w-4" /> : s + 1}
               </div>
-              {s < 3 && (
+              {s < 2 && (
                 <div
                   className={cn('w-12 h-px transition-colors', s < step ? 'bg-agent' : 'bg-border')}
                 />
@@ -402,152 +370,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
           </div>
         )}
 
-        {/* Step 2: Brain (LLM) */}
         {step === 2 && (
-          <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="space-y-6">
-              <div className="text-center space-y-2">
-                <div className="mx-auto w-16 h-16 rounded-2xl bg-agent/10 flex items-center justify-center">
-                  <Brain className="h-8 w-8 text-agent" />
-                </div>
-                <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
-                  {t('setup.llm.title')}
-                </h2>
-                <p className="text-sm font-body text-secondary-ol">{t('setup.llm.subtitle')}</p>
-              </div>
-
-              {status.llm.ok ? (
-                <div className="rounded-lg border border-success/30 bg-success/5 p-4 flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
-                  <div>
-                    <p className="text-sm font-body text-primary-ol">
-                      Connected to <strong>{status.llm.provider}</strong> ({status.llm.model})
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleConfigureLLM} className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-body text-secondary-ol uppercase tracking-wider">
-                      {t('setup.llm.chooseProvider')}
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { value: 'gemini', label: 'Google Gemini', badge: 'Free' },
-                        { value: 'openrouter', label: 'OpenRouter', badge: 'Free/Paid' },
-                        { value: 'anthropic', label: 'Anthropic Claude', badge: '' },
-                        { value: 'openai', label: 'OpenAI', badge: '' },
-                        { value: 'ollama', label: 'Ollama (Local)', badge: 'No Key' },
-                      ].map((p) => (
-                        <button
-                          key={p.value}
-                          type="button"
-                          onClick={() => setLlmProvider(p.value)}
-                          className={cn(
-                            'text-left px-3 py-2.5 rounded-lg border text-sm font-body transition-all',
-                            llmProvider === p.value
-                              ? 'border-agent/50 bg-agent/10 text-primary-ol'
-                              : 'border-border bg-bg-subtle/30 text-secondary-ol hover:border-border hover:bg-bg-subtle/50',
-                          )}
-                        >
-                          <span className="flex items-center justify-between">
-                            {p.label}
-                            {p.badge && (
-                              <Badge variant="outline" className="text-[10px] ml-1 py-0">
-                                {p.badge}
-                              </Badge>
-                            )}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {llmProvider === 'anthropic' && <ProviderHelp provider="anthropic" />}
-                  {llmProvider === 'gemini' && <ProviderHelp provider="gemini" />}
-
-                  {(llmProvider === 'openai' || llmProvider === 'openrouter') && (
-                    <>
-                      <OAuthButton
-                        provider={llmProvider}
-                        onSuccess={async () => {
-                          await configureLLM(llmProvider, '');
-                          await refetch();
-                          goNext();
-                        }}
-                      />
-                      <div className="relative py-2">
-                        <div className="absolute inset-0 flex items-center">
-                          <span className="w-full border-t border-border" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                          <span className="bg-bg-app px-2 text-muted-ol font-body">
-                            {t('settings.aiModel.orUseApiKey')}
-                          </span>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {llmProvider !== 'ollama' && (
-                    <div className="space-y-2">
-                      <label className="text-xs font-body text-secondary-ol uppercase tracking-wider">
-                        {'API Key'}
-                      </label>
-                      <Input
-                        type="password"
-                        placeholder="Paste your API key or token..."
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        required={llmProvider !== 'openai' && llmProvider !== 'openrouter'}
-                        className="font-mono text-sm bg-bg-app border-border"
-                      />
-                    </div>
-                  )}
-
-                  {llmError && <p className="text-xs font-body text-error">{llmError}</p>}
-
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={goBack}
-                      className="gap-1.5 font-body"
-                    >
-                      <ArrowLeft className="h-3.5 w-3.5" />
-                      {'Back'}
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={configuringLLM || (llmProvider !== 'ollama' && !apiKey.trim())}
-                      className="flex-1 bg-agent text-bg-app hover:bg-agent/90 font-body gap-1.5"
-                    >
-                      {configuringLLM ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Check className="h-4 w-4" />
-                      )}
-                      {'Save'}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {status.llm.ok && (
-                <Button
-                  onClick={goNext}
-                  className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
-                >
-                  {'Continue'}
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Access (GitHub) + Complete */}
-        {step === 3 && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="space-y-6">
               <div className="text-center space-y-2">
@@ -709,15 +532,9 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   label="Traefik"
                   detail={status.traefik.ok ? 'Running' : 'Stopped'}
                 />
-                <StatusRow
-                  ok={status.llm.ok}
-                  label={'AI Model'}
-                  detail={
-                    status.llm.ok
-                      ? `${status.llm.provider} (${status.llm.model})`
-                      : t('settings.aiModel.configureProvider')
-                  }
-                />
+                <p className="pt-1 text-[11px] font-body text-muted-ol">
+                  {'API key is optional - enables smart auto-recovery.'}
+                </p>
               </div>
 
               <div className="flex gap-2">
@@ -732,7 +549,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 </Button>
                 <Button
                   onClick={handleComplete}
-                  disabled={!status.ready || completing}
+                  disabled={!status.docker.ok || completing}
                   size="lg"
                   className="flex-1 bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
                 >
@@ -745,9 +562,9 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                 </Button>
               </div>
 
-              {!status.ready && (
+              {!status.docker.ok && (
                 <p className="text-xs font-body text-muted-ol text-center">
-                  Docker and LLM must be configured to continue.
+                  Docker must be configured to continue.
                 </p>
               )}
             </div>

@@ -3,15 +3,12 @@ import { useLanguage } from '@/i18n/context';
 import { useSetup } from '@/hooks/use-setup';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import {
-  configureLLM,
   configureCloudflare,
   connectCloudflare,
   getGlobalSecrets,
   getCloudflareStatus,
   setGlobalSecret,
   deleteGlobalSecret,
-  getOAuthStatus,
-  disconnectOAuth,
   connectGithub,
   disconnectGithub,
   startGithubDeviceFlow,
@@ -19,16 +16,12 @@ import {
   getServerStatus,
   type ServerStatus,
   type GlobalSecret,
-  type OAuthStatus,
 } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { OAuthButton } from '@/components/setup/OAuthButton';
-import { ProviderHelp } from '@/components/setup/ProviderHelp';
 import { cn } from '@/lib/utils';
 import {
-  Brain,
   Github,
   Cpu,
   MemoryStick,
@@ -55,16 +48,11 @@ export function SettingsPage() {
   const { stats } = useSystemStats();
   const { t } = useLanguage();
 
-  const [llmProvider, setLlmProvider] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [llmError, setLlmError] = useState('');
-  const [saving, setSaving] = useState(false);
   const [secrets, setSecrets] = useState<GlobalSecret[]>([]);
   const [secretKey, setSecretKey] = useState('');
   const [secretValue, setSecretValue] = useState('');
   const [secretDesc, setSecretDesc] = useState('');
   const [secretSaving, setSecretSaving] = useState(false);
-  const [oauthStatus, setOauthStatus] = useState<OAuthStatus | null>(null);
   const [githubToken, setGithubToken] = useState('');
   const [githubConnecting, setGithubConnecting] = useState(false);
   const [githubDisconnecting, setGithubDisconnecting] = useState(false);
@@ -118,14 +106,6 @@ export function SettingsPage() {
     }
   };
 
-  const fetchOAuthStatus = useCallback(async () => {
-    try {
-      const data = await getOAuthStatus();
-      setOauthStatus(data);
-    } catch {
-      /* ignore */
-    }
-  }, []);
   const fetchSecrets = useCallback(async () => {
     try {
       const data = await getGlobalSecrets();
@@ -153,9 +133,8 @@ export function SettingsPage() {
 
   useEffect(() => {
     fetchSecrets();
-    fetchOAuthStatus();
     fetchCloudflareStatus();
-  }, [fetchSecrets, fetchOAuthStatus, fetchCloudflareStatus]);
+  }, [fetchSecrets, fetchCloudflareStatus]);
 
   const handleAddSecret = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,21 +159,6 @@ export function SettingsPage() {
       await fetchSecrets();
     } catch {
       /* ignore */
-    }
-  };
-
-  const handleUpdateLLM = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setLlmError('');
-    try {
-      await configureLLM(llmProvider, apiKey);
-      await refetch();
-      setApiKey('');
-    } catch {
-      setLlmError(t('settings.aiModel.updateFailed'));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -296,9 +260,6 @@ export function SettingsPage() {
     }
   };
 
-  const isOauthProvider = llmProvider === 'openai' || llmProvider === 'openrouter';
-  const oauthConnected = isOauthProvider && Boolean(oauthStatus?.providers[llmProvider]?.connected);
-
   const handleCopyCode = async () => {
     if (!deviceFlow?.userCode) return;
     try {
@@ -378,157 +339,6 @@ export function SettingsPage() {
         </h1>
         <p className="text-sm font-body text-secondary-ol mt-1">{t('settings.description')}</p>
       </div>
-
-      {/* AI Model */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">{'AI Model'}</h2>
-        </div>
-
-        {status?.llm.ok && (
-          <div className="rounded-lg border border-success/20 bg-success/5 p-4 flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-body text-primary-ol">
-                Connected to <strong>{status.llm.provider}</strong>
-              </p>
-              <p className="text-xs font-body text-muted-ol mt-0.5">Model: {status.llm.model}</p>
-            </div>
-            <Badge variant="outline" className="text-success border-success/30">
-              {'Active'}
-            </Badge>
-          </div>
-        )}
-
-        <form onSubmit={handleUpdateLLM} className="space-y-3">
-          <p className="text-xs font-body text-secondary-ol">
-            {status?.llm.ok
-              ? t('settings.aiModel.switchProvider')
-              : t('settings.aiModel.configureProvider')}
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { value: 'gemini', label: 'Google Gemini', badge: 'Free' },
-              { value: 'openrouter', label: 'OpenRouter', badge: 'Free/Paid' },
-              { value: 'anthropic', label: 'Anthropic Claude', badge: '' },
-              { value: 'openai', label: 'OpenAI', badge: '' },
-              { value: 'ollama', label: 'Ollama (Local)', badge: 'No Key' },
-            ].map((p) => (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => setLlmProvider(p.value)}
-                className={cn(
-                  'text-left px-3 py-2.5 rounded-lg border text-sm font-body transition-all',
-                  llmProvider === p.value
-                    ? 'border-agent/50 bg-agent/10 text-primary-ol'
-                    : 'border-border bg-bg-subtle/30 text-secondary-ol hover:border-border hover:bg-bg-subtle/50',
-                )}
-              >
-                <span className="flex items-center justify-between">
-                  {p.label}
-                  {p.badge && (
-                    <Badge variant="outline" className="text-[10px] ml-1 py-0">
-                      {p.badge}
-                    </Badge>
-                  )}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {llmProvider === 'anthropic' && <ProviderHelp provider="anthropic" />}
-          {llmProvider === 'gemini' && <ProviderHelp provider="gemini" />}
-
-          {(llmProvider === 'openai' || llmProvider === 'openrouter') && (
-            <div className="space-y-3">
-              {oauthStatus?.providers[llmProvider]?.connected ? (
-                <div className="flex items-center justify-between p-3 rounded-lg border border-success/20 bg-success/5">
-                  <div className="flex items-center gap-2 text-success">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span className="text-sm font-medium">
-                      {t('settings.aiModel.connectedViaOauth')}
-                    </span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-xs text-error hover:text-error hover:bg-error/10"
-                    onClick={async () => {
-                      try {
-                        await disconnectOAuth(llmProvider);
-                        await fetchOAuthStatus();
-                        await refetch();
-                      } catch (err) {
-                        console.error(err);
-                      }
-                    }}
-                  >
-                    {'Disconnect'}
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <OAuthButton
-                    provider={llmProvider}
-                    onSuccess={async () => {
-                      await configureLLM(llmProvider, '');
-                      await fetchOAuthStatus();
-                      await refetch();
-                    }}
-                  />
-                  <div className="relative py-2">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t border-border" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-bg-app px-2 text-muted-ol font-body">
-                        {t('settings.aiModel.orUseApiKey')}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {llmProvider &&
-            llmProvider !== 'ollama' &&
-            !(
-              (llmProvider === 'openai' || llmProvider === 'openrouter') &&
-              oauthStatus?.providers[llmProvider]?.connected
-            ) && (
-              <Input
-                type="password"
-                placeholder={'API Key'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                required={llmProvider !== 'openai' && llmProvider !== 'openrouter'}
-                className="font-mono text-sm bg-bg-app border-border"
-              />
-            )}
-
-          {llmError && <p className="text-xs font-body text-error">{llmError}</p>}
-
-          {llmProvider && (
-            <Button
-              type="submit"
-              disabled={saving || (llmProvider !== 'ollama' && !apiKey.trim() && !oauthConnected)}
-              size="sm"
-              className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
-            >
-              {saving ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              {'Update Provider'}
-            </Button>
-          )}
-        </form>
-      </section>
 
       {/* Global Secrets */}
       <section className="space-y-4">
