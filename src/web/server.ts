@@ -11,8 +11,6 @@ import { createApiRoutes } from './api/routes.js';
 import { createWebhookRoutes } from './api/webhook-routes.js';
 import { createDomainRoutes } from './api/domain-routes.js';
 import { createSetupRoutes } from './api/setup-routes.js';
-import { createAuthRoutes } from './api/auth-routes.js';
-import { createChatRoutes } from './api/chat-routes.js';
 import { createTerminalRoutes } from './api/terminal-routes.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
@@ -129,13 +127,6 @@ function createApp(
   // v0.2: Webhook auto-redeploy routes
   const webhookRoutes = createWebhookRoutes(ctx);
   app.route('/api', webhookRoutes);
-
-  // v0.0.12: Provider OAuth routes
-  const authRoutes = createAuthRoutes(ctx);
-  app.route('/api', authRoutes);
-
-  const chatRoutes = createChatRoutes(ctx);
-  app.route('/api', chatRoutes);
 
   const terminalRoutes = createTerminalRoutes(ctx, options.upgradeWebSocket);
   app.route('/api', terminalRoutes);

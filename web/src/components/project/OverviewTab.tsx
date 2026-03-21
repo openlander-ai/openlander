@@ -45,7 +45,6 @@ interface OverviewTabProps {
   isTimelineStreaming: boolean;
   onSubmitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion: (questionId: string) => void;
-  onInsightAction: (projectId: string, action: string) => Promise<void>;
   onOpenLogs: () => void;
 }
 

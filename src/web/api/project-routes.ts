@@ -5,7 +5,6 @@ import { rm } from 'node:fs/promises';
 import type { AppContext } from '../../app.js';
 import { ProjectNotFoundError, TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
-import { getPostmortemInstance } from '../../monitor/postmortem.js';
 import { encrypt } from '../../env/crypto.js';
 import { getProjectUrl } from '../../pipeline/traefik.js';
 import { cloneRepo } from '../../pipeline/git.js';
@@ -678,34 +677,6 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   // v0.3: Build error debugging
-  api.post('/projects/:id/debug-build', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    if (!ctx.buildDebugger) {
-      return c.json(
-        { error: 'LLM_NOT_CONFIGURED', message: 'Build debugger requires an LLM provider.' },
-        400,
-      );
-    }
-
-    const lastDeploy = ctx.db.getLastDeployLog(project.id);
-    if (!lastDeploy || lastDeploy.status !== 'failed') {
-      return c.json(
-        { error: 'NO_FAILED_BUILD', message: 'No failed build found for this project.' },
-        404,
-      );
-    }
-
-    const diagnosis = await ctx.buildDebugger.diagnose({
-      buildLog: lastDeploy.build_log ?? 'No build log available',
-      projectName: project.name,
-      imageTag: project.image_tag ?? `openlander/${project.name}:latest`,
-      failedStep: 'build',
-    });
-    return c.json(diagnosis);
-  });
 
   // v0.4: Preview deployments
   api.post('/previews/deploy', async (c) => {
@@ -1231,21 +1202,6 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     await ctx.pipeline.remove(previewId, ctx.cloudflare);
     return c.json({ status: 'removed', preview: preview.name });
-  });
-
-  api.get('/projects/:id/postmortem/latest', (c) => {
-    const id = c.req.param('id');
-    const postmortem = getPostmortemInstance();
-    const entry = postmortem?.getLatest(id);
-    if (!entry) {
-      return c.body(null, 204);
-    }
-    return c.json({
-      projectId: entry.projectId,
-      projectName: entry.projectName,
-      markdown: entry.markdown,
-      generatedAt: entry.generatedAt.toISOString(),
-    });
   });
 
   return api;

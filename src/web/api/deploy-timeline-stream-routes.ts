@@ -468,84 +468,6 @@ function registerComposeEventHandlers(handlerCtx: StreamHandlerContext): Array<(
   ];
 }
 
-function registerAgentEventHandlers(handlerCtx: StreamHandlerContext): Array<() => void> {
-  const { project, emitTimelineEvent, deployState, fallbackTimerRef } = handlerCtx;
-
-  return [
-    eventBus.on('agent:event', (payload) => {
-      if (payload.projectId !== project.id) return;
-      if (shouldSuppressAgentEvent(deployState)) return;
-
-      const ev = payload.event;
-      markAgentStarted(deployState, ev.type, fallbackTimerRef);
-      const base = { projectId: project.id, timestamp: ev.timestamp };
-
-      switch (ev.type) {
-        case 'thinking':
-          emitTimelineEvent({
-            ...base,
-            type: 'agent_thinking',
-            message: 'Agent is analyzing...',
-          });
-          break;
-        case 'tool_call':
-          emitTimelineEvent({
-            ...base,
-            type: 'agent_tool_call',
-            message: `Calling ${ev.toolName}...`,
-            toolName: ev.toolName,
-            toolArguments: ev.arguments,
-          });
-          break;
-        case 'tool_result':
-          emitTimelineEvent({
-            ...base,
-            type: 'agent_tool_result',
-            message: ev.success
-              ? `${ev.toolName} completed`
-              : `${ev.toolName} failed: ${ev.error ?? 'unknown'}`,
-            toolName: ev.toolName,
-            toolResult: ev.result === undefined ? null : sanitizeToolResultForStream(ev.result),
-            toolSuccess: ev.success,
-            toolError: ev.error ?? null,
-          });
-          break;
-        case 'message':
-          emitTimelineEvent({ ...base, type: 'agent_message', message: ev.content });
-          break;
-        case 'question':
-          break;
-        case 'error':
-          emitTimelineEvent({ ...base, type: 'error', message: ev.error || 'Agent error' });
-          break;
-        default:
-          emitTimelineEvent({ ...base, type: 'status', message: `Agent: ${ev.type}` });
-      }
-    }),
-    eventBus.on('question:pending', (payload) => {
-      if (payload.projectId !== project.id) return;
-      const firstQuestion = payload.questions[0];
-      emitTimelineEvent({
-        id: payload.requestId,
-        type: 'question_pending',
-        message: firstQuestion?.question ?? 'Agent needs input',
-        questionId: payload.requestId,
-        questions: payload.questions,
-        projectId: project.id,
-      });
-    }),
-    eventBus.on('deploy:needs-user-action', (payload) => {
-      if (payload.projectId !== project.id) return;
-      emitTimelineEvent({
-        type: 'error',
-        message: payload.title,
-        detail: payload.description,
-        projectId: project.id,
-      });
-    }),
-  ];
-}
-
 function handleInitialStatusCheck(
   ctx: AppContext,
   project: ProjectRow,
@@ -698,7 +620,6 @@ function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow
     unsubscribers.push(...registerDeployLifecycleHandlers(handlerCtx));
     unsubscribers.push(...registerBuildEventHandlers(handlerCtx));
     unsubscribers.push(...registerComposeEventHandlers(handlerCtx));
-    unsubscribers.push(...registerAgentEventHandlers(handlerCtx));
 
     streamTimeoutRef.streamTimeout = setTimeout(
       () => {
