@@ -7,6 +7,14 @@ import { formatRelativeTime } from '@/lib/time';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import {
@@ -21,6 +29,7 @@ import {
   Box,
   ShieldCheck,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
 
@@ -106,29 +115,64 @@ export function ProjectsGrid() {
   const isTraefikOk = setupStatus?.traefik?.ok;
   const isLlmOk = setupStatus?.llm?.ok;
   const containerCount = serverStatus?.containers?.total ?? 0;
+  const errorProjects = projects.filter((p) => p.status === 'error');
+  const isAllOk = isDockerOk && isTraefikOk && errorProjects.length === 0;
 
   return (
     <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4">
-          <div className="p-2.5 bg-bg-subtle rounded-md">
-            <Activity className="h-5 w-5 text-primary-ol" />
-          </div>
-          <div>
-            <p className="text-xs font-mono text-muted-ol mb-0.5">SYSTEM HEALTH</p>
-            <div className="flex items-center gap-1.5">
-              <div
-                className={cn(
-                  'h-2 w-2 rounded-full',
-                  isDockerOk && isTraefikOk ? 'bg-success' : 'bg-error',
-                )}
-              />
-              <span className="text-sm font-semibold text-primary-ol">
-                {isDockerOk && isTraefikOk ? 'All Systems Operational' : 'System Issues Detected'}
-              </span>
-            </div>
-          </div>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4 hover:bg-bg-subtle/50 transition-colors text-left w-full cursor-pointer">
+              <div className="p-2.5 bg-bg-subtle rounded-md shrink-0">
+                <Activity className="h-5 w-5 text-primary-ol" />
+              </div>
+              <div>
+                <p className="text-xs font-mono text-muted-ol mb-0.5">SYSTEM HEALTH</p>
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className={cn(
+                      'h-2 w-2 rounded-full shrink-0',
+                      isAllOk ? 'bg-success' : 'bg-error',
+                    )}
+                  />
+                  <span className="text-sm font-semibold text-primary-ol">
+                    {isAllOk ? 'All Systems Operational' : 'System Issues Detected'}
+                  </span>
+                </div>
+              </div>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-80" align="start">
+            <DropdownMenuLabel>System Issues</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {!isTraefikOk && (
+              <DropdownMenuItem onClick={() => navigate('/settings')} className="cursor-pointer">
+                <AlertTriangle className="h-3.5 w-3.5 text-warning mr-2 shrink-0" />
+                <span>Traefik Proxy: Offline</span>
+              </DropdownMenuItem>
+            )}
+            {errorProjects.map((p) => (
+              <DropdownMenuItem
+                key={p.id}
+                onClick={() => navigate(`/projects/${p.id}`)}
+                className="cursor-pointer"
+              >
+                <AlertCircle className="h-3.5 w-3.5 text-error mr-2 shrink-0" />
+                <span className="truncate">{p.name}: error</span>
+                <span className="text-muted-ol text-[10px] ml-auto shrink-0">
+                  {formatRelativeTime(p.updatedAt, t)}
+                </span>
+              </DropdownMenuItem>
+            ))}
+            {isAllOk && (
+              <div className="flex items-center gap-2 px-2 py-1.5 text-xs font-body text-success">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                All systems operational
+              </div>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <div className="bg-bg-panel border border-[hsl(var(--border))] rounded-lg p-4 flex items-center gap-4">
           <div className="p-2.5 bg-bg-subtle rounded-md">
