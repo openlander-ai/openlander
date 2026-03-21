@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Agent } from '../src/agent/index.js';
+import type { Agent } from '../src/llm/agent.js';
 import type { Database } from '../src/db/index.js';
 import type { OpenLanderConfig } from '../src/config/index.js';
 import { EventBus } from '../src/events/index.js';

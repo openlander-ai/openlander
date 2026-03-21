@@ -19,11 +19,11 @@ describe('deploy-flow unification integration evidence', () => {
   });
 
   it('keeps scan_project adapter wiring and scan-first prompt guidance aligned', () => {
-    const toolsSource = readSource('src/agent/tools.ts');
+    const toolsSource = readSource('src/tools/index.ts');
     const gitToolDefsSource = readSource('src/tools/defs/git.ts');
-    const promptsSource = readSource('src/agent/prompts.ts');
+    const promptsSource = readSource('src/llm/prompts.ts');
 
-    expect(toolsSource).toContain("import { toAiSdkTools } from '../tools/adapters/ai-sdk.js';");
+    expect(toolsSource).toContain("import { toAiSdkTools } from './adapters/ai-sdk.js';");
     expect(toolsSource).toContain('...gitToolDefs,');
     expect(toolsSource).toContain('return toAiSdkTools(agentToolDefs, ctx, questionBridge);');
     expect(gitToolDefsSource).toContain("name: 'scan_project'");
