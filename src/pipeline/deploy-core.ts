@@ -556,6 +556,14 @@ export class DeployPipeline {
     const routeName = getRouteName(projectName, environment.type);
     const shouldSyncProjectState = environment.type === 'production';
 
+    if (config.envVars) {
+      if (shouldSyncProjectState) {
+        this.db.mergeEnvVars(projectId, config.envVars);
+      } else {
+        this.db.mergeEnvVars(projectId, config.envVars, environmentId);
+      }
+    }
+
     if (environment.container_id) {
       try {
         await this.docker.removeContainer(environment.container_id);
@@ -1198,14 +1206,6 @@ export class DeployPipeline {
       skipPhaseUpdate,
     } = params;
     let { buildLog } = params;
-
-    if (config.envVars) {
-      if (shouldSyncProjectState) {
-        this.db.mergeEnvVars(projectId, config.envVars);
-      } else {
-        this.db.mergeEnvVars(projectId, config.envVars, environmentId);
-      }
-    }
 
     let publicUrl: string | undefined;
     if (config.visibility === 'quick-share' && shouldSyncProjectState && port !== undefined) {
