@@ -11,11 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **MCP response guidance hints**: Tool responses now include `verify`, `action_required`, and `recovery_hint` fields to guide AI agents toward correct next actions instead of falling back to docker CLI or curl
-- **Deploy success verification**: `get_deploy_status` (done) returns `verify` and `internal_host` fields directing agents to use `get_logs` instead of curl localhost
-- **Deploy failure recovery**: `get_deploy_status` (failed), `execute_deploy_plan` (failed), and `deploy_compose` (BUILD_FAILED) return `recovery_hint` with correct recovery path
-- **Post-action guidance**: `map_domain`, `set_env_vars`, `upload_secret_file`, and `enable_webhook` return `action_required` arrays with next steps
-- **Remote Docker warnings**: `get_logs`, `stop_project`, `restart_project`, and `get_system_stats` descriptions warn that Docker host may be remote — do not use docker CLI directly
+- **`_agent_guidance.next_steps[]`**: Unified guidance field in tool responses directing AI agents to the correct next action (replaces ad-hoc prose hints)
+- **`docker_host` fact field**: `get_deploy_status` (done/failed) now includes `docker_host: "local" | "remote"` so agents can dynamically decide whether local docker/curl commands would work
+- **`getDockerHostType()` utility**: Detects local vs remote Docker from `DOCKER_HOST` env var
+- **SERVER_INSTRUCTIONS remote Docker rule**: Single authoritative "Docker may be remote" warning in MCP server instructions instead of per-tool description repetition
+- **Deploy guidance**: Success → `get_logs` verification hint; Failure → `get_build_log` + `debug_build_error` recovery path
+- **Post-action guidance**: `map_domain`, `set_env_vars`, `upload_secret_file`, `enable_webhook`, `expose_public` return structured next steps
 
 ## [0.7.0] - 2026-03-21
 
