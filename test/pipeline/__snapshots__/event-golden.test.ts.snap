@@ -1,84 +1,49 @@
-// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`pipeline event golden snapshots catalogs all unique deploy.ts + compose.ts event types 1`] = `
+exports[`pipeline event golden snapshots captures compose failed event sequence and payload shapes 1`] = `
 [
-  "build:dockerfile-fixed",
-  "build:inform",
-  "build:output",
-  "build:suggest",
-  "compose:down",
-  "compose:failed",
-  "compose:start",
-  "compose:up",
-  "container:remove",
-  "container:start",
-  "container:stop",
-  "deploy:auto-detect",
-  "deploy:build",
-  "deploy:clone",
-  "deploy:crash",
-  "deploy:diff-analyzed",
-  "deploy:failed",
-  "deploy:rollback",
-  "deploy:run",
-  "deploy:start",
-  "deploy:success",
-  "env:new-keys-detected",
-  "monitor:healthcheck",
-  "secret:detected",
-  "tunnel:url",
+  {
+    "payloadShape": {
+      "composePath": "string",
+      "projectId": "string",
+      "serviceCount": "number",
+    },
+    "type": "compose:start",
+  },
+  {
+    "payloadShape": {
+      "error": "string",
+      "projectId": "string",
+    },
+    "type": "compose:failed",
+  },
 ]
 `;
 
-exports[`pipeline event golden snapshots captures single deploy event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots captures compose success + down event sequence and payload shapes 1`] = `
 [
   {
     "payloadShape": {
+      "composePath": "string",
       "projectId": "string",
-      "repoUrl": "string",
+      "serviceCount": "number",
     },
-    "type": "deploy:start",
-  },
-  {
-    "payloadShape": {
-      "commitSha": "string",
-      "path": "string",
-      "projectId": "string",
-    },
-    "type": "deploy:clone",
-  },
-  {
-    "payloadShape": {
-      "durationMs": "number",
-      "imageTag": "string",
-      "projectId": "string",
-    },
-    "type": "deploy:build",
-  },
-  {
-    "payloadShape": {
-      "containerId": "string",
-      "port": "number",
-      "projectId": "string",
-      "url": "string",
-    },
-    "type": "deploy:run",
-  },
-  {
-    "payloadShape": {
-      "healthy": "boolean",
-      "projectId": "string",
-      "responseTimeMs": "number",
-    },
-    "type": "monitor:healthcheck",
+    "type": "compose:start",
   },
   {
     "payloadShape": {
       "projectId": "string",
-      "totalDurationMs": "number",
-      "url": "string",
+      "services": [
+        "string",
+      ],
     },
-    "type": "deploy:success",
+    "type": "compose:up",
+  },
+  {
+    "payloadShape": {
+      "projectId": "string",
+    },
+    "type": "compose:down",
   },
 ]
 `;
@@ -256,6 +221,59 @@ exports[`pipeline event golden snapshots captures rollback event sequence and pa
 ]
 `;
 
+exports[`pipeline event golden snapshots captures single deploy event sequence and payload shapes 1`] = `
+[
+  {
+    "payloadShape": {
+      "projectId": "string",
+      "repoUrl": "string",
+    },
+    "type": "deploy:start",
+  },
+  {
+    "payloadShape": {
+      "commitSha": "string",
+      "path": "string",
+      "projectId": "string",
+    },
+    "type": "deploy:clone",
+  },
+  {
+    "payloadShape": {
+      "durationMs": "number",
+      "imageTag": "string",
+      "projectId": "string",
+    },
+    "type": "deploy:build",
+  },
+  {
+    "payloadShape": {
+      "containerId": "string",
+      "port": "number",
+      "projectId": "string",
+      "url": "string",
+    },
+    "type": "deploy:run",
+  },
+  {
+    "payloadShape": {
+      "healthy": "boolean",
+      "projectId": "string",
+      "responseTimeMs": "number",
+    },
+    "type": "monitor:healthcheck",
+  },
+  {
+    "payloadShape": {
+      "projectId": "string",
+      "totalDurationMs": "number",
+      "url": "string",
+    },
+    "type": "deploy:success",
+  },
+]
+`;
+
 exports[`pipeline event golden snapshots captures stop/start/remove event sequence and payload shapes 1`] = `
 [
   {
@@ -282,50 +300,32 @@ exports[`pipeline event golden snapshots captures stop/start/remove event sequen
 ]
 `;
 
-exports[`pipeline event golden snapshots captures compose success + down event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots catalogs all unique deploy.ts + compose.ts event types 1`] = `
 [
-  {
-    "payloadShape": {
-      "composePath": "string",
-      "projectId": "string",
-      "serviceCount": "number",
-    },
-    "type": "compose:start",
-  },
-  {
-    "payloadShape": {
-      "projectId": "string",
-      "services": [
-        "string",
-      ],
-    },
-    "type": "compose:up",
-  },
-  {
-    "payloadShape": {
-      "projectId": "string",
-    },
-    "type": "compose:down",
-  },
-]
-`;
-
-exports[`pipeline event golden snapshots captures compose failed event sequence and payload shapes 1`] = `
-[
-  {
-    "payloadShape": {
-      "composePath": "string",
-      "projectId": "string",
-      "serviceCount": "number",
-    },
-    "type": "compose:start",
-  },
-  {
-    "payloadShape": {
-      "error": "string",
-      "projectId": "string",
-    },
-    "type": "compose:failed",
-  },
+  "build:dockerfile-fixed",
+  "build:inform",
+  "build:output",
+  "build:suggest",
+  "compose:down",
+  "compose:failed",
+  "compose:start",
+  "compose:up",
+  "container:remove",
+  "container:start",
+  "container:stop",
+  "deploy:auto-detect",
+  "deploy:build",
+  "deploy:clone",
+  "deploy:crash",
+  "deploy:diff-analyzed",
+  "deploy:failed",
+  "deploy:rollback",
+  "deploy:run",
+  "deploy:start",
+  "deploy:success",
+  "env:new-keys-detected",
+  "monitor:healthcheck",
+  "secret:detected",
+  "tunnel:url",
 ]
 `;
