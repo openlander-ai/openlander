@@ -238,66 +238,90 @@ export const deployPlanToolDefs: ToolDef[] = [
       return await new Promise((resolve) => {
         let settled = false;
 
-        const finish = (timedOut: boolean): void => {
-          if (settled) return;
-          settled = true;
+        const cleanup = (): void => {
           clearTimeout(timer);
           unsubSuccess();
           unsubFailed();
+        };
 
+        const resolveSuccess = (
+          payload: { url?: string; totalDurationMs?: number },
+          timedOut: boolean,
+        ): void => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve({
+            plan_id: plan.plan_id,
+            status: 'done',
+            project_name: result.project_name,
+            project_id: projectId,
+            urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
+            internal_host: `ol-${result.project_name}`,
+            docker_host: getDockerHostType(),
+            ...(payload.totalDurationMs
+              ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }
+              : {}),
+            ...(timedOut ? { timeout: true } : {}),
+          });
+        };
+
+        const resolveFailed = (
+          payload: { error?: string; buildLog?: string },
+          timedOut: boolean,
+        ): void => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          const job = appCtx.jobManager.getStatus(projectId);
+          resolve({
+            plan_id: plan.plan_id,
+            status: 'failed',
+            project_name: result.project_name,
+            error: payload.error ?? job?.errorSummary,
+            ...(job?.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
+            ...(job?.autoDiagnosis
+              ? {
+                  auto_diagnosis: {
+                    category: job.autoDiagnosis.category,
+                    tier: job.autoDiagnosis.tier,
+                    cause: job.autoDiagnosis.cause,
+                    auto_fixable: job.autoDiagnosis.autoFixable,
+                    ...(job.autoDiagnosis.suggestedAction
+                      ? { suggested_action: job.autoDiagnosis.suggestedAction }
+                      : {}),
+                  },
+                }
+              : {}),
+            docker_host: getDockerHostType(),
+            ...(timedOut ? { timeout: true } : {}),
+            _agent_guidance: {
+              next_steps: [
+                'Call debug_build_error for AI diagnosis',
+                'Fix the issue, then call deploy again to retry',
+              ],
+            },
+          });
+        };
+
+        const resolveTimeout = (): void => {
+          if (settled) return;
+          settled = true;
+          cleanup();
           const job = appCtx.jobManager.getStatus(projectId);
           if (job?.phase === 'done') {
-            resolve({
-              plan_id: plan.plan_id,
-              status: 'done',
-              project_name: result.project_name,
-              project_id: projectId,
-              urls: getProjectUrls(result.project_name),
-              internal_host: `ol-${result.project_name}`,
-              docker_host: getDockerHostType(),
-              elapsed: `${String(Math.round((Date.now() - job.startedAt.getTime()) / 1000))}s`,
-              ...(timedOut ? { timeout: true } : {}),
-            });
+            resolveSuccess({}, true);
             return;
           }
-
           if (job?.phase === 'failed') {
-            resolve({
-              plan_id: plan.plan_id,
-              status: 'failed',
-              project_name: result.project_name,
-              error: job.errorSummary,
-              ...(job.buildLogTail ? { build_log_tail: job.buildLogTail } : {}),
-              ...(job.autoDiagnosis
-                ? {
-                    auto_diagnosis: {
-                      category: job.autoDiagnosis.category,
-                      tier: job.autoDiagnosis.tier,
-                      cause: job.autoDiagnosis.cause,
-                      auto_fixable: job.autoDiagnosis.autoFixable,
-                      ...(job.autoDiagnosis.suggestedAction
-                        ? { suggested_action: job.autoDiagnosis.suggestedAction }
-                        : {}),
-                    },
-                  }
-                : {}),
-              docker_host: getDockerHostType(),
-              ...(timedOut ? { timeout: true } : {}),
-              _agent_guidance: {
-                next_steps: [
-                  'Call debug_build_error for AI diagnosis',
-                  'Fix the issue, then call deploy again to retry',
-                ],
-              },
-            });
+            resolveFailed({ error: job.errorSummary }, true);
             return;
           }
-
           resolve({
             plan_id: plan.plan_id,
             status: job?.phase ?? 'unknown',
             project_name: result.project_name,
-            ...(timedOut ? { timeout: true } : {}),
+            timeout: true,
             _agent_guidance: {
               next_steps: ['Poll get_deploy_status to check current progress'],
             },
@@ -310,23 +334,24 @@ export const deployPlanToolDefs: ToolDef[] = [
         }): boolean => payload.projectId === projectId || payload.parentProjectId === projectId;
 
         const unsubSuccess = eventBus.on('deploy:success', (payload) => {
-          if (matchesProject(payload)) finish(false);
+          if (matchesProject(payload)) resolveSuccess(payload, false);
         });
 
         const unsubFailed = eventBus.on('deploy:failed', (payload) => {
-          if (matchesProject(payload)) finish(false);
+          if (matchesProject(payload)) resolveFailed(payload, false);
         });
 
         const timer = setTimeout(
           () => {
-            finish(true);
+            resolveTimeout();
           },
           Math.max(1, timeoutSec) * 1000,
         );
 
         const currentJob = appCtx.jobManager.getStatus(projectId);
         if (currentJob && (currentJob.phase === 'done' || currentJob.phase === 'failed')) {
-          finish(false);
+          if (currentJob.phase === 'done') resolveSuccess({}, false);
+          else resolveFailed({ error: currentJob.errorSummary }, false);
         }
       });
     },
