@@ -173,9 +173,7 @@ export function OverviewTab({
 
             <div className="space-y-4">
               <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-ol uppercase tracking-wide">
-                  Container Status
-                </span>
+                <span className="text-xs text-muted-ol">Container Status</span>
                 <div className="flex items-center gap-2">
                   <div
                     className={cn(
@@ -191,7 +189,7 @@ export function OverviewTab({
 
               {imageTag && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-ol uppercase tracking-wide">Image</span>
+                  <span className="text-xs text-muted-ol">Image</span>
                   <span className="text-xs font-mono text-secondary-ol bg-bg-app px-2 py-1 rounded border border-[hsl(var(--border))] w-fit">
                     {imageTag}
                   </span>
@@ -200,14 +198,14 @@ export function OverviewTab({
 
               {port !== undefined && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-ol uppercase tracking-wide">Port</span>
+                  <span className="text-xs text-muted-ol">Port</span>
                   <span className="text-sm font-medium text-secondary-ol">{port}</span>
                 </div>
               )}
 
               {(publicUrl || internalUrl) && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-ol uppercase tracking-wide">Endpoint</span>
+                  <span className="text-xs text-muted-ol">Endpoint</span>
                   <a
                     href={publicUrl || internalUrl}
                     target="_blank"
@@ -223,7 +221,7 @@ export function OverviewTab({
 
               {branchName && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-ol uppercase tracking-wide">Branch</span>
+                  <span className="text-xs text-muted-ol">Branch</span>
                   <div className="flex items-center gap-1.5 text-sm font-medium text-secondary-ol">
                     <GitBranch className="h-3.5 w-3.5 text-muted-ol" />
                     {branchName}
@@ -233,7 +231,7 @@ export function OverviewTab({
 
               {latestDeploy && (
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-ol uppercase tracking-wide">Last Deploy</span>
+                  <span className="text-xs text-muted-ol">Last Deploy</span>
                   <div className="flex items-center gap-1.5 text-sm font-medium text-secondary-ol">
                     <Clock className="h-3.5 w-3.5 text-muted-ol" />
                     {formatRelativeTime(latestDeploy.createdAt)}
@@ -257,9 +255,7 @@ export function OverviewTab({
                   }
                 ).environments?.length ?? 0) > 0 && (
                   <div className="flex flex-col gap-1">
-                    <span className="text-xs text-muted-ol uppercase tracking-wide">
-                      Environments
-                    </span>
+                    <span className="text-xs text-muted-ol">Environments</span>
                     <div className="flex items-center gap-3 text-sm font-medium text-secondary-ol">
                       {(
                         activeProject as Project & {

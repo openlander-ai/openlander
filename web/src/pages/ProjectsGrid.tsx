@@ -32,25 +32,25 @@ function getStatusConfig(): Record<
     running: {
       label: 'Healthy',
       dot: 'bg-success',
-      badge: 'text-success border-success/30 bg-success/10',
+      badge: 'bg-success/10 text-success border border-success/30',
       border: 'border-success/20',
     },
     stopped: {
       label: 'Stopped',
       dot: 'bg-[var(--text-muted)]',
-      badge: 'text-muted-ol border-[var(--text-muted)]/30 bg-[var(--text-muted)]/10',
+      badge: 'bg-bg-subtle text-muted-ol border border-border',
       border: 'border-[hsl(var(--border))]',
     },
     building: {
       label: 'Deploying',
       dot: 'bg-warning animate-pulse',
-      badge: 'text-warning border-warning/30 bg-warning/10',
+      badge: 'bg-warning/10 text-warning border border-warning/30',
       border: 'border-warning/30',
     },
     error: {
       label: 'Failed',
       dot: 'bg-error',
-      badge: 'text-error border-error/30 bg-error/10',
+      badge: 'bg-error/10 text-error border border-error/30',
       border: 'border-error/30',
     },
   };
@@ -239,7 +239,7 @@ export function ProjectsGrid() {
                 key={project.id}
                 onClick={() => navigate(`/projects/${project.id}`)}
                 className={cn(
-                  'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 transition-all duration-200 cursor-pointer overflow-hidden card-hover',
+                  'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 hover:shadow-md hover:border-agent/20 transition-all duration-200 cursor-pointer overflow-hidden card-hover',
                   status.border,
                 )}
               >
@@ -258,7 +258,7 @@ export function ProjectsGrid() {
                   </div>
                   <span
                     className={cn(
-                      'text-[10px] font-mono px-2 py-0.5 rounded border shrink-0 uppercase tracking-wider font-semibold',
+                      'px-2 py-0.5 rounded-full text-xs font-medium shrink-0',
                       status.badge,
                     )}
                   >
@@ -269,18 +269,14 @@ export function ProjectsGrid() {
                 <div className="p-4 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-wider">
-                        Last Deploy
-                      </p>
+                      <p className="text-[10px] font-mono text-muted-ol mb-1">Last Deploy</p>
                       <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol">
                         <Clock className="h-3.5 w-3.5" />
                         {formatRelativeTime(project.updatedAt, t)}
                       </div>
                     </div>
                     <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-wider">
-                        Branch
-                      </p>
+                      <p className="text-[10px] font-mono text-muted-ol mb-1">Branch</p>
                       <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol truncate">
                         <GitBranch className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate">{project.branch || 'main'}</span>
@@ -290,9 +286,7 @@ export function ProjectsGrid() {
 
                   {project.url && (
                     <div>
-                      <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-wider">
-                        Endpoint
-                      </p>
+                      <p className="text-[10px] font-mono text-muted-ol mb-1">Endpoint</p>
                       <a
                         href={project.url}
                         target="_blank"
@@ -316,9 +310,7 @@ export function ProjectsGrid() {
 
                     return (
                       <div className="pt-2 border-t border-[hsl(var(--border))]/50">
-                        <p className="text-[10px] font-mono text-muted-ol mb-2 uppercase tracking-wider">
-                          Environments
-                        </p>
+                        <p className="text-[10px] font-mono text-muted-ol mb-2">Environments</p>
                         <div className="flex items-center gap-2 flex-wrap">
                           {allEnvs.map((env) => {
                             const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
@@ -333,7 +325,7 @@ export function ProjectsGrid() {
                                 title={`${env.type} - ${envStatus.label}`}
                               >
                                 <div className={cn('h-1.5 w-1.5 rounded-full', envStatus.dot)} />
-                                <span className="text-[10px] font-mono text-secondary-ol group-hover/env:text-primary-ol transition-colors uppercase">
+                                <span className="text-[10px] font-mono text-secondary-ol group-hover/env:text-primary-ol transition-colors">
                                   {env.type === 'production'
                                     ? 'prod'
                                     : env.type === 'development'
