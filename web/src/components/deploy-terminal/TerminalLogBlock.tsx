@@ -8,7 +8,7 @@ export interface TerminalLogBlockProps {
   className?: string;
 }
 
-export function TerminalLogBlock({ logs, maxHeight = 240, className }: TerminalLogBlockProps) {
+export function TerminalLogBlock({ logs, maxHeight = 384, className }: TerminalLogBlockProps) {
   const logArray = Array.isArray(logs) ? logs : logs.split('\n');
 
   return (

@@ -150,7 +150,12 @@ export function OverviewTab({
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 flex-1 min-h-0">
         {/* Left Column: Deploy Timeline */}
-        <section className="lg:col-span-3 flex flex-col rounded-xl border border-[hsl(var(--border))] bg-bg-panel overflow-hidden shadow-sm min-h-[600px]">
+        <section
+          className={cn(
+            'lg:col-span-3 flex flex-col rounded-xl border border-[hsl(var(--border))] bg-bg-panel overflow-hidden shadow-sm',
+            projectStatus === 'building' || isTimelineStreaming ? 'min-h-[600px]' : 'min-h-[300px]',
+          )}
+        >
           <LocalErrorBoundary>
             <DeployTerminalSession
               projectName={projectName}

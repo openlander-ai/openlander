@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { CheckCircle2, XCircle, Square } from 'lucide-react';
+import { formatRelativeTime } from '@/lib/time';
 
 import type { TimelineItem } from '@/lib/event-types';
 
@@ -85,6 +87,13 @@ export function DeployTerminalSession({
   const headerStatus =
     projectStatus === 'error' ? 'error' : projectStatus === 'running' ? 'active' : 'done';
 
+  const isBuilding = isTimelineStreaming || projectStatus === 'building';
+  const showIdleSummary = !isBuilding && timelineItems.length < 5;
+  const lastItem = timelineItems[timelineItems.length - 1];
+  const relativeTime = lastItem ? formatRelativeTime(lastItem.timestamp) : '';
+  const isError = projectStatus === 'error';
+  const isStopped = projectStatus === 'stopped';
+
   return (
     <TerminalFrame className={cn('h-full', className)} title="Deploy Terminal">
       <div className="flex flex-col h-full" data-testid="deploy-terminal-session">
@@ -140,6 +149,33 @@ export function DeployTerminalSession({
                     <TerminalLine glyphState="active" textColor="muted" className="animate-pulse">
                       _
                     </TerminalLine>
+                  )}
+
+                  {showIdleSummary && (
+                    <div className="flex flex-col items-center justify-center py-8 text-center gap-2 mt-4">
+                      {isError ? (
+                        <XCircle className="h-8 w-8 text-error/50" />
+                      ) : isStopped ? (
+                        <Square className="h-8 w-8 text-muted-ol/50" />
+                      ) : (
+                        <CheckCircle2 className="h-8 w-8 text-success/50" />
+                      )}
+                      <p className="text-sm text-muted-ol">
+                        {isError
+                          ? 'Deployment failed'
+                          : isStopped
+                            ? 'Container stopped'
+                            : 'All stages completed'}
+                      </p>
+                      <p className="text-xs text-muted-ol/60">
+                        {isError
+                          ? 'Check logs for details'
+                          : isStopped
+                            ? 'Not running'
+                            : 'Container running'}
+                        {relativeTime && ` • Last deploy ${relativeTime}`}
+                      </p>
+                    </div>
                   )}
                 </div>
               </TerminalScrollback>
