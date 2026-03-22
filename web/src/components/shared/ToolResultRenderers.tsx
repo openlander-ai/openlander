@@ -95,9 +95,9 @@ export function DeployComposeResult({ result }: { result: unknown }) {
         )}
       </div>
       {services.length > 0 && (
-        <div className="mt-1 border border-white/10 rounded-md overflow-hidden">
+        <div className="mt-1 border border-border rounded-md overflow-hidden">
           <table className="w-full text-left text-xs">
-            <thead className="bg-white/5 text-secondary-ol">
+            <thead className="bg-bg-subtle text-secondary-ol">
               <tr>
                 <th className="px-3 py-1.5 font-medium">Service</th>
                 <th className="px-3 py-1.5 font-medium">Container</th>
@@ -157,7 +157,7 @@ export function RollbackProjectResult({ result }: { result: unknown }) {
         )}
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-secondary-ol bg-bg-app/50 p-2 rounded-md border border-white/5">
+      <div className="flex items-center gap-2 text-xs text-secondary-ol bg-bg-app/50 p-2 rounded-md border border-border/50">
         <div className="flex flex-col">
           <span className="text-[10px] uppercase tracking-wider text-muted-ol">From</span>
           <span className="font-mono text-error/80">
@@ -251,7 +251,7 @@ export function FixDockerfileResult({ result }: { result: unknown }) {
           <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
             View Dockerfile ▾
           </summary>
-          <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+          <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
             {res.dockerfileContent}
           </pre>
         </details>
@@ -268,9 +268,9 @@ export function ListProjectsResult({ result }: { result: unknown }) {
 
   return (
     <div className="mt-2">
-      <div className="border border-white/10 rounded-md overflow-hidden">
+      <div className="border border-border rounded-md overflow-hidden">
         <table className="w-full text-left text-xs">
-          <thead className="bg-white/5 text-secondary-ol">
+          <thead className="bg-bg-subtle text-secondary-ol">
             <tr>
               <th className="px-3 py-1.5 font-medium">Name</th>
               <th className="px-3 py-1.5 font-medium">Status</th>
@@ -343,7 +343,7 @@ export function GetLogsResult({ result }: { result: unknown }) {
       <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
         View logs ▾
       </summary>
-      <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+      <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
         {displayLogs}
       </pre>
     </details>
@@ -414,7 +414,7 @@ export function SetEnvVarsResult({ result }: { result: unknown }) {
         {keys.map((key, i) => (
           <div
             key={i}
-            className="px-2 py-1 rounded bg-white/5 border border-white/10 text-[11px] font-mono text-primary-ol flex items-center gap-1.5"
+            className="px-2 py-1 rounded bg-bg-subtle border border-border text-[11px] font-mono text-primary-ol flex items-center gap-1.5"
           >
             <span>{key}</span>
             <span className="text-muted-ol">***</span>
@@ -432,7 +432,7 @@ export function FallbackResult({ result }: { result: unknown }) {
       <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
         View result ▾
       </summary>
-      <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+      <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
         {JSON.stringify(masked, null, 2)}
       </pre>
     </details>

@@ -72,7 +72,7 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
             <summary className="text-[11px] font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
               Error details ▾
             </summary>
-            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
               {item.detail}
             </pre>
           </details>

@@ -77,7 +77,7 @@ export function LogPreview({ projectId, status, onOpenLogs }: LogPreviewProps) {
 
       <div
         className={cn(
-          'overflow-hidden transition-all duration-200 ease-in-out bg-[#0a0a0a]',
+          'overflow-hidden transition-all duration-200 ease-in-out bg-bg-terminal',
           isOpen ? 'max-h-[220px] border-t border-[hsl(var(--border))]' : 'max-h-0',
         )}
       >

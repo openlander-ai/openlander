@@ -45,7 +45,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 prose-a:text-ai prose-a:no-underline hover:prose-a:underline
                 prose-strong:text-primary-ol
                 prose-code:text-ai/80 prose-code:bg-bg-subtle prose-code:px-1 prose-code:py-0.5 prose-code:rounded
-                prose-pre:bg-bg-terminal prose-pre:border prose-pre:border-[#3f3f46]
+                prose-pre:bg-bg-terminal prose-pre:border prose-pre:border-border
                 prose-td:text-secondary-ol prose-th:text-primary-ol
                 prose-blockquote:border-ai/30 prose-blockquote:text-secondary-ol
               "

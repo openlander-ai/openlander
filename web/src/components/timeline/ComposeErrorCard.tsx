@@ -110,7 +110,7 @@ export function ComposeErrorCard({
               placeholder="KEY=VALUE&#10;ANOTHER_KEY=VALUE"
               className={cn(
                 'w-full h-24 px-3 py-2 rounded-md text-xs font-mono',
-                'bg-[#0a0a0a] border border-agent/20 placeholder:text-muted-ol/50',
+                'bg-bg-terminal border border-agent/20 placeholder:text-muted-ol/50',
                 'focus:outline-none focus:ring-1 focus:ring-agent/40 focus:border-agent/40',
                 'transition-colors resize-none',
                 isSubmitting && 'opacity-50 cursor-not-allowed',
@@ -171,7 +171,7 @@ export function ComposeErrorCard({
                   </div>
                   {pattern.codeSnippet && (
                     <div className="mt-2 w-full">
-                      <pre className="text-[11px] font-mono text-agent/90 bg-[#0a0a0a] p-2 rounded border border-agent/10 overflow-x-auto whitespace-pre-wrap break-all">
+                      <pre className="text-[11px] font-mono text-agent/90 bg-bg-terminal p-2 rounded border border-agent/10 overflow-x-auto whitespace-pre-wrap break-all">
                         {pattern.codeSnippet}
                       </pre>
                     </div>

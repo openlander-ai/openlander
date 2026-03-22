@@ -124,7 +124,7 @@ export function TimelineItemCard({
           </div>
         )}
         {!isSuccess && !isError && !isAgentEvent && (
-          <div className="p-1.5 rounded-md bg-bg-subtle/50 border border-white/5">
+          <div className="p-1.5 rounded-md bg-bg-subtle/50 border border-border">
             <Activity className="h-3.5 w-3.5 text-secondary-ol" />
           </div>
         )}
@@ -174,7 +174,7 @@ export function TimelineItemCard({
             <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
               Arguments ▾
             </summary>
-            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
               {JSON.stringify(item.toolArguments, null, 2)}
             </pre>
           </details>
@@ -185,7 +185,7 @@ export function TimelineItemCard({
             <summary className="text-[11px] font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
               Build log ▾
             </summary>
-            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-[#0a0a0a] border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
               {item.detail.slice(-2000)}
             </pre>
           </details>

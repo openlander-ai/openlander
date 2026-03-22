@@ -76,7 +76,7 @@ export function TimelineFeed({
             projectStatus !== 'running' &&
             projectStatus !== 'stopped' &&
             projectStatus !== 'error' && (
-              <div className="mb-4 px-4 py-3 rounded-lg bg-bg-subtle/40 border border-white/5">
+              <div className="mb-4 px-4 py-3 rounded-lg bg-bg-subtle/40 border border-border">
                 <div className="flex gap-2 items-center flex-wrap">
                   {['Preparing', 'Clone', 'Build', 'Start', 'Health Check', 'Complete'].map(
                     (step, i, arr) => {
@@ -112,7 +112,7 @@ export function TimelineFeed({
 
           {/* Status Badge */}
           {projectStatus && ['running', 'stopped', 'error'].includes(projectStatus) && (
-            <div className="mb-4 px-4 py-3 rounded-lg bg-bg-subtle/40 border border-white/5 flex items-center gap-3">
+            <div className="mb-4 px-4 py-3 rounded-lg bg-bg-subtle/40 border border-border flex items-center gap-3">
               <div
                 className={cn(
                   'w-2 h-2 rounded-full',

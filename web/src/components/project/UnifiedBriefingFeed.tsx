@@ -54,9 +54,12 @@ export function UnifiedBriefingFeed({
   const latestProgress = progressItems.length > 0 ? progressItems[progressItems.length - 1] : null;
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-[#0d0d0d]" data-testid="unified-briefing-feed">
+    <div
+      className="flex flex-col h-full min-h-0 bg-bg-terminal"
+      data-testid="unified-briefing-feed"
+    >
       <ScrollArea className="flex-1" ref={scrollRef}>
-        <div className="p-4 font-mono text-[13px] leading-relaxed text-[#e0e0e0] space-y-1">
+        <div className="p-4 font-mono text-[13px] leading-relaxed text-primary-ol space-y-1">
           {latestProgress &&
             projectStatus !== 'running' &&
             projectStatus !== 'stopped' &&
@@ -159,7 +162,7 @@ export function UnifiedBriefingFeed({
             setAutoFollow(true);
             bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
           }}
-          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1 rounded bg-[#1a1a1a] border border-[#333] text-[11px] font-mono text-[#888] hover:text-[#e0e0e0]"
+          className="absolute bottom-20 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1 rounded bg-bg-subtle border border-border text-[11px] font-mono text-muted-ol hover:text-primary-ol"
         >
           <ArrowDown className="h-3 w-3" />
           follow

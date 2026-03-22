@@ -313,13 +313,13 @@ export function CommandPalette() {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
+        className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm animate-in fade-in duration-150"
         onClick={close}
       />
 
       {/* Palette */}
       <div className="fixed inset-x-0 top-[20%] z-50 mx-auto w-full max-w-lg animate-in fade-in slide-in-from-top-4 duration-200">
-        <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel shadow-2xl shadow-black/30 overflow-hidden flex flex-col">
+        <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel shadow-2xl shadow-black/10 overflow-hidden flex flex-col">
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 border-b border-[hsl(var(--border))]">
             <Search className="h-4 w-4 text-muted-ol shrink-0" />

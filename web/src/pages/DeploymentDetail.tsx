@@ -206,9 +206,9 @@ export function DeploymentDetail() {
           </div>
         )}
 
-        <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] bg-[#0a0a0a] overflow-hidden">
-          <div className="flex items-center px-4 py-2 border-b border-gray-800 bg-gray-950">
-            <span className="text-xs font-mono text-gray-400">{'build_log'}</span>
+        <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] bg-bg-terminal overflow-hidden">
+          <div className="flex items-center px-4 py-2 border-b border-border bg-bg-panel">
+            <span className="text-xs font-mono text-muted-ol">{'build_log'}</span>
           </div>
           <div className="flex-1 overflow-auto p-4">
             {deployment.buildLog ? (
