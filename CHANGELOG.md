@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-03-23
+
+### Changed
+
+- **Backend refactoring** — service-manager.ts (1406→817 lines, -42%): Extracted ServiceAdapter interface + 4 adapter implementations (PostgreSQL, MySQL, Redis, MongoDB), replacing type-based if/else branches with adapter factory pattern
+- **Backend refactoring** — setup-routes.ts (819→234 lines, -71%): Split into domain sub-files (cloudflare, github, mcp handlers), extracted reloadAgent() and mergeToolsIfMcpEnabled() shared helpers
+- **Backend refactoring** — project-routes.ts (1285→1174 lines, -9%): Extracted getProjectOrThrow, getEnvironmentByIdOrThrow, resolveEnvironmentByType shared helpers replacing 39 duplication instances
+
+### Added
+
+- **MCP service external access**: `list_services`, `create_service`, `get_service_status`, and `get_service_credentials` MCP tool responses now include `externalAccess` array with server LAN/VPN IPs — AI agents can now correctly guide users to connect to services from their machines instead of only seeing Docker internal hostnames
+- **MCP service external connection strings**: `get_service_credentials` returns `externalConnectionStrings` with the Docker internal hostname replaced by each detected server IP
+
+### Fixed
+
+- **Test suite green**: Fixed 41 pre-existing test failures across vitest and bun test runners — deleted orphan tests for removed AI assistant components, updated MCP tool test expectations for `_agent_guidance` fields, fixed `vi.hoisted()` vitest compatibility, corrected stale worktree path references
+
 ## [0.9.6] - 2026-03-22
 
 ### Changed
