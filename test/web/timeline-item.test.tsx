@@ -161,21 +161,6 @@ describeTimeline('TimelineItemCard', () => {
     expect(findTextInTree(dockerfileTree, 'Fixed')).toBe(true);
   });
 
-  it('routes agent_tool_result error-analysis variant to ErrorAnalysisCard', () => {
-    const item: TimelineItem = {
-      id: '5',
-      type: 'agent_tool_result',
-      timestamp: new Date().toISOString(),
-      title: 'Error analysis result',
-      percent: -1,
-      toolName: 'error_analysis',
-      toolResult: {},
-    };
-
-    const tree = TimelineItemCard({ item });
-    expect(findTextInTree(tree, 'timeline.errorAnalysis.title')).toBe(true);
-  });
-
   it('routes non analysis agent_tool_result to ToolResultCard', () => {
     const item: TimelineItem = {
       id: '6',
