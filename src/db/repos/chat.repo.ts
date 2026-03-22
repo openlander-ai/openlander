@@ -41,12 +41,20 @@ export class ChatRepo {
       .all() as ChatHistoryRow[];
   }
 
-  listChatSessions(): Array<{ session_id: string; message_count: number; last_message: string }> {
+  listChatSessions(): Array<{
+    session_id: string;
+    message_count: number;
+    last_message: string;
+    first_message: string | null;
+  }> {
     return this.db
       .select({
         session_id: chatHistory.session_id,
         message_count: count(),
         last_message: sql<string>`max(${chatHistory.created_at})`,
+        first_message: sql<
+          string | null
+        >`(SELECT ${chatHistory.content} FROM ${chatHistory} ch2 WHERE ch2.${chatHistory.session_id} = ${chatHistory.session_id} AND ch2.${chatHistory.role} = 'user' ORDER BY ch2.${chatHistory.created_at} ASC LIMIT 1)`,
       })
       .from(chatHistory)
       .groupBy(chatHistory.session_id)
@@ -55,6 +63,7 @@ export class ChatRepo {
       session_id: string;
       message_count: number;
       last_message: string;
+      first_message: string | null;
     }>;
   }
 

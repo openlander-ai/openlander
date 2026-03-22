@@ -135,6 +135,7 @@ export function createChatRoutes(ctx: AppContext): Hono {
         sessionId: session.session_id,
         messageCount: session.message_count,
         lastActive: session.last_message,
+        firstMessage: session.first_message,
       })),
     });
   });
