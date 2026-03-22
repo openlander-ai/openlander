@@ -30,7 +30,24 @@ export function getDeploymentStatusMeta(status: DeployLogSummary['status']) {
   }
 }
 
-export function getDeploymentTriggerLabel(trigger: DeployLogSummary['trigger']): string {
+export function getDeploymentTriggerLabel(
+  trigger: DeployLogSummary['trigger'],
+  triggerDetail?: string | null,
+): string {
+  if (triggerDetail) {
+    switch (triggerDetail) {
+      case 'restart':
+        return 'Restart';
+      case 'env_update':
+        return 'Env Update';
+      case 'deploy':
+        return 'Deploy';
+      case 'deploy_plan':
+        return 'Deploy Plan';
+      default:
+        return triggerDetail;
+    }
+  }
   switch (trigger) {
     case 'chat':
       return 'Agent Deploy';

@@ -135,7 +135,7 @@ export function DeploymentsList({
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="flex items-center gap-1.5 text-sm font-display font-medium text-primary-ol">
                     <TriggerIcon className="h-4 w-4 text-muted-ol" />
-                    {getDeploymentTriggerLabel(deploy.trigger)}
+                    {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail)}
                   </span>
                   <span
                     className={cn(

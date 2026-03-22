@@ -123,6 +123,7 @@ export const deployLogs = sqliteTable(
     }),
     status: text('status', { enum: ['success', 'failed', 'cancelled'] }),
     trigger: text('trigger_source', { enum: ['chat', 'webhook', 'api'] }),
+    trigger_detail: text('trigger_detail'),
     commit_sha: text('commit_sha'),
     build_log: text('build_log'),
     duration_ms: integer('duration_ms'),

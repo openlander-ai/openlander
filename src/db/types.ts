@@ -51,6 +51,7 @@ export interface DeployLogRow {
   environment_id: string | null;
   status: 'success' | 'failed' | 'cancelled';
   trigger: 'chat' | 'webhook' | 'api';
+  trigger_detail: string | null;
   commit_sha: string | null;
   build_log: string | null;
   duration_ms: number | null;

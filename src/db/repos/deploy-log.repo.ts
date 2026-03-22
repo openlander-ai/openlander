@@ -18,6 +18,7 @@ export class DeployLogRepo {
     environmentId?: string;
     status: DeployLogRow['status'];
     trigger: DeployLogRow['trigger'];
+    triggerDetail?: string;
     commitSha?: string;
     buildLog?: string;
     durationMs?: number;
@@ -30,6 +31,7 @@ export class DeployLogRepo {
         environment_id: log.environmentId ?? null,
         status: log.status,
         trigger: log.trigger,
+        trigger_detail: log.triggerDetail ?? null,
         commit_sha: log.commitSha ?? null,
         build_log: log.buildLog ?? null,
         duration_ms: log.durationMs ?? null,
