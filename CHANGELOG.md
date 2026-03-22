@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-03-22
+
+### Changed
+
+- **Overview tab redesign**: Replaced 6 card blocks with flat progressive disclosure layout (412→160 lines)
+  - Removed SummaryDashboard, Infrastructure Info card, Quick Actions card, LogPreview
+  - Collapsible Deploy Pipeline (auto-expands during build)
+  - Collapsible Details section (port, branch, image, environments)
+  - Single-line last event instead of 5-event card
+
+### Fixed
+
+- **trigger_detail DB migration**: Added missing ALTER TABLE migration that caused Deployments API 500
+- **Status display mismatch**: Removed independent getProject() fetch in OverviewTab causing Stopped/Running contradiction
+- **Traefik detection**: Now checks container name in addition to image name
+- **Settings i18n**: Moved hardcoded English labels to translation files
+- **Settings tab animation**: Added fade-in/zoom-in transitions
+
 ## [0.9.4] - 2026-03-22
 
 ### Added

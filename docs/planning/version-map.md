@@ -8,15 +8,19 @@
 ## 버전 타임라인
 
 ```
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v1.0.0 (TBD)
+```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v1.0.0 (TBD)
+
 ```
 
 v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v1.0.0 (TBD)
 
 ```
 
- MVP      일상관리    MCP연동    멀티채널    TUI리팩토링  TUI마감     서버인식    ProviderOAuth 에이전트능동  Env관리      AI SDK      Dashboard   i18n+버그    Traefik     DeployCtrl  Domains     Extended    SharedMode
+MVP 일상관리 MCP연동 멀티채널 TUI리팩토링 TUI마감 서버인식 ProviderOAuth 에이전트능동 Env관리 AI SDK Dashboard i18n+버그 Traefik DeployCtrl Domains Extended SharedMode
+
 ```
 
 > ✅ = 완료 | 🧪 = 도그푸딩 중 | 🔧 = 진행 중 | 📋 = 기획/계획 | ❌ = 미착수
@@ -1150,13 +1154,15 @@ v0.6.3까지의 기능을 안정화하고 품질 검증 완료 후 릴리즈 예
 **2026-03-19 기준 (v0.6.3)**:
 
 ```
+
 ✅ npm run build — 성공
 ✅ vitest — 1014+ pass
 ✅ lsp_diagnostics — 0 errors
 ✅ v0.6.1 — env vars merge fix, list_env_vars, healthcheck Docker fallback
 ✅ v0.6.2 — compose service filtering, secret file mount, env escaping,
-            build log detail, redeploy port fix, Traefik HTTP Provider
+build log detail, redeploy port fix, Traefik HTTP Provider
 ✅ v0.6.3 — port stability on redeploy, environments port tracking, public URL API fix
+
 ```
 
 ---
@@ -1164,17 +1170,19 @@ v0.6.3까지의 기능을 안정화하고 품질 검증 완료 후 릴리즈 예
 ## 버그 워크플로우
 
 ```
+
 사용자 "이거 안 돼"
-    ↓
+↓
 AI: version-map.md에서 관련 버전/스펙 찾기
-    ↓
+↓
 AI: bugs.md "활성 버그"에 BUG-NNN 추가
-    ↓
+↓
 AI: gh issue create --label "bug,[version]" (버그 이슈 생성)
-    ↓
+↓
 AI: 버그 수정 + npm test 통과
-    ↓
+↓
 AI: bugs.md → 해결됨 + gh issue close
+
 ```
 
 **참조**: `v0.0.9/bugs.md` 워크플로우 섹션, `.opencode/instructions.md` §9
@@ -1347,3 +1355,27 @@ AI: bugs.md → 해결됨 + gh issue close
 - 18개 파일 다크 색상 정리 (agent/, command/, timeline/, shared/, ui/, pages/, hooks/)
 
 ---
+
+### v0.9.5 — Overview Redesign & Critical Fixes ✅
+
+**상태**: ✅ 완료 | **관련 커밋**: 3개 (migration fix, status fix, overview redesign)
+
+> **핵심 가치**: Overview 탭 완전 재설계 (카드 6개 → 플랫 프로그레시브 디스클로저), 배포 트리거 DB 마이그레이션 추가, 상태 표시 불일치 해결
+
+| 항목                                    | 내용                                                                                 | 상태 |
+| --------------------------------------- | ------------------------------------------------------------------------------------ | ---- |
+| Overview 탭 재설계                      | 6개 카드 제거, 플랫 섹션 + 프로그레시브 디스클로저 (412→160 줄)                     | ✅   |
+| Deploy Pipeline 자동 확장               | 빌드 중 또는 스트리밍 중 자동 확장, 유휴 시 축소                                    | ✅   |
+| Details 섹션 축소 가능                  | Port, Branch, Image, Environments 2컬럼 그리드                                      | ✅   |
+| trigger_detail DB 마이그레이션          | ALTER TABLE deploy_logs ADD COLUMN trigger_detail 추가 (Deployments API 500 해결)   | ✅   |
+| 상태 표시 불일치 해결                  | OverviewTab 독립 getProject() 제거, displayProject 사용으로 통일                    | ✅   |
+
+**구현 내역**:
+
+- `web/src/components/project/OverviewTab.tsx` — 완전 재작성 (412→160 줄)
+- `web/src/components/project/SummaryDashboard.tsx` — 삭제 (더 이상 사용 안 함)
+- `src/db/migration.ts` — trigger_detail ALTER TABLE 마이그레이션 추가
+- 제거된 컴포넌트: SummaryDashboard, Infrastructure Info card, Quick Actions card, LogPreview
+
+---
+```
