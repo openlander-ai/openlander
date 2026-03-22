@@ -54,7 +54,7 @@ export class ChatRepo {
         last_message: sql<string>`max(${chatHistory.created_at})`,
         first_message: sql<
           string | null
-        >`(SELECT ${chatHistory.content} FROM ${chatHistory} ch2 WHERE ch2.${chatHistory.session_id} = ${chatHistory.session_id} AND ch2.${chatHistory.role} = 'user' ORDER BY ch2.${chatHistory.created_at} ASC LIMIT 1)`,
+        >`(SELECT ch2."content" FROM "chat_history" ch2 WHERE ch2."session_id" = "chat_history"."session_id" AND ch2."role" = 'user' ORDER BY ch2."created_at" ASC LIMIT 1)`,
       })
       .from(chatHistory)
       .groupBy(chatHistory.session_id)
