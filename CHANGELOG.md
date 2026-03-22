@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-03-22
+
+### Changed
+
+- **Light theme with Rose brand**: Switched from dark Zinc to clean light theme with Rose (#F43F5E) accent color
+- Terminal/code blocks remain dark for readability
+- Card shadows and hover effects optimized for light backgrounds
+- Chat bubbles updated for light theme contrast
+
 ## [0.9.2] - 2026-03-22
 
 ### Added
