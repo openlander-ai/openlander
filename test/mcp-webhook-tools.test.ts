@@ -149,19 +149,18 @@ describe('MCP webhook tools', () => {
     db.getWebhookConfigs.mockReturnValue([]);
 
     const tool = getTool(ctx, 'disable_webhook');
-    const result = tool.execute(
-      {
-        project_name: 'demo',
-        source: 'gitlab',
-      },
-      { target: 'mcp' },
-    );
+
+    expect(() =>
+      tool.execute(
+        {
+          project_name: 'demo',
+          source: 'gitlab',
+        },
+        { target: 'mcp' },
+      ),
+    ).toThrow('WEBHOOK_NOT_FOUND: No webhook configured for gitlab on project demo');
 
     expect(db.setWebhookEnabled).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      error: 'WEBHOOK_NOT_FOUND',
-      message: 'No webhook configured for gitlab on project demo',
-    });
   });
 
   it('get_webhook_config returns all webhooks with masked secrets', () => {

@@ -160,6 +160,12 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       suggested_env: [],
+      _agent_guidance: {
+        next_steps: [
+          'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
+          'Then redeploy the project with create_deploy_plan + execute_deploy_plan for changes to take effect.',
+        ],
+      },
     });
 
     serviceManager.create.mockRejectedValueOnce(new Error('Unsupported service template: bad'));
@@ -204,6 +210,12 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       suggested_env: [],
+      _agent_guidance: {
+        next_steps: [
+          'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
+          'Then redeploy the project with create_deploy_plan + execute_deploy_plan for changes to take effect.',
+        ],
+      },
     });
     expect(serviceManager.create).toHaveBeenCalledWith({ name: 'shared-mysql', template: 'mysql' });
   });
@@ -243,6 +255,12 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       suggested_env: [],
+      _agent_guidance: {
+        next_steps: [
+          'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
+          'Then redeploy the project with create_deploy_plan + execute_deploy_plan for changes to take effect.',
+        ],
+      },
     });
     expect(serviceManager.create).toHaveBeenCalledWith({ name: 'shared-redis', template: 'redis' });
   });
@@ -458,11 +476,9 @@ describe('MCP service tools (Task 8)', () => {
     expect(mockAnalyzeInfrastructure).toHaveBeenCalledWith('/tmp/repo', services);
 
     mockCloneRepo.mockRejectedValueOnce(new Error('CLONE_FAILED'));
-    const failed = await tool.execute(
-      { repo_url: 'https://github.com/example/bad' },
-      { target: 'mcp' },
-    );
-    expect(failed).toEqual({ error: 'CLONE_FAILED' });
+    await expect(
+      tool.execute({ repo_url: 'https://github.com/example/bad' }, { target: 'mcp' }),
+    ).rejects.toThrow('CLONE_FAILED');
   });
 
   it('web_search returns { results } and reports failures', async () => {
@@ -480,7 +496,8 @@ describe('MCP service tools (Task 8)', () => {
     expect(mockWebSearch).toHaveBeenCalledWith('openlander', { maxResults: 3 });
 
     mockWebSearch.mockRejectedValueOnce(new Error('Search backend unavailable'));
-    const failed = await tool.execute({ query: 'openlander' }, { target: 'mcp' });
-    expect(failed).toEqual({ error: 'Search backend unavailable' });
+    await expect(tool.execute({ query: 'openlander' }, { target: 'mcp' })).rejects.toThrow(
+      'Search backend unavailable',
+    );
   });
 });

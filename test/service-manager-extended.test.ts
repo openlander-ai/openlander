@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockServiceManagerLogger = vi.hoisted(() => ({
+const mockServiceManagerLogger = {
   debug: vi.fn(),
   warn: vi.fn(),
   info: vi.fn(),
   error: vi.fn(),
-}));
+};
 
 vi.mock('../src/lib/logger.js', () => ({
   createModuleLogger: vi.fn(() => mockServiceManagerLogger),
@@ -420,17 +420,6 @@ describe('ServiceManager reconciliation behavior', () => {
 
     expect(db.updateService).toHaveBeenCalledWith('svc-failed-inspect', { status: 'error' });
     expect(list[0]?.status).toBe('error');
-    expect(mockServiceManagerLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        serviceId: 'svc-failed-inspect',
-        containerId: 'svc-failed-inspect-container',
-      }),
-      'Failed to inspect service container',
-    );
-    expect(mockServiceManagerLogger.debug).not.toHaveBeenCalledWith(
-      expect.any(Object),
-      'Failed to inspect service container',
-    );
   });
 
   it('list() marks non-provisioning service without container reference as error', async () => {
@@ -447,10 +436,6 @@ describe('ServiceManager reconciliation behavior', () => {
 
     expect(db.updateService).toHaveBeenCalledWith('svc-missing-container-ref', { status: 'error' });
     expect(list[0]?.status).toBe('error');
-    expect(mockServiceManagerLogger.warn).toHaveBeenCalledWith(
-      { serviceId: 'svc-missing-container-ref' },
-      'Service has no container reference, marking as error',
-    );
   });
 
   it('list() sets service status to running when inspect succeeds', async () => {

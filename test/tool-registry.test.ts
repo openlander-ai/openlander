@@ -394,18 +394,13 @@ describe('Tool Registry', () => {
     const { ctx } = createMockContext();
     const debugBuildError = getTool(ctx, 'debug_build_error');
 
-    const agentResult = await debugBuildError.execute(
-      { project_name: 'my-app' },
-      { target: 'agent' },
-    );
-    const mcpResult = await debugBuildError.execute({ project_name: 'my-app' }, { target: 'mcp' });
+    await expect(
+      debugBuildError.execute({ project_name: 'my-app' }, { target: 'agent' }),
+    ).rejects.toThrow('Build debugger requires an LLM provider. Configure one first.');
 
-    expect(agentResult).toEqual({
-      error: 'Build debugger requires an LLM provider. Configure one first.',
-    });
-    expect(mcpResult).toEqual({
-      error: 'Build debugger requires an LLM provider.',
-    });
+    await expect(
+      debugBuildError.execute({ project_name: 'my-app' }, { target: 'mcp' }),
+    ).rejects.toThrow('Build debugger requires an LLM provider.');
   });
 
   it('debug_build_error returns NO_FAILED_BUILD when last deploy did not fail', async () => {
@@ -423,9 +418,10 @@ describe('Tool Registry', () => {
     ).db.getLastDeployLog = vi.fn().mockReturnValueOnce({ status: 'done' });
 
     const debugBuildError = getTool(ctx, 'debug_build_error');
-    const result = await debugBuildError.execute({ project_name: 'my-app' }, { target: 'agent' });
 
-    expect(result).toEqual({ error: 'No failed build found for this project.' });
+    await expect(
+      debugBuildError.execute({ project_name: 'my-app' }, { target: 'agent' }),
+    ).rejects.toThrow('No failed build found for this project.');
     expect(diagnose).not.toHaveBeenCalled();
   });
 

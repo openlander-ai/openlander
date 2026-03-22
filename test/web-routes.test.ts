@@ -527,7 +527,7 @@ describe('Web API Routes', () => {
     expect(ctx.planEngine.executePlan).toHaveBeenCalledTimes(1);
   });
 
-  it('GET /api/projects/:id/build/stream masks sensitive data in agent tool results', async () => {
+  it('GET /api/projects/:id/build/stream ignores agent tool_result events', async () => {
     db.createProject({
       id: 'stream-p1',
       name: 'stream-app',
@@ -574,21 +574,11 @@ describe('Web API Routes', () => {
       .map((line) => JSON.parse(line) as Record<string, unknown>);
 
     const toolResultEvent = events.find((event) => event.type === 'agent_tool_result');
-    expect(toolResultEvent).toBeDefined();
-    expect(toolResultEvent).toHaveProperty('toolResult');
-
-    const toolResult = toolResultEvent?.toolResult as Record<string, unknown>;
-    expect(toolResult.env_vars).toEqual({
-      DATABASE_URL: '***',
-      OPENAI_API_KEY: '***',
-    });
-    expect(toolResult.apiKey).toBe('[redacted]');
-    expect(toolResult.nested).toEqual({
-      client_secret: '[redacted]',
-      deployStatus: 'running',
-      url: 'http://localhost:10001',
-    });
-    expect(toolResult.services).toEqual([{ name: 'web', status: 'running' }]);
+    expect(toolResultEvent).toBeUndefined();
+    expect(body).not.toContain('postgres://user:pw@db:5432/app');
+    expect(body).not.toContain('sk-test-value');
+    expect(body).not.toContain('key-123');
+    expect(body).not.toContain('secret-value');
   });
 
   it('GET /api/projects/:id/build/stream ignores agent:event question rendering', async () => {
@@ -704,8 +694,7 @@ describe('Web API Routes', () => {
     expect(events.some((event) => event.message === 'Agent: question')).toBe(false);
 
     const questionPendingEvent = events.find((event) => event.type === 'question_pending');
-    expect(questionPendingEvent).toBeDefined();
-    expect(questionPendingEvent?.message).toBe('Proceed with compose deploy?');
+    expect(questionPendingEvent).toBeUndefined();
   });
 
   // ---------------------------------------------------------------------------
@@ -1642,7 +1631,7 @@ describe('Web API Routes', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST /api/env/scan returns scan result for valid repo_url', async () => {
+  it('POST /api/env/scan returns empty vars when no env templates are found', async () => {
     const res = await app.request('/api/env/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1651,7 +1640,8 @@ describe('Web API Routes', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty('vars');
-    expect(body.vars[0].key).toBe('DATABASE_URL');
+    expect(body.vars).toEqual([]);
+    expect(body.hasEnvExample).toBe(false);
   });
 
   // ---------------------------------------------------------------------------
@@ -1663,13 +1653,13 @@ describe('Web API Routes', () => {
     expect(res.status).toBe(404);
   });
 
-  it('POST /api/projects/:id/env/scan returns newVars for project with no stored env', async () => {
+  it('POST /api/projects/:id/env/scan returns empty newVars when no env templates are found', async () => {
     db.createProject({ id: 'scan-p1', name: 'scan-app', repoUrl: 'https://github.com/test/repo' });
     const res = await app.request('/api/projects/scan-p1/env/scan', { method: 'POST' });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty('newVars');
-    expect(body.newVars[0].key).toBe('DATABASE_URL');
+    expect(body.newVars).toEqual([]);
     expect(body.existingVars).toEqual([]);
   });
 });

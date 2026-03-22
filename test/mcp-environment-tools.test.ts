@@ -250,15 +250,10 @@ describe('MCP environment tools', () => {
     });
     const tool = getTool(ctx, 'deploy_environment');
 
-    const result = tool.execute(
-      { project_name: 'my-app', environment_type: 'development' },
-      { target: 'mcp' },
-    );
+    expect(() =>
+      tool.execute({ project_name: 'my-app', environment_type: 'development' }, { target: 'mcp' }),
+    ).toThrow('ENVIRONMENT_NOT_FOUND: No development environment found for project my-app');
 
     expect(pipeline.deployEnvironment).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      error: 'ENVIRONMENT_NOT_FOUND',
-      message: 'No development environment found for project my-app',
-    });
   });
 });
