@@ -23,7 +23,7 @@ export function SettingsPage() {
     <div className="max-w-2xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
-          {'Settings'}
+          {t('settings.title')}
         </h1>
         <p className="text-sm font-body text-secondary-ol mt-1">{t('settings.description')}</p>
       </div>
@@ -31,16 +31,16 @@ export function SettingsPage() {
       <Tabs defaultValue="system" className="space-y-6">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto gap-1 bg-bg-subtle/50 p-1">
           <TabsTrigger value="system" className="font-body text-xs sm:text-sm">
-            {'System'}
+            {t('settings.tabs.system')}
           </TabsTrigger>
           <TabsTrigger value="proxy" className="font-body text-xs sm:text-sm">
-            {'Proxy'}
+            {t('settings.tabs.proxy')}
           </TabsTrigger>
           <TabsTrigger value="github" className="font-body text-xs sm:text-sm">
-            {'GitHub'}
+            {t('settings.tabs.github')}
           </TabsTrigger>
           <TabsTrigger value="llm" className="font-body text-xs sm:text-sm">
-            {'LLM'}
+            {t('settings.tabs.llm')}
           </TabsTrigger>
         </TabsList>
 

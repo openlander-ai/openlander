@@ -67,7 +67,22 @@ export const translations = {
     },
   },
   settings: {
+    title: 'Settings',
     description: 'Manage your AI provider, connections, and system configuration.',
+    tabs: {
+      system: 'System',
+      proxy: 'Proxy',
+      github: 'GitHub',
+      llm: 'AI Model',
+    },
+    system: {
+      globalSecrets: 'Global Secrets',
+      systemResources: 'System Resources',
+      loading: 'Loading system stats...',
+    },
+    proxySection: {
+      title: 'Reverse Proxy',
+    },
     aiModel: {
       switchProvider: 'Switch to a different provider:',
       configureProvider: 'Configure an AI provider:',
@@ -113,9 +128,6 @@ export const translations = {
       },
       warning: 'Traefik not detected — redeployments may break external access',
       loading: 'Loading proxy status...',
-    },
-    system: {
-      loading: 'Loading system stats...',
     },
     serverScan: {
       externalDescription: 'Containers not managed by OpenLander detected on this server:',

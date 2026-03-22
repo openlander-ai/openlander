@@ -378,7 +378,7 @@ export async function detectReverseProxy(docker: Docker): Promise<ProxyDetection
       }
 
       for (const { type, pattern } of PROXY_PATTERNS) {
-        if (pattern.test(container.image)) {
+        if (pattern.test(container.image) || pattern.test(container.name)) {
           const ports = container.ports
             .filter((p): p is typeof p & { PublicPort: number } => p.PublicPort !== undefined)
             .map((p) => p.PublicPort);

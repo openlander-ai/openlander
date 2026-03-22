@@ -67,7 +67,22 @@ export const translations = {
     },
   },
   settings: {
+    title: '설정',
     description: 'AI 제공자, 연결 및 시스템 구성을 관리합니다.',
+    tabs: {
+      system: '시스템',
+      proxy: '프록시',
+      github: 'GitHub',
+      llm: 'AI 모델',
+    },
+    system: {
+      globalSecrets: '전역 비밀값',
+      systemResources: '시스템 리소스',
+      loading: '시스템 통계 로딩 중...',
+    },
+    proxySection: {
+      title: '리버스 프록시',
+    },
     aiModel: {
       switchProvider: '다른 제공자로 변경:',
       configureProvider: 'AI 제공자 구성:',
@@ -113,9 +128,6 @@ export const translations = {
       },
       warning: 'Traefik 미감지 — 재배포 시 외부 접근이 끊길 수 있습니다',
       loading: '프록시 상태 로딩 중...',
-    },
-    system: {
-      loading: '시스템 통계 로딩 중...',
     },
     serverScan: {
       externalDescription: '이 서버에서 OpenLander가 관리하지 않는 컨테이너가 감지되었습니다:',

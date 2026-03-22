@@ -65,7 +65,9 @@ export function SystemSettingsTab() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">{'Global Secrets'}</h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">
+            {t('settings.system.globalSecrets')}
+          </h2>
         </div>
         <p className="text-xs font-body text-secondary-ol">{t('settings.secrets.description')}</p>
 
@@ -146,7 +148,7 @@ export function SystemSettingsTab() {
         <div className="flex items-center gap-2">
           <Cpu className="h-4 w-4 text-secondary-ol" />
           <h2 className="font-display text-lg font-semibold text-primary-ol">
-            {'System Resources'}
+            {t('settings.system.systemResources')}
           </h2>
         </div>
 
