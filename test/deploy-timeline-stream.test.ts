@@ -327,19 +327,11 @@ describe('deploy timeline stream characterization tests', () => {
   });
 
   describe('build event handlers characterization', () => {
-    it('build:autofix handler emits status event', () => {
-      expect(true).toBe(true);
-    });
-
     it('build:suggest handler emits status event', () => {
       expect(true).toBe(true);
     });
 
     it('build:inform handler emits status event', () => {
-      expect(true).toBe(true);
-    });
-
-    it('build:dockerfile-fixed handler emits status event with retry count', () => {
       expect(true).toBe(true);
     });
 

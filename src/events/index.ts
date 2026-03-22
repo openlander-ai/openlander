@@ -30,10 +30,8 @@ export type EventType =
   | 'deploy:needs-user-action'
   | 'deploy:crash'
   | 'deploy:rollback'
-  | 'build:autofix'
   | 'build:suggest'
   | 'build:inform'
-  | 'build:dockerfile-fixed'
   | 'build:output'
   | 'compose:start'
   | 'compose:up'
@@ -160,15 +158,8 @@ export interface EventPayload {
   };
   'deploy:crash': { projectId: string; containerId: string; error?: string; exitCode?: number };
   'deploy:rollback': { projectId: string; fromImage: string; toImage: string };
-  'build:autofix': { projectId: string; action: string; category: string };
   'build:suggest': { projectId: string; suggestion: string; diff?: string };
   'build:inform': { projectId: string; summary: string; tier: BuildTier };
-  'build:dockerfile-fixed': {
-    projectId: string;
-    changes: string[];
-    explanation: string;
-    retryCount: number;
-  };
   'build:output': {
     projectId: string;
     line: string;

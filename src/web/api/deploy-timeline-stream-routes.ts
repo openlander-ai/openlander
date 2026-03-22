@@ -371,14 +371,6 @@ function registerBuildEventHandlers(handlerCtx: StreamHandlerContext): Array<() 
   const { project, write, emitTimelineEvent, resolveScopedProject } = handlerCtx;
 
   return [
-    eventBus.on('build:autofix', (payload) => {
-      if (payload.projectId !== project.id) return;
-      emitTimelineEvent({
-        type: 'status',
-        message: `Auto-fix applied: ${payload.action} (${payload.category})`,
-        projectId: project.id,
-      });
-    }),
     eventBus.on('build:suggest', (payload) => {
       if (payload.projectId !== project.id) return;
       emitTimelineEvent({
@@ -392,14 +384,6 @@ function registerBuildEventHandlers(handlerCtx: StreamHandlerContext): Array<() 
       emitTimelineEvent({
         type: 'status',
         message: `Build analysis: ${payload.summary}`,
-        projectId: project.id,
-      });
-    }),
-    eventBus.on('build:dockerfile-fixed', (payload) => {
-      if (payload.projectId !== project.id) return;
-      emitTimelineEvent({
-        type: 'status',
-        message: `Dockerfile fixed (attempt ${String(payload.retryCount)}/3): ${payload.changes.join(', ')}`,
         projectId: project.id,
       });
     }),

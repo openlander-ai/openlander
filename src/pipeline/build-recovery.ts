@@ -1,11 +1,3 @@
-import { createModuleLogger } from '../lib/logger.js';
-import type { Docker } from './docker.js';
-import type { Database } from '../db/index.js';
-import type { EventBus } from '../events/index.js';
-import { allocatePort } from './port.js';
-
-const log = createModuleLogger('build-recovery');
-
 export type BuildTier = 1 | 2 | 2.5 | 3;
 
 export interface BuildRecoveryResult {
@@ -16,12 +8,6 @@ export interface BuildRecoveryResult {
   suggestible: boolean;
   errorSummary: string;
   suggestedAction?: string;
-}
-
-export interface Tier1FixResult {
-  fixed: boolean;
-  action: string;
-  retryNeeded: boolean;
 }
 
 export interface BuildContext {
@@ -179,12 +165,6 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
 ];
 
 export class BuildRecovery {
-  constructor(
-    private readonly docker: Docker,
-    private readonly db: Database,
-    private readonly events: EventBus,
-  ) {}
-
   classify(buildLog: string, _context: BuildContext): BuildRecoveryResult {
     for (const definition of CATEGORY_DEFINITIONS) {
       if (definition.patterns.some((pattern) => pattern.test(buildLog))) {
@@ -209,110 +189,6 @@ export class BuildRecovery {
       autoFixable: false,
       suggestible: false,
       errorSummary: this.extractErrorSummary(buildLog),
-    };
-  }
-
-  async attemptTier1Fix(
-    result: BuildRecoveryResult,
-    context: BuildContext,
-  ): Promise<Tier1FixResult> {
-    if (!result.autoFixable || result.tier !== 1) {
-      return {
-        fixed: false,
-        action: 'No automatic fix available for this failure tier.',
-        retryNeeded: false,
-      };
-    }
-
-    try {
-      if (result.category === 'port-conflict') {
-        const fallbackPort = await allocatePort(this.db, this.docker, {
-          rangeStart: 11000,
-          rangeEnd: 11999,
-        });
-        this.db.updateProject(context.projectId, { assignedPort: fallbackPort });
-
-        const action = `Allocated fallback port ${String(fallbackPort)} for retry.`;
-        await this.events.emit('build:autofix', {
-          projectId: context.projectId,
-          action,
-          category: result.category,
-        });
-
-        return { fixed: true, action, retryNeeded: true };
-      }
-
-      if (result.category === 'cache-corrupt') {
-        const action = 'Enabled no-cache rebuild mode for next retry.';
-        await this.events.emit('build:autofix', {
-          projectId: context.projectId,
-          action,
-          category: result.category,
-        });
-        return { fixed: true, action, retryNeeded: true };
-      }
-
-      if (result.category === 'disk-full') {
-        const dockerClient = this.docker.getClient();
-        await dockerClient.pruneContainers();
-        await dockerClient.pruneImages();
-
-        const action = 'Pruned Docker containers/images to recover disk space.';
-        await this.events.emit('build:autofix', {
-          projectId: context.projectId,
-          action,
-          category: result.category,
-        });
-
-        return { fixed: true, action, retryNeeded: true };
-      }
-
-      if (result.category === 'network-error') {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-
-        const action = 'Waited 3 seconds to recover from transient network failure.';
-        await this.events.emit('build:autofix', {
-          projectId: context.projectId,
-          action,
-          category: result.category,
-        });
-
-        return { fixed: true, action, retryNeeded: true };
-      }
-
-      if (result.category === 'runtime-wrong-cmd' || result.category === 'runtime-permission') {
-        // Runtime crashes due to wrong CMD or permissions are fixed by updated Dockerfile templates.
-        // A retry will clone fresh, re-detect the framework, and generate a corrected Dockerfile.
-        const action = `Runtime crash detected (${result.category}). Retrying with corrected Dockerfile generation.`;
-        await this.events.emit('build:autofix', {
-          projectId: context.projectId,
-          action,
-          category: result.category,
-        });
-
-        return { fixed: true, action, retryNeeded: true };
-      }
-    } catch (error) {
-      log.warn(
-        {
-          err: error,
-          projectId: context.projectId,
-          category: result.category,
-        },
-        'Tier 1 auto-fix failed',
-      );
-
-      return {
-        fixed: false,
-        action: `Tier 1 auto-fix failed: ${error instanceof Error ? error.message : String(error)}`,
-        retryNeeded: false,
-      };
-    }
-
-    return {
-      fixed: false,
-      action: `No Tier 1 fix handler registered for category ${result.category}.`,
-      retryNeeded: false,
     };
   }
 

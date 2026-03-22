@@ -1,16 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { BuildRecovery, type BuildContext } from '../src/pipeline/build-recovery.js';
-import type { Docker } from '../src/pipeline/docker.js';
-import type { Database } from '../src/db/index.js';
-import type { EventBus } from '../src/events/index.js';
 
 describe('BuildRecovery', () => {
-  let pruneContainers: ReturnType<typeof vi.fn>;
-  let pruneImages: ReturnType<typeof vi.fn>;
-  let updateProject: ReturnType<typeof vi.fn>;
-  let emit: ReturnType<typeof vi.fn>;
-  let recovery: BuildRecovery;
+  const recovery = new BuildRecovery();
 
   const context: BuildContext = {
     projectId: 'p1',
@@ -20,30 +13,6 @@ describe('BuildRecovery', () => {
     buildLog: 'failed',
     failedStep: 'build',
   };
-
-  beforeEach(() => {
-    pruneContainers = vi.fn().mockResolvedValue(undefined);
-    pruneImages = vi.fn().mockResolvedValue(undefined);
-    updateProject = vi.fn();
-    emit = vi.fn().mockResolvedValue(undefined);
-
-    const docker = {
-      getClient: vi.fn().mockReturnValue({
-        pruneContainers,
-        pruneImages,
-      }),
-    } as unknown as Docker;
-
-    const db = {
-      updateProject,
-    } as unknown as Database;
-
-    const events = {
-      emit,
-    } as unknown as EventBus;
-
-    recovery = new BuildRecovery(docker, db, events);
-  });
 
   it('classifies port conflict as Tier 1 auto-fixable', () => {
     const result = recovery.classify('bind: address already in use', context);
@@ -113,23 +82,6 @@ describe('BuildRecovery', () => {
     expect(summary).not.toContain('downloading layer 1/4');
     expect(summary).not.toContain('=> CACHED');
   });
-
-  it('runs Tier 1 disk-full fix by pruning Docker resources', async () => {
-    const classified = recovery.classify('ENOSPC: no space left on device', context);
-
-    const result = await recovery.attemptTier1Fix(classified, context);
-
-    expect(result.fixed).toBe(true);
-    expect(result.retryNeeded).toBe(true);
-    expect(pruneContainers).toHaveBeenCalledOnce();
-    expect(pruneImages).toHaveBeenCalledOnce();
-    expect(emit).toHaveBeenCalledWith(
-      'build:autofix',
-      expect.objectContaining({ projectId: 'p1', category: 'disk-full' }),
-    );
-  });
-
-  // --- Tier 2.5: Dockerfile content errors ---
 
   it('classifies Node version incompatibility as Tier 2.5 dockerfile-content', () => {
     const result = recovery.classify(

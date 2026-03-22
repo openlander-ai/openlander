@@ -40,7 +40,6 @@ const DEPLOY_AND_COMPOSE_EVENT_TYPES = [
   'deploy:crash',
   'deploy:success',
   'build:inform',
-  'build:dockerfile-fixed',
   'build:suggest',
   'deploy:failed',
   'deploy:rollback',

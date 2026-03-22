@@ -15,7 +15,7 @@ import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
-import type { EventPayload } from '../events/index.js';
+
 import { ContainerNotFoundError, PreflightCheckError } from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { buildDeployConfig } from './build-deploy-config.js';
@@ -23,7 +23,7 @@ import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
-import type { BuildDebugger } from './build-debugger.js';
+
 import { extractProjectName } from './helpers.js';
 import {
   getRouteName,
@@ -36,7 +36,7 @@ import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
 import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
-import { RecoveryOrchestrator } from './deploy/recovery.js';
+
 import {
   buildProject,
   cloneAndAnalyze,
@@ -80,7 +80,6 @@ export interface ProjectConfig {
   dryRun?: boolean;
   /** @internal Pre-allocated project ID from startDeploy(). Do not set manually. */
   _projectId?: string;
-  _retryCount?: number;
   _noCacheBuild?: boolean;
   _preferredPort?: number;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
@@ -201,7 +200,6 @@ export class DeployPipeline {
     private readonly jobManager?: JobManager,
     private readonly composePipeline?: ComposePipeline,
     private readonly autoDetector?: AutoDetector,
-    private readonly buildDebugger?: BuildDebugger,
   ) {
     this.tunnelManager = new TunnelManager(this.db);
     this.lifecycle = new ContainerLifecycle(this.docker, this.db);
@@ -664,10 +662,11 @@ export class DeployPipeline {
       const errorMsg = error instanceof Error ? error.message : String(error);
       const failStep = this.detectFailStep(buildLog);
       const buildLogWithError = buildLog + `[error] ${errorMsg}\n`;
-      const retryCount = config._retryCount ?? 0;
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
+
+      // Classify for diagnosis only — auto-recovery.ts handles retry via agent.
       try {
-        const recovery = new BuildRecovery(this.docker, this.db, eventBus);
+        const recovery = new BuildRecovery();
         const classification = recovery.classify(buildLogWithError, {
           projectId,
           projectName,
@@ -680,46 +679,11 @@ export class DeployPipeline {
           category: classification.category,
           tier: classification.tier,
           cause: classification.message,
-          autoFixable: classification.autoFixable,
+          autoFixable: false,
           suggestedAction: classification.suggestedAction,
         });
-
-        const recoveryOrchestrator = new RecoveryOrchestrator(this.buildDebugger);
-        const action = await recoveryOrchestrator.handleBuildFailure({
-          projectId,
-          projectName,
-          imageTag,
-          clonePath,
-          buildLogWithError,
-          failedStep: failStep,
-          retryCount,
-          buildRecovery: recovery,
-          emit: async <T extends 'build:inform' | 'build:dockerfile-fixed' | 'build:suggest'>(
-            eventName: T,
-            payload: EventPayload[T],
-          ) => {
-            await eventBus.emit(eventName, payload);
-          },
-        });
-        if (action.type === 'retry') {
-          const retryConfig: ProjectConfig = {
-            ...config,
-            repoUrl,
-            name: projectName,
-            _projectId: projectId,
-            _retryCount: action.retryCount,
-          };
-          if (action.noCacheBuild) {
-            retryConfig._noCacheBuild = true;
-          }
-          buildLog += `${action.logMessage}\n`;
-          return await this.deployEnvironment(projectId, environmentId, retryConfig);
-        }
-      } catch (recoveryError) {
-        log.warn(
-          { err: recoveryError, projectId },
-          'Build recovery failed; falling back to default error flow',
-        );
+      } catch (classifyError) {
+        log.warn({ err: classifyError, projectId }, 'Build failure classification failed');
       }
       this.db.updateEnvironment(environmentId, { status: 'error' });
       if (shouldSyncProjectState) {

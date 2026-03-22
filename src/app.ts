@@ -116,15 +116,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     }
   }
 
-  const pipeline = new DeployPipeline(
-    docker,
-    db,
-    env,
-    jobManager,
-    composePipeline,
-    autoDetector,
-    buildDebugger ?? undefined,
-  );
+  const pipeline = new DeployPipeline(docker, db, env, jobManager, composePipeline, autoDetector);
 
   // Create agent only if LLM is configured
   let agent: Agent | null = null;
