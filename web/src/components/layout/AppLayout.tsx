@@ -36,7 +36,7 @@ export function AppLayout() {
 
       <div className="flex flex-1 overflow-hidden pt-12">
         {/* Desktop Sidebar */}
-        <aside className="hidden md:flex md:w-16 lg:w-[200px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
+        <aside className="hidden md:flex md:w-16 lg:w-[260px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
           <Sidebar projects={projects} loading={loading} />
         </aside>
 
@@ -44,7 +44,7 @@ export function AppLayout() {
         <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
           <SheetContent
             side="left"
-            className="p-0 w-[240px] bg-bg-panel border-r border-[hsl(var(--border))]"
+            className="p-0 w-[280px] bg-bg-panel border-r border-[hsl(var(--border))]"
             aria-describedby={undefined}
           >
             <SheetTitle className="sr-only">Navigation</SheetTitle>
