@@ -30,7 +30,7 @@ export function EmptyState({ onSendMessage }: EmptyStateProps) {
             key={s}
             data-testid="suggestion-chip"
             onClick={() => onSendMessage(s)}
-            className="px-4 py-2 rounded-full border border-border text-sm text-secondary-ol hover:bg-bg-subtle hover:text-primary-ol transition-colors"
+            className="px-4 py-2 rounded-full border border-border bg-bg-app shadow-sm text-sm text-secondary-ol hover:border-border/80 hover:bg-bg-subtle hover:text-primary-ol hover:shadow transition-all"
           >
             {s}
           </button>

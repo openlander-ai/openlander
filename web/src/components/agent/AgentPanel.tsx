@@ -136,7 +136,7 @@ export function AgentPanel({
       <SheetContent
         side="right"
         hideOverlay
-        className="p-0 w-full sm:max-w-[480px] bg-bg-panel border-l border-[hsl(var(--border))]"
+        className="p-0 w-full sm:max-w-[480px] bg-bg-panel border-l border-[hsl(var(--border))] shadow-[-4px_0_24px_rgba(0,0,0,0.05)]"
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">{panelTitle}</SheetTitle>
@@ -168,7 +168,7 @@ export function AgentPanel({
                 type="button"
                 onClick={() => setSessionsCollapsed((prev) => !prev)}
                 className={cn(
-                  'absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-bg-panel/90 px-2 py-1 text-[11px] text-muted-ol hover:text-primary-ol transition-colors',
+                  'absolute left-2 top-2 z-10 inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-panel/90 backdrop-blur-sm shadow-sm px-2.5 py-1.5 text-[11px] font-medium text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle transition-all',
                   sessionsCollapsed ? 'left-3' : undefined,
                 )}
                 title={sessionsCollapsed ? 'Show sessions' : 'Hide sessions'}

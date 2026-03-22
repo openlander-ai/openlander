@@ -318,7 +318,7 @@ export function RollbackDialog({
                         className={cn(
                           'w-full rounded-md border px-3 py-2 text-left transition-colors',
                           selected
-                            ? 'border-agent bg-agent/10 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.35)]'
+                            ? 'border-agent bg-agent/5 ring-1 ring-agent'
                             : 'border-border bg-bg-panel hover:border-agent/40 hover:bg-agent/5',
                         )}
                       >

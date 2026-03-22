@@ -28,7 +28,7 @@ export function ChatSidebar({
 
   return (
     <div className="flex flex-col h-full" data-testid="session-list">
-      <div className="p-2 lg:p-3 shrink-0">
+      <div className="p-2 lg:p-3 shrink-0 border-b border-border/50">
         <button
           data-testid="new-chat-button"
           onClick={onNewChat}
@@ -56,11 +56,11 @@ export function ChatSidebar({
               key={session.sessionId}
               data-testid="session-item"
               className={cn(
-                'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150 group cursor-pointer',
+                'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150 group cursor-pointer relative overflow-hidden',
                 'lg:justify-start justify-center',
                 'hover:bg-bg-subtle',
                 activeSessionId === session.sessionId
-                  ? 'bg-bg-subtle text-primary-ol'
+                  ? 'bg-bg-subtle text-primary-ol before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[3px] before:bg-agent'
                   : 'text-secondary-ol',
               )}
               onClick={() => onSelectSession(session.sessionId)}
@@ -70,7 +70,7 @@ export function ChatSidebar({
                 <span className="text-xs font-body truncate">
                   {session.firstMessage || 'New conversation'}
                 </span>
-                <div className="flex items-center justify-between text-[10px] text-muted-ol mt-0.5">
+                <div className="flex items-center justify-between text-[10px] text-secondary-ol/80 mt-0.5">
                   <span>{session.messageCount} messages</span>
                   <span>{formatRelativeTime(session.lastActive)}</span>
                 </div>
