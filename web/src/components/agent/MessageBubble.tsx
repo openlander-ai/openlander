@@ -30,7 +30,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={cn(
           'max-w-[80%] rounded-lg px-4 py-2',
-          isUser ? 'bg-agent text-white' : 'bg-bg-surface border border-[#27272A] text-primary-ol',
+          isUser ? 'bg-agent text-white' : 'bg-bg-panel border border-[#e4e4e7] text-primary-ol',
         )}
       >
         {isUser ? (
@@ -39,13 +39,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <>
             {message.content && (
               <div
-                className="prose prose-sm prose-invert max-w-none
+                className="prose prose-sm max-w-none
                 prose-headings:text-primary-ol
                 prose-p:text-secondary-ol
                 prose-a:text-ai prose-a:no-underline hover:prose-a:underline
                 prose-strong:text-primary-ol
                 prose-code:text-ai/80 prose-code:bg-bg-subtle prose-code:px-1 prose-code:py-0.5 prose-code:rounded
-                prose-pre:bg-bg-terminal prose-pre:border prose-pre:border-[#27272A]
+                prose-pre:bg-bg-terminal prose-pre:border prose-pre:border-[#3f3f46]
                 prose-td:text-secondary-ol prose-th:text-primary-ol
                 prose-blockquote:border-ai/30 prose-blockquote:text-secondary-ol
               "

@@ -49,11 +49,11 @@ export function ProjectCard({
         <div className="flex items-center gap-3 min-w-0">
           <div
             className={cn(
-              'h-2.5 w-2.5 rounded-full shrink-0 shadow-[0_0_8px_rgba(0,0,0,0.2)]',
+              'h-2.5 w-2.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,0,0,0.1)]',
               status.dot,
-              project.status === 'running' && 'shadow-[0_0_8px_rgba(52,211,153,0.6)]',
-              project.status === 'error' && 'shadow-[0_0_8px_rgba(248,113,113,0.6)]',
-              project.status === 'building' && 'shadow-[0_0_8px_rgba(251,191,36,0.6)]',
+              project.status === 'running' && 'shadow-[0_0_6px_rgba(22,163,74,0.4)]',
+              project.status === 'error' && 'shadow-[0_0_6px_rgba(220,38,38,0.4)]',
+              project.status === 'building' && 'shadow-[0_0_6px_rgba(217,119,6,0.4)]',
             )}
           />
           <h3 className="font-display font-semibold text-base text-primary-ol truncate">

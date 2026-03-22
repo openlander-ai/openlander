@@ -4,41 +4,41 @@
 
 @layer base {
   :root {
-    /* ── OpenLander Design Tokens (Dark Zinc) ── */
-    --bg-app: #09090b; /* zinc-950 — deepest background */
-    --bg-panel: #18181b; /* zinc-900 — card/panel backgrounds */
-    --bg-subtle: #27272a; /* zinc-800 — subtle backgrounds, hover states */
-    --bg-surface: #121214; /* between app and panel — card surface */
-    --bg-terminal: #000000; /* pure black for terminals */
-    --color-accent: #2563eb; /* blue-600 — primary accent (keep) */
-    --color-ai: #06b6d4; /* cyan-500 — AI identity color */
-    --color-success: #34d399; /* emerald-400 — brighter for dark bg */
-    --color-warning: #fbbf24; /* amber-400 — brighter for dark bg */
-    --color-error: #f87171; /* red-400 — brighter for dark bg */
-    --text-primary: #fafafa; /* zinc-50 — primary text */
-    --text-secondary: #a1a1aa; /* zinc-400 — secondary text */
-    --text-muted: #71717a; /* zinc-500 — muted/dim text */
+    /* ── OpenLander Design Tokens (Clean Light + Rose) ── */
+    --bg-app: #ffffff; /* white — app background */
+    --bg-panel: #fafafa; /* zinc-50 — card/panel backgrounds */
+    --bg-subtle: #f4f4f5; /* zinc-100 — subtle backgrounds, hover states */
+    --bg-surface: #f9fafb; /* zinc-50 — card surface */
+    --bg-terminal: #18181b; /* zinc-900 — dark for code blocks */
+    --color-accent: #f43f5e; /* rose-500 — brand color */
+    --color-ai: #f43f5e; /* rose-500 — AI identity (unified brand) */
+    --color-success: #16a34a; /* green-600 */
+    --color-warning: #d97706; /* amber-600 */
+    --color-error: #dc2626; /* red-600 */
+    --text-primary: #09090b; /* zinc-950 — primary text */
+    --text-secondary: #52525b; /* zinc-600 — secondary text */
+    --text-muted: #a1a1aa; /* zinc-400 — muted/dim text */
 
-    /* ── shadcn/ui — Dark Zinc palette ── */
-    --background: 240 10% 3.9%; /* zinc-950 */
-    --foreground: 0 0% 98%; /* zinc-50 */
-    --card: 240 6% 10%; /* zinc-900 */
-    --card-foreground: 0 0% 98%; /* zinc-50 */
-    --popover: 240 6% 10%; /* zinc-900 */
-    --popover-foreground: 0 0% 98%; /* zinc-50 */
-    --primary: 221 83% 53%; /* blue-600 — keep accent */
+    /* ── shadcn/ui — Clean Light palette ── */
+    --background: 0 0% 100%; /* white */
+    --foreground: 240 10% 3.9%; /* zinc-950 */
+    --card: 0 0% 98%; /* zinc-50 */
+    --card-foreground: 240 10% 3.9%; /* zinc-950 */
+    --popover: 0 0% 100%; /* white */
+    --popover-foreground: 240 10% 3.9%; /* zinc-950 */
+    --primary: 347 77% 50%; /* rose-500 HSL */
     --primary-foreground: 0 0% 100%; /* white */
-    --secondary: 240 4% 16%; /* zinc-800 */
-    --secondary-foreground: 0 0% 98%; /* zinc-50 */
-    --muted: 240 4% 16%; /* zinc-800 */
-    --muted-foreground: 240 5% 65%; /* zinc-400 */
-    --accent: 240 4% 16%; /* zinc-800 */
-    --accent-foreground: 0 0% 98%; /* zinc-50 */
-    --destructive: 0 63% 31%; /* dark red for dark mode */
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 4% 16%; /* zinc-800 */
-    --input: 240 4% 16%; /* zinc-800 */
-    --ring: 221 83% 53%; /* blue-600 */
+    --secondary: 240 5% 96%; /* zinc-100 */
+    --secondary-foreground: 240 6% 10%; /* zinc-900 */
+    --muted: 240 5% 96%; /* zinc-100 */
+    --muted-foreground: 240 4% 46%; /* zinc-600 */
+    --accent: 240 5% 96%; /* zinc-100 */
+    --accent-foreground: 240 6% 10%; /* zinc-900 */
+    --destructive: 0 84% 60%; /* red-600 */
+    --destructive-foreground: 0 0% 100%; /* white */
+    --border: 240 6% 90%; /* zinc-200 */
+    --input: 240 6% 90%; /* zinc-200 */
+    --ring: 347 77% 50%; /* rose-500 for focus rings */
     --radius: 0.5rem;
   }
 }
@@ -85,24 +85,24 @@
       box-shadow 0.2s ease,
       border-color 0.2s ease;
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.02);
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 1px 3px rgba(0, 0, 0, 0.06);
   }
   .card-hover:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-    border-color: #3f3f46; /* zinc-700 */
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: rgba(244, 63, 94, 0.2); /* rose-500/20 */
   }
 
   /* AI Deployment Border */
   .ai-deploy-border {
     border-left: 2px solid transparent;
-    border-image: linear-gradient(to bottom, #06b6d4, #8b5cf6) 1;
+    border-image: linear-gradient(to bottom, #f43f5e, #ec4899) 1;
   }
 
   /* Terminal Dot Grid */
   .terminal-dot-grid {
-    background-image: radial-gradient(#27272a 1px, transparent 1px);
+    background-image: radial-gradient(#e4e4e7 1px, transparent 1px);
     background-size: 24px 24px;
   }
 }

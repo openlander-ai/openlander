@@ -198,7 +198,7 @@ export function Header({
               llmConnected === null
                 ? 'bg-muted-foreground/40'
                 : llmConnected
-                  ? 'bg-ai animate-pulse shadow-[0_0_8px_rgba(6,182,212,0.6)]'
+                  ? 'bg-ai animate-pulse shadow-[0_0_6px_rgba(244,63,94,0.4)]'
                   : 'bg-error',
             )}
           />
