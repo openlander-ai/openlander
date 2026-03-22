@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-03-22
+
+### Added
+
+- **`get_project_stats` tool**: Per-container CPU, memory, restarts, and uptime monitoring via Docker API
+- **Command palette**: Groups, AI fallback, recent commands, keyboard hints
+
+### Changed
+
+- **Dark Zinc theme**: Full app conversion to dark mode with card depth, glow dots, AI identity colors
+- **Chat bubbles**: Dark theme optimized markdown rendering with sender indicators
+- **Terminal**: Dot grid background pattern, AI deploy gradient borders
+
+### Fixed
+
+- **Deploy wait=true**: Fixed event/phase ordering bug — `get_deploy_status(wait=true)` now resolves in single call
+- **Deploy error message**: Added `restart_project` guidance when container already exists
+- **Chat sessions**: Show first message as title instead of "New conversation"
+
+### Refactored
+
+- Split `api.ts` (1,066 lines) into domain modules (projects, services, system, chat)
+- Split `SettingsPage.tsx` (1,139 lines) into tab components
+- Split `ProjectsGrid.tsx` (545 lines) into dashboard components
+- Split `ProjectDetail.tsx` (590 lines) into focused components
+- Split `NewProjectFlow.tsx` (588 lines) into step components
+- Merged `sidebar/` → `layout/`, `terminal/` → `deploy-terminal/`
+
 ## [0.9.1] - 2026-03-22
 
 ### Improved
