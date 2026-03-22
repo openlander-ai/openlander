@@ -5,6 +5,7 @@ import type { Docker } from './docker.js';
 import type { Database } from '../db/index.js';
 import type { EnvManager } from './env.js';
 import type { EventBus } from '../events/index.js';
+import type { JobManager } from './job-manager.js';
 import { cloneRepo } from './git.js';
 import { allocatePort } from './port.js';
 import { buildTraefikLabels, getProjectUrl } from './traefik.js';
@@ -31,6 +32,7 @@ export class BlueGreenDeployer {
     private readonly db: Database,
     private readonly env: EnvManager,
     private readonly eventBus: EventBus,
+    private readonly jobManager?: JobManager,
   ) {}
 
   /**
@@ -178,6 +180,7 @@ export class BlueGreenDeployer {
       shouldCleanupGreen = false;
       const durationMs = Date.now() - startTime;
 
+      this.jobManager?.updatePhase(projectId, 'done');
       await this.eventBus.emit('deploy:success', {
         projectId,
         url: routedUrl,
@@ -197,6 +200,7 @@ export class BlueGreenDeployer {
       const errorMsg = error instanceof Error ? error.message : String(error);
 
       this.db.updateProject(projectId, { status: 'error' });
+      this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
 
       await this.eventBus.emit('deploy:failed', {
         projectId,

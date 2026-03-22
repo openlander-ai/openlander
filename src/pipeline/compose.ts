@@ -948,6 +948,16 @@ export class ComposePipeline {
         durationMs: Date.now() - startTime,
       });
 
+      const parentLogTail = hasError
+        ? buildLog.split('\n').filter(Boolean).slice(-30).join('\n')
+        : undefined;
+      this.jobManager?.updatePhase(
+        parentProjectId,
+        hasError ? 'failed' : 'done',
+        hasError ? (errorMessage ?? 'One or more services failed to start') : undefined,
+        parentLogTail,
+      );
+
       if (hasError) {
         await this.events.emit('compose:failed', {
           projectId: parentProjectId,
@@ -959,16 +969,6 @@ export class ComposePipeline {
           services: reconciledStatuses.map((status) => status.name),
         });
       }
-
-      const parentLogTail = hasError
-        ? buildLog.split('\n').filter(Boolean).slice(-30).join('\n')
-        : undefined;
-      this.jobManager?.updatePhase(
-        parentProjectId,
-        hasError ? 'failed' : 'done',
-        hasError ? (errorMessage ?? 'One or more services failed to start') : undefined,
-        parentLogTail,
-      );
 
       return {
         success: !hasError,
@@ -1021,12 +1021,12 @@ export class ComposePipeline {
         durationMs: Date.now() - startTime,
       });
 
+      this.jobManager?.updatePhase(parentProjectId, 'failed', errorMsg);
+
       await this.events.emit('compose:failed', {
         projectId: parentProjectId,
         error: errorMsg,
       });
-
-      this.jobManager?.updatePhase(parentProjectId, 'failed', errorMsg);
 
       return {
         success: false,

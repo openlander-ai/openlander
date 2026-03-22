@@ -185,7 +185,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
   const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
 
   // v0.3: Blue-green deployer
-  const blueGreen = new BlueGreenDeployer(docker, db, env, eventBus);
+  const blueGreen = new BlueGreenDeployer(docker, db, env, eventBus, jobManager);
 
   // v0.3: Database provisioner
   const dbProvisioner = new DatabaseProvisioner(docker, db);

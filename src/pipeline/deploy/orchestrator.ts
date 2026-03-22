@@ -528,6 +528,10 @@ export async function handlePostDeploy(
     log.debug({ err, projectId }, 'Failed to persist deploy config snapshot');
   }
 
+  if (!skipPhaseUpdate) {
+    deps.jobManager?.updatePhase(projectId, 'done');
+  }
+
   if (!skipSuccessEvent) {
     const successUrl = publicUrl ?? internalUrl;
     if (successUrl) {
@@ -537,10 +541,6 @@ export async function handlePostDeploy(
         totalDurationMs: totalDuration,
       });
     }
-  }
-
-  if (!skipPhaseUpdate) {
-    deps.jobManager?.updatePhase(projectId, 'done');
   }
 
   return { publicUrl, totalDuration, buildLog };
