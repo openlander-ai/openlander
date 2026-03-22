@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ChatLayout } from '@/components/agent/ChatLayout';
 import { LlmGate } from '@/components/agent/LlmGate';
 import { useStreamChat } from '@/hooks/use-stream-chat';
-import { useChatSessions } from '@/hooks/use-chat-sessions';
+import { useChatSessions } from '@/contexts/chat-sessions';
 import { getSetupStatus, replyQuestion, dismissQuestion } from '@/lib/api';
 import type { QuestionAnswer } from '@/lib/chat-types';
 

@@ -7,6 +7,7 @@ import { useSystemStats } from '@/hooks/use-system-stats';
 import { useNotifications } from '@/hooks/use-notifications';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { CommandPalette } from '@/components/command/CommandPalette';
+import { ChatSessionsProvider } from '@/contexts/chat-sessions';
 
 export function AppLayout() {
   const { projects, loading } = useProjects();
@@ -15,48 +16,50 @@ export function AppLayout() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-bg-app">
-      <Header
-        stats={stats}
-        notifications={notifications}
-        unreadCount={unreadCount}
-        onDismissNotification={dismissNotification}
-        onNotificationAction={(notification, action) => {
-          // TODO: Route notification actions (view_logs, cleanup, etc.)
-          // Will be handled by dedicated pages in future
-          const projectId = notification.details?.projectId as string | undefined;
-          if (projectId && (action === 'view_logs' || action === 'view_stats')) {
-            window.location.href = `/projects/${projectId}`;
-          }
-        }}
-        onMenuClick={() => setIsMobileSidebarOpen(true)}
-      />
+    <ChatSessionsProvider>
+      <div className="flex flex-col h-screen overflow-hidden bg-bg-app">
+        <Header
+          stats={stats}
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onDismissNotification={dismissNotification}
+          onNotificationAction={(notification, action) => {
+            // TODO: Route notification actions (view_logs, cleanup, etc.)
+            // Will be handled by dedicated pages in future
+            const projectId = notification.details?.projectId as string | undefined;
+            if (projectId && (action === 'view_logs' || action === 'view_stats')) {
+              window.location.href = `/projects/${projectId}`;
+            }
+          }}
+          onMenuClick={() => setIsMobileSidebarOpen(true)}
+        />
 
-      <CommandPalette />
+        <CommandPalette />
 
-      <div className="flex flex-1 overflow-hidden pt-12">
-        {/* Desktop Sidebar */}
-        <aside className="hidden md:flex md:w-16 lg:w-[260px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
-          <Sidebar projects={projects} loading={loading} />
-        </aside>
-
-        {/* Mobile Sidebar Sheet */}
-        <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
-          <SheetContent
-            side="left"
-            className="p-0 w-[280px] bg-bg-panel border-r border-[hsl(var(--border))]"
-            aria-describedby={undefined}
-          >
-            <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <div className="flex flex-1 overflow-hidden pt-12">
+          {/* Desktop Sidebar */}
+          <aside className="hidden md:flex md:w-16 lg:w-[260px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
             <Sidebar projects={projects} loading={loading} />
-          </SheetContent>
-        </Sheet>
+          </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col min-w-0 h-full overflow-auto bg-bg-app">
-          <Outlet />
-        </main>
+          {/* Mobile Sidebar Sheet */}
+          <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+            <SheetContent
+              side="left"
+              className="p-0 w-[280px] bg-bg-panel border-r border-[hsl(var(--border))]"
+              aria-describedby={undefined}
+            >
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
+              <Sidebar projects={projects} loading={loading} />
+            </SheetContent>
+          </Sheet>
+
+          {/* Main Content */}
+          <main className="flex-1 flex flex-col min-w-0 h-full overflow-auto bg-bg-app">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </ChatSessionsProvider>
   );
 }

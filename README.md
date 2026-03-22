@@ -200,6 +200,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.7.3**  | Pipeline Refactor + Bugfixes | Done   | Deploy orchestration extraction (519→251 lines), Dockerfile.\* scan, Python infra detection, Docker log header stripping                                                |
 | **v0.8.0**  | MCP-First Web Pivot          | Done   | Web dashboard monitoring-focused, LLM optional, auto-recovery dual-mode (LLM + programmatic), RecoveryCard timeline                                                     |
 | **v0.9.0**  | Web Agent Mode               | Done   | ChatGPT-style agent chat in web dashboard, NDJSON streaming, multi-session DB persistence, markdown rendering, tool call visualization                                  |
+| **v0.9.6**  | UI Polish                    | Done   | Agent Chat bubble/code block redesign, session Context migration, Deployments compact Vercel-style rows, AI deploy border fix                                           |
 | **v1.0.0**  | Stable Release               | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                         |
 
 ## MCP Integration (AI Coding Agents)

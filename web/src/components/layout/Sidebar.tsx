@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
-import { useChatSessions } from '@/hooks/use-chat-sessions';
+import { useChatSessions } from '@/contexts/chat-sessions';
 import { ChatSidebar } from '@/components/agent/ChatSidebar';
 import { formatRelativeTime } from '@/lib/time';
 

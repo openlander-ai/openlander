@@ -9,17 +9,7 @@ import {
 } from '@/lib/deployments';
 import { useDeployments } from '@/hooks/use-deployments';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  GitBranch,
-  GitCommit,
-  Clock,
-  Activity,
-  History,
-  Bot,
-  Webhook,
-  Zap,
-  Rocket,
-} from 'lucide-react';
+import { GitBranch, Clock, Activity, History, Bot, Webhook, Zap, Rocket } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -55,25 +45,17 @@ export function DeploymentsList({
 
   if (loading) {
     return (
-      <div className="p-4 space-y-2 h-full">
+      <div className="divide-y divide-border h-full">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel"
-          >
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-2.5 w-2.5 rounded-full" />
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-4 w-16" />
-                </div>
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-3 w-16" />
-                </div>
-              </div>
-            </div>
+          <div key={i} className="flex items-center gap-3 py-2.5 px-4">
+            <Skeleton className="h-2 w-2 rounded-full shrink-0" />
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-3 w-12" />
+            <Skeleton className="h-3 w-14" />
+            <div className="flex-1" />
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-10" />
+            <Skeleton className="h-3 w-14" />
           </div>
         ))}
       </div>
@@ -106,7 +88,7 @@ export function DeploymentsList({
   }
 
   return (
-    <div className="p-4 space-y-2 overflow-auto h-full">
+    <div className="divide-y divide-border overflow-auto h-full">
       {filteredDeployments.map((deploy) => {
         const statusMeta = getDeploymentStatusMeta(deploy.status);
         const shortCommitSha = getShortCommitSha(deploy.commitSha);
@@ -126,57 +108,48 @@ export function DeploymentsList({
             key={deploy.id}
             onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
             className={cn(
-              'flex items-center justify-between p-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel hover:border-agent/30 cursor-pointer transition-colors',
+              'flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-colors hover:bg-bg-subtle/50',
               deploy.trigger === 'chat' && 'ai-deploy-border',
             )}
           >
-            <div className="flex items-center gap-3 w-full">
-              <div className="flex flex-col w-full">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="flex items-center gap-1.5 text-sm font-display font-medium text-primary-ol">
-                    <TriggerIcon className="h-4 w-4 text-muted-ol" />
-                    {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail)}
-                  </span>
-                  <span
-                    className={cn(
-                      'flex items-center gap-1.5 text-[11px] font-body px-2 py-0.5 rounded-full bg-bg-subtle',
-                      statusMeta.textClass,
-                    )}
-                  >
-                    <div className={cn('h-1.5 w-1.5 rounded-full shrink-0', statusMeta.dotClass)} />
-                    {statusMeta.label}
-                  </span>
-                  {shortCommitSha && (
-                    <span className="flex items-center gap-1 text-xs font-mono text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
-                      <GitCommit className="h-3 w-3" />
-                      {shortCommitSha}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3 mt-1 text-xs font-body text-secondary-ol flex-wrap">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatRelativeTime(deploy.createdAt, t)}
-                  </span>
-                  {projectBranch && (
-                    <span className="flex items-center gap-1">
-                      <GitBranch className="h-3 w-3" />
-                      {projectBranch}
-                    </span>
-                  )}
-                  {deploy.durationMs && (
-                    <span className="flex items-center gap-1">
-                      <Activity className="h-3 w-3" />
-                      {formatDeploymentDuration(deploy.durationMs)}
-                    </span>
-                  )}
-                </div>
-                {deploy.failureSummary && (
-                  <p className="mt-1 text-xs font-body text-error line-clamp-2">
-                    {deploy.failureSummary}
-                  </p>
-                )}
-              </div>
+            <div className={cn('h-2 w-2 rounded-full shrink-0', statusMeta.dotClass)} />
+
+            <span className="flex items-center gap-1.5 text-[13px] font-semibold text-primary-ol truncate shrink-0">
+              <TriggerIcon className="h-3.5 w-3.5 text-muted-ol shrink-0" />
+              {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail)}
+            </span>
+            <span className={cn('text-[11px] font-body shrink-0', statusMeta.textClass)}>
+              {statusMeta.label}
+            </span>
+            {shortCommitSha && (
+              <span className="text-[11px] font-mono text-muted-ol shrink-0">{shortCommitSha}</span>
+            )}
+
+            {deploy.failureSummary && (
+              <span className="text-[11px] font-body text-error truncate min-w-0">
+                {deploy.failureSummary}
+              </span>
+            )}
+
+            <div className="flex-1" />
+
+            <div className="flex items-center gap-3 text-[11px] font-body text-muted-ol shrink-0">
+              {projectBranch && (
+                <span className="flex items-center gap-1">
+                  <GitBranch className="h-3 w-3" />
+                  {projectBranch}
+                </span>
+              )}
+              {deploy.durationMs && (
+                <span className="flex items-center gap-1">
+                  <Activity className="h-3 w-3" />
+                  {formatDeploymentDuration(deploy.durationMs)}
+                </span>
+              )}
+              <span className="flex items-center gap-1 w-16 justify-end">
+                <Clock className="h-3 w-3" />
+                {formatRelativeTime(deploy.createdAt, t)}
+              </span>
             </div>
           </div>
         );

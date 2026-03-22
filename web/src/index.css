@@ -94,10 +94,9 @@
     border-color: rgba(244, 63, 94, 0.2); /* rose-500/20 */
   }
 
-  /* AI Deployment Border */
+  /* AI Deployment Border — left accent only */
   .ai-deploy-border {
-    border-left: 2px solid transparent;
-    border-image: linear-gradient(to bottom, #f43f5e, #ec4899) 1;
+    border-left: 2px solid #f43f5e;
   }
 }
 

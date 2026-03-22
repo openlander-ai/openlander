@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-03-22
+
+### Changed
+
+- **Agent Chat bubble redesign**: iMessage-style rounded corners, `w-fit` shrink-to-fit, stronger AI bubble contrast (`bg-bg-subtle`), shadow
+- **Code block overhaul**: highlight.js syntax highlighting (github-dark theme), light text on dark background, language header bar with copy-to-clipboard button
+- **Chat session architecture**: Migrated `useChatSessions` from independent hook instances to React Context — Sidebar and AgentPage now share single session state, fixing "New conversation" title never updating
+- **Thinking indicator redesign**: Bot icon + brand color pulse + smooth `bounce-dot` animation replacing basic bounce
+- **Streaming indicator**: Moved from header bar into message area (integrated with ThinkingIndicator)
+- **Deployments list compact redesign**: Card-style rows → Vercel-style single-line rows with `divide-y`, justify-between horizontal spread, ~44px row height
+- **Deployments visual hierarchy**: Trigger label `font-semibold` as primary, status/commit as secondary plain text, meta pushed right
+- **AI deploy border fix**: `border-image` (caused 4-side pink leak) → `border-left: solid` left-only accent
+
 ## [0.9.5] - 2026-03-22
 
 ### Changed

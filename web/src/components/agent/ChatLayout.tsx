@@ -30,14 +30,8 @@ export function ChatLayout({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="shrink-0 px-4 py-3 border-b border-border flex items-center justify-between">
+      <div className="shrink-0 px-4 py-3 border-b border-border">
         <h2 className="text-sm font-medium text-primary-ol">Agent Chat</h2>
-        {isStreaming && (
-          <div className="flex items-center gap-1.5 text-xs text-agent">
-            <span className="h-1.5 w-1.5 rounded-full bg-agent animate-pulse" />
-            Streaming
-          </div>
-        )}
       </div>
 
       {!hasMessages && !isStreaming ? (

@@ -8,14 +8,14 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v1.0.0 (TBD)
 
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -1353,6 +1353,36 @@ AI: bugs.md → 해결됨 + gh issue close
 - `web/src/components/project/OverviewTab.tsx` — 터미널 컴팩트, 2컬럼 레이아웃
 - `web/src/components/deploy-terminal/TerminalFrame.tsx` — 점 그리드 제거
 - 18개 파일 다크 색상 정리 (agent/, command/, timeline/, shared/, ui/, pages/, hooks/)
+
+---
+
+### v0.9.6 — Agent Chat & Deployments UI Polish ✅
+
+**상태**: ✅ 완료
+
+> **핵심 가치**: Agent Chat 버블/코드블록/세션 아키텍처 전면 개선, Deployments 리스트 Vercel 스타일 compact 재설계
+
+| 항목                                    | 내용                                                                                 | 상태 |
+| --------------------------------------- | ------------------------------------------------------------------------------------ | ---- |
+| Agent Chat 버블 리디자인               | iMessage 스타일 라운딩, w-fit shrink, AI 버블 대비 강화, shadow                     | ✅   |
+| 코드 블록 가독성                       | highlight.js CSS import, prose-pre:text-zinc-100, 언어 헤더 바 + 복사 버튼          | ✅   |
+| Chat 세션 Context 마이그레이션         | useChatSessions 이중 인스턴스 → React Context 단일 인스턴스 (제목 갱신 버그 해결)  | ✅   |
+| Thinking 인디케이터 리디자인           | Bot 아이콘 + 브랜드 컬러 pulse + bounce-dot 애니메이션                              | ✅   |
+| Streaming 인디케이터 이동              | 헤더 바 → 메시지 영역 통합                                                          | ✅   |
+| Deployments 리스트 compact 재설계      | 카드형 → divide-y 1줄 행, justify-between 가로 꽉 채움, ~44px 행 높이              | ✅   |
+| AI deploy border 버그 수정             | border-image 4면 핑크 누출 → border-left solid 좌측만                               | ✅   |
+
+**구현 내역**:
+
+- `web/src/components/agent/MessageBubble.tsx` — 버블 스타일 + CodeBlock 컴포넌트 (언어 헤더/복사)
+- `web/src/components/agent/ThinkingIndicator.tsx` — 리디자인
+- `web/src/components/agent/ChatLayout.tsx` — Streaming 인디케이터 헤더에서 제거
+- `web/src/contexts/chat-sessions.tsx` — 신규: ChatSessionsProvider + Context
+- `web/src/components/layout/AppLayout.tsx` — Provider 래핑
+- `web/src/components/layout/Sidebar.tsx` — Context import 전환
+- `web/src/pages/AgentPage.tsx` — Context import 전환
+- `web/src/components/project/DeploymentsList.tsx` — Compact 1줄 행 + justify-between
+- `web/src/index.css` — ai-deploy-border 수정
 
 ---
 
