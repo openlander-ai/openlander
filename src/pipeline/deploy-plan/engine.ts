@@ -118,8 +118,18 @@ export class PlanEngine {
   } {
     const dockerfiles = findDockerfiles(clonePath);
     const relativeDockerfiles = dockerfiles.map((d) => relative(clonePath, d));
-    const userDockerfile = opts.dockerfilePath ?? 'Dockerfile';
-    const dockerfileExists = existsSync(join(clonePath, userDockerfile));
+    let userDockerfile = opts.dockerfilePath ?? 'Dockerfile';
+    let dockerfileExists = existsSync(join(clonePath, userDockerfile));
+
+    // If the specified/default Dockerfile doesn't exist but we found one elsewhere, use it.
+    const firstFound = relativeDockerfiles[0];
+    if (!dockerfileExists && firstFound) {
+      userDockerfile = firstFound;
+      dockerfileExists = true;
+      warnings.push(
+        `Specified "${opts.dockerfilePath ?? 'Dockerfile'}" not found; using discovered ${userDockerfile}`,
+      );
+    }
 
     if (relativeDockerfiles.length > 1) {
       warnings.push(
