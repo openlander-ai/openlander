@@ -13,6 +13,7 @@ import { createDomainRoutes } from './api/domain-routes.js';
 import { createSetupRoutes } from './api/setup-routes.js';
 import { createTerminalRoutes } from './api/terminal-routes.js';
 import { createChatRoutes } from './api/chat-routes.js';
+import { createLlmRoutes } from './api/llm-routes.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
@@ -138,6 +139,9 @@ function createApp(
 
   const chatRoutes = createChatRoutes(ctx);
   app.route('/api', chatRoutes);
+
+  const llmRoutes = createLlmRoutes(ctx);
+  app.route('/api', llmRoutes);
 
   const mcpRoutes = createMcpHttpRoutes(ctx);
   app.route('/mcp', mcpRoutes);

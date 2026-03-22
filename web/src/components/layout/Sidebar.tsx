@@ -204,9 +204,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                 ? 'bg-agent/10 text-agent shadow-sm font-semibold border border-agent/20'
                 : 'text-muted-ol hover:text-secondary-ol',
             )}
-            title={
-              agentDisabled ? 'Configure API key in Settings' : 'Open Agent panel (Cmd/Ctrl+J)'
-            }
+            title={agentDisabled ? 'Configure API key in Settings' : 'Open Agent panel (Alt+J)'}
           >
             <Bot className="h-3.5 w-3.5" />
             <span className="hidden lg:inline">Agent</span>

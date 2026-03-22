@@ -55,6 +55,16 @@ export function AgentPanel({
     sessions;
   const { abort, clearMessages, setMessages } = chat;
 
+  const filteredSessions = useMemo(
+    () =>
+      sessions.sessions.filter(
+        (s) =>
+          !s.sessionId.startsWith('rollback-hint-') &&
+          (s.messageCount > 0 || s.sessionId === activeSessionId),
+      ),
+    [sessions.sessions, activeSessionId],
+  );
+
   useEffect(() => {
     getSetupStatus()
       .then((status) => setLlmConfigured(status.llm.ok))
@@ -154,7 +164,7 @@ export function AgentPanel({
             {!sessionsCollapsed ? (
               <aside className="w-[220px] shrink-0 border-r border-border min-h-0">
                 <ChatSidebar
-                  sessions={sessions.sessions}
+                  sessions={filteredSessions}
                   activeSessionId={sessions.activeSessionId}
                   onNewChat={() => createSession()}
                   onSelectSession={(id) => sessions.switchSession(id)}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { AgentPanel } from '@/components/agent/AgentPanel';
@@ -15,6 +15,7 @@ export function AppLayout() {
   const { projects, loading } = useProjects();
   const { stats } = useSystemStats();
   const { notifications, unreadCount, dismiss: dismissNotification } = useNotifications();
+  const navigate = useNavigate();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
   const [agentPanelInitialContext, setAgentPanelInitialContext] =
@@ -31,7 +32,7 @@ export function AppLayout() {
 
   useEffect(() => {
     const handleToggleAgent = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'j') {
+      if (!event.altKey || event.key.toLowerCase() !== 'j') {
         return;
       }
 
@@ -62,11 +63,9 @@ export function AppLayout() {
             unreadCount={unreadCount}
             onDismissNotification={dismissNotification}
             onNotificationAction={(notification, action) => {
-              // TODO: Route notification actions (view_logs, cleanup, etc.)
-              // Will be handled by dedicated pages in future
               const projectId = notification.details?.projectId as string | undefined;
               if (projectId && (action === 'view_logs' || action === 'view_stats')) {
-                window.location.href = `/projects/${projectId}`;
+                navigate(`/projects/${projectId}`);
               }
             }}
             onMenuClick={() => setIsMobileSidebarOpen(true)}

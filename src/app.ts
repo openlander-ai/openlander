@@ -56,6 +56,7 @@ export interface AppContext {
   traefik: TraefikManager;
   env: EnvManager;
   agent: Agent | null;
+  model: LanguageModel | null;
   deployQueue: DeployQueue;
   // v0.2 modules
   healthMonitor: HealthMonitor;
@@ -268,6 +269,7 @@ export function createAppContext(config: OpenLanderConfig, dbPath: string): AppC
     traefik,
     env,
     agent,
+    model,
     deployQueue,
     healthMonitor,
     webhookManager,

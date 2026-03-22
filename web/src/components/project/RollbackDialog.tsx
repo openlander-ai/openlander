@@ -15,7 +15,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useLanguage } from '@/i18n/context';
 import { getProjectDeployments } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
-import type { ChatStreamEvent, DeployLogSummary } from '@/types';
+import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 import { useSetup } from '@/hooks/use-setup';
 
@@ -40,17 +40,6 @@ interface AiSuggestion {
   suggestedDeploymentId?: string;
 }
 
-function parseChatStreamEvent(line: string): ChatStreamEvent | null {
-  if (!line.trim()) {
-    return null;
-  }
-  try {
-    return JSON.parse(line) as ChatStreamEvent;
-  } catch {
-    return null;
-  }
-}
-
 function parseSuggestedDeploymentId(
   text: string,
   deployments: DeployLogSummary[],
@@ -72,10 +61,6 @@ function parseSuggestedDeploymentId(
   }
 
   return deploymentIds.find((id) => text.includes(id));
-}
-
-function createSuggestionSessionId(projectId: string): string {
-  return `rollback-hint-${projectId}`;
 }
 
 export function RollbackDialog({
@@ -168,12 +153,12 @@ export function RollbackDialog({
       const prompt = `Given these deployment records for project "${projectName}":\n${deploymentLines}\n\nWhich deployment should be rolled back to? Reply with ONLY the deployment ID on the first line, then a brief reason on the second line.`;
 
       try {
-        const response = await fetch('/api/chat/stream', {
+        const response = await fetch('/api/llm/suggest', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            message: prompt,
-            session_id: createSuggestionSessionId(projectId),
+            prompt,
+            project_id: projectId,
           }),
           signal: controller.signal,
         });
@@ -181,49 +166,18 @@ export function RollbackDialog({
         if (!response.ok) {
           throw new Error('AI suggestion request failed');
         }
-        if (!response.body) {
-          throw new Error('AI suggestion stream unavailable');
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let assistantText = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            const event = parseChatStreamEvent(line);
-            if (event?.type === 'message') {
-              assistantText = event.content.trim();
-            }
-          }
-        }
-
-        const trailingEvent = parseChatStreamEvent(buffer);
-        if (trailingEvent?.type === 'message') {
-          assistantText = trailingEvent.content.trim();
-        }
-
-        if (!assistantText) {
-          throw new Error('AI suggestion empty response');
-        }
+        const data = (await response.json()) as {
+          suggestion: string;
+          event_id: string;
+        };
 
         if (!active) {
           return;
         }
 
-        const suggestedDeploymentId = parseSuggestedDeploymentId(assistantText, deployments);
+        const suggestedDeploymentId = parseSuggestedDeploymentId(data.suggestion, deployments);
         setAiSuggestion({
-          text: assistantText,
+          text: data.suggestion,
           suggestedDeploymentId,
         });
         setAiError(null);
