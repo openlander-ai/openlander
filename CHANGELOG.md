@@ -11,14 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **Agent Chat bubble redesign**: iMessage-style rounded corners, `w-fit` shrink-to-fit, stronger AI bubble contrast (`bg-bg-subtle`), shadow
-- **Code block overhaul**: highlight.js syntax highlighting (github-dark theme), light text on dark background, language header bar with copy-to-clipboard button
-- **Chat session architecture**: Migrated `useChatSessions` from independent hook instances to React Context — Sidebar and AgentPage now share single session state, fixing "New conversation" title never updating
-- **Thinking indicator redesign**: Bot icon + brand color pulse + smooth `bounce-dot` animation replacing basic bounce
-- **Streaming indicator**: Moved from header bar into message area (integrated with ThinkingIndicator)
-- **Deployments list compact redesign**: Card-style rows → Vercel-style single-line rows with `divide-y`, justify-between horizontal spread, ~44px row height
-- **Deployments visual hierarchy**: Trigger label `font-semibold` as primary, status/commit as secondary plain text, meta pushed right
-- **AI deploy border fix**: `border-image` (caused 4-side pink leak) → `border-left: solid` left-only accent
+- **Agent Chat bubble redesign**: iMessage-style rounded corners (`18px/4px` tail), `w-fit` shrink-to-fit, `shadow-sm` depth, user bubble rose-500 / AI bubble zinc-100
+- **Code block overhaul**: Added `highlight.js/styles/github-dark.css` for syntax highlighting, `prose-pre:text-zinc-100` for readable text on dark background, language header bar with one-click copy-to-clipboard button via custom `CodeBlock` component
+- **Chat session Context migration**: `useChatSessions` was instantiated independently in both Sidebar and AgentPage — two separate `useState` instances that never synced `sessions[]`. Migrated to `React.createContext` with `ChatSessionsProvider` in AppLayout so both components share a single session state
+- **Thinking indicator redesign**: Replaced basic `animate-bounce` with Bot icon + brand color `animate-pulse` + custom `bounce-dot` keyframe (smoother scale+opacity animation)
+- **Streaming indicator relocated**: Removed `● Streaming` badge from header bar — streaming state is now communicated solely through ThinkingIndicator in the message area
+- **Deployments list compact redesign**: Card-style rows (`p-3 rounded-lg border`) → Vercel-style single-line rows (`py-2.5 px-4 divide-y`), ~44px row height (was ~68px), horizontal `justify-between` spread filling full tab width
+- **Deployments visual hierarchy**: Trigger label promoted to `font-semibold text-[13px]` as primary scan target, status badge demoted from pill to plain text, commit SHA as plain mono, meta row pushed to right edge
+
+### Fixed
+
+- **AI deploy border 4-side pink leak**: `border-image: linear-gradient(...)` applied gradient to all 4 sides and broke `border-radius`. Replaced with `border-left: 2px solid #f43f5e` — left accent only, radius-compatible
+- **Chat session title "New conversation" never updating**: Sidebar's `useChatSessions` had its own `sessions[]` state that was never refreshed after AgentPage's streaming completed. Context migration ensures `refreshSessions()` updates the shared state both components read from
+- **Code block black-on-black text**: `prose-pre:bg-bg-terminal` (#1e1e1e) had no text color override — inherited light-mode default (black text on black background). Added `prose-pre:text-zinc-100` and `[&_pre_code]:bg-transparent` to prevent inline code background bleeding into pre blocks
 
 ## [0.9.5] - 2026-03-22
 

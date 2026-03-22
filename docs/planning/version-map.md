@@ -1358,29 +1358,38 @@ AI: bugs.md → 해결됨 + gh issue close
 
 ### v0.9.6 — Agent Chat & Deployments UI Polish ✅
 
-**상태**: ✅ 완료
+**상태**: ✅ 완료 | **관련 커밋**: 1개 (style: agent chat & deployments UI polish)
 
-> **핵심 가치**: Agent Chat 버블/코드블록/세션 아키텍처 전면 개선, Deployments 리스트 Vercel 스타일 compact 재설계
+> **핵심 가치**: Agent Chat 버블/코드블록/세션 아키텍처 전면 개선, Deployments 리스트 Vercel 스타일 compact 재설계. 기능 변경 없이 순수 UI/UX + 아키텍처 개선.
 
-| 항목                                    | 내용                                                                                 | 상태 |
-| --------------------------------------- | ------------------------------------------------------------------------------------ | ---- |
-| Agent Chat 버블 리디자인               | iMessage 스타일 라운딩, w-fit shrink, AI 버블 대비 강화, shadow                     | ✅   |
-| 코드 블록 가독성                       | highlight.js CSS import, prose-pre:text-zinc-100, 언어 헤더 바 + 복사 버튼          | ✅   |
-| Chat 세션 Context 마이그레이션         | useChatSessions 이중 인스턴스 → React Context 단일 인스턴스 (제목 갱신 버그 해결)  | ✅   |
-| Thinking 인디케이터 리디자인           | Bot 아이콘 + 브랜드 컬러 pulse + bounce-dot 애니메이션                              | ✅   |
-| Streaming 인디케이터 이동              | 헤더 바 → 메시지 영역 통합                                                          | ✅   |
-| Deployments 리스트 compact 재설계      | 카드형 → divide-y 1줄 행, justify-between 가로 꽉 채움, ~44px 행 높이              | ✅   |
-| AI deploy border 버그 수정             | border-image 4면 핑크 누출 → border-left solid 좌측만                               | ✅   |
+| 항목                                    | Before                                                    | After                                                                    | 상태 |
+| --------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------ | ---- |
+| Agent Chat 버블                        | `rounded-lg` 네모, AI 버블 `bg-bg-panel`(#fafafa ≈ 흰색) | iMessage `rounded-[18px_18px_4px_18px]`, `w-fit`, `bg-bg-subtle`, shadow | ✅   |
+| 코드 블록                              | 검은 배경+검은 글자, hljs CSS 없음, 복사 불가             | github-dark 구문 강조, `text-zinc-100`, 언어 헤더 바 + Copy 버튼        | ✅   |
+| Chat 세션 상태관리                     | Sidebar/AgentPage 각각 독립 useState 인스턴스             | React Context 단일 인스턴스 (ChatSessionsProvider)                       | ✅   |
+| Thinking 인디케이터                    | 회색 `animate-bounce` 3개 점                              | Bot 아이콘 + 브랜드 컬러 pulse + `bounce-dot` 커스텀 keyframe           | ✅   |
+| Streaming 인디케이터                   | 헤더 바 우측 `● Streaming` 뱃지                           | 메시지 영역 내 ThinkingIndicator로 통합                                  | ✅   |
+| Deployments 행                         | `p-3 rounded-lg border` 카드형 (~68px)                    | `py-2.5 px-4 divide-y` 1줄 행 (~44px), justify-between 가로 꽉 채움    | ✅   |
+| Deployments 시각 위계                  | 모든 텍스트 비슷한 크기/굵기, status pill 뱃지            | trigger `font-semibold` 1순위, status 플레인 텍스트, 메타 우측 정렬     | ✅   |
+| AI deploy border                       | `border-image` → 4면 핑크 + radius 충돌                   | `border-left: 2px solid #f43f5e` 좌측만                                  | ✅   |
+
+**아키텍처 변경 상세 — Chat 세션 Context**:
+
+- **문제**: `useChatSessions()`가 커스텀 훅(Context 아님)이라 호출할 때마다 독립 `useState` 생성. Sidebar(인스턴스A)와 AgentPage(인스턴스B)가 `activeSessionId`는 URL params로 동기화했지만 `sessions[]` 배열은 동기화 안 됨
+- **증상**: AgentPage에서 메시지 전송 후 `refreshSessions()` → B의 sessions만 갱신 → Sidebar(A)는 계속 `firstMessage: undefined` → "New conversation" 도배
+- **해결**: `ChatSessionsProvider` Context로 단일 인스턴스 공유 → B의 `refreshSessions()`가 A도 동시 갱신
 
 **구현 내역**:
 
 - `web/src/components/agent/MessageBubble.tsx` — 버블 스타일 + CodeBlock 컴포넌트 (언어 헤더/복사)
-- `web/src/components/agent/ThinkingIndicator.tsx` — 리디자인
+- `web/src/components/agent/ThinkingIndicator.tsx` — Bot 아이콘 + bounce-dot 리디자인
 - `web/src/components/agent/ChatLayout.tsx` — Streaming 인디케이터 헤더에서 제거
-- `web/src/contexts/chat-sessions.tsx` — 신규: ChatSessionsProvider + Context
-- `web/src/components/layout/AppLayout.tsx` — Provider 래핑
-- `web/src/components/layout/Sidebar.tsx` — Context import 전환
-- `web/src/pages/AgentPage.tsx` — Context import 전환
+- `web/src/contexts/chat-sessions.tsx` — **신규**: ChatSessionsProvider + Context 기반 useChatSessions
+- `web/src/components/layout/AppLayout.tsx` — ChatSessionsProvider 래핑
+- `web/src/components/layout/Sidebar.tsx` — import 경로 hooks → contexts
+- `web/src/pages/AgentPage.tsx` — import 경로 hooks → contexts
+- `web/src/components/project/DeploymentsList.tsx` — compact 1줄 행 + justify-between
+- `web/src/index.css` — `ai-deploy-border` border-image → border-left solid
 - `web/src/components/project/DeploymentsList.tsx` — Compact 1줄 행 + justify-between
 - `web/src/index.css` — ai-deploy-border 수정
 
