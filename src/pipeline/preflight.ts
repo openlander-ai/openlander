@@ -198,7 +198,7 @@ export async function preflightCheck(
     const nameCheck: PreflightCheck = existingContainer
       ? {
           pass: false,
-          detail: `Container "${containerName}" already exists (${existingContainer.managedByOpenLander ? 'managed' : 'external'}, ${existingContainer.state})`,
+          detail: `Container "${containerName}" already exists (${existingContainer.managedByOpenLander ? 'managed' : 'external'}, ${existingContainer.state}). Use restart_project to redeploy, or remove_project first.`,
         }
       : {
           pass: true,
