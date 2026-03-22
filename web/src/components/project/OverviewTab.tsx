@@ -4,7 +4,7 @@ import { LogPreview } from '@/components/timeline/LogPreview';
 import { DeployTerminalSession } from '@/components/deploy-terminal/DeployTerminalSession';
 import type { TimelineItem } from '@/lib/event-types';
 import { SummaryDashboard } from '@/components/project/SummaryDashboard';
-import { getProject, getProjectDeployments } from '@/lib/api';
+import { getProjectDeployments } from '@/lib/api';
 import type { Project, DeployLogSummary } from '@/types';
 import {
   ExternalLink,
@@ -72,16 +72,10 @@ export function OverviewTab({
   onStop,
   onRollback,
 }: OverviewTabProps) {
-  const [project, setProject] = useState<Project | null>(null);
   const [latestDeploy, setLatestDeploy] = useState<DeployLogSummary | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    getProject(projectId)
-      .then((data) => {
-        if (mounted) setProject(data);
-      })
-      .catch((err) => console.error('Failed to fetch project:', err));
 
     getProjectDeployments(projectId, 1)
       .then((deployments) => {
@@ -96,7 +90,7 @@ export function OverviewTab({
     };
   }, [projectId]);
 
-  const activeProject = displayProject || project;
+  const activeProject = displayProject;
   const projectName = activeProject?.name || projectId;
   const branchName = activeProject?.branch;
   const publicUrl = activeProject?.publicUrl;

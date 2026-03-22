@@ -180,6 +180,9 @@ export function runMigrations(sqlite: SqliteDatabase): void {
       'ALTER TABLE deploy_logs ADD COLUMN environment_id TEXT REFERENCES environments(id) ON DELETE CASCADE',
     );
   }
+  if (!dlColNames.has('trigger_detail')) {
+    sqlite.exec('ALTER TABLE deploy_logs ADD COLUMN trigger_detail TEXT');
+  }
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id)',
   );
