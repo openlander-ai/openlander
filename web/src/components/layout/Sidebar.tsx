@@ -17,8 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
-import { useChatSessions } from '@/contexts/chat-sessions';
-import { ChatSidebar } from '@/components/agent/ChatSidebar';
+import { useAgentPanel } from '@/contexts/agent-panel';
 import { formatRelativeTime } from '@/lib/time';
 
 interface SidebarProps {
@@ -80,9 +79,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const location = useLocation();
   const [groupState, setGroupState] = useState<Record<string, boolean>>({});
   const [agentDisabled, setAgentDisabled] = useState(true);
-
-  const { sessions, activeSessionId, createSession, switchSession, deleteSession } =
-    useChatSessions();
+  const { isOpen: isAgentPanelOpen, openPanel } = useAgentPanel();
 
   useEffect(() => {
     getSetupStatus()
@@ -90,8 +87,8 @@ export function Sidebar({ projects, loading }: SidebarProps) {
       .catch(() => setAgentDisabled(true));
   }, []);
 
-  const isDashboardMode = !location.pathname.startsWith('/agent');
-  const isAgentMode = location.pathname.startsWith('/agent');
+  const isDashboardMode = !isAgentPanelOpen;
+  const isAgentMode = isAgentPanelOpen;
 
   const isActive = (path: string) => location.pathname === path;
   const isProjectActive = (id: string) => location.pathname === `/projects/${id}`;
@@ -200,16 +197,16 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           </button>
           <button
             data-testid="mode-toggle-agent"
-            onClick={() => !agentDisabled && navigate('/agent')}
-            disabled={agentDisabled}
+            onClick={() => openPanel()}
             className={cn(
               'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
               isAgentMode
                 ? 'bg-agent/10 text-agent shadow-sm font-semibold border border-agent/20'
                 : 'text-muted-ol hover:text-secondary-ol',
-              agentDisabled && 'opacity-50 cursor-not-allowed',
             )}
-            title={agentDisabled ? 'Configure API key in Settings' : undefined}
+            title={
+              agentDisabled ? 'Configure API key in Settings' : 'Open Agent panel (Cmd/Ctrl+J)'
+            }
           >
             <Bot className="h-3.5 w-3.5" />
             <span className="hidden lg:inline">Agent</span>
@@ -234,83 +231,73 @@ export function Sidebar({ projects, loading }: SidebarProps) {
         </button>
       </div>
 
-      {isAgentMode ? (
-        <ChatSidebar
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          onNewChat={() => createSession()}
-          onSelectSession={(id) => switchSession(id)}
-          onDeleteSession={(id) => void deleteSession(id)}
-        />
-      ) : (
-        <ScrollArea className="flex-1">
-          <div className="p-2 lg:p-3 space-y-0.5">
-            {loading && (
-              <div className="flex items-center justify-center lg:justify-start gap-2 py-3 px-2 text-secondary-ol">
-                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                <span className="hidden lg:inline text-xs font-body">Loading...</span>
-              </div>
-            )}
-
-            {!loading && projects.length === 0 && (
-              <div className="flex items-center justify-center lg:justify-start gap-2 py-3 px-2 text-muted-ol">
-                <Box className="h-4 w-4 shrink-0" />
-                <span className="hidden lg:inline text-xs font-body">No projects</span>
-              </div>
-            )}
-
-            {/* Flat list for collapsed mode (< lg) */}
-            <div className="lg:hidden space-y-0.5">{allSortedProjects.map(renderProjectItem)}</div>
-
-            {/* Grouped list for expanded mode (>= lg) */}
-            <div className="hidden lg:block space-y-4">
-              {issueProjects.length > 0 && (
-                <div className="space-y-0.5 pb-3 mb-1 border-b border-border/50">
-                  <div className="text-[10px] uppercase tracking-[0.08em] font-mono text-muted-ol px-3 py-1">
-                    ⚠️ Issues ({issueProjects.length})
-                  </div>
-                  {issueProjects.map(renderProjectItem)}
-                </div>
-              )}
-
-              {Array.from(groups.entries()).map(([url, projs]) => {
-                const visibleProjs = projs;
-
-                const open = isGroupOpen(url, projs);
-                const repoName = getRepoName(url);
-
-                return (
-                  <div key={url} className="space-y-0.5">
-                    <button
-                      onClick={() => toggleGroup(url, projs)}
-                      title={repoName}
-                      className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-muted-ol hover:text-secondary-ol transition-colors group"
-                    >
-                      {open ? (
-                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                      <span className="text-xs font-medium truncate">{repoName}</span>
-                      <span className="text-[10px] bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
-                        {visibleProjs.length}
-                      </span>
-                    </button>
-                    {open && (
-                      <div className="space-y-0.5 pl-2 border-l border-border/50 ml-3 mt-1">
-                        {visibleProjs.map(renderProjectItem)}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Singletons */}
-              <div className="space-y-0.5">{singletons.map(renderProjectItem)}</div>
+      <ScrollArea className="flex-1">
+        <div className="p-2 lg:p-3 space-y-0.5">
+          {loading && (
+            <div className="flex items-center justify-center lg:justify-start gap-2 py-3 px-2 text-secondary-ol">
+              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              <span className="hidden lg:inline text-xs font-body">Loading...</span>
             </div>
+          )}
+
+          {!loading && projects.length === 0 && (
+            <div className="flex items-center justify-center lg:justify-start gap-2 py-3 px-2 text-muted-ol">
+              <Box className="h-4 w-4 shrink-0" />
+              <span className="hidden lg:inline text-xs font-body">No projects</span>
+            </div>
+          )}
+
+          {/* Flat list for collapsed mode (< lg) */}
+          <div className="lg:hidden space-y-0.5">{allSortedProjects.map(renderProjectItem)}</div>
+
+          {/* Grouped list for expanded mode (>= lg) */}
+          <div className="hidden lg:block space-y-4">
+            {issueProjects.length > 0 && (
+              <div className="space-y-0.5 pb-3 mb-1 border-b border-border/50">
+                <div className="text-[10px] uppercase tracking-[0.08em] font-mono text-muted-ol px-3 py-1">
+                  ⚠️ Issues ({issueProjects.length})
+                </div>
+                {issueProjects.map(renderProjectItem)}
+              </div>
+            )}
+
+            {Array.from(groups.entries()).map(([url, projs]) => {
+              const visibleProjs = projs;
+
+              const open = isGroupOpen(url, projs);
+              const repoName = getRepoName(url);
+
+              return (
+                <div key={url} className="space-y-0.5">
+                  <button
+                    onClick={() => toggleGroup(url, projs)}
+                    title={repoName}
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-muted-ol hover:text-secondary-ol transition-colors group"
+                  >
+                    {open ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span className="text-xs font-medium truncate">{repoName}</span>
+                    <span className="text-[10px] bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
+                      {visibleProjs.length}
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="space-y-0.5 pl-2 border-l border-border/50 ml-3 mt-1">
+                      {visibleProjs.map(renderProjectItem)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Singletons */}
+            <div className="space-y-0.5">{singletons.map(renderProjectItem)}</div>
           </div>
-        </ScrollArea>
-      )}
+        </div>
+      </ScrollArea>
 
       <Separator className="bg-[hsl(var(--border))]" />
 

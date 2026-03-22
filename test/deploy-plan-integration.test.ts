@@ -28,13 +28,12 @@ describe('deploy-plan integration', () => {
     vi.clearAllMocks();
   });
 
-  it('deploy_project and redeploy_project are NOT in tool registry', () => {
+  it('deploy_project is NOT in tool registry (replaced by deploy plan engine)', () => {
     const ctx = createMockContext();
     const registry = createSharedToolRegistry(ctx);
     const toolNames = registry.map((tool) => tool.name);
 
     expect(toolNames).not.toContain('deploy_project');
-    expect(toolNames).not.toContain('redeploy_project');
   });
 
   it('create_deploy_plan, update_deploy_plan, execute_deploy_plan ARE in tool registry', () => {

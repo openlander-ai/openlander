@@ -27,6 +27,8 @@ import { ProjectDetailLoading } from '@/components/project/ProjectDetailLoading'
 import { ProjectDetailTabs } from '@/components/project/ProjectDetailTabs';
 import { RedeployEnvDialog } from '@/components/project/RedeployEnvDialog';
 import { AddEnvironmentDialog } from '@/components/project/AddEnvironmentDialog';
+import { RollbackDialog } from '@/components/project/RollbackDialog';
+import { BlueGreenDialog } from '@/components/project/BlueGreenDialog';
 
 export function ProjectDetail() {
   const { id } = useParams();
@@ -40,6 +42,8 @@ export function ProjectDetail() {
   const isMobile = useIsMobile();
   const [shareOpen, setShareOpen] = useState(false);
   const [redeploySheet, setRedeploySheet] = useState(false);
+  const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
+  const [blueGreenDialogOpen, setBlueGreenDialogOpen] = useState(false);
   const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
   const [redeployPasteText, setRedeployPasteText] = useState('');
   const [addEnvSheet, setAddEnvSheet] = useState<{ open: boolean; type: EnvironmentType | null }>({
@@ -224,20 +228,25 @@ export function ProjectDetail() {
     }
   };
 
-  const handleRollback = async () => {
+  const handleRollback = () => {
     if (isMobile) {
       showMobileToast();
       return;
     }
     if (!id || actionLoading) return;
-    if (!project?.previousImageTag) return;
 
+    setRollbackDialogOpen(true);
+  };
+
+  const handleRollbackConfirm = async (deploymentId: string) => {
+    if (!id || actionLoading) return;
     setActionLoading('rollback');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
 
     try {
-      await rollbackProject(id, currentEnvType);
+      await rollbackProject(id, currentEnvType, deploymentId);
       setTimelineRunKey((k) => k + 1);
+      setRollbackDialogOpen(false);
       toast.success('Project rolling back');
     } catch (err) {
       console.error('Rollback failed:', err);
@@ -253,17 +262,30 @@ export function ProjectDetail() {
     }
   };
 
-  const handleBlueGreen = async () => {
+  const handleBlueGreen = () => {
     if (isMobile) {
       showMobileToast();
       return;
     }
-    if (!id || actionLoading) return;
+    if (!id || actionLoading) {
+      return;
+    }
+
+    setBlueGreenDialogOpen(true);
+  };
+
+  const handleBlueGreenConfirm = async (healthCheckPath?: string) => {
+    if (!id || actionLoading) {
+      return;
+    }
+
     setActionLoading('bluegreen');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
+
     try {
-      await blueGreenProject(id, undefined, currentEnvType);
+      await blueGreenProject(id, healthCheckPath, currentEnvType);
       setTimelineRunKey((k) => k + 1);
+      setBlueGreenDialogOpen(false);
       toast.success('Blue-green deploy started');
     } catch (err) {
       console.error('Blue-green deploy failed:', err);
@@ -348,7 +370,7 @@ export function ProjectDetail() {
           onStop={handleStop}
           onStart={handleStart}
           onRollback={handleRollback}
-          onBlueGreen={handleBlueGreen}
+          onOpenBlueGreenDialog={handleBlueGreen}
           onShare={() => setShareOpen(true)}
           onDelete={handleDelete}
         />
@@ -387,6 +409,24 @@ export function ProjectDetail() {
         onCancel={() => setAddEnvSheet({ open: false, type: null })}
         onConfirm={() => void confirmAddEnv()}
         isSubmitting={actionLoading === 'add-env'}
+      />
+
+      <RollbackDialog
+        open={rollbackDialogOpen}
+        onOpenChange={setRollbackDialogOpen}
+        projectId={id!}
+        projectName={project.name}
+        currentEnvironment={currentEnvType}
+        isSubmitting={actionLoading === 'rollback'}
+        onConfirm={handleRollbackConfirm}
+      />
+
+      <BlueGreenDialog
+        open={blueGreenDialogOpen}
+        onOpenChange={setBlueGreenDialogOpen}
+        projectName={project.name}
+        isSubmitting={actionLoading === 'bluegreen'}
+        onConfirm={handleBlueGreenConfirm}
       />
 
       <ShareDialog

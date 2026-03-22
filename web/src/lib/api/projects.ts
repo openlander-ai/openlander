@@ -304,11 +304,19 @@ export async function redeployProject(
   }
 }
 
-export async function rollbackProject(id: string, environment?: string): Promise<DeployResult> {
+export async function rollbackProject(
+  id: string,
+  environment?: string,
+  deploymentId?: string,
+): Promise<DeployResult> {
   const url = environment
     ? `/api/projects/${id}/rollback?environment=${environment}`
     : `/api/projects/${id}/rollback`;
-  const res = await fetch(url, { method: 'POST' });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: deploymentId ? { 'Content-Type': 'application/json' } : undefined,
+    body: deploymentId ? JSON.stringify({ deployment_id: deploymentId }) : undefined,
+  });
 
   if (!res.ok) {
     const error = await res.text();
@@ -335,8 +343,8 @@ export async function blueGreenProject(
     : `/api/projects/${id}/blue-green`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ health_check_path: healthCheckPath }),
+    headers: healthCheckPath ? { 'Content-Type': 'application/json' } : undefined,
+    body: healthCheckPath ? JSON.stringify({ health_check_path: healthCheckPath }) : undefined,
   });
 
   if (!res.ok) {

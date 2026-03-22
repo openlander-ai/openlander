@@ -267,6 +267,12 @@ export const scanProjectSchema = z.object({
 // Redeploy schema
 export const redeployProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  no_cache: z
+    .boolean()
+    .optional()
+    .describe(
+      'Force fresh Docker build without cache. Use when dependencies changed but Docker layers are stale.',
+    ),
 });
 
 // Rollback schema
@@ -306,6 +312,18 @@ export const exposePublicSchema = z.object({
 });
 
 export const unexposePublicSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+});
+
+export const startProjectSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  environment: z
+    .string()
+    .optional()
+    .describe('Environment to start (e.g. "production", "development"). Omit for default.'),
+});
+
+export const shareProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 

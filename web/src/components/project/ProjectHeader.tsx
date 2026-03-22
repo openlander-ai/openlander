@@ -37,7 +37,7 @@ interface ProjectHeaderProps {
   onStop: () => void;
   onStart: () => void;
   onRollback: () => void;
-  onBlueGreen: () => void;
+  onOpenBlueGreenDialog: () => void;
   onShare: () => void;
   onDelete: () => void;
 }
@@ -65,7 +65,7 @@ export function ProjectHeader({
   onStop,
   onStart,
   onRollback,
-  onBlueGreen,
+  onOpenBlueGreenDialog,
   onShare,
   onDelete,
 }: ProjectHeaderProps) {
@@ -307,17 +307,17 @@ export function ProjectHeader({
               )}
 
               {/* Rollback */}
-              <DropdownMenuItem
-                onClick={onRollback}
-                disabled={!project.previousImageTag || !!actionLoading}
-              >
+              <DropdownMenuItem onClick={onRollback} disabled={!!actionLoading}>
                 <History className="h-3.5 w-3.5 mr-2" />
                 Rollback
               </DropdownMenuItem>
 
               {/* Blue-Green */}
               {currentEnvType === 'production' && (
-                <DropdownMenuItem onClick={onBlueGreen} disabled={!isRunning || !!actionLoading}>
+                <DropdownMenuItem
+                  onClick={onOpenBlueGreenDialog}
+                  disabled={!isRunning || !!actionLoading}
+                >
                   <Zap className="h-3.5 w-3.5 mr-2" />
                   Blue-Green Deploy
                 </DropdownMenuItem>

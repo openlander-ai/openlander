@@ -13,6 +13,7 @@ import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard
 import { ToolResultCard } from './ToolResultCard';
 import { ComposeErrorCard } from './ComposeErrorCard';
 import { RecoveryCard } from './RecoveryCard';
+import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
 
 interface TimelineItemProps {
   item: TItem;
@@ -189,6 +190,15 @@ export function TimelineItemCard({
               {item.detail.slice(-2000)}
             </pre>
           </details>
+        )}
+
+        {isError && (
+          <DiagnoseButton
+            className="mt-2"
+            projectId={item.sourceProjectId}
+            errorMessage={item.detail ?? item.title}
+            logLines={item.detail ? item.detail.split('\n').slice(-40) : undefined}
+          />
         )}
       </div>
     </div>

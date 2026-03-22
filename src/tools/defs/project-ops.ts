@@ -6,6 +6,9 @@ import {
   removeProjectSchema,
   restartProjectSchema,
   stopProjectSchema,
+  startProjectSchema,
+  redeployProjectSchema,
+  shareProjectSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
 
@@ -166,6 +169,84 @@ export const projectOpsToolDefs: ToolDef[] = [
         status: 'restarting',
         project: projectName,
         message: 'Redeployment started. Use get_deploy_status to track progress.',
+      };
+    },
+  },
+  {
+    name: 'start_project',
+    description:
+      'Start a stopped project container. Use when user wants to resume a paused project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT redeploy; use restart_project to redeploy with code changes.',
+    mcpDescription: 'Start a stopped project container.',
+    inputSchema: startProjectSchema,
+    execute: async (args, context) => {
+      const projectName = args['project_name'] as string;
+      const project = context.appCtx.db.getProjectByName(projectName);
+      if (!project) {
+        throw new ProjectNotFoundError(projectName);
+      }
+
+      await context.appCtx.pipeline.start(project.id);
+      return {
+        status: 'started',
+        project: projectName,
+        _agent_guidance: {
+          next_steps: [
+            'Call list_projects to verify the project is running, or stop_project to pause it again.',
+          ],
+        },
+      };
+    },
+  },
+  {
+    name: 'redeploy_project',
+    description:
+      'Redeploy a project with the same configuration and code. Use when user wants to rebuild and restart without code changes, or to apply environment variable updates. Returns { status, project }. Errors: PROJECT_NOT_FOUND. Pass no_cache=true to rebuild from scratch (use when dependencies changed but Docker layers stale).',
+    mcpDescription:
+      'Redeploy a project with the same configuration. Pass no_cache=true to rebuild from scratch.',
+    inputSchema: redeployProjectSchema,
+    execute: (args, context) => {
+      const projectName = args['project_name'] as string;
+      const noCache = (args['no_cache'] as boolean | undefined) === true;
+      const project = context.appCtx.db.getProjectByName(projectName);
+      if (!project) {
+        throw new ProjectNotFoundError(projectName);
+      }
+
+      void context.appCtx.pipeline.redeploy(project.id, { noCache }).catch((err: unknown) => {
+        log.error({ err, projectId: project.id }, 'Redeploy failed');
+      });
+
+      return {
+        status: 'redeploying',
+        project: projectName,
+        message: 'Redeployment started. Use get_deploy_status to track progress.',
+      };
+    },
+  },
+  {
+    name: 'share_project',
+    description:
+      'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
+    mcpDescription: 'Generate a temporary public URL for a project via TryCloudflare.',
+    inputSchema: shareProjectSchema,
+    execute: async (args, context) => {
+      const projectName = args['project_name'] as string;
+      const project = context.appCtx.db.getProjectByName(projectName);
+      if (!project) {
+        throw new ProjectNotFoundError(projectName);
+      }
+      if (!project.assigned_port) {
+        throw new Error('Project is not running — deploy it first');
+      }
+
+      const url = await context.appCtx.pipeline.exposeTunnel(project.id, project.assigned_port);
+      return {
+        status: 'exposed',
+        project: projectName,
+        publicUrl: url,
+        _agent_guidance: {
+          next_steps: ['Access the app via the publicUrl above'],
+        },
       };
     },
   },

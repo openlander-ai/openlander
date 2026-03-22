@@ -67,6 +67,27 @@ function extractFailureSummary(buildLog: string | null): string | null {
   return errorLine ?? lines.at(-1) ?? null;
 }
 
+function extractImageTagFromBuildLog(buildLog: string | null): string | null {
+  if (!buildLog) return null;
+
+  const buildMatch = buildLog.match(/\[build\]\s+([^\s]+)\s+\(\d+ms\)/);
+  if (buildMatch?.[1]) {
+    return buildMatch[1];
+  }
+
+  const rollbackMatch = buildLog.match(/\[rollback\]\s+[^\s]+\s+→\s+([^\s]+)/);
+  if (rollbackMatch?.[1]) {
+    return rollbackMatch[1];
+  }
+
+  const monorepoMatch = buildLog.match(/\[monorepo\].*→\s+([^\s]+)/);
+  if (monorepoMatch?.[1]) {
+    return monorepoMatch[1];
+  }
+
+  return null;
+}
+
 export function createProjectRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -557,6 +578,60 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         },
         404,
       );
+    }
+
+    const body = await c.req
+      .json<{ deployment_id?: unknown }>()
+      .catch(() => ({ deployment_id: undefined }));
+    const deploymentId =
+      typeof body.deployment_id === 'string' && body.deployment_id.trim().length > 0
+        ? body.deployment_id.trim()
+        : undefined;
+
+    if (deploymentId) {
+      const deployment = ctx.db.getDeployLog(deploymentId);
+      if (!deployment || deployment.project_id !== project.id) {
+        return c.json(
+          {
+            error: 'DEPLOYMENT_NOT_FOUND',
+            message: `Deployment ${deploymentId} not found for project`,
+          },
+          404,
+        );
+      }
+
+      const isRequestedEnvironmentMatch =
+        requestedEnvironment === 'production'
+          ? deployment.environment_id === null ||
+            (!!environmentRow && deployment.environment_id === environmentRow.id)
+          : !!environmentRow && deployment.environment_id === environmentRow.id;
+
+      if (!isRequestedEnvironmentMatch) {
+        return c.json(
+          {
+            error: 'DEPLOYMENT_ENVIRONMENT_MISMATCH',
+            message: 'Selected deployment does not belong to the requested environment',
+          },
+          400,
+        );
+      }
+
+      const imageTag = extractImageTagFromBuildLog(deployment.build_log);
+      if (!imageTag) {
+        return c.json(
+          {
+            error: 'DEPLOYMENT_IMAGE_NOT_FOUND',
+            message: 'Could not determine image tag from selected deployment',
+          },
+          400,
+        );
+      }
+
+      if (requestedEnvironment === 'production') {
+        ctx.db.updateProject(project.id, { previousImageTag: imageTag });
+      } else if (environmentRow) {
+        ctx.db.updateEnvironment(environmentRow.id, { previousImageTag: imageTag });
+      }
     }
 
     let result;

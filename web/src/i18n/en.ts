@@ -38,6 +38,27 @@ export const translations = {
       fixFailed: 'Fix with AI failed',
     },
   },
+  rollback: {
+    title: 'Rollback',
+    selectVersion: 'Select a version to roll back to',
+    confirm: 'Confirm Rollback',
+    cancel: 'Cancel',
+    aiAnalyzing: 'AI analyzing rollback targets...',
+    aiSuggestion: 'AI Suggestion',
+    useSuggestion: 'Use this suggestion',
+    noDeployments: 'No deployments available',
+  },
+  blueGreen: {
+    title: 'Blue-Green Deploy',
+    description: 'Creates a new container, health-checks it, then switches traffic. Zero downtime.',
+    healthCheckPath: 'Health check path (optional)',
+    healthCheckPlaceholder: '/health or /api/health',
+    confirm: 'Start Blue-Green Deploy',
+    cancel: 'Cancel',
+  },
+  agent: {
+    diagnoseWithAgent: '✨ Diagnose with Agent',
+  },
   deploy: {
     notFound: 'Deployment not found',
     backToDeployments: 'Back to deployments',

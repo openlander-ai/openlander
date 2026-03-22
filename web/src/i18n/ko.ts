@@ -38,6 +38,27 @@ export const translations = {
       fixFailed: 'AI로 수정 실패',
     },
   },
+  rollback: {
+    title: '롤백',
+    selectVersion: '롤백할 버전을 선택하세요',
+    confirm: '롤백 확인',
+    cancel: '취소',
+    aiAnalyzing: 'AI가 롤백 대상을 분석 중...',
+    aiSuggestion: 'AI 추천',
+    useSuggestion: '이 추천 사용',
+    noDeployments: '사용 가능한 배포가 없습니다',
+  },
+  blueGreen: {
+    title: '블루-그린 배포',
+    description: '새 컨테이너를 생성하고, 헬스체크 후 트래픽을 전환합니다. 제로 다운타임.',
+    healthCheckPath: '헬스체크 경로 (선택 사항)',
+    healthCheckPlaceholder: '/health 또는 /api/health',
+    confirm: '블루-그린 배포 시작',
+    cancel: '취소',
+  },
+  agent: {
+    diagnoseWithAgent: '✨ 에이전트로 진단',
+  },
   deploy: {
     notFound: '배포를 찾을 수 없습니다',
     backToDeployments: '배포 목록으로 돌아가기',

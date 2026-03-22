@@ -1,6 +1,6 @@
 import { LanguageProvider } from '@/i18n/context';
 import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SetupScreen } from '@/components/setup/SetupScreen';
 import { NewProjectFlow } from '@/pages/NewProjectFlow';
@@ -10,7 +10,7 @@ import { DeploymentDetail } from '@/pages/DeploymentDetail';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
 import { ServiceDetail } from '@/pages/ServiceDetail';
-import { AgentPage } from '@/pages/AgentPage';
+import { useAgentPanel } from '@/contexts/agent-panel';
 import './App.css';
 import { getSetupStatus } from '@/lib/api';
 import { Toaster } from 'sonner';
@@ -71,6 +71,18 @@ function SetupGuard() {
   return <Outlet />;
 }
 
+function AgentRouteRedirect() {
+  const navigate = useNavigate();
+  const { openPanel } = useAgentPanel();
+
+  useEffect(() => {
+    openPanel();
+    navigate('/projects', { replace: true });
+  }, [openPanel, navigate]);
+
+  return null;
+}
+
 function App() {
   return (
     <LanguageProvider>
@@ -96,7 +108,7 @@ function App() {
                 <Route path="/services" element={<ServicesPage />} />
                 <Route path="/services/:id" element={<ServiceDetail />} />
                 <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/agent" element={<AgentPage />} />
+                <Route path="/agent" element={<AgentRouteRedirect />} />
               </Route>
             </Route>
             <Route path="/" element={<Navigate to="/projects" replace />} />

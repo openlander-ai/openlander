@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/time';
 import { RefreshCw, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import type { TimelineItem } from '@/lib/event-types';
+import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
 
 interface RecoveryCardProps {
   item: TimelineItem;
@@ -83,6 +84,15 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
             <p className="font-medium mb-1">Manual intervention needed</p>
             <p className="font-mono text-[10px]">{item.detail}</p>
           </div>
+        )}
+
+        {(isFailed || isExhausted) && (
+          <DiagnoseButton
+            className="mt-2"
+            projectId={item.sourceProjectId}
+            errorMessage={item.detail ?? item.title}
+            logLines={item.detail ? item.detail.split('\n').slice(-40) : undefined}
+          />
         )}
       </div>
     </div>

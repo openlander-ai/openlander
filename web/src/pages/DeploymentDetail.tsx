@@ -23,6 +23,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
 import { parseAnsiLine } from '@/lib/ansi';
+import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
 
 export function DeploymentDetail() {
   const { id, deployId } = useParams();
@@ -201,6 +202,13 @@ export function DeploymentDetail() {
                 <p className="text-sm font-body text-secondary-ol">
                   {t('deploy.buildFailureDetected')}
                 </p>
+                <DiagnoseButton
+                  className="mt-2"
+                  projectId={id}
+                  deployId={deployId ?? deployment.id}
+                  errorMessage={deployment.failureSummary ?? deployment.buildLog ?? undefined}
+                  logLines={deployment.buildLog.split('\n').slice(-80)}
+                />
               </div>
             </div>
           </div>

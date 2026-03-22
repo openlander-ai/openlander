@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
+import { AgentPanel } from '@/components/agent/AgentPanel';
 import { useProjects } from '@/hooks/use-projects';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import { useNotifications } from '@/hooks/use-notifications';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { AgentPanelContext, type AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { CommandPalette } from '@/components/command/CommandPalette';
 import { ChatSessionsProvider } from '@/contexts/chat-sessions';
 
@@ -14,52 +16,96 @@ export function AppLayout() {
   const { stats } = useSystemStats();
   const { notifications, unreadCount, dismiss: dismissNotification } = useNotifications();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
+  const [agentPanelInitialContext, setAgentPanelInitialContext] =
+    useState<AgentPanelInitialContext | null>(null);
+
+  const closePanel = useCallback(() => setIsAgentPanelOpen(false), []);
+
+  const openPanel = useCallback((initialContext?: AgentPanelInitialContext) => {
+    if (initialContext) {
+      setAgentPanelInitialContext(initialContext);
+    }
+    setIsAgentPanelOpen(true);
+  }, []);
+
+  useEffect(() => {
+    const handleToggleAgent = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'j') {
+        return;
+      }
+
+      event.preventDefault();
+      setIsAgentPanelOpen((prev) => !prev);
+    };
+
+    window.addEventListener('keydown', handleToggleAgent);
+    return () => window.removeEventListener('keydown', handleToggleAgent);
+  }, []);
+
+  const agentPanelContextValue = useMemo(
+    () => ({
+      isOpen: isAgentPanelOpen,
+      openPanel,
+      closePanel,
+    }),
+    [isAgentPanelOpen, openPanel, closePanel],
+  );
 
   return (
     <ChatSessionsProvider>
-      <div className="flex flex-col h-screen overflow-hidden bg-bg-app">
-        <Header
-          stats={stats}
-          notifications={notifications}
-          unreadCount={unreadCount}
-          onDismissNotification={dismissNotification}
-          onNotificationAction={(notification, action) => {
-            // TODO: Route notification actions (view_logs, cleanup, etc.)
-            // Will be handled by dedicated pages in future
-            const projectId = notification.details?.projectId as string | undefined;
-            if (projectId && (action === 'view_logs' || action === 'view_stats')) {
-              window.location.href = `/projects/${projectId}`;
-            }
-          }}
-          onMenuClick={() => setIsMobileSidebarOpen(true)}
-        />
+      <AgentPanelContext.Provider value={agentPanelContextValue}>
+        <div className="flex flex-col h-screen overflow-hidden bg-bg-app">
+          <Header
+            stats={stats}
+            notifications={notifications}
+            unreadCount={unreadCount}
+            onDismissNotification={dismissNotification}
+            onNotificationAction={(notification, action) => {
+              // TODO: Route notification actions (view_logs, cleanup, etc.)
+              // Will be handled by dedicated pages in future
+              const projectId = notification.details?.projectId as string | undefined;
+              if (projectId && (action === 'view_logs' || action === 'view_stats')) {
+                window.location.href = `/projects/${projectId}`;
+              }
+            }}
+            onMenuClick={() => setIsMobileSidebarOpen(true)}
+          />
 
-        <CommandPalette />
+          <CommandPalette />
 
-        <div className="flex flex-1 overflow-hidden pt-12">
-          {/* Desktop Sidebar */}
-          <aside className="hidden md:flex md:w-16 lg:w-[260px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
-            <Sidebar projects={projects} loading={loading} />
-          </aside>
-
-          {/* Mobile Sidebar Sheet */}
-          <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
-            <SheetContent
-              side="left"
-              className="p-0 w-[280px] bg-bg-panel border-r border-[hsl(var(--border))]"
-              aria-describedby={undefined}
-            >
-              <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <div className="flex flex-1 overflow-hidden pt-12">
+            {/* Desktop Sidebar */}
+            <aside className="hidden md:flex md:w-16 lg:w-[260px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
               <Sidebar projects={projects} loading={loading} />
-            </SheetContent>
-          </Sheet>
+            </aside>
 
-          {/* Main Content */}
-          <main className="flex-1 flex flex-col min-w-0 h-full overflow-auto bg-bg-app">
-            <Outlet />
-          </main>
+            {/* Mobile Sidebar Sheet */}
+            <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+              <SheetContent
+                side="left"
+                className="p-0 w-[280px] bg-bg-panel border-r border-[hsl(var(--border))]"
+                aria-describedby={undefined}
+              >
+                <SheetTitle className="sr-only">Navigation</SheetTitle>
+                <Sidebar projects={projects} loading={loading} />
+              </SheetContent>
+            </Sheet>
+
+            {/* Main Content */}
+            <main className="flex-1 flex flex-col min-w-0 h-full overflow-auto bg-bg-app">
+              <Outlet />
+            </main>
+          </div>
+
+          <AgentPanel
+            open={isAgentPanelOpen}
+            onOpenChange={setIsAgentPanelOpen}
+            initialContext={agentPanelInitialContext}
+            onInitialContextConsumed={() => setAgentPanelInitialContext(null)}
+          />
         </div>
-      </div>
+      </AgentPanelContext.Provider>
     </ChatSessionsProvider>
   );
 }
