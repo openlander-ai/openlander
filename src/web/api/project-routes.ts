@@ -3,7 +3,7 @@ import { stream } from 'hono/streaming';
 import { rm } from 'node:fs/promises';
 
 import type { AppContext } from '../../app.js';
-import { ProjectNotFoundError, TunnelStartError } from '../../errors.js';
+import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
 import { getProjectUrl } from '../../pipeline/traefik.js';
@@ -11,6 +11,11 @@ import { cloneRepo } from '../../pipeline/git.js';
 import { scanForEnvUsage } from '../../pipeline/env-scan.js';
 import { generateEnvExample } from '../../pipeline/env-inject.js';
 import type { EnvironmentRow, EnvironmentType } from '../../db/index.js';
+import {
+  getEnvironmentByIdOrThrow,
+  getProjectOrThrow,
+  resolveEnvironmentByType,
+} from './helpers/project-helpers.js';
 
 const log = createModuleLogger('api');
 
@@ -142,9 +147,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/stats', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     if (project.container_id && project.status === 'running') {
       try {
@@ -219,9 +222,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const envVars = ctx.env.getAllMasked(project.id);
     const environments = ctx.db.getEnvironmentsByProject(project.id);
@@ -242,9 +243,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/environments', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req
       .json<{ type?: unknown; branch?: unknown }>()
@@ -291,37 +290,27 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/environments', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const environments = ctx.db.getEnvironmentsByProject(project.id);
     return c.json({ environments: environments.map(mapEnvironment) });
   });
 
   api.get('/projects/:id/environments/:envId', (c) => {
-    const id = c.req.param('id');
-    const envId = c.req.param('envId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const environment = ctx.db.getEnvironment(envId);
-    if (!environment || environment.project_id !== project.id) {
-      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
+    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+    if (environment instanceof Response) {
+      return environment;
     }
 
     return c.json({ environment: mapEnvironment(environment) });
   });
 
   api.delete('/projects/:id/environments/:envId', (c) => {
-    const id = c.req.param('id');
-    const envId = c.req.param('envId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const environment = ctx.db.getEnvironment(envId);
-    if (!environment || environment.project_id !== project.id) {
-      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
+    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+    if (environment instanceof Response) {
+      return environment;
     }
 
     if (environment.type === 'production') {
@@ -339,14 +328,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/environments/:envId/env', (c) => {
-    const id = c.req.param('id');
-    const envId = c.req.param('envId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const environment = ctx.db.getEnvironment(envId);
-    if (!environment || environment.project_id !== project.id) {
-      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
+    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+    if (environment instanceof Response) {
+      return environment;
     }
 
     const envVars = ctx.env.getAllWithInheritance(project.id, environment.id);
@@ -360,14 +345,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/environments/:envId/env', async (c) => {
-    const id = c.req.param('id');
-    const envId = c.req.param('envId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
-
-    const environment = ctx.db.getEnvironment(envId);
-    if (!environment || environment.project_id !== project.id) {
-      return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message: 'Environment not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
+    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
+    if (environment instanceof Response) {
+      return environment;
     }
 
     const body = await c.req.json<{ variables?: Record<string, string> }>();
@@ -388,9 +369,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // --- Deployment History ---
 
   api.get('/projects/:id/deployments', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const limit = parseInt(c.req.query('limit') ?? '50', 10);
     const environmentId = c.req.query('environmentId');
@@ -412,10 +391,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/deployments/:deployId', (c) => {
-    const id = c.req.param('id');
     const deployId = c.req.param('deployId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const log = ctx.db.getDeployLog(deployId);
     if (!log || log.project_id !== project.id) {
@@ -437,25 +414,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.2.3: Start a stopped project
   api.post('/projects/:id/start', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-
-    if (requestedEnvironment !== 'production' && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
+    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
+    if ('response' in environmentResolution) {
+      return environmentResolution.response;
     }
+    const { requestedEnvironment, environmentRow } = environmentResolution;
 
     if (requestedEnvironment === 'production') {
       if (!project.container_id) {
@@ -472,25 +437,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/stop', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-
-    if (requestedEnvironment !== 'production' && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
+    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
+    if ('response' in environmentResolution) {
+      return environmentResolution.response;
     }
+    const { requestedEnvironment, environmentRow } = environmentResolution;
 
     if (requestedEnvironment === 'production') {
       await ctx.pipeline.stop(project.id);
@@ -501,25 +454,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/redeploy', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-
-    if (requestedEnvironment !== 'production' && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
+    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
+    if ('response' in environmentResolution) {
+      return environmentResolution.response;
     }
+    const { requestedEnvironment, environmentRow } = environmentResolution;
 
     // If caller provides env_vars, merge them into existing vars before redeploying
     const body = await c.req
@@ -560,25 +501,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.3: Rollback
   api.post('/projects/:id/rollback', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-
-    if (requestedEnvironment !== 'production' && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
+    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
+    if ('response' in environmentResolution) {
+      return environmentResolution.response;
     }
+    const { requestedEnvironment, environmentRow } = environmentResolution;
 
     const body = await c.req
       .json<{ deployment_id?: unknown }>()
@@ -647,9 +576,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.3: Blue-green deployment
   api.post('/projects/:id/blue-green', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
     if (requestedEnvironment !== 'production') {
@@ -674,9 +601,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.2.3: Webhook settings API
   api.get('/projects/:id/webhooks', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
     const configs = ctx.db.getWebhookConfigs(project.id);
     return c.json({
       webhooks: configs.map((cfg) => ({
@@ -692,9 +617,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/webhooks', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
     const body = await c.req.json<{ source: string; branch_filter?: string; enabled?: boolean }>();
     if (!body.source || !['github', 'gitlab', 'bitbucket'].includes(body.source)) {
       return c.json({ error: 'Invalid source. Must be github, gitlab, or bitbucket.' }, 400);
@@ -726,10 +649,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.delete('/projects/:id/webhooks/:source', (c) => {
-    const id = c.req.param('id');
     const source = c.req.param('source');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
     if (!['github', 'gitlab', 'bitbucket'].includes(source)) {
       return c.json({ error: 'Invalid source' }, 400);
     }
@@ -739,9 +660,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   // v0.3: Database provisioning
   api.post('/projects/:id/provision-db', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req
       .json<{ type?: 'sqlite' | 'postgres'; db_name?: string }>()
@@ -798,9 +717,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   // --- v0.0.11: Insight action handlers ---
 
   api.post('/projects/:id/actions', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ action: string }>().catch(() => ({ action: '' }));
     const { action } = body;
@@ -849,18 +766,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.delete('/projects/:id', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     await ctx.pipeline.remove(project.id, ctx.cloudflare);
     return c.json({ status: 'removed', project: project.name });
   });
 
   api.get('/projects/:id/logs', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const follow = c.req.query('follow');
 
@@ -918,18 +831,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/env', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const vars = ctx.env.getAllMasked(project.id);
     return c.json({ project: project.name, envVars: vars });
   });
 
   api.get('/projects/:id/env-example', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
     if (!project.repo_url) {
       return c.json({ error: 'MISSING_REPO_URL', message: 'Project has no repository URL' }, 400);
     }
@@ -946,19 +855,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const environments = ctx.db.getEnvironmentsByProject(project.id);
-    const environmentRow = environments.find(
-      (environment) => environment.type === requestedEnvironment,
-    );
-    if (environments.length > 0 && !environmentRow) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_NOT_FOUND',
-          message: `${requestedEnvironment} environment not found for project`,
-        },
-        404,
-      );
+    const environmentResolution = resolveEnvironmentByType(c, ctx, project, {
+      requireExistingEnvironmentWhenAnyExists: true,
+    });
+    if ('response' in environmentResolution) {
+      return environmentResolution.response;
     }
+    const { environmentRow } = environmentResolution;
 
     let clonePath: string | null = null;
     try {
@@ -984,9 +887,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/env', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ variables?: Record<string, string> }>();
     if (!body.variables) {
@@ -1106,9 +1007,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/expose', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     if (!project.assigned_port) {
       return c.json({ error: 'NOT_RUNNING', message: 'Project is not running' }, 400);
@@ -1132,18 +1031,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.post('/projects/:id/unexpose', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     ctx.pipeline.closeTunnel(project.id);
     return c.json({ status: 'unexposed', project: project.name });
   });
 
   api.post('/projects/:id/share', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ accessCode: string }>();
     if (!body.accessCode || body.accessCode.length < 4) {
@@ -1228,9 +1123,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.delete('/projects/:id/share', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const tunnel = ctx.pipeline.getTunnel(project.id);
     if (tunnel) {
@@ -1247,9 +1140,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.get('/projects/:id/previews', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const previews = ctx.db.getPreviewProjects(project.id);
     return c.json({
@@ -1267,10 +1158,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   });
 
   api.delete('/projects/:id/previews/:previewId', async (c) => {
-    const id = c.req.param('id');
     const previewId = c.req.param('previewId');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const preview = ctx.db.getProject(previewId);
     if (!preview || preview.parent_project_id !== project.id) {

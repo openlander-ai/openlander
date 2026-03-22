@@ -1,26 +1,31 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { PassThrough } from 'node:stream';
 
 import { nanoid } from 'nanoid';
 
 import { getDataDir } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import {
+  getServiceAdapter,
+  type BuiltInServiceType,
+  type CreateDatabaseResult,
+  type CreateUserResult,
+  type ListedDatabase,
+  type ListedUser,
+} from './service-adapters/index.js';
+import {
+  assertSafeDatabaseName,
+  assertSafeUserName,
+  execInServiceContainer,
+} from './service-adapters/shared.js';
 import type { Docker } from './docker.js';
 import { allocatePort } from './port.js';
 
 const log = createModuleLogger('service-manager');
 
 const WEB_NETWORK = 'web';
-type BuiltInServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb';
-
-interface ServiceCredentials {
-  user: string;
-  password: string;
-  database: string;
-}
 
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
@@ -28,35 +33,6 @@ export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   redis: ['8-alpine', '7-alpine'],
   mongodb: ['8', '7'],
 };
-
-interface ContainerExecResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-}
-
-interface CreateDatabaseResult {
-  database: string;
-  user?: string;
-  password?: string;
-  connectionString?: string;
-}
-
-interface CreateUserResult {
-  database: string;
-  user: string;
-  password: string;
-  connectionString: string;
-}
-
-interface ListedDatabase {
-  name: string;
-  sizeBytes: number | null;
-}
-
-interface ListedUser {
-  name: string;
-}
 
 export interface ServiceTemplate {
   type: string;
@@ -580,7 +556,11 @@ export class ServiceManager {
     let diskUsageBytes: number | null = null;
     try {
       const dataMountPath = this.getDataMountPath(service.type);
-      const result = await this.execInServiceContainer(service, ['du', '-sb', dataMountPath]);
+      const result = await execInServiceContainer(this.docker, service, [
+        'du',
+        '-sb',
+        dataMountPath,
+      ]);
       const usageRaw = result.stdout.trim().split(/\s+/)[0] ?? '';
       const parsed = Number.parseInt(usageRaw, 10);
       if (Number.isFinite(parsed)) {
@@ -614,80 +594,11 @@ export class ServiceManager {
     let activeConnections: number | null = null;
     let maxConnections: number | null = null;
     try {
-      if (service.type === 'postgresql') {
-        const credentials = this.parseServiceCredentials(service);
-        const connResult = await this.execInServiceContainer(service, [
-          'psql',
-          '-t',
-          '-A',
-          '-U',
-          credentials.user,
-          '-d',
-          'postgres',
-          '-c',
-          'SELECT count(*) FROM pg_stat_activity WHERE state IS NOT NULL',
-        ]);
-        const maxResult = await this.execInServiceContainer(service, [
-          'psql',
-          '-t',
-          '-A',
-          '-U',
-          credentials.user,
-          '-d',
-          'postgres',
-          '-c',
-          'SHOW max_connections',
-        ]);
-        activeConnections = Number.parseInt(connResult.stdout.trim(), 10) || 0;
-        maxConnections = Number.parseInt(maxResult.stdout.trim(), 10) || null;
-      } else if (service.type === 'mysql') {
-        const credentials = this.parseServiceCredentials(service);
-        const connResult = await this.execInServiceContainer(service, [
-          'mysql',
-          '-N',
-          '-uroot',
-          `-p${credentials.password}`,
-          '-e',
-          'SELECT COUNT(*) FROM information_schema.processlist',
-        ]);
-        const maxResult = await this.execInServiceContainer(service, [
-          'mysql',
-          '-N',
-          '-uroot',
-          `-p${credentials.password}`,
-          '-e',
-          "SHOW VARIABLES LIKE 'max_connections'",
-        ]);
-        activeConnections = Number.parseInt(connResult.stdout.trim(), 10) || 0;
-        const maxParts = maxResult.stdout.trim().split(/\s+/);
-        maxConnections =
-          maxParts.length >= 2 ? Number.parseInt(maxParts[1] ?? '', 10) || null : null;
-      } else if (service.type === 'redis') {
-        const infoResult = await this.execInServiceContainer(service, [
-          'redis-cli',
-          'INFO',
-          'clients',
-        ]);
-        const clientsMatch = infoResult.stdout.match(/connected_clients:(\d+)/);
-        const maxMatch = infoResult.stdout.match(/maxclients:(\d+)/);
-        activeConnections = clientsMatch ? Number.parseInt(clientsMatch[1] ?? '', 10) : null;
-        maxConnections = maxMatch ? Number.parseInt(maxMatch[1] ?? '', 10) : null;
-      } else if (service.type === 'mongodb') {
-        const connResult = await this.execInServiceContainer(service, [
-          'mongosh',
-          '--quiet',
-          '--eval',
-          'JSON.stringify(db.serverStatus().connections)',
-        ]);
-        const parsed = JSON.parse(connResult.stdout.trim()) as {
-          current?: number;
-          available?: number;
-        };
-        activeConnections = parsed.current ?? null;
-        maxConnections =
-          parsed.available != null && parsed.current != null
-            ? parsed.current + parsed.available
-            : null;
+      const adapter = getServiceAdapter(service.type);
+      if (adapter) {
+        const connectionStats = await adapter.getConnectionStats(service, this.docker);
+        activeConnections = connectionStats.activeConnections;
+        maxConnections = connectionStats.maxConnections;
       }
     } catch {
       // connection stats unavailable — non-fatal
@@ -726,245 +637,36 @@ export class ServiceManager {
   async listDatabases(serviceId: string): Promise<ListedDatabase[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-
-    if (service.type === 'redis') {
-      throw new Error('Database listing is not supported for redis services');
+    const adapter = getServiceAdapter(service.type);
+    if (!adapter) {
+      throw new Error(`Database listing is not supported for service type: ${service.type}`);
     }
 
-    if (service.type === 'postgresql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForPostgresReady(service, credentials);
-
-      const result = await this.execInServiceContainer(service, [
-        'psql',
-        '-t',
-        '-A',
-        '-F',
-        '|',
-        '-U',
-        credentials.user,
-        '-d',
-        'postgres',
-        '-c',
-        'SELECT datname, pg_database_size(datname) FROM pg_database WHERE datistemplate = false',
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const separatorIndex = line.indexOf('|');
-          if (separatorIndex < 0) {
-            return {
-              name: line,
-              sizeBytes: null,
-            };
-          }
-
-          const name = line.slice(0, separatorIndex).trim();
-          const sizeRaw = line.slice(separatorIndex + 1).trim();
-          const parsedSize = Number.parseInt(sizeRaw, 10);
-          return {
-            name,
-            sizeBytes: Number.isFinite(parsedSize) ? parsedSize : null,
-          };
-        })
-        .filter((database) => database.name.length > 0);
-    }
-
-    if (service.type === 'mysql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForMySqlReady(service, credentials);
-
-      const result = await this.execInServiceContainer(service, [
-        'mysql',
-        '-N',
-        '-uroot',
-        `-p${credentials.password}`,
-        '-e',
-        "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema','mysql','performance_schema','sys')",
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((name) => name.length > 0)
-        .map((name) => ({
-          name,
-          sizeBytes: null,
-        }));
-    }
-
-    if (service.type === 'mongodb') {
-      const result = await this.execInServiceContainer(service, [
-        'mongosh',
-        '--quiet',
-        '--eval',
-        'db.adminCommand("listDatabases").databases.filter(d => !["admin","config","local"].includes(d.name)).forEach(d => print(d.name + "|" + d.sizeOnDisk))',
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const separatorIndex = line.indexOf('|');
-          if (separatorIndex < 0) return { name: line, sizeBytes: null };
-          const name = line.slice(0, separatorIndex).trim();
-          const sizeRaw = line.slice(separatorIndex + 1).trim();
-          const parsedSize = Number.parseInt(sizeRaw, 10);
-          return { name, sizeBytes: Number.isFinite(parsedSize) ? parsedSize : null };
-        })
-        .filter((db) => db.name.length > 0);
-    }
-
-    throw new Error(`Database listing is not supported for service type: ${service.type}`);
+    return adapter.listDatabases(service, this.docker);
   }
 
   async listUsers(serviceId: string): Promise<ListedUser[]> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-
-    if (service.type === 'redis') {
-      throw new Error('User listing is not supported for redis services');
+    const adapter = getServiceAdapter(service.type);
+    if (!adapter) {
+      throw new Error(`User listing is not supported for service type: ${service.type}`);
     }
 
-    if (service.type === 'postgresql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForPostgresReady(service, credentials);
-
-      const result = await this.execInServiceContainer(service, [
-        'psql',
-        '-t',
-        '-A',
-        '-F',
-        '|',
-        '-U',
-        credentials.user,
-        '-d',
-        'postgres',
-        '-c',
-        'SELECT rolname FROM pg_roles WHERE rolcanlogin = true',
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const separatorIndex = line.indexOf('|');
-          const name = separatorIndex >= 0 ? line.slice(0, separatorIndex).trim() : line;
-          return { name };
-        })
-        .filter((user) => user.name.length > 0);
-    }
-
-    if (service.type === 'mysql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForMySqlReady(service, credentials);
-
-      const result = await this.execInServiceContainer(service, [
-        'mysql',
-        '-N',
-        '-uroot',
-        `-p${credentials.password}`,
-        '-e',
-        "SELECT user FROM mysql.user WHERE user NOT IN ('root','mysql.sys','mysql.infoschema','mysql.session')",
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((name) => name.length > 0)
-        .map((name) => ({ name }));
-    }
-
-    if (service.type === 'mongodb') {
-      const result = await this.execInServiceContainer(service, [
-        'mongosh',
-        '--quiet',
-        '--eval',
-        'db.system.users.find({}, {user:1, _id:0}).forEach(u => print(u.user))',
-      ]);
-
-      return result.stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((name) => name.length > 0)
-        .map((name) => ({ name }));
-    }
-
-    throw new Error(`User listing is not supported for service type: ${service.type}`);
+    return adapter.listUsers(service, this.docker);
   }
 
   async createDatabase(serviceId: string, dbName: string): Promise<CreateDatabaseResult> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    this.assertSafeDatabaseName(dbName);
+    assertSafeDatabaseName(dbName);
 
-    if (service.type === 'redis') {
-      throw new Error('Database creation is not supported for redis services');
+    const adapter = getServiceAdapter(service.type);
+    if (!adapter) {
+      throw new Error(`Database creation is not supported for service type: ${service.type}`);
     }
 
-    if (service.type === 'postgresql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForPostgresReady(service, credentials);
-
-      await this.execInServiceContainer(service, [
-        'psql',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-U',
-        credentials.user,
-        '-d',
-        'postgres',
-        '-c',
-        `CREATE DATABASE ${this.quotePostgresIdentifier(dbName)}`,
-      ]);
-
-      return {
-        database: dbName,
-        user: credentials.user,
-        password: credentials.password,
-        connectionString: this.getConnectionString(
-          'postgresql',
-          service.container_name,
-          service.port,
-          {
-            user: credentials.user,
-            password: credentials.password,
-            database: dbName,
-          },
-        ),
-      };
-    }
-
-    if (service.type === 'mysql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForMySqlReady(service, credentials);
-
-      await this.execInServiceContainer(service, [
-        'mysql',
-        '-uroot',
-        `-p${credentials.password}`,
-        '-e',
-        `CREATE DATABASE IF NOT EXISTS ${this.quoteMySqlIdentifier(dbName)};`,
-      ]);
-
-      return {
-        database: dbName,
-        user: credentials.user,
-        password: credentials.password,
-        connectionString: this.getConnectionString('mysql', service.container_name, service.port, {
-          user: credentials.user,
-          password: credentials.password,
-          database: dbName,
-        }),
-      };
-    }
-
-    throw new Error(`Database creation is not supported for service type: ${service.type}`);
+    return adapter.createDatabase(service, dbName, this.docker);
   }
 
   async createUser(
@@ -975,102 +677,19 @@ export class ServiceManager {
   ): Promise<CreateUserResult> {
     const service = this.getRequiredService(serviceId);
     await this.ensureServiceContainerRunning(service);
-    this.assertSafeUserName(username);
-
-    if (service.type === 'redis') {
-      throw new Error('User creation is not supported for redis services');
-    }
+    assertSafeUserName(username);
 
     const userPassword = password ?? randomBytes(16).toString('hex');
-
-    if (service.type === 'postgresql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForPostgresReady(service, credentials);
-
-      await this.execInServiceContainer(service, [
-        'psql',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-U',
-        credentials.user,
-        '-d',
-        'postgres',
-        '-c',
-        `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${this.quoteSqlLiteral(username)}) THEN CREATE ROLE ${this.quotePostgresIdentifier(username)} LOGIN PASSWORD ${this.quoteSqlLiteral(userPassword)}; ELSE ALTER ROLE ${this.quotePostgresIdentifier(username)} LOGIN PASSWORD ${this.quoteSqlLiteral(userPassword)}; END IF; END $$;`,
-      ]);
-
-      const grantDatabase = grants?.database;
-      if (grantDatabase) {
-        this.assertSafeDatabaseName(grantDatabase);
-        await this.execInServiceContainer(service, [
-          'psql',
-          '-v',
-          'ON_ERROR_STOP=1',
-          '-U',
-          credentials.user,
-          '-d',
-          'postgres',
-          '-c',
-          `GRANT ALL PRIVILEGES ON DATABASE ${this.quotePostgresIdentifier(grantDatabase)} TO ${this.quotePostgresIdentifier(username)};`,
-        ]);
-      }
-
-      const database = grantDatabase ?? credentials.database;
-      return {
-        database,
-        user: username,
-        password: userPassword,
-        connectionString: this.getConnectionString(
-          'postgresql',
-          service.container_name,
-          service.port,
-          {
-            user: username,
-            password: userPassword,
-            database,
-          },
-        ),
-      };
+    if (grants?.database) {
+      assertSafeDatabaseName(grants.database);
     }
 
-    if (service.type === 'mysql') {
-      const credentials = this.parseServiceCredentials(service);
-      await this.waitForMySqlReady(service, credentials);
-
-      await this.execInServiceContainer(service, [
-        'mysql',
-        '-uroot',
-        `-p${credentials.password}`,
-        '-e',
-        `CREATE USER IF NOT EXISTS ${this.quoteMySqlUserHost(username)} IDENTIFIED BY ${this.quoteSqlLiteral(userPassword)}; ALTER USER ${this.quoteMySqlUserHost(username)} IDENTIFIED BY ${this.quoteSqlLiteral(userPassword)};`,
-      ]);
-
-      const grantDatabase = grants?.database;
-      if (grantDatabase) {
-        this.assertSafeDatabaseName(grantDatabase);
-        await this.execInServiceContainer(service, [
-          'mysql',
-          '-uroot',
-          `-p${credentials.password}`,
-          '-e',
-          `GRANT ALL PRIVILEGES ON ${this.quoteMySqlIdentifier(grantDatabase)}.* TO ${this.quoteMySqlUserHost(username)}; FLUSH PRIVILEGES;`,
-        ]);
-      }
-
-      const database = grantDatabase ?? credentials.database;
-      return {
-        database,
-        user: username,
-        password: userPassword,
-        connectionString: this.getConnectionString('mysql', service.container_name, service.port, {
-          user: username,
-          password: userPassword,
-          database,
-        }),
-      };
+    const adapter = getServiceAdapter(service.type);
+    if (!adapter) {
+      throw new Error(`User creation is not supported for service type: ${service.type}`);
     }
 
-    throw new Error(`User creation is not supported for service type: ${service.type}`);
+    return adapter.createUser(service, { username, password: userPassword, grants }, this.docker);
   }
 
   private getContainerName(name: string): string {
@@ -1086,18 +705,12 @@ export class ServiceManager {
   }
 
   private getDataMountPath(type: string): string {
-    switch (type) {
-      case 'postgresql':
-        return '/var/lib/postgresql/data';
-      case 'mysql':
-        return '/var/lib/mysql';
-      case 'redis':
-        return '/data';
-      case 'mongodb':
-        return '/data/db';
-      default:
-        return '/data';
+    const adapter = getServiceAdapter(type);
+    if (!adapter) {
+      return '/data';
     }
+
+    return adapter.getDataMountPath();
   }
 
   private buildCredentials(
@@ -1137,30 +750,12 @@ export class ServiceManager {
     port: number,
     creds?: { user: string; password: string; database: string },
   ): string {
-    if (type === 'redis') {
-      return `redis://${containerName}:${String(port)}`;
+    const adapter = getServiceAdapter(type);
+    if (!adapter) {
+      throw new Error(`Unsupported service type: ${type}`);
     }
 
-    if (!creds) {
-      throw new Error(`Credentials required for ${type}`);
-    }
-
-    const user = encodeURIComponent(creds.user);
-    const password = encodeURIComponent(creds.password);
-    const database = encodeURIComponent(creds.database);
-
-    switch (type) {
-      case 'postgresql':
-        return `postgresql://${user}:${password}@${containerName}:${String(port)}/${database}`;
-      case 'mysql':
-        return `mysql://${user}:${password}@${containerName}:${String(port)}/${database}`;
-      case 'mongodb':
-        return `mongodb://${user}:${password}@${containerName}:${String(port)}/admin`;
-      default: {
-        const _exhaustive: never = type;
-        throw new Error(`Unsupported service type: ${_exhaustive as string}`);
-      }
-    }
+    return adapter.getConnectionString(containerName, port, creds);
   }
 
   private toDatabaseName(name: string): string {
@@ -1218,189 +813,5 @@ export class ServiceManager {
       }
       throw error;
     }
-  }
-
-  private parseServiceCredentials(service: ServiceRow): ServiceCredentials {
-    if (!service.credentials) {
-      throw new Error(`Service credentials not available: ${service.id}`);
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(service.credentials);
-    } catch (_err) {
-      throw new Error(`Invalid service credentials: ${service.id}`);
-    }
-
-    if (typeof parsed !== 'object' || parsed === null) {
-      throw new Error(`Incomplete service credentials: ${service.id}`);
-    }
-
-    const record = parsed as Record<string, unknown>;
-    if (
-      typeof record['user'] !== 'string' ||
-      typeof record['password'] !== 'string' ||
-      typeof record['database'] !== 'string'
-    ) {
-      throw new Error(`Incomplete service credentials: ${service.id}`);
-    }
-
-    return {
-      user: record['user'],
-      password: record['password'],
-      database: record['database'],
-    };
-  }
-
-  private assertSafeDatabaseName(name: string): void {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
-      throw new Error(`Invalid database name: ${name}`);
-    }
-  }
-
-  private assertSafeUserName(username: string): void {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(username)) {
-      throw new Error(`Invalid username: ${username}`);
-    }
-  }
-
-  private quotePostgresIdentifier(identifier: string): string {
-    return `"${identifier.replace(/"/g, '""')}"`;
-  }
-
-  private quoteMySqlIdentifier(identifier: string): string {
-    return `\`${identifier.replace(/`/g, '``')}\``;
-  }
-
-  private quoteMySqlUserHost(username: string): string {
-    return `${this.quoteSqlLiteral(username)}@'%'`;
-  }
-
-  private quoteSqlLiteral(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`;
-  }
-
-  private async waitForPostgresReady(
-    service: ServiceRow,
-    credentials: ServiceCredentials,
-  ): Promise<void> {
-    let lastError = '';
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      try {
-        const result = await this.execInServiceContainer(
-          service,
-          ['pg_isready', '-U', credentials.user, '-d', 'postgres'],
-          { throwOnNonZeroExit: false },
-        );
-        if (result.exitCode === 0) {
-          return;
-        }
-        lastError = result.stderr.trim() || result.stdout.trim();
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-      }
-      await this.sleep(1000);
-    }
-
-    throw new Error(
-      `PostgreSQL service is not ready: ${service.id}${lastError ? ` (${lastError})` : ''}`,
-    );
-  }
-
-  private async waitForMySqlReady(
-    service: ServiceRow,
-    credentials: ServiceCredentials,
-  ): Promise<void> {
-    let lastError = '';
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      try {
-        const result = await this.execInServiceContainer(
-          service,
-          [
-            'mysqladmin',
-            'ping',
-            '-h',
-            '127.0.0.1',
-            '-uroot',
-            `-p${credentials.password}`,
-            '--silent',
-          ],
-          { throwOnNonZeroExit: false },
-        );
-        if (result.exitCode === 0) {
-          return;
-        }
-        lastError = result.stderr.trim() || result.stdout.trim();
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-      }
-      await this.sleep(1000);
-    }
-
-    throw new Error(
-      `MySQL service is not ready: ${service.id}${lastError ? ` (${lastError})` : ''}`,
-    );
-  }
-
-  private async execInServiceContainer(
-    service: ServiceRow,
-    command: string[],
-    options?: { throwOnNonZeroExit?: boolean },
-  ): Promise<ContainerExecResult> {
-    const client = this.docker.getClient();
-    const containerId = service.container_id ?? service.container_name;
-    const container = client.getContainer(containerId);
-    const exec = await container.exec({
-      Cmd: command,
-      AttachStdin: false,
-      AttachStdout: true,
-      AttachStderr: true,
-      Tty: false,
-    });
-
-    const stream = await exec.start({ hijack: false, stdin: false });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    const stdoutStream = new PassThrough();
-    const stderrStream = new PassThrough();
-
-    stdoutStream.on('data', (chunk: Buffer) => {
-      stdoutChunks.push(chunk);
-    });
-    stderrStream.on('data', (chunk: Buffer) => {
-      stderrChunks.push(chunk);
-    });
-
-    client.modem.demuxStream(stream, stdoutStream, stderrStream);
-
-    await new Promise<void>((resolve, reject) => {
-      stream.on('error', reject);
-      stream.on('end', resolve);
-    });
-
-    const info = await exec.inspect();
-    const exitCode = info.ExitCode;
-    if (typeof exitCode !== 'number') {
-      throw new Error(`Container command did not report an exit code for service: ${service.id}`);
-    }
-
-    const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-    const stderr = Buffer.concat(stderrChunks).toString('utf8');
-
-    if (options?.throwOnNonZeroExit !== false && exitCode !== 0) {
-      const commandText = command.join(' ');
-      const output = stderr.trim() || stdout.trim();
-      throw new Error(
-        `Container command failed (${commandText}) with exit code ${String(exitCode)}${output ? `: ${output}` : ''}`,
-      );
-    }
-
-    return { stdout, stderr, exitCode };
-  }
-
-  private async sleep(ms: number): Promise<void> {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, ms);
-    });
   }
 }
