@@ -45,7 +45,7 @@ export function AgentPanel({
   onInitialContextConsumed,
 }: AgentPanelProps) {
   const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
-  const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
+  const [sessionsCollapsed, setSessionsCollapsed] = useState(true);
   const sentContextKeyRef = useRef<string | null>(null);
   const [searchParams] = useSearchParams();
 

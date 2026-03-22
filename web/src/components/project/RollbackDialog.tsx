@@ -75,10 +75,7 @@ function parseSuggestedDeploymentId(
 }
 
 function createSuggestionSessionId(projectId: string): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `rollback-${projectId}-${Date.now()}`;
+  return `rollback-hint-${projectId}`;
 }
 
 export function RollbackDialog({
