@@ -52,6 +52,10 @@ export const getLogsSchema = z.object({
   lines: z.number().int().positive().optional().describe('Number of log lines to retrieve'),
 });
 
+export const getProjectStatsSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+});
+
 // Environment & configuration schemas
 export const setEnvVarsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
