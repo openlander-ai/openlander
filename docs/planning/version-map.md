@@ -8,10 +8,11 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v1.0.0 (TBD)
+
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -1314,5 +1315,35 @@ AI: bugs.md → 해결됨 + gh issue close
 | 터미널 점 그리드    | 다크 → 라이트 (zinc-300) 또는 제거                               | ✅   |
 | AI 배포 테두리      | Rose 그래디언트 (cyan-purple → rose-pink)                        | ✅   |
 | 코드 블록 다크 유지 | 가독성을 위해 터미널/코드 블록은 다크 유지                       | ✅   |
+
+---
+
+### v0.9.4 — Light Theme Refinements & Deployment Tracking ✅
+
+**상태**: ✅ 완료 | **관련 커밋**: 7개 (sidebar, overview, terminal, theme cleanup, trigger_detail)
+
+> **핵심 가치**: Light Rose 테마 완성 + 배포 트리거 추적 인프라 + 사이드바/오버뷰 레이아웃 최적화
+
+| 항목                      | 내용                                                                       | 상태 |
+| ------------------------- | -------------------------------------------------------------------------- | ---- |
+| 사이드바 레이아웃 개선    | 검색바 (⌘K), ISSUES 섹션 분리, New Project 하단 이동, 레포 이름 툴팁       | ✅   |
+| 오버뷰 탭 레이아웃 최적화 | 터미널 컴팩트 모드 (idle 220px), Infrastructure + Quick Actions 2컬럼 배치 | ✅   |
+| 터미널 스타일 정리        | 점 그리드 제거, VS Code 다크 배경 (#1E1E1E)                                | ✅   |
+| 다크 테마 잔여 정리       | 34개 하드코딩 다크 색상 제거 (18개 파일), 라이트 테마 변수 통일            | ✅   |
+| 배포 트리거 추적 인프라   | deploy_logs.trigger_detail 컬럼 추가, 타입 정의, API 연결                  | ✅   |
+| 배포 트리거 라벨 개선     | getDeploymentTriggerLabel() 확장 (triggerDetail 우선, fallback 매핑)       | ✅   |
+
+**구현 내역**:
+
+- `src/db/schema.drizzle.ts` — trigger_detail 컬럼 추가
+- `src/db/types.ts` — DeployLogRow.trigger_detail 필드
+- `src/db/repos/deploy-log.repo.ts` — createDeployLog(triggerDetail?) 파라미터
+- `src/web/api/project-routes.ts` — API 응답에 triggerDetail 포함
+- `web/src/types/index.ts` — DeployLogSummary.triggerDetail 필드
+- `web/src/lib/deployments.ts` — getDeploymentTriggerLabel() 개선
+- `web/src/components/layout/Sidebar.tsx` — 검색바, 레이아웃 개선
+- `web/src/components/project/OverviewTab.tsx` — 터미널 컴팩트, 2컬럼 레이아웃
+- `web/src/components/deploy-terminal/TerminalFrame.tsx` — 점 그리드 제거
+- 18개 파일 다크 색상 정리 (agent/, command/, timeline/, shared/, ui/, pages/, hooks/)
 
 ---

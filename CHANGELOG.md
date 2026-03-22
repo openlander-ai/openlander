@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-03-22
+
+### Added
+
+- **Deployment trigger detail**: Deployments now show specific trigger (Restart, Env Update, Deploy Plan) instead of generic "Agent Deploy"
+- **`get_project_stats` tool**: Per-container CPU, memory, restarts, and uptime monitoring
+- **Sidebar search bar**: ⌘K shortcut directly in sidebar
+- **Command palette enhancements**: Groups, AI fallback, recent commands
+
+### Fixed
+
+- **Deploy `wait=true` single-call**: Fixed event/phase ordering bug — status resolves correctly in one call
+- **Deploy error guidance**: Added "Use restart_project" suggestion when container already exists
+- **Chat session titles**: Show first message instead of "New conversation"
+- **Dark theme remnants**: Cleaned up 34 hardcoded dark colors across 18 files for light Rose theme
+- **Terminal dot grid removed**: Cleaner VS Code-style dark terminal on light background
+- **Overview layout**: Compact terminal (max 220px idle), side-by-side Infrastructure + Quick Actions
+- **Sidebar layout**: New Project moved to bottom, ISSUES section separated, repo name tooltips
+- **Overlay backdrops**: Lightened for clean light theme (dialog, sheet, command palette)
+
 ## [0.9.3] - 2026-03-22
 
 ### Changed
