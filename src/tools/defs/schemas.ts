@@ -518,6 +518,38 @@ export const validateDeployPlanSchema = z.object({
   plan_id: z.string().min(1).describe('Plan ID returned from create_deploy_plan'),
 });
 
+export const updateProjectConfigSchema = z
+  .object({
+    project_name: z.string().min(1).describe('Project name'),
+    dockerfile_path: z
+      .string()
+      .optional()
+      .describe(
+        'Relative Dockerfile path inside the repository (e.g., apps/api/Dockerfile). Set to "Dockerfile" to reset to default.',
+      ),
+    docker_target: z
+      .string()
+      .optional()
+      .describe(
+        'Docker build target stage for multi-stage Dockerfiles (e.g., api, worker). Set to empty string to clear.',
+      ),
+    build_context: z
+      .string()
+      .optional()
+      .describe(
+        'Docker build context path relative to repo root (e.g., apps/api). Set to empty string to clear.',
+      ),
+  })
+  .refine(
+    (data) =>
+      data.dockerfile_path !== undefined ||
+      data.docker_target !== undefined ||
+      data.build_context !== undefined,
+    {
+      message: 'At least one of dockerfile_path, docker_target, or build_context must be provided',
+    },
+  );
+
 // Deployment history schema
 export const deployHistorySchema = z.object({
   project_name: z.string().min(1).describe('Project name'),

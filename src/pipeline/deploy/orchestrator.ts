@@ -9,8 +9,9 @@ import type { AutoDetector } from '../auto-detect.js';
 import type { ComposePipeline } from '../compose.js';
 import type { EnvManager } from '../env.js';
 import { ensureDockerfile, detectFramework, parseDockerfileExposePort } from '../dockerfile-gen.js';
+import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { resolveEnvVars, resolveEnvVarsForBuild } from '../resolve-env.js';
-import { cloneRepo } from '../git.js';
+import { cloneRepo, getCommitSubject } from '../git.js';
 import { detectNewEnvKeys } from '../env-inject.js';
 import { analyzeBuildDiff, formatDiffForPrompt } from '../diff-analysis.js';
 import { scanForSecrets } from '../secret-scan.js';
@@ -48,12 +49,19 @@ export async function cloneAndAnalyze(
     branch?: string;
     sshKeyPath?: string;
   },
-): Promise<{ clonePath: string; commitSha: string; buildLog: string; diffContext?: string }> {
+): Promise<{
+  clonePath: string;
+  commitSha: string;
+  commitMessage?: string;
+  buildLog: string;
+  diffContext?: string;
+}> {
   const { projectId, projectName, environmentId, repoUrl, branch, sshKeyPath } = params;
   let buildLog = '';
   let diffContext: string | undefined;
 
   const cloneResult = await cloneRepo({ repoUrl, branch, sshKeyPath });
+  const commitMessage = await getCommitSubject(cloneResult.path, cloneResult.commitSha);
 
   await eventBus.emit('deploy:clone', {
     projectId,
@@ -121,6 +129,7 @@ export async function cloneAndAnalyze(
   return {
     clonePath: cloneResult.path,
     commitSha: cloneResult.commitSha,
+    commitMessage,
     buildLog,
     diffContext,
   };
@@ -196,6 +205,7 @@ export async function buildProject(
       branch,
       clonePath,
       composePath,
+      commitSha,
       profiles: [],
       services: config.composeServices,
       name: routeName,
@@ -234,8 +244,31 @@ export async function buildProject(
     };
   }
 
-  const dockerfilePath = resolveDockerfilePath(clonePath, config.dockerfilePath);
-  const usingExplicitDockerfile = hasExplicitDockerfilePath;
+  let resolvedDockerfilePath = config.dockerfilePath;
+  if (
+    hasExplicitDockerfilePath &&
+    !existsSync(resolveDockerfilePath(clonePath, resolvedDockerfilePath))
+  ) {
+    const discovered = findDockerfiles(clonePath);
+    const { relative } = await import('node:path');
+    const relDiscovered = discovered.map((d) => relative(clonePath, d));
+    const rootDockerfile = relDiscovered.find((d) => d === 'Dockerfile');
+
+    if (rootDockerfile) {
+      resolvedDockerfilePath = rootDockerfile;
+      buildLog += `[dockerfile] ${config.dockerfilePath as string} not found; falling back to ${resolvedDockerfilePath}\n`;
+    } else if (relDiscovered.length === 1 && relDiscovered[0]) {
+      resolvedDockerfilePath = relDiscovered[0];
+      buildLog += `[dockerfile] ${config.dockerfilePath as string} not found; falling back to ${resolvedDockerfilePath}\n`;
+    } else if (relDiscovered.length > 1) {
+      throw new DockerfileNotFoundError(
+        `${config.dockerfilePath as string} not found. Multiple Dockerfiles discovered: ${relDiscovered.join(', ')}. Use update_project_config to set the correct dockerfile_path.`,
+      );
+    }
+  }
+  const dockerfilePath = resolveDockerfilePath(clonePath, resolvedDockerfilePath);
+  const usingExplicitDockerfile =
+    hasExplicitDockerfilePath && resolvedDockerfilePath === config.dockerfilePath;
   const dockerfileResult = usingExplicitDockerfile ? null : ensureDockerfile(clonePath);
 
   let autoDetected = false;
@@ -288,7 +321,7 @@ export async function buildProject(
       clonePath,
       projectId,
       imageTag,
-      dockerfilePath: config.dockerfilePath,
+      dockerfilePath: resolvedDockerfilePath,
       buildArgs: buildTimeVars,
       noCache: config._noCacheBuild === true,
       buildContext: config.buildContext,
@@ -476,6 +509,7 @@ export async function handlePostDeploy(
     startTime: number;
     buildLog: string;
     commitSha?: string;
+    commitMessage?: string;
     shouldSyncProjectState: boolean;
     port?: number;
     internalUrl?: string;
@@ -492,6 +526,7 @@ export async function handlePostDeploy(
     trigger,
     startTime,
     commitSha,
+    commitMessage,
     shouldSyncProjectState,
     port,
     internalUrl,
@@ -517,6 +552,7 @@ export async function handlePostDeploy(
       status: 'success',
       trigger,
       commitSha,
+      commitMessage,
       buildLog,
       durationMs: totalDuration,
     });

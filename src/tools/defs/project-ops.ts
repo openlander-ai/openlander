@@ -9,6 +9,7 @@ import {
   startProjectSchema,
   redeployProjectSchema,
   shareProjectSchema,
+  updateProjectConfigSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
 
@@ -246,6 +247,57 @@ export const projectOpsToolDefs: ToolDef[] = [
         publicUrl: url,
         _agent_guidance: {
           next_steps: ['Access the app via the publicUrl above'],
+        },
+      };
+    },
+  },
+  {
+    name: 'update_project_config',
+    description:
+      "Update a project's build configuration (dockerfile_path, docker_target, build_context). Use when the current config points to a wrong Dockerfile or build target. Changes take effect on next redeploy. Returns the updated config values.",
+    mcpDescription:
+      'Update project build config (dockerfile_path, docker_target, build_context). Takes effect on next redeploy.',
+    inputSchema: updateProjectConfigSchema,
+    execute: (args, context) => {
+      const projectName = args['project_name'] as string;
+      const project = context.appCtx.db.getProjectByName(projectName);
+      if (!project) {
+        throw new ProjectNotFoundError(projectName);
+      }
+
+      const updates: Record<string, string | null> = {};
+      if (args['dockerfile_path'] !== undefined) {
+        const val = (args['dockerfile_path'] as string).trim();
+        if (val.startsWith('/') || val.includes('..')) {
+          throw new Error('dockerfile_path must be a relative path within the repository');
+        }
+        updates.dockerfilePath = val || 'Dockerfile';
+      }
+      if (args['docker_target'] !== undefined) {
+        const val = (args['docker_target'] as string).trim();
+        updates.dockerTarget = val === '' ? null : val;
+      }
+      if (args['build_context'] !== undefined) {
+        const val = (args['build_context'] as string).trim();
+        if (val.startsWith('/') || val.includes('..')) {
+          throw new Error('build_context must be a relative path within the repository');
+        }
+        updates.buildContext = val === '' ? null : val;
+      }
+
+      context.appCtx.db.updateProject(project.id, updates);
+
+      const updated = context.appCtx.db.getProject(project.id);
+      return {
+        status: 'updated',
+        project: projectName,
+        config: {
+          dockerfile_path: updated?.dockerfile_path,
+          docker_target: updated?.docker_target,
+          build_context: updated?.build_context,
+        },
+        _agent_guidance: {
+          next_steps: ['Call redeploy_project to apply the new configuration.'],
         },
       };
     },
