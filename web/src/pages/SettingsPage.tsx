@@ -28,7 +28,7 @@ export function SettingsPage() {
         <p className="text-sm font-body text-secondary-ol mt-1">{t('settings.description')}</p>
       </div>
 
-      <Tabs defaultValue="system" className="space-y-6">
+      <Tabs defaultValue="system" className="space-y-6 min-h-[480px]">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto gap-1 bg-bg-subtle/50 p-1">
           <TabsTrigger value="system" className="font-body text-xs sm:text-sm">
             {t('settings.tabs.system')}
@@ -44,16 +44,28 @@ export function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="system" className="mt-0">
+        <TabsContent
+          value="system"
+          className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+        >
           <SystemSettingsTab />
         </TabsContent>
-        <TabsContent value="proxy" className="mt-0">
+        <TabsContent
+          value="proxy"
+          className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+        >
           <TraefikSettingsTab />
         </TabsContent>
-        <TabsContent value="github" className="mt-0">
+        <TabsContent
+          value="github"
+          className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+        >
           <GithubSettingsTab status={status} refetch={refetch} />
         </TabsContent>
-        <TabsContent value="llm" className="mt-0">
+        <TabsContent
+          value="llm"
+          className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+        >
           <LlmSettingsTab status={status} refetch={refetch} />
         </TabsContent>
       </Tabs>
