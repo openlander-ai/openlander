@@ -9,7 +9,7 @@
     --bg-panel: #fafafa; /* zinc-50 — card/panel backgrounds */
     --bg-subtle: #f4f4f5; /* zinc-100 — subtle backgrounds, hover states */
     --bg-surface: #f9fafb; /* zinc-50 — card surface */
-    --bg-terminal: #18181b; /* zinc-900 — dark for code blocks */
+    --bg-terminal: #1e1e1e; /* VS Code dark — slightly warmer than zinc */
     --color-accent: #f43f5e; /* rose-500 — brand color */
     --color-ai: #f43f5e; /* rose-500 — AI identity (unified brand) */
     --color-success: #16a34a; /* green-600 */
@@ -98,12 +98,6 @@
   .ai-deploy-border {
     border-left: 2px solid transparent;
     border-image: linear-gradient(to bottom, #f43f5e, #ec4899) 1;
-  }
-
-  /* Terminal Dot Grid */
-  .terminal-dot-grid {
-    background-image: radial-gradient(#e4e4e7 1px, transparent 1px);
-    background-size: 24px 24px;
   }
 }
 
