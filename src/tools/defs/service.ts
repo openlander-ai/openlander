@@ -1,5 +1,6 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { getAllIps } from '../../pipeline/traefik.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
@@ -18,6 +19,33 @@ import {
 
 const log = createModuleLogger('tools-defs-service');
 const SERVICE_CRASH_LOG_PATTERN = /PANIC|FATAL|OOM|Segmentation fault|out of memory|No space left/i;
+
+function getServiceExternalAccess(port: number | null) {
+  if (!port) {
+    return [];
+  }
+
+  return getAllIps().map((ip) => ({
+    host: ip.address,
+    port,
+    type: ip.type,
+  }));
+}
+
+function getExternalConnectionStrings(
+  connectionString: string | null | undefined,
+  internalHost: string | null | undefined,
+) {
+  if (!connectionString || !internalHost) {
+    return [];
+  }
+
+  return getAllIps().map((ip) => ({
+    connectionString: connectionString.replace(internalHost, ip.address),
+    type: ip.type,
+    ip: ip.address,
+  }));
+}
 
 function parseServiceCredentials(credentials: string | null): Record<string, unknown> | null {
   if (!credentials) {
@@ -75,6 +103,7 @@ export const serviceToolDefs: ToolDef[] = [
           credentials: parseServiceCredentials(result.credentials),
         },
         suggested_env: suggestedEnv,
+        externalAccess: getServiceExternalAccess(result.port),
         _agent_guidance: {
           next_steps: [
             'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
@@ -105,6 +134,7 @@ export const serviceToolDefs: ToolDef[] = [
             port: service.port,
             image: service.image,
             createdAt: service.created_at,
+            externalAccess: getServiceExternalAccess(service.port),
           })),
         };
       }
@@ -246,6 +276,7 @@ export const serviceToolDefs: ToolDef[] = [
         containerId: service.container_id,
         createdAt: service.created_at,
         updatedAt: service.updated_at,
+        externalAccess: getServiceExternalAccess(service.port),
       };
     },
     targets: ['mcp'],
@@ -398,16 +429,21 @@ export const serviceToolDefs: ToolDef[] = [
       const serviceName = args['service_name'] as string;
       const service = await getServiceByName(appCtx, serviceName);
       const credentials = parseServiceCredentials(service.credentials);
+      const internalHost = (credentials?.['host'] as string | undefined) || null;
+      const connectionString = (credentials?.['connectionString'] as string | undefined) || null;
+
       return {
         service: serviceName,
         type: service.type,
         credentials,
-        connectionString: (credentials?.['connectionString'] as string | undefined) || null,
-        host: (credentials?.['host'] as string | undefined) || null,
+        connectionString,
+        host: internalHost,
         port: (credentials?.['port'] as number | undefined) || service.port,
         user: (credentials?.['user'] as string | undefined) || null,
         password: (credentials?.['password'] as string | undefined) || null,
         database: (credentials?.['database'] as string | undefined) || null,
+        externalAccess: getServiceExternalAccess(service.port),
+        externalConnectionStrings: getExternalConnectionStrings(connectionString, internalHost),
       };
     },
     targets: ['mcp'],

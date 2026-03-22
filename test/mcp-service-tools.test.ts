@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '../src/app.js';
 import type { ServiceRow } from '../src/db/index.js';
 import * as gitPipeline from '../src/pipeline/git.js';
+import * as traefikPipeline from '../src/pipeline/traefik.js';
 import * as infraAnalyzer from '../src/lib/infra-analyzer.js';
 import * as webSearchModule from '../src/lib/web-search.js';
 import { createSharedToolRegistry } from './tools/shared-tool-registry.js';
@@ -72,6 +73,10 @@ describe('MCP service tools (Task 8)', () => {
       mockAnalyzeInfrastructure(...args),
     );
     vi.spyOn(webSearchModule, 'webSearch').mockImplementation((...args) => mockWebSearch(...args));
+    vi.spyOn(traefikPipeline, 'getAllIps').mockReturnValue([
+      { address: '10.0.0.10', interface: 'eth0', type: 'lan' },
+      { address: '100.100.100.10', interface: 'tailscale0', type: 'vpn' },
+    ]);
   });
 
   afterEach(() => {
@@ -160,6 +165,10 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       suggested_env: [],
+      externalAccess: [
+        { host: '10.0.0.10', port: 5432, type: 'lan' },
+        { host: '100.100.100.10', port: 5432, type: 'vpn' },
+      ],
       _agent_guidance: {
         next_steps: [
           'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
@@ -210,6 +219,10 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       suggested_env: [],
+      externalAccess: [
+        { host: '10.0.0.10', port: 3306, type: 'lan' },
+        { host: '100.100.100.10', port: 3306, type: 'vpn' },
+      ],
       _agent_guidance: {
         next_steps: [
           'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
@@ -255,6 +268,10 @@ describe('MCP service tools (Task 8)', () => {
         },
       },
       suggested_env: [],
+      externalAccess: [
+        { host: '10.0.0.10', port: 6379, type: 'lan' },
+        { host: '100.100.100.10', port: 6379, type: 'vpn' },
+      ],
       _agent_guidance: {
         next_steps: [
           'Call set_env_vars to link this service to your project (e.g., DATABASE_URL, REDIS_URL).',
@@ -313,6 +330,10 @@ describe('MCP service tools (Task 8)', () => {
         name: 'shared-pg',
         status: 'running',
         port: 5432,
+        externalAccess: [
+          { host: '10.0.0.10', port: 5432, type: 'lan' },
+          { host: '100.100.100.10', port: 5432, type: 'vpn' },
+        ],
       }),
     );
     expect(await startTool.execute({ service_name: 'shared-pg' }, { target: 'mcp' })).toEqual({
@@ -346,6 +367,11 @@ describe('MCP service tools (Task 8)', () => {
         user: null,
         password: null,
         database: null,
+        externalAccess: [
+          { host: '10.0.0.10', port: 5432, type: 'lan' },
+          { host: '100.100.100.10', port: 5432, type: 'vpn' },
+        ],
+        externalConnectionStrings: [],
       },
     );
 
