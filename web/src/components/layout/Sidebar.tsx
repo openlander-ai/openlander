@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { Project } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
   Plus,
@@ -14,6 +13,7 @@ import {
   ChevronDown,
   LayoutDashboard,
   Bot,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
@@ -217,23 +217,22 @@ export function Sidebar({ projects, loading }: SidebarProps) {
         </div>
       </div>
 
-      {/* New Project */}
-      <div className="p-2 lg:p-3 shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
-          className={cn(
-            'w-full gap-2 border-dashed border-foreground/20 text-foreground hover:bg-foreground hover:text-background hover:border-foreground/50 transition-all',
-            'lg:justify-start justify-center',
-          )}
-          onClick={() => navigate('/projects/new')}
+      {/* Search — opens Cmd+K */}
+      <div className="px-2 lg:px-3 pb-2 shrink-0">
+        <button
+          onClick={() => {
+            const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
+            document.dispatchEvent(event);
+          }}
+          className="w-full flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-muted-ol bg-bg-subtle hover:bg-bg-subtle/80 transition-colors"
         >
-          <Plus className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-xs font-body">New Project</span>
-        </Button>
+          <Search className="h-3.5 w-3.5 shrink-0" />
+          <span className="hidden lg:inline flex-1 text-left">Search...</span>
+          <kbd className="hidden lg:inline text-[10px] font-mono bg-bg-panel px-1 py-0.5 rounded border border-border">
+            ⌘K
+          </kbd>
+        </button>
       </div>
-
-      <Separator className="bg-[hsl(var(--border))]" />
 
       {isAgentMode ? (
         <ChatSidebar
@@ -266,8 +265,8 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             {/* Grouped list for expanded mode (>= lg) */}
             <div className="hidden lg:block space-y-4">
               {issueProjects.length > 0 && (
-                <div className="space-y-0.5">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-ol px-3 py-1">
+                <div className="space-y-0.5 pb-3 mb-1 border-b border-border/50">
+                  <div className="text-[10px] uppercase tracking-[0.08em] font-mono text-muted-ol px-3 py-1">
                     ⚠️ Issues ({issueProjects.length})
                   </div>
                   {issueProjects.map(renderProjectItem)}
@@ -284,6 +283,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                   <div key={url} className="space-y-0.5">
                     <button
                       onClick={() => toggleGroup(url, projs)}
+                      title={repoName}
                       className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-muted-ol hover:text-secondary-ol transition-colors group"
                     >
                       {open ? (
@@ -314,8 +314,21 @@ export function Sidebar({ projects, loading }: SidebarProps) {
 
       <Separator className="bg-[hsl(var(--border))]" />
 
-      {/* Bottom: Settings + Stats */}
-      <div className="shrink-0 p-2 lg:p-3 space-y-2">
+      {/* Bottom: New Project + Services + Settings */}
+      <div className="shrink-0 p-2 lg:p-3 space-y-1">
+        {/* New Project */}
+        <button
+          onClick={() => navigate('/projects/new')}
+          className={cn(
+            'w-full gap-2 border-dashed border-foreground/20 text-foreground hover:bg-foreground hover:text-background hover:border-foreground/50 transition-all',
+            'lg:justify-start justify-center',
+            'flex items-center rounded-md px-2.5 py-2 text-xs font-body',
+          )}
+        >
+          <Plus className="h-4 w-4 shrink-0" />
+          <span className="hidden lg:inline">New Project</span>
+        </button>
+
         {/* Services Link */}
         <button
           onClick={() => navigate('/services')}
