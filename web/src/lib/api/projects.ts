@@ -108,6 +108,10 @@ export async function listProjects(): Promise<ProjectWithOptionalEnvironments[]>
 
 export async function getProject(id: string): Promise<ProjectWithOptionalEnvironments> {
   const res = await fetch(`/api/projects/${id}`);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || 'Failed to fetch project');
+  }
   const data = (await res.json()) as Project & {
     previous_image_tag?: string | null;
     environments?: BackendEnvironment[];
