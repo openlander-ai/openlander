@@ -456,7 +456,7 @@ export class ComposePipeline {
 
   async deployComposeViaDockerode(config: ComposeDeployConfig): Promise<ComposeDeployResult> {
     const startTime = Date.now();
-    const trigger = config.trigger ?? 'chat';
+    const trigger = config.trigger ?? 'api';
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const projectName = sanitizeComposeProjectName(parentName);
     const parentProjectId = config._parentId ?? nanoid(12);

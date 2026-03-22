@@ -399,7 +399,7 @@ export class DeployPipeline {
   private recordBackgroundFailure(
     projectId: string,
     errMsg: string,
-    trigger: 'chat' | 'webhook' | 'api' = 'chat',
+    trigger: 'chat' | 'webhook' | 'api' = 'api',
   ): void {
     log.error({ projectId, error: errMsg }, 'Background deploy failed');
     this.jobManager?.updatePhase(projectId, 'failed', errMsg);
@@ -445,7 +445,7 @@ export class DeployPipeline {
 
   async deploy(config: ProjectConfig): Promise<DeployResult> {
     const projectName = config.name ?? extractProjectName(config.repoUrl);
-    const trigger = config.trigger ?? 'chat';
+    const trigger = config.trigger ?? 'api';
 
     // Use pre-allocated projectId from startDeploy() if available,
     // otherwise create a new one (synchronous callers like redeploy, CLI)
@@ -543,7 +543,7 @@ export class DeployPipeline {
       };
     }
     const projectName = config.name ?? project.name;
-    const trigger = config.trigger ?? 'chat';
+    const trigger = config.trigger ?? 'api';
     const repoUrl = config.repoUrl ?? project.repo_url ?? '';
     if (!repoUrl) {
       return {
@@ -785,7 +785,7 @@ export class DeployPipeline {
   async deployMonorepo(config: MonorepoConfig): Promise<MonorepoResult> {
     const startTime = Date.now();
     const parentName = config.name ?? extractProjectName(config.repoUrl);
-    const trigger = config.trigger ?? 'chat';
+    const trigger = config.trigger ?? 'api';
 
     // Use pre-allocated parentId from startMonorepoDeploy() if available
     const parentId = config._parentId ?? nanoid(12);
