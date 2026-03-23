@@ -130,9 +130,14 @@ export class HealthMonitor {
 
       const now = Date.now();
       if (shouldRunCleanup() && now - this.lastCleanupAt >= CLEANUP_COOLDOWN_MS) {
-        this.lastCleanupAt = now;
-        log.info('Disk usage above threshold — triggering cleanup');
-        diskThresholdCleanup();
+        const building = this.db.listProjects('building');
+        if (building.length > 0) {
+          log.info({ count: building.length }, 'Deferred disk cleanup — builds in progress');
+        } else {
+          this.lastCleanupAt = now;
+          log.info('Disk usage above threshold — triggering cleanup');
+          diskThresholdCleanup();
+        }
       }
     } finally {
       this.checking = false;
