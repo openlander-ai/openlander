@@ -19,24 +19,36 @@ import { serviceToolDefs } from '../tools/defs/service.js';
 import { volumeToolDefs } from '../tools/defs/volume.js';
 import { webhookToolDefs } from '../tools/defs/webhook.js';
 import { environmentToolDefs } from '../tools/defs/environment.js';
+import { platformReadToolDefs } from '../tools/defs/platform-read.js';
+import { platformDebugToolDefs } from '../tools/defs/platform-debug.js';
+import { platformActionToolDefs } from '../tools/defs/platform-actions.js';
 import type { ToolDef } from '../tools/defs/types.js';
 
 const log = createModuleLogger('mcp');
 
-const mcpToolDefs: ToolDef[] = [
-  ...deployToolDefs,
-  ...deployPlanToolDefs,
-  ...projectOpsToolDefs,
-  ...envToolDefs,
-  ...serviceToolDefs,
-  ...volumeToolDefs,
-  ...infraToolDefs,
-  ...gitToolDefs,
-  ...monitoringToolDefs,
-  ...debugToolDefs,
-  ...webhookToolDefs,
-  ...environmentToolDefs,
-];
+/**
+ * Get MCP tool definitions, optionally including platform tools.
+ * Platform tools are only registered when config.mcp.platformTools is true.
+ */
+function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
+  return [
+    ...deployToolDefs,
+    ...deployPlanToolDefs,
+    ...projectOpsToolDefs,
+    ...envToolDefs,
+    ...serviceToolDefs,
+    ...volumeToolDefs,
+    ...infraToolDefs,
+    ...gitToolDefs,
+    ...monitoringToolDefs,
+    ...debugToolDefs,
+    ...webhookToolDefs,
+    ...environmentToolDefs,
+    ...(platformToolsEnabled
+      ? [...platformReadToolDefs, ...platformDebugToolDefs, ...platformActionToolDefs]
+      : []),
+  ];
+}
 
 const SERVER_INSTRUCTIONS = `You are connected to OpenLander, a self-hosted deployment platform that builds Docker images from git repos and runs them behind Traefik.
 
@@ -271,7 +283,8 @@ function createMcpServerInstance(ctx: AppContext): Server {
     { capabilities: { tools: {}, prompts: {} }, instructions: SERVER_INSTRUCTIONS },
   );
 
-  registerMcpTools(server, mcpToolDefs, ctx);
+  const toolDefs = getMcpToolDefs(ctx.config.mcp.platformTools === true);
+  registerMcpTools(server, toolDefs, ctx);
   registerMcpPrompts(server);
 
   return server;
