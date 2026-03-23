@@ -5,6 +5,7 @@ import type { AppContext } from '../../app.js';
 import { PreflightCheckError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { extractProjectName } from '../../pipeline/helpers.js';
+import { parseImageUrl } from '../../pipeline/image-utils.js';
 import { preflightCheckOrThrow } from '../../pipeline/preflight.js';
 import {
   emitTerminalMessage,
@@ -24,7 +25,11 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
 
   api.post('/projects/deploy', async (c) => {
     const body = await c.req.json<{
-      repo_url: string;
+      source?: 'git' | 'image';
+      repo_url?: string;
+      image_url?: string;
+      image_cmd?: string | string[];
+      port?: number;
       branch?: string;
       name?: string;
       env_vars?: Record<string, string>;
@@ -32,26 +37,74 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       environment?: string;
     }>();
 
-    if (!body.repo_url) {
-      return c.json({ error: 'MISSING_FIELD', message: 'repo_url is required' }, 400);
+    const source = body.source ?? 'git';
+
+    let imageUrl: string | undefined;
+    let repoUrl: string | undefined;
+
+    if (source === 'image') {
+      if (!body.image_url) {
+        return c.json(
+          { error: 'MISSING_FIELD', message: 'image_url is required for image source' },
+          400,
+        );
+      }
+      const parsed = parseImageUrl(body.image_url);
+      if (!parsed) {
+        return c.json(
+          { error: 'INVALID_IMAGE_URL', message: 'Invalid Docker image URL format' },
+          400,
+        );
+      }
+      imageUrl = body.image_url;
+    } else {
+      if (!body.repo_url) {
+        return c.json(
+          { error: 'MISSING_FIELD', message: 'repo_url is required for git source' },
+          400,
+        );
+      }
+      repoUrl = body.repo_url;
     }
 
     // Fallback: no agent (LLM not configured) → direct pipeline call
     if (!ctx.agent) {
-      const result = await ctx.pipeline.deploy({
-        repoUrl: body.repo_url,
-        branch: body.branch,
-        name: body.name,
-        envVars: body.env_vars,
-        visibility: body.visibility,
-        sshKeyPath: ctx.config.git.sshKeyPath || undefined,
-        trigger: 'api',
-        environment: body.environment,
-      });
-      return c.json(result, result.success ? 200 : 500);
+      if (source === 'image' && imageUrl) {
+        const result = await ctx.pipeline.deploy({
+          repoUrl: '',
+          source: 'image',
+          imageUrl,
+          containerPort: body.port,
+          imageCmd: typeof body.image_cmd === 'string' ? body.image_cmd.split(' ') : body.image_cmd,
+          name: body.name,
+          envVars: body.env_vars,
+          visibility: body.visibility,
+          trigger: 'api',
+          environment: body.environment,
+        });
+        return c.json(result, result.success ? 200 : 500);
+      } else if (repoUrl) {
+        const result = await ctx.pipeline.deploy({
+          repoUrl,
+          branch: body.branch,
+          name: body.name,
+          envVars: body.env_vars,
+          visibility: body.visibility,
+          sshKeyPath: ctx.config.git.sshKeyPath || undefined,
+          trigger: 'api',
+          environment: body.environment,
+        });
+        return c.json(result, result.success ? 200 : 500);
+      }
     }
 
-    const projectName = body.name ?? extractProjectName(body.repo_url);
+    const projectName =
+      body.name ??
+      (source === 'image' && imageUrl
+        ? extractProjectName(imageUrl)
+        : repoUrl
+          ? extractProjectName(repoUrl)
+          : 'unknown');
 
     try {
       await preflightCheckOrThrow(ctx.db, ctx.docker, projectName);
@@ -74,12 +127,24 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     const projectId = existing?.id ?? nanoid(12);
 
     if (!existing) {
-      ctx.db.createProject({
-        id: projectId,
-        name: projectName,
-        repoUrl: body.repo_url,
-        branch: body.branch,
-      });
+      if (source === 'image' && imageUrl) {
+        ctx.db.createProject({
+          id: projectId,
+          name: projectName,
+          repoUrl: '',
+          source: 'image',
+          imageUrl,
+          imageCmd: typeof body.image_cmd === 'string' ? body.image_cmd.split(' ') : body.image_cmd,
+          containerPort: body.port,
+        });
+      } else if (repoUrl) {
+        ctx.db.createProject({
+          id: projectId,
+          name: projectName,
+          repoUrl,
+          branch: body.branch,
+        });
+      }
     }
 
     ctx.db.updateProject(projectId, { status: 'building' });
@@ -114,12 +179,13 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       const retryState = { hasRetriedAfterTerminalFailure: false };
       const write = (message: string): Promise<void> =>
         emitTerminalMessage(projectId, message, isKorean);
+      const planRepoUrl = source === 'image' && imageUrl ? imageUrl : repoUrl || '';
       const planDeps = {
         ctx,
         projectId,
         projectName,
         isKorean,
-        repoUrl: body.repo_url,
+        repoUrl: planRepoUrl,
         branch: body.branch,
         envVars: body.env_vars,
         visibility: body.visibility,

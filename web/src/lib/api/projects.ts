@@ -55,16 +55,37 @@ function mapEnvironment(environment: BackendEnvironment): Environment {
 }
 
 export async function deployProject(
-  repoUrl: string,
+  repoUrl?: string,
   branch?: string,
   name?: string,
   envVars?: Record<string, string>,
   environment?: string,
+  source?: 'git' | 'image',
+  imageUrl?: string,
+  imageCmd?: string | string[],
+  port?: number,
 ): Promise<DeployResult> {
+  const body: Record<string, unknown> = {
+    branch,
+    name,
+    env_vars: envVars,
+    environment,
+  };
+
+  if (source === 'image') {
+    body.source = 'image';
+    body.image_url = imageUrl;
+    body.image_cmd = imageCmd;
+    body.port = port;
+  } else {
+    body.source = 'git';
+    body.repo_url = repoUrl;
+  }
+
   const res = await fetch('/api/projects/deploy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ repo_url: repoUrl, branch, name, env_vars: envVars, environment }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
