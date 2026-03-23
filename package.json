@@ -1,6 +1,6 @@
 {
   "name": "openlander",
-  "version": "0.9.11",
+  "version": "0.9.12",
   "description": "Self-hosted deployment platform that fixes its own failures",
   "type": "module",
   "bin": {

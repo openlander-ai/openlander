@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.12] - 2026-03-23
+
+### Added
+
+- **Volume auto-mount on deploy**: `runContainer()` and `runComposeService()` now query Docker for project volumes by label and auto-mount them as Binds. Volumes created via `add_volume` are automatically available inside containers on next deploy.
+- **Bucket management MCP tools**: `create_bucket`, `list_buckets`, `delete_bucket` for managing S3 buckets inside MinIO services via `mc` CLI.
+- **VPN sslip.io routes**: Traefik HTTP provider now generates sslip.io routes for all detected IPs (LAN + VPN). Tailscale, ZeroTier, and WireGuard users can access projects via VPN IP.
+- **MCP VPN guidance**: `SERVER_INSTRUCTIONS` updated to advise agents to prefer VPN URLs when available, and document volume/MinIO/bucket tools.
+
+### Fixed
+
+- **Sidebar Issues section removed**: Projects with error/building status now stay in their normal group instead of a distracting separate section with warning emoji.
+
 ## [0.9.11] - 2026-03-23
 
 ### Added
