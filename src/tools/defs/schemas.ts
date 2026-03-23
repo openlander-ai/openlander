@@ -103,6 +103,21 @@ export const platformDbInspectSchema = z.object({
   limit: z.number().optional(),
 });
 
+export const platformCleanupOrphansSchema = z.object({
+  confirm: z.boolean(),
+  dry_run: z.boolean().optional().default(true),
+});
+
+export const platformReconcileSchema = z.object({
+  confirm: z.boolean(),
+  dry_run: z.boolean().optional().default(true),
+});
+
+export const platformForceRemoveSchema = z.object({
+  container_id: z.string(),
+  confirm: z.boolean(),
+});
+
 // Environment & configuration schemas
 export const setEnvVarsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
