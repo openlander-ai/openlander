@@ -242,6 +242,7 @@ export class DeployPipeline {
       for (const container of managed) {
         if (knownIds.has(container.id)) continue;
         if (knownNames.has(container.name)) continue;
+        if (container.labels?.['openlander.role']) continue;
 
         log.info({ id: container.id, name: container.name }, 'Removing orphan container');
         try {

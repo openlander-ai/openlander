@@ -61,6 +61,7 @@ export interface ContainerInfo {
   status: string;
   port?: number;
   imageTag?: string;
+  labels?: Record<string, string>;
 }
 
 export interface PortInfo {
@@ -777,6 +778,7 @@ export class Docker {
       status: c.State,
       port: c.Ports[0]?.PublicPort,
       imageTag: c.Image,
+      labels: (c.Labels as Record<string, string> | undefined) ?? {},
     }));
   }
 
