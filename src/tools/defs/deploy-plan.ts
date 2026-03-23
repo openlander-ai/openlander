@@ -28,9 +28,13 @@ export const deployPlanToolDefs: ToolDef[] = [
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
-        repoUrl: args['repo_url'] as string,
+        repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
         name: (args['name'] as string | undefined) ?? undefined,
+        source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
+        imageUrl: (args['image'] as string | undefined) ?? undefined,
+        imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
+        containerPort: (args['port'] as number | undefined) ?? undefined,
         envVars,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
@@ -179,9 +183,13 @@ export const deployPlanToolDefs: ToolDef[] = [
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
-        repoUrl: args['repo_url'] as string,
+        repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
         branch: (args['branch'] as string | undefined) ?? undefined,
         name: (args['name'] as string | undefined) ?? undefined,
+        source: (args['source'] as 'git' | 'image' | undefined) ?? undefined,
+        imageUrl: (args['image'] as string | undefined) ?? undefined,
+        imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
+        containerPort: (args['port'] as number | undefined) ?? undefined,
         envVars,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,

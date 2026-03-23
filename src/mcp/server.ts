@@ -59,7 +59,7 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 ## Tools by Category
 
 ### Deploy
-- create_deploy_plan — Create a deployment plan from git URL. Key params: name (project name override — NOT "project_name"), dockerfile_path, docker_target (multi-stage), env_vars (JSON string), prefer_dockerfile (skip compose detection — use for monorepos), force (auto-clean conflicts), dry_run (preview plan without deploying). Returns planId immediately.
+- create_deploy_plan — Create a deployment plan from git URL or Docker image. Key params: source ('git' or 'image'), repo_url (for git), image (for Docker image, e.g., nginx:latest), port (container port), cmd (command override), name (project name override — NOT "project_name"), dockerfile_path, docker_target (multi-stage), env_vars (JSON string), prefer_dockerfile (skip compose detection — use for monorepos), force (auto-clean conflicts), dry_run (preview plan without deploying). Returns planId immediately.
 - update_deploy_plan — Update an existing deployment plan with new parameters.
 - execute_deploy_plan — Execute a deployment plan. Returns immediately; poll with get_deploy_status.
 - rollback_project — Revert to previous Docker image.
@@ -207,6 +207,12 @@ Deploy responses include URLs for all detected network interfaces (LAN and VPN).
 ### TLS certificate (global, all projects)
 1. upload_secret_file({ filename: "ca-cert.pem", content: "-----BEGIN CERTIFICATE-----..." })
    → Global: available to all projects at /run/secrets/ca-cert.pem
+
+### Deploy Docker image directly (no git repo)
+1. create_deploy_plan({ source: "image", image: "nginx:latest", name: "my-nginx", port: 80 })
+   → Returns plan_id with detected port and configuration
+2. execute_deploy_plan({ plan_id: "..." })
+3. get_deploy_status({ project_name: "my-nginx" }) — poll until done
 
 ### Deploy with stale container conflict
 - create_deploy_plan({ repo_url: "...", force: true }) then execute_deploy_plan — auto-removes conflicting containers

@@ -36,6 +36,7 @@ import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
 import { BuildExecutor } from './deploy/build-step.js';
 import { ContainerRunner } from './deploy/run-step.js';
+import { getImageExposedPort, mapPullError } from './image-utils.js';
 
 import {
   buildProject,
@@ -269,7 +270,10 @@ export class DeployPipeline {
    * Runs preflight check first and returns immediately if it fails.
    */
   async startDeploy(config: ProjectConfig): Promise<StartDeployResult> {
-    const projectName = config.name ?? extractProjectName(config.repoUrl);
+    const source = config.source ?? 'git';
+    const projectName =
+      config.name ??
+      extractProjectName(source === 'image' ? (config.imageUrl ?? 'image') : config.repoUrl);
     const projectId = nanoid(12);
 
     try {
@@ -305,6 +309,24 @@ export class DeployPipeline {
     }
 
     if (config.dryRun) {
+      if (source === 'image') {
+        return {
+          projectId: '',
+          projectName,
+          status: 'dry_run' as const,
+          dryRunPlan: {
+            projectName,
+            repoUrl: config.imageUrl ?? '',
+            branch: undefined,
+            dockerfile: null,
+            composeDetected: false,
+            preferDockerfile: false,
+            envVarsProvided: config.envVars ? Object.keys(config.envVars).length : 0,
+            existingProject: !!this.db.getProjectByName(projectName),
+          },
+        };
+      }
+
       const cloneResult = await cloneRepo({
         repoUrl: config.repoUrl,
         branch: config.branch,
@@ -455,7 +477,10 @@ export class DeployPipeline {
   }
 
   async deploy(config: ProjectConfig): Promise<DeployResult> {
-    const projectName = config.name ?? extractProjectName(config.repoUrl);
+    const source = config.source ?? 'git';
+    const projectName =
+      config.name ??
+      extractProjectName(source === 'image' ? (config.imageUrl ?? 'image') : config.repoUrl);
     const trigger = config.trigger ?? 'api';
 
     // Use pre-allocated projectId from startDeploy() if available,
@@ -553,10 +578,12 @@ export class DeployPipeline {
         buildDurationMs: Date.now() - startTime,
       };
     }
-    const projectName = config.name ?? project.name;
-    const trigger = config.trigger ?? 'api';
-    const repoUrl = config.repoUrl ?? project.repo_url ?? '';
-    if (!repoUrl) {
+    const deployConfig: Partial<ProjectConfig> = { ...config };
+    const projectName = deployConfig.name ?? project.name;
+    const trigger = deployConfig.trigger ?? 'api';
+    const source = deployConfig.source ?? 'git';
+    const repoUrl = deployConfig.repoUrl ?? project.repo_url ?? '';
+    if (source !== 'image' && !repoUrl) {
       return {
         success: false,
         projectId,
@@ -568,10 +595,10 @@ export class DeployPipeline {
     const routeName = getRouteName(projectName, environment.type);
     const shouldSyncProjectState = environment.type === 'production';
     const orchestrationDeps = this.createOrchestrationDeps();
-    if (config.envVars) {
+    if (deployConfig.envVars) {
       this.db.mergeEnvVars(
         projectId,
-        config.envVars,
+        deployConfig.envVars,
         shouldSyncProjectState ? undefined : environmentId,
       );
     }
@@ -614,40 +641,78 @@ export class DeployPipeline {
     let diffContext: string | undefined;
     let commitSha: string | undefined;
     let commitMessage: string | undefined;
-    const imageTag = `openlander/${routeName}:latest`;
+    let imageTag = `openlander/${routeName}:latest`;
+    let dockerfilePath: string | undefined;
     try {
-      const cloneResult = await cloneAndAnalyze(orchestrationDeps, {
-        projectId,
-        projectName,
-        environmentId,
-        repoUrl,
-        branch: environment.branch,
-        sshKeyPath: config.sshKeyPath,
-      });
-      clonePath = cloneResult.clonePath;
-      diffContext = cloneResult.diffContext;
-      buildLog = cloneResult.buildLog;
-      commitSha = cloneResult.commitSha;
-      commitMessage = cloneResult.commitMessage;
-      const buildResult = await buildProject(orchestrationDeps, {
-        projectId,
-        environmentId,
-        branch: environment.branch,
-        routeName,
-        trigger,
-        imageTag,
-        repoUrl,
-        startTime,
-        shouldSyncProjectState,
-        config,
-        clonePath: cloneResult.clonePath,
-        commitSha: cloneResult.commitSha,
-        buildLog,
-      });
-      buildLog = buildResult.buildLog;
-      if (buildResult.type === 'compose') {
-        return buildResult.result;
+      if (source === 'image') {
+        const imageUrl = deployConfig.imageUrl;
+        if (!imageUrl) {
+          throw new Error('Missing image URL for image deployment source');
+        }
+
+        await (
+          eventBus as unknown as {
+            emit(event: string, payload: Record<string, unknown>): Promise<void>;
+          }
+        ).emit('deploy:image-pull', { projectId, image: imageUrl });
+        buildLog += `[pull] Pulling image ${imageUrl}\n`;
+        try {
+          await this.docker.pullImage(imageUrl);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          throw new Error(mapPullError(err));
+        }
+        await (
+          eventBus as unknown as {
+            emit(event: string, payload: Record<string, unknown>): Promise<void>;
+          }
+        ).emit('deploy:image-pulled', { projectId, image: imageUrl });
+        buildLog += `[pull] Pulled image ${imageUrl}\n`;
+
+        imageTag = imageUrl;
+        if (!deployConfig.containerPort) {
+          const exposedPort = await getImageExposedPort(this.docker, imageTag);
+          if (exposedPort) {
+            deployConfig.containerPort = exposedPort;
+            buildLog += `[image] Detected EXPOSE port ${String(exposedPort)}\n`;
+          }
+        }
+      } else {
+        const cloneResult = await cloneAndAnalyze(orchestrationDeps, {
+          projectId,
+          projectName,
+          environmentId,
+          repoUrl,
+          branch: environment.branch,
+          sshKeyPath: deployConfig.sshKeyPath,
+        });
+        clonePath = cloneResult.clonePath;
+        diffContext = cloneResult.diffContext;
+        buildLog = cloneResult.buildLog;
+        commitSha = cloneResult.commitSha;
+        commitMessage = cloneResult.commitMessage;
+        const buildResult = await buildProject(orchestrationDeps, {
+          projectId,
+          environmentId,
+          branch: environment.branch,
+          routeName,
+          trigger,
+          imageTag,
+          repoUrl,
+          startTime,
+          shouldSyncProjectState,
+          config: deployConfig,
+          clonePath: cloneResult.clonePath,
+          commitSha: cloneResult.commitSha,
+          buildLog,
+        });
+        buildLog = buildResult.buildLog;
+        if (buildResult.type === 'compose') {
+          return buildResult.result;
+        }
+        dockerfilePath = buildResult.dockerfilePath;
       }
+
       const runResult = await runAndVerify(orchestrationDeps, {
         projectId,
         environmentId,
@@ -655,18 +720,18 @@ export class DeployPipeline {
         routeName,
         environmentType: environment.type,
         imageTag,
-        dockerfilePath: buildResult.dockerfilePath,
+        dockerfilePath,
         previousEnvironmentImageTag: environment.image_tag,
         previousProjectImageTag: project.image_tag,
         shouldSyncProjectState,
-        config,
+        config: deployConfig,
         buildLog,
       });
       buildLog = runResult.buildLog;
       const postDeploy = await handlePostDeploy(orchestrationDeps, {
         projectId,
         environmentId,
-        config,
+        config: deployConfig,
         repoUrl,
         trigger,
         startTime,
@@ -1003,9 +1068,7 @@ export class DeployPipeline {
 
     await this.cleanupProjectContainers(projectId, 'remove');
 
-    if (project.image_tag) {
-      this.db.updateProject(projectId, { previousImageTag: project.image_tag });
-    }
+    this.db.updateProject(projectId, { previousImageTag: project.image_tag });
 
     const previousPort = project.assigned_port ?? undefined;
 
@@ -1030,7 +1093,7 @@ export class DeployPipeline {
       runtimeOverrides: {
         _projectId: projectId,
         _preferredPort: previousPort,
-        _noCacheBuild: options?.noCache,
+        _noCacheBuild: project.source === 'image' ? true : options?.noCache,
       },
       db: this.db,
     });

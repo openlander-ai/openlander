@@ -181,6 +181,14 @@ export async function buildProject(
   } = params;
   let { buildLog } = params;
 
+  if (config.source === 'image') {
+    return {
+      type: 'docker',
+      dockerfilePath: '',
+      buildLog,
+    };
+  }
+
   const hasExplicitDockerfilePath =
     typeof config.dockerfilePath === 'string' && config.dockerfilePath.trim().length > 0;
   const preferDockerfile = config.preferDockerfile === true || hasExplicitDockerfilePath;
@@ -416,7 +424,7 @@ export async function runAndVerify(
     routeName: string;
     environmentType: string;
     imageTag: string;
-    dockerfilePath: string;
+    dockerfilePath?: string;
     previousEnvironmentImageTag: string | null;
     previousProjectImageTag: string | null;
     shouldSyncProjectState: boolean;
@@ -439,7 +447,11 @@ export async function runAndVerify(
   } = params;
   let { buildLog } = params;
 
-  const containerPort = parseDockerfileExposePort(dockerfilePath) ?? undefined;
+  const containerPort =
+    config.containerPort ??
+    (dockerfilePath && dockerfilePath.length > 0
+      ? (parseDockerfileExposePort(dockerfilePath) ?? undefined)
+      : undefined);
   const envVars = resolveEnvVars(
     { projectId, environmentId, inlineEnvVars: config.envVars },
     { env: deps.env },

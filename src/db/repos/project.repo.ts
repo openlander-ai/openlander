@@ -19,6 +19,10 @@ export class ProjectRepo {
     dockerfilePath?: string;
     dockerTarget?: string;
     buildContext?: string;
+    source?: ProjectRow['source'];
+    imageUrl?: string;
+    imageCmd?: string[];
+    containerPort?: number;
   }): ProjectRow {
     try {
       this.db
@@ -32,6 +36,10 @@ export class ProjectRepo {
           dockerfile_path: project.dockerfilePath ?? 'Dockerfile',
           docker_target: project.dockerTarget ?? null,
           build_context: project.buildContext ?? null,
+          source: project.source ?? 'git',
+          image_url: project.imageUrl ?? null,
+          image_cmd: project.imageCmd !== undefined ? JSON.stringify(project.imageCmd) : null,
+          container_port: project.containerPort ?? null,
         })
         .run();
     } catch (error) {
@@ -86,6 +94,10 @@ export class ProjectRepo {
       dockerTarget: string | null;
       buildContext: string | null;
       buildMethod: ProjectRow['build_method'];
+      source: ProjectRow['source'];
+      imageUrl: string | null;
+      imageCmd: string[] | null;
+      containerPort: number | null;
       pendingFix: string | null;
       accessCode: string | null;
       accessCodeIv: string | null;
@@ -131,6 +143,18 @@ export class ProjectRepo {
     }
     if (updates.buildMethod !== undefined) {
       setValues.build_method = updates.buildMethod;
+    }
+    if (updates.source !== undefined) {
+      setValues.source = updates.source;
+    }
+    if (updates.imageUrl !== undefined) {
+      setValues.image_url = updates.imageUrl;
+    }
+    if (updates.imageCmd !== undefined) {
+      setValues.image_cmd = updates.imageCmd === null ? null : JSON.stringify(updates.imageCmd);
+    }
+    if (updates.containerPort !== undefined) {
+      setValues.container_port = updates.containerPort;
     }
     if (updates.pendingFix !== undefined) {
       setValues.pending_fix = updates.pendingFix;

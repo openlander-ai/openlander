@@ -8,6 +8,24 @@ export interface BuildDeployConfigParams {
   db: Database;
 }
 
+function parseImageCmd(rawImageCmd: string | null): string[] | undefined {
+  if (!rawImageCmd) {
+    return undefined;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(rawImageCmd);
+    if (!Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    const cmd = parsed.filter((entry): entry is string => typeof entry === 'string');
+    return cmd.length > 0 ? cmd : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isValidDockerfilePath(path: string): boolean {
   return (
     path !== 'Dockerfile' &&
@@ -26,11 +44,16 @@ export function buildDeployConfig(params: BuildDeployConfigParams): ProjectConfi
   }
 
   const isCompose = project.build_method === 'compose';
+  const imageCmd = parseImageCmd(project.image_cmd);
   const dbConfig: ProjectConfig = {
     repoUrl: project.repo_url ?? '',
     branch: project.branch,
     name: project.name,
     visibility: project.visibility,
+    source: project.source,
+    imageUrl: project.image_url ?? undefined,
+    imageCmd,
+    containerPort: project.container_port ?? undefined,
     dockerfilePath:
       !isCompose && isValidDockerfilePath(project.dockerfile_path)
         ? project.dockerfile_path

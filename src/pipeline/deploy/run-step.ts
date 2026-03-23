@@ -32,7 +32,13 @@ export class ContainerRunner {
     await this.docker.removeContainer(containerName);
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      const containerPort = config.containerPort ?? port;
+      const configuredContainerPort = config.containerPort;
+      const containerPort =
+        typeof configuredContainerPort === 'number' &&
+        Number.isInteger(configuredContainerPort) &&
+        configuredContainerPort > 0
+          ? configuredContainerPort
+          : port;
       const traefikLabels = buildTraefikLabels(
         config.projectName,
         containerPort,

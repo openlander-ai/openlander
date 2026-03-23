@@ -509,6 +509,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     try {
       if (requestedEnvironment === 'production') {
+        if (project.source === 'git' && !project.repo_url) {
+          return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
+        }
         ctx.db.updateProject(project.id, { status: 'building' });
         const result = await ctx.pipeline.redeploy(project.id);
         return c.json(result, result.success ? 200 : 500);

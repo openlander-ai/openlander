@@ -7,6 +7,7 @@ import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
 import { extractProjectName } from '../helpers.js';
+import { parseImageUrl } from '../image-utils.js';
 import type {
   DeployPlan,
   PlanService,
@@ -28,9 +29,13 @@ import type { ComposePipeline } from '../compose.js';
 const log = createModuleLogger('plan-engine');
 
 export interface CreatePlanOptions {
-  repoUrl: string;
+  repoUrl?: string;
   branch?: string;
   name?: string;
+  source?: 'git' | 'image';
+  imageUrl?: string;
+  imageCmd?: string[];
+  containerPort?: number;
   envVars?: Record<string, string>;
   visibility?: 'internal' | 'quick-share' | 'shared';
   environment?: string;
@@ -46,6 +51,8 @@ interface PlanExecutionContext {
   environment?: string;
   sshKeyPath?: string;
   trigger?: string;
+  imageCmd?: string[];
+  containerPort?: number;
 }
 
 export interface PlanUpdates {
@@ -286,13 +293,17 @@ export class PlanEngine {
       environment: opts.environment,
       sshKeyPath: opts.sshKeyPath,
       trigger: opts.trigger,
+      imageCmd: opts.imageCmd,
+      containerPort: opts.containerPort,
     };
 
     if (
       !execution.visibility &&
       !execution.environment &&
       !execution.sshKeyPath &&
-      !execution.trigger
+      !execution.trigger &&
+      !execution.imageCmd &&
+      execution.containerPort === undefined
     ) {
       return undefined;
     }
@@ -339,6 +350,7 @@ export class PlanEngine {
     repoUrl: string;
     planBranch: string;
     commitSha: string;
+    imageUrl?: string;
     buildMethod: DeployPlan['build']['method'];
     userDockerfile: string;
     dockerTarget?: string;
@@ -387,6 +399,7 @@ export class PlanEngine {
           repo_url: params.repoUrl,
           branch: params.planBranch,
           commit_sha: params.commitSha,
+          image_url: params.imageUrl,
         },
       },
       build: {
@@ -423,9 +436,71 @@ export class PlanEngine {
   }
 
   async createPlan(opts: CreatePlanOptions): Promise<DeployPlan> {
-    const { repoUrl, branch, name, envVars = {}, sshKeyPath } = opts;
+    const { repoUrl, branch, name, envVars = {}, sshKeyPath, source, imageUrl } = opts;
     const { nanoid } = await import('nanoid');
     const planId = `plan_${nanoid(12)}`;
+
+    if (source === 'image' || imageUrl) {
+      const normalizedImageUrl = imageUrl?.trim();
+      if (!normalizedImageUrl) {
+        throw new Error('imageUrl is required when source is "image"');
+      }
+
+      const parsedImage = parseImageUrl(normalizedImageUrl);
+      if (!parsedImage) {
+        throw new Error(`Invalid Docker image URL: ${normalizedImageUrl}`);
+      }
+
+      const imageNameParts = parsedImage.name.split('/');
+      const fallbackProjectName = imageNameParts[imageNameParts.length - 1] || parsedImage.name;
+      const projectName = name || fallbackProjectName;
+      const initialStatus: DeployPlan['status'] = 'ready';
+      const complexity: DeployPlanComplexity = 'simple';
+
+      const plan = this.assemblePlan({
+        planId,
+        status: initialStatus,
+        complexity,
+        projectName,
+        repoUrl: '',
+        planBranch: '',
+        commitSha: '',
+        imageUrl: normalizedImageUrl,
+        buildMethod: 'image',
+        userDockerfile: 'Dockerfile',
+        dockerTarget: opts.dockerTarget,
+        relativeDockerfiles: [],
+        services: [],
+        autoEnvVars: {},
+        requiredEnvVars: [],
+        envVars,
+        detectedEnv: [],
+        missing: [],
+        warnings: [],
+      });
+
+      const execution = this.buildExecutionContext(opts);
+      if (execution) {
+        (plan as DeployPlan & { execution?: PlanExecutionContext }).execution = execution;
+      }
+
+      log.info({ planId, status: initialStatus, buildMethod: 'image' }, 'Creating deploy plan');
+      this.db.createDeployPlan({
+        id: planId,
+        projectName,
+        status: initialStatus,
+        complexity,
+        planJson: JSON.stringify(this.preparePlanForStorage(plan)),
+        commitSha: '',
+      });
+
+      return plan;
+    }
+
+    if (!repoUrl) {
+      throw new Error('repoUrl is required when source is "git" or undefined');
+    }
+
     const projectName = name || extractProjectName(repoUrl);
 
     log.info({ repoUrl, branch }, 'Cloning repository');
@@ -631,6 +706,7 @@ export class PlanEngine {
 
       const deployMode = this.getDeployMode(plan);
       const execution = this.getExecutionContext(plan);
+      const isImage = plan.build.method === 'image';
 
       let startedProjectId: string;
       let startedProjectName: string;
@@ -671,6 +747,12 @@ export class PlanEngine {
           branch: plan.app.source.branch,
           name: plan.app.name,
           envVars: mergedEnv,
+          ...(isImage ? { source: 'image' as const } : {}),
+          ...(isImage && plan.app.source.image_url ? { imageUrl: plan.app.source.image_url } : {}),
+          ...(execution.imageCmd ? { imageCmd: execution.imageCmd } : {}),
+          ...(execution.containerPort !== undefined
+            ? { containerPort: execution.containerPort }
+            : {}),
           preferDockerfile: isCompose ? false : !plan.build.generated_dockerfile,
           dockerfilePath:
             !isCompose && plan.build.dockerfile !== 'Dockerfile'
