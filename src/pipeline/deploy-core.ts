@@ -404,6 +404,10 @@ export class DeployPipeline {
     this.jobManager?.updatePhase(projectId, 'failed', errMsg);
     this.db.updateProject(projectId, { status: 'error' });
     try {
+      const lastLog = this.db.getLastDeployLog(projectId);
+      if (lastLog?.status === 'failed') {
+        return;
+      }
       const environments = this.db.getEnvironmentsByProject(projectId);
       const envId = environments[0]?.id;
       this.db.createDeployLog({
@@ -412,7 +416,6 @@ export class DeployPipeline {
         environmentId: envId,
         status: 'failed',
         trigger,
-        commitMessage: undefined,
         buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
         durationMs: 0,
       });
