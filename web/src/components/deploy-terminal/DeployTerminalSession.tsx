@@ -66,23 +66,61 @@ export function DeployTerminalSession({
   const { t } = useLanguage();
   const groupedItems = useMemo(() => groupLogs(timelineItems), [timelineItems]);
 
-  // Derive phases from timeline items
   const phases = useMemo(() => {
     const steps = ['Preparing', 'Clone', 'Build', 'Start', 'Health Check', 'Complete'];
-    const progressItems = timelineItems.filter((item) => item.type === 'progress');
-    const latestProgress =
-      progressItems.length > 0 ? progressItems[progressItems.length - 1] : null;
 
-    const currentIdx = latestProgress ? steps.indexOf(latestProgress.stepName ?? '') : -1;
+    const typeToStep: Record<string, string> = {
+      status: 'Preparing',
+      progress: 'Preparing',
+      complete: 'Complete',
+      error: '',
+    };
+
+    let currentIdx = -1;
+
+    for (const item of timelineItems) {
+      const stepFromName = item.stepName ? steps.indexOf(item.stepName) : -1;
+      if (stepFromName > currentIdx) {
+        currentIdx = stepFromName;
+        continue;
+      }
+
+      const stepFromType = typeToStep[item.type];
+      if (stepFromType) {
+        const idx = steps.indexOf(stepFromType);
+        if (idx > currentIdx) currentIdx = idx;
+      }
+
+      if (item.percent != null && item.percent >= 0) {
+        const estimated =
+          item.percent < 15
+            ? 0
+            : item.percent < 60
+              ? 1
+              : item.percent < 85
+                ? 2
+                : item.percent < 95
+                  ? 3
+                  : item.percent < 100
+                    ? 4
+                    : 5;
+        if (estimated > currentIdx) currentIdx = estimated;
+      }
+    }
+
+    const isRunning = projectStatus === 'running';
+    if (isRunning && currentIdx < steps.length - 1) {
+      currentIdx = steps.length - 1;
+    }
 
     return steps.map((step, i) => {
       let state: Phase['state'] = 'pending';
       if (projectStatus === 'error' && i === currentIdx) {
         state = 'error';
-      } else if (i < currentIdx || (step === 'Complete' && projectStatus === 'done')) {
+      } else if (i < currentIdx || (step === 'Complete' && isRunning)) {
         state = 'done';
       } else if (i === currentIdx) {
-        state = 'active';
+        state = isRunning ? 'done' : 'active';
       }
       return { id: step, label: step, state };
     });

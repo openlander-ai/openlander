@@ -34,7 +34,7 @@ export function TerminalPhaseRail({ phases, className }: TerminalPhaseRailProps)
           <div key={phase.id} className="flex items-start gap-3 relative">
             <div className="flex flex-col items-center mt-1">
               <div
-                className="w-2 h-2 rounded-full z-10"
+                className={cn('w-2 h-2 rounded-full z-10', isActive && 'animate-pulse')}
                 style={{
                   backgroundColor: color,
                   boxShadow: isActive ? terminalTokens.effects.glow : 'none',
