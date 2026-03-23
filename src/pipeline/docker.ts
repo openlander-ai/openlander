@@ -388,7 +388,10 @@ export class Docker {
     const envArray = Object.entries(options.envVars).map(([k, v]) => `${k}=${v}`);
     const cPort = options.containerPort ?? options.port;
     const extraHosts = await this.resolveExtraHosts();
-    const binds = this.writeSecretFiles(options.name, options.secretFiles ?? []);
+    const secretBinds = this.writeSecretFiles(options.name, options.secretFiles ?? []);
+    const projectName = options.name.replace(/^ol-/, '');
+    const volumeBinds = await this.getProjectVolumeBinds(projectName);
+    const binds = [...secretBinds, ...volumeBinds];
 
     const container = await this.client.createContainer({
       Image: options.imageTag,
@@ -421,7 +424,10 @@ export class Docker {
     const envArray = Object.entries(opts.envVars).map(([k, v]) => `${k}=${v}`);
     const cPort = opts.containerPort ?? opts.port;
     const extraHosts = await this.resolveExtraHosts();
-    const binds = this.writeSecretFiles(opts.name, opts.secretFiles ?? []);
+    const secretBinds = this.writeSecretFiles(opts.name, opts.secretFiles ?? []);
+    const projectName = opts.name.replace(/^ol-/, '');
+    const volumeBinds = await this.getProjectVolumeBinds(projectName);
+    const binds = [...secretBinds, ...volumeBinds];
     const networkMode = opts.networks?.[0] ?? this.networkName;
 
     const command = typeof opts.command === 'string' ? ['sh', '-c', opts.command] : opts.command;
@@ -519,6 +525,34 @@ export class Docker {
       binds.push(`${hostPath}:${file.mountPath}:ro`);
     }
     return binds;
+  }
+
+  private async getProjectVolumeBinds(projectName: string): Promise<string[]> {
+    try {
+      const result = await this.client.listVolumes({
+        filters: {
+          label: [
+            'openlander.managed=true',
+            'openlander.role=volume',
+            `openlander.project=${projectName}`,
+          ],
+        },
+      });
+      const volumes = Array.isArray(result.Volumes) ? result.Volumes : [];
+      const volumeBinds: string[] = [];
+      for (const vol of volumes) {
+        const name = vol.Name;
+        const labels = vol.Labels as Record<string, string> | undefined;
+        if (!labels) continue;
+        const mountPath = labels['openlander.mount_path'];
+        if (typeof mountPath === 'string' && mountPath.startsWith('/')) {
+          volumeBinds.push(`${name}:${mountPath}:rw`);
+        }
+      }
+      return volumeBinds;
+    } catch {
+      return [];
+    }
   }
 
   cleanupSecretFiles(containerName: string): void {

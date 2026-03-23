@@ -56,8 +56,8 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - deploy_environment — Deploy a specific environment (production/development) for a project. Returns immediately.
 - get_deploy_status — Poll build progress. Shows phase (queued/cloning/building/starting/done/failed) and elapsed time. Pass wait=true to block until completion instead of polling.
 
-### Services (Databases & Caches)
-- create_service — Create PostgreSQL/MySQL/Redis/MongoDB via template, or any Docker image. Returns suggested_env with the recommended env var key and connection string for auto-linking.
+### Services (Databases, Caches & Object Storage)
+- create_service — Create PostgreSQL/MySQL/Redis/MongoDB/MinIO via template, or any Docker image. Returns suggested_env with the recommended env var key and connection string for auto-linking. MinIO returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY.
 - provision_database — Quick shortcut: creates a PostgreSQL container tied to a specific project and auto-sets DATABASE_URL. Use when you just need "give this project a database".
 - list_services / get_service_status — See running services.
 - get_service_credentials — Get connection string, host, port, user, password.
@@ -68,6 +68,13 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - start_service / stop_service / remove_service — Lifecycle management. IMPORTANT: remove_service deletes ALL data. Always backup_service first.
 - create_service_database — Create additional databases inside an existing PostgreSQL/MySQL service.
 - create_service_user — Create a user with optional database grants and per-database access.
+- create_bucket / list_buckets / delete_bucket — Manage S3 buckets inside a MinIO service. Use after creating a MinIO service to set up per-project storage buckets.
+
+### Volumes (Persistent Storage)
+- add_volume — Create a persistent Docker volume for a project. Specify mount_path (e.g. /app/uploads). Volume survives redeploys and is auto-mounted on next deploy.
+- list_volumes — List volumes for a project (or all managed volumes). Shows name, mount path, and size.
+- remove_volume — Delete a volume. Container must be stopped first. WARNING: permanently deletes all data.
+- get_disk_usage — Docker system disk usage breakdown: images, containers, volumes with sizes.
 
 ### Environment & Config
 - set_env_vars — Set env vars on a project (JSON string of key-value pairs). Requires redeploy to take effect.
