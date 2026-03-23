@@ -148,6 +148,8 @@ export interface EventPayload {
     status?: 'pending' | 'in_progress' | 'success' | 'failed';
     message?: string;
     durationMs?: number;
+    /** When 'mcp', auto-recovery is skipped — the MCP client agent handles failure. */
+    source?: 'mcp' | 'dashboard' | 'webhook';
   };
   'deploy:needs-user-action': {
     projectId: string;

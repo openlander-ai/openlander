@@ -109,6 +109,13 @@ function mapFailStep(step?: string): 'clone' | 'dockerfile' | 'build' | 'run' | 
  * - LLM mode (`agent !== null`): streams agent-driven analysis and recovery.
  * - Programmatic mode (`agent === null`): recipe match + optional debugger + single redeploy retry.
  */
+const mcpDeployProjects = new Set<string>();
+
+export function markMcpDeploy(projectId: string): void {
+  mcpDeployProjects.add(projectId);
+  setTimeout(() => mcpDeployProjects.delete(projectId), 10 * 60 * 1000);
+}
+
 export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
   const { eventBus, agent, db, buildDebugger, deployQueue, pipeline, questionBridge, language } =
     params;
@@ -348,6 +355,11 @@ ${plan.agentGuidance}
   }
 
   eventBus.on('deploy:failed', (payload) => {
+    if (payload.source === 'mcp' || mcpDeployProjects.has(payload.projectId)) {
+      mcpDeployProjects.delete(payload.projectId);
+      log.info({ projectId: payload.projectId }, 'MCP-triggered deploy, skipping auto-recovery');
+      return;
+    }
     setTimeout(() => {
       enqueueRecoveryCall(
         () => handleAutoRecovery(payload.projectId, payload.error, payload.step, payload.buildLog),

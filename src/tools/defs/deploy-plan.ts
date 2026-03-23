@@ -4,6 +4,7 @@ import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/
 import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
+import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 
 import {
   createDeployPlanSchema,
@@ -125,6 +126,10 @@ export const deployPlanToolDefs: ToolDef[] = [
       const deployOnly = (args['deploy_only'] as string[] | undefined) ?? undefined;
       const result: ExecutePlanResult = await appCtx.planEngine.executePlan(planId, deployOnly);
 
+      if (result.project_name) {
+        markMcpDeploy(result.project_name);
+      }
+
       if (result.status === 'building') {
         return {
           plan_id: result.plan_id,
@@ -193,6 +198,10 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
 
       const result: ExecutePlanResult = await appCtx.planEngine.executePlan(plan.plan_id);
+
+      if (result.project_name) {
+        markMcpDeploy(result.project_name);
+      }
 
       if (result.status === 'failed') {
         return {
