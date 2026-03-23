@@ -19,6 +19,10 @@ export interface ProjectRow {
   docker_target: string | null;
   build_context: string | null;
   build_method: 'dockerfile' | 'compose' | null;
+  source: 'git' | 'image';
+  image_url: string | null;
+  image_cmd: string | null;
+  container_port: number | null;
   pending_fix: string | null;
   created_at: string;
   updated_at: string;

@@ -30,6 +30,10 @@ export interface Project {
   accessCode?: string | null;
   createdAt: string;
   updatedAt: string;
+  source?: 'git' | 'image';
+  imageUrl?: string;
+  imageCmd?: string[];
+  containerPort?: number;
 }
 
 export interface ProjectWithEnvironments extends Project {

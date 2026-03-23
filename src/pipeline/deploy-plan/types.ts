@@ -120,10 +120,11 @@ export interface DeployPlan {
       repo_url: string;
       branch: string;
       commit_sha: string;
+      image_url?: string;
     };
   };
   build: {
-    method: 'dockerfile' | 'compose';
+    method: 'dockerfile' | 'compose' | 'image';
     dockerfile: string;
     context: string;
     target?: string;

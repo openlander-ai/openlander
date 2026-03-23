@@ -84,6 +84,14 @@ export interface ProjectConfig {
   _preferredPort?: number;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
   composeServices?: string[];
+  /** Deployment source type (git or pre-built image) */
+  source?: 'git' | 'image';
+  /** Full Docker image reference (e.g., registry.example.com/app:latest) */
+  imageUrl?: string;
+  /** Command override array for container entrypoint */
+  imageCmd?: string[];
+  /** Port the application listens on inside the container */
+  containerPort?: number;
 }
 
 /**

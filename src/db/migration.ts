@@ -58,6 +58,18 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   if (!colNames.has('pr_number')) {
     sqlite.exec('ALTER TABLE projects ADD COLUMN pr_number INTEGER');
   }
+  if (!colNames.has('source')) {
+    sqlite.exec("ALTER TABLE projects ADD COLUMN source TEXT NOT NULL DEFAULT 'git'");
+  }
+  if (!colNames.has('image_url')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN image_url TEXT DEFAULT NULL');
+  }
+  if (!colNames.has('image_cmd')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN image_cmd TEXT DEFAULT NULL');
+  }
+  if (!colNames.has('container_port')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN container_port INTEGER DEFAULT NULL');
+  }
 
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
 
