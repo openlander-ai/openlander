@@ -338,7 +338,8 @@ function registerDeployLifecycleHandlers(handlerCtx: StreamHandlerContext): Arra
           type: 'complete',
           message:
             payload.message ??
-            `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s — ${payload.url}`,
+            `Deploy complete in ${String(Math.round(payload.totalDurationMs / 1000))}s`,
+          url: payload.url,
           projectId: project.id,
           percent: 100,
           phase: payload.phase,
