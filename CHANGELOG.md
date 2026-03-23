@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-03-23
+
+### Added
+
+- **MCP tool `update_project_config`**: Change project's `dockerfile_path`, `docker_target`, and `build_context` stored in DB. Includes path traversal validation and at-least-one-field requirement. Use when build config is stuck from prior deploys.
+- **Dockerfile mismatch warning**: When a commit modifies a Dockerfile that differs from the one used for the build, a warning is logged with `update_project_config` hint (e.g., `[warning] Commit modified apps/api/Dockerfile, but build uses Dockerfile.api`).
+- **Dockerfile build log preview**: Build log now shows key RUN/CMD/EXPOSE lines from the Dockerfile being built, so users can verify the right file at a glance.
+- **Dockerfile fallback in redeploy**: When DB `dockerfile_path` points to a missing file in the clone, falls back to root `Dockerfile` or single discovered candidate. Fails with actionable message when multiple Dockerfiles found.
+- **Dockerfile discovery in deploy plan**: `resolveBuildConfig` now uses discovered Dockerfiles instead of auto-generating when the repo already has one.
+
+### Changed
+
+- **Removed RecoveryOrchestrator**: Build failures now propagate immediately to `deploy:failed` event, letting `auto-recovery.ts` route to agent instead of silently retrying with LLM-rewritten Dockerfiles (Tier 2.5). Removed `attemptTier1Fix`, `_retryCount`, `build:autofix` and `build:dockerfile-fixed` events.
+
 ## [0.9.7] - 2026-03-23
 
 ### Changed
