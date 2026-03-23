@@ -93,21 +93,8 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const isActive = (path: string) => location.pathname === path;
   const isProjectActive = (id: string) => location.pathname === `/projects/${id}`;
 
-  const issueProjects: Project[] = [];
-  const normalProjects: Project[] = [];
-
-  for (const p of projects) {
-    if (p.status === 'error' || p.status === 'building') {
-      issueProjects.push(p);
-    } else {
-      normalProjects.push(p);
-    }
-  }
-
-  issueProjects.sort(sortProjects);
-
   const tempGroups = new Map<string, Project[]>();
-  for (const p of normalProjects) {
+  for (const p of projects) {
     const url = p.repoUrl ? normalizeRepoUrl(p.repoUrl) : 'unknown';
     if (!tempGroups.has(url)) tempGroups.set(url, []);
     tempGroups.get(url)!.push(p);
@@ -250,15 +237,6 @@ export function Sidebar({ projects, loading }: SidebarProps) {
 
           {/* Grouped list for expanded mode (>= lg) */}
           <div className="hidden lg:block space-y-4">
-            {issueProjects.length > 0 && (
-              <div className="space-y-0.5 pb-3 mb-1 border-b border-border/50">
-                <div className="text-xs uppercase tracking-[0.08em] font-mono text-muted-ol px-3 py-1">
-                  ⚠️ Issues ({issueProjects.length})
-                </div>
-                {issueProjects.map(renderProjectItem)}
-              </div>
-            )}
-
             {Array.from(groups.entries()).map(([url, projs]) => {
               const visibleProjs = projs;
 
