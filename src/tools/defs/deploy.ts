@@ -119,7 +119,7 @@ export const deployToolDefs: ToolDef[] = [
     description:
       'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed), timing, and build progress details. When building, includes current phase and last few lines of build output. When failed, includes error summary and build log tail. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With wait=true: blocks until completion. Without project_name, waits for ALL active deploys to finish.',
     mcpDescription:
-      'Get real-time deployment status. During build phase, includes build_step, build_step_total, build_step_desc for progress tracking. Poll this tool to monitor deployment progress.',
+      'Get real-time deployment status. During build phase, includes build_step, build_step_total, build_step_desc for progress tracking. Poll this tool to monitor deployment progress. For no_cache rebuilds, use timeout=600 (builds may take 3-5+ minutes).',
     inputSchema: deployStatusSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;

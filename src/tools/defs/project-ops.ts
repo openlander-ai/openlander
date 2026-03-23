@@ -169,7 +169,9 @@ export const projectOpsToolDefs: ToolDef[] = [
       return {
         status: 'restarting',
         project: projectName,
-        message: 'Redeployment started. Use get_deploy_status to track progress.',
+        message: noCache
+          ? 'Restart initiated (no_cache). Full rebuild may take 3-5+ minutes. Use get_deploy_status with wait=true and timeout=600.'
+          : 'Redeployment started. Use get_deploy_status to track progress.',
       };
     },
   },
@@ -220,7 +222,9 @@ export const projectOpsToolDefs: ToolDef[] = [
       return {
         status: 'redeploying',
         project: projectName,
-        message: 'Redeployment started. Use get_deploy_status to track progress.',
+        message: noCache
+          ? 'Redeployment started (no_cache). Full rebuild may take 3-5+ minutes. Use get_deploy_status with wait=true and timeout=600.'
+          : 'Redeployment started. Use get_deploy_status to track progress.',
       };
     },
   },
