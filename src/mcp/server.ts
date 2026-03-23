@@ -16,6 +16,7 @@ import { infraToolDefs } from '../tools/defs/infra.js';
 import { monitoringToolDefs } from '../tools/defs/monitoring.js';
 import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
 import { serviceToolDefs } from '../tools/defs/service.js';
+import { volumeToolDefs } from '../tools/defs/volume.js';
 import { webhookToolDefs } from '../tools/defs/webhook.js';
 import { environmentToolDefs } from '../tools/defs/environment.js';
 import type { ToolDef } from '../tools/defs/types.js';
@@ -28,6 +29,7 @@ const mcpToolDefs: ToolDef[] = [
   ...projectOpsToolDefs,
   ...envToolDefs,
   ...serviceToolDefs,
+  ...volumeToolDefs,
   ...infraToolDefs,
   ...gitToolDefs,
   ...monitoringToolDefs,

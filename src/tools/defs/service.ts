@@ -4,11 +4,14 @@ import { getAllIps } from '../../pipeline/traefik.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
+  createBucketSchema,
   createDatabaseSchema,
   createServiceDatabaseSchema,
   createServiceSchema,
   createServiceUserSchema,
+  deleteBucketSchema,
   getServiceLogsSchema,
+  listBucketsSchema,
   listDatabasesSchema,
   listServiceBackupsSchema,
   listServicesSchema,
@@ -215,6 +218,63 @@ export const serviceToolDefs: ToolDef[] = [
       }
     },
     targets: ['agent'],
+  },
+  {
+    name: 'list_buckets',
+    description:
+      'List S3 buckets in a MinIO service. Use to see what storage buckets exist. Returns { service, count, buckets[] } where each bucket has name and createdAt. Errors: SERVICE_NOT_FOUND, not a MinIO service.',
+    mcpDescription: 'List S3 buckets in a MinIO object storage service.',
+    inputSchema: listBucketsSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const service = await getServiceByName(appCtx, serviceName);
+      const buckets = await appCtx.serviceManager.listBuckets(service.id);
+      return {
+        service: service.name,
+        count: buckets.length,
+        buckets,
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'create_bucket',
+    description:
+      'Create an S3 bucket in a MinIO service. Use when setting up storage for a project. Bucket names must be 3-63 chars, lowercase, following S3 naming rules. Returns { status, service, bucket }. Errors: SERVICE_NOT_FOUND, bucket already exists, not a MinIO service.',
+    mcpDescription: 'Create an S3 bucket in a MinIO object storage service.',
+    inputSchema: createBucketSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const bucketName = args['bucket_name'] as string;
+      const service = await getServiceByName(appCtx, serviceName);
+      await appCtx.serviceManager.createBucket(service.id, bucketName);
+      return {
+        status: 'created',
+        service: service.name,
+        bucket: bucketName,
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'delete_bucket',
+    description:
+      'Delete an empty S3 bucket from a MinIO service. The bucket must be empty before deletion. Returns { status, service, bucket, warning }. Errors: SERVICE_NOT_FOUND, bucket not empty, not a MinIO service.',
+    mcpDescription: 'Delete an empty S3 bucket from a MinIO object storage service.',
+    inputSchema: deleteBucketSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const bucketName = args['bucket_name'] as string;
+      const service = await getServiceByName(appCtx, serviceName);
+      await appCtx.serviceManager.deleteBucket(service.id, bucketName);
+      return {
+        status: 'deleted',
+        service: service.name,
+        bucket: bucketName,
+        warning: 'Bucket and all its contents have been permanently deleted.',
+      };
+    },
+    targets: ['mcp'],
   },
   {
     name: 'get_service_status',

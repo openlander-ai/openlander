@@ -559,3 +559,60 @@ export const deployHistorySchema = z.object({
     .describe('Filter by environment (e.g. "production", "development")'),
   limit: z.number().optional().describe('Max entries to return (default 10)'),
 });
+
+export const addVolumeSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  volume_name: z
+    .string()
+    .min(1)
+    .regex(
+      /^[a-z0-9][a-z0-9-]*$/,
+      'Must be lowercase alphanumeric with hyphens, starting with a letter or digit',
+    )
+    .describe('Volume name (lowercase alphanumeric and hyphens)'),
+  mount_path: z
+    .string()
+    .min(1)
+    .startsWith('/', 'Must be an absolute path (e.g., /app/uploads)')
+    .describe('Absolute mount path inside the container (e.g., /app/uploads)'),
+});
+
+export const listVolumesSchema = z.object({
+  project_name: z.string().optional().describe('Project name to filter managed volumes'),
+});
+
+export const removeVolumeSchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+  volume_name: z
+    .string()
+    .min(1)
+    .regex(
+      /^[a-z0-9][a-z0-9-]*$/,
+      'Must be lowercase alphanumeric with hyphens, starting with a letter or digit',
+    )
+    .describe('Volume name (lowercase alphanumeric and hyphens)'),
+});
+
+export const listBucketsSchema = z.object({
+  service_name: z.string().min(1).describe('MinIO service name'),
+});
+
+export const createBucketSchema = z.object({
+  service_name: z.string().min(1).describe('MinIO service name'),
+  bucket_name: z
+    .string()
+    .min(3)
+    .max(63)
+    .regex(
+      /^[a-z0-9][a-z0-9.-]*[a-z0-9]$/,
+      'Must follow S3 bucket naming rules (lowercase, 3-63 chars)',
+    )
+    .describe('Bucket name (lowercase, 3-63 characters, S3 naming rules)'),
+});
+
+export const deleteBucketSchema = z.object({
+  service_name: z.string().min(1).describe('MinIO service name'),
+  bucket_name: z.string().min(1).describe('Bucket name to delete'),
+});
+
+export const getDiskUsageSchema = z.object({});

@@ -15,6 +15,7 @@ import {
   type ListedDatabase,
   type ListedUser,
 } from './service-adapters/index.js';
+import { MinioAdapter } from './service-adapters/minio-adapter.js';
 import {
   assertSafeDatabaseName,
   assertSafeUserName,
@@ -32,12 +33,21 @@ export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   mysql: ['9', '8'],
   redis: ['8-alpine', '7-alpine'],
   mongodb: ['8', '7'],
+  minio: ['RELEASE.2024-11-07T00-52-20Z', 'latest'],
 };
 
 export interface ServiceTemplate {
   type: string;
   image: string;
   port: number;
+  cmd?: string[];
+  healthcheck?: {
+    test: string[];
+    interval: number;
+    timeout: number;
+    retries: number;
+    startPeriod: number;
+  };
   env: (creds: { user: string; password: string; database: string }) => string[];
 }
 
@@ -78,6 +88,20 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
       `MONGO_INITDB_ROOT_PASSWORD=${c.password}`,
     ],
   },
+  minio: {
+    type: 'minio',
+    image: 'minio/minio:RELEASE.2024-11-07T00-52-20Z',
+    port: 9000,
+    cmd: ['server', '/data', '--console-address', ':9001'],
+    healthcheck: {
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live'],
+      interval: 30,
+      timeout: 10,
+      retries: 3,
+      startPeriod: 10,
+    },
+    env: (c) => [`MINIO_ROOT_USER=${c.user}`, `MINIO_ROOT_PASSWORD=${c.password}`],
+  },
 };
 
 /**
@@ -89,6 +113,7 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
   mysql: 'DATABASE_URL',
   redis: 'REDIS_URL',
   mongodb: 'MONGODB_URL',
+  minio: 'S3_ENDPOINT',
 };
 
 export class ServiceManager {
@@ -121,6 +146,18 @@ export class ServiceManager {
     const existing = this.db
       .listServices()
       .filter((s) => s.type === service.type && s.id !== service.id);
+
+    if (service.type === 'minio') {
+      const user = (credentials?.['user'] as string | undefined) ?? '';
+      const password = (credentials?.['password'] as string | undefined) ?? '';
+      const prefix =
+        existing.length === 0 ? '' : `${service.name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_`;
+      return [
+        { key: `${prefix}S3_ENDPOINT`, value: connectionString },
+        { key: `${prefix}AWS_ACCESS_KEY_ID`, value: user },
+        { key: `${prefix}AWS_SECRET_ACCESS_KEY`, value: password },
+      ];
+    }
 
     const key =
       existing.length === 0
@@ -166,6 +203,8 @@ export class ServiceManager {
     let env: string[];
     let credentialsJson: string | undefined;
     let dataMountPath: string;
+    let containerCmd: string[] | undefined;
+    let containerHealthcheck: ServiceTemplate['healthcheck'] | undefined;
 
     if (hasTemplate) {
       const templateId = opts.template as string;
@@ -180,6 +219,8 @@ export class ServiceManager {
       image = template.image.replace(/:[^:]+$/, `:${version}`);
       port = template.port;
       dataMountPath = this.getDataMountPath(template.type);
+      containerCmd = template.cmd;
+      containerHealthcheck = template.healthcheck;
 
       if (template.type === 'redis') {
         env = [...userEnv];
@@ -192,10 +233,22 @@ export class ServiceManager {
             port,
           ),
         });
+      } else if (template.type === 'minio') {
+        const user = 'openlander';
+        const password = randomBytes(16).toString('hex');
+        const containerName = this.getContainerName(opts.name);
+        env = [...template.env({ user, password, database: '' }), ...userEnv];
+        credentialsJson = JSON.stringify({
+          host: containerName,
+          port,
+          user,
+          password,
+          connectionString: this.getConnectionString('minio', containerName, port),
+        });
       } else {
         const containerName = this.getContainerName(opts.name);
         const credentials = this.buildCredentials(
-          template.type as Exclude<BuiltInServiceType, 'redis'>,
+          template.type as Exclude<BuiltInServiceType, 'redis' | 'minio'>,
           opts.name,
           containerName,
           port,
@@ -217,6 +270,7 @@ export class ServiceManager {
       env = userEnv;
       credentialsJson = undefined;
       dataMountPath = '/data';
+      containerCmd = undefined;
     }
 
     if (!Number.isInteger(port) || port <= 0) {
@@ -246,6 +300,18 @@ export class ServiceManager {
       Image: image,
       name: containerName,
       Env: env,
+      ...(containerCmd ? { Cmd: containerCmd } : {}),
+      ...(containerHealthcheck
+        ? {
+            Healthcheck: {
+              Test: containerHealthcheck.test,
+              Interval: containerHealthcheck.interval * 1_000_000_000,
+              Timeout: containerHealthcheck.timeout * 1_000_000_000,
+              Retries: containerHealthcheck.retries,
+              StartPeriod: containerHealthcheck.startPeriod * 1_000_000_000,
+            },
+          }
+        : {}),
       Labels: {
         'openlander.managed': 'true',
         'openlander.role': 'service',
@@ -699,6 +765,45 @@ export class ServiceManager {
     return adapter.createUser(service, { username, password: userPassword, grants }, this.docker);
   }
 
+  async listBuckets(serviceId: string): Promise<Array<{ name: string; createdAt: string }>> {
+    const service = this.getRequiredService(serviceId);
+    await this.ensureServiceContainerRunning(service);
+    if (service.type !== 'minio') {
+      throw new Error(
+        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
+      );
+    }
+
+    const adapter = new MinioAdapter();
+    return adapter.listBuckets(service, this.docker);
+  }
+
+  async createBucket(serviceId: string, bucketName: string): Promise<void> {
+    const service = this.getRequiredService(serviceId);
+    await this.ensureServiceContainerRunning(service);
+    if (service.type !== 'minio') {
+      throw new Error(
+        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
+      );
+    }
+
+    const adapter = new MinioAdapter();
+    return adapter.createBucket(service, this.docker, bucketName);
+  }
+
+  async deleteBucket(serviceId: string, bucketName: string): Promise<void> {
+    const service = this.getRequiredService(serviceId);
+    await this.ensureServiceContainerRunning(service);
+    if (service.type !== 'minio') {
+      throw new Error(
+        `Bucket operations are only supported for MinIO services, got: ${service.type}`,
+      );
+    }
+
+    const adapter = new MinioAdapter();
+    return adapter.deleteBucket(service, this.docker, bucketName);
+  }
+
   private getContainerName(name: string): string {
     return `ol-svc-${name}`;
   }
@@ -721,7 +826,7 @@ export class ServiceManager {
   }
 
   private buildCredentials(
-    type: Exclude<BuiltInServiceType, 'redis'>,
+    type: Exclude<BuiltInServiceType, 'redis' | 'minio'>,
     name: string,
     containerName: string,
     port: number,

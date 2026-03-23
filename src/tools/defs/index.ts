@@ -10,5 +10,6 @@ export { infraToolDefs } from './infra.js';
 export { monitoringToolDefs } from './monitoring.js';
 export { projectOpsToolDefs } from './project-ops.js';
 export { serviceToolDefs } from './service.js';
+export { volumeToolDefs } from './volume.js';
 export { webhookToolDefs } from './webhook.js';
 export { environmentToolDefs } from './environment.js';

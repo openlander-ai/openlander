@@ -1,7 +1,7 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
 
-export type BuiltInServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb';
+export type BuiltInServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb' | 'minio';
 
 export interface ServiceCredentials {
   user: string;

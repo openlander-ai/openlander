@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.11] - 2026-03-23
+
+### Added
+
+- **Volume MCP tools**: `add_volume`, `list_volumes`, `remove_volume`, `get_disk_usage` for managing Docker persistent volumes per project. Includes inspect-before-create duplicate detection, ownership label verification on removal, and schema validation (regex for volume names, absolute path for mount paths).
+- **MinIO service template**: `create_service(template="minio")` provisions S3-compatible object storage with auto-generated credentials. Includes health check (`/minio/health/live`), pinned version (`RELEASE.2024-11-07T00-52-20Z`), and `getSuggestedEnv` returning `S3_ENDPOINT`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
+- **Bucket management MCP tools**: `create_bucket`, `list_buckets`, `delete_bucket` for managing MinIO S3 buckets via `mc` CLI inside the service container.
+- **ServiceTemplate extensions**: Optional `cmd` and `healthcheck` fields on `ServiceTemplate` interface, reusable by future templates.
+
 ## [0.9.10] - 2026-03-23
 
 ### Fixed
