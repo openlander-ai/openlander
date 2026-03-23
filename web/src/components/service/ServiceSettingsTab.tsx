@@ -42,7 +42,7 @@ export function ServiceSettingsTab({ service, onDeleteClick }: ServiceSettingsTa
         <div className="p-4 rounded-lg border border-error/30 bg-error/5 space-y-4">
           <div>
             <h4 className="text-sm font-medium text-primary-ol">Delete Service</h4>
-            <p className="text-xs font-body text-secondary-ol mt-1">
+            <p className="text-sm font-body text-secondary-ol mt-1">
               Permanently delete this service and all its data. This action cannot be undone.
             </p>
           </div>

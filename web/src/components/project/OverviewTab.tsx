@@ -429,7 +429,7 @@ export function OverviewTab({
           <div className="flex items-center gap-2.5">
             <h3 className="text-xs font-medium text-muted-ol tracking-wider">Error Logs</h3>
             {recentErrorCount > 0 && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-error/10 text-error">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-error/10 text-error">
                 <AlertCircle className="h-3 w-3" />
                 {recentErrorCount} error{recentErrorCount !== 1 ? 's' : ''} (1h)
               </span>
@@ -450,10 +450,7 @@ export function OverviewTab({
           <div className="rounded-lg border border-error/20 bg-bg-terminal overflow-hidden">
             <div className="divide-y divide-border/30">
               {displayErrors.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="px-3 py-1.5 font-mono text-[11px] text-error truncate"
-                >
+                <div key={entry.id} className="px-3 py-1.5 font-mono text-xs text-error truncate">
                   {normalizeLogText(entry.line)}
                 </div>
               ))}
@@ -495,27 +492,27 @@ export function OverviewTab({
                 >
                   <div className={cn('h-2 w-2 rounded-full shrink-0', statusMeta.dotClass)} />
                   <TriggerIcon trigger={deploy.trigger} />
-                  <span className={cn('text-[11px] font-body shrink-0', statusMeta.textClass)}>
+                  <span className={cn('text-xs font-body shrink-0', statusMeta.textClass)}>
                     {statusMeta.label}
                   </span>
                   {shortSha && (
-                    <span className="text-[11px] font-mono text-muted-ol shrink-0">{shortSha}</span>
+                    <span className="text-xs font-mono text-muted-ol shrink-0">{shortSha}</span>
                   )}
                   {deploy.commitMessage && (
-                    <span className="text-[11px] font-body text-muted-ol truncate min-w-0">
+                    <span className="text-xs font-body text-muted-ol truncate min-w-0">
                       {deploy.commitMessage}
                     </span>
                   )}
 
                   {deploy.failureSummary && (
-                    <span className="text-[11px] font-body text-error truncate min-w-0">
+                    <span className="text-xs font-body text-error truncate min-w-0">
                       {deploy.failureSummary}
                     </span>
                   )}
 
                   <div className="flex-1" />
 
-                  <div className="flex items-center gap-3 text-[11px] font-body text-muted-ol shrink-0">
+                  <div className="flex items-center gap-3 text-xs font-body text-muted-ol shrink-0">
                     {deploy.durationMs && (
                       <span className="flex items-center gap-1">
                         <Activity className="h-3 w-3" />

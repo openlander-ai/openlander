@@ -248,7 +248,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
               </div>
             </div>
 
-            <p className="text-xs font-body text-muted-ol">{t('settings.github.enterToken')}</p>
+            <p className="text-sm font-body text-muted-ol">{t('settings.github.enterToken')}</p>
             <form onSubmit={handleConnectGithub} className="space-y-3">
               <div className="space-y-2">
                 <Input
@@ -283,7 +283,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
               </Button>
             </form>
 
-            {githubError && <p className="text-xs font-body text-error">{githubError}</p>}
+            {githubError && <p className="text-sm font-body text-error">{githubError}</p>}
 
             <Button
               type="button"

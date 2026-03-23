@@ -198,7 +198,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         ) : (
           <p className="text-sm font-body text-muted-ol">{t('domains.notAvailable')}</p>
         )}
-        <p className="text-[11px] font-body text-muted-ol">{t('domains.accessibleFrom')}</p>
+        <p className="text-sm font-body text-muted-ol">{t('domains.accessibleFrom')}</p>
       </div>
 
       {/* Direct Port Access */}
@@ -225,7 +225,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                     {directUrl}
                     <ExternalLink className="h-3 w-3" />
                   </a>
-                  <span className="text-[10px] font-body text-muted-ol px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))]">
+                  <span className="text-xs font-body text-muted-ol px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))]">
                     {label}
                   </span>
                   <button
@@ -242,7 +242,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               );
             })}
           </div>
-          <p className="text-[11px] font-body text-muted-ol">{t('domains.directPortAccess')}</p>
+          <p className="text-sm font-body text-muted-ol">{t('domains.directPortAccess')}</p>
         </div>
       )}
 
@@ -296,7 +296,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         {/* Add domain form */}
         {cfConfigured === false ? (
           <div className="rounded-md border border-warning/30 bg-warning/10 p-2.5 space-y-1">
-            <p className="text-xs font-body text-warning">{t('domains.cloudflareNotConfigured')}</p>
+            <p className="text-sm font-body text-warning">{t('domains.cloudflareNotConfigured')}</p>
             <a
               href="/settings"
               className="text-xs font-body font-medium text-warning underline-offset-2 hover:underline flex items-center gap-1"
@@ -335,7 +335,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                 {'Add Domain'}
               </Button>
             </div>
-            <p className="text-[11px] font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
+            <p className="text-sm font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
           </>
         )}
       </div>
@@ -408,7 +408,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
           <p className="text-sm font-body text-muted-ol">{t('domains.notExposed')}</p>
         )}
 
-        <p className="text-[11px] font-body text-muted-ol">
+        <p className="text-sm font-body text-muted-ol">
           {publicUrl ? t('domains.anyoneWithUrl') : t('domains.requiresRunning')}
         </p>
       </div>

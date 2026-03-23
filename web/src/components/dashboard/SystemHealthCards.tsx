@@ -82,7 +82,7 @@ export function SystemHealthCards({
             >
               <AlertCircle className="h-3.5 w-3.5 text-error mr-2 shrink-0" />
               <span className="truncate">{project.name}: error</span>
-              <span className="text-muted-ol text-[10px] ml-auto shrink-0">
+              <span className="text-muted-ol text-xs ml-auto shrink-0">
                 {formatRelativeTime(project.updatedAt, t)}
               </span>
             </DropdownMenuItem>

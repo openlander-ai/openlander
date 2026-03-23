@@ -53,12 +53,12 @@ export function ServiceHeader({
               <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
                 {service.name}
               </h1>
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-ol/10 border border-secondary-ol/20 text-[10px] font-mono text-secondary-ol">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-ol/10 border border-secondary-ol/20 text-xs font-mono text-secondary-ol">
                 <Database className="h-3 w-3" />
                 {service.image}
               </div>
             </div>
-            <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
+            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
               <span className={status.color}>{status.label}</span>
             </div>
           </div>
@@ -69,7 +69,7 @@ export function ServiceHeader({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
+              className="h-7 text-xs font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
               onClick={onStart}
               disabled={!!actionLoading}
             >
@@ -86,7 +86,7 @@ export function ServiceHeader({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-[11px] font-body gap-1.5 text-warning hover:text-warning hover:bg-warning/10 hover:border-warning/30"
+              className="h-7 text-xs font-body gap-1.5 text-warning hover:text-warning hover:bg-warning/10 hover:border-warning/30"
               onClick={onStop}
               disabled={!!actionLoading}
             >
@@ -102,7 +102,7 @@ export function ServiceHeader({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-[11px] font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
+            className="h-7 text-xs font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
             onClick={onDelete}
             disabled={!!actionLoading}
           >

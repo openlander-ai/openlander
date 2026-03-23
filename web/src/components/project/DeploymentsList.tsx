@@ -114,26 +114,26 @@ export function DeploymentsList({
           >
             <div className={cn('h-2 w-2 rounded-full shrink-0', statusMeta.dotClass)} />
 
-            <span className="flex items-center gap-1.5 text-[13px] font-semibold text-primary-ol truncate shrink-0">
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-primary-ol truncate shrink-0">
               <TriggerIcon className="h-3.5 w-3.5 text-muted-ol shrink-0" />
               {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail)}
             </span>
-            <span className={cn('text-[11px] font-body shrink-0', statusMeta.textClass)}>
+            <span className={cn('text-xs font-body shrink-0', statusMeta.textClass)}>
               {statusMeta.label}
             </span>
             {shortCommitSha && (
-              <span className="text-[11px] font-mono text-muted-ol shrink-0">{shortCommitSha}</span>
+              <span className="text-xs font-mono text-muted-ol shrink-0">{shortCommitSha}</span>
             )}
 
             {deploy.failureSummary && (
-              <span className="text-[11px] font-body text-error truncate min-w-0">
+              <span className="text-xs font-body text-error truncate min-w-0">
                 {deploy.failureSummary}
               </span>
             )}
 
             <div className="flex-1" />
 
-            <div className="flex items-center gap-3 text-[11px] font-body text-muted-ol shrink-0">
+            <div className="flex items-center gap-3 text-xs font-body text-muted-ol shrink-0">
               {projectBranch && (
                 <span className="flex items-center gap-1">
                   <GitBranch className="h-3 w-3" />

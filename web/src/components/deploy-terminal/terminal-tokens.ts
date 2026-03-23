@@ -22,9 +22,9 @@ export const terminalTokens = {
     },
   },
   typography: {
-    fontFamily: '"JetBrains Mono", monospace',
+    fontFamily: '"Geist Mono Variable", "Geist Mono", ui-monospace, monospace',
     fontSize: {
-      sm: '11px',
+      sm: '12px',
       base: '13px',
     },
     lineHeight: '1.6',

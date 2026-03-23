@@ -146,7 +146,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                     </span>
                     <span
                       className={cn(
-                        'text-[10px] px-1.5 py-0.5 rounded font-body',
+                        'text-xs px-1.5 py-0.5 rounded font-body',
                         webhook.enabled
                           ? 'bg-success/10 text-success'
                           : 'bg-[var(--bg-subtle)] text-muted-ol',
@@ -159,7 +159,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-[11px] font-body"
+                      className="h-7 text-xs font-body"
                       onClick={() => handleToggle(webhook)}
                     >
                       {webhook.enabled ? 'Disable' : 'Enable'}
@@ -167,7 +167,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-[11px] font-body text-error hover:text-error"
+                      className="h-7 text-xs font-body text-error hover:text-error"
                       onClick={() => handleDelete(webhook.source)}
                     >
                       <Trash2 className="h-3 w-3" />
@@ -179,7 +179,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                   <div>
                     <span className="text-muted-ol">{'Webhook URL'}:</span>
                     <div className="flex items-center gap-1 mt-0.5">
-                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
+                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-xs text-secondary-ol truncate">
                         {fullUrl}
                       </code>
                       <Button
@@ -200,7 +200,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                   <div>
                     <span className="text-muted-ol">{'Secret'}:</span>
                     <div className="flex items-center gap-1 mt-0.5">
-                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-[11px] text-secondary-ol truncate">
+                      <code className="flex-1 bg-bg-subtle px-2 py-1 rounded text-xs text-secondary-ol truncate">
                         {webhook.secret}
                       </code>
                       <Button

@@ -139,7 +139,7 @@ export function LlmSettingsTab({ status, refetch }: LlmSettingsTabProps) {
       </div>
 
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
-        <p className="text-xs font-body text-muted-ol">
+        <p className="text-sm font-body text-muted-ol">
           Provide an LLM API key to enable smart auto-recovery. Without it, programmatic recovery
           recipes are used.
         </p>
@@ -240,9 +240,9 @@ export function LlmSettingsTab({ status, refetch }: LlmSettingsTabProps) {
           )}
 
           {llmMessage && !testResult && (
-            <p className="text-xs font-body text-success">{llmMessage}</p>
+            <p className="text-sm font-body text-success">{llmMessage}</p>
           )}
-          {llmError && <p className="text-xs font-body text-error">{llmError}</p>}
+          {llmError && <p className="text-sm font-body text-error">{llmError}</p>}
         </form>
       </div>
     </section>

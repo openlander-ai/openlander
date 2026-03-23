@@ -113,7 +113,7 @@ export function ProjectsGrid() {
           <h1 className="font-display font-bold text-xl text-primary-ol tracking-tight">
             Project Overview
           </h1>
-          <p className="text-xs font-body text-secondary-ol mt-0.5">
+          <p className="text-sm font-body text-secondary-ol mt-0.5">
             {projects.length} {projects.length === 1 ? 'project monitored' : 'projects monitored'}
           </p>
         </div>
@@ -170,7 +170,7 @@ export function ProjectsGrid() {
             <p className="font-display font-semibold text-primary-ol">
               {t('projects.deployFirstApp')}
             </p>
-            <p className="text-xs font-body text-secondary-ol mt-1">
+            <p className="text-sm font-body text-secondary-ol mt-1">
               {t('projects.connectGithub')}
             </p>
           </div>

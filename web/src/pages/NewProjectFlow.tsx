@@ -158,7 +158,7 @@ export function NewProjectFlow() {
             <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight">
               {'New Project'}
             </h1>
-            <p className="text-xs font-body text-secondary-ol">{t('newProject.selectRepo')}</p>
+            <p className="text-sm font-body text-secondary-ol">{t('newProject.selectRepo')}</p>
           </div>
         </div>
 
@@ -204,7 +204,7 @@ export function NewProjectFlow() {
       </div>
 
       {(error || ghError) && (
-        <div className="mx-6 mt-4 px-3 py-2 rounded border border-error/30 bg-error/10 text-error text-xs font-body">
+        <div className="mx-6 mt-4 px-3 py-2 rounded border border-error/30 bg-error/10 text-error text-sm font-body">
           {error ?? ghError}
         </div>
       )}

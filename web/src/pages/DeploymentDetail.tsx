@@ -130,7 +130,7 @@ export function DeploymentDetail() {
                     </span>
                   )}
                 </h1>
-                <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
+                <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
                   <span className={cn('flex items-center gap-1', statusMeta.textClass)}>
                     <StatusIcon className="h-3 w-3" />
                     {statusMeta.label}
@@ -155,7 +155,7 @@ export function DeploymentDetail() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
-              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+              <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Status'}
               </div>
               <div className={cn('mt-1 text-sm font-display font-medium', statusMeta.textClass)}>
@@ -163,7 +163,7 @@ export function DeploymentDetail() {
               </div>
             </div>
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
-              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+              <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Trigger'}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol capitalize">
@@ -171,7 +171,7 @@ export function DeploymentDetail() {
               </div>
             </div>
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
-              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+              <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Started'}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol">
@@ -179,7 +179,7 @@ export function DeploymentDetail() {
               </div>
             </div>
             <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
-              <div className="text-[11px] font-body uppercase tracking-wide text-muted-ol">
+              <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Duration'}
               </div>
               <div className="mt-1 text-sm font-body text-primary-ol">

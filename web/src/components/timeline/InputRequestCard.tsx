@@ -99,9 +99,7 @@ export function InputRequestCard({
           <div key={qIndex} className="space-y-2">
             {/* Question header */}
             {q.header && (
-              <p className="text-[11px] font-mono text-muted-ol uppercase tracking-wider">
-                {q.header}
-              </p>
+              <p className="text-xs font-mono text-muted-ol uppercase tracking-wider">{q.header}</p>
             )}
 
             {/* Question text */}
@@ -142,7 +140,7 @@ export function InputRequestCard({
                         <span>{opt.label}</span>
                       </span>
                       {opt.description && (
-                        <span className="block ml-[22px] text-[11px] text-muted-ol mt-0.5">
+                        <span className="block ml-[22px] text-xs text-muted-ol mt-0.5">
                           {opt.description}
                         </span>
                       )}

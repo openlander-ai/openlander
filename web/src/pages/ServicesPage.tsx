@@ -112,7 +112,7 @@ export function ServicesPage() {
                     {service.name}
                   </h3>
                 </div>
-                <p className="text-[11px] font-mono text-muted-ol truncate">{service.image}</p>
+                <p className="text-xs font-mono text-muted-ol truncate">{service.image}</p>
               </div>
 
               <div className="flex items-center justify-between text-xs text-muted-ol">

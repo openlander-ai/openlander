@@ -97,7 +97,7 @@ export function ProjectHeader({
   const renderPrimaryAction = () => {
     if (isBuilding) {
       return (
-        <Button variant="outline" size="sm" className="h-7 text-[11px] font-body gap-1.5" disabled>
+        <Button variant="outline" size="sm" className="h-7 text-xs font-body gap-1.5" disabled>
           <Spinner className="h-3 w-3" />
           Deploying...
         </Button>
@@ -108,7 +108,7 @@ export function ProjectHeader({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 text-[11px] font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
+          className="h-7 text-xs font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
           onClick={onRedeploy}
           disabled={!!actionLoading}
         >
@@ -126,7 +126,7 @@ export function ProjectHeader({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 text-[11px] font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
+          className="h-7 text-xs font-body gap-1.5 text-success hover:text-success hover:bg-success/10 hover:border-success/30"
           onClick={onStart}
           disabled={!!actionLoading}
         >
@@ -144,7 +144,7 @@ export function ProjectHeader({
       <Button
         variant="outline"
         size="sm"
-        className="h-7 text-[11px] font-body gap-1.5"
+        className="h-7 text-xs font-body gap-1.5"
         onClick={onRedeploy}
         disabled={!!actionLoading}
       >
@@ -176,7 +176,7 @@ export function ProjectHeader({
                     variant="outline"
                     size="sm"
                     className={cn(
-                      'h-6 px-2 text-[11px] font-body gap-1 border',
+                      'h-6 px-2 text-xs font-body gap-1 border',
                       envColors[currentEnvType],
                     )}
                   >
@@ -209,7 +209,7 @@ export function ProjectHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <div className="flex items-center gap-3 mt-0.5 text-[11px] font-body text-secondary-ol">
+            <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
               <span className={status.color}>{status.label}</span>
               {displayBranch && (
                 <span className="flex items-center gap-1 text-muted-ol">
@@ -234,7 +234,7 @@ export function ProjectHeader({
                 href={displayPublicUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-success hover:text-success/80 transition-colors text-[11px] font-body mt-0.5"
+                className="flex items-center gap-1 text-success hover:text-success/80 transition-colors text-xs font-body mt-0.5"
               >
                 <Globe className="h-3 w-3" />
                 {displayPublicUrl.replace(/^https?:\/\//, '')}
@@ -252,7 +252,7 @@ export function ProjectHeader({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-[11px] font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
+              className="h-7 text-xs font-body gap-1.5 text-error hover:text-error hover:bg-error/10 hover:border-error/30"
               onClick={onStop}
               disabled={!!actionLoading}
             >
@@ -270,7 +270,7 @@ export function ProjectHeader({
             variant="outline"
             size="sm"
             className={cn(
-              'h-7 text-[11px] font-body gap-1.5',
+              'h-7 text-xs font-body gap-1.5',
               isShared ? 'text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30' : '',
             )}
             onClick={onShare}

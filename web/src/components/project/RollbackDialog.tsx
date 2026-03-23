@@ -285,11 +285,11 @@ export function RollbackDialog({
                               </span>
                             </span>
                           </div>
-                          <span className="shrink-0 text-[11px] text-muted-ol">
+                          <span className="shrink-0 text-xs text-muted-ol">
                             {formatRelativeTime(deployment.createdAt)}
                           </span>
                         </div>
-                        <div className="mt-1 text-[11px] text-muted-ol">{triggerText}</div>
+                        <div className="mt-1 text-xs text-muted-ol">{triggerText}</div>
                       </button>
                     );
                   })}

@@ -52,7 +52,7 @@ export function TerminalPhaseRail({ phases, className }: TerminalPhaseRailProps)
               )}
             </div>
             <span
-              className={cn('text-[12px]', isActive && 'font-bold')}
+              className={cn('text-xs', isActive && 'font-bold')}
               style={{
                 color: isActive
                   ? terminalTokens.colors.text.primary

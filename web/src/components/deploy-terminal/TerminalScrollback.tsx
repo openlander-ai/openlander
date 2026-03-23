@@ -52,7 +52,7 @@ export function TerminalScrollback({
             setIsFollowing(true);
             scrollToBottom();
           }}
-          className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-mono transition-opacity bg-black/50 hover:bg-black/80 border backdrop-blur-sm"
+          className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-opacity bg-black/50 hover:bg-black/80 border backdrop-blur-sm"
           style={{
             borderColor: terminalTokens.colors.border,
             color: terminalTokens.colors.text.primary,

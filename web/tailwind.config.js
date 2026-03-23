@@ -73,9 +73,9 @@ export default {
         'muted-ol': 'var(--text-muted)',
       },
       fontFamily: {
-        display: ['Outfit', 'sans-serif'],
-        body: ['Manrope', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        display: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
+        body: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['Geist Mono Variable', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',

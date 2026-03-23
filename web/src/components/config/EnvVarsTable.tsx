@@ -271,7 +271,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-[11px] font-body gap-1.5"
+            className="h-7 text-xs font-body gap-1.5"
             onClick={handleGenerateExample}
             disabled={generatingExample}
           >
@@ -285,7 +285,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-[11px] font-body gap-1.5"
+            className="h-7 text-xs font-body gap-1.5"
             onClick={() => setPasteMode(!pasteMode)}
           >
             <ClipboardPaste className="h-3 w-3" />
@@ -294,7 +294,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
           <Button
             variant="outline"
             size="sm"
-            className="h-7 text-[11px] font-body gap-1.5"
+            className="h-7 text-xs font-body gap-1.5"
             onClick={addVar}
           >
             <Plus className="h-3 w-3" />
@@ -303,7 +303,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
           {dirty && (
             <Button
               size="sm"
-              className="h-7 text-[11px] font-body gap-1.5 bg-agent text-bg-app hover:bg-agent/90"
+              className="h-7 text-xs font-body gap-1.5 bg-agent text-bg-app hover:bg-agent/90"
               onClick={handleSave}
               disabled={saving}
             >
@@ -317,7 +317,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       {/* Paste .env modal */}
       {pasteMode && (
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle p-3 space-y-2">
-          <p className="text-[11px] font-body text-secondary-ol">{t('envVars.pasteDescription')}</p>
+          <p className="text-sm font-body text-secondary-ol">{t('envVars.pasteDescription')}</p>
           <textarea
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
@@ -334,7 +334,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-[11px]"
+              className="h-7 text-xs"
               onClick={() => {
                 setPasteMode(false);
                 setPasteText('');
@@ -344,7 +344,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             </Button>
             <Button
               size="sm"
-              className="h-7 text-[11px] bg-agent text-bg-app hover:bg-agent/90"
+              className="h-7 text-xs bg-agent text-bg-app hover:bg-agent/90"
               onClick={handlePaste}
               disabled={!pasteText.trim()}
             >
@@ -358,7 +358,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       {envExampleMode && (
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-body text-secondary-ol">
+            <p className="text-sm font-body text-secondary-ol">
               Generated .env.example based on your repository and current environment variables.
             </p>
           </div>
@@ -376,7 +376,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-[11px]"
+              className="h-7 text-xs"
               onClick={() => {
                 setEnvExampleMode(false);
                 setEnvExampleText('');
@@ -386,7 +386,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             </Button>
             <Button
               size="sm"
-              className="h-7 text-[11px] bg-agent text-bg-app hover:bg-agent/90 gap-1.5"
+              className="h-7 text-xs bg-agent text-bg-app hover:bg-agent/90 gap-1.5"
               onClick={handleDownloadExample}
             >
               <Download className="h-3 w-3" />
@@ -400,12 +400,12 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       {vars.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-sm font-body text-secondary-ol">{t('envVars.noEnvVars')}</p>
-          <p className="text-xs font-body text-muted-ol mt-1">{t('envVars.getStarted')}</p>
+          <p className="text-sm font-body text-muted-ol mt-1">{t('envVars.getStarted')}</p>
         </div>
       ) : (
         <div className="space-y-1">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_1fr_140px_36px_36px] gap-2 px-2 pb-1 text-[10px] font-mono text-muted-ol uppercase tracking-wider">
+          <div className="grid grid-cols-[1fr_1fr_140px_36px_36px] gap-2 px-2 pb-1 text-xs font-mono text-muted-ol uppercase tracking-wider">
             <span>{'Key'}</span>
             <span>{'Value'}</span>
             <span>{'Source'}</span>
@@ -452,7 +452,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                   {selectedEnvId && (
                     <span
                       className={cn(
-                        'text-[10px] px-1.5 py-0.5 rounded font-body whitespace-nowrap',
+                        'text-xs px-1.5 py-0.5 rounded font-body whitespace-nowrap',
                         v.source === 'global' && 'bg-purple-500/10 text-purple-500',
                         v.source === 'project' && 'bg-blue-500/10 text-blue-500',
                         v.source === 'production' && 'bg-orange-500/10 text-orange-500',

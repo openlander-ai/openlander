@@ -47,10 +47,10 @@ function CodeBlock({ children, ...rest }: HTMLAttributes<HTMLPreElement>) {
   return (
     <div className="relative group rounded-lg overflow-hidden my-3 border border-border">
       <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-800 border-b border-zinc-700">
-        <span className="text-[11px] font-mono text-zinc-400">{language ?? 'code'}</span>
+        <span className="text-xs font-mono text-zinc-400">{language ?? 'code'}</span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors"
+          className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
         >
           {copied ? (
             <>
@@ -90,11 +90,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       title={message.createdAt ? new Date(message.createdAt).toLocaleString() : undefined}
     >
       {isUser ? (
-        <p className="text-[10px] text-muted-ol mb-1 text-right">You</p>
+        <p className="text-xs text-muted-ol mb-1 text-right">You</p>
       ) : (
         <div className="flex items-center gap-1.5 mb-1">
           <Bot className="h-3 w-3 text-ai" />
-          <p className="text-[10px] text-ai">Agent</p>
+          <p className="text-xs text-ai">Agent</p>
         </div>
       )}
       <div

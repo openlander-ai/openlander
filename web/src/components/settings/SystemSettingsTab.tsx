@@ -69,7 +69,7 @@ export function SystemSettingsTab() {
             {t('settings.system.globalSecrets')}
           </h2>
         </div>
-        <p className="text-xs font-body text-muted-ol">{t('settings.secrets.description')}</p>
+        <p className="text-sm font-body text-muted-ol">{t('settings.secrets.description')}</p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
           {secrets.length === 0 ? (

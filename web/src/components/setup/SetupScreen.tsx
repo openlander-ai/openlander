@@ -387,7 +387,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
               </Button>
 
               {!status.docker.ok && (
-                <p className="text-xs font-body text-muted-ol">
+                <p className="text-sm font-body text-muted-ol">
                   {t('setup.welcome.dockerRequired')}
                 </p>
               )}
@@ -415,11 +415,11 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                   <span className="text-sm font-body font-medium text-primary-ol">
                     {'GitHub Access'}
                   </span>
-                  <Badge variant="outline" className="text-[10px] py-0">
+                  <Badge variant="outline" className="text-xs py-0">
                     Optional
                   </Badge>
                 </div>
-                <p className="text-xs font-body text-muted-ol">{t('setup.github.description')}</p>
+                <p className="text-sm font-body text-muted-ol">{t('setup.github.description')}</p>
 
                 {status?.github?.ok ? (
                   <div className="flex items-center gap-2 p-3 rounded-lg border border-success/20 bg-success/5 text-success">
@@ -537,7 +537,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                       </Button>
                     </form>
 
-                    {githubError && <p className="text-xs font-body text-error">{githubError}</p>}
+                    {githubError && <p className="text-sm font-body text-error">{githubError}</p>}
                   </div>
                 )}
               </div>
@@ -582,7 +582,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
               </div>
 
               <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
-                <p className="text-xs font-body text-muted-ol">
+                <p className="text-sm font-body text-muted-ol">
                   Provide an LLM API key to enable smart auto-recovery. Without it, programmatic
                   recovery recipes are used.
                 </p>
@@ -632,7 +632,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
                     )}
                     Save API Key
                   </Button>
-                  {llmError && <p className="text-xs font-body text-error">{llmError}</p>}
+                  {llmError && <p className="text-sm font-body text-error">{llmError}</p>}
                 </form>
               </div>
 
@@ -772,7 +772,7 @@ function DockerFixGuide({ state }: { state?: string }) {
           <code className="block text-xs bg-bg-app rounded p-2 font-mono break-all text-secondary-ol">
             {DOCKER_PERM_CMD}
           </code>
-          <p className="text-[11px] font-body text-muted-ol mt-1">
+          <p className="text-sm font-body text-muted-ol mt-1">
             Then log out and back in for the group change to take effect.
           </p>
         </div>
@@ -818,11 +818,11 @@ function CommandBlock({ label, cmd }: { label: string; cmd: string }) {
 function AgentHint({ prompt }: { prompt: string }) {
   return (
     <div className="rounded-md border border-dashed border-agent/20 bg-agent/5 p-3">
-      <p className="text-[11px] font-body text-muted-ol">
+      <p className="text-sm font-body text-muted-ol">
         <strong className="text-secondary-ol">Using an AI coding tool?</strong> Paste this:
       </p>
       <div className="flex items-center justify-between mt-1">
-        <code className="text-[11px] font-mono text-agent">{prompt}</code>
+        <code className="text-xs font-mono text-agent">{prompt}</code>
         <CopyButton text={prompt} />
       </div>
     </div>

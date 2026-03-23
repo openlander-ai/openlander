@@ -21,7 +21,7 @@ export function TerminalLogBlock({ logs, maxHeight = 384, className }: TerminalL
     >
       <ScrollArea className="w-full" style={{ maxHeight }}>
         <div
-          className="p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words"
+          className="p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words"
           style={{
             color: terminalTokens.colors.text.muted,
             fontFamily: terminalTokens.typography.fontFamily,

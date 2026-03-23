@@ -113,7 +113,7 @@ export function NotificationCenter({
       <div className="px-4 py-3 border-b border-[hsl(var(--border))] shrink-0">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-display font-semibold text-primary-ol">Notifications</h3>
-          <span className="text-[10px] font-mono text-muted-ol">{notifications.length}</span>
+          <span className="text-xs font-mono text-muted-ol">{notifications.length}</span>
         </div>
       </div>
 
@@ -141,7 +141,7 @@ export function NotificationCenter({
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
-                    <p className={cn('text-[12px] font-body leading-snug', config.titleColor)}>
+                    <p className={cn('text-xs font-body leading-snug', config.titleColor)}>
                       {notification.message}
                     </p>
                     <button
@@ -160,16 +160,14 @@ export function NotificationCenter({
 
                   {/* Suggestion */}
                   {notification.suggestion && (
-                    <p className="mt-1 text-[11px] font-body text-secondary-ol leading-relaxed">
+                    <p className="mt-1 text-sm font-body text-secondary-ol leading-relaxed">
                       {notification.suggestion}
                     </p>
                   )}
 
                   {/* Footer: badge + actions + time */}
                   <div className="flex items-center gap-2 mt-2">
-                    <span
-                      className={cn('text-[9px] font-mono px-1.5 py-0.5 rounded', config.badgeBg)}
-                    >
+                    <span className={cn('text-xs font-mono px-1.5 py-0.5 rounded', config.badgeBg)}>
                       {typeLabels[notification.type]}
                     </span>
 
@@ -177,13 +175,13 @@ export function NotificationCenter({
                       <button
                         key={action.action}
                         onClick={() => onAction?.(notification, action.action)}
-                        className="text-[10px] font-body text-agent hover:text-agent/80 transition-colors underline underline-offset-2"
+                        className="text-xs font-body text-agent hover:text-agent/80 transition-colors underline underline-offset-2"
                       >
                         {action.label}
                       </button>
                     ))}
 
-                    <span className="ml-auto text-[9px] font-mono text-muted-ol">
+                    <span className="ml-auto text-xs font-mono text-muted-ol">
                       {formatTime(notification.createdAt)}
                     </span>
                   </div>

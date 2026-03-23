@@ -121,7 +121,7 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
     return (
       <div className="h-full min-h-[14rem] bg-[#0a0a0a] rounded-lg overflow-hidden border border-[hsl(var(--border))]">
         <div className="flex h-full flex-col justify-center gap-3 px-5 py-6 text-sm">
-          <span className="inline-flex w-fit rounded-full border border-[hsl(var(--border))] bg-bg-panel/60 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-ol">
+          <span className="inline-flex w-fit rounded-full border border-[hsl(var(--border))] bg-bg-panel/60 px-2.5 py-1 text-xs font-mono uppercase tracking-[0.18em] text-muted-ol">
             {availability.badge}
           </span>
           <div className="space-y-1.5">
@@ -182,10 +182,10 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
     <div className="h-full bg-[#0a0a0a] rounded-lg overflow-hidden relative">
       <div className="absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-3 rounded-md border border-[hsl(var(--border))] bg-bg-panel/80 px-3 py-2 backdrop-blur-sm">
         <div className="min-w-0">
-          <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-muted-ol">
+          <p className="text-xs font-mono uppercase tracking-[0.18em] text-muted-ol">
             {availability.badge}
           </p>
-          <p className="text-xs font-body text-primary-ol">{availability.detail}</p>
+          <p className="text-sm font-body text-primary-ol">{availability.detail}</p>
         </div>
 
         <div className="flex items-center gap-2 text-xs font-mono text-secondary-ol">
@@ -207,7 +207,7 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
           <div className="pointer-events-auto w-full max-w-sm rounded-lg border border-[hsl(var(--border))] bg-bg-panel/85 p-4 text-center shadow-lg backdrop-blur-sm">
             <p className="text-sm font-mono text-secondary-ol">{getStatusText()}</p>
-            <p className="mt-2 text-xs font-body text-muted-ol">{getStatusBody()}</p>
+            <p className="mt-2 text-sm font-body text-muted-ol">{getStatusBody()}</p>
             {(connectionState === 'disconnected' || connectionState === 'error') && (
               <button
                 type="button"

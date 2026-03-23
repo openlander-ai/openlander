@@ -99,7 +99,7 @@ export function Header({
             OpenLander
           </span>
           {version && (
-            <span className="px-1.5 py-0.5 rounded-md bg-bg-subtle text-[10px] font-mono text-muted-ol border border-[hsl(var(--border))]">
+            <span className="px-1.5 py-0.5 rounded-md bg-bg-subtle text-xs font-mono text-muted-ol border border-[hsl(var(--border))]">
               v{version}
             </span>
           )}
@@ -119,7 +119,7 @@ export function Header({
           <div className="hidden md:flex items-center gap-3 font-mono text-muted-ol">
             <div className="flex items-center gap-1" title={'CPU Usage'}>
               <Cpu className="h-3 w-3" />
-              <span className="text-[10px]">
+              <span className="text-xs">
                 {typeof stats.cpu === 'number'
                   ? stats.cpu.toFixed(0)
                   : (stats.cpu?.usagePercent?.toFixed(0) ?? '—')}
@@ -128,7 +128,7 @@ export function Header({
             </div>
             <div className="flex items-center gap-1" title={'Memory Usage'}>
               <MemoryStick className="h-3 w-3" />
-              <span className="text-[10px]">{formatMemory(stats.memory)}</span>
+              <span className="text-xs">{formatMemory(stats.memory)}</span>
             </div>
             {stats.disk && (
               <div
@@ -139,7 +139,7 @@ export function Header({
                 title={'Disk Usage'}
               >
                 <HardDrive className="h-3 w-3" />
-                <span className="text-[10px]">
+                <span className="text-xs">
                   {stats.disk.usedGB.toFixed(1)}G / {stats.disk.totalGB.toFixed(1)}G (
                   {stats.disk.usagePercent.toFixed(0)}%)
                 </span>
@@ -202,7 +202,7 @@ export function Header({
                   : 'bg-error',
             )}
           />
-          <span className="hidden sm:inline text-[11px] font-body text-secondary-ol">
+          <span className="hidden sm:inline text-xs font-body text-secondary-ol">
             {llmConnected === null ? '...' : llmConnected ? 'AI Online' : 'AI Offline'}
           </span>
         </div>

@@ -63,17 +63,17 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
           >
             {item.title}
           </p>
-          <span className="text-[10px] font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
+          <span className="text-xs font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
             {formatTime(item.timestamp)}
           </span>
         </div>
 
         {(isStart || isFailed) && item.detail && (
           <details className="mt-2 group/log" open={isLatest}>
-            <summary className="text-[11px] font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
+            <summary className="text-xs font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
               Error details ▾
             </summary>
-            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+            <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
               {item.detail}
             </pre>
           </details>
@@ -82,7 +82,7 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
         {isExhausted && item.detail && (
           <div className="mt-2 text-xs text-amber-500/80 bg-amber-500/5 border border-amber-500/10 rounded-md p-2.5">
             <p className="font-medium mb-1">Manual intervention needed</p>
-            <p className="font-mono text-[10px]">{item.detail}</p>
+            <p className="font-mono text-xs">{item.detail}</p>
           </div>
         )}
 

@@ -200,7 +200,7 @@ export function TraefikSettingsTab() {
                   <h3 className="font-display text-base font-semibold text-primary-ol">
                     Cloudflare Tunnel
                   </h3>
-                  <p className="text-xs font-body text-secondary-ol">
+                  <p className="text-sm font-body text-secondary-ol">
                     {t('settings.proxy.cloudflare.description')}
                   </p>
                 </div>
@@ -224,10 +224,10 @@ export function TraefikSettingsTab() {
 
               {!cloudflareConnected ? (
                 <div className="space-y-3 rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-3">
-                  <p className="text-xs font-body text-secondary-ol">
+                  <p className="text-sm font-body text-secondary-ol">
                     {t('settings.proxy.cloudflare.tokenHelpTitle')}
                   </p>
-                  <p className="text-xs font-body text-muted-ol">
+                  <p className="text-sm font-body text-muted-ol">
                     {t('settings.proxy.cloudflare.tokenHelpText')}
                   </p>
                   <a
@@ -249,7 +249,7 @@ export function TraefikSettingsTab() {
                     <p className="text-xs font-body text-secondary-ol">
                       {t('settings.proxy.cloudflare.tokenPermissionsLabel')}
                     </p>
-                    <ul className="list-disc pl-4 text-xs font-body text-muted-ol">
+                    <ul className="list-disc pl-4 text-sm font-body text-muted-ol">
                       {cloudflareTokenPermissions.map((perm) => (
                         <li key={perm}>{perm}</li>
                       ))}
@@ -283,7 +283,7 @@ export function TraefikSettingsTab() {
                     </div>
 
                     {cloudflareError && (
-                      <p className="text-xs font-body text-error">{cloudflareError}</p>
+                      <p className="text-sm font-body text-error">{cloudflareError}</p>
                     )}
                   </form>
                 </div>
@@ -324,10 +324,10 @@ export function TraefikSettingsTab() {
                   </div>
 
                   {cloudflareMessage && (
-                    <p className="text-xs font-body text-success">{cloudflareMessage}</p>
+                    <p className="text-sm font-body text-success">{cloudflareMessage}</p>
                   )}
                   {cloudflareError && (
-                    <p className="text-xs font-body text-error">{cloudflareError}</p>
+                    <p className="text-sm font-body text-error">{cloudflareError}</p>
                   )}
 
                   <Button
@@ -470,7 +470,7 @@ export function TraefikSettingsTab() {
             <div className="p-4">
               {serverStatus.externalContainers && serverStatus.externalContainers.length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-xs font-body text-muted-ol mb-2">
+                  <p className="text-sm font-body text-muted-ol mb-2">
                     {t('settings.serverScan.externalDescription')}
                   </p>
                   {serverStatus.externalContainers.map((container) => (
@@ -484,7 +484,7 @@ export function TraefikSettingsTab() {
                           <p className="text-sm font-mono text-primary-ol truncate">
                             {container.name}
                           </p>
-                          <p className="text-[11px] font-body text-muted-ol truncate">
+                          <p className="text-xs font-body text-muted-ol truncate">
                             {container.image.includes('sha256:')
                               ? container.image.substring(0, 19) + '...'
                               : container.image}
@@ -496,7 +496,7 @@ export function TraefikSettingsTab() {
                           {container.ports.map((port) => (
                             <span
                               key={port}
-                              className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-secondary-ol"
+                              className="text-xs font-mono px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-secondary-ol"
                             >
                               :{port}
                             </span>
@@ -509,7 +509,7 @@ export function TraefikSettingsTab() {
               ) : (
                 <div className="text-center py-4">
                   <p className="text-sm font-body text-success">{'All clear'}</p>
-                  <p className="text-[11px] font-body text-muted-ol mt-1">
+                  <p className="text-sm font-body text-muted-ol mt-1">
                     {t('settings.serverScan.noExternal')}
                   </p>
                 </div>

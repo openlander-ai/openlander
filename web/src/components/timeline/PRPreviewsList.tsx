@@ -97,7 +97,7 @@ export function PRPreviewsList({ projectId }: PRPreviewsListProps) {
       <div className="flex flex-col items-center justify-center py-12 text-secondary-ol">
         <GitPullRequest className="h-8 w-8 mb-3 text-muted-ol" />
         <p className="text-sm font-body">{t('prPreviews.noPreviews')}</p>
-        <p className="text-xs font-body text-muted-ol mt-1">{t('prPreviews.description')}</p>
+        <p className="text-sm font-body text-muted-ol mt-1">{t('prPreviews.description')}</p>
       </div>
     );
   }

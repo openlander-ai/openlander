@@ -78,7 +78,7 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
                     {project.environments?.map((environment) => (
                       <span
                         key={environment.id || environment.type}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-bg-subtle text-muted-ol border border-[hsl(var(--border))]"
+                        className="text-xs px-1.5 py-0.5 rounded bg-bg-subtle text-muted-ol border border-[hsl(var(--border))]"
                       >
                         {environment.type === 'production'
                           ? 'prod'

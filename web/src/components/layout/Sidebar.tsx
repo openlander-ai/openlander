@@ -223,7 +223,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
           <span className="hidden lg:inline flex-1 text-left">Search...</span>
-          <kbd className="hidden lg:inline text-[10px] font-mono bg-bg-panel px-1 py-0.5 rounded border border-border">
+          <kbd className="hidden lg:inline text-xs font-mono bg-bg-panel px-1 py-0.5 rounded border border-border">
             ⌘K
           </kbd>
         </button>
@@ -252,7 +252,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           <div className="hidden lg:block space-y-4">
             {issueProjects.length > 0 && (
               <div className="space-y-0.5 pb-3 mb-1 border-b border-border/50">
-                <div className="text-[10px] uppercase tracking-[0.08em] font-mono text-muted-ol px-3 py-1">
+                <div className="text-xs uppercase tracking-[0.08em] font-mono text-muted-ol px-3 py-1">
                   ⚠️ Issues ({issueProjects.length})
                 </div>
                 {issueProjects.map(renderProjectItem)}
@@ -278,7 +278,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                       <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                     )}
                     <span className="text-xs font-medium truncate">{repoName}</span>
-                    <span className="text-[10px] bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
+                    <span className="text-xs bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
                       {visibleProjs.length}
                     </span>
                   </button>

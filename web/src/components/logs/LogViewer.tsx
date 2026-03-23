@@ -201,7 +201,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
               }))
             }
             className={cn(
-              'px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors',
+              'px-1.5 py-0.5 rounded text-xs font-mono transition-colors',
               isRegex
                 ? 'bg-agent/15 text-agent border border-agent/30'
                 : 'text-muted-ol hover:text-secondary-ol border border-transparent',
@@ -231,7 +231,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
         {/* Right: Controls & Status */}
         <div className="flex items-center gap-3">
           {/* Status Indicators */}
-          <div className="flex items-center gap-2 text-[11px] font-mono">
+          <div className="flex items-center gap-2 text-xs font-mono">
             {isConnected && (
               <span className="flex items-center gap-1.5 text-success">
                 <span className="relative flex h-2 w-2">
@@ -311,7 +311,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                 <p className={cn('text-sm font-body', error ? 'text-error' : 'text-warning')}>
                   {error ? t('logs.errorTitle') : t('logs.disconnectedTitle')}
                 </p>
-                <p className="text-xs font-body text-muted-ol">
+                <p className="text-sm font-body text-muted-ol">
                   {error ? error : t('logs.disconnectedInlineBody')}
                 </p>
               </div>
@@ -333,7 +333,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
               onClick={() => void loadOlderWithScrollAnchor()}
               disabled={isLoadingOlder}
               className={cn(
-                'rounded-full border border-[hsl(var(--border))] px-3 py-1 text-[11px] font-body transition-colors',
+                'rounded-full border border-[hsl(var(--border))] px-3 py-1 text-xs font-body transition-colors',
                 isLoadingOlder
                   ? 'text-muted-ol bg-bg-panel/60 cursor-wait'
                   : 'text-secondary-ol bg-bg-panel hover:text-primary-ol',
@@ -424,7 +424,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                   )}
                 >
                   {/* Line number */}
-                  <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-[10px] leading-5">
+                  <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-xs leading-5">
                     {virtualItem.index + 1}
                   </span>
                   {/* Content */}

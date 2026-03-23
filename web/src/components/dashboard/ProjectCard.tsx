@@ -68,7 +68,7 @@ export function ProjectCard({
       <div className="p-4 space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
               Last Deploy
             </p>
             <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol">
@@ -77,7 +77,7 @@ export function ProjectCard({
             </div>
           </div>
           <div>
-            <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
               Branch
             </p>
             <div className="flex items-center gap-1.5 text-xs font-body text-secondary-ol truncate">
@@ -89,7 +89,7 @@ export function ProjectCard({
 
         {project.url && (
           <div>
-            <p className="text-[10px] font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
               Endpoint
             </p>
             <a
@@ -107,7 +107,7 @@ export function ProjectCard({
 
         {allEnvironments.length > 0 && (
           <div className="pt-2 border-t border-[hsl(var(--border))]/50">
-            <p className="text-[10px] font-mono text-muted-ol mb-2 uppercase tracking-[0.08em]">
+            <p className="text-xs font-mono text-muted-ol mb-2 uppercase tracking-[0.08em]">
               Environments
             </p>
             <div className="flex items-center gap-2 flex-wrap">
@@ -124,7 +124,7 @@ export function ProjectCard({
                     title={`${environment.type} - ${environmentStatus.label}`}
                   >
                     <div className={cn('h-1.5 w-1.5 rounded-full', environmentStatus.dot)} />
-                    <span className="text-[10px] font-mono text-secondary-ol group-hover/env:text-primary-ol transition-colors">
+                    <span className="text-xs font-mono text-secondary-ol group-hover/env:text-primary-ol transition-colors">
                       {environment.type === 'production'
                         ? 'prod'
                         : environment.type === 'development'

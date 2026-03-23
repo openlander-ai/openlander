@@ -71,7 +71,7 @@ export function BlueGreenDialog({
             className="h-8 text-sm"
             autoFocus
           />
-          <p className="text-[11px] text-muted-ol">{projectName}</p>
+          <p className="text-xs text-muted-ol">{projectName}</p>
         </div>
 
         <DialogFooter>

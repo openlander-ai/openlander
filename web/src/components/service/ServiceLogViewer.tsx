@@ -85,7 +85,7 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-[11px] font-mono text-muted-ol">{logLines.length} lines</span>
+          <span className="text-xs font-mono text-muted-ol">{logLines.length} lines</span>
           <div className="w-px h-4 bg-[hsl(var(--border))]" />
           <button
             type="button"
@@ -118,7 +118,7 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
                 key={i}
                 className="flex items-start hover:bg-bg-subtle/50 group border-b border-transparent hover:border-[hsl(var(--border))]/30 transition-colors"
               >
-                <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-[10px] leading-5">
+                <span className="shrink-0 w-12 text-right pr-3 text-muted-ol/40 group-hover:text-muted-ol select-none tabular-nums text-xs leading-5">
                   {i + 1}
                 </span>
                 <span

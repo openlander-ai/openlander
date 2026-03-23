@@ -1,9 +1,21 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/geist-mono';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    /* ── Typography Scale ── */
+    --font-size-xs: 0.75rem; /* 12px — labels, timestamps, meta */
+    --font-size-sm: 0.875rem; /* 14px — body text (base) */
+    --font-size-base: 1rem; /* 16px — emphasized body */
+    --font-size-lg: 1.125rem; /* 18px — h3, section headings */
+    --font-size-xl: 1.25rem; /* 20px — h2, sub-page headings */
+    --font-size-2xl: 1.5rem; /* 24px — h1, page headings */
+    --font-size-3xl: 1.875rem; /* 30px — hero, setup screen */
+
     /* ── OpenLander Design Tokens (Clean Light + Rose) ── */
     --bg-app: #ffffff; /* white — app background */
     --bg-panel: #fafafa; /* zinc-50 — card/panel backgrounds */
@@ -59,10 +71,14 @@
     @apply bg-background text-foreground;
     margin: 0;
     font-family:
-      'Manrope',
+      'Inter Variable',
+      'Inter',
       system-ui,
       -apple-system,
       sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   h1,
   h2,

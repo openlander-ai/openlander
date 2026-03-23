@@ -70,7 +70,7 @@ export function ChatSidebar({
                 <span className="text-xs font-body truncate">
                   {session.firstMessage || 'New conversation'}
                 </span>
-                <div className="flex items-center justify-between text-[10px] text-secondary-ol/80 mt-0.5">
+                <div className="flex items-center justify-between text-xs text-secondary-ol/80 mt-0.5">
                   <span>{session.messageCount} messages</span>
                   <span>{formatRelativeTime(session.lastActive)}</span>
                 </div>

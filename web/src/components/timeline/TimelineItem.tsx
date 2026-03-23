@@ -153,7 +153,7 @@ export function TimelineItemCard({
                   ? cleanMarkdown(item.title)
                   : item.title}
           </p>
-          <span className="text-[10px] font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
+          <span className="text-xs font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
             {formatTime(item.timestamp)}
           </span>
         </div>
@@ -172,10 +172,10 @@ export function TimelineItemCard({
 
         {isAgentToolCall && item.toolArguments && Object.keys(item.toolArguments).length > 0 && (
           <details className="mt-2 group/args">
-            <summary className="text-[11px] font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
+            <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
               Arguments ▾
             </summary>
-            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+            <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
               {JSON.stringify(item.toolArguments, null, 2)}
             </pre>
           </details>
@@ -183,10 +183,10 @@ export function TimelineItemCard({
 
         {isError && item.detail && (
           <details className="mt-2 group/log">
-            <summary className="text-[11px] font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
+            <summary className="text-xs font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
               Build log ▾
             </summary>
-            <pre className="mt-1.5 text-[10px] font-mono text-muted-ol bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+            <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-error/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
               {item.detail.slice(-2000)}
             </pre>
           </details>
