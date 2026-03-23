@@ -403,7 +403,7 @@ export function OverviewTab({
                 <div className="flex items-center justify-between">
                   <span className="text-muted-ol">Container</span>
                   <span
-                    className="text-xs font-mono text-secondary-ol truncate max-w-[200px]"
+                    className="text-xs font-mono text-secondary-ol truncate max-w-[300px]"
                     title={imageTag}
                   >
                     {imageTag}

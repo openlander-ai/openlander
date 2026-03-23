@@ -146,7 +146,7 @@ export function DeploymentsList({
                   {formatDeploymentDuration(deploy.durationMs)}
                 </span>
               )}
-              <span className="flex items-center gap-1 w-16 justify-end">
+              <span className="flex items-center gap-1 whitespace-nowrap justify-end">
                 <Clock className="h-3 w-3" />
                 {formatRelativeTime(deploy.createdAt, t)}
               </span>

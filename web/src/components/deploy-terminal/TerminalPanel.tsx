@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 import { getTerminalAvailabilityState } from './terminalAvailability';
+import { terminalTokens } from './terminal-tokens';
 import '@xterm/xterm/css/xterm.css';
 
 interface TerminalPanelProps {
@@ -39,7 +40,7 @@ export function TerminalPanel({ projectId, isConsoleActive, projectStatus }: Ter
         cursor: '#d4d4d4',
         selectionBackground: '#264f78',
       },
-      fontFamily: 'ui-monospace, monospace',
+      fontFamily: terminalTokens.typography.fontFamily,
       fontSize: 13,
       cursorBlink: true,
     });
