@@ -113,6 +113,7 @@ export class RollbackExecutor {
         environmentId: target.target.environment?.id,
         status: 'success',
         trigger: 'api',
+        commitMessage: undefined,
         buildLog: `[rollback] ${currentImageTag} → ${rollbackImageTag}\n`,
         durationMs: totalDuration,
       });

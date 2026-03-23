@@ -20,6 +20,7 @@ export class DeployLogRepo {
     trigger: DeployLogRow['trigger'];
     triggerDetail?: string;
     commitSha?: string;
+    commitMessage?: string;
     buildLog?: string;
     durationMs?: number;
   }): void {
@@ -33,6 +34,7 @@ export class DeployLogRepo {
         trigger: log.trigger,
         trigger_detail: log.triggerDetail ?? null,
         commit_sha: log.commitSha ?? null,
+        commit_message: log.commitMessage ?? null,
         build_log: log.buildLog ?? null,
         duration_ms: log.durationMs ?? null,
       })

@@ -89,6 +89,7 @@ export interface DeployLogSummary {
   trigger: 'chat' | 'webhook' | 'api';
   triggerDetail?: string | null;
   commitSha: string | null;
+  commitMessage?: string | null;
   durationMs: number | null;
   createdAt: string;
   failureSummary?: string | null;

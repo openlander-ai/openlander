@@ -53,6 +53,7 @@ export interface DeployLogRow {
   trigger: 'chat' | 'webhook' | 'api';
   trigger_detail: string | null;
   commit_sha: string | null;
+  commit_message: string | null;
   build_log: string | null;
   duration_ms: number | null;
   created_at: string;

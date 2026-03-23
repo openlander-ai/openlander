@@ -411,6 +411,7 @@ export class DeployPipeline {
         environmentId: envId,
         status: 'failed',
         trigger,
+        commitMessage: undefined,
         buildLog: `[fatal] Deploy crashed before build: ${errMsg}`,
         durationMs: 0,
       });
@@ -587,6 +588,8 @@ export class DeployPipeline {
     let buildLog = '';
     let clonePath = '';
     let diffContext: string | undefined;
+    let commitSha: string | undefined;
+    let commitMessage: string | undefined;
     const imageTag = `openlander/${routeName}:latest`;
     try {
       const cloneResult = await cloneAndAnalyze(orchestrationDeps, {
@@ -600,6 +603,8 @@ export class DeployPipeline {
       clonePath = cloneResult.clonePath;
       diffContext = cloneResult.diffContext;
       buildLog = cloneResult.buildLog;
+      commitSha = cloneResult.commitSha;
+      commitMessage = cloneResult.commitMessage;
       const buildResult = await buildProject(orchestrationDeps, {
         projectId,
         environmentId,
@@ -642,7 +647,8 @@ export class DeployPipeline {
         trigger,
         startTime,
         buildLog,
-        commitSha: cloneResult.commitSha,
+        commitSha,
+        commitMessage,
         shouldSyncProjectState,
         port: runResult.port,
         internalUrl: runResult.internalUrl,
@@ -655,7 +661,7 @@ export class DeployPipeline {
         url: runResult.internalUrl,
         publicUrl: postDeploy.publicUrl,
         port: runResult.port,
-        commitSha: cloneResult.commitSha,
+        commitSha,
         buildDurationMs: postDeploy.totalDuration,
       };
     } catch (error) {
@@ -695,6 +701,8 @@ export class DeployPipeline {
         environmentId,
         status: 'failed',
         trigger,
+        commitSha,
+        commitMessage,
         buildLog: buildLogWithError,
         durationMs: Date.now() - startTime,
       });

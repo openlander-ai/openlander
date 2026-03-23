@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS deploy_logs (
   status TEXT CHECK(status IN ('success', 'failed', 'cancelled')),
   trigger_source TEXT CHECK(trigger_source IN ('chat', 'webhook', 'api')),
   commit_sha TEXT,
+  commit_message TEXT,
   build_log TEXT,
   duration_ms INTEGER,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP

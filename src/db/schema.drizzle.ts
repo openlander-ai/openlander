@@ -125,6 +125,7 @@ export const deployLogs = sqliteTable(
     trigger: text('trigger_source', { enum: ['chat', 'webhook', 'api'] }),
     trigger_detail: text('trigger_detail'),
     commit_sha: text('commit_sha'),
+    commit_message: text('commit_message'),
     build_log: text('build_log'),
     duration_ms: integer('duration_ms'),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),

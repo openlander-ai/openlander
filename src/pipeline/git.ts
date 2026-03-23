@@ -31,6 +31,24 @@ export interface CloneResult {
   commitSha: string;
 }
 
+export async function getCommitSubject(
+  repoPath: string,
+  commitSha?: string,
+): Promise<string | undefined> {
+  try {
+    const args = ['log', '-1', '--pretty=%s'];
+    if (commitSha && commitSha.trim().length > 0) {
+      args.push(commitSha.trim());
+    }
+    const { stdout } = await exec('git', args, { cwd: repoPath, timeout: 10_000 });
+    const subject = stdout.trim();
+    return subject.length > 0 ? subject : undefined;
+  } catch (error) {
+    log.debug({ err: error, repoPath, commitSha }, 'Failed to resolve commit subject');
+    return undefined;
+  }
+}
+
 /**
  * Clone a git repository to a temporary directory.
  *

@@ -78,6 +78,8 @@ export function ProjectDetailTabs({
             timelineItems={allTimelineItems}
             isTimelineStreaming={isStreaming}
             onOpenLogs={() => onActiveTabChange('console')}
+            onOpenDeployments={() => onActiveTabChange('deployments')}
+            onOpenSettings={() => onActiveTabChange('settings')}
             onRedeploy={onRedeploy}
             onStop={onStop}
             onRollback={onRollback}

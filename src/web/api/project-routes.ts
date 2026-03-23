@@ -238,7 +238,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       updated_at: normalizeTimestamp(project.updated_at),
       environments: environments.map(mapEnvironment),
       envVars,
-      recentDeploys: deployLogs,
+      recentDeploys: deployLogs.map((log) => ({
+        ...log,
+        commitMessage: log.commit_message ?? null,
+      })),
     });
   });
 
@@ -383,6 +386,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         trigger: log.trigger,
         triggerDetail: log.trigger_detail,
         commitSha: log.commit_sha,
+        commitMessage: log.commit_message ?? null,
         durationMs: log.duration_ms,
         createdAt: normalizeTimestamp(log.created_at),
         failureSummary: log.status === 'failed' ? extractFailureSummary(log.build_log) : null,
@@ -406,6 +410,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       trigger: log.trigger,
       triggerDetail: log.trigger_detail,
       commitSha: log.commit_sha,
+      commitMessage: log.commit_message ?? null,
       buildLog: log.build_log,
       durationMs: log.duration_ms,
       createdAt: normalizeTimestamp(log.created_at),

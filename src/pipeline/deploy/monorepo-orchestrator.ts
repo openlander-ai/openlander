@@ -6,6 +6,7 @@ import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import { parseDockerfileExposePort } from '../dockerfile-gen.js';
 import { filterBuildTimeVars } from '../build-args.js';
+import { getCommitSubject } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
 import type { Docker } from '../docker.js';
@@ -44,6 +45,7 @@ export async function deployMonorepoService(
   const childId = nanoid(12);
   const imageTag = `openlander/${childName.replace('/', '-')}:latest`;
   const childStartTime = Date.now();
+  const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
   deps.db.createProject({
     id: childId,
@@ -187,6 +189,7 @@ export async function deployMonorepoService(
       status: 'success',
       trigger,
       commitSha: config.commitSha,
+      commitMessage,
       buildLog: `[monorepo] ${dockerfilePath} → ${imageTag}\n`,
       durationMs: Date.now() - childStartTime,
     });
@@ -242,6 +245,8 @@ export async function deployMonorepoService(
       projectId: childId,
       status: 'failed',
       trigger,
+      commitSha: config.commitSha,
+      commitMessage,
       buildLog: `[monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`,
       durationMs: Date.now() - childStartTime,
     });
@@ -306,6 +311,7 @@ export async function rollbackMonorepoService(
     projectId: service.projectId,
     status: 'failed',
     trigger,
+    commitMessage: undefined,
     buildLog: `[monorepo] ${service.name} ROLLED_BACK: dependency deployment failure\n`,
     durationMs: Date.now() - startTime,
   });

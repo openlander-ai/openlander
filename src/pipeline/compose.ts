@@ -13,6 +13,7 @@ import { nanoid } from 'nanoid';
 import { allocatePort, clearPortScanCache, releasePortReservation } from './port.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import { buildTraefikLabels } from './traefik.js';
+import { getCommitSubject } from './git.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
@@ -65,6 +66,7 @@ export interface ComposeDeployConfig {
   repoUrl: string;
   branch?: string;
   clonePath: string;
+  commitSha?: string;
   composePath: string;
   profiles?: string[];
   services?: string[];
@@ -461,6 +463,7 @@ export class ComposePipeline {
     const projectName = sanitizeComposeProjectName(parentName);
     const parentProjectId = config._parentId ?? nanoid(12);
     let buildLog = '';
+    const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
     const composeProject = this.parseComposeFile(config.composePath);
     const filteredComposeProject: ComposeProject = {
@@ -944,6 +947,8 @@ export class ComposePipeline {
         projectId: parentProjectId,
         status: hasError ? 'failed' : 'success',
         trigger,
+        commitSha: config.commitSha,
+        commitMessage,
         buildLog,
         durationMs: Date.now() - startTime,
       });
@@ -1017,6 +1022,8 @@ export class ComposePipeline {
         projectId: parentProjectId,
         status: 'failed',
         trigger,
+        commitSha: config.commitSha,
+        commitMessage,
         buildLog: `${buildLog}[error] ${errorMsg}\n`,
         durationMs: Date.now() - startTime,
       });
