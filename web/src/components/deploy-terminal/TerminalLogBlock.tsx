@@ -23,7 +23,7 @@ export function TerminalLogBlock({ logs, maxHeight = 384, className }: TerminalL
         <div
           className="p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words"
           style={{
-            color: terminalTokens.colors.text.muted,
+            color: terminalTokens.colors.text.secondary,
             fontFamily: terminalTokens.typography.fontFamily,
           }}
         >
