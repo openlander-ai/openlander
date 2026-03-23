@@ -99,6 +99,7 @@ export interface DeployLogSummary {
 export interface DeployLogDetail extends DeployLogSummary {
   projectId: string;
   buildLog: string | null;
+  runtimeLog: string | null;
 }
 
 export type DeploymentHistoryFilter = 'all' | 'failed' | 'success' | 'in_progress';

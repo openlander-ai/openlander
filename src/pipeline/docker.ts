@@ -412,6 +412,7 @@ export class Docker {
         Binds: binds.length > 0 ? binds : undefined,
         NetworkMode: this.networkName,
         RestartPolicy: { Name: 'unless-stopped' },
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
       },
     });
@@ -479,6 +480,7 @@ export class Docker {
         Binds: binds.length > 0 ? binds : undefined,
         NetworkMode: networkMode,
         RestartPolicy: { Name: restartPolicyName },
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
       },
     });

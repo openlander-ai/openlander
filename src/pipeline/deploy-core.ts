@@ -569,6 +569,18 @@ export class DeployPipeline {
     }
     if (environment.container_id) {
       try {
+        const runtimeLog = await this.docker.getLogs(environment.container_id, 500);
+        if (runtimeLog) {
+          const lastLog = this.db.getLastDeployLog(projectId, environmentId);
+          if (lastLog) {
+            this.db.updateRuntimeLog(lastLog.id, runtimeLog);
+          }
+        }
+      } catch {
+        // Container may already be gone — best-effort capture
+      }
+
+      try {
         await this.docker.removeContainer(environment.container_id);
       } catch {
         // container may already be removed

@@ -184,6 +184,7 @@ export class DatabaseProvisioner {
       HostConfig: {
         NetworkMode: WEB_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
       },
     });
 

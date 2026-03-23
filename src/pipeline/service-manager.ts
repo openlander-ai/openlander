@@ -327,6 +327,7 @@ export class ServiceManager {
         PortBindings: {
           [`${String(containerPort)}/tcp`]: [{ HostPort: String(hostPort) }],
         },
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
       },
     });
 

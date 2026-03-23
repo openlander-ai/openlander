@@ -207,9 +207,27 @@ export function DeploymentDetail() {
           </div>
         )}
 
-        <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
-          <StaticLogViewer content={deployment.buildLog} />
+        <div className="space-y-2">
+          <h3 className="text-sm font-display font-medium text-secondary-ol">Build Logs</h3>
+          <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+            <StaticLogViewer content={deployment.buildLog} />
+          </div>
         </div>
+
+        {deployment.runtimeLog && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-display font-medium text-secondary-ol flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Runtime Logs
+              <span className="text-xs font-body text-muted-ol font-normal">
+                (last 500 lines before redeploy)
+              </span>
+            </h3>
+            <div className="flex flex-col h-full min-h-[300px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+              <StaticLogViewer content={deployment.runtimeLog} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

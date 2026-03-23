@@ -186,6 +186,9 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   if (!dlColNames.has('commit_message')) {
     sqlite.exec('ALTER TABLE deploy_logs ADD COLUMN commit_message TEXT');
   }
+  if (!dlColNames.has('runtime_log')) {
+    sqlite.exec('ALTER TABLE deploy_logs ADD COLUMN runtime_log TEXT');
+  }
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_deploy_logs_environment ON deploy_logs(environment_id)',
   );

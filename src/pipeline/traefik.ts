@@ -141,6 +141,7 @@ export class TraefikManager {
         ...(platform() !== 'darwin' ? { ExtraHosts: ['host.docker.internal:host-gateway'] } : {}),
         NetworkMode: TRAEFIK_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
       },
       Labels: {
         'openlander.managed': 'true',

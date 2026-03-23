@@ -69,6 +69,14 @@ export class DeployLogRepo {
       .get() as DeployLogRow | undefined;
   }
 
+  updateRuntimeLog(deployId: string, runtimeLog: string): void {
+    this.db
+      .update(deployLogs)
+      .set({ runtime_log: runtimeLog })
+      .where(eq(deployLogs.id, deployId))
+      .run();
+  }
+
   getDeployLog(deployId: string): DeployLogRow | undefined {
     return this.db.select().from(deployLogs).where(eq(deployLogs.id, deployId)).get() as
       | DeployLogRow

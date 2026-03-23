@@ -438,6 +438,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       commitSha: log.commit_sha,
       commitMessage: log.commit_message ?? null,
       buildLog: log.build_log,
+      runtimeLog: log.runtime_log ?? null,
       durationMs: log.duration_ms,
       createdAt: normalizeTimestamp(log.created_at),
     });

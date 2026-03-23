@@ -55,6 +55,7 @@ export interface DeployLogRow {
   commit_sha: string | null;
   commit_message: string | null;
   build_log: string | null;
+  runtime_log: string | null;
   duration_ms: number | null;
   created_at: string;
 }
