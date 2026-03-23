@@ -317,11 +317,13 @@ export function OverviewTab({
             <div className="min-w-0">
               <div className="flex items-center gap-3 text-sm">
                 <span className="text-muted-ol">Latest Deploy</span>
-                {latestDeploy.commitSha && (
+                {activeProject?.source === 'image' ? (
+                  <span className="font-mono text-secondary-ol">Image pulled</span>
+                ) : latestDeploy.commitSha ? (
                   <span className="font-mono text-secondary-ol">
                     {latestDeploy.commitSha.substring(0, 7)}
                   </span>
-                )}
+                ) : null}
                 <span className="text-muted-ol">{formatRelativeTime(latestDeploy.createdAt)}</span>
                 {latestDeploy.durationMs && (
                   <span className="text-muted-ol">
@@ -329,7 +331,7 @@ export function OverviewTab({
                   </span>
                 )}
               </div>
-              {latestDeploy.commitMessage && (
+              {activeProject?.source !== 'image' && latestDeploy.commitMessage && (
                 <p className="text-xs text-secondary-ol truncate mt-1">
                   {latestDeploy.commitMessage}
                 </p>
@@ -465,7 +467,17 @@ export function OverviewTab({
               )}
 
               {/* Container image */}
-              {imageTag && (
+              {activeProject?.source === 'image' ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-ol">Image</span>
+                  <span
+                    className="text-xs font-mono text-secondary-ol truncate max-w-[300px]"
+                    title={activeProject.imageUrl}
+                  >
+                    {activeProject.imageUrl}
+                  </span>
+                </div>
+              ) : imageTag ? (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-ol">Container</span>
                   <span
@@ -475,15 +487,39 @@ export function OverviewTab({
                     {imageTag}
                   </span>
                 </div>
-              )}
+              ) : null}
 
               {/* Port */}
-              {activeProject?.port !== undefined && (
+              {activeProject?.source === 'image' ? (
+                (activeProject.containerPort !== undefined || activeProject.port !== undefined) && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-ol">Port</span>
+                    <span className="text-secondary-ol font-mono">
+                      {activeProject.containerPort ?? activeProject.port}
+                    </span>
+                  </div>
+                )
+              ) : activeProject?.port !== undefined ? (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-ol">Port</span>
                   <span className="text-secondary-ol font-mono">{activeProject.port}</span>
                 </div>
-              )}
+              ) : null}
+
+              {/* Command */}
+              {activeProject?.source === 'image' &&
+                activeProject.imageCmd &&
+                activeProject.imageCmd.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-ol">Command</span>
+                    <span
+                      className="text-xs font-mono text-secondary-ol truncate max-w-[300px]"
+                      title={activeProject.imageCmd.join(' ')}
+                    >
+                      {activeProject.imageCmd.join(' ')}
+                    </span>
+                  </div>
+                )}
             </div>
           </div>
         </div>

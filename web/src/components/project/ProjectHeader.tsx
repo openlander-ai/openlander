@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Plus,
   Trash2,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Project, Environment, EnvironmentType } from '@/types';
@@ -44,11 +45,15 @@ interface ProjectHeaderProps {
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(): Record<string, StatusConfig> {
+function getStatusConfig(isImageSource: boolean = false): Record<string, StatusConfig> {
   return {
     running: { label: 'Live', color: 'text-success', dot: 'bg-success' },
     stopped: { label: 'Stopped', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
-    building: { label: 'Deploying', color: 'text-warning', dot: 'bg-warning animate-pulse' },
+    building: {
+      label: isImageSource ? 'Pulling' : 'Deploying',
+      color: 'text-warning',
+      dot: 'bg-warning animate-pulse',
+    },
     error: { label: 'Failed', color: 'text-error', dot: 'bg-error' },
     idle: { label: 'Idle', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
   };
@@ -69,7 +74,8 @@ export function ProjectHeader({
   onShare,
   onDelete,
 }: ProjectHeaderProps) {
-  const statusConfig = getStatusConfig();
+  const isImageSource = project.source === 'image';
+  const statusConfig = getStatusConfig(isImageSource);
 
   const selectedEnv = environments.find((e) => e.type === currentEnvType);
   const displayStatus = selectedEnv ? selectedEnv.status : project.status;
@@ -99,7 +105,7 @@ export function ProjectHeader({
       return (
         <Button variant="outline" size="sm" className="h-7 text-xs font-body gap-1.5" disabled>
           <Spinner className="h-3 w-3" />
-          Deploying...
+          {isImageSource ? 'Pulling...' : 'Deploying...'}
         </Button>
       );
     }
@@ -139,7 +145,7 @@ export function ProjectHeader({
         </Button>
       );
     }
-    // running or error → Redeploy
+    // running or error → Redeploy or Pull & Restart for image source
     return (
       <Button
         variant="outline"
@@ -150,10 +156,12 @@ export function ProjectHeader({
       >
         {actionLoading === 'redeploy' ? (
           <Spinner className="h-3 w-3" />
+        ) : isImageSource ? (
+          <Download className="h-3 w-3" />
         ) : (
           <RotateCw className="h-3 w-3" />
         )}
-        Redeploy
+        {isImageSource ? 'Pull & Restart' : 'Redeploy'}
       </Button>
     );
   };
