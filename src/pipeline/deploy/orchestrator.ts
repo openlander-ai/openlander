@@ -1,4 +1,5 @@
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { nanoid } from 'nanoid';
 
 import { createModuleLogger } from '../../lib/logger.js';
@@ -305,6 +306,44 @@ export async function buildProject(
     buildLog += `[dockerfile] Auto-generated for ${dockerfileResult.detection.framework} (${dockerfileResult.detection.language})\n`;
   } else if (!autoDetected) {
     buildLog += '[dockerfile] Found Dockerfile\n';
+  }
+
+  try {
+    const dfPreview = readFileSync(dockerfilePath, 'utf8');
+    const keyLines = dfPreview
+      .split('\n')
+      .map((l: string) => l.trim())
+      .filter((l: string) => /^(RUN|CMD|ENTRYPOINT|EXPOSE)\s/i.test(l))
+      .slice(0, 4);
+    for (const line of keyLines) {
+      const truncated = line.length > 120 ? line.slice(0, 117) + '...' : line;
+      buildLog += `[dockerfile]   ${truncated}\n`;
+    }
+  } catch {
+    /* validated above */
+  }
+
+  {
+    const { relative: relPath } = await import('node:path');
+    const usedDockerfile = relPath(clonePath, dockerfilePath);
+    const allDockerfiles = findDockerfiles(clonePath).map((d: string) => relPath(clonePath, d));
+    const changedDockerfiles = allDockerfiles.filter((df: string) => {
+      if (df === usedDockerfile) return false;
+      try {
+        const diff = execSync(`git diff HEAD~1 --name-only -- "${df}" 2>/dev/null`, {
+          cwd: clonePath,
+          encoding: 'utf8',
+          timeout: 5000,
+        }).trim();
+        return diff.length > 0;
+      } catch {
+        return false;
+      }
+    });
+    for (const changed of changedDockerfiles) {
+      buildLog += `[warning] Commit modified ${changed}, but build uses ${usedDockerfile}\n`;
+      buildLog += `[warning]   → To change: update_project_config(dockerfile_path="${changed}")\n`;
+    }
   }
 
   const buildTimeVars = resolveEnvVarsForBuild(
