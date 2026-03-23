@@ -733,6 +733,15 @@ export class DeployPipeline {
         buildLogTail,
         buildDurationMs: Date.now() - startTime,
       };
+    } finally {
+      if (clonePath) {
+        try {
+          const { rmSync } = await import('node:fs');
+          rmSync(clonePath, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup
+        }
+      }
     }
   }
 

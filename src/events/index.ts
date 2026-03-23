@@ -286,6 +286,7 @@ type EventHandler<T extends EventType> = (payload: EventPayload[T]) => void | Pr
 
 export class EventBus {
   private handlers = new Map<EventType, Set<EventHandler<EventType>>>();
+  private captureHook?: (event: string, payload: unknown) => void;
 
   /** Subscribe to an event. Returns an unsubscribe function. */
   on<T extends EventType>(event: T, handler: EventHandler<T>): () => void {
@@ -317,6 +318,14 @@ export class EventBus {
 
   /** Emit an event to all subscribers. Errors in handlers are caught and logged. */
   async emit<T extends EventType>(event: T, payload: EventPayload[T]): Promise<void> {
+    if (this.captureHook) {
+      try {
+        this.captureHook(event, payload);
+      } catch {
+        // Swallow capture hook errors to never break emit flow
+      }
+    }
+
     const handlerSet = this.handlers.get(event);
     if (!handlerSet || handlerSet.size === 0) return;
 
@@ -354,6 +363,16 @@ export class EventBus {
   /** Get count of handlers for an event. Useful for testing. */
   listenerCount(event: EventType): number {
     return this.handlers.get(event)?.size ?? 0;
+  }
+
+  /** Set a capture hook that receives all emitted events. */
+  setCaptureHook(hook: (event: string, payload: unknown) => void): void {
+    this.captureHook = hook;
+  }
+
+  /** Remove the capture hook. */
+  removeCaptureHook(): void {
+    this.captureHook = undefined;
   }
 }
 

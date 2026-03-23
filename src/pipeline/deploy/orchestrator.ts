@@ -355,36 +355,38 @@ export async function buildProject(
   let dockerBuildOutput = '';
 
   deps.jobManager?.updatePhase(projectId, 'building');
-  await deps.buildExecutor.build(
-    {
-      clonePath,
-      projectId,
-      imageTag,
-      dockerfilePath: resolvedDockerfilePath,
-      buildArgs: buildTimeVars,
-      noCache: config._noCacheBuild === true,
-      buildContext: config.buildContext,
-      dockerTarget: config.dockerTarget,
-    },
-    (line) => {
-      dockerBuildOutput += line + '\n';
-      const stepInfo = JobManagerClass.parseDockerBuildStep(line);
-      if (stepInfo) {
-        deps.jobManager?.updateBuildStep(projectId, stepInfo.step, stepInfo.total, stepInfo.desc);
-      }
-      const now = Date.now();
-      if (now - lastBuildOutputEmit <= 50) return;
-      lastBuildOutputEmit = now;
-      void eventBus.emit('build:output', {
+  try {
+    await deps.buildExecutor.build(
+      {
+        clonePath,
         projectId,
-        line,
-        stream: 'stdout',
-      });
-    },
-  );
-
-  if (dockerBuildOutput) {
-    buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
+        imageTag,
+        dockerfilePath: resolvedDockerfilePath,
+        buildArgs: buildTimeVars,
+        noCache: config._noCacheBuild === true,
+        buildContext: config.buildContext,
+        dockerTarget: config.dockerTarget,
+      },
+      (line) => {
+        dockerBuildOutput += line + '\n';
+        const stepInfo = JobManagerClass.parseDockerBuildStep(line);
+        if (stepInfo) {
+          deps.jobManager?.updateBuildStep(projectId, stepInfo.step, stepInfo.total, stepInfo.desc);
+        }
+        const now = Date.now();
+        if (now - lastBuildOutputEmit <= 50) return;
+        lastBuildOutputEmit = now;
+        void eventBus.emit('build:output', {
+          projectId,
+          line,
+          stream: 'stdout',
+        });
+      },
+    );
+  } finally {
+    if (dockerBuildOutput) {
+      buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
+    }
   }
 
   const buildDuration = Date.now() - buildStart;

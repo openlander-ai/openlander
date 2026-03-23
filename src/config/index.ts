@@ -129,6 +129,8 @@ export interface MCPConfig {
   transport: 'stdio' | 'sse';
   /** External MCP servers the agent can consume tools from */
   servers: McpServerEntry[];
+  /** Whether to expose platform tools (Docker, Git, etc.) via MCP */
+  platformTools?: boolean;
 }
 
 export interface ChannelConfig {
@@ -215,6 +217,7 @@ const DEFAULT_CONFIG: OpenLanderConfig = {
     enabled: false,
     transport: 'stdio',
     servers: [],
+    platformTools: false,
   },
   channels: {
     slack: { enabled: false, token: '', signingSecret: '', recoveryChannelId: '' },
