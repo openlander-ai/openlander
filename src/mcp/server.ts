@@ -69,8 +69,7 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - get_deploy_status — Poll build progress. Shows phase (queued/cloning/building/starting/done/failed) and elapsed time. Pass wait=true to block until completion instead of polling.
 
 ### Services (Databases, Caches & Object Storage)
-- create_service — Create PostgreSQL/MySQL/Redis/MongoDB/MinIO via template, or any Docker image. Returns suggested_env with the recommended env var key and connection string for auto-linking. MinIO returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY.
-- provision_database — Quick shortcut: creates a PostgreSQL container tied to a specific project and auto-sets DATABASE_URL. Use when you just need "give this project a database".
+- create_service — Create PostgreSQL/MySQL/Redis/MongoDB/MinIO via template, or any Docker image. Data persisted in Docker named volumes. Returns suggested_env with connection string for auto-linking. For databases, use template="postgres" and set DATABASE_URL from suggested_env.
 - list_services / get_service_status — See running services.
 - get_service_credentials — Get connection string, host, port, user, password.
 - get_service_logs — Get container logs for a service. Essential for diagnosing error-state services.
@@ -178,11 +177,11 @@ Deploy responses include URLs for all detected network interfaces (LAN and VPN).
 5. get_deploy_status({ project_name: "..." }) — poll until done
 6. If failed: get_build_log → debug_build_error
 
-### Quick database for a project (no service management needed)
-1. provision_database({ project_name: "myapp" })
-   → Auto-creates PostgreSQL, sets DATABASE_URL, returns connection details
-2. create_deploy_plan({ project_name: "myapp" })
-3. execute_deploy_plan({ plan_id: "..." })
+### Add database to a project
+1. create_service({ name: "myapp-db", template: "postgres" })
+   → Creates PostgreSQL with persistent volume, returns suggested_env with DATABASE_URL
+2. set_env_vars({ project_name: "myapp", env_vars: { DATABASE_URL: "..." } })
+3. Redeploy the project
 
 ### Add service to existing project
 1. create_service({ name: "cache", template: "redis" })
@@ -270,7 +269,7 @@ No extra configuration needed. Pass them via env_vars in create_deploy_plan or s
 - Second service of the same type gets a prefixed env key (e.g. ANALYTICS_DATABASE_URL instead of DATABASE_URL).
 - Deploys are non-blocking — execute_deploy_plan returns immediately. ALWAYS poll get_deploy_status afterward.
 - list_projects and get_deploy_status return a urls array with LAN and VPN access URLs (type: "lan" or "vpn"). Use these to tell the user how to access from other devices on the network.
-- provision_database is a shortcut for "create PostgreSQL + auto-set DATABASE_URL". Use create_service for more control (MySQL, Redis, MongoDB, custom images).
+- For databases, use create_service with template="postgres" (or "mysql"). Data is stored in Docker named volumes and persists across container restarts.
 - scan_project before first deploy is strongly recommended — it reveals framework, required env vars, and monorepo structure.
 - Global secrets (set_global_secret) are auto-injected into all deploys. Project-level env vars override them.
 - Secret files (upload_secret_file) mount at /run/secrets/filename inside containers. Use for Firebase JSON, TLS certs, SSH keys — any file the app needs on disk. Set GOOGLE_APPLICATION_CREDENTIALS or similar env var pointing to the mount path.`;

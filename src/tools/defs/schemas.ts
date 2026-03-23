@@ -154,15 +154,6 @@ export const domainSchema = z.object({
   domain: z.string().min(1).describe('Domain name'),
 });
 
-// Database & service schemas
-export const provisionDbSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-  db_type: z
-    .string()
-    .optional()
-    .describe('Database type: "sqlite" or "postgres" (default: postgres)'),
-});
-
 // Preview deployment schemas
 export const previewDeploySchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),

@@ -1,4 +1,3 @@
-import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
 import type { ToolDef } from './types.js';
@@ -15,7 +14,6 @@ import {
   listDatabasesSchema,
   listServiceBackupsSchema,
   listServicesSchema,
-  provisionDbSchema,
   restoreServiceSchema,
   serviceNameSchema,
 } from './schemas.js';
@@ -555,22 +553,5 @@ export const serviceToolDefs: ToolDef[] = [
       };
     },
     targets: ['mcp'],
-  },
-  {
-    name: 'provision_database',
-    description:
-      'Provision a database sidecar (PostgreSQL or SQLite) for a project. Automatically sets DATABASE_URL in the project env vars and redeploys. Use when user says they need a database. Defaults to PostgreSQL. Returns { status, connectionUrl, type }. For other services (Redis, MongoDB) use create_service + set_env_vars pattern instead. Errors: PROJECT_NOT_FOUND, ALREADY_PROVISIONED.',
-    mcpDescription: 'Provision PostgreSQL or SQLite and auto-set DATABASE_URL for a project.',
-    inputSchema: provisionDbSchema,
-    execute: async (args, { appCtx }) => {
-      const projectName = args['project_name'] as string;
-      const project = appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
-      const dbType = (args['db_type'] as string | undefined) === 'sqlite' ? 'sqlite' : 'postgres';
-      const result = await appCtx.dbProvisioner.provision(project.id, { type: dbType });
-      return { status: 'provisioned', project: projectName, ...result };
-    },
   },
 ];

@@ -25,7 +25,6 @@ const EXPECTED_TOOL_NAMES = [
   'unexpose_public',
   'get_system_stats',
   'rollback_project',
-  'provision_database',
   'deploy_blue_green',
   'debug_build_error',
   'preview_deploy',

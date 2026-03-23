@@ -11,7 +11,7 @@ import { HealthMonitor } from './monitor/health.js';
 import { WebhookManager } from './webhook/index.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
 import { BlueGreenDeployer } from './pipeline/blue-green.js';
-import { DatabaseProvisioner } from './pipeline/db-provision.js';
+
 import { ServiceManager } from './pipeline/service-manager.js';
 import { BuildDebugger } from './pipeline/build-debugger.js';
 import { ChannelManager } from './channels/base.js';
@@ -64,7 +64,6 @@ export interface AppContext {
   cloudflare: CloudflareTunnelManager;
   // v0.3 modules
   blueGreen: BlueGreenDeployer;
-  dbProvisioner: DatabaseProvisioner;
   buildDebugger: BuildDebugger | null;
   // v0.4 modules
   channelManager: ChannelManager;
@@ -229,8 +228,6 @@ export async function createAppContext(
   // v0.3: Blue-green deployer
   const blueGreen = new BlueGreenDeployer(docker, db, env, eventBus, jobManager);
 
-  // v0.3: Database provisioner
-  const dbProvisioner = new DatabaseProvisioner(docker, db);
   const serviceManager = new ServiceManager(docker, db);
 
   // (Build debugger moved above pipeline creation)
@@ -322,7 +319,6 @@ export async function createAppContext(
     webhookManager,
     cloudflare,
     blueGreen,
-    dbProvisioner,
     buildDebugger,
     previewDeployer,
     jobManager,

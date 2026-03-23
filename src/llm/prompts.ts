@@ -241,7 +241,7 @@ Choose the right tool based on user intent:
 | List all projects             | list_projects        | Shows status, ports, URLs.               |
 | Check server resources        | get_system_stats     | CPU, memory, disk usage.                 |
 | Rollback a bad deploy         | rollback_project     | Reverts to previous Docker image.        |
-| Need a database               | provision_database   | PostgreSQL by default.                   |
+| Need a database               | create_service       | template="postgres". Auto-creates volume.|
 | Zero-downtime update          | deploy_blue_green    | Health-checks before traffic switch.     |
 | Diagnose a build failure      | debug_build_error    | AI-powered log analysis.                 |
 | Preview a branch              | preview_deploy       | Ephemeral environment for PRs.           |

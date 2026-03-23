@@ -690,20 +690,6 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'deleted' });
   });
 
-  // v0.3: Database provisioning
-  api.post('/projects/:id/provision-db', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
-
-    const body = await c.req
-      .json<{ type?: 'sqlite' | 'postgres'; db_name?: string }>()
-      .catch((): { type?: 'sqlite' | 'postgres'; db_name?: string } => ({}));
-    const result = await ctx.dbProvisioner.provision(project.id, {
-      type: body.type ?? 'postgres',
-      dbName: body.db_name,
-    });
-    return c.json({ status: 'provisioned', project: project.name, ...result });
-  });
-
   // v0.3: Build error debugging
 
   // v0.4: Preview deployments
