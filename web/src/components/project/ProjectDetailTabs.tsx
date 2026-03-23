@@ -69,7 +69,7 @@ export function ProjectDetailTabs({
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="overview" className="flex-1 min-h-0 mt-0">
+      <TabsContent value="overview" className="flex-1 min-h-0 mt-0 overflow-auto">
         {id && displayProject && (
           <OverviewTab
             projectId={id}

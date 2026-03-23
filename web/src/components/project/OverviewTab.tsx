@@ -236,7 +236,7 @@ export function OverviewTab({
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-auto p-6 bg-bg-app">
+    <div className="flex flex-col h-full min-h-0 p-6 bg-bg-app max-w-5xl mx-auto w-full">
       {/* ── Section 1: Current State ─────────────────────────────────────── */}
       <section className="space-y-4 pb-6">
         {/* Endpoint */}
