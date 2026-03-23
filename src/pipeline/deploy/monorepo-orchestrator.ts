@@ -95,6 +95,8 @@ export async function deployMonorepoService(
     };
   }
 
+  let dockerBuildOutput = '';
+
   try {
     deps.jobManager?.updatePhase(childId, 'building');
     const envVars = resolveEnvVars(
@@ -116,6 +118,7 @@ export async function deployMonorepoService(
         buildArgs: buildTimeVarsForChild,
       },
       (line) => {
+        dockerBuildOutput += line + '\n';
         const stepInfo = JobManagerClass.parseDockerBuildStep(line);
         if (stepInfo) {
           deps.jobManager?.updateBuildStep(childId, stepInfo.step, stepInfo.total, stepInfo.desc);
@@ -225,6 +228,10 @@ export async function deployMonorepoService(
     };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    const buildLogWithOutput = dockerBuildOutput
+      ? `--- Docker build output ---\n${dockerBuildOutput}[error] [monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`
+      : `[monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`;
+
     deps.db.updateProject(childId, { status: 'error' });
     deps.jobManager?.updatePhase(childId, 'failed', errorMsg);
 
@@ -233,6 +240,7 @@ export async function deployMonorepoService(
       parentProjectId: parentId,
       step: 'service-deploy',
       error: errorMsg,
+      buildLog: buildLogWithOutput,
       phase: 'build',
       scope: service.name,
       status: 'failed',
@@ -247,7 +255,7 @@ export async function deployMonorepoService(
       trigger,
       commitSha: config.commitSha,
       commitMessage,
-      buildLog: `[monorepo] ${dockerfilePath} FAILED: ${errorMsg}\n`,
+      buildLog: buildLogWithOutput,
       durationMs: Date.now() - childStartTime,
     });
 

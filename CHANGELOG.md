@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.14] - 2026-03-23
+
+### Added
+
+- **Dashboard VPN URL display**: Project list, detail, card, and table views now show VPN (Tailscale/WireGuard) URLs alongside LAN URLs with purple VPN badge. API returns `urls: ProjectUrl[]` field.
+
+### Fixed
+
+- **Build log propagation**: Blue-green, preview, and monorepo deploy paths now preserve Docker build output on failure. Previously only the main deploy path captured build logs — the other three paths discarded build output in catch blocks.
+- **tsup build race condition**: Removed per-entry `clean: true` from tsup config (parallel builds could delete each other's output). Build script now runs `rm -rf dist` before tsup instead.
+- **VPN URL environment guard**: VPN URLs only shown when viewing production environment, preventing production URL leakage in development views.
+- **Project list API performance**: `getAllIps()` hoisted to single call per request instead of per-project in the list endpoint.
+
 ## [0.9.13] - 2026-03-23
 
 ### Added

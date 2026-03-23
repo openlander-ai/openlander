@@ -1,6 +1,6 @@
 {
   "name": "openlander",
-  "version": "0.9.13",
+  "version": "0.9.14",
   "description": "Self-hosted deployment platform that fixes its own failures",
   "type": "module",
   "bin": {
@@ -23,7 +23,7 @@
   },
   "scripts": {
     "dev": "tsup --watch",
-    "build": "tsup && npm run build:web",
+    "build": "npm run clean && tsup && npm run build:web",
     "build:web": "cd web && npm install && npx vite build",
     "start": "node dist/cli/index.js",
     "lint": "eslint .",

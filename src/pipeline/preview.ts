@@ -37,6 +37,7 @@ export interface PreviewResult {
   port?: number;
   containerId?: string;
   error?: string;
+  buildLog?: string;
 }
 
 /**
@@ -83,6 +84,8 @@ export class PreviewDeployer {
       await this.cleanup(existingPreviewId);
     }
 
+    let buildOutput = '';
+
     try {
       const cloneResult = await cloneRepo({
         repoUrl: options.repoUrl,
@@ -93,7 +96,6 @@ export class PreviewDeployer {
       ensureDockerfile(cloneResult.path);
 
       const imageTag = `openlander/preview-${options.branch}:latest`;
-      let buildOutput = '';
       await this.docker.buildImage(cloneResult.path, imageTag, {
         onProgress: (event) => {
           const line = event.stream?.trimEnd() ?? event.error ?? '';
@@ -151,10 +153,15 @@ export class PreviewDeployer {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
+      const buildLogWithOutput = buildOutput
+        ? `${buildOutput}[error] ${errorMessage}\n`
+        : undefined;
+
       return {
         success: false,
         previewId,
         error: errorMessage,
+        buildLog: buildLogWithOutput,
       };
     }
   }

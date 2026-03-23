@@ -63,6 +63,7 @@ export class BlueGreenDeployer {
     let newPort: number | undefined;
     let greenContainerId: string | undefined;
     let shouldCleanupGreen = false;
+    let buildOutput = '';
 
     try {
       const project = this.db.getProject(projectId);
@@ -112,7 +113,6 @@ export class BlueGreenDeployer {
 
       imageTag = `openlander/${projectName}:${String(Date.now())}`;
       const buildStart = Date.now();
-      let buildOutput = '';
       await this.docker.buildImage(cloneResult.path, imageTag, {
         onProgress: (event) => {
           const line = event.stream?.trimEnd() ?? event.error ?? '';
@@ -198,6 +198,9 @@ export class BlueGreenDeployer {
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+      const buildLogWithOutput = buildOutput
+        ? `--- Docker build output ---\n${buildOutput}[error] ${errorMsg}\n`
+        : `[error] ${errorMsg}\n`;
 
       this.db.updateProject(projectId, { status: 'error' });
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
@@ -206,6 +209,7 @@ export class BlueGreenDeployer {
         projectId,
         step: 'blue-green',
         error: errorMsg,
+        buildLog: buildLogWithOutput,
       });
 
       return {

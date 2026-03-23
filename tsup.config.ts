@@ -16,7 +16,6 @@ export default defineConfig([
     platform: 'node',
     dts: true,
     sourcemap: true,
-    clean: true,
     splitting: true,
     shims: false,
     banner: {

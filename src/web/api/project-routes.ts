@@ -6,7 +6,7 @@ import type { AppContext } from '../../app.js';
 import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
-import { getProjectUrl } from '../../pipeline/traefik.js';
+import { getProjectUrl, getProjectUrls, getAllIps } from '../../pipeline/traefik.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import { scanForEnvUsage } from '../../pipeline/env-scan.js';
 import { generateEnvExample } from '../../pipeline/env-inject.js';
@@ -195,6 +195,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       | 'error'
       | undefined;
     const projects = ctx.db.listProjects(status);
+    const ips = getAllIps();
 
     return c.json({
       count: projects.length,
@@ -209,6 +210,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           branch: p.branch,
           port: p.assigned_port,
           url: p.assigned_port ? getProjectUrl(p.name) : null,
+          urls: p.assigned_port
+            ? ips.map((ip) => ({
+                url: `http://${p.name}.${ip.address}.sslip.io`,
+                type: ip.type,
+                ip: ip.address,
+              }))
+            : [],
           publicUrl: p.public_url,
           createdAt: normalizeTimestamp(p.created_at),
           updatedAt: normalizeTimestamp(p.updated_at),
@@ -232,6 +240,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       ...project,
       port: project.assigned_port ?? null,
       url: project.assigned_port ? getProjectUrl(project.name) : null,
+      urls: project.assigned_port ? getProjectUrls(project.name) : [],
       publicUrl: project.public_url ?? null,
       repoUrl: project.repo_url,
       created_at: normalizeTimestamp(project.created_at),

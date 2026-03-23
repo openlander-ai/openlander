@@ -25,6 +25,7 @@ export interface Project {
   port?: number;
   previousImageTag?: string | null;
   url?: string;
+  urls?: { url: string; type: 'lan' | 'vpn'; ip: string }[];
   publicUrl?: string | null;
   accessCode?: string | null;
   createdAt: string;

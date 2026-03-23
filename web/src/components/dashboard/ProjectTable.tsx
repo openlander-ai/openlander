@@ -62,15 +62,34 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
                 </td>
                 <td className="px-4 py-3 hidden lg:table-cell">
                   {project.url && (
-                    <a
-                      href={project.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-agent hover:underline truncate max-w-[200px] block"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {project.url.replace(/^https?:\/\//, '')}
-                    </a>
+                    <div className="space-y-0.5">
+                      <a
+                        href={project.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-agent hover:underline truncate max-w-[200px] block"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {project.url.replace(/^https?:\/\//, '')}
+                      </a>
+                      {project.urls
+                        ?.filter((u) => u.type === 'vpn')
+                        .map((vpn) => (
+                          <a
+                            key={vpn.ip}
+                            href={vpn.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-purple-400 hover:underline truncate max-w-[200px] flex items-center gap-1"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <span className="text-[9px] px-1 rounded bg-purple-500/10 border border-purple-500/20">
+                              VPN
+                            </span>
+                            {vpn.url.replace(/^https?:\/\//, '')}
+                          </a>
+                        ))}
+                    </div>
                   )}
                 </td>
                 <td className="px-4 py-3 hidden lg:table-cell">

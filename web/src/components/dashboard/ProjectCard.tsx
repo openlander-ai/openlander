@@ -102,6 +102,23 @@ export function ProjectCard({
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {project.url.replace(/^https?:\/\//, '')}
             </a>
+            {project.urls
+              ?.filter((u) => u.type === 'vpn')
+              .map((vpn) => (
+                <a
+                  key={vpn.ip}
+                  href={vpn.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                  className="flex items-center gap-1.5 text-xs font-mono text-purple-400 hover:text-purple-300 truncate transition-colors mt-1"
+                >
+                  <span className="text-[10px] px-1 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 shrink-0">
+                    VPN
+                  </span>
+                  {vpn.url.replace(/^https?:\/\//, '')}
+                </a>
+              ))}
           </div>
         )}
 

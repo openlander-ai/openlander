@@ -275,17 +275,37 @@ export function OverviewTab({
       <section className="space-y-4 pb-6">
         {/* Endpoint */}
         {(activeProject?.publicUrl || activeProject?.url) && (
-          <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4 text-muted-ol" />
-            <a
-              href={activeProject.publicUrl || activeProject.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-agent hover:underline"
-            >
-              {(activeProject.publicUrl || activeProject.url)?.replace(/^https?:\/\//, '')}
-            </a>
-            <ExternalLink className="h-3 w-3 text-muted-ol" />
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-ol" />
+              <a
+                href={activeProject.publicUrl || activeProject.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-agent hover:underline"
+              >
+                {(activeProject.publicUrl || activeProject.url)?.replace(/^https?:\/\//, '')}
+              </a>
+              <ExternalLink className="h-3 w-3 text-muted-ol" />
+            </div>
+            {activeProject?.urls
+              ?.filter((u) => u.type === 'vpn')
+              .map((vpn) => (
+                <div key={vpn.ip} className="flex items-center gap-2 pl-6">
+                  <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    VPN
+                  </span>
+                  <a
+                    href={vpn.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-purple-400 hover:underline"
+                  >
+                    {vpn.url.replace(/^https?:\/\//, '')}
+                  </a>
+                  <ExternalLink className="h-3 w-3 text-muted-ol" />
+                </div>
+              ))}
           </div>
         )}
 

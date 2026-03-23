@@ -228,6 +228,23 @@ export function ProjectHeader({
                   {displayUrl.replace(/^https?:\/\//, '')}
                 </a>
               )}
+              {currentEnvType === 'production' &&
+                project.urls
+                  ?.filter((u) => u.type === 'vpn')
+                  .map((vpn) => (
+                    <a
+                      key={vpn.ip}
+                      href={vpn.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors"
+                    >
+                      <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
+                        VPN
+                      </span>
+                      <span className="text-xs">{vpn.url.replace(/^https?:\/\//, '')}</span>
+                    </a>
+                  ))}
             </div>
             {displayPublicUrl && (
               <a
