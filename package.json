@@ -59,7 +59,7 @@
     "duck-duck-scrape": "^2.2.7",
     "hono": "^4.12.9",
     "nanoid": "^5.1.7",
-    "ollama-ai-provider-v2": "^3.3.1",
+    "ollama-ai-provider-v2": "^3.5.0",
     "picocolors": "^1.1.1",
     "pino": "^10.3.1",
     "sugar-high": "^0.9.5",
