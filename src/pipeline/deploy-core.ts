@@ -671,6 +671,14 @@ export class DeployPipeline {
       const buildLogWithError = buildLog + `[error] ${errorMsg}\n`;
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
 
+      try {
+        const containerName = `ol-${routeName}`;
+        await this.docker.removeContainer(containerName);
+        log.info({ projectId, containerName }, 'Cleaned up orphan container after failed deploy');
+      } catch {
+        // container may not exist — that's fine
+      }
+
       // Classify for diagnosis only — auto-recovery.ts handles retry via agent.
       try {
         const recovery = new BuildRecovery();
