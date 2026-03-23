@@ -615,6 +615,13 @@ export class ServiceManager {
     };
   }
 
+  getProjectServices(projectId: string): ServiceRow[] {
+    const envVars = this.db.getEnvVars(projectId);
+    const allValues = Object.values(envVars).join(' ');
+    const services = this.db.listServices();
+    return services.filter((s) => allValues.includes(s.container_name));
+  }
+
   getConnectedProjects(serviceId: string): Array<{ id: string; name: string }> {
     const service = this.getRequiredService(serviceId);
     const containerName = service.container_name;

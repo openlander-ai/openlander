@@ -2,8 +2,12 @@ import { useEffect, useState, useMemo, Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { DeployTerminalSession } from '@/components/deploy-terminal/DeployTerminalSession';
 import type { TimelineItem } from '@/lib/event-types';
-import { getProjectDeployments, getProjectEnv } from '@/lib/api';
-import { getServices, type Service } from '@/lib/api/services';
+import {
+  getProjectDeployments,
+  getProjectEnv,
+  getProjectConnectedServices,
+  type ConnectedService,
+} from '@/lib/api';
 import type { Project, DeployLogSummary } from '@/types';
 import {
   ExternalLink,
@@ -114,7 +118,7 @@ export function OverviewTab({
   const [latestDeploy, setLatestDeploy] = useState<DeployLogSummary | null>(null);
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [recentDeploys, setRecentDeploys] = useState<DeployLogSummary[]>([]);
-  const [connectedServices, setConnectedServices] = useState<Service[]>([]);
+  const [connectedServices, setConnectedServices] = useState<ConnectedService[]>([]);
   const [envVarCount, setEnvVarCount] = useState<number>(0);
   const [errorEntries, setErrorEntries] = useState<LogEntry[]>([]);
 
@@ -180,13 +184,11 @@ export function OverviewTab({
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([getServices(), getProjectEnv(projectId)])
-      .then(([allServices, envVars]) => {
+    Promise.all([getProjectConnectedServices(projectId), getProjectEnv(projectId)])
+      .then(([services, envVars]) => {
         if (!mounted) return;
+        setConnectedServices(services);
         setEnvVarCount(Object.keys(envVars).length);
-        const allValues = Object.values(envVars).join(' ');
-        const connected = allServices.filter((s) => allValues.includes(s.container_name));
-        setConnectedServices(connected);
       })
       .catch((err) => console.error('Failed to fetch services/env:', err));
 
@@ -342,7 +344,7 @@ export function OverviewTab({
         <div className="grid grid-cols-2 gap-8">
           {/* Left: Connected Services */}
           <div>
-            <h3 className="text-xs font-medium text-muted-ol uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-medium text-muted-ol tracking-wider mb-3">
               Connected Services
             </h3>
             {connectedServices.length > 0 ? (
@@ -374,9 +376,7 @@ export function OverviewTab({
 
           {/* Right: Project Info */}
           <div>
-            <h3 className="text-xs font-medium text-muted-ol uppercase tracking-wider mb-3">
-              Project Info
-            </h3>
+            <h3 className="text-xs font-medium text-muted-ol tracking-wider mb-3">Project Info</h3>
             <div className="space-y-2.5 text-sm">
               {/* Env var count */}
               <div className="flex items-center justify-between">
@@ -402,7 +402,10 @@ export function OverviewTab({
               {imageTag && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-ol">Container</span>
-                  <span className="text-xs font-mono text-secondary-ol truncate max-w-[200px]">
+                  <span
+                    className="text-xs font-mono text-secondary-ol truncate max-w-[200px]"
+                    title={imageTag}
+                  >
                     {imageTag}
                   </span>
                 </div>
@@ -424,9 +427,7 @@ export function OverviewTab({
       <section className="border-t border-border py-5">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
-            <h3 className="text-xs font-medium text-muted-ol uppercase tracking-wider">
-              Error Logs
-            </h3>
+            <h3 className="text-xs font-medium text-muted-ol tracking-wider">Error Logs</h3>
             {recentErrorCount > 0 && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-error/10 text-error">
                 <AlertCircle className="h-3 w-3" />
@@ -469,9 +470,7 @@ export function OverviewTab({
       {/* ── Recent Deployments ───────────────────────────────────────────── */}
       <section className="border-t border-border py-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-medium text-muted-ol uppercase tracking-wider">
-            Recent Deployments
-          </h3>
+          <h3 className="text-xs font-medium text-muted-ol tracking-wider">Recent Deployments</h3>
           <button
             onClick={onOpenDeployments}
             className="text-xs text-muted-ol hover:text-primary-ol transition-colors flex items-center gap-1"

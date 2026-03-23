@@ -369,6 +369,23 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
   });
 
+  // --- Connected Services ---
+
+  api.get('/projects/:id/services', (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    const services = ctx.serviceManager.getProjectServices(project.id);
+    return c.json(
+      services.map((s) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        status: s.status,
+        port: s.port,
+        containerName: s.container_name,
+      })),
+    );
+  });
+
   // --- Deployment History ---
 
   api.get('/projects/:id/deployments', (c) => {

@@ -570,7 +570,8 @@ export function getProxyStatus(detection: ProxyDetection, mode: 'managed' | 'ext
       : 'No reverse proxy detected (external mode may not work)';
   }
 
-  const versionInfo = detection.version ? ` v${detection.version}` : '';
+  const ver = detection.version?.replace(/^v/i, '') ?? '';
+  const versionInfo = ver ? ` v${ver}` : '';
   const containerInfo = detection.container ? ` (${detection.container})` : '';
 
   if (detection.type === 'traefik') {

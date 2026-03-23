@@ -244,6 +244,21 @@ export async function getProjectDeployments(
   return data.deployments;
 }
 
+export interface ConnectedService {
+  id: string;
+  name: string;
+  type: string;
+  status: 'running' | 'stopped' | 'error';
+  port: number;
+  containerName: string;
+}
+
+export async function getProjectConnectedServices(id: string): Promise<ConnectedService[]> {
+  const res = await fetch(`/api/projects/${id}/services`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function getProjectTimeline(id: string): Promise<BuildStreamEvent[]> {
   const res = await fetch(`/api/projects/${id}/timeline`);
   if (!res.ok) {

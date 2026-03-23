@@ -23,7 +23,10 @@ export function StatCard({
         {icon}
         <span className="text-xs font-body uppercase tracking-wider">{label}</span>
       </div>
-      <p className="text-lg font-mono font-bold text-primary-ol leading-tight break-words">
+      <p
+        className="text-lg font-mono font-bold text-primary-ol leading-tight line-clamp-2"
+        title={value}
+      >
         {value}
       </p>
     </div>
