@@ -117,7 +117,7 @@ export const deployToolDefs: ToolDef[] = [
   {
     name: 'get_deploy_status',
     description:
-      'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed), timing, and build progress details. When building, includes current phase and last few lines of build output. When failed, includes error summary and build log tail. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }.',
+      'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed), timing, and build progress details. When building, includes current phase and last few lines of build output. When failed, includes error summary and build log tail. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With wait=true: blocks until completion. Without project_name, waits for ALL active deploys to finish.',
     mcpDescription:
       'Get real-time deployment status. During build phase, includes build_step, build_step_total, build_step_desc for progress tracking. Poll this tool to monitor deployment progress.',
     inputSchema: deployStatusSchema,
@@ -313,20 +313,75 @@ export const deployToolDefs: ToolDef[] = [
         });
       }
 
-      const allJobs = appCtx.jobManager.getStatuses();
-      const recentJobs = allJobs.filter(
-        (j) =>
-          (j.phase !== 'done' && j.phase !== 'failed') ||
-          (j.completedAt && Date.now() - j.completedAt.getTime() < 5 * 60 * 1000),
-      );
-      const activeCount = recentJobs.filter(
-        (j) => j.phase !== 'done' && j.phase !== 'failed',
-      ).length;
-
-      return {
-        active: activeCount,
-        jobs: recentJobs.map(formatJob),
+      const buildAllResult = () => {
+        const allJobs = appCtx.jobManager.getStatuses();
+        const recentJobs = allJobs.filter(
+          (j) =>
+            (j.phase !== 'done' && j.phase !== 'failed') ||
+            (j.completedAt && Date.now() - j.completedAt.getTime() < 5 * 60 * 1000),
+        );
+        const activeCount = recentJobs.filter(
+          (j) => j.phase !== 'done' && j.phase !== 'failed',
+        ).length;
+        return { active: activeCount, jobs: recentJobs.map(formatJob) };
       };
+
+      if (!wait) {
+        return buildAllResult();
+      }
+
+      const trackedIds = new Set(
+        appCtx.jobManager
+          .getStatuses()
+          .filter((j) => j.phase !== 'done' && j.phase !== 'failed')
+          .map((j) => j.projectId),
+      );
+
+      if (trackedIds.size === 0) {
+        return buildAllResult();
+      }
+
+      return await new Promise((resolve) => {
+        let settled = false;
+
+        const resolveIfAllDone = (timedOut: boolean): void => {
+          for (const id of trackedIds) {
+            const s = appCtx.jobManager.getStatus(id);
+            if (s && s.phase !== 'done' && s.phase !== 'failed') return;
+          }
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          unsubSuccess();
+          unsubFailed();
+          const payload = buildAllResult() as Record<string, unknown>;
+          if (timedOut) payload['timeout'] = true;
+          resolve(payload);
+        };
+
+        const unsubSuccess = eventBus.on('deploy:success', () => {
+          resolveIfAllDone(false);
+        });
+        const unsubFailed = eventBus.on('deploy:failed', () => {
+          resolveIfAllDone(false);
+        });
+
+        const timer = setTimeout(
+          () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            unsubSuccess();
+            unsubFailed();
+            const payload = buildAllResult() as Record<string, unknown>;
+            payload['timeout'] = true;
+            resolve(payload);
+          },
+          Math.max(1, timeoutSec) * 1000,
+        );
+
+        resolveIfAllDone(false);
+      });
     },
   },
   {

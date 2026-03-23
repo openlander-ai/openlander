@@ -5,12 +5,12 @@ import { useLogStream, type LogEntry } from '@/hooks/use-log-stream';
 import { cn } from '@/lib/utils';
 import { Search, ArrowDown, Trash2, Radio, RefreshCw } from 'lucide-react';
 import { normalizeLogText, parseAnsiLine } from '@/lib/ansi';
+import { detectLevel, levelColors } from '@/lib/log-utils';
 import {
   CONSOLE_LABELS,
   DEFAULT_CONSOLE_FILTER_STATE,
   getConsoleSurfaceState,
   type ConsoleFilterState,
-  type ConsoleLogLevel,
   type ConsoleLogLevelFilter,
 } from '@/types';
 
@@ -18,24 +18,6 @@ interface LogViewerProps {
   projectId: string;
   toolbarActions?: React.ReactNode;
 }
-
-/** Detect log level from line content */
-function detectLevel(line: string): ConsoleLogLevel {
-  const lower = normalizeLogText(line).toLowerCase();
-  if (/\berror\b|\bfatal\b|\bpanic\b/.test(lower)) return 'error';
-  if (/\bwarn(ing)?\b/.test(lower)) return 'warn';
-  if (/\binfo\b/.test(lower)) return 'info';
-  if (/\bdebug\b|\btrace\b/.test(lower)) return 'debug';
-  return 'plain';
-}
-
-const levelColors: Record<ConsoleLogLevel, string> = {
-  error: 'text-error',
-  warn: 'text-warning',
-  info: '',
-  debug: 'text-muted-ol',
-  plain: '',
-};
 
 export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
   const { t } = useLanguage();
