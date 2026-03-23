@@ -109,11 +109,13 @@ function mapFailStep(step?: string): 'clone' | 'dockerfile' | 'build' | 'run' | 
  * - LLM mode (`agent !== null`): streams agent-driven analysis and recovery.
  * - Programmatic mode (`agent === null`): recipe match + optional debugger + single redeploy retry.
  */
-const mcpDeployProjects = new Set<string>();
+const mcpDeployTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export function markMcpDeploy(projectId: string): void {
-  mcpDeployProjects.add(projectId);
-  setTimeout(() => mcpDeployProjects.delete(projectId), 10 * 60 * 1000);
+  const existing = mcpDeployTimers.get(projectId);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => mcpDeployTimers.delete(projectId), 10 * 60 * 1000);
+  mcpDeployTimers.set(projectId, timer);
 }
 
 export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
@@ -355,8 +357,8 @@ ${plan.agentGuidance}
   }
 
   eventBus.on('deploy:failed', (payload) => {
-    if (payload.source === 'mcp' || mcpDeployProjects.has(payload.projectId)) {
-      mcpDeployProjects.delete(payload.projectId);
+    if (payload.source === 'mcp' || mcpDeployTimers.has(payload.projectId)) {
+      mcpDeployTimers.delete(payload.projectId);
       log.info({ projectId: payload.projectId }, 'MCP-triggered deploy, skipping auto-recovery');
       return;
     }
@@ -369,6 +371,14 @@ ${plan.agentGuidance}
   });
 
   eventBus.on('compose:failed', (payload) => {
+    if (mcpDeployTimers.has(payload.projectId)) {
+      mcpDeployTimers.delete(payload.projectId);
+      log.info(
+        { projectId: payload.projectId },
+        'MCP-triggered compose deploy, skipping auto-recovery',
+      );
+      return;
+    }
     setTimeout(() => {
       enqueueRecoveryCall(() => handleAutoRecovery(payload.projectId, payload.error), {
         projectId: payload.projectId,

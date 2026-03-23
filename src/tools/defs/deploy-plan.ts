@@ -124,10 +124,17 @@ export const deployPlanToolDefs: ToolDef[] = [
       const planId = args['plan_id'] as string;
 
       const deployOnly = (args['deploy_only'] as string[] | undefined) ?? undefined;
+      const planRow = appCtx.db.getDeployPlan(planId);
+      if (planRow) {
+        const planData = JSON.parse(planRow.plan_json) as DeployPlan;
+        if (planData.project_id) {
+          markMcpDeploy(planData.project_id);
+        }
+      }
       const result: ExecutePlanResult = await appCtx.planEngine.executePlan(planId, deployOnly);
 
-      if (result.project_name) {
-        markMcpDeploy(result.project_name);
+      if (result.project_id) {
+        markMcpDeploy(result.project_id);
       }
 
       if (result.status === 'building') {
@@ -197,10 +204,13 @@ export const deployPlanToolDefs: ToolDef[] = [
         };
       }
 
+      if (plan.project_id) {
+        markMcpDeploy(plan.project_id);
+      }
       const result: ExecutePlanResult = await appCtx.planEngine.executePlan(plan.plan_id);
 
-      if (result.project_name) {
-        markMcpDeploy(result.project_name);
+      if (result.project_id) {
+        markMcpDeploy(result.project_id);
       }
 
       if (result.status === 'failed') {

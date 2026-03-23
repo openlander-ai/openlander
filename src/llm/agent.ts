@@ -211,6 +211,7 @@ export class Agent {
             content: m.content,
           })),
           tools: this.tools,
+          maxRetries: 1,
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
         });
 
@@ -264,7 +265,11 @@ export class Agent {
           }
         }
       } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
+        const rawMsg = error instanceof Error ? error.message : String(error);
+        const isRateLimit = /rate.limit|too many|429|quota|exceeded/i.test(rawMsg);
+        const errMsg = isRateLimit
+          ? `LLM rate limit exceeded. Please wait a moment and try again. (${rawMsg})`
+          : rawMsg;
         await onEvent({ type: 'error', error: errMsg });
         return;
       }
