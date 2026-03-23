@@ -388,11 +388,11 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                     transform: `translateY(${virtualItem.start}px)`,
                   }}
                   className={cn(
-                    'flex items-start px-4 py-0.5 hover:bg-bg-subtle/50 group border-b border-transparent hover:border-[hsl(var(--border))]/30 transition-colors border-l-2',
+                    'flex items-start px-4 py-0.5 hover:bg-bg-subtle/50 group border-b border-b-transparent hover:border-b-[hsl(var(--border))]/30 transition-colors border-l-2',
                     level === 'error'
-                      ? 'bg-error/10 border-error'
+                      ? 'bg-error/10 border-l-error'
                       : level === 'warn'
-                        ? 'bg-warning/10 border-warning'
+                        ? 'bg-warning/10 border-l-warning'
                         : 'border-l-transparent',
                     level === 'debug' && 'opacity-60',
                     level !== 'error' &&
