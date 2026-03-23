@@ -129,7 +129,9 @@ export function OverviewTab({
   const [now, setNow] = useState(Date.now());
 
   const activeProject = displayProject;
+  const hasRecentTimeline = timelineItems.length > 0;
   const isBuilding = projectStatus === 'building' || isTimelineStreaming;
+  const showDeployTerminal = isBuilding || (projectStatus === 'error' && hasRecentTimeline);
   const isRunning = projectStatus === 'running';
 
   const imageTag =
@@ -350,8 +352,7 @@ export function OverviewTab({
           </div>
         )}
 
-        {/* Last event */}
-        {lastEvent && (
+        {lastEvent && !isBuilding && (
           <p className="text-xs text-muted-ol">
             Last event: {lastEvent.title} — {formatRelativeTime(lastEvent.timestamp)}
           </p>
@@ -359,7 +360,7 @@ export function OverviewTab({
       </section>
 
       {/* ── Deploy Pipeline (contextual: only during build) ────────────── */}
-      {isBuilding && (
+      {showDeployTerminal && (
         <section className="border-t border-border">
           <button
             onClick={() => setPipelineOpen(!pipelineOpen)}
@@ -373,10 +374,14 @@ export function OverviewTab({
               )}
               <span className="font-medium">Deploy Pipeline</span>
             </div>
-            <span className="text-xs text-warning animate-pulse">Building...</span>
+            {isBuilding ? (
+              <span className="text-xs text-warning animate-pulse">Building...</span>
+            ) : (
+              <span className="text-xs text-error">Failed</span>
+            )}
           </button>
           {pipelineOpen && (
-            <div className="rounded-lg border border-border bg-bg-terminal overflow-hidden mb-4 min-h-[350px]">
+            <div className="rounded-lg border border-border bg-bg-terminal overflow-hidden mb-4 min-h-[350px] max-h-[600px]">
               {isStale && (
                 <div className="mx-0 mb-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 flex items-center gap-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
