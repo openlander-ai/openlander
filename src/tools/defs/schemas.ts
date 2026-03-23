@@ -678,3 +678,13 @@ export const deleteBucketSchema = z.object({
 });
 
 export const getDiskUsageSchema = z.object({});
+
+export const cleanupDockerSchema = z.object({
+  level: z
+    .enum(['soft', 'standard', 'aggressive'])
+    .optional()
+    .default('standard')
+    .describe(
+      'Cleanup intensity. soft: dangling (untagged) images only — fast, minimal impact. standard: dangling images + all build cache — frees more space but next build will be slower. aggressive: standard + all unused images older than 24h — frees the most space but may remove rollback images and cached base images.',
+    ),
+});

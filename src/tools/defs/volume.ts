@@ -1,10 +1,12 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import {
   addVolumeSchema,
+  cleanupDockerSchema,
   getDiskUsageSchema,
   listVolumesSchema,
   removeVolumeSchema,
 } from './schemas.js';
+import { pruneBuildCache, pruneDanglingImages, pruneUnusedImages } from '../../pipeline/cleanup.js';
 import type { ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-volume');
@@ -308,6 +310,55 @@ export const volumeToolDefs: ToolDef[] = [
           totalSizeBytes: volumeTotalSizeBytes,
           managed: managedVolumes,
         },
+      };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'cleanup_docker',
+    description:
+      'Free Docker disk space by removing dangling images, build cache, and unused images. Host-wide operation — affects all Docker workloads, not just OpenLander projects. Use when disk is running low, Docker builds fail with storage errors, or user asks to clean up. Workflow: get_disk_usage → cleanup_docker → get_disk_usage to show reclaimed space. Three levels: "soft" removes only dangling (untagged) images. "standard" (default) also clears build cache — may slow the next build. "aggressive" additionally removes all unused images older than 24h — frees the most space but removes cached base images and possibly stored rollback images. Does NOT remove running containers, mounted volumes, or images referenced by a container.',
+    mcpDescription:
+      'Free Docker disk space by pruning dangling images, build cache, and unused images. Host-wide — affects all Docker workloads on this host. Recommended workflow: call get_disk_usage first, then cleanup_docker, then get_disk_usage again to report reclaimed space. Levels: "soft" (dangling images only), "standard" (default — also clears build cache, may slow next build), "aggressive" (also removes unused images older than 24h, may remove rollback images). Does NOT remove running containers, mounted volumes, or in-use images.',
+    inputSchema: cleanupDockerSchema,
+    execute: (args) => {
+      const level = (args['level'] as string | undefined) ?? 'standard';
+      const warnings: string[] = [];
+      let totalReclaimedMB = 0;
+
+      const dangling = pruneDanglingImages();
+      totalReclaimedMB += dangling.reclaimedMB;
+
+      let buildCache: ReturnType<typeof pruneBuildCache> | undefined;
+      if (level === 'standard' || level === 'aggressive') {
+        buildCache = pruneBuildCache();
+        totalReclaimedMB += buildCache.reclaimedMB;
+        if (buildCache.status === 'ok' && buildCache.reclaimedMB > 0) {
+          warnings.push('Build cache cleared — next build may be slower due to cache miss.');
+        }
+      }
+
+      let unusedImages: ReturnType<typeof pruneUnusedImages> | undefined;
+      if (level === 'aggressive') {
+        unusedImages = pruneUnusedImages();
+        totalReclaimedMB += unusedImages.reclaimedMB;
+        if (unusedImages.status === 'ok' && unusedImages.removed > 0) {
+          warnings.push(
+            'Unused images removed — rollback to a previous version may require re-pulling the image.',
+          );
+        }
+      }
+
+      totalReclaimedMB = Math.round(totalReclaimedMB * 100) / 100;
+      log.info({ level, totalReclaimedMB }, 'Docker cleanup completed via MCP');
+
+      return {
+        level,
+        danglingImages: dangling,
+        ...(buildCache ? { buildCache } : {}),
+        ...(unusedImages ? { unusedImages } : {}),
+        totalReclaimedMB,
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
     },
     targets: ['mcp'],

@@ -32,7 +32,14 @@ function parseRemovedCount(output: string): number {
   return deletedMatches.length + untaggedMatches.length;
 }
 
-export function pruneDanglingImages(): { removed: number; reclaimedMB: number } {
+interface PruneResult {
+  status: 'ok' | 'error';
+  removed: number;
+  reclaimedMB: number;
+  error?: string;
+}
+
+export function pruneDanglingImages(): PruneResult {
   try {
     const output = execSync('docker image prune -f', {
       encoding: 'utf8',
@@ -44,14 +51,15 @@ export function pruneDanglingImages(): { removed: number; reclaimedMB: number } 
     const reclaimedMB = parseReclaimedMB(output);
 
     log.info({ removed, reclaimedMB }, 'Pruned dangling Docker images');
-    return { removed, reclaimedMB };
+    return { status: 'ok', removed, reclaimedMB };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     log.warn({ err }, 'Failed to prune dangling Docker images');
-    return { removed: 0, reclaimedMB: 0 };
+    return { status: 'error', removed: 0, reclaimedMB: 0, error: message };
   }
 }
 
-export function pruneBuildCache(): { reclaimedMB: number } {
+export function pruneBuildCache(): PruneResult {
   try {
     const output = execSync('docker builder prune -af', {
       encoding: 'utf8',
@@ -61,14 +69,15 @@ export function pruneBuildCache(): { reclaimedMB: number } {
 
     const reclaimedMB = parseReclaimedMB(output);
     log.info({ reclaimedMB }, 'Pruned Docker build cache');
-    return { reclaimedMB };
+    return { status: 'ok', removed: 0, reclaimedMB };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     log.warn({ err }, 'Failed to prune Docker build cache');
-    return { reclaimedMB: 0 };
+    return { status: 'error', removed: 0, reclaimedMB: 0, error: message };
   }
 }
 
-export function pruneUnusedImages(): { removed: number; reclaimedMB: number } {
+export function pruneUnusedImages(): PruneResult {
   try {
     const output = execSync('docker image prune -a -f --filter "until=24h"', {
       encoding: 'utf8',
@@ -80,10 +89,11 @@ export function pruneUnusedImages(): { removed: number; reclaimedMB: number } {
     const reclaimedMB = parseReclaimedMB(output);
 
     log.info({ removed, reclaimedMB }, 'Pruned unused Docker images older than 24h');
-    return { removed, reclaimedMB };
+    return { status: 'ok', removed, reclaimedMB };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     log.warn({ err }, 'Failed to prune unused Docker images');
-    return { removed: 0, reclaimedMB: 0 };
+    return { status: 'error', removed: 0, reclaimedMB: 0, error: message };
   }
 }
 
