@@ -9,6 +9,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { createDeployStreamRoutes } from './deploy-stream-routes.js';
 import { createProjectRoutes } from './project-routes.js';
 import { createSystemRoutes } from './system-routes.js';
+import { getEnvironmentProjectHostname } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('api');
 
@@ -252,6 +253,15 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
     const allProjects = ctx.db.listProjects('running');
     for (const project of allProjects) {
+      const sslipHost = getEnvironmentProjectHostname(project.name, 'production');
+      if (sslipHost && !sslipHost.endsWith('.localhost')) {
+        routers[`sslip-${project.name}`] = {
+          rule: `Host(\`${sslipHost}\`)`,
+          entryPoints: ['web'],
+          service: `ol-${project.name}@docker`,
+        };
+      }
+
       if (
         (project.visibility === 'quick-share' || project.visibility === 'shared') &&
         project.public_url

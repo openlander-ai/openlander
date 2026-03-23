@@ -1,6 +1,10 @@
 import type { Docker } from '../pipeline/docker.js';
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import { createModuleLogger } from '../lib/logger.js';
+import { shouldRunCleanup, diskThresholdCleanup } from '../pipeline/cleanup.js';
+
+const log = createModuleLogger('health');
 
 export interface HealthMonitorOptions {
   intervalMs?: number;
@@ -26,6 +30,7 @@ const DEFAULT_OPTIONS: Required<HealthMonitorOptions> = {
 
 const INACTIVE_FAILURE_THRESHOLD = 5;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const CLEANUP_COOLDOWN_MS = 10 * 60 * 1000;
 
 export class HealthMonitor {
   private readonly docker: Docker;
@@ -35,6 +40,7 @@ export class HealthMonitor {
   private readonly status = new Map<string, HealthCheckResult>();
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private checking = false;
+  private lastCleanupAt = 0;
 
   constructor(docker: Docker, db: Database, events: EventBus, options?: HealthMonitorOptions) {
     this.docker = docker;
@@ -121,6 +127,13 @@ export class HealthMonitor {
         .filter((project) => project.assigned_port != null);
 
       await Promise.all(projects.map((project) => this.checkProject(project.id)));
+
+      const now = Date.now();
+      if (shouldRunCleanup() && now - this.lastCleanupAt >= CLEANUP_COOLDOWN_MS) {
+        this.lastCleanupAt = now;
+        log.info('Disk usage above threshold — triggering cleanup');
+        diskThresholdCleanup();
+      }
     } finally {
       this.checking = false;
     }

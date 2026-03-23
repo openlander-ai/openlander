@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getDeploymentDetail } from '@/lib/api';
@@ -22,8 +22,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
-import { parseAnsiLine } from '@/lib/ansi';
 import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
+import { StaticLogViewer } from '@/components/logs/StaticLogViewer';
 
 export function DeploymentDetail() {
   const { id, deployId } = useParams();
@@ -31,7 +31,6 @@ export function DeploymentDetail() {
   const { t } = useLanguage();
   const [deployment, setDeployment] = useState<DeployLogDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!id || !deployId) return;
@@ -47,12 +46,6 @@ export function DeploymentDetail() {
     };
     fetchDetail();
   }, [id, deployId]);
-
-  useEffect(() => {
-    if (deployment?.buildLog) {
-      logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [deployment?.buildLog]);
 
   if (loading) {
     return (
@@ -214,24 +207,8 @@ export function DeploymentDetail() {
           </div>
         )}
 
-        <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] bg-bg-terminal overflow-hidden">
-          <div className="flex items-center px-4 py-2 border-b border-border bg-bg-panel">
-            <span className="text-xs font-mono text-muted-ol">{'build_log'}</span>
-          </div>
-          <div className="flex-1 overflow-auto p-4">
-            {deployment.buildLog ? (
-              <div className="text-[13px] font-mono text-gray-300 whitespace-pre-wrap break-all">
-                {deployment.buildLog.split('\n').map((line, i) => (
-                  <div key={i} dangerouslySetInnerHTML={{ __html: parseAnsiLine(line) }} />
-                ))}
-                <div ref={logEndRef} />
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-sm font-mono text-gray-500">
-                {t('deploy.noBuildLog')}
-              </div>
-            )}
-          </div>
+        <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+          <StaticLogViewer content={deployment.buildLog} />
         </div>
       </div>
     </div>

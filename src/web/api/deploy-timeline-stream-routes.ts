@@ -7,6 +7,7 @@ import type { ProjectRow } from '../../db/types.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { postDeployCleanup } from '../../pipeline/cleanup.js';
 import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
 
 const log = createModuleLogger('api');
@@ -325,6 +326,12 @@ function registerDeployLifecycleHandlers(handlerCtx: StreamHandlerContext): Arra
           }
         } catch (err) {
           log.warn({ err }, 'Post-deploy insight generation failed');
+        }
+
+        try {
+          postDeployCleanup();
+        } catch (err) {
+          log.warn({ err }, 'Post-deploy cleanup failed');
         }
 
         emitTimelineEvent({
