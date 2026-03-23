@@ -69,7 +69,7 @@ export function SystemSettingsTab() {
             {t('settings.system.globalSecrets')}
           </h2>
         </div>
-        <p className="text-xs font-body text-secondary-ol">{t('settings.secrets.description')}</p>
+        <p className="text-xs font-body text-muted-ol">{t('settings.secrets.description')}</p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
           {secrets.length === 0 ? (
@@ -158,19 +158,19 @@ export function SystemSettingsTab() {
               icon={<Cpu className="h-4 w-4" />}
               label={'CPU'}
               value={`${typeof stats.cpu === 'number' ? stats.cpu.toFixed(0) : (stats.cpu?.usagePercent?.toFixed(0) ?? '—')}%`}
-              color="text-agent"
+              color="text-secondary-ol"
             />
             <StatCard
               icon={<MemoryStick className="h-4 w-4" />}
               label={'Memory'}
               value={formatMemory(stats.memory)}
-              color="text-warning"
+              color="text-secondary-ol"
             />
             <StatCard
               icon={<HardDrive className="h-4 w-4" />}
               label={'Disk'}
               value={formatDisk(stats.disk)}
-              color="text-success"
+              color="text-secondary-ol"
             />
           </div>
         ) : (

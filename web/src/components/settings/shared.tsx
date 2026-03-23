@@ -23,7 +23,9 @@ export function StatCard({
         {icon}
         <span className="text-xs font-body uppercase tracking-wider">{label}</span>
       </div>
-      <p className="text-2xl font-mono font-bold text-primary-ol truncate">{value}</p>
+      <p className="text-lg font-mono font-bold text-primary-ol leading-tight break-words">
+        {value}
+      </p>
     </div>
   );
 }

@@ -152,11 +152,9 @@ export function TraefikSettingsTab() {
         ) : serverStatus ? (
           <div className="space-y-4">
             {serverStatus.proxy.type === 'none' && (
-              <div className="rounded-lg border border-warning/20 bg-warning/5 p-3 flex items-start gap-3">
+              <div className="rounded-lg border-l-4 border-warning bg-warning/10 p-3 flex items-start gap-3">
                 <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
-                <p className="text-sm font-body text-warning-foreground">
-                  {t('settings.proxy.warning')}
-                </p>
+                <p className="text-sm font-body text-primary-ol">{t('settings.proxy.warning')}</p>
               </div>
             )}
 
@@ -211,7 +209,10 @@ export function TraefikSettingsTab() {
                     Connected as: {cloudflareAccountName}
                   </Badge>
                 ) : cloudflareConfigured ? (
-                  <Badge variant="outline" className="text-success border-success/30">
+                  <Badge
+                    variant="outline"
+                    className="text-success border-success/30 px-2.5 py-1 text-xs font-medium"
+                  >
                     Configured ✓
                   </Badge>
                 ) : (
@@ -432,7 +433,7 @@ export function TraefikSettingsTab() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Server className="h-4 w-4 text-agent" />
-          <h2 className="text-sm font-display font-semibold text-primary-ol">{'Server Scan'}</h2>
+          <h2 className="font-display text-lg font-semibold text-primary-ol">{'Server Scan'}</h2>
         </div>
 
         {!serverStatus ? (
