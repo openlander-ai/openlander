@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.9] - 2026-03-23
+
+### Added
+
+- **Typography system overhaul**: Migrated to Inter (body+display) + Geist Mono (code), self-hosted via fontsource. Established 14px body base, 12px minimum for accessibility. Typography CSS tokens (`--font-size-xs` through `--font-size-3xl`).
+- **Docker image cleanup system**: Automatic cleanup module (`src/pipeline/cleanup.ts`) with dangling image prune, build cache prune, and disk-threshold-triggered aggressive cleanup (80% threshold, 10-minute cooldown). Post-deploy hook prunes dangling images after each successful deploy.
+
+### Fixed
+
+- **sslip.io stale IP on network change**: Added sslip.io routes to Traefik HTTP provider endpoint (`/api/traefik/config`), so IP changes are reflected within 5 seconds via polling instead of requiring container redeploy.
+- **get_deploy_status wait=true for multiple deploys**: `wait=true` without `project_name` now blocks until ALL active deploys complete, instead of returning immediately. Prevents agents from falling back to `sleep`.
+- **Traefik killed on restart**: Orphan container cleanup now skips infrastructure containers with `openlander.role` label, preventing Traefik from being destroyed during process restart.
+
 ## [0.9.8] - 2026-03-23
 
 ### Added
