@@ -291,10 +291,10 @@ export function OverviewTab({
             {activeProject?.urls
               ?.filter((u) => u.type === 'vpn')
               .map((vpn) => (
-                <div key={vpn.ip} className="flex items-center gap-2 pl-6">
-                  <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                    VPN
-                  </span>
+                <div key={vpn.ip} className="flex items-center gap-2">
+                  <div className="h-4 w-4 shrink-0 flex items-center justify-center">
+                    <span className="text-[9px] font-mono font-medium text-purple-400">VPN</span>
+                  </div>
                   <a
                     href={vpn.url}
                     target="_blank"
