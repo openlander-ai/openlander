@@ -199,7 +199,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
         </div>
       </div>
 
-      <div ref={parentRef} className="flex-1 overflow-auto font-mono text-xs leading-5 bg-bg-app">
+      <div ref={parentRef} className="flex-1 overflow-auto font-log text-xs leading-5 bg-bg-app">
         {filteredEntries.length === 0 ? (
           <div className="flex h-full items-center justify-center p-6">
             <div className="w-full max-w-md rounded-xl border border-[hsl(var(--border))] bg-bg-panel/60 p-5 text-center shadow-sm">

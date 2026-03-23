@@ -14,7 +14,7 @@ interface ProjectDetailTabsProps {
   displayProject: ProjectWithOptionalEnvironments | null;
   allTimelineItems: TimelineItem[];
   isStreaming: boolean;
-
+  timelineDisconnected?: boolean;
   selectedEnvId?: string;
   onRedeploy: () => void;
   onStop: () => void;

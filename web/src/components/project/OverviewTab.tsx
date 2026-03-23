@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, Component } from 'react';
+import { useEffect, useState, useMemo, useRef, Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { useLanguage } from '@/i18n/context';
 import { DeployTerminalSession } from '@/components/deploy-terminal/DeployTerminalSession';
@@ -141,6 +141,19 @@ export function OverviewTab({
   const lastEvent = timelineItems.length > 0 ? timelineItems[timelineItems.length - 1] : null;
 
   const STALE_BUILD_THRESHOLD_MS = 2 * 60 * 1000;
+  const lastEventTimestampRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    if (lastEvent) {
+      lastEventTimestampRef.current = new Date(lastEvent.timestamp).getTime();
+    }
+  }, [lastEvent]);
+
+  useEffect(() => {
+    if (isBuilding) {
+      lastEventTimestampRef.current = Date.now();
+    }
+  }, [isBuilding]);
 
   useEffect(() => {
     if (!isBuilding) return;
@@ -149,9 +162,9 @@ export function OverviewTab({
   }, [isBuilding]);
 
   const isStale = useMemo(() => {
-    if (!isBuilding || !lastEvent) return false;
-    return now - new Date(lastEvent.timestamp).getTime() > STALE_BUILD_THRESHOLD_MS;
-  }, [isBuilding, lastEvent, now]);
+    if (!isBuilding) return false;
+    return now - lastEventTimestampRef.current > STALE_BUILD_THRESHOLD_MS;
+  }, [isBuilding, now]);
 
   const uptime = useMemo(() => {
     if (!isRunning || !activeProject?.updatedAt) return null;

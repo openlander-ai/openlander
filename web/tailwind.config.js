@@ -76,6 +76,7 @@ export default {
         display: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
         body: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['Geist Mono Variable', 'ui-monospace', 'monospace'],
+        log: ['JetBrains Mono Variable', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',

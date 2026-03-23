@@ -60,7 +60,7 @@ export function DeployTerminalSession({
   projectStatus,
   timelineItems,
   isTimelineStreaming,
-  streamError,
+  streamDisconnected,
   className,
 }: DeployTerminalSessionProps) {
   const { t } = useLanguage();
@@ -112,7 +112,7 @@ export function DeployTerminalSession({
           <TerminalPhaseRail phases={phases} className="hidden md:flex" />
 
           <div className="flex-1 flex flex-col min-w-0">
-            {streamError && !isTimelineStreaming && (
+            {streamDisconnected && !isTimelineStreaming && (
               <div className="mx-4 mt-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-body text-warning">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
