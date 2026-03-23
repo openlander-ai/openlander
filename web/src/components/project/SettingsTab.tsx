@@ -21,7 +21,7 @@ export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>('env');
 
   return (
-    <div className="flex flex-col md:flex-row h-full min-h-0 overflow-hidden max-w-5xl mx-auto w-full">
+    <div className="flex flex-col md:flex-row h-full min-h-0 overflow-hidden">
       {/* Left nav: horizontal on mobile, vertical on desktop */}
       <div className="shrink-0 md:w-48 border-b md:border-b-0 md:border-r border-[hsl(var(--border))] bg-bg-panel/50">
         {/* Mobile: horizontal scroll row */}
