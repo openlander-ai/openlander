@@ -4,6 +4,7 @@ import type { AppContext } from '../../app.js';
 import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
 import { loadDecryptedToken } from '../../auth/token-store.js';
 import type { OpenLanderConfig } from '../../config/index.js';
+import type { LLMConfig } from '../../llm/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
 import { createGithubSetupRoutes } from './setup/github-routes.js';
@@ -164,6 +165,62 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  });
+
+  api.post('/setup/llm/test', async (c) => {
+    const body = await c.req
+      .json<{ provider?: string; api_key?: string }>()
+      .catch((): { provider?: string; api_key?: string } => ({}));
+
+    try {
+      const config = loadConfig();
+      const provider = (body.provider || config.llm.provider) as LLMConfig['provider'];
+      const apiKey = body.api_key || config.llm.apiKey;
+
+      if (!apiKey && provider !== 'ollama') {
+        return c.json({ ok: false, error: 'No API key configured' }, 400);
+      }
+
+      const { createModel: createTestModel } = await import('../../llm/index.js');
+      const { generateText } = await import('ai');
+
+      const model = createTestModel({
+        provider,
+        apiKey,
+        model: config.llm.model,
+      });
+
+      const start = Date.now();
+      await generateText({
+        model,
+        prompt: 'Respond with exactly: ok',
+        maxOutputTokens: 5,
+      });
+      const latencyMs = Date.now() - start;
+
+      return c.json({ ok: true, latencyMs, provider, model: config.llm.model });
+    } catch (error) {
+      return c.json({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  api.delete('/setup/llm', (c) => {
+    updateConfig({
+      llm: {
+        provider: 'gemini',
+        apiKey: '',
+        authToken: '',
+        model: 'gemini-2.0-flash',
+      },
+    });
+
+    ctx.agent = null;
+    log.info('LLM configuration removed');
+
+    return c.json({ status: 'removed', message: 'LLM configuration cleared.' });
   });
 
   api.post('/setup/traefik', async (c) => {

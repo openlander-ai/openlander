@@ -81,6 +81,28 @@ export async function configureLLM(
   return res.json();
 }
 
+export async function testLLMConnection(
+  provider?: string,
+  apiKey?: string,
+): Promise<{ ok: boolean; latencyMs?: number; provider?: string; model?: string; error?: string }> {
+  const body: Record<string, string> = {};
+  if (provider) body.provider = provider;
+  if (apiKey) body.api_key = apiKey;
+
+  const res = await fetch('/api/setup/llm/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function deleteLLMConfig(): Promise<{ status: string; message: string }> {
+  const res = await fetch('/api/setup/llm', { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to remove LLM configuration');
+  return res.json();
+}
+
 export async function configureCloudflare(config: {
   apiToken: string;
   accountId: string;
