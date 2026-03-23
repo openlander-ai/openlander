@@ -383,10 +383,13 @@ export async function buildProject(
         });
       },
     );
-  } finally {
+  } catch (buildErr) {
     if (dockerBuildOutput) {
       buildLog += '--- Docker build output ---\n' + dockerBuildOutput;
     }
+    const err = buildErr instanceof Error ? buildErr : new Error(String(buildErr));
+    (err as Error & { buildLog?: string }).buildLog = buildLog;
+    throw err;
   }
 
   const buildDuration = Date.now() - buildStart;

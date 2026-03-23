@@ -56,6 +56,53 @@ export const getProjectStatsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
+export const platformHealthSchema = z.object({});
+
+export const platformEventLogSchema = z.object({
+  limit: z.number().optional(),
+  event_type: z.string().optional(),
+  since_minutes: z.number().optional(),
+});
+
+export const platformContainerAuditSchema = z.object({
+  project_name: z.string().optional(),
+});
+
+export const platformConfigSchema = z.object({
+  section: z.string().optional(),
+});
+
+export const platformLogsSchema = z.object({
+  limit: z.number().optional(),
+  level: z.string().optional(),
+  module: z.string().optional(),
+  since_minutes: z.number().optional(),
+});
+
+export const platformDockerInspectSchema = z.object({
+  container_id: z.string(),
+});
+
+export const platformDockerPsSchema = z.object({
+  all: z.boolean().optional(),
+  filter_managed: z.boolean().optional(),
+});
+
+export const platformDbInspectSchema = z.object({
+  table: z.enum([
+    'projects',
+    'environments',
+    'services',
+    'deploy_logs',
+    'timeline_events',
+    'domain_mappings',
+    'webhook_configs',
+    'deploy_configs',
+  ]),
+  project_id: z.string().optional(),
+  limit: z.number().optional(),
+});
+
 // Environment & configuration schemas
 export const setEnvVarsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),

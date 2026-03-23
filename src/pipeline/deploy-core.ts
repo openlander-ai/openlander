@@ -670,6 +670,10 @@ export class DeployPipeline {
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+      const attachedLog = (error as Error & { buildLog?: string }).buildLog;
+      if (attachedLog) {
+        buildLog = attachedLog;
+      }
       const failStep = this.detectFailStep(buildLog);
       const buildLogWithError = buildLog + `[error] ${errorMsg}\n`;
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
