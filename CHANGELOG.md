@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.15] - 2026-03-24
+
+### Added
+
+- **Runtime log snapshots**: Captures last 500 lines of container logs before redeploy, stored in deploy history. Viewable in DeploymentDetail page under "Runtime Logs" section.
+- **Docker log rotation**: All containers created by OpenLander now have `json-file` log driver with 10MB×3 rotation, preventing unbounded disk growth.
+- **`cleanup_docker` MCP tool**: Three-level Docker cleanup (soft/standard/aggressive) with per-phase status reporting and build-safety guards.
+- **Deploy terminal phase rail**: Phase indicators now update correctly during builds with pulse animation on active step.
+
+### Fixed
+
+- **Build log propagation**: Blue-green, preview, and monorepo deploy paths now preserve Docker build output on failure.
+- **Phase rail not updating**: Backend SSE events were missing `stepName` field — all deploy lifecycle events now include it.
+- **Docker cleanup during builds**: Health monitor and cleanup_docker MCP tool now skip aggressive cleanup when projects are building.
+
+### Removed
+
+- **`provision_database` tool**: Replaced by `create_service(template="postgres")` which uses Docker named volumes for data persistence. The legacy tool created containers without volumes — data was lost on container removal.
+- **`deploy_monorepo` tool**: Deprecated in favor of `orchestrate_deploy` which supports dependency ordering and atomic rollback.
+- **`/auth/pkce.ts`**: Unused PKCE utilities (CLI has its own implementation).
+
 ## [0.9.14] - 2026-03-23
 
 ### Added

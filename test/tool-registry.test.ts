@@ -36,7 +36,7 @@ const EXPECTED_TOOL_NAMES = [
   'get_deploy_status',
   'get_deploy_history',
   'scan_dockerfiles',
-  'deploy_monorepo',
+
   'orchestrate_deploy',
   'list_github_repos',
   'search_github_repos',

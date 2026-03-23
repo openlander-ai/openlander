@@ -6,7 +6,6 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import type { ToolDef } from './types.js';
 import {
-  deployMonorepoSchema,
   listGithubReposSchema,
   scanDockerfilesSchema,
   scanProjectSchema,
@@ -137,36 +136,6 @@ export const gitToolDefs: ToolDef[] = [
       };
     },
     targets: ['agent'],
-  },
-  {
-    name: 'deploy_monorepo',
-    description:
-      '[DEPRECATED] Use orchestrate_deploy instead. This tool exists for backward compatibility. Deploys a monorepo with multiple services in the background. Returns immediately with { parentProjectId, parentName, status: "building" } while all services build in parallel. Use get_deploy_status to check progress.',
-    mcpDescription:
-      '[DEPRECATED] Use orchestrate_deploy instead. Legacy monorepo deploy entrypoint.',
-    inputSchema: deployMonorepoSchema,
-    execute: (args, { appCtx }) => {
-      const raw = args['dockerfiles'] as string | string[];
-      const dockerfiles = Array.isArray(raw) ? raw : (JSON.parse(raw) as string[]);
-      const result = appCtx.pipeline.startMonorepoDeploy({
-        repoUrl: args['repo_url'] as string,
-        clonePath: args['clone_path'] as string,
-        commitSha: args['commit_sha'] as string,
-        dockerfiles,
-        branch: (args['branch'] as string | undefined) ?? undefined,
-      });
-      return Promise.resolve({
-        ...result,
-        hint: 'Use get_deploy_status to check progress.',
-        _agent_guidance: {
-          deprecated: true,
-          next_steps: [
-            'DEPRECATED: Use orchestrate_deploy instead for dependency-ordered deployment with atomic rollback.',
-            'orchestrate_deploy handles service ordering, health checks, and automatic rollback on failure.',
-          ],
-        },
-      });
-    },
   },
   {
     name: 'list_github_repos',

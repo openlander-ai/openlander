@@ -183,18 +183,6 @@ export const scanDockerfilesSchema = z.object({
   branch: z.string().optional().describe('Branch to scan'),
 });
 
-export const deployMonorepoSchema = z.object({
-  repo_url: z.string().min(1).describe('Git repository URL'),
-  clone_path: z.string().min(1).describe('Path where repo is cloned'),
-  commit_sha: z.string().min(1).describe('Commit SHA'),
-  dockerfiles: z
-    .union([z.array(z.string()), z.string().min(1)])
-    .describe(
-      'Dockerfile paths from scan_dockerfiles — array or JSON string, e.g. ["frontend/Dockerfile", "backend/Dockerfile"]',
-    ),
-  branch: z.string().optional().describe('Branch'),
-});
-
 export const orchestrateDeploySchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),
   branch: z.string().optional().describe('Branch'),

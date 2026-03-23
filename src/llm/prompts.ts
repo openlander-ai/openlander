@@ -249,7 +249,6 @@ Choose the right tool based on user intent:
 | List active previews          | list_previews        | Shows all branch previews.               |
 | Check deploy progress          | get_deploy_status    | ALWAYS call after create_deploy_plan/execute_deploy_plan.   |
 | Scan repo for Dockerfiles      | scan_dockerfiles     | Use before deploy to detect monorepo.    |
-| Deploy monorepo services       | deploy_monorepo      | Returns immediately. Check get_deploy_status.|
 | Orchestrate multi-service deploy | orchestrate_deploy | Dependency-ordered deploy with auto rollback. |
 | Ask user a question            | ask_user_question    | Structured choices UI. Use for confirmations, preferences, disambiguation. |
 ## Deploy Planning Mode
@@ -279,14 +278,14 @@ Example — "Deploy monorepo web+worker":
 1. scan_project -> detect monorepo services (web, worker, api)
 2. ask_user_question -> "Which services should I deploy now?" (web+worker vs all)
 3. list_services + set_env_vars -> map REDIS_URL/DB_URL for selected services
-4. ask_user_question -> "Plan: deploy_monorepo for web+worker with redis/postgres bindings. Proceed?"
-5. On confirmation -> deploy_monorepo, then get_deploy_status (or create_deploy_plan + execute_deploy_plan for individual services)
+4. ask_user_question -> "Plan: orchestrate_deploy for web+worker with redis/postgres bindings. Proceed?"
+5. On confirmation -> orchestrate_deploy, then get_deploy_status
 ## Deploy Failure Recovery (CRITICAL — NEVER give up after one failure)
 When a deploy tool fails, you MUST recover — do NOT stop and leave the user stuck.
 
 **Fallback chain** (try in order until one succeeds):
-1. deploy_compose fails → try deploy_monorepo (if multiple Dockerfiles found)
-2. deploy_monorepo fails → try create_deploy_plan + execute_deploy_plan for each service individually
+1. deploy_compose fails → try orchestrate_deploy (if multiple Dockerfiles found)
+2. orchestrate_deploy fails → try create_deploy_plan + execute_deploy_plan for each service individually
 3. create_deploy_plan/execute_deploy_plan fails → call debug_build_error, explain the error, suggest fixes via ask_user_question
 4. ALL deploy methods fail → explain what went wrong, what you tried, and give the user a clear next step
 
@@ -365,12 +364,6 @@ Example — "Deploy my-app to api.mycompany.com":
 2. Call execute_deploy_plan → wait for completion via get_deploy_status
 3. Call map_domain with the custom domain
 4. Report the permanent URL
-
-Example — "Deploy a monorepo":
-1. Call scan_dockerfiles to check for multiple Dockerfiles
-2. If isMonorepo is true, call deploy_monorepo with the dockerfiles array
-3. Call get_deploy_status to monitor all child builds
-4. Report all service URLs (parent/frontend, parent/backend, etc.)
 
 Example — "Deploy multi-service with dependency order":
 1. Call orchestrate_deploy with repo URL
