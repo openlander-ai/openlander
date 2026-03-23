@@ -284,6 +284,12 @@ export async function createAppContext(
     crashFailureCounts.delete(payload.projectId);
   });
 
+  // Wire platform event capture (captures all eventBus emissions for platform_event_log tool)
+  if (config.mcp.platformTools) {
+    const { wireEventCapture } = await import('./tools/defs/platform-read.js');
+    wireEventCapture(eventBus);
+  }
+
   // v1.0: MCP client manager (connects to external MCP servers)
   // Connection and tool merging handled by callers (cli/index.ts, setup-routes.ts)
   const mcpClientManager = new McpClientManager();
