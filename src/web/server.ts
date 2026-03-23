@@ -269,7 +269,7 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   const server = createAdaptorServer(appWithRoutes);
 
   server.listen(options.port, options.host, () => {
-    log.info({ port: options.port }, 'Server listening');
+    log.info({ version: VERSION, port: options.port }, `OpenLander v${VERSION} listening`);
   });
   injectWebSocket(server);
 
