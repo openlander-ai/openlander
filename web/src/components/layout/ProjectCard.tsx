@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { stopProject, deleteProject, exposeProject, unexposeProject } from '@/lib/api';
-import { Square, Trash2, Globe, Globe2, ExternalLink, Loader2 } from 'lucide-react';
+import { Square, Trash2, Globe, Globe2, ExternalLink, Loader2, Container } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ProjectCardProps {
@@ -81,9 +81,14 @@ export function ProjectCard({ project, onUpdate }: ProjectCardProps) {
     <Card className="mb-4 overflow-hidden">
       <CardHeader className="p-4 pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-bold truncate" title={project.name}>
-            {project.name}
-          </CardTitle>
+          <div className="flex items-center gap-2 min-w-0">
+            {project.source === 'image' && (
+              <Container className="w-4 h-4 flex-shrink-0 text-blue-500" />
+            )}
+            <CardTitle className="text-base font-bold truncate" title={project.name}>
+              {project.name}
+            </CardTitle>
+          </div>
           <Badge
             variant="outline"
             className={cn(
@@ -95,8 +100,13 @@ export function ProjectCard({ project, onUpdate }: ProjectCardProps) {
             {project.status}
           </Badge>
         </div>
-        <div className="text-xs text-muted-foreground truncate" title={project.repoUrl}>
-          {project.repoUrl.replace('https://', '').replace('http://', '')}
+        <div
+          className="text-xs text-muted-foreground truncate"
+          title={project.source === 'image' ? project.imageUrl : project.repoUrl}
+        >
+          {project.source === 'image' && project.imageUrl
+            ? project.imageUrl.replace('https://', '').replace('http://', '')
+            : project.repoUrl.replace('https://', '').replace('http://', '')}
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-2 space-y-2">

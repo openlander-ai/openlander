@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { EnvVarsTable } from '@/components/config/EnvVarsTable';
 import { DomainsPanel } from '@/components/config/DomainsPanel';
 import { WebhookPanel } from '@/components/config/WebhookPanel';
+import { DeploymentSourcePanel } from '@/components/project/DeploymentSourcePanel';
 import { cn } from '@/lib/utils';
 
-type SettingsSection = 'env' | 'domains' | 'webhooks';
+type SettingsSection = 'source' | 'env' | 'domains' | 'webhooks';
 
 interface SettingsTabProps {
   projectId: string;
@@ -12,13 +13,14 @@ interface SettingsTabProps {
 }
 
 const NAV_ITEMS: { id: SettingsSection; label: string }[] = [
+  { id: 'source', label: 'Deployment Source' },
   { id: 'env', label: 'Environment Variables' },
   { id: 'domains', label: 'Domains' },
   { id: 'webhooks', label: 'Webhooks' },
 ];
 
 export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('env');
+  const [activeSection, setActiveSection] = useState<SettingsSection>('source');
 
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0 overflow-hidden">
@@ -63,6 +65,7 @@ export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
 
       {/* Right pane: settings form */}
       <div className="flex-1 min-w-0 overflow-auto p-4">
+        {activeSection === 'source' && <DeploymentSourcePanel projectId={projectId} />}
         {activeSection === 'env' && <EnvVarsTable projectId={projectId} />}
         {activeSection === 'domains' && (
           <DomainsPanel projectId={projectId} projectStatus={projectStatus} />

@@ -156,6 +156,28 @@ export async function getProject(id: string): Promise<ProjectWithOptionalEnviron
   };
 }
 
+export async function updateProject(
+  id: string,
+  data: { imageUrl?: string; imageCmd?: string; containerPort?: number },
+): Promise<ProjectWithOptionalEnvironments> {
+  const res = await fetch(`/api/projects/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      image_url: data.imageUrl,
+      image_cmd: data.imageCmd,
+      container_port: data.containerPort,
+    }),
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to update project');
+  }
+
+  return res.json();
+}
+
 export async function createEnvironment(
   projectId: string,
   type: Environment['type'],

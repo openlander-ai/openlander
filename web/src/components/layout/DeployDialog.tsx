@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select';
 import { deployProject } from '@/lib/api';
 import { useEnvScanFlow } from '@/hooks/use-env-scan-flow';
+import { cn } from '@/lib/utils';
 
 interface DeployDialogProps {
   open: boolean;
@@ -30,7 +31,11 @@ interface DeployDialogProps {
 type Step = 'form' | 'scanning' | 'env-review' | 'deploying';
 
 export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDialogProps) {
+  const [source, setSource] = useState<'git' | 'image'>('git');
   const [repoUrl, setRepoUrl] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [port, setPort] = useState('');
+  const [imageCmd, setImageCmd] = useState('');
   const [environment, setEnvironment] = useState<string>('production');
   const [branch, setBranch] = useState('main');
   const [name, setName] = useState('');
@@ -59,7 +64,11 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
   } = useEnvScanFlow();
 
   const reset = () => {
+    setSource('git');
     setRepoUrl('');
+    setImageUrl('');
+    setPort('');
+    setImageCmd('');
     setEnvironment('production');
     setBranch('main');
     setName('');
@@ -79,15 +88,21 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
 
   const handleScan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!repoUrl) return;
-    setError(null);
-    setStep('scanning');
+    if (source === 'git') {
+      if (!repoUrl) return;
+      setError(null);
+      setStep('scanning');
 
-    const hasVars = await startScan(repoUrl, branch || undefined);
-    if (!hasVars) {
-      await doDeploy({});
+      const hasVars = await startScan(repoUrl, branch || undefined);
+      if (!hasVars) {
+        await doDeploy({});
+      } else {
+        setStep('env-review');
+      }
     } else {
-      setStep('env-review');
+      if (!imageUrl) return;
+      setError(null);
+      await doDeploy({});
     }
   };
 
@@ -123,7 +138,28 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
     }
 
     try {
-      await deployProject(repoUrl, branch || undefined, name || undefined, filtered, environment);
+      if (source === 'git') {
+        await deployProject(
+          repoUrl,
+          branch || undefined,
+          name || undefined,
+          filtered,
+          environment,
+          'git',
+        );
+      } else {
+        await deployProject(
+          undefined,
+          undefined,
+          name || undefined,
+          filtered,
+          environment,
+          'image',
+          imageUrl,
+          imageCmd || undefined,
+          port ? parseInt(port, 10) : undefined,
+        );
+      }
       reset();
       onDeploySuccess();
       onOpenChange(false);
@@ -132,7 +168,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
       const msg = err instanceof Error ? err.message : t('deploy.dialog.failed');
       setError(msg);
       toast.error('Deploy failed: ' + msg);
-      if (envVars.length > 0) {
+      if (source === 'git' && envVars.length > 0) {
         setStep('env-review');
       } else {
         setStep('form');
@@ -159,66 +195,184 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
         {/* Step: form */}
         {step === 'form' && (
           <form onSubmit={handleScan} className="space-y-4 py-2">
-            <div className="space-y-2">
-              <label
-                htmlFor="repo-url"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            <div className="flex p-1 bg-muted rounded-md mb-4">
+              <button
+                type="button"
+                className={cn(
+                  'flex-1 text-sm font-medium py-1.5 rounded-sm transition-all',
+                  source === 'git'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                onClick={() => setSource('git')}
               >
-                {'Repository URL'}
-              </label>
-              <Input
-                id="repo-url"
-                placeholder="github.com/user/repo"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="environment"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                Git Repository
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'flex-1 text-sm font-medium py-1.5 rounded-sm transition-all',
+                  source === 'image'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                onClick={() => setSource('image')}
               >
-                {'Environment'}
-              </label>
-              <Select value={environment} onValueChange={handleEnvironmentChange}>
-                <SelectTrigger id="environment">
-                  <SelectValue placeholder="Select environment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="production">Production</SelectItem>
-                  <SelectItem value="development">Development</SelectItem>
-                </SelectContent>
-              </Select>
+                Docker Image
+              </button>
             </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="branch"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {'Branch (Optional)'}
-              </label>
-              <Input
-                id="branch"
-                placeholder="main"
-                value={branch}
-                onChange={(e) => setBranch(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label
-                htmlFor="name"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {t('deploy.dialog.projectName')}
-              </label>
-              <Input
-                id="name"
-                placeholder={t('deploy.dialog.autoDetected')}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
+
+            {source === 'git' ? (
+              <>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="repo-url"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {'Repository URL'}
+                  </label>
+                  <Input
+                    id="repo-url"
+                    placeholder="github.com/user/repo"
+                    value={repoUrl}
+                    onChange={(e) => setRepoUrl(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="environment"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {'Environment'}
+                  </label>
+                  <Select value={environment} onValueChange={handleEnvironmentChange}>
+                    <SelectTrigger id="environment">
+                      <SelectValue placeholder="Select environment" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="production">Production</SelectItem>
+                      <SelectItem value="development">Development</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="branch"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {'Branch (Optional)'}
+                  </label>
+                  <Input
+                    id="branch"
+                    placeholder="main"
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="name"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {t('deploy.dialog.projectName')}
+                  </label>
+                  <Input
+                    id="name"
+                    placeholder={t('deploy.dialog.autoDetected')}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="image-url"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {'Docker Image'}
+                  </label>
+                  <Input
+                    id="image-url"
+                    placeholder="e.g., nginx:latest"
+                    value={imageUrl}
+                    onChange={(e) => {
+                      setImageUrl(e.target.value);
+                      if (!name && e.target.value) {
+                        const parts = e.target.value.split('/');
+                        const lastPart = parts[parts.length - 1].split(':')[0];
+                        if (lastPart) setName(lastPart);
+                      }
+                    }}
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="port"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {'Port (Optional)'}
+                    </label>
+                    <Input
+                      id="port"
+                      type="number"
+                      placeholder="80"
+                      value={port}
+                      onChange={(e) => setPort(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="environment-image"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {'Environment'}
+                    </label>
+                    <Select value={environment} onValueChange={handleEnvironmentChange}>
+                      <SelectTrigger id="environment-image">
+                        <SelectValue placeholder="Select environment" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="production">Production</SelectItem>
+                        <SelectItem value="development">Development</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="image-cmd"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {'Command (Optional)'}
+                  </label>
+                  <Input
+                    id="image-cmd"
+                    placeholder="e.g., --model-id BAAI/bge-m3"
+                    value={imageCmd}
+                    onChange={(e) => setImageCmd(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="name-image"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    {t('deploy.dialog.projectName')}
+                  </label>
+                  <Input
+                    id="name-image"
+                    placeholder={t('deploy.dialog.autoDetected')}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
             {error && <div className="text-sm text-red-500">{error}</div>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => handleClose(false)}>
