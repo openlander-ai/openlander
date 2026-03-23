@@ -121,7 +121,7 @@ export function OverviewTab({
 }: OverviewTabProps) {
   const { t } = useLanguage();
   const [latestDeploy, setLatestDeploy] = useState<DeployLogSummary | null>(null);
-  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [pipelineOpen, setPipelineOpen] = useState(true);
   const [recentDeploys, setRecentDeploys] = useState<DeployLogSummary[]>([]);
   const [connectedServices, setConnectedServices] = useState<ConnectedService[]>([]);
   const [envVarCount, setEnvVarCount] = useState<number>(0);
