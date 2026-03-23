@@ -18,6 +18,7 @@ interface UseTimelineReturn {
   isStreaming: boolean;
   isComplete: boolean;
   error: string | null;
+  disconnected: boolean;
   submitAnswer: (questionId: string, answers: QuestionAnswerPayload[]) => Promise<void>;
   skipQuestion: (questionId: string) => Promise<void>;
   executeAction: (projectId: string, action: string) => Promise<void>;
@@ -37,6 +38,7 @@ export function useTimeline({
   const [isStreaming, setIsStreaming] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [disconnected, setDisconnected] = useState(false);
   const retriesRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const seenEventKeysRef = useRef<Set<string>>(new Set());
@@ -80,6 +82,7 @@ export function useTimeline({
 
     setIsStreaming(true);
     setError(null);
+    setDisconnected(false);
 
     try {
       const response = await fetch(`/api/projects/${projectId}/build/stream`, {
@@ -135,6 +138,7 @@ export function useTimeline({
 
       const message = err instanceof Error ? err.message : 'Stream failed';
       setError(message);
+      setDisconnected(true);
       setIsStreaming(false);
 
       // Auto-retry on disconnect
@@ -261,5 +265,14 @@ export function useTimeline({
     [projectId],
   );
 
-  return { items, isStreaming, isComplete, error, submitAnswer, skipQuestion, executeAction };
+  return {
+    items,
+    isStreaming,
+    isComplete,
+    error,
+    disconnected,
+    submitAnswer,
+    skipQuestion,
+    executeAction,
+  };
 }

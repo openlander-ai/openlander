@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.10] - 2026-03-23
+
+### Fixed
+
+- **Deploy terminal readability**: Bumped muted color (#555→#6b6b6b), build log uses secondary (#888) for WCAG AA contrast, timestamp opacity 50%→70%.
+- **Log error/warn underline**: Border color now only applies to left indicator, not bottom underline.
+- **Container name truncation**: Increased max-width from 200px to 300px in Project Info.
+- **Deploy time wrapping**: Fixed `w-16` causing "58m ago" line break in both Overview and Deployments list.
+- **xterm terminal font**: Unified to Geist Mono via terminalTokens instead of hardcoded system monospace.
+- **no_cache timeout guidance**: redeploy/restart responses now advise `timeout=600` for full rebuilds.
+
 ## [0.9.9] - 2026-03-23
 
 ### Added

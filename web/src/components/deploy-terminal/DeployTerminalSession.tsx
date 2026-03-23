@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, XCircle, Square } from 'lucide-react';
+import { CheckCircle2, XCircle, Square, AlertTriangle } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/time';
+import { useLanguage } from '@/i18n/context';
 
 import type { TimelineItem } from '@/lib/event-types';
 
@@ -18,6 +19,7 @@ export interface DeployTerminalSessionProps {
   projectStatus?: string;
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
+  streamDisconnected?: boolean;
   className?: string;
 }
 
@@ -58,8 +60,10 @@ export function DeployTerminalSession({
   projectStatus,
   timelineItems,
   isTimelineStreaming,
+  streamError,
   className,
 }: DeployTerminalSessionProps) {
+  const { t } = useLanguage();
   const groupedItems = useMemo(() => groupLogs(timelineItems), [timelineItems]);
 
   // Derive phases from timeline items
@@ -108,6 +112,14 @@ export function DeployTerminalSession({
           <TerminalPhaseRail phases={phases} className="hidden md:flex" />
 
           <div className="flex-1 flex flex-col min-w-0">
+            {streamError && !isTimelineStreaming && (
+              <div className="mx-4 mt-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-body text-warning">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{t('logs.streamDisconnected')}</span>
+                </div>
+              </div>
+            )}
             <div className="flex-1 min-h-0 relative">
               <TerminalScrollback>
                 <div className="p-4 flex flex-col gap-1">

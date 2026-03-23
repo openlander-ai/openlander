@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
+import { useLanguage } from '@/i18n/context';
 import { DeployTerminalSession } from '@/components/deploy-terminal/DeployTerminalSession';
 import type { TimelineItem } from '@/lib/event-types';
 import {
@@ -17,6 +18,7 @@ import {
   ArrowRight,
   Database,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Clock,
   Activity,
@@ -95,6 +97,7 @@ interface OverviewTabProps {
   // Timeline props
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
+  timelineDisconnected?: boolean;
   onOpenLogs: () => void;
   onOpenDeployments: () => void;
   onOpenSettings: () => void;
@@ -111,16 +114,19 @@ export function OverviewTab({
   displayProject,
   timelineItems,
   isTimelineStreaming,
+  timelineDisconnected,
   onOpenLogs,
   onOpenDeployments,
   onOpenSettings,
 }: OverviewTabProps) {
+  const { t } = useLanguage();
   const [latestDeploy, setLatestDeploy] = useState<DeployLogSummary | null>(null);
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [recentDeploys, setRecentDeploys] = useState<DeployLogSummary[]>([]);
   const [connectedServices, setConnectedServices] = useState<ConnectedService[]>([]);
   const [envVarCount, setEnvVarCount] = useState<number>(0);
   const [errorEntries, setErrorEntries] = useState<LogEntry[]>([]);
+  const [now, setNow] = useState(Date.now());
 
   const activeProject = displayProject;
   const isBuilding = projectStatus === 'building' || isTimelineStreaming;
@@ -133,6 +139,19 @@ export function OverviewTab({
     activeProject?.previousImageTag;
 
   const lastEvent = timelineItems.length > 0 ? timelineItems[timelineItems.length - 1] : null;
+
+  const STALE_BUILD_THRESHOLD_MS = 2 * 60 * 1000;
+
+  useEffect(() => {
+    if (!isBuilding) return;
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [isBuilding]);
+
+  const isStale = useMemo(() => {
+    if (!isBuilding || !lastEvent) return false;
+    return now - new Date(lastEvent.timestamp).getTime() > STALE_BUILD_THRESHOLD_MS;
+  }, [isBuilding, lastEvent, now]);
 
   const uptime = useMemo(() => {
     if (!isRunning || !activeProject?.updatedAt) return null;
@@ -325,6 +344,14 @@ export function OverviewTab({
           </button>
           {pipelineOpen && (
             <div className="rounded-lg border border-border bg-bg-terminal overflow-hidden mb-4 min-h-[350px]">
+              {isStale && (
+                <div className="mx-0 mb-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 flex items-center gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+                  <span className="text-xs font-body text-warning">
+                    {t('logs.staleBuildWarning')}
+                  </span>
+                </div>
+              )}
               <LocalErrorBoundary>
                 <DeployTerminalSession
                   projectName={activeProject?.name || projectId}
@@ -332,6 +359,7 @@ export function OverviewTab({
                   projectStatus={projectStatus}
                   timelineItems={timelineItems}
                   isTimelineStreaming={isTimelineStreaming}
+                  streamDisconnected={timelineDisconnected}
                 />
               </LocalErrorBoundary>
             </div>

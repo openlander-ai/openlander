@@ -80,10 +80,59 @@ export interface AppContext {
   planEngine: PlanEngine;
 }
 
+/** Reset projects and environments stuck in 'building' status from a previous server run. */
+async function cleanupStaleBuilds(db: Database, docker: Docker): Promise<void> {
+  const staleProjects = db.listProjects('building');
+  if (staleProjects.length === 0) return;
+
+  log.info({ count: staleProjects.length }, 'Found stale building projects — cleaning up');
+
+  let runningContainerIds: Set<string>;
+  try {
+    const containers = await docker.listManagedContainers();
+    runningContainerIds = new Set(
+      containers.filter((c) => c.status === 'running').map((c) => c.id),
+    );
+  } catch (err) {
+    log.warn({ err }, 'Docker unreachable during stale build cleanup — deferring reconciliation');
+    return;
+  }
+
+  for (const project of staleProjects) {
+    if (project.status !== 'building') continue;
+    const isContainerRunning =
+      project.container_id != null && runningContainerIds.has(project.container_id);
+    const newStatus = isContainerRunning ? 'running' : 'stopped';
+    db.updateProject(project.id, { status: newStatus });
+    log.info(
+      { projectId: project.id, name: project.name, from: 'building', to: newStatus },
+      'Stale build status reset',
+    );
+
+    const envs = db.getEnvironmentsByProject(project.id);
+    for (const env of envs) {
+      if (env.status !== 'building') continue;
+      const envContainerRunning =
+        env.container_id != null && runningContainerIds.has(env.container_id);
+      const envNewStatus = envContainerRunning ? 'running' : 'stopped';
+      db.updateEnvironment(env.id, { status: envNewStatus });
+      log.info(
+        { envId: env.id, type: env.type, from: 'building', to: envNewStatus },
+        'Stale environment status reset',
+      );
+    }
+  }
+}
+
 /** Create the application context from config. */
-export function createAppContext(config: OpenLanderConfig, dbPath: string): AppContext {
+export async function createAppContext(
+  config: OpenLanderConfig,
+  dbPath: string,
+): Promise<AppContext> {
   const db = new Database(dbPath);
   const docker = new Docker(config.docker.socketPath || undefined, config.docker.networkName);
+
+  await cleanupStaleBuilds(db, docker);
   const jobManager = new JobManager();
   const env = new EnvManager(db);
   const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager, env);

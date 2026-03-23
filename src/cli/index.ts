@@ -38,7 +38,7 @@ program
     config.server.host = options.host;
 
     const { createAppContext } = await import('../app.js');
-    const ctx = createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDbPath());
 
     // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
@@ -112,7 +112,7 @@ program
     const config = loadConfig();
 
     const { createAppContext } = await import('../app.js');
-    const ctx = createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDbPath());
 
     // Register tools with agent (including external MCP tools)
     if (ctx.agent) {
@@ -240,7 +240,7 @@ program
     const config = loadConfig();
 
     const { createAppContext } = await import('../app.js');
-    const ctx = createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDbPath());
 
     if (ctx.agent) {
       const { createTools } = await import('../tools/index.js');
@@ -405,7 +405,7 @@ program
     const config = loadConfig();
 
     const { createAppContext } = await import('../app.js');
-    const ctx = createAppContext(config, getDbPath());
+    const ctx = await createAppContext(config, getDbPath());
 
     if (ctx.agent) {
       const { createTools } = await import('../tools/index.js');

@@ -245,6 +245,9 @@ export const translations = {
     getStarted: 'Click "Add" or "Paste .env" to get started.',
   },
   logs: {
+    streamDisconnected: 'Build stream disconnected. The server may have restarted.',
+    staleBuildWarning:
+      'No build activity for over 2 minutes. The build may be stuck or the server may have restarted.',
     noLogs: 'No logs available',
     noMatching: 'No matching lines',
     loadingTitle: 'Connecting to live logs',

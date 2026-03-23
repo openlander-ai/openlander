@@ -203,6 +203,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.9.6**  | UI Polish                    | Done   | Agent Chat iMessage-style bubbles, code block syntax highlighting + copy button, session Context migration, Deployments compact Vercel-style rows, AI deploy border fix       |
 | **v0.9.7**  | Backend Refactor & MCP       | Done   | Service-manager adapter pattern (-42%), setup-routes domain split (-71%), project-routes dedup (-9%), MCP service external access (LAN/VPN IPs), test suite green (1462 pass) |
 | **v0.9.9**  | Typography & Infrastructure  | Done   | Inter+Geist Mono self-hosted fonts, Docker image auto-cleanup, sslip.io dynamic IP, multi-deploy wait, Traefik restart survival                                               |
+| **v0.9.10** | UI Polish & Agent DX         | Done   | Deploy terminal readability, log error underline fix, container name truncation, time wrapping, xterm font consistency, no_cache timeout guidance                             |
 | **v1.0.0**  | Stable Release               | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                               |
 
 ## MCP Integration (AI Coding Agents)

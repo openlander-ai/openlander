@@ -107,7 +107,11 @@ export function ProjectDetail() {
     return () => clearInterval(interval);
   }, [fetchProject]);
 
-  const { items, isStreaming } = useTimeline({
+  const {
+    items,
+    isStreaming,
+    disconnected: timelineDisconnected,
+  } = useTimeline({
     projectId: id,
     enabled: !!id,
     runKey: timelineRunKey,
@@ -382,6 +386,7 @@ export function ProjectDetail() {
           displayProject={displayProject}
           allTimelineItems={allTimelineItems}
           isStreaming={isStreaming}
+          timelineDisconnected={timelineDisconnected}
           selectedEnvId={selectedEnv?.id}
           onRedeploy={handleRedeploy}
           onStop={handleStop}

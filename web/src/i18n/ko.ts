@@ -246,6 +246,9 @@ export const translations = {
     getStarted: '시작하려면 "추가" 또는 ".env 붙여넣기"를 클릭하세요.',
   },
   logs: {
+    streamDisconnected: '빌드 스트림 연결이 끊어졌습니다. 서버가 재시작되었을 수 있습니다.',
+    staleBuildWarning:
+      '2분 이상 빌드 활동이 없습니다. 빌드가 멈췄거나 서버가 재시작되었을 수 있습니다.',
     noLogs: '사용 가능한 로그가 없습니다',
     noMatching: '일치하는 줄이 없습니다',
     loadingTitle: '실시간 로그에 연결 중',

@@ -14,6 +14,7 @@ interface ProjectDetailTabsProps {
   displayProject: ProjectWithOptionalEnvironments | null;
   allTimelineItems: TimelineItem[];
   isStreaming: boolean;
+
   selectedEnvId?: string;
   onRedeploy: () => void;
   onStop: () => void;
@@ -27,6 +28,7 @@ export function ProjectDetailTabs({
   displayProject,
   allTimelineItems,
   isStreaming,
+
   selectedEnvId,
   onRedeploy,
   onStop,
