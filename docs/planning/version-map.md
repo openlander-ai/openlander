@@ -11,7 +11,7 @@
 v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v0.9.7 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v0.9.7 ✅ ── v0.9.8 ✅ ── v0.9.9 ✅ ── v0.9.10 ✅ ── v0.9.11 ✅ ── v0.9.12 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v0.9.7 ✅ ── v0.9.8 ✅ ── v0.9.9 ✅ ── v0.9.10 ✅ ── v0.9.11 ✅ ── v0.9.12 ✅ ── v0.9.13 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -1489,3 +1489,22 @@ AI: bugs.md → 해결됨 + gh issue close
 - `src/tools/defs/deploy.ts` — get_deploy_status 멀티 프로젝트 대기 로직
 - `src/pipeline/deploy-core.ts` — orphan cleanup role 라벨 스킵
 - `src/pipeline/docker.ts` — ContainerInfo에 labels 필드 추가
+
+---
+
+## v0.9.13 — Platform Debug/Admin Tools (2026-03-23) ✅
+
+| 항목                       | 내용                                                                                                               | 상태 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------ | ---- |
+| Platform debug/admin tools | 11개 `platform_*` MCP 도구 (Tier 1: read-only, Tier 2: debug, Tier 3: corrective), config.mcp.platformTools 플래그 | ✅   |
+| Generic RingBuffer         | 메모리 순환 버퍼 (`src/lib/ring-buffer.ts`), 타임스탐프 래핑, 시간 필터링 조회                                     | ✅   |
+| EventBus capture hook      | 모든 EventBus 이벤트 자동 캡처, `platform_event_log` 도구 지원                                                     | ✅   |
+| Pino log ring buffer       | 프로세스 로그 메모리 캡처 (custom Writable stream), `platform_logs` 도구 지원                                      | ✅   |
+
+**구현 내역**:
+
+- `src/lib/ring-buffer.ts` — 신규: 제네릭 순환 버퍼 (push, getAll, getFiltered)
+- `src/tools/registry.ts` — 11개 platform\_\* 도구 추가 (health, event_log, container_audit, config, logs, docker_inspect, docker_ps, db_inspect, cleanup_orphans, reconcile, force_remove)
+- `src/events/index.ts` — EventBus 캡처 훅 통합
+- `src/monitor/pino-ring-buffer.ts` — 신규: Pino custom Writable stream
+- `src/config/index.ts` — mcp.platformTools 플래그 추가

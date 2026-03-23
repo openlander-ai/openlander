@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.13] - 2026-03-23
+
+### Added
+
+- **Platform debug/admin MCP tools**: 11 new `platform_*` tools for diagnosing OpenLander internal state, gated behind `config.mcp.platformTools` flag (default: false).
+  - **Tier 1 (read-only)**: `platform_health` (process health summary), `platform_event_log` (recent EventBus emissions), `platform_container_audit` (Docker vs DB mismatch detection), `platform_config` (redacted config viewer)
+  - **Tier 2 (debug)**: `platform_logs` (OpenLander process logs), `platform_docker_inspect` (raw Docker inspect), `platform_docker_ps` (full Docker container listing), `platform_db_inspect` (structured DB table query)
+  - **Tier 3 (corrective)**: `platform_cleanup_orphans` (orphan container cleanup), `platform_reconcile` (DB↔Docker state sync), `platform_force_remove` (force container removal)
+- **Generic RingBuffer**: In-memory circular buffer (`src/lib/ring-buffer.ts`) with timestamp wrapping and time-filtered retrieval.
+- **EventBus capture hook**: All EventBus emissions automatically captured for `platform_event_log` without per-event registration.
+- **Pino log ring buffer**: Process logs captured in-memory via custom Writable stream for `platform_logs` tool.
+
 ## [0.9.12] - 2026-03-23
 
 ### Added
