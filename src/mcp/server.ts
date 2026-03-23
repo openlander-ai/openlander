@@ -148,6 +148,13 @@ Common failure patterns:
 - "port already in use" → Another container on the same port. Use force=true or stop the conflicting project.
 - "health check failed" → App not responding on expected port. Check get_logs for startup errors.
 
+## Network Access
+
+Deploy responses include URLs for all detected network interfaces (LAN and VPN).
+- If VPN IPs (Tailscale, ZeroTier, WireGuard) are detected, prefer VPN URLs for verification — they work from both local and remote networks.
+- LAN URLs (192.168.x.x) only work within the same local network.
+- When verifying a deploy, use the VPN URL if available; fall back to LAN URL only if no VPN is detected.
+
 ## Typical Workflows
 
 ### First deploy with database
