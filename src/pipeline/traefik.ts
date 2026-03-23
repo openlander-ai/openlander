@@ -1,4 +1,4 @@
-import { homedir, networkInterfaces } from 'node:os';
+import { homedir, networkInterfaces, platform } from 'node:os';
 import { join } from 'node:path';
 
 import { createModuleLogger } from '../lib/logger.js';
@@ -138,7 +138,7 @@ export class TraefikManager {
           '8080/tcp': [{ HostPort: '8080' }],
         },
         Binds: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
-        ExtraHosts: ['host.docker.internal:host-gateway'],
+        ...(platform() !== 'darwin' ? { ExtraHosts: ['host.docker.internal:host-gateway'] } : {}),
         NetworkMode: TRAEFIK_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
       },
