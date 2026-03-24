@@ -11,6 +11,7 @@ export interface RunConfig {
   environmentType?: string;
   environmentId?: string;
   envVars: Record<string, string>;
+  imageCmd?: string[];
   containerPort?: number;
   preferredPort?: number;
   secretFiles?: Array<{ filename: string; content: string; mountPath: string }>;
@@ -53,6 +54,7 @@ export class ContainerRunner {
           port,
           containerPort,
           envVars: config.envVars,
+          cmd: config.imageCmd,
           traefikLabels,
           secretFiles: config.secretFiles,
         });

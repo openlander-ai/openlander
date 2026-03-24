@@ -30,6 +30,7 @@ export interface RunContainerOptions {
   /** Container-internal port the app listens on (default: same as port). */
   containerPort?: number;
   envVars: Record<string, string>;
+  cmd?: string[];
   traefikLabels: Record<string, string>;
   secretFiles?: SecretFileMount[];
 }
@@ -405,6 +406,7 @@ export class Docker {
       ExposedPorts: {
         [`${String(cPort)}/tcp`]: {},
       },
+      Cmd: options.cmd,
       HostConfig: {
         PortBindings: {
           [`${String(cPort)}/tcp`]: [{ HostPort: String(options.port) }],

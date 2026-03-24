@@ -469,6 +469,7 @@ export async function runAndVerify(
     preferredPort: config._preferredPort,
     containerPort,
     envVars,
+    imageCmd: config.imageCmd,
     secretFiles: secretFilesMounts,
   });
   const { containerId, port, url: internalUrl } = runResult;

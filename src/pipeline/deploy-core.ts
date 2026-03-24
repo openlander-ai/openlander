@@ -367,6 +367,14 @@ export class DeployPipeline {
         ...(config.buildContext ? { buildContext: config.buildContext } : {}),
         ...(config.dockerfilePath ? { dockerfilePath: config.dockerfilePath } : {}),
         ...(config.dockerTarget ? { dockerTarget: config.dockerTarget } : {}),
+        ...(source === 'image'
+          ? {
+              source,
+              imageUrl: config.imageUrl,
+              imageCmd: config.imageCmd,
+              containerPort: config.containerPort,
+            }
+          : {}),
       });
       this.jobManager?.trackJob(existing.id, projectName);
 
@@ -383,11 +391,19 @@ export class DeployPipeline {
     this.db.createProject({
       id: projectId,
       name: projectName,
-      repoUrl: config.repoUrl,
+      repoUrl: source === 'image' ? '' : config.repoUrl,
       branch: config.branch,
       dockerfilePath: config.dockerfilePath,
       dockerTarget: config.dockerTarget,
       buildContext: config.buildContext,
+      ...(source === 'image'
+        ? {
+            source,
+            imageUrl: config.imageUrl,
+            imageCmd: config.imageCmd,
+            containerPort: config.containerPort,
+          }
+        : {}),
     });
     this.db.updateProject(projectId, { status: 'building' });
     this.jobManager?.trackJob(projectId, projectName);
@@ -492,13 +508,38 @@ export class DeployPipeline {
       this.db.createProject({
         id: projectId,
         name: projectName,
-        repoUrl: config.repoUrl,
+        repoUrl: source === 'image' ? '' : config.repoUrl,
         branch: config.branch,
+        ...(source === 'image'
+          ? {
+              source,
+              imageUrl: config.imageUrl,
+              imageCmd: config.imageCmd,
+              containerPort: config.containerPort,
+            }
+          : {}),
       });
       this.db.updateProject(projectId, { status: 'building' });
       this.jobManager?.trackJob(projectId, projectName);
     } else if (config.branch) {
-      this.db.updateProject(projectId, { branch: config.branch });
+      this.db.updateProject(projectId, {
+        branch: config.branch,
+        ...(source === 'image'
+          ? {
+              source,
+              imageUrl: config.imageUrl,
+              imageCmd: config.imageCmd,
+              containerPort: config.containerPort,
+            }
+          : {}),
+      });
+    } else if (source === 'image') {
+      this.db.updateProject(projectId, {
+        source,
+        imageUrl: config.imageUrl,
+        imageCmd: config.imageCmd,
+        containerPort: config.containerPort,
+      });
     }
 
     // Preflight check - skip if already called from startDeploy()
