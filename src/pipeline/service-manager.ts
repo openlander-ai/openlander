@@ -32,6 +32,7 @@ export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   redis: ['8-alpine', '7-alpine'],
   mongodb: ['8', '7'],
   minio: ['RELEASE.2024-11-07T00-52-20Z', 'latest'],
+  rabbitmq: ['4.0-management-alpine', '3.13-management-alpine'],
 };
 
 export interface ServiceTemplate {
@@ -100,6 +101,19 @@ export const SERVICE_TEMPLATES: Record<string, ServiceTemplate> = {
     },
     env: (c) => [`MINIO_ROOT_USER=${c.user}`, `MINIO_ROOT_PASSWORD=${c.password}`],
   },
+  rabbitmq: {
+    type: 'rabbitmq',
+    image: 'rabbitmq:4.0-management-alpine',
+    port: 5672,
+    healthcheck: {
+      test: ['CMD', 'rabbitmq-diagnostics', 'check_running'],
+      interval: 30,
+      timeout: 10,
+      retries: 3,
+      startPeriod: 30,
+    },
+    env: (c) => [`RABBITMQ_DEFAULT_USER=${c.user}`, `RABBITMQ_DEFAULT_PASS=${c.password}`],
+  },
 };
 
 /**
@@ -112,6 +126,7 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
   redis: 'REDIS_URL',
   mongodb: 'MONGODB_URL',
   minio: 'S3_ENDPOINT',
+  rabbitmq: 'RABBITMQ_URL',
 };
 
 export class ServiceManager {

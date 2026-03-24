@@ -116,20 +116,20 @@ export function ProjectCard({
           </div>
         </div>
 
-        {project.url && (
+        {(currentEnvData?.publicUrl ?? project.url) && (
           <div>
             <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
               Endpoint
             </p>
             <a
-              href={project.url}
+              href={currentEnvData?.publicUrl ?? project.url ?? '#'}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
               className="flex items-center gap-1.5 text-xs font-mono text-agent hover:text-agent/80 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-              {project.url.replace(/^https?:\/\//, '')}
+              {(currentEnvData?.publicUrl ?? project.url ?? '').replace(/^https?:\/\//, '')}
             </a>
             {project.urls
               ?.filter((u) => u.type === 'vpn')

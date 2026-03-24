@@ -2,6 +2,7 @@ import { MinioAdapter } from './minio-adapter.js';
 import { MongoAdapter } from './mongo-adapter.js';
 import { MySqlAdapter } from './mysql-adapter.js';
 import { PostgresAdapter } from './postgres-adapter.js';
+import { RabbitMqAdapter } from './rabbitmq-adapter.js';
 import { RedisAdapter } from './redis-adapter.js';
 import type { ServiceAdapter } from './types.js';
 
@@ -10,6 +11,7 @@ const mySqlAdapter = new MySqlAdapter();
 const redisAdapter = new RedisAdapter();
 const mongoAdapter = new MongoAdapter();
 const minioAdapter = new MinioAdapter();
+const rabbitMqAdapter = new RabbitMqAdapter();
 
 export function getServiceAdapter(type: string): ServiceAdapter | null {
   switch (type) {
@@ -23,6 +25,8 @@ export function getServiceAdapter(type: string): ServiceAdapter | null {
       return mongoAdapter;
     case 'minio':
       return minioAdapter;
+    case 'rabbitmq':
+      return rabbitMqAdapter;
     default:
       return null;
   }

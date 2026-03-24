@@ -78,6 +78,7 @@ const SERVICE_ENV_VARS: Record<string, string> = {
   mysql: 'MYSQL_URL',
   redis: 'REDIS_URL',
   mongodb: 'MONGODB_URI',
+  rabbitmq: 'RABBITMQ_URL',
 };
 
 export interface ExecutePlanResult {

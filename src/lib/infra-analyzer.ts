@@ -8,7 +8,7 @@ const log = createModuleLogger('infra-analyzer');
 /**
  * Service type that can be detected from dependencies or env vars.
  */
-export type DetectedServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb';
+export type DetectedServiceType = 'postgresql' | 'mysql' | 'redis' | 'mongodb' | 'rabbitmq';
 
 /**
  * Infrastructure need detected from package.json or env files.
@@ -74,6 +74,12 @@ const DEPENDENCY_PATTERNS: Record<string, DetectedServiceType> = {
   mongodb: 'mongodb',
   motor: 'mongodb',
   pymongo: 'mongodb',
+
+  amqplib: 'rabbitmq',
+  'amqp-connection-manager': 'rabbitmq',
+  amqp: 'rabbitmq',
+  pika: 'rabbitmq',
+  aio_pika: 'rabbitmq',
 };
 
 /**
@@ -113,6 +119,13 @@ const ENV_VAR_PATTERNS: Record<string, DetectedServiceType> = {
   MONGO_DATABASE: 'mongodb',
   MONGO_INITDB_ROOT_USERNAME: 'mongodb',
   MONGO_INITDB_ROOT_PASSWORD: 'mongodb',
+
+  RABBITMQ_URL: 'rabbitmq',
+  AMQP_URL: 'rabbitmq',
+  RABBITMQ_HOST: 'rabbitmq',
+  RABBITMQ_PORT: 'rabbitmq',
+  RABBITMQ_DEFAULT_USER: 'rabbitmq',
+  RABBITMQ_DEFAULT_PASS: 'rabbitmq',
 };
 
 function findDepFiles(dir: string, filename: string, maxDepth = 3): string[] {

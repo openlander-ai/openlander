@@ -107,7 +107,7 @@ export function Header({
           )}
         </div>
 
-        <div className="hidden sm:flex items-center bg-bg-subtle border border-[hsl(var(--border))] rounded-full p-0.5 ml-2">
+        <div className="flex items-center bg-bg-subtle border border-[hsl(var(--border))] rounded-full p-0.5 ml-2">
           <button
             onClick={() => setEnvironment('production')}
             className={cn(

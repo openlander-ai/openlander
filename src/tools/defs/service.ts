@@ -80,8 +80,9 @@ export const serviceToolDefs: ToolDef[] = [
   {
     name: 'create_service',
     description:
-      'Create a new service (database, cache, object storage, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, MinIO (S3-compatible storage), or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb/minio) or custom image with port. Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, S3_ENDPOINT) for connecting a project. For MinIO: returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
-    mcpDescription: 'Create a PostgreSQL, MySQL, Redis, MongoDB, MinIO, or custom image service.',
+      'Create a new service (database, cache, message broker, object storage, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO (S3-compatible storage), or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb/rabbitmq/minio) or custom image with port. Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, RABBITMQ_URL, S3_ENDPOINT) for connecting a project. For MinIO: returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+    mcpDescription:
+      'Create a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO, or custom image service.',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const result = await appCtx.serviceManager.create({
