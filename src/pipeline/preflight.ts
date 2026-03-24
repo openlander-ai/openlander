@@ -6,7 +6,6 @@ import { scanUsedPorts, clearPortScanCache } from './port.js';
 import { detectReverseProxy, getProxyStatus } from './traefik.js';
 import { getSystemStats } from '../monitor/stats.js';
 import { PreflightCheckError } from '../errors.js';
-import { getEnvDefaults } from '../config/index.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -185,13 +184,11 @@ export async function preflightCheck(
         };
       }
     } else {
-      const { portRangeStart, portRangeEnd } = getEnvDefaults();
-      const totalRange = portRangeEnd - portRangeStart + 1;
-      const hasAvailablePort = portScan.all.length < totalRange;
+      const hasAvailablePort = portScan.all.length < 999;
       portCheck = {
         pass: hasAvailablePort,
         detail: hasAvailablePort
-          ? `Ports available in range ${String(portRangeStart)}-${String(portRangeEnd)}`
+          ? 'Ports available in range 10001-10999'
           : 'No ports available in allocation range',
       };
     }

@@ -27,7 +27,6 @@ function createMockDocker(): Docker {
     removeContainer: vi.fn().mockResolvedValue(undefined),
     removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue(''),
-    getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
   } as unknown as Docker;
 }
 

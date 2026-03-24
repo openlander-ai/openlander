@@ -16,7 +16,6 @@ import type { ProjectRow, DeployLogRow, Database } from '../db/index.js';
 import type { Docker } from '../pipeline/docker.js';
 import { scanUsedPorts } from '../pipeline/port.js';
 import { detectReverseProxy } from '../pipeline/traefik.js';
-import { getEnvDefaults } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('prompts');
@@ -816,9 +815,10 @@ function buildDeploymentRules(ctx: ServerContext | null): string | null {
   let hasRules = false;
 
   // Forbidden ports (common conflict points)
-  const { portRangeStart, portRangeEnd } = getEnvDefaults();
   const forbiddenPorts = ctx.usedPorts
-    .filter((p) => p < portRangeStart || p > portRangeEnd)
+    .filter(
+      (p) => p < 10000 || p > 10999, // Outside OpenLander's range
+    )
     .slice(0, 20);
 
   if (forbiddenPorts.length > 0) {
@@ -826,7 +826,7 @@ function buildDeploymentRules(ctx: ServerContext | null): string | null {
     hasRules = true;
   }
 
-  rules.push(`- Use allocated ports from range ${String(portRangeStart)}-${String(portRangeEnd)}`);
+  rules.push('- Use allocated ports from range 10001-10999');
 
   // Container name conflicts
   const conflictNames = ctx.usedNames

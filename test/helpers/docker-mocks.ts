@@ -218,7 +218,6 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
       }),
       pullImage: vi.fn().mockResolvedValue(undefined),
       getClient: vi.fn().mockReturnValue(client),
-      getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
     } as unknown as Docker,
     client,
     createdVolumes,

@@ -4,11 +4,14 @@ import { promisify } from 'node:util';
 import type { Database } from '../db/index.js';
 import { PortExhaustedError } from '../errors.js';
 import { createModuleLogger } from '../lib/logger.js';
-import { getEnvDefaults } from '../config/index.js';
 import type { Docker } from './docker.js';
 
 const log = createModuleLogger('port');
 const execAsync = promisify(exec);
+
+/** Default port range for OpenLander-managed containers. */
+const PORT_RANGE_START = 10001;
+const PORT_RANGE_END = 10999;
 
 /** OpenLander default ports that may conflict with external services. */
 const OPENLANDER_DEFAULT_PORTS = [80, 443, 8080];
@@ -170,12 +173,7 @@ export async function allocatePort(
   docker: Docker,
   options: AllocatePortOptions = {},
 ): Promise<number> {
-  const envDef = getEnvDefaults();
-  const {
-    preferredPort,
-    rangeStart = envDef.portRangeStart,
-    rangeEnd = envDef.portRangeEnd,
-  } = options;
+  const { preferredPort, rangeStart = PORT_RANGE_START, rangeEnd = PORT_RANGE_END } = options;
   const usedPorts = await scanUsedPorts(db, docker);
   const usedSet = new Set(usedPorts.all);
 
@@ -213,13 +211,10 @@ export function isPortAvailable(db: Database, port: number): boolean {
 /** Get the count of available ports. */
 export function getAvailablePortCount(
   db: Database,
-  rangeStart?: number,
-  rangeEnd?: number,
+  rangeStart = PORT_RANGE_START,
+  rangeEnd = PORT_RANGE_END,
 ): number {
-  const envDef = getEnvDefaults();
-  const start = rangeStart ?? envDef.portRangeStart;
-  const end = rangeEnd ?? envDef.portRangeEnd;
-  const total = end - start + 1;
+  const total = rangeEnd - rangeStart + 1;
   const used = db.getUsedPorts().length;
   return total - used;
 }

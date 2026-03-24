@@ -26,6 +26,8 @@ import { allocatePort } from './port.js';
 
 const log = createModuleLogger('service-manager');
 
+const WEB_NETWORK = 'web';
+
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
   mysql: ['9', '8'],
@@ -319,7 +321,7 @@ export class ServiceManager {
         [`${String(containerPort)}/tcp`]: {},
       },
       HostConfig: {
-        NetworkMode: this.docker.getNetworkName(),
+        NetworkMode: WEB_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
         Binds: [`${volumeName}:${dataMountPath}`],
         PortBindings: {

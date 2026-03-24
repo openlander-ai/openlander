@@ -1,27 +1,18 @@
-import { networkInterfaces, platform } from 'node:os';
+import { homedir, networkInterfaces, platform } from 'node:os';
+import { join } from 'node:path';
 
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('traefik');
 
 import type { Docker } from './docker.js';
-import { getDataDir, getEnvDefaults } from '../config/index.js';
-import { join } from 'node:path';
 
+const TRAEFIK_CONTAINER_NAME = 'openlander-traefik';
 const TRAEFIK_IMAGE = 'traefik:v3.6';
+const TRAEFIK_NETWORK = 'web';
+
+export const DYNAMIC_CONFIG_DIR = join(homedir(), '.openlander', 'traefik', 'dynamic');
 
 export type TraefikEnvironment = 'production' | 'development';
-
-export interface TraefikManagerOptions {
-  containerName?: string;
-  networkName?: string;
-  httpPort?: number;
-  dashboardPort?: number;
-}
-
-/** Get the dynamic config directory for the current environment. */
-export function getDynamicConfigDir(): string {
-  return join(getDataDir(), 'traefik', 'dynamic');
-}
 
 /**
  * Traefik reverse proxy management.
@@ -31,28 +22,17 @@ export function getDynamicConfigDir(): string {
  * configure routing without touching any config files.
  */
 export class TraefikManager {
-  private readonly containerName: string;
-  private readonly networkName: string;
-  private readonly httpPort: number;
-  private readonly dashboardPort: number;
-
   constructor(
     private readonly docker: Docker,
     private readonly openLanderPort: number = 3000,
-    options?: TraefikManagerOptions,
-  ) {
-    const envDef = getEnvDefaults();
-    this.containerName = options?.containerName ?? envDef.traefikContainerName;
-    this.networkName = options?.networkName ?? envDef.networkName;
-    this.httpPort = options?.httpPort ?? envDef.traefikHttpPort;
-    this.dashboardPort = options?.dashboardPort ?? envDef.traefikDashboardPort;
-  }
+  ) {}
 
+  /** Check if Traefik container is running. */
   async isRunning(): Promise<boolean> {
     try {
       const client = this.docker.getClient();
       const containers = await client.listContainers({
-        filters: { name: [this.containerName] },
+        filters: { name: [TRAEFIK_CONTAINER_NAME] },
       });
       return containers.length > 0;
     } catch (err) {
@@ -61,10 +41,14 @@ export class TraefikManager {
     }
   }
 
+  /**
+   * Check if the running Traefik container has up-to-date config.
+   * Returns false if the container is missing File Provider or other required args.
+   */
   private async hasCurrentConfig(): Promise<boolean> {
     try {
       const client = this.docker.getClient();
-      const container = client.getContainer(this.containerName);
+      const container = client.getContainer(TRAEFIK_CONTAINER_NAME);
       const info = await container.inspect();
       const cmd: string[] = (info.Config.Cmd as string[] | null) ?? [];
       return cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
@@ -73,21 +57,30 @@ export class TraefikManager {
     }
   }
 
+  /**
+   * Ensure the Docker network for Traefik exists.
+   * All managed containers join this network.
+   */
   async ensureNetwork(): Promise<void> {
     const client = this.docker.getClient();
     const networks = await client.listNetworks({
-      filters: { name: [this.networkName] },
+      filters: { name: [TRAEFIK_NETWORK] },
     });
 
     if (networks.length === 0) {
       await client.createNetwork({
-        Name: this.networkName,
+        Name: TRAEFIK_NETWORK,
         Driver: 'bridge',
       });
     }
   }
 
+  /**
+   * Start the Traefik reverse proxy container.
+   * Configured as Docker provider — reads labels from other containers.
+   */
   async start(): Promise<void> {
+    // If running, check if config is up-to-date (e.g., File Provider added in v0.2.6)
     if (await this.isRunning()) {
       if (await this.hasCurrentConfig()) return;
       log.info('Traefik config outdated (missing HTTP Provider) — recreating container');
@@ -97,14 +90,16 @@ export class TraefikManager {
 
     const client = this.docker.getClient();
 
+    // Remove any existing stopped container to avoid 409 Conflict on create
     try {
-      const existing = client.getContainer(this.containerName);
+      const existing = client.getContainer(TRAEFIK_CONTAINER_NAME);
       await existing.remove({ force: true });
       log.debug('Removed existing Traefik container before recreation');
     } catch (_err) {
       // Container doesn't exist — expected on first run
     }
 
+    // Pull image first
     try {
       const stream = await client.pull(TRAEFIK_IMAGE);
       await new Promise<void>((resolve, reject) => {
@@ -118,35 +113,33 @@ export class TraefikManager {
       });
     } catch (err) {
       log.debug({ err }, 'Traefik image pull failed — may already exist locally');
+      // Image might already exist locally
     }
-
-    const httpPortStr = String(this.httpPort);
-    const dashboardPortStr = String(this.dashboardPort);
 
     const container = await client.createContainer({
       Image: TRAEFIK_IMAGE,
-      name: this.containerName,
+      name: TRAEFIK_CONTAINER_NAME,
       Cmd: [
         '--api.insecure=true',
         '--providers.docker=true',
         '--providers.docker.exposedbydefault=false',
-        `--providers.docker.network=${this.networkName}`,
+        `--providers.docker.network=${TRAEFIK_NETWORK}`,
         `--providers.http.endpoint=http://host.docker.internal:${String(this.openLanderPort)}/api/traefik/config`,
         '--providers.http.pollInterval=5s',
         '--entrypoints.web.address=:80',
       ],
       ExposedPorts: {
         '80/tcp': {},
-        '8080/tcp': {},
+        '8080/tcp': {}, // Traefik dashboard
       },
       HostConfig: {
         PortBindings: {
-          '80/tcp': [{ HostPort: httpPortStr }],
-          '8080/tcp': [{ HostPort: dashboardPortStr }],
+          '80/tcp': [{ HostPort: '80' }],
+          '8080/tcp': [{ HostPort: '8080' }],
         },
         Binds: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
         ...(platform() !== 'darwin' ? { ExtraHosts: ['host.docker.internal:host-gateway'] } : {}),
-        NetworkMode: this.networkName,
+        NetworkMode: TRAEFIK_NETWORK,
         RestartPolicy: { Name: 'unless-stopped' },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
       },
@@ -158,11 +151,13 @@ export class TraefikManager {
     await container.start();
   }
 
+  /** Stop and remove the Traefik container. */
   async stop(): Promise<void> {
     try {
-      await this.docker.removeContainer(this.containerName);
+      await this.docker.removeContainer(TRAEFIK_CONTAINER_NAME);
     } catch (err) {
       log.warn({ err }, 'Failed to remove Traefik container — may already be removed');
+      // Already removed
     }
   }
 }
@@ -498,11 +493,11 @@ export async function switchToExternalMode(docker: Docker, externalNetwork: stri
 /**
  * Connect a container to the Traefik network.
  * In external mode, connects to the external network.
- * In managed mode, connects to the environment's network (e.g. openlander-prod).
+ * In managed mode, connects to the 'web' network.
  *
  * @param docker - Docker instance
  * @param containerId - Container ID to connect
- * @param networkName - Network name (from traefik.externalNetwork or config.docker.networkName)
+ * @param networkName - Network name (from traefik.externalNetwork or 'web')
  */
 export async function connectToTraefikNetwork(
   docker: Docker,

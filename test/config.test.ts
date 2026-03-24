@@ -1,17 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
-import {
-  resolveEnvironment,
-  setEnvironment,
-  getEnvironment,
-  getDataDir,
-  getDbPath,
-  getConfigPath,
-  getEnvDefaults,
-  _resetEnvironment,
-} from '../src/config/index.js';
+import { tmpdir } from 'node:os';
 
 const describeConfig =
   typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined' ? describe.skip : describe;
@@ -86,106 +76,6 @@ describeConfig('Config DB Path', () => {
     expect(parsed.llm.provider).toBe('gemini');
     expect(parsed.llm.apiKey).toBe('test-key');
     expect(parsed.server.port).toBe(3000);
-  });
-});
-
-describeConfig('Environment Resolution', () => {
-  afterEach(() => {
-    _resetEnvironment();
-    delete process.env['OPENLANDER_ENV'];
-  });
-
-  it('defaults to production', () => {
-    expect(resolveEnvironment()).toBe('production');
-  });
-
-  it('resolves from explicit argument', () => {
-    expect(resolveEnvironment('development')).toBe('development');
-  });
-
-  it('resolves from OPENLANDER_ENV env var', () => {
-    process.env['OPENLANDER_ENV'] = 'development';
-    expect(resolveEnvironment()).toBe('development');
-  });
-
-  it('CLI flag takes precedence over env var', () => {
-    process.env['OPENLANDER_ENV'] = 'development';
-    expect(resolveEnvironment('production')).toBe('production');
-  });
-
-  it('rejects invalid environment names and falls back to production', () => {
-    expect(resolveEnvironment('staging')).toBe('production');
-    expect(resolveEnvironment('../etc/passwd')).toBe('production');
-    expect(resolveEnvironment('')).toBe('production');
-  });
-
-  it('setEnvironment / getEnvironment round-trips', () => {
-    setEnvironment('development');
-    expect(getEnvironment()).toBe('development');
-    _resetEnvironment();
-    expect(getEnvironment()).toBe('production');
-  });
-
-  it('setEnvironment throws on invalid input', () => {
-    expect(() => setEnvironment('staging' as 'production')).toThrow('Invalid environment');
-  });
-});
-
-describeConfig('Environment-specific Paths', () => {
-  afterEach(() => {
-    _resetEnvironment();
-  });
-
-  it('getDataDir includes environment name', () => {
-    expect(getDataDir()).toBe(join(homedir(), '.openlander', 'production'));
-    setEnvironment('development');
-    expect(getDataDir()).toBe(join(homedir(), '.openlander', 'development'));
-  });
-
-  it('getDbPath includes environment name', () => {
-    expect(getDbPath()).toContain(join('production', 'openlander.db'));
-    setEnvironment('development');
-    expect(getDbPath()).toContain(join('development', 'openlander.db'));
-  });
-
-  it('getConfigPath includes environment name', () => {
-    expect(getConfigPath()).toContain(join('production', 'config.json'));
-    setEnvironment('development');
-    expect(getConfigPath()).toContain(join('development', 'config.json'));
-  });
-});
-
-describeConfig('Environment Defaults', () => {
-  afterEach(() => {
-    _resetEnvironment();
-  });
-
-  it('production defaults', () => {
-    const defs = getEnvDefaults('production');
-    expect(defs.serverPort).toBe(10114);
-    expect(defs.networkName).toBe('openlander-prod');
-    expect(defs.portRangeStart).toBe(10001);
-    expect(defs.portRangeEnd).toBe(10499);
-    expect(defs.traefikContainerName).toBe('traefik-ol-prod');
-    expect(defs.traefikHttpPort).toBe(80);
-    expect(defs.traefikDashboardPort).toBe(8080);
-  });
-
-  it('development defaults', () => {
-    const defs = getEnvDefaults('development');
-    expect(defs.serverPort).toBe(10214);
-    expect(defs.networkName).toBe('openlander-dev');
-    expect(defs.portRangeStart).toBe(10501);
-    expect(defs.portRangeEnd).toBe(10999);
-    expect(defs.traefikContainerName).toBe('traefik-ol-dev');
-    expect(defs.traefikHttpPort).toBe(8180);
-    expect(defs.traefikDashboardPort).toBe(8280);
-  });
-
-  it('getEnvDefaults uses current env when no arg given', () => {
-    setEnvironment('development');
-    const defs = getEnvDefaults();
-    expect(defs.serverPort).toBe(10214);
   });
 });
 
