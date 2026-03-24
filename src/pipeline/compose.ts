@@ -731,7 +731,7 @@ export class ComposePipeline {
                   entrypoint: composeService.entrypoint,
                   restart: composeService.restart,
                   healthcheck,
-                  networks: [projectNetwork, 'web'],
+                  networks: [projectNetwork, this.docker.getNetworkName()],
                 });
                 break;
               } catch (error) {

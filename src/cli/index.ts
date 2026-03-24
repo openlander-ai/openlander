@@ -5,9 +5,16 @@ import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { createModuleLogger } from '../lib/logger.js';
 import { VERSION } from '../version.js';
 import { getProjectUrl, getLanIp } from '../pipeline/traefik.js';
+import { resolveEnvironment, setEnvironment, migrateOldDataDir } from '../config/index.js';
 import type { ToolSet } from 'ai';
 
 const log = createModuleLogger('cli');
+
+function applyEnv(envFlag?: string): void {
+  const env = resolveEnvironment(envFlag);
+  setEnvironment(env);
+  migrateOldDataDir();
+}
 
 const program = new Command();
 
@@ -17,23 +24,19 @@ program
   .name('openlander')
   .description('AI agent that deploys your app from a chat')
   .version(VERSION)
-  .option('-p, --port <port>', 'Port to listen on', '10114')
+  .option('-p, --port <port>', 'Port to listen on')
   .option('--host <host>', 'Host to bind to', '0.0.0.0')
+  .option('--env <env>', 'Runtime environment (production|development)')
   .option('--no-open', 'Do not open browser automatically')
-  .action(async (options: { port: string; host: string; open?: boolean }) => {
-    const port = parseInt(options.port, 10);
+  .action(async (options: { port?: string; host: string; env?: string; open?: boolean }) => {
+    applyEnv(options.env);
 
-    // Step 1: Ensure Docker is ready
     const { ensureDocker } = await import('./onboard.js');
     await ensureDocker();
 
-    // Step 2: Onboarding handled by Web UI (SetupScreen)
-    // CLI no longer runs LLM/Git setup — just start the server
-
-    // Step 3: Load config & create app context
     const { loadConfig, getDbPath } = await import('../config/index.js');
-
     const config = loadConfig();
+    const port = options.port ? parseInt(options.port, 10) : config.server.port;
     config.server.port = port;
     config.server.host = options.host;
 
@@ -107,7 +110,9 @@ program
 program
   .command('start')
   .description('Start daemon only (background)')
-  .action(async () => {
+  .option('--env <env>', 'Runtime environment (production|development)')
+  .action(async (options: { env?: string }) => {
+    applyEnv(options.env);
     const { loadConfig, getDbPath, getDataDir } = await import('../config/index.js');
     const config = loadConfig();
 
@@ -143,7 +148,9 @@ program
 program
   .command('stop')
   .description('Stop daemon')
-  .action(async () => {
+  .option('--env <env>', 'Runtime environment (production|development)')
+  .action(async (options: { env?: string }) => {
+    applyEnv(options.env);
     const { getDataDir } = await import('../config/index.js');
     const { OpenLanderClient } = await import('../ipc/client.js');
 
@@ -208,8 +215,9 @@ program
 program
   .command('restart')
   .description('Restart daemon')
-  .action(async () => {
-    // Stop
+  .option('--env <env>', 'Runtime environment (production|development)')
+  .action(async (options: { env?: string }) => {
+    applyEnv(options.env);
     const { getDataDir } = await import('../config/index.js');
     const socketPath = join(getDataDir(), 'openlander.sock');
     const pidPath = join(getDataDir(), 'openlander.pid');
@@ -268,7 +276,9 @@ program
   .command('config')
   .description('Manage configuration')
   .argument('[action]', 'Action: show (default) or reset')
-  .action(async (action) => {
+  .option('--env <env>', 'Runtime environment (production|development)')
+  .action(async (action: string | undefined, options: { env?: string }) => {
+    applyEnv(options.env);
     const { loadConfig, isOnboarded, getDataDir } = await import('../config/index.js');
     const configPath = join(getDataDir(), 'config.json');
 
@@ -321,7 +331,9 @@ program
 program
   .command('status')
   .description('Show running projects and system stats')
-  .action(async () => {
+  .option('--env <env>', 'Runtime environment (production|development)')
+  .action(async (options: { env?: string }) => {
+    applyEnv(options.env);
     const { loadConfig, getDbPath } = await import('../config/index.js');
     const { Database } = await import('../db/index.js');
     const { getSystemStats, formatStatsSummary } = await import('../monitor/stats.js');
@@ -394,7 +406,9 @@ program
 program
   .command('mcp')
   .description('Start the MCP server (for Claude Code, Cursor, etc.)')
-  .action(async () => {
+  .option('--env <env>', 'Runtime environment (production|development)')
+  .action(async (options: { env?: string }) => {
+    applyEnv(options.env);
     const { loadConfig, getDbPath, isOnboarded } = await import('../config/index.js');
 
     if (!isOnboarded()) {

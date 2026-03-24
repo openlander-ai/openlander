@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getDataDir, getEnvDefaults } from '../config/index.js';
 import type Dockerode from 'dockerode';
 
 import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
@@ -154,7 +155,7 @@ export class Docker {
   private readonly client: Dockerode;
   private readonly networkName: string;
 
-  constructor(socketPath?: string, networkName: string = 'web') {
+  constructor(socketPath?: string, networkName?: string) {
     const require = createRequire(import.meta.url);
 
     // docker-modem eagerly requires its SSH transport, which pulls in ssh2's
@@ -183,7 +184,7 @@ export class Docker {
       throw new Error('Failed to load dockerode constructor');
     }
 
-    this.networkName = networkName;
+    this.networkName = networkName ?? getEnvDefaults().networkName;
     if (socketPath) {
       this.client = new DockerodeClass({ socketPath });
     } else {
@@ -517,7 +518,7 @@ export class Docker {
   private writeSecretFiles(containerName: string, files: SecretFileMount[]): string[] {
     if (files.length === 0) return [];
 
-    const secretsDir = join(homedir(), '.openlander', 'container-secrets', containerName);
+    const secretsDir = join(getDataDir(), 'container-secrets', containerName);
     mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
 
     const binds: string[] = [];
@@ -558,7 +559,7 @@ export class Docker {
   }
 
   cleanupSecretFiles(containerName: string): void {
-    const secretsDir = join(homedir(), '.openlander', 'container-secrets', containerName);
+    const secretsDir = join(getDataDir(), 'container-secrets', containerName);
     try {
       rmSync(secretsDir, { recursive: true, force: true });
     } catch (_) {
@@ -880,7 +881,10 @@ export class Docker {
     }
   }
 
-  /** Get the underlying dockerode client (for Traefik manager). */
+  getNetworkName(): string {
+    return this.networkName;
+  }
+
   getClient(): Dockerode {
     return this.client;
   }
