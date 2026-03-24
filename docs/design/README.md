@@ -4,4 +4,8 @@ This directory contains the design specifications for OpenLander.
 
 ## Current Specifications
 
-- **[Web MVP UI/UX](./web-mvp-ui-ux.md)**: Comprehensive design document for the web interface, focusing on the "Agent Timeline" as the primary interaction model.
+- **[v1.0.0 Web UI Vision](../planning/release/v1.0.0-web-ui-vision.md)**: Button-to-Chat pattern — action buttons become AI shortcuts, API key optional (DEC-041)
+
+## Archived / Reference Only
+
+- **[Web MVP UI/UX](./web-mvp-ui-ux.md)**: ⚠️ Superseded by v1.0.0 vision. Design system (colors, typography) still valid as reference.
