@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.16] - 2026-03-24
+
+### Added
+
+- **Docker image deployment**: Deploy pre-built Docker images directly without git clone/build. Supports image URL, port, command override via API, MCP, and web UI.
+- **Deploy Dialog image toggle**: Git/Image source selector in deploy dialog with conditional fields (image URL, port, command).
+- **ProjectCard Docker badge**: Container icon and image URL display for image-source projects.
+- **OverviewTab image info**: Shows image URL, port, command for image-source projects instead of git-specific info.
+- **ProjectHeader "Pull & Restart"**: Image projects show "Pull & Restart" instead of "Redeploy" button.
+- **Settings image fields**: Editable image URL, port, command in project settings with PATCH API.
+- **MCP image deployment schema**: Extended `create_deploy_plan` schema with source/image/cmd/port params.
+- **Image URL validation**: `parseImageUrl()`, `getImageExposedPort()`, `mapPullError()` utilities.
+- **Pipeline tests**: 7 pipeline tests + 10 MCP schema tests + 3 E2E integration tests for image deployment.
+
 ## [0.9.15] - 2026-03-24
 
 ### Added

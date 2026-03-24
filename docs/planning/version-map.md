@@ -8,14 +8,14 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v1.0.0 (TBD)
 
 ```
 
-v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v0.9.7 ✅ ── v0.9.8 ✅ ── v0.9.9 ✅ ── v0.9.10 ✅ ── v0.9.11 ✅ ── v0.9.12 ✅ ── v0.9.13 ✅ ── v0.9.14 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.2.6 ✅ ── v0.3.0 ✅ ── v0.3.1 ✅ ── v0.4.0 ✅ ── v0.5.1 ✅ ── v0.6.0 ✅ ── v0.6.1 ✅ ── v0.6.2 ✅ ── v0.6.3 ✅ ── v0.6.4 ✅ ── v0.6.5 ✅ ── v0.6.6 ✅ ── v0.6.7 ✅ ── v0.6.8 ✅ ── v0.6.9 ✅ ── v0.6.10 ✅ ── v0.6.11 ✅ ── v0.6.12 ✅ ── v0.6.13 ✅ ── v0.6.14 ✅ ── v0.6.15 ✅ ── v0.7.0 ✅ ── v0.7.1 ✅ ── v0.7.2 ✅ ── v0.7.3 ✅ ── v0.8.0 ✅ ── v0.9.0 ✅ ── v0.9.3 ✅ ── v0.9.4 ✅ ── v0.9.5 ✅ ── v0.9.6 ✅ ── v0.9.7 ✅ ── v0.9.8 ✅ ── v0.9.9 ✅ ── v0.9.10 ✅ ── v0.9.11 ✅ ── v0.9.12 ✅ ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -1508,3 +1508,45 @@ AI: bugs.md → 해결됨 + gh issue close
 - `src/events/index.ts` — EventBus 캡처 훅 통합
 - `src/monitor/pino-ring-buffer.ts` — 신규: Pino custom Writable stream
 - `src/config/index.ts` — mcp.platformTools 플래그 추가
+
+---
+
+## v0.9.14 — Dashboard VPN URL Display (2026-03-23) ✅
+
+| 항목                   | 내용                                                                                                                   | 상태 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---- |
+| Dashboard VPN URL 표시 | Project list, detail, card, table 뷰에서 VPN (Tailscale/WireGuard) URL 표시, 보라색 VPN 배지, API `urls: ProjectUrl[]` | ✅   |
+| Build log 전파 버그    | Blue-green, preview, monorepo 배포 경로에서 Docker build 출력 보존                                                     | ✅   |
+| tsup 빌드 경합 조건    | 병렬 빌드 시 `clean: true` 제거, 빌드 전 `rm -rf dist` 실행                                                            | ✅   |
+| VPN URL 환경 보호      | VPN URL은 production 환경에서만 표시, development 뷰에서 숨김                                                          | ✅   |
+| Project list API 성능  | `getAllIps()` 호출 최적화 (요청당 1회 → 프로젝트당 1회 제거)                                                           | ✅   |
+
+---
+
+## v0.9.15 — Runtime Log Snapshots & Docker Cleanup (2026-03-24) ✅
+
+| 항목                       | 내용                                                                                                           | 상태 |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- | ---- |
+| Runtime log snapshots      | 재배포 전 컨테이너 로그 마지막 500줄 캡처, 배포 히스토리에 저장, DeploymentDetail "Runtime Logs" 섹션에서 조회 | ✅   |
+| Docker log rotation        | OpenLander이 생성한 모든 컨테이너에 `json-file` 로그 드라이버 + 10MB×3 로테이션 설정, 무제한 디스크 증가 방지  | ✅   |
+| `cleanup_docker` MCP 도구  | 3단계 정리 (soft/standard/aggressive) + 단계별 상태 리포팅 + 빌드 중 안전 가드                                 | ✅   |
+| Deploy terminal phase rail | 배포 중 phase indicator 올바르게 업데이트, active step에 pulse 애니메이션                                      | ✅   |
+| Build log 전파 버그 수정   | Blue-green, preview, monorepo 배포 경로에서 Docker build 출력 보존                                             | ✅   |
+| Phase rail 업데이트 버그   | Backend SSE 이벤트에 `stepName` 필드 추가, 모든 배포 lifecycle 이벤트 포함                                     | ✅   |
+| Docker cleanup 빌드 보호   | Health monitor와 cleanup_docker 도구가 빌드 중인 프로젝트 aggressive cleanup 스킵                              | ✅   |
+
+---
+
+## v0.9.16 — Docker Image Deployment ✅
+
+| 항목                           | 내용                                                                                                                  | 상태 |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ---- |
+| Docker image deployment        | 사전 빌드된 Docker 이미지 직접 배포 (git clone/build 불필요), image URL, port, command override 지원 (API/MCP/Web UI) | ✅   |
+| Deploy Dialog image toggle     | Git/Image 소스 선택기, 조건부 필드 (image URL, port, command)                                                         | ✅   |
+| ProjectCard Docker badge       | Container 아이콘 + image URL 표시 (image-source 프로젝트)                                                             | ✅   |
+| OverviewTab image info         | Image URL, port, command 표시 (image-source 프로젝트, git 정보 대신)                                                  | ✅   |
+| ProjectHeader "Pull & Restart" | Image 프로젝트는 "Pull & Restart" 버튼 표시 ("Redeploy" 대신)                                                         | ✅   |
+| Settings image fields          | Project settings에서 image URL, port, command 편집 가능, PATCH API 지원                                               | ✅   |
+| MCP image deployment schema    | `create_deploy_plan` 스키마 확장 (source/image/cmd/port 파라미터)                                                     | ✅   |
+| Image URL validation           | `parseImageUrl()`, `getImageExposedPort()`, `mapPullError()` 유틸리티                                                 | ✅   |
+| Pipeline tests                 | 7개 pipeline 테스트 + 10개 MCP schema 테스트 + 3개 E2E integration 테스트                                             | ✅   |
