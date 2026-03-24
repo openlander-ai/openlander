@@ -247,9 +247,7 @@ export function ProjectHeader({
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors"
                     >
-                      <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
-                        VPN
-                      </span>
+                      <ExternalLink className="h-3 w-3" />
                       <span className="text-xs">{vpn.url.replace(/^https?:\/\//, '')}</span>
                     </a>
                   ))}

@@ -7,6 +7,7 @@ import { NotificationCenter } from './NotificationCenter';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
 import { useNavigate } from 'react-router-dom';
+import { useEnvironment } from '@/contexts/environment';
 import { Logo } from '@/components/icons/Logo';
 
 interface HeaderProps {
@@ -30,6 +31,7 @@ export function Header({
   const [version, setVersion] = useState<string | null>(null);
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const { environment, setEnvironment } = useEnvironment();
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -104,6 +106,44 @@ export function Header({
             </span>
           )}
         </div>
+
+        <div className="hidden sm:flex items-center bg-bg-subtle border border-[hsl(var(--border))] rounded-full p-0.5 ml-2">
+          <button
+            onClick={() => setEnvironment('production')}
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
+              environment === 'production'
+                ? 'bg-bg-panel text-primary-ol shadow-sm'
+                : 'text-muted-ol hover:text-secondary-ol',
+            )}
+          >
+            <div
+              className={cn(
+                'w-1.5 h-1.5 rounded-full',
+                environment === 'production' ? 'bg-success' : 'bg-muted-foreground/40',
+              )}
+            />
+            PROD
+          </button>
+          <button
+            onClick={() => setEnvironment('development')}
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
+              environment === 'development'
+                ? 'bg-bg-panel text-primary-ol shadow-sm'
+                : 'text-muted-ol hover:text-secondary-ol',
+            )}
+          >
+            <div
+              className={cn(
+                'w-1.5 h-1.5 rounded-full',
+                environment === 'development' ? 'bg-info' : 'bg-muted-foreground/40',
+              )}
+            />
+            DEV
+          </button>
+        </div>
+
         <Button
           variant="ghost"
           size="icon"

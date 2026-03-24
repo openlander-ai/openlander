@@ -1,3 +1,4 @@
+import { useEnvironment } from '@/contexts/environment';
 import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, List, Plus } from 'lucide-react';
@@ -51,10 +52,28 @@ export function ProjectsGrid() {
   const { serverStatus, setupStatus, loading: systemLoading } = useSystemStatus();
   const { t } = useLanguage();
   const statusConfig = getStatusConfig();
+  const { environment: selectedEnv } = useEnvironment();
   const [redeployingId, setRedeployingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
     return (localStorage.getItem('openlander-view-mode') as 'grid' | 'table') || 'grid';
   });
+
+  const filteredProjects = projects
+    .filter((project) => {
+      if (selectedEnv === 'production') return true;
+      const environments = project.environments ?? [];
+      return environments.some((e) => e.type === selectedEnv);
+    })
+    .map((project) => {
+      const environments = project.environments ?? [];
+      const currentEnvData = environments.find((e) => e.type === selectedEnv);
+      const currentStatus = currentEnvData
+        ? currentEnvData.status
+        : selectedEnv === 'production'
+          ? project.status
+          : 'idle';
+      return { ...project, status: currentStatus };
+    });
 
   const toggleView = (mode: 'grid' | 'table') => {
     setViewMode(mode);
@@ -103,7 +122,7 @@ export function ProjectsGrid() {
       <SystemHealthCards
         serverStatus={serverStatus}
         setupStatus={setupStatus}
-        projects={projects}
+        projects={filteredProjects}
         onNavigate={navigate}
         t={t}
       />
@@ -114,7 +133,8 @@ export function ProjectsGrid() {
             Project Overview
           </h1>
           <p className="text-sm font-body text-secondary-ol mt-0.5">
-            {projects.length} {projects.length === 1 ? 'project monitored' : 'projects monitored'}
+            {filteredProjects.length}{' '}
+            {filteredProjects.length === 1 ? 'project monitored' : 'projects monitored'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -158,7 +178,7 @@ export function ProjectsGrid() {
         </div>
       </div>
 
-      {projects.length === 0 ? (
+      {filteredProjects.length === 0 ? (
         <button
           onClick={() => navigate('/projects/new')}
           className="w-full max-w-md mx-auto flex flex-col items-center gap-4 py-16 px-8 rounded-lg border-2 border-dashed border-[hsl(var(--border))] hover:border-agent/40 bg-bg-panel/50 hover:bg-bg-panel transition-all duration-200 group cursor-pointer"
@@ -177,7 +197,7 @@ export function ProjectsGrid() {
         </button>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-          {projects.map((project) => (
+          {filteredProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
@@ -190,7 +210,12 @@ export function ProjectsGrid() {
           ))}
         </div>
       ) : (
-        <ProjectTable projects={projects} statusConfig={statusConfig} onNavigate={navigate} t={t} />
+        <ProjectTable
+          projects={filteredProjects}
+          statusConfig={statusConfig}
+          onNavigate={navigate}
+          t={t}
+        />
       )}
     </div>
   );

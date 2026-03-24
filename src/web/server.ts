@@ -116,6 +116,7 @@ function createApp(
       timestamp: new Date().toISOString(),
       uptime,
       dockerContainers,
+      environments: ['production', 'development'] as const,
     });
   });
 

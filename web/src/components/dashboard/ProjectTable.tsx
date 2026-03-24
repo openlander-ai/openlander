@@ -1,3 +1,4 @@
+import { useEnvironment } from '@/contexts/environment';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -17,6 +18,8 @@ interface ProjectTableProps {
 }
 
 export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectTableProps) {
+  const { environment: selectedEnv } = useEnvironment();
+
   return (
     <div className="border border-[hsl(var(--border))] rounded-lg overflow-hidden bg-bg-panel">
       <table className="w-full text-sm">
@@ -33,21 +36,55 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
             <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden lg:table-cell">
               Endpoint
             </th>
-            <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-ol hidden lg:table-cell">
-              Envs
-            </th>
           </tr>
         </thead>
         <tbody>
           {projects.map((project) => {
-            const status = statusConfig[project.status] ?? statusConfig.stopped;
+            const environments = project.environments ?? [];
+            const currentEnvData = environments.find((e) => e.type === selectedEnv);
+            const currentStatus = currentEnvData
+              ? currentEnvData.status
+              : selectedEnv === 'production'
+                ? project.status
+                : 'idle';
+            const status = statusConfig[currentStatus] ?? statusConfig.stopped;
+
+            const hasProd = environments.some((environment) => environment.type === 'production');
+            const allEnvironments = hasProd
+              ? environments
+              : [{ type: 'production', status: project.status }, ...environments];
+
             return (
               <tr
                 key={project.id}
                 onClick={() => onNavigate(`/projects/${project.id}`)}
                 className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-bg-subtle/50 cursor-pointer transition-colors"
               >
-                <td className="px-4 py-3 font-medium text-primary-ol">{project.name}</td>
+                <td className="px-4 py-3 font-medium text-primary-ol">
+                  <div className="flex items-center gap-2">
+                    {project.name}
+                    <div className="flex items-center gap-1.5">
+                      {allEnvironments.map((env) => {
+                        if (
+                          env.type === 'development' &&
+                          !environments.some((e) => e.type === 'development')
+                        )
+                          return null;
+                        const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
+                        return (
+                          <div
+                            key={env.type}
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-[10px] font-mono text-secondary-ol"
+                            title={`${env.type} - ${envStatus.label}`}
+                          >
+                            <div className={cn('h-1.5 w-1.5 rounded-full', envStatus.dot)} />
+                            {env.type === 'production' ? 'PROD' : 'DEV'}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5">
                     <span className={cn('h-2 w-2 rounded-full', status.dot)} />
@@ -91,22 +128,6 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
                         ))}
                     </div>
                   )}
-                </td>
-                <td className="px-4 py-3 hidden lg:table-cell">
-                  <div className="flex gap-1 flex-wrap">
-                    {project.environments?.map((environment) => (
-                      <span
-                        key={environment.id || environment.type}
-                        className="text-xs px-1.5 py-0.5 rounded bg-bg-subtle text-muted-ol border border-[hsl(var(--border))]"
-                      >
-                        {environment.type === 'production'
-                          ? 'prod'
-                          : environment.type === 'development'
-                            ? 'dev'
-                            : String(environment.type).substring(0, 4)}
-                      </span>
-                    ))}
-                  </div>
                 </td>
               </tr>
             );

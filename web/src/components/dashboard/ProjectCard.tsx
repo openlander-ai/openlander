@@ -1,3 +1,4 @@
+import { useEnvironment } from '@/contexts/environment';
 import { Spinner } from '@/components/ui/spinner';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
@@ -29,8 +30,19 @@ export function ProjectCard({
   onRedeploy,
   t,
 }: ProjectCardProps) {
-  const status = statusConfig[project.status] ?? statusConfig.stopped;
+  const { environment: selectedEnv } = useEnvironment();
   const environments = project.environments ?? [];
+
+  const currentEnvData = environments.find((e) => e.type === selectedEnv);
+
+  const currentStatus = currentEnvData
+    ? currentEnvData.status
+    : selectedEnv === 'production'
+      ? project.status
+      : 'idle';
+
+  const status = statusConfig[currentStatus] ?? statusConfig.stopped;
+
   const hasProd = environments.some((environment) => environment.type === 'production');
   const allEnvironments = hasProd
     ? environments
@@ -51,14 +63,31 @@ export function ProjectCard({
             className={cn(
               'h-2.5 w-2.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,0,0,0.1)]',
               status.dot,
-              project.status === 'running' && 'shadow-[0_0_6px_rgba(22,163,74,0.4)]',
-              project.status === 'error' && 'shadow-[0_0_6px_rgba(220,38,38,0.4)]',
-              project.status === 'building' && 'shadow-[0_0_6px_rgba(217,119,6,0.4)]',
+              currentStatus === 'running' && 'shadow-[0_0_6px_rgba(22,163,74,0.4)]',
+              currentStatus === 'error' && 'shadow-[0_0_6px_rgba(220,38,38,0.4)]',
+              currentStatus === 'building' && 'shadow-[0_0_6px_rgba(217,119,6,0.4)]',
             )}
           />
           <h3 className="font-display font-semibold text-base text-primary-ol truncate">
             {project.name}
           </h3>
+          <div className="flex items-center gap-1.5 ml-1">
+            {allEnvironments.map((env) => {
+              if (env.type === 'development' && !environments.some((e) => e.type === 'development'))
+                return null;
+              const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
+              return (
+                <div
+                  key={env.type}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-[10px] font-mono text-secondary-ol"
+                  title={`${env.type} - ${envStatus.label}`}
+                >
+                  <div className={cn('h-1.5 w-1.5 rounded-full', envStatus.dot)} />
+                  {env.type === 'production' ? 'PROD' : 'DEV'}
+                </div>
+              );
+            })}
+          </div>
         </div>
         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium shrink-0', status.badge)}>
           {status.label}
@@ -113,45 +142,28 @@ export function ProjectCard({
                   onClick={(event) => event.stopPropagation()}
                   className="flex items-center gap-1.5 text-xs font-mono text-purple-400 hover:text-purple-300 truncate transition-colors mt-1"
                 >
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 shrink-0">
-                    VPN
-                  </span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                   {vpn.url.replace(/^https?:\/\//, '')}
                 </a>
               ))}
           </div>
         )}
 
-        {allEnvironments.length > 0 && (
-          <div className="pt-2 border-t border-[hsl(var(--border))]/50">
-            <p className="text-xs font-mono text-muted-ol mb-2 uppercase tracking-[0.08em]">
-              Environments
+        {project.publicUrl && (
+          <div>
+            <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
+              Public
             </p>
-            <div className="flex items-center gap-2 flex-wrap">
-              {allEnvironments.map((environment) => {
-                const environmentStatus = statusConfig[environment.status] ?? statusConfig.stopped;
-                return (
-                  <button
-                    key={environment.type}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onNavigate(`/projects/${project.id}?env=${environment.type}`);
-                    }}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded border border-[hsl(var(--border))] hover:border-agent/30 bg-bg-subtle hover:bg-bg-panel transition-colors group/env"
-                    title={`${environment.type} - ${environmentStatus.label}`}
-                  >
-                    <div className={cn('h-1.5 w-1.5 rounded-full', environmentStatus.dot)} />
-                    <span className="text-xs font-mono text-secondary-ol group-hover/env:text-primary-ol transition-colors">
-                      {environment.type === 'production'
-                        ? 'prod'
-                        : environment.type === 'development'
-                          ? 'dev'
-                          : String(environment.type).substring(0, 4)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <a
+              href={project.publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => event.stopPropagation()}
+              className="flex items-center gap-1.5 text-xs font-mono text-success hover:text-success/80 truncate transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              {project.publicUrl.replace(/^https?:\/\//, '')}
+            </a>
           </div>
         )}
       </div>
