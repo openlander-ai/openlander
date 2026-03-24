@@ -294,10 +294,12 @@ export function NewProjectFlow() {
                   value={imageUrl}
                   onChange={(e) => {
                     setImageUrl(e.target.value);
-                    if (!imageName && e.target.value) {
+                    if (e.target.value) {
                       const parts = e.target.value.split('/');
                       const lastPart = parts[parts.length - 1].split(':')[0];
                       if (lastPart) setImageName(lastPart);
+                    } else {
+                      setImageName('');
                     }
                   }}
                   required
