@@ -16,7 +16,7 @@ interface GitRepo {
   stars: number;
 }
 
-type Tab = 'repos' | 'search';
+type Tab = 'repos' | 'search' | 'docker';
 
 const langColors: Record<string, string> = {
   TypeScript: 'bg-[#3178c6]',

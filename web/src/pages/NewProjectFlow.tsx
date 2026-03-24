@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useEnvScanFlow } from '@/hooks/use-env-scan-flow';
 import { Input } from '@/components/ui/input';
-import { Search, ArrowLeft } from 'lucide-react';
+import { Search, ArrowLeft, Container } from 'lucide-react';
 import { DeployingOverlay } from '@/components/new-project/DeployingOverlay';
 import { RepoListStep } from '@/components/new-project/RepoListStep';
 import type { GitRepo, Tab } from '@/components/new-project/RepoListStep';
@@ -28,6 +28,11 @@ export function NewProjectFlow() {
   const [error, setError] = useState<string | null>(null);
   const [ghError, setGhError] = useState<string | null>(null);
   const [deployStatus, setDeployStatus] = useState<string | null>(null);
+
+  const [imageUrl, setImageUrl] = useState('');
+  const [port, setPort] = useState('');
+  const [imageCmd, setImageCmd] = useState('');
+  const [imageName, setImageName] = useState('');
 
   const [selectedRepo, setSelectedRepo] = useState<GitRepo | null>(null);
   const [environment, setEnvironment] = useState<string>('production');
@@ -141,6 +146,38 @@ export function NewProjectFlow() {
     }
   };
 
+  const handleDeployImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!imageUrl) return;
+    setDeploying(true);
+    setError(null);
+    setDeployStatus('Starting deployment...');
+    try {
+      const result = await deployProject(
+        undefined,
+        undefined,
+        imageName || undefined,
+        undefined,
+        environment,
+        'image',
+        imageUrl,
+        imageCmd || undefined,
+        port ? parseInt(port, 10) : undefined,
+      );
+      if (result.success && result.projectId) {
+        navigate(`/projects/${result.projectId}?env=${environment}`);
+      } else {
+        setError(result.error ?? 'Deploy failed');
+        setDeploying(false);
+        setDeployStatus(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Deploy failed');
+      setDeploying(false);
+      setDeployStatus(null);
+    }
+  };
+
   const displayedRepos = tab === 'search' ? searchResults : repos;
 
   return (
@@ -186,6 +223,18 @@ export function NewProjectFlow() {
             >
               {'Search'}
             </button>
+            <button
+              onClick={() => setTab('docker')}
+              className={cn(
+                'px-3 py-1 rounded text-xs font-body transition-colors flex items-center gap-1.5',
+                tab === 'docker'
+                  ? 'bg-bg-panel text-primary-ol'
+                  : 'text-secondary-ol hover:text-primary-ol',
+              )}
+            >
+              <Container className="h-3.5 w-3.5" />
+              {'Docker Image'}
+            </button>
           </div>
 
           {tab === 'search' && (
@@ -211,7 +260,7 @@ export function NewProjectFlow() {
 
       {deploying && <DeployingOverlay deployStatus={deployStatus} />}
 
-      {!deploying && !selectedRepo && (
+      {!deploying && !selectedRepo && tab !== 'docker' && (
         <RepoListStep
           displayedRepos={displayedRepos}
           loading={loading}
@@ -226,6 +275,112 @@ export function NewProjectFlow() {
           onDeployClick={handleDeployClick}
           t={t}
         />
+      )}
+
+      {!deploying && tab === 'docker' && (
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-xl mx-auto space-y-6">
+            <form onSubmit={handleDeployImage} className="space-y-4">
+              <div className="space-y-2">
+                <label
+                  htmlFor="image-url"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                >
+                  {'Docker Image'}
+                </label>
+                <Input
+                  id="image-url"
+                  placeholder="e.g., nginx:latest or ghcr.io/user/app:v1"
+                  value={imageUrl}
+                  onChange={(e) => {
+                    setImageUrl(e.target.value);
+                    if (!imageName && e.target.value) {
+                      const parts = e.target.value.split('/');
+                      const lastPart = parts[parts.length - 1].split(':')[0];
+                      if (lastPart) setImageName(lastPart);
+                    }
+                  }}
+                  required
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="port"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                  >
+                    {'Port (Optional)'}
+                  </label>
+                  <Input
+                    id="port"
+                    type="number"
+                    placeholder="80"
+                    value={port}
+                    onChange={(e) => setPort(e.target.value)}
+                    className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="environment-image"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                  >
+                    {'Environment'}
+                  </label>
+                  <select
+                    id="environment-image"
+                    value={environment}
+                    onChange={(e) => handleEnvironmentChange(e.target.value)}
+                    className="flex h-9 w-full items-center justify-between rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-sm text-primary-ol shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="production">Production</option>
+                    <option value="development">Development</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="image-cmd"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                >
+                  {'Command (Optional)'}
+                </label>
+                <Input
+                  id="image-cmd"
+                  placeholder="e.g., --model-id BAAI/bge-m3"
+                  value={imageCmd}
+                  onChange={(e) => setImageCmd(e.target.value)}
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                />
+              </div>
+              <div className="space-y-2">
+                <label
+                  htmlFor="name-image"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
+                >
+                  {t('deploy.dialog.projectName')}
+                </label>
+                <Input
+                  id="name-image"
+                  placeholder={t('deploy.dialog.autoDetected')}
+                  value={imageName}
+                  onChange={(e) => setImageName(e.target.value)}
+                  className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
+                />
+              </div>
+              <div className="pt-4">
+                <button
+                  type="submit"
+                  disabled={deploying || !imageUrl}
+                  className="w-full inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-foreground text-background hover:bg-foreground/90 h-10 px-4 py-2"
+                >
+                  {'Deploy Image'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {!deploying && selectedRepo && (
