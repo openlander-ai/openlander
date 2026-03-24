@@ -1,6 +1,8 @@
 import { nanoid } from 'nanoid';
 
 import type { Database, EnvironmentRow, ProjectRow } from '../../db/index.js';
+import { getPolicy } from '../../config/index.js';
+import type { OpenLanderEnv } from '../../config/index.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { allocatePort } from '../port.js';
@@ -73,13 +75,16 @@ export class RollbackExecutor {
       );
       const containerPort = (await this.docker.getImageExposedPort(rollbackImageTag)) ?? port;
 
+      const envType: OpenLanderEnv =
+        environmentType === 'development' ? 'development' : 'production';
       const containerId = await this.docker.runContainer({
         imageTag: rollbackImageTag,
         name: containerName,
         port,
         containerPort,
         envVars: this.db.getEnvVars(projectId, target.target.environment?.id),
-        traefikLabels: buildTraefikLabels(project.name, containerPort, undefined, environmentType),
+        traefikLabels: buildTraefikLabels(project.name, containerPort, undefined, envType),
+        network: getPolicy(envType).networkName,
       });
 
       if (target.target.environment) {

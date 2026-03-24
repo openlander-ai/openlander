@@ -209,6 +209,7 @@ export const searchGithubReposSchema = z.object({
 export const deployComposeSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),
   branch: z.string().optional().describe('Branch'),
+  environment: deploymentEnvironmentSchema,
 });
 
 export const listComposeServicesSchema = z.object({
@@ -330,6 +331,7 @@ export const rollbackProjectSchema = z.object({
 // Blue-green deploy schema
 export const deployBlueGreenSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  environment: deploymentEnvironmentSchema,
 });
 
 // Restart project schema

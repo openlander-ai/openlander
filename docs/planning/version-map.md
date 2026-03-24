@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0 (TBD)
 
 ```
 
@@ -1534,6 +1534,21 @@ AI: bugs.md → 해결됨 + gh issue close
 | Build log 전파 버그 수정   | Blue-green, preview, monorepo 배포 경로에서 Docker build 출력 보존                                             | ✅   |
 | Phase rail 업데이트 버그   | Backend SSE 이벤트에 `stepName` 필드 추가, 모든 배포 lifecycle 이벤트 포함                                     | ✅   |
 | Docker cleanup 빌드 보호   | Health monitor와 cleanup_docker 도구가 빌드 중인 프로젝트 aggressive cleanup 스킵                              | ✅   |
+
+---
+
+## v0.9.18 — Docker Network Isolation ✅
+
+| 항목                        | 내용                                                                                                          | 상태 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- | ---- |
+| Traefik multi-network       | `ensureAllNetworks()` + `connectToNetwork()` — Traefik이 prod/dev 양쪽 네트워크에 자동 연결                   | ✅   |
+| Per-container network label | `buildTraefikLabels()`에 `traefik.docker.network` 추가, 환경별 올바른 네트워크로 라우팅                       | ✅   |
+| run-step network isolation  | `ContainerRunner.run()`이 `getPolicy(envType).networkName`을 `runContainer()`에 전달                          | ✅   |
+| compose network isolation   | `ComposeDeployConfig.environmentType` 추가, allocatePort/traefik labels/networks 환경별 분리                  | ✅   |
+| rollback/blue-green network | 롤백 및 blue-green 배포 시 환경별 네트워크 사용                                                               | ✅   |
+| Service dual-network        | 공유 서비스(PostgreSQL, Redis 등) 생성 후 secondary 네트워크에 자동 connect                                   | ✅   |
+| Caller chain (MCP/API)      | `deploy_compose`, `deploy_blue_green` MCP 도구 + API에 environment 파라미터 추가, orchestrator → compose 전달 | ✅   |
+| Tests                       | traefik labels(3), run-step network(2), compose-network dev(1) — 6개 신규 테스트                              | ✅   |
 
 ---
 

@@ -717,22 +717,23 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const project = getProjectOrThrow(c, ctx);
 
     const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    if (requestedEnvironment !== 'production') {
+    if (requestedEnvironment !== 'production' && requestedEnvironment !== 'development') {
       return c.json(
         {
           success: false,
-          error:
-            'Blue-green deployment is currently only supported for the production environment.',
+          error: 'Blue-green deployment environment must be "production" or "development".',
         },
         400,
       );
     }
+    const environmentType = requestedEnvironment;
 
     const body = await c.req
       .json<{ health_check_path?: string }>()
       .catch((): { health_check_path?: string } => ({}));
     const result = await ctx.blueGreen.deploy(project.id, {
       healthCheckPath: body.health_check_path,
+      environmentType,
     });
     return c.json(result, result.success ? 200 : 500);
   });

@@ -153,6 +153,7 @@ export async function buildProject(
     clonePath: string;
     commitSha: string;
     buildLog: string;
+    environmentType?: OpenLanderEnv;
   },
 ): Promise<
   | {
@@ -221,6 +222,7 @@ export async function buildProject(
       name: routeName,
       trigger,
       envVars: composeEnvVars,
+      environmentType: params.environmentType,
       _parentId: projectId,
     });
 

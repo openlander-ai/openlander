@@ -1,4 +1,5 @@
 import type { Database } from '../../db/index.js';
+import { getPolicy } from '../../config/index.js';
 import type { OpenLanderEnv } from '../../config/index.js';
 import type { Docker } from '../docker.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
@@ -63,6 +64,7 @@ export class ContainerRunner {
           envVars: config.envVars,
           cmd: config.imageCmd,
           traefikLabels,
+          network: getPolicy(envType).networkName,
           secretFiles: config.secretFiles,
         });
 

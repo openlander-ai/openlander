@@ -44,6 +44,8 @@ export const composeToolDefs: ToolDef[] = [
       const branch = args['branch'] as string | undefined;
       const name = args['name'] as string | undefined;
       const profiles = args['profiles'] as string[] | undefined;
+      const environment =
+        (args['environment'] as 'production' | 'development' | undefined) ?? 'production';
 
       const cloneResult = await cloneRepo({
         repoUrl,
@@ -70,6 +72,7 @@ export const composeToolDefs: ToolDef[] = [
         profiles,
         envVars,
         trigger: 'chat',
+        environmentType: environment,
       });
 
       if (!result.success) {

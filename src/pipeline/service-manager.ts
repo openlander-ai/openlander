@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { nanoid } from 'nanoid';
 
-import { getDataDir } from '../config/index.js';
+import { getDataDir, getPolicy } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import {
@@ -346,6 +346,20 @@ export class ServiceManager {
     });
 
     await container.start();
+
+    const primaryNetwork = this.docker.getNetworkName();
+    const prodNetwork = getPolicy('production').networkName;
+    const devNetwork = getPolicy('development').networkName;
+    const secondaryNetwork = primaryNetwork === prodNetwork ? devNetwork : prodNetwork;
+    try {
+      const client = this.docker.getClient();
+      await client.getNetwork(secondaryNetwork).connect({ Container: container.id });
+    } catch (err) {
+      log.warn(
+        { err, secondaryNetwork, containerName },
+        'Failed to connect service to secondary network',
+      );
+    }
 
     this.db.createService({
       id,

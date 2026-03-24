@@ -14,6 +14,8 @@ import { allocatePort, clearPortScanCache, releasePortReservation } from './port
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import { buildTraefikLabels } from './traefik.js';
 import { getCommitSubject } from './git.js';
+import { getPolicy } from '../config/index.js';
+import type { OpenLanderEnv } from '../config/index.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
@@ -73,6 +75,7 @@ export interface ComposeDeployConfig {
   name?: string;
   envVars?: Record<string, string>;
   trigger?: 'chat' | 'webhook' | 'api';
+  environmentType?: OpenLanderEnv;
   _parentId?: string;
 }
 
@@ -462,6 +465,7 @@ export class ComposePipeline {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const projectName = sanitizeComposeProjectName(parentName);
     const parentProjectId = config._parentId ?? nanoid(12);
+    const envType: OpenLanderEnv = config.environmentType ?? 'production';
     let buildLog = '';
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 
@@ -706,19 +710,18 @@ export class ComposePipeline {
             await this.docker.removeContainer(containerName);
 
             const parsedPort = this.resolveServicePortMapping(composeService);
-            // Given no explicit env context, use production port policy for compose deploys.
             let hostPort = await allocatePort(
               this.db,
               this.docker,
               {
                 preferredPort: parsedPort?.hostPort ?? undefined,
               },
-              'production',
+              envType,
             );
             allocatedHostPort = hostPort;
             const containerPort = parsedPort?.containerPort ?? hostPort;
             const routeName = sanitizeComposeProjectName(`${projectName}-${service.name}`);
-            const traefikLabels = buildTraefikLabels(routeName, containerPort);
+            const traefikLabels = buildTraefikLabels(routeName, containerPort, undefined, envType);
             const resolvedEnvVars = this.resolveComposeServiceEnvVars(composeService, envVars);
             const healthcheck = this.resolveDockerHealthcheck(composeService.healthcheck);
 
@@ -737,7 +740,7 @@ export class ComposePipeline {
                   entrypoint: composeService.entrypoint,
                   restart: composeService.restart,
                   healthcheck,
-                  networks: [projectNetwork, this.docker.getNetworkName()],
+                  networks: [projectNetwork, getPolicy(envType).networkName],
                 });
                 break;
               } catch (error) {
@@ -748,8 +751,7 @@ export class ComposePipeline {
                 if (attempt === 0 && isPortConflict) {
                   releasePortReservation(hostPort);
                   clearPortScanCache();
-                  // Given no explicit env context, use production port policy for compose deploys.
-                  hostPort = await allocatePort(this.db, this.docker, {}, 'production');
+                  hostPort = await allocatePort(this.db, this.docker, {}, envType);
                   allocatedHostPort = hostPort;
                   continue;
                 }

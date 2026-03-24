@@ -6,6 +6,8 @@ import type { Database } from '../db/index.js';
 import type { EnvManager } from './env.js';
 import type { EventBus } from '../events/index.js';
 import type { JobManager } from './job-manager.js';
+import { getPolicy } from '../config/index.js';
+import type { OpenLanderEnv } from '../config/index.js';
 import { cloneRepo } from './git.js';
 import { allocatePort } from './port.js';
 import { buildTraefikLabels, getProjectUrl } from './traefik.js';
@@ -51,6 +53,7 @@ export class BlueGreenDeployer {
       healthCheckPath?: string;
       healthCheckRetries?: number;
       healthCheckIntervalMs?: number;
+      environmentType?: OpenLanderEnv;
     },
   ): Promise<BlueGreenResult> {
     const startTime = Date.now();
@@ -130,11 +133,11 @@ export class BlueGreenDeployer {
         durationMs: buildDuration,
       });
 
-      // Given no explicit env context, use production for blue-green port policy.
-      newPort = await allocatePort(this.db, this.docker, {}, 'production');
+      const envType: OpenLanderEnv = options?.environmentType ?? 'production';
+      newPort = await allocatePort(this.db, this.docker, {}, envType);
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? newPort;
       const envVars = resolveEnvVars({ projectId }, { env: this.env });
-      const traefikLabels = buildTraefikLabels(projectName, containerPort);
+      const traefikLabels = buildTraefikLabels(projectName, containerPort, undefined, envType);
 
       greenContainerId = await this.docker.runContainer({
         imageTag,
@@ -143,6 +146,7 @@ export class BlueGreenDeployer {
         containerPort,
         envVars,
         traefikLabels,
+        network: getPolicy(envType).networkName,
       });
       shouldCleanupGreen = true;
 

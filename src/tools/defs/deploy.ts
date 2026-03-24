@@ -68,11 +68,15 @@ export const deployToolDefs: ToolDef[] = [
     inputSchema: deployBlueGreenSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
+      const environment =
+        (args['environment'] as 'production' | 'development' | undefined) ?? 'production';
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
-      const result = await context.appCtx.blueGreen.deploy(project.id);
+      const result = await context.appCtx.blueGreen.deploy(project.id, {
+        environmentType: environment,
+      });
       return {
         ...result,
         _agent_guidance: {

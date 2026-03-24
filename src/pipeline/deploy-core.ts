@@ -746,6 +746,7 @@ export class DeployPipeline {
           clonePath: cloneResult.clonePath,
           commitSha: cloneResult.commitSha,
           buildLog,
+          environmentType: environment.type,
         });
         buildLog = buildResult.buildLog;
         if (buildResult.type === 'compose') {

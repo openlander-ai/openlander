@@ -35,4 +35,22 @@ describe('Traefik Labels', () => {
     expect(labels['traefik.http.services.ol-app.loadbalancer.server.port']).toBe('10042');
     expect(typeof labels['traefik.http.services.ol-app.loadbalancer.server.port']).toBe('string');
   });
+
+  it('includes traefik.docker.network for production environment', () => {
+    const labels = buildTraefikLabels('my-app', 10001, undefined, 'production');
+
+    expect(labels['traefik.docker.network']).toBe('openlander-prod');
+  });
+
+  it('includes traefik.docker.network for development environment', () => {
+    const labels = buildTraefikLabels('my-app', 10001, undefined, 'development');
+
+    expect(labels['traefik.docker.network']).toBe('openlander-dev');
+  });
+
+  it('defaults traefik.docker.network to production when environment is omitted', () => {
+    const labels = buildTraefikLabels('my-app', 10001);
+
+    expect(labels['traefik.docker.network']).toBe('openlander-prod');
+  });
 });

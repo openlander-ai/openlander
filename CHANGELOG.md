@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.18] - 2026-03-25
+
+### Added
+
+- **Docker network isolation**: Production and development containers now run on separate Docker networks (`openlander-prod` / `openlander-dev`). Traefik auto-joins both networks at startup.
+- **Per-container `traefik.docker.network` label**: Tells Traefik which network to use for reaching each container, enabling correct routing across isolated networks.
+- **Multi-network Traefik**: `ensureAllNetworks()` creates both networks at startup; `connectToNetwork()` joins Traefik to the secondary network (idempotent).
+- **Service dual-network**: Shared services (PostgreSQL, Redis, etc.) are automatically connected to both networks after creation, ensuring accessibility from either environment.
+- **MCP environment parameter**: `deploy_compose` and `deploy_blue_green` tools now accept optional `environment` parameter for network-aware deployments.
+
+### Changed
+
+- **run-step.ts**: `ContainerRunner.run()` passes `getPolicy(envType).networkName` to `docker.runContainer()`.
+- **compose.ts**: `ComposeDeployConfig` accepts `environmentType`; port allocation, Traefik labels, and compose service networks are all environment-driven.
+- **rollback.ts / blue-green.ts**: Container creation uses environment-specific network.
+- **Blue-green API**: `POST /projects/:id/blue-green` now accepts `?environment=development` (previously production-only).
+- **orchestrator.ts / deploy-core.ts**: `buildProject()` propagates `environmentType` to compose pipeline.
+
 ## [0.9.17] - 2026-03-24
 
 ### Added

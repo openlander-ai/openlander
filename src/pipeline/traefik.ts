@@ -74,14 +74,56 @@ export class TraefikManager {
   }
 
   async ensureNetwork(): Promise<void> {
+    await this.ensureNetworkByName(this.networkName);
+  }
+
+  /**
+   * Ensure both production and development Docker networks exist.
+   * Called at startup so that either environment can deploy immediately.
+   */
+  async ensureAllNetworks(): Promise<void> {
+    const prodNetwork = getPolicy('production').networkName;
+    const devNetwork = getPolicy('development').networkName;
+    await Promise.all([
+      this.ensureNetworkByName(prodNetwork),
+      this.ensureNetworkByName(devNetwork),
+    ]);
+  }
+
+  /**
+   * Connect the Traefik container to an additional Docker network.
+   * Used to join the dev network so Traefik can route to dev containers.
+   * No-op if already connected.
+   */
+  async connectToNetwork(networkName: string): Promise<void> {
+    try {
+      const client = this.docker.getClient();
+      const container = client.getContainer(this.containerName);
+      const info = await container.inspect();
+      const connected = Object.keys(info.NetworkSettings.Networks);
+      if (connected.includes(networkName)) {
+        return;
+      }
+      const network = client.getNetwork(networkName);
+      await network.connect({ Container: container.id });
+      log.info(
+        { containerName: this.containerName, networkName },
+        'Traefik connected to additional network',
+      );
+    } catch (err) {
+      log.warn({ err, networkName }, 'Failed to connect Traefik to additional network');
+    }
+  }
+
+  private async ensureNetworkByName(name: string): Promise<void> {
     const client = this.docker.getClient();
     const networks = await client.listNetworks({
-      filters: { name: [this.networkName] },
+      filters: { name: [name] },
     });
 
     if (networks.length === 0) {
       await client.createNetwork({
-        Name: this.networkName,
+        Name: name,
         Driver: 'bridge',
       });
     }
@@ -89,11 +131,14 @@ export class TraefikManager {
 
   async start(): Promise<void> {
     if (await this.isRunning()) {
-      if (await this.hasCurrentConfig()) return;
+      if (await this.hasCurrentConfig()) {
+        await this.ensureMultiNetwork();
+        return;
+      }
       log.info('Traefik config outdated (missing HTTP Provider) — recreating container');
     }
 
-    await this.ensureNetwork();
+    await this.ensureAllNetworks();
 
     const client = this.docker.getClient();
 
@@ -156,6 +201,18 @@ export class TraefikManager {
       },
     });
     await container.start();
+
+    await this.ensureMultiNetwork();
+  }
+
+  private async ensureMultiNetwork(): Promise<void> {
+    const devNetwork = getPolicy('development').networkName;
+    const prodNetwork = getPolicy('production').networkName;
+    if (this.networkName === prodNetwork) {
+      await this.connectToNetwork(devNetwork);
+    } else {
+      await this.connectToNetwork(prodNetwork);
+    }
   }
 
   async stop(): Promise<void> {
@@ -316,6 +373,7 @@ export function buildTraefikLabels(
 ): Record<string, string> {
   const routerName = `ol-${projectName}`;
   const host = hostname ?? getEnvironmentProjectHostname(projectName, environment);
+  const networkName = getPolicy(environment).networkName;
 
   return {
     'traefik.enable': 'true',
@@ -323,6 +381,7 @@ export function buildTraefikLabels(
     [`traefik.http.routers.${routerName}.entrypoints`]: 'web',
     [`traefik.http.routers.${routerName}.service`]: routerName,
     [`traefik.http.services.${routerName}.loadbalancer.server.port`]: String(containerPort),
+    'traefik.docker.network': networkName,
   };
 }
 

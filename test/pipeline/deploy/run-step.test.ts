@@ -53,6 +53,7 @@ describe('ContainerRunner', () => {
         port: 12001,
         containerPort: 12001,
         envVars: { NODE_ENV: 'test' },
+        network: 'openlander-dev',
         secretFiles: [{ filename: '.env', content: 'A=1', mountPath: '/run/secrets/.env' }],
       }),
     );
@@ -85,26 +86,26 @@ describe('ContainerRunner', () => {
     expect(result.url).toContain('mono-api.');
   });
 
-  it('does not perform health check or DB status updates', async () => {
+  it('passes production network for production environment', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();
     const runner = new ContainerRunner(docker, db);
     vi.spyOn(portPipeline, 'allocatePort').mockResolvedValue(14000);
 
-    await expect(
-      runner.run({
-        imageTag: 'openlander/fail:latest',
-        projectName: 'failing-app',
-        projectId: 'p-fail',
-        environmentId: 'p-fail-production',
-        environmentType: 'production',
-        envVars: {},
-      }),
-    ).resolves.toEqual({
-      containerId: 'container-abc123456789',
-      port: 14000,
-      url: expect.stringContaining('failing-app.'),
+    await runner.run({
+      imageTag: 'openlander/fail:latest',
+      projectName: 'failing-app',
+      projectId: 'p-fail',
+      environmentId: 'p-fail-production',
+      environmentType: 'production',
+      envVars: {},
     });
+
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        network: 'openlander-prod',
+      }),
+    );
   });
 
   it('returns deploy:run payload fields for upstream event emission', async () => {

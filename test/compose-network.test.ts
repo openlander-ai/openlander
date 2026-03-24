@@ -62,6 +62,44 @@ describe('ComposePipeline dockerode networking', () => {
     });
   });
 
+  it('uses development network when environmentType is development', async () => {
+    const composePath = join(tmpDir, 'docker-compose.yml');
+    writeFileSync(composePath, 'services:\n  api:\n    image: nginx\n', 'utf8');
+
+    const runComposeServiceMock = vi
+      .fn()
+      .mockImplementation(async (config: { name: string }) => `cid-${config.name}`);
+    const docker = {
+      listAllContainers: vi.fn().mockResolvedValue([]),
+      ensureProjectNetwork: vi.fn().mockResolvedValue('stack-network'),
+      pullImage: vi.fn().mockResolvedValue(undefined),
+      buildComposeService: vi.fn().mockResolvedValue(undefined),
+      removeContainer: vi.fn().mockResolvedValue(undefined),
+      runComposeService: runComposeServiceMock,
+      waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
+      getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
+    } as unknown as Docker;
+
+    const pipeline = new ComposePipeline(docker, db, events);
+    const result = await pipeline.deployCompose({
+      repoUrl: 'https://github.com/example/stack',
+      clonePath: tmpDir,
+      composePath,
+      name: 'stack',
+      trigger: 'chat',
+      environmentType: 'development',
+    });
+
+    expect(result.success).toBe(true);
+    expect(runComposeServiceMock).toHaveBeenCalledTimes(1);
+    expect(runComposeServiceMock.mock.calls[0]?.[0]).toMatchObject({
+      name: 'ol-stack-api',
+      networks: ['stack-network', 'openlander-dev'],
+    });
+  });
+
   it('stops/removes child containers and project network on stopCompose', async () => {
     const composePath = join(tmpDir, 'docker-compose.yml');
     writeFileSync(composePath, 'services:\n  api:\n    image: nginx\n', 'utf8');
