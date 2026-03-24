@@ -10,7 +10,7 @@ import { getProjectUrl, getProjectUrls, getAllIps } from '../../pipeline/traefik
 import { cloneRepo } from '../../pipeline/git.js';
 import { scanForEnvUsage } from '../../pipeline/env-scan.js';
 import { generateEnvExample } from '../../pipeline/env-inject.js';
-import type { EnvironmentRow, EnvironmentType } from '../../db/index.js';
+import type { EnvironmentRow, EnvironmentType, ProjectRow } from '../../db/index.js';
 import {
   getEnvironmentByIdOrThrow,
   getProjectOrThrow,
@@ -28,6 +28,38 @@ function mapEnvironment(environment: EnvironmentRow) {
     ...environment,
     created_at: normalizeTimestamp(environment.created_at),
     updated_at: normalizeTimestamp(environment.updated_at),
+  };
+}
+
+function parseImageCmd(imageCmd: string | null): string[] | null {
+  if (!imageCmd) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(imageCmd);
+    return Array.isArray(parsed) && parsed.every((entry: unknown) => typeof entry === 'string')
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function mapProjectForApi(project: ProjectRow) {
+  return {
+    ...project,
+    port: project.assigned_port ?? null,
+    url: project.assigned_port ? getProjectUrl(project.name) : null,
+    urls: project.assigned_port ? getProjectUrls(project.name) : [],
+    publicUrl: project.public_url ?? null,
+    repoUrl: project.repo_url,
+    source: project.source,
+    imageUrl: project.image_url ?? undefined,
+    imageCmd: parseImageCmd(project.image_cmd),
+    containerPort: project.container_port ?? null,
+    created_at: normalizeTimestamp(project.created_at),
+    updated_at: normalizeTimestamp(project.updated_at),
   };
 }
 
@@ -206,6 +238,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           name: p.name,
           status: p.status,
           visibility: p.visibility,
+          source: p.source,
           repoUrl: p.repo_url,
           branch: p.branch,
           port: p.assigned_port,
@@ -218,6 +251,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
               }))
             : [],
           publicUrl: p.public_url,
+          ...(p.image_url ? { imageUrl: p.image_url } : {}),
           createdAt: normalizeTimestamp(p.created_at),
           updatedAt: normalizeTimestamp(p.updated_at),
           parentProjectId: p.parent_project_id,
@@ -237,14 +271,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const deployLogs = ctx.db.getDeployLogs(project.id, 5);
 
     return c.json({
-      ...project,
-      port: project.assigned_port ?? null,
-      url: project.assigned_port ? getProjectUrl(project.name) : null,
-      urls: project.assigned_port ? getProjectUrls(project.name) : [],
-      publicUrl: project.public_url ?? null,
-      repoUrl: project.repo_url,
-      created_at: normalizeTimestamp(project.created_at),
-      updated_at: normalizeTimestamp(project.updated_at),
+      ...mapProjectForApi(project),
       environments: environments.map(mapEnvironment),
       envVars,
       recentDeploys: deployLogs.map((log) => ({
@@ -252,6 +279,82 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         commitMessage: log.commit_message ?? null,
       })),
     });
+  });
+
+  api.patch('/projects/:id', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
+
+    const body = await c.req
+      .json<{
+        imageUrl?: unknown;
+        imageCmd?: unknown;
+        containerPort?: unknown;
+        image_url?: unknown;
+        image_cmd?: unknown;
+        container_port?: unknown;
+      }>()
+      .catch(
+        (): {
+          imageUrl?: unknown;
+          imageCmd?: unknown;
+          containerPort?: unknown;
+          image_url?: unknown;
+          image_cmd?: unknown;
+          container_port?: unknown;
+        } => ({}),
+      );
+
+    const imageUrlRaw = body.imageUrl ?? body.image_url;
+    const imageCmdRaw = body.imageCmd ?? body.image_cmd;
+    const containerPortRaw = body.containerPort ?? body.container_port;
+
+    const imageUrl =
+      imageUrlRaw === undefined || imageUrlRaw === null
+        ? undefined
+        : typeof imageUrlRaw === 'string'
+          ? imageUrlRaw
+          : undefined;
+
+    const imageCmd =
+      imageCmdRaw === undefined || imageCmdRaw === null
+        ? undefined
+        : Array.isArray(imageCmdRaw) && imageCmdRaw.every((entry) => typeof entry === 'string')
+          ? imageCmdRaw
+          : typeof imageCmdRaw === 'string'
+            ? imageCmdRaw
+                .split(' ')
+                .map((part) => part.trim())
+                .filter((part) => part.length > 0)
+            : undefined;
+
+    const containerPort =
+      containerPortRaw === undefined || containerPortRaw === null
+        ? undefined
+        : typeof containerPortRaw === 'number' && Number.isInteger(containerPortRaw)
+          ? containerPortRaw
+          : typeof containerPortRaw === 'string'
+            ? Number.parseInt(containerPortRaw, 10)
+            : undefined;
+
+    if (containerPort !== undefined && !Number.isFinite(containerPort)) {
+      return c.json(
+        { error: 'INVALID_FIELD', message: 'containerPort must be a valid integer' },
+        400,
+      );
+    }
+
+    ctx.db.updateProject(project.id, {
+      imageUrl,
+      imageCmd,
+      containerPort,
+    });
+
+    const updatedProject = ctx.db.getProject(project.id);
+    if (!updatedProject) {
+      return c.json({ error: 'NOT_FOUND', message: 'Project not found' }, 404);
+    }
+
+    return c.json(mapProjectForApi(updatedProject));
   });
 
   api.post('/projects/:id/environments', async (c) => {
