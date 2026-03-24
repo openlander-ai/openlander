@@ -29,6 +29,10 @@ export type PlanExecutionDeps = {
   sshKeyPath: string | null;
   trigger: string;
   write: (message: string) => Promise<void>;
+  source?: 'git' | 'image';
+  imageUrl?: string;
+  imageCmd?: string[];
+  containerPort?: number;
 };
 
 export type FailureHandlerDeps = {
@@ -52,6 +56,10 @@ export async function startPlanExecution(deps: PlanExecutionDeps): Promise<void>
     environment: deps.environment,
     sshKeyPath: deps.sshKeyPath || undefined,
     trigger: deps.trigger,
+    source: deps.source,
+    imageUrl: deps.imageUrl,
+    imageCmd: deps.imageCmd,
+    containerPort: deps.containerPort,
   });
 
   await deps.write(deps.isKorean ? '배포 계획 실행 중...' : 'Executing deployment plan...');

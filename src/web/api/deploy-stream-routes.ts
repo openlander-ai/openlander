@@ -193,6 +193,10 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         sshKeyPath: ctx.config.git.sshKeyPath,
         trigger: 'api',
         write,
+        source,
+        imageUrl,
+        imageCmd: typeof body.image_cmd === 'string' ? body.image_cmd.split(' ') : body.image_cmd,
+        containerPort: body.port,
       };
       const failureDeps = {
         ctx,
