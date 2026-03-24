@@ -26,8 +26,6 @@ import { allocatePort } from './port.js';
 
 const log = createModuleLogger('service-manager');
 
-const WEB_NETWORK = 'web';
-
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
   mysql: ['9', '8'],
@@ -278,7 +276,8 @@ export class ServiceManager {
     }
 
     const containerPort = port;
-    const hostPort = await allocatePort(this.db, this.docker);
+    // Given no explicit env context, use production port policy for services.
+    const hostPort = await allocatePort(this.db, this.docker, {}, 'production');
 
     const id = nanoid(12);
     const containerName = this.getContainerName(opts.name);
@@ -321,7 +320,7 @@ export class ServiceManager {
         [`${String(containerPort)}/tcp`]: {},
       },
       HostConfig: {
-        NetworkMode: WEB_NETWORK,
+        NetworkMode: this.docker.getNetworkName(),
         RestartPolicy: { Name: 'unless-stopped' },
         Binds: [`${volumeName}:${dataMountPath}`],
         PortBindings: {

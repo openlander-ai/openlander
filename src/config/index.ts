@@ -13,6 +13,58 @@ const log = createModuleLogger('config');
  * existing configs never break.
  */
 
+// --- Environment Policies ---
+
+/** Supported deployment environment types. */
+export type OpenLanderEnv = 'production' | 'development';
+
+/** Valid environment names for input validation. */
+const VALID_ENVIRONMENTS: ReadonlySet<string> = new Set<string>(['production', 'development']);
+
+/** Deploy-level policy that varies per environment type. */
+export interface EnvironmentPolicy {
+  networkName: string;
+  portRangeStart: number;
+  portRangeEnd: number;
+  traefikContainerName: string;
+  traefikHttpPort: number;
+  traefikDashboardPort: number;
+}
+
+/** Default policies per environment. Pipeline functions read these via getPolicy(). */
+const DEFAULT_POLICIES: Record<OpenLanderEnv, EnvironmentPolicy> = {
+  production: {
+    networkName: 'openlander-prod',
+    portRangeStart: 10001,
+    portRangeEnd: 10999,
+    traefikContainerName: 'traefik-ol-prod',
+    traefikHttpPort: 80,
+    traefikDashboardPort: 8080,
+  },
+  development: {
+    networkName: 'openlander-dev',
+    portRangeStart: 20001,
+    portRangeEnd: 20999,
+    traefikContainerName: 'traefik-ol-dev',
+    traefikHttpPort: 20080,
+    traefikDashboardPort: 28080,
+  },
+};
+
+/**
+ * Get the deploy policy for an environment type.
+ * Pipeline code should always go through this function — never read DEFAULT_POLICIES directly.
+ * Future: this will layer global config overrides and per-project overrides on top.
+ */
+export function getPolicy(envType: OpenLanderEnv): EnvironmentPolicy {
+  return DEFAULT_POLICIES[envType];
+}
+
+/** Validate whether a string is a valid environment type. */
+export function isValidEnvironment(value: string): value is OpenLanderEnv {
+  return VALID_ENVIRONMENTS.has(value);
+}
+
 // --- Config schema ---
 
 export interface OpenLanderConfig {
@@ -72,9 +124,9 @@ export interface ServerConfig {
 
 export interface DockerConfig {
   socketPath: string;
-  /** Network name for Traefik routing */
+  /** Network name for Traefik routing (production default) */
   networkName: string;
-  /** Port range for managed containers */
+  /** Port range for managed containers (production defaults) */
   portRangeStart: number;
   portRangeEnd: number;
 }
@@ -180,83 +232,91 @@ export interface GitProvidersConfig {
 
 // --- Defaults ---
 
-const DEFAULT_CONFIG: OpenLanderConfig = {
-  language: 'en',
-  llm: {
-    provider: 'gemini',
-    apiKey: '',
-    model: 'gemini-2.0-flash',
-    authToken: '',
-    ollamaEndpoint: 'http://localhost:11434',
-  },
-  server: {
-    port: 10114,
-    host: '0.0.0.0',
-    baseUrl: 'http://localhost:10114',
-  },
-  docker: {
-    socketPath: '',
-    networkName: 'web',
-    portRangeStart: 10001,
-    portRangeEnd: 10999,
-  },
-  git: {
-    sshKeyPath: join(homedir(), '.ssh', 'id_ed25519'),
-    cloneDir: join(homedir(), '.openlander', 'repos'),
-  },
-  cloudflare: {
-    apiToken: '',
-    tunnelId: '',
-    accountId: '',
-  },
-  monitoring: {
-    healthcheckIntervalSec: 60,
-    inactivityThresholdDays: 14,
-  },
-  mcp: {
-    enabled: false,
-    transport: 'stdio',
-    servers: [],
-    platformTools: false,
-  },
-  channels: {
-    slack: { enabled: false, token: '', signingSecret: '', recoveryChannelId: '' },
-    discord: { enabled: false, token: '', applicationId: '', publicKey: '', recoveryChannelId: '' },
-    telegram: { enabled: false, token: '', webhookSecret: '', recoveryChannelId: '' },
-  },
-  gitProviders: {
-    github: { token: '', username: '' },
-    gitlab: { token: '', username: '' },
-  },
-  localModel: {
-    preferLocal: false,
-    modelName: 'openlander-agent',
-  },
-  traefik: {
-    mode: 'managed',
-    externalNetwork: undefined,
-  },
-};
+const CONFIG_DIR = join(homedir(), '.openlander');
+
+function buildDefaultConfig(): OpenLanderConfig {
+  const prodPolicy = DEFAULT_POLICIES.production;
+
+  return {
+    language: 'en',
+    llm: {
+      provider: 'gemini',
+      apiKey: '',
+      model: 'gemini-2.0-flash',
+      authToken: '',
+      ollamaEndpoint: 'http://localhost:11434',
+    },
+    server: {
+      port: 10114,
+      host: '0.0.0.0',
+      baseUrl: 'http://localhost:10114',
+    },
+    docker: {
+      socketPath: '',
+      networkName: prodPolicy.networkName,
+      portRangeStart: prodPolicy.portRangeStart,
+      portRangeEnd: prodPolicy.portRangeEnd,
+    },
+    git: {
+      sshKeyPath: join(homedir(), '.ssh', 'id_ed25519'),
+      cloneDir: join(CONFIG_DIR, 'repos'),
+    },
+    cloudflare: {
+      apiToken: '',
+      tunnelId: '',
+      accountId: '',
+    },
+    monitoring: {
+      healthcheckIntervalSec: 60,
+      inactivityThresholdDays: 14,
+    },
+    mcp: {
+      enabled: false,
+      transport: 'stdio',
+      servers: [],
+      platformTools: false,
+    },
+    channels: {
+      slack: { enabled: false, token: '', signingSecret: '', recoveryChannelId: '' },
+      discord: {
+        enabled: false,
+        token: '',
+        applicationId: '',
+        publicKey: '',
+        recoveryChannelId: '',
+      },
+      telegram: { enabled: false, token: '', webhookSecret: '', recoveryChannelId: '' },
+    },
+    gitProviders: {
+      github: { token: '', username: '' },
+      gitlab: { token: '', username: '' },
+    },
+    localModel: {
+      preferLocal: false,
+      modelName: 'openlander-agent',
+    },
+    traefik: {
+      mode: 'managed',
+      externalNetwork: undefined,
+    },
+  };
+}
 
 // --- Config Manager ---
 
-const CONFIG_DIR = join(homedir(), '.openlander');
-const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
-const DB_PATH = join(CONFIG_DIR, 'openlander.db');
-
-/** Get the path to the OpenLander data directory. */
+/** Get the OpenLander data directory. */
 export function getDataDir(): string {
   return CONFIG_DIR;
 }
 
 /** Get the default database file path. */
 export function getDbPath(): string {
-  return DB_PATH;
+  return join(CONFIG_DIR, 'openlander.db');
 }
 
 /** Get the config file path. */
 export function getConfigPath(): string {
-  return CONFIG_PATH;
+  return join(CONFIG_DIR, 'config.json');
 }
 
 /**
@@ -264,24 +324,28 @@ export function getConfigPath(): string {
  * Merges saved config with defaults — new fields get default values automatically.
  */
 export function loadConfig(): OpenLanderConfig {
-  if (!existsSync(CONFIG_PATH)) {
-    return { ...DEFAULT_CONFIG };
+  const configPath = getConfigPath();
+  const defaults = buildDefaultConfig();
+
+  if (!existsSync(configPath)) {
+    return { ...defaults };
   }
 
   try {
-    const raw = readFileSync(CONFIG_PATH, 'utf-8');
+    const raw = readFileSync(configPath, 'utf-8');
     const saved = JSON.parse(raw) as Partial<OpenLanderConfig>;
-    return deepMerge(DEFAULT_CONFIG, saved);
+    return deepMerge(defaults, saved);
   } catch (err) {
     log.debug({ err }, 'Config file corrupted — returning defaults');
-    return { ...DEFAULT_CONFIG };
+    return { ...defaults };
   }
 }
 
 /** Save configuration to disk. */
 export function saveConfig(config: OpenLanderConfig): void {
-  mkdirSync(dirname(CONFIG_PATH), { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  const configPath = getConfigPath();
+  mkdirSync(dirname(configPath), { recursive: true });
+  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
 }
 
 /** Update specific config fields (partial update). */
@@ -294,7 +358,7 @@ export function updateConfig(partial: DeepPartial<OpenLanderConfig>): OpenLander
 
 /** Check if initial onboarding has been completed. */
 export function isOnboarded(): boolean {
-  return existsSync(CONFIG_PATH);
+  return existsSync(getConfigPath());
 }
 
 // --- Utility types ---

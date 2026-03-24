@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import { nanoid } from 'nanoid';
 
 import { createModuleLogger } from '../../lib/logger.js';
+import type { OpenLanderEnv } from '../../config/index.js';
 import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import type { Docker } from '../docker.js';
@@ -422,7 +423,7 @@ export async function runAndVerify(
     environmentId: string;
     projectName: string;
     routeName: string;
-    environmentType: string;
+    environmentType: OpenLanderEnv;
     imageTag: string;
     dockerfilePath?: string;
     previousEnvironmentImageTag: string | null;

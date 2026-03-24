@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+const deploymentEnvironmentSchema = z
+  .enum(['production', 'development'])
+  .optional()
+  .describe('Target deployment environment');
+
 // Core project/deployment schemas
 export const deployProjectSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL (e.g., github.com/user/repo)'),
@@ -308,6 +313,7 @@ export const scanProjectSchema = z.object({
 // Redeploy schema
 export const redeployProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  environment: deploymentEnvironmentSchema,
   no_cache: z
     .boolean()
     .optional()
@@ -329,6 +335,7 @@ export const deployBlueGreenSchema = z.object({
 // Restart project schema
 export const restartProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  environment: deploymentEnvironmentSchema,
   no_cache: z
     .boolean()
     .optional()
@@ -340,6 +347,7 @@ export const restartProjectSchema = z.object({
 // Stop project schema
 export const stopProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  environment: deploymentEnvironmentSchema,
 });
 
 // Remove project schema
@@ -489,6 +497,7 @@ export const createDeployPlanSchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().optional().describe('Container port'),
+    environment: deploymentEnvironmentSchema,
     env_vars: z
       .string()
       .optional()
@@ -513,7 +522,6 @@ export const createDeployPlanSchema = z
       if (data.source === 'image') {
         return !!data.image && data.image.length > 0;
       }
-      // source is 'git' or unset — repo_url required
       return !!data.repo_url && data.repo_url.length > 0;
     },
     {
@@ -556,6 +564,7 @@ export const deploySchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().optional().describe('Container port'),
+    environment: deploymentEnvironmentSchema,
     env_vars: z
       .string()
       .optional()
@@ -590,7 +599,6 @@ export const deploySchema = z
       if (data.source === 'image') {
         return !!data.image && data.image.length > 0;
       }
-      // source is 'git' or unset — repo_url required
       return !!data.repo_url && data.repo_url.length > 0;
     },
     {

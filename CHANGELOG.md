@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.17] - 2026-03-24
+
+### Added
+
+- **Deploy-level environment policies**: `getPolicy(envType)` returns per-environment config (network name, port range, Traefik settings). Production: ports 10001-10999, Development: ports 20001-20999.
+- **MCP environment parameter**: `deploy`, `create_deploy_plan`, `redeploy_project`, `stop_project`, `restart_project` tools now accept optional `environment` parameter (`production`|`development`).
+- **Environment validation**: `isValidEnvironment()` prevents arbitrary strings from being used as environment types.
+- **Docker network override infrastructure**: `runContainer()` accepts optional `network` parameter (ready for future per-env network isolation).
+
+### Changed
+
+- **Hardcoded values removed**: All references to `'web'` network, `'openlander-traefik'` container name, and fixed port range `10001-10999` replaced with policy-driven values.
+- **allocatePort environment-aware**: All callers now pass environment type for correct port range selection.
+- **TraefikManager config-driven**: Container name, network, and ports driven by constructor options instead of module constants.
+- **redeploy() environment routing**: Correctly routes development environment redeploys to the right container/environment.
+
 ## [0.9.16] - 2026-03-24
 
 ### Added

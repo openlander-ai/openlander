@@ -15,6 +15,38 @@ import type { ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-project-ops');
 
+type ToolAppCtx = Parameters<ToolDef['execute']>[1]['appCtx'];
+type DeploymentEnvironment = 'production' | 'development';
+
+function resolveEnvironmentType(args: Record<string, unknown>): DeploymentEnvironment {
+  return args['environment'] === 'development' ? 'development' : 'production';
+}
+
+function hasExplicitEnvironment(args: Record<string, unknown>): boolean {
+  return args['environment'] === 'production' || args['environment'] === 'development';
+}
+
+function resolveEnvironmentId(
+  appCtx: ToolAppCtx,
+  projectId: string,
+  projectName: string,
+  environment: DeploymentEnvironment,
+): string | undefined {
+  if (typeof appCtx.db.getEnvironmentsByProject !== 'function') {
+    return undefined;
+  }
+
+  const match = appCtx.db
+    .getEnvironmentsByProject(projectId)
+    .find((entry) => entry.type === environment);
+  if (!match) {
+    throw new Error(
+      `ENVIRONMENT_NOT_FOUND: No ${environment} environment found for project ${projectName}`,
+    );
+  }
+  return match.id;
+}
+
 async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
   let client: ReturnType<typeof appCtx.docker.getClient>;
   try {
@@ -56,15 +88,28 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: stopProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
+      const environment = resolveEnvironmentType(args);
+      const explicitEnvironment = hasExplicitEnvironment(args);
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      await context.appCtx.pipeline.stop(project.id);
+      if (explicitEnvironment) {
+        const environmentId = resolveEnvironmentId(
+          context.appCtx,
+          project.id,
+          projectName,
+          environment,
+        );
+        await context.appCtx.pipeline.stop(project.id, environmentId);
+      } else {
+        await context.appCtx.pipeline.stop(project.id);
+      }
       return {
         status: 'stopped',
         project: projectName,
+        ...(explicitEnvironment ? { environment } : {}),
         _agent_guidance: {
           next_steps: [
             'Call restart_project to start the project again, or remove_project to delete it entirely.',
@@ -155,20 +200,36 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: restartProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
+      const environment = resolveEnvironmentType(args);
+      const explicitEnvironment = hasExplicitEnvironment(args);
       const noCache = (args['no_cache'] as boolean | undefined) === true;
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      await context.appCtx.pipeline.stop(project.id);
-      void context.appCtx.pipeline.redeploy(project.id, { noCache }).catch((err: unknown) => {
-        log.error({ err, projectId: project.id }, 'Restart redeploy failed');
-      });
+      if (explicitEnvironment) {
+        const environmentId = resolveEnvironmentId(
+          context.appCtx,
+          project.id,
+          projectName,
+          environment,
+        );
+        await context.appCtx.pipeline.stop(project.id, environmentId);
+      } else {
+        await context.appCtx.pipeline.stop(project.id);
+      }
+
+      void context.appCtx.pipeline
+        .redeploy(project.id, explicitEnvironment ? { noCache, environment } : { noCache })
+        .catch((err: unknown) => {
+          log.error({ err, projectId: project.id }, 'Restart redeploy failed');
+        });
 
       return {
         status: 'restarting',
         project: projectName,
+        ...(explicitEnvironment ? { environment } : {}),
         message: noCache
           ? 'Restart initiated (no_cache). Full rebuild may take 3-5+ minutes. Use get_deploy_status with wait=true and timeout=600.'
           : 'Redeployment started. Use get_deploy_status to track progress.',
@@ -209,19 +270,24 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: redeployProjectSchema,
     execute: (args, context) => {
       const projectName = args['project_name'] as string;
+      const environment = resolveEnvironmentType(args);
+      const explicitEnvironment = hasExplicitEnvironment(args);
       const noCache = (args['no_cache'] as boolean | undefined) === true;
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      void context.appCtx.pipeline.redeploy(project.id, { noCache }).catch((err: unknown) => {
-        log.error({ err, projectId: project.id }, 'Redeploy failed');
-      });
+      void context.appCtx.pipeline
+        .redeploy(project.id, explicitEnvironment ? { noCache, environment } : { noCache })
+        .catch((err: unknown) => {
+          log.error({ err, projectId: project.id }, 'Redeploy failed');
+        });
 
       return {
         status: 'redeploying',
         project: projectName,
+        ...(explicitEnvironment ? { environment } : {}),
         message: noCache
           ? 'Redeployment started (no_cache). Full rebuild may take 3-5+ minutes. Use get_deploy_status with wait=true and timeout=600.'
           : 'Redeployment started. Use get_deploy_status to track progress.',

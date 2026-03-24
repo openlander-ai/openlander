@@ -1,13 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
+import {
+  getPolicy,
+  isValidEnvironment,
+  getDataDir,
+  getDbPath,
+  getConfigPath,
+} from '../src/config/index.js';
 
 const describeConfig =
   typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined' ? describe.skip : describe;
-
-// We test the deepMerge logic indirectly via loadConfig behavior
-// Since the config module uses hardcoded paths, we test the logic concepts
 
 describeConfig('Config Deep Merge', () => {
   it('preserves defaults for missing fields', () => {
@@ -76,6 +80,65 @@ describeConfig('Config DB Path', () => {
     expect(parsed.llm.provider).toBe('gemini');
     expect(parsed.llm.apiKey).toBe('test-key');
     expect(parsed.server.port).toBe(3000);
+  });
+});
+
+describeConfig('Environment Policies', () => {
+  it('returns production policy', () => {
+    const policy = getPolicy('production');
+    expect(policy.networkName).toBe('openlander-prod');
+    expect(policy.portRangeStart).toBe(10001);
+    expect(policy.portRangeEnd).toBe(10999);
+    expect(policy.traefikContainerName).toBe('traefik-ol-prod');
+    expect(policy.traefikHttpPort).toBe(80);
+    expect(policy.traefikDashboardPort).toBe(8080);
+  });
+
+  it('returns development policy with separate port range', () => {
+    const policy = getPolicy('development');
+    expect(policy.networkName).toBe('openlander-dev');
+    expect(policy.portRangeStart).toBe(20001);
+    expect(policy.portRangeEnd).toBe(20999);
+    expect(policy.traefikContainerName).toBe('traefik-ol-dev');
+    expect(policy.traefikHttpPort).toBe(20080);
+    expect(policy.traefikDashboardPort).toBe(28080);
+  });
+
+  it('port ranges do not overlap', () => {
+    const prod = getPolicy('production');
+    const dev = getPolicy('development');
+    expect(prod.portRangeEnd).toBeLessThan(dev.portRangeStart);
+  });
+
+  it('network names differ between environments', () => {
+    expect(getPolicy('production').networkName).not.toBe(getPolicy('development').networkName);
+  });
+});
+
+describeConfig('Environment Validation', () => {
+  it('accepts valid environment types', () => {
+    expect(isValidEnvironment('production')).toBe(true);
+    expect(isValidEnvironment('development')).toBe(true);
+  });
+
+  it('rejects invalid environment types', () => {
+    expect(isValidEnvironment('staging')).toBe(false);
+    expect(isValidEnvironment('../etc/passwd')).toBe(false);
+    expect(isValidEnvironment('')).toBe(false);
+  });
+});
+
+describeConfig('Data Paths', () => {
+  it('getDataDir returns ~/.openlander', () => {
+    expect(getDataDir()).toBe(join(homedir(), '.openlander'));
+  });
+
+  it('getDbPath returns ~/.openlander/openlander.db', () => {
+    expect(getDbPath()).toContain('openlander.db');
+  });
+
+  it('getConfigPath returns ~/.openlander/config.json', () => {
+    expect(getConfigPath()).toContain('config.json');
   });
 });
 

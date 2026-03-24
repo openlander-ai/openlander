@@ -130,7 +130,8 @@ export class BlueGreenDeployer {
         durationMs: buildDuration,
       });
 
-      newPort = await allocatePort(this.db, this.docker);
+      // Given no explicit env context, use production for blue-green port policy.
+      newPort = await allocatePort(this.db, this.docker, {}, 'production');
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? newPort;
       const envVars = resolveEnvVars({ projectId }, { env: this.env });
       const traefikLabels = buildTraefikLabels(projectName, containerPort);

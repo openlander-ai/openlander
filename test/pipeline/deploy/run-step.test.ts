@@ -36,7 +36,12 @@ describe('ContainerRunner', () => {
       secretFiles: [{ filename: '.env', content: 'A=1', mountPath: '/run/secrets/.env' }],
     });
 
-    expect(allocatePortSpy).toHaveBeenCalledWith(db, docker, { preferredPort: 12001 });
+    expect(allocatePortSpy).toHaveBeenCalledWith(
+      db,
+      docker,
+      { preferredPort: 12001 },
+      'development',
+    );
     expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('ol-demo-app');
     expect(
       (docker.removeContainer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],

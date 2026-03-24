@@ -202,13 +202,15 @@ export class RollbackExecutor {
   ): Promise<{ port: number; containerName: string; environmentType?: EnvironmentRow['type'] }> {
     if (!target.environment) {
       return {
-        port: await allocatePort(this.db, this.docker),
+        port: await allocatePort(this.db, this.docker, {}, 'production'),
         containerName: `ol-${target.project.name}`,
       };
     }
 
     const routeName = getRouteName(target.project.name, target.environment.type);
-    const port = target.environment.assigned_port ?? (await allocatePort(this.db, this.docker));
+    const port =
+      target.environment.assigned_port ??
+      (await allocatePort(this.db, this.docker, {}, target.environment.type));
 
     return {
       port,

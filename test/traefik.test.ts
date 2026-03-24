@@ -285,7 +285,7 @@ describe('switchToExternalMode', () => {
   it('calls removeContainer for managed Traefik', async () => {
     await switchToExternalMode(docker, 'external-network');
 
-    expect(mockRemoveContainer).toHaveBeenCalledWith('openlander-traefik');
+    expect(mockRemoveContainer).toHaveBeenCalledWith('traefik-ol-prod');
   });
 
   it('does not throw if container does not exist', async () => {
@@ -293,7 +293,7 @@ describe('switchToExternalMode', () => {
 
     // Should complete without throwing (error is caught internally)
     await switchToExternalMode(docker, 'external-network');
-    expect(mockRemoveContainer).toHaveBeenCalledWith('openlander-traefik');
+    expect(mockRemoveContainer).toHaveBeenCalledWith('traefik-ol-prod');
   });
 });
 

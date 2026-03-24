@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getDataDir, getPolicy } from '../config/index.js';
 import type Dockerode from 'dockerode';
 
 import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
@@ -32,6 +33,7 @@ export interface RunContainerOptions {
   envVars: Record<string, string>;
   cmd?: string[];
   traefikLabels: Record<string, string>;
+  network?: string;
   secretFiles?: SecretFileMount[];
 }
 
@@ -53,6 +55,7 @@ export interface RunComposeServiceOptions {
     retries?: number;
     start_period?: number;
   };
+  network?: string;
   networks?: string[];
 }
 
@@ -155,7 +158,7 @@ export class Docker {
   private readonly client: Dockerode;
   private readonly networkName: string;
 
-  constructor(socketPath?: string, networkName: string = 'web') {
+  constructor(socketPath?: string, networkName?: string) {
     const require = createRequire(import.meta.url);
 
     // docker-modem eagerly requires its SSH transport, which pulls in ssh2's
@@ -184,7 +187,7 @@ export class Docker {
       throw new Error('Failed to load dockerode constructor');
     }
 
-    this.networkName = networkName;
+    this.networkName = networkName ?? getPolicy('production').networkName;
     if (socketPath) {
       this.client = new DockerodeClass({ socketPath });
     } else {
@@ -412,7 +415,7 @@ export class Docker {
           [`${String(cPort)}/tcp`]: [{ HostPort: String(options.port) }],
         },
         Binds: binds.length > 0 ? binds : undefined,
-        NetworkMode: this.networkName,
+        NetworkMode: options.network ?? this.networkName,
         RestartPolicy: { Name: 'unless-stopped' },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
@@ -431,7 +434,7 @@ export class Docker {
     const projectName = opts.name.replace(/^ol-/, '');
     const volumeBinds = await this.getProjectVolumeBinds(projectName);
     const binds = [...secretBinds, ...volumeBinds];
-    const networkMode = opts.networks?.[0] ?? this.networkName;
+    const networkMode = opts.network ?? opts.networks?.[0] ?? this.networkName;
 
     const command = typeof opts.command === 'string' ? ['sh', '-c', opts.command] : opts.command;
     const restartPolicyName =
@@ -519,7 +522,7 @@ export class Docker {
   private writeSecretFiles(containerName: string, files: SecretFileMount[]): string[] {
     if (files.length === 0) return [];
 
-    const secretsDir = join(homedir(), '.openlander', 'container-secrets', containerName);
+    const secretsDir = join(getDataDir(), 'container-secrets', containerName);
     mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
 
     const binds: string[] = [];
@@ -560,7 +563,7 @@ export class Docker {
   }
 
   cleanupSecretFiles(containerName: string): void {
-    const secretsDir = join(homedir(), '.openlander', 'container-secrets', containerName);
+    const secretsDir = join(getDataDir(), 'container-secrets', containerName);
     try {
       rmSync(secretsDir, { recursive: true, force: true });
     } catch (_) {
@@ -882,7 +885,10 @@ export class Docker {
     }
   }
 
-  /** Get the underlying dockerode client (for Traefik manager). */
+  getNetworkName(): string {
+    return this.networkName;
+  }
+
   getClient(): Dockerode {
     return this.client;
   }

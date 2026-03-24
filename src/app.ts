@@ -135,7 +135,9 @@ export async function createAppContext(
   const jobManager = new JobManager();
   const env = new EnvManager(db);
   const composePipeline = new ComposePipeline(docker, db, eventBus, jobManager, env);
-  const traefik = new TraefikManager(docker, config.server.port);
+  const traefik = new TraefikManager(docker, config.server.port, {
+    networkName: config.docker.networkName,
+  });
 
   let model: LanguageModel | null = null;
   if (config.llm.apiKey || config.llm.authToken || config.llm.provider === 'ollama') {

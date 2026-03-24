@@ -706,9 +706,15 @@ export class ComposePipeline {
             await this.docker.removeContainer(containerName);
 
             const parsedPort = this.resolveServicePortMapping(composeService);
-            let hostPort = await allocatePort(this.db, this.docker, {
-              preferredPort: parsedPort?.hostPort ?? undefined,
-            });
+            // Given no explicit env context, use production port policy for compose deploys.
+            let hostPort = await allocatePort(
+              this.db,
+              this.docker,
+              {
+                preferredPort: parsedPort?.hostPort ?? undefined,
+              },
+              'production',
+            );
             allocatedHostPort = hostPort;
             const containerPort = parsedPort?.containerPort ?? hostPort;
             const routeName = sanitizeComposeProjectName(`${projectName}-${service.name}`);
@@ -731,7 +737,7 @@ export class ComposePipeline {
                   entrypoint: composeService.entrypoint,
                   restart: composeService.restart,
                   healthcheck,
-                  networks: [projectNetwork, 'web'],
+                  networks: [projectNetwork, this.docker.getNetworkName()],
                 });
                 break;
               } catch (error) {
@@ -742,7 +748,8 @@ export class ComposePipeline {
                 if (attempt === 0 && isPortConflict) {
                   releasePortReservation(hostPort);
                   clearPortScanCache();
-                  hostPort = await allocatePort(this.db, this.docker);
+                  // Given no explicit env context, use production port policy for compose deploys.
+                  hostPort = await allocatePort(this.db, this.docker, {}, 'production');
                   allocatedHostPort = hostPort;
                   continue;
                 }

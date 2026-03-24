@@ -77,6 +77,7 @@ function createMockDocker(): Docker {
     buildComposeService: vi.fn().mockResolvedValue(undefined),
     runComposeService: vi.fn().mockImplementation(async (config: { name: string }) => config.name),
     removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
+    getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
   } as unknown as Docker;
 }
 

@@ -10,9 +10,9 @@ import { allocatePort } from './port.js';
 import { buildTraefikLabels, getProjectUrl } from './traefik.js';
 import { cloneRepo } from './git.js';
 import { ensureDockerfile } from './dockerfile-gen.js';
+import { getPolicy } from '../config/index.js';
 
 const DEFAULT_PREVIEW_TTL_MS = 86_400_000;
-const PORT_RANGE_END = 10999;
 
 /**
  * Deployment options for creating a preview environment.
@@ -256,14 +256,18 @@ export class PreviewDeployer {
   }
 
   private async allocatePreviewPort(): Promise<number> {
-    let port = await allocatePort(this.db, this.docker);
+    // Given no explicit env context, use production port policy for previews.
+    let port = await allocatePort(this.db, this.docker, {}, 'production');
     const dbPorts = new Set(this.db.getUsedPorts());
     const previewPorts = new Set(this.list().map((preview) => preview.port));
+    const { portRangeStart, portRangeEnd } = getPolicy('production');
 
     while (dbPorts.has(port) || previewPorts.has(port)) {
       port += 1;
-      if (port > PORT_RANGE_END) {
-        throw new Error('No available preview ports in range 10001-10999');
+      if (port > portRangeEnd) {
+        throw new Error(
+          `No available preview ports in range ${String(portRangeStart)}-${String(portRangeEnd)}`,
+        );
       }
     }
 

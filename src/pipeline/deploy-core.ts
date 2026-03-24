@@ -1096,7 +1096,10 @@ export class DeployPipeline {
   }
 
   /** Redeploy an existing project (pull latest, rebuild, swap containers). */
-  async redeploy(projectId: string, options?: { noCache?: boolean }): Promise<DeployResult> {
+  async redeploy(
+    projectId: string,
+    options?: { noCache?: boolean; environment?: 'production' | 'development' },
+  ): Promise<DeployResult> {
     const project = this.db.getProject(projectId);
     if (!project) {
       return {
@@ -1105,6 +1108,57 @@ export class DeployPipeline {
         projectName: 'unknown',
         error: `Project not found: ${projectId}`,
       };
+    }
+
+    const environmentType =
+      options?.environment === 'development' ? ('development' as const) : ('production' as const);
+    const targetEnvironment = this.db
+      .getEnvironmentsByProject(projectId)
+      .find((environment) => environment.type === environmentType);
+    if (!targetEnvironment) {
+      return {
+        success: false,
+        projectId,
+        projectName: project.name,
+        error: `Environment not found: ${environmentType}`,
+      };
+    }
+
+    if (environmentType === 'development') {
+      if (targetEnvironment.container_id) {
+        try {
+          await this.docker.removeContainer(targetEnvironment.container_id);
+        } catch (_err) {
+          /* container may already be removed */
+        }
+      }
+
+      if (targetEnvironment.image_tag) {
+        this.db.updateEnvironment(targetEnvironment.id, {
+          previousImageTag: targetEnvironment.image_tag,
+        });
+      }
+
+      this.db.updateEnvironment(targetEnvironment.id, {
+        status: 'building',
+        containerId: null,
+        imageTag: null,
+        assignedPort: null,
+      });
+      this.jobManager?.trackJob(projectId, project.name);
+
+      const config = buildDeployConfig({
+        projectId,
+        runtimeOverrides: {
+          _projectId: projectId,
+          _preferredPort: targetEnvironment.assigned_port ?? undefined,
+          _noCacheBuild: options?.noCache,
+          environment: environmentType,
+        },
+        db: this.db,
+      });
+
+      return this.deploy(config);
     }
 
     await this.cleanupProjectContainers(projectId, 'remove');
@@ -1135,6 +1189,7 @@ export class DeployPipeline {
         _projectId: projectId,
         _preferredPort: previousPort,
         _noCacheBuild: project.source === 'image' ? true : options?.noCache,
+        environment: environmentType,
       },
       db: this.db,
     });

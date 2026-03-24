@@ -42,6 +42,7 @@ describe('ComposePipeline dockerode networking', () => {
       waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
       stopContainer: vi.fn().mockResolvedValue(undefined),
       removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
+      getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
     } as unknown as Docker;
 
     const pipeline = new ComposePipeline(docker, db, events);
@@ -57,7 +58,7 @@ describe('ComposePipeline dockerode networking', () => {
     expect(runComposeServiceMock).toHaveBeenCalledTimes(1);
     expect(runComposeServiceMock.mock.calls[0]?.[0]).toMatchObject({
       name: 'ol-stack-api',
-      networks: ['stack-network', 'web'],
+      networks: ['stack-network', 'openlander-prod'],
     });
   });
 
@@ -78,6 +79,7 @@ describe('ComposePipeline dockerode networking', () => {
       stopContainer: stopContainerMock,
       removeContainer: removeContainerMock,
       removeProjectNetwork: removeProjectNetworkMock,
+      getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
     } as unknown as Docker;
 
     const pipeline = new ComposePipeline(docker, db, events);
