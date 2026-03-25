@@ -4,7 +4,6 @@ import { stream } from 'hono/streaming';
 import type { AppContext } from '../../app.js';
 import { OpenLanderError } from '../../errors.js';
 import { eventBus, type EventType, type EventPayload } from '../../events/index.js';
-import { SessionStore } from '../session.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { createDeployStreamRoutes } from './deploy-stream-routes.js';
 import { createProjectRoutes } from './project-routes.js';
@@ -36,9 +35,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
     log.error({ err }, 'API Error');
     return c.json({ error: 'INTERNAL_ERROR', message: err.message }, 500);
   });
-
-  // --- Session Store ---
-  const sessionStore = new SessionStore(ctx.db);
 
   // --- Event Subscription for Activity Buffer ---
 
@@ -182,20 +178,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
     }
 
     return c.json({ activities: activityBuffer.slice(-20) });
-  });
-
-  // --- Session Management ---
-
-  api.get('/sessions', (c) => {
-    const sessions = sessionStore.listSessions();
-    return c.json({ sessions });
-  });
-
-  api.get('/sessions/:id/messages', (c) => {
-    const sessionId = c.req.param('id');
-    const limit = c.req.query('limit') ? parseInt(c.req.query('limit') ?? '50', 10) : undefined;
-    const messages = sessionStore.getMessages(sessionId, limit);
-    return c.json({ messages });
   });
 
   // --- Global Secrets ---

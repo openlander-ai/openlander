@@ -78,15 +78,6 @@ export interface TimelineEventRow {
   created_at: string;
 }
 
-export interface ChatHistoryRow {
-  id: string;
-  session_id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  tool_calls: string | null;
-  created_at: string;
-}
-
 export interface DomainMappingRow {
   id: string;
   project_id: string;

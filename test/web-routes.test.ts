@@ -1608,16 +1608,6 @@ describe('Web API Routes', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // GET /api/sessions
-  // ---------------------------------------------------------------------------
-
-  it('GET /api/sessions returns sessions list', async () => {
-    const res = await app.request('/api/sessions');
-    expect(res.status).toBe(200);
-
-    const body = await res.json();
-    expect(body).toHaveProperty('sessions');
-  });
   // ---------------------------------------------------------------------------
   // POST /api/env/scan
   // ---------------------------------------------------------------------------

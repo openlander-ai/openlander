@@ -67,19 +67,6 @@ export interface LogEntry {
   message: string;
 }
 
-export interface SessionInfo {
-  sessionId: string;
-  messageCount: number;
-  lastActivity: string;
-  preview: string;
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
-}
-
 export interface DeployResponse {
   success: boolean;
   projectId: string;
@@ -367,16 +354,6 @@ export class OpenLanderClient {
 
   // ---------------------------------------------------------------------------
   // Sessions & Chat History
-  // ---------------------------------------------------------------------------
-
-  async listSessions(): Promise<SessionInfo[]> {
-    return this.get<SessionInfo[]>('/api/sessions');
-  }
-
-  async getSessionMessages(sessionId: string): Promise<ChatMessage[]> {
-    return this.get<ChatMessage[]>(`/api/sessions/${sessionId}/messages`);
-  }
-
   // ---------------------------------------------------------------------------
   // System
   // ---------------------------------------------------------------------------

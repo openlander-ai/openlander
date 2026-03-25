@@ -286,40 +286,6 @@ describe('Database', () => {
     });
   });
 
-  // --- Chat History ---
-
-  describe('Chat History', () => {
-    it('saves and retrieves chat messages', () => {
-      db.saveChatMessage({
-        id: 'msg1',
-        sessionId: 'session-1',
-        role: 'user',
-        content: 'Deploy my app',
-      });
-
-      db.saveChatMessage({
-        id: 'msg2',
-        sessionId: 'session-1',
-        role: 'assistant',
-        content: 'Deploying...',
-      });
-
-      const history = db.getChatHistory('session-1');
-      expect(history).toHaveLength(2);
-      expect(history[0]!.role).toBe('user');
-      expect(history[1]!.role).toBe('assistant');
-    });
-
-    it('lists chat sessions', () => {
-      db.saveChatMessage({ id: 'msg1', sessionId: 's1', role: 'user', content: 'hi' });
-      db.saveChatMessage({ id: 'msg2', sessionId: 's1', role: 'assistant', content: 'hello' });
-      db.saveChatMessage({ id: 'msg3', sessionId: 's2', role: 'user', content: 'deploy' });
-
-      const sessions = db.listChatSessions();
-      expect(sessions).toHaveLength(2);
-    });
-  });
-
   describe('Monorepo (parent-child projects)', () => {
     it('creates a parent project with children', () => {
       db.createProject({ id: 'parent1', name: 'my-saas', repoUrl: 'https://github.com/test/saas' });

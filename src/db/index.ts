@@ -18,7 +18,6 @@ import { WebhookRepo } from './repos/webhook.repo.js';
 import { DeployPlanRepo } from './repos/deploy-plan.repo.js';
 import { DeployConfigRepo } from './repos/deploy-config.repo.js';
 import type { ProjectRow } from './types.js';
-import type { ChatHistoryRow } from './types.js';
 
 export type {
   EnvironmentType,
@@ -26,7 +25,6 @@ export type {
   EnvironmentRow,
   DeployLogRow,
   TimelineEventRow,
-  ChatHistoryRow,
   DomainMappingRow,
   OAuthTokenRow,
   WebhookConfigRow,
@@ -118,14 +116,10 @@ export class Database {
   getLastDeployLog(projectId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLog(projectId, environmentId); }
   getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }
   updateRuntimeLog(deployId: string, runtimeLog: string) { this.deployLogRepo.updateRuntimeLog(deployId, runtimeLog); }
-  createTimelineEvent(event: Parameters<TimelineRepo['createTimelineEvent']>[0]) { this.timelineRepo.createTimelineEvent(event); }
-  getTimelineEvents(projectId: string, limit = 200) { return this.timelineRepo.getTimelineEvents(projectId, limit); }
-  deleteTimelineEvents(projectId: string) { this.timelineRepo.deleteTimelineEvents(projectId); }
-   saveChatMessage(msg: { id: string; sessionId: string; role: ChatHistoryRow['role']; content: string; toolCalls?: unknown; }) { void msg; }
-   getChatHistory(sessionId: string, limit = 50): ChatHistoryRow[] { void sessionId; void limit; return []; }
-   listChatSessions(): Array<{ session_id: string; message_count: number; last_message: string; first_message: string | null; }> { return []; }
-   deleteSession(sessionId: string) { void sessionId; }
-  createDomainMapping(mapping: Parameters<DomainMappingRepo['createDomainMapping']>[0]) { this.domainMappingRepo.createDomainMapping(mapping); }
+   createTimelineEvent(event: Parameters<TimelineRepo['createTimelineEvent']>[0]) { this.timelineRepo.createTimelineEvent(event); }
+   getTimelineEvents(projectId: string, limit = 200) { return this.timelineRepo.getTimelineEvents(projectId, limit); }
+   deleteTimelineEvents(projectId: string) { this.timelineRepo.deleteTimelineEvents(projectId); }
+   createDomainMapping(mapping: Parameters<DomainMappingRepo['createDomainMapping']>[0]) { this.domainMappingRepo.createDomainMapping(mapping); }
   getDomainMappings(projectId: string) { return this.domainMappingRepo.getDomainMappings(projectId); }
   listDomainMappings() { return this.domainMappingRepo.listDomainMappings(); }
   deleteDomainMapping(id: string) { this.domainMappingRepo.deleteDomainMapping(id); }
