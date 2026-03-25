@@ -64,16 +64,16 @@ async function resolveAccessibleUrl(projectId: string): Promise<string> {
     port?: unknown;
   };
 
-  if (typeof project.url === 'string' && project.url.length > 0) {
-    return project.url;
-  }
-
-  if (typeof project.assigned_port === 'number') {
+  if (typeof project.assigned_port === 'number' && project.assigned_port > 0) {
     return `http://localhost:${String(project.assigned_port)}`;
   }
 
-  if (typeof project.port === 'number') {
+  if (typeof project.port === 'number' && (project.port as number) > 0) {
     return `http://localhost:${String(project.port)}`;
+  }
+
+  if (typeof project.url === 'string' && project.url.length > 0) {
+    return project.url;
   }
 
   throw new Error('Unable to resolve accessible URL from project response');

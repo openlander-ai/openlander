@@ -2,23 +2,38 @@ import { createHmac } from 'node:crypto';
 
 const BASE = 'http://localhost:10114';
 
+function authHeaders(): Record<string, string> {
+  if (process.env.OPENLANDER_API_TOKEN) {
+    return { Authorization: `Bearer ${process.env.OPENLANDER_API_TOKEN}` };
+  }
+  if (process.env.OPENLANDER_SESSION) {
+    return { Cookie: `ol_session=${process.env.OPENLANDER_SESSION}` };
+  }
+  return {};
+}
+
+function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const headers = { ...authHeaders(), ...(init?.headers as Record<string, string>) };
+  return fetch(`${BASE}${path}`, { ...init, headers });
+}
+
 // ============================================================================
 // Deploy
 // ============================================================================
 
 export async function deployGitProject(
   repoUrl: string,
-  branch?: string,
+  branch: string = 'main',
   environment?: string,
 ): Promise<{ projectId: string; success: boolean }> {
   const body = {
     source: 'git',
     repo_url: repoUrl,
-    ...(branch && { branch }),
+    branch,
     ...(environment && { environment }),
   };
 
-  const res = await fetch(`${BASE}/api/projects/deploy`, {
+  const res = await apiFetch('/api/projects/deploy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -48,7 +63,7 @@ export async function deployImageProject(
     ...(name && { name }),
   };
 
-  const res = await fetch(`${BASE}/api/projects/deploy`, {
+  const res = await apiFetch('/api/projects/deploy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -71,7 +86,7 @@ export async function deployImageProject(
 // ============================================================================
 
 export async function getProject(projectId: string): Promise<any> {
-  const res = await fetch(`${BASE}/api/projects/${projectId}`);
+  const res = await apiFetch(`/api/projects/${projectId}`);
 
   if (!res.ok) {
     const text = await res.text();
@@ -82,7 +97,7 @@ export async function getProject(projectId: string): Promise<any> {
 }
 
 export async function deleteProject(projectId: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/projects/${projectId}`, { method: 'DELETE' });
+  const res = await apiFetch(`/api/projects/${projectId}`, { method: 'DELETE' });
 
   if (!res.ok) {
     const text = await res.text();
@@ -91,7 +106,7 @@ export async function deleteProject(projectId: string): Promise<void> {
 }
 
 export async function listProjects(): Promise<any[]> {
-  const res = await fetch(`${BASE}/api/projects`);
+  const res = await apiFetch(`/api/projects`);
 
   if (!res.ok) {
     const text = await res.text();
@@ -107,7 +122,7 @@ export async function listProjects(): Promise<any[]> {
 // ============================================================================
 
 export async function redeployProject(projectId: string): Promise<any> {
-  const res = await fetch(`${BASE}/api/projects/${projectId}/redeploy`, {
+  const res = await apiFetch(`/api/projects/${projectId}/redeploy`, {
     method: 'POST',
   });
 
@@ -126,7 +141,7 @@ export async function redeployProject(projectId: string): Promise<any> {
 }
 
 export async function rollbackProject(projectId: string, deployId: string): Promise<any> {
-  const res = await fetch(`${BASE}/api/projects/${projectId}/rollback`, {
+  const res = await apiFetch(`/api/projects/${projectId}/rollback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deployment_id: deployId }),
@@ -143,7 +158,7 @@ export async function rollbackProject(projectId: string, deployId: string): Prom
 export async function blueGreenDeploy(projectId: string, healthCheckPath?: string): Promise<any> {
   const body = healthCheckPath ? { health_check_path: healthCheckPath } : {};
 
-  const res = await fetch(`${BASE}/api/projects/${projectId}/blue-green`, {
+  const res = await apiFetch(`/api/projects/${projectId}/blue-green`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -162,7 +177,7 @@ export async function blueGreenDeploy(projectId: string, healthCheckPath?: strin
 // ============================================================================
 
 export async function setEnvVars(projectId: string, vars: Record<string, string>): Promise<void> {
-  const res = await fetch(`${BASE}/api/projects/${projectId}/env`, {
+  const res = await apiFetch(`/api/projects/${projectId}/env`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ variables: vars }),
@@ -177,7 +192,7 @@ export async function setEnvVars(projectId: string, vars: Record<string, string>
 export async function configureWebhook(
   projectId: string,
 ): Promise<{ secret: string; webhookId: string }> {
-  const res = await fetch(`${BASE}/api/projects/${projectId}/webhooks`, {
+  const res = await apiFetch(`/api/projects/${projectId}/webhooks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ source: 'github', enabled: true }),
@@ -203,7 +218,7 @@ export async function postWebhook(projectId: string, payload: any, secret: strin
   const payloadStr = JSON.stringify(payload);
   const signature = createHmac('sha256', secret).update(payloadStr).digest('hex');
 
-  const res = await fetch(`${BASE}/api/webhooks/${projectId}/github`, {
+  const res = await apiFetch(`/api/webhooks/${projectId}/github`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -236,13 +251,14 @@ export async function mcpCall(method: string, params?: any): Promise<any> {
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    Accept: 'application/json, text/event-stream',
   };
 
   if (mcpSessionId) {
     headers['mcp-session-id'] = mcpSessionId;
   }
 
-  const res = await fetch(`${BASE}/mcp`, {
+  const res = await apiFetch('/mcp', {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
@@ -253,13 +269,33 @@ export async function mcpCall(method: string, params?: any): Promise<any> {
     throw new Error(`MCP call failed (${res.status}): ${text}`);
   }
 
-  const data = (await res.json()) as { result?: any; error?: any };
-
-  // Store session ID from response headers if present
   const sessionHeader = res.headers.get('mcp-session-id');
   if (sessionHeader) {
     mcpSessionId = sessionHeader;
   }
+
+  const contentType = res.headers.get('content-type') ?? '';
+
+  if (contentType.includes('text/event-stream')) {
+    const text = await res.text();
+    const lines = text.split('\n');
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const jsonStr = line.slice(5).trim();
+      if (!jsonStr) continue;
+      try {
+        const data = JSON.parse(jsonStr) as { result?: any; error?: any };
+        if (data.error) throw new Error(`MCP error: ${JSON.stringify(data.error)}`);
+        if (data.result !== undefined) return data.result;
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;
+        throw e;
+      }
+    }
+    throw new Error('No JSON-RPC result found in SSE response');
+  }
+
+  const data = (await res.json()) as { result?: any; error?: any };
 
   if (data.error) {
     throw new Error(`MCP error: ${JSON.stringify(data.error)}`);
@@ -305,7 +341,7 @@ export async function waitForStatus(
 // ============================================================================
 
 export async function getTimeline(projectId: string): Promise<any[]> {
-  const res = await fetch(`${BASE}/api/projects/${projectId}/timeline`);
+  const res = await apiFetch(`/api/projects/${projectId}/timeline`);
 
   if (!res.ok) {
     const text = await res.text();
@@ -314,4 +350,20 @@ export async function getTimeline(projectId: string): Promise<any[]> {
 
   const data = (await res.json()) as { events?: any[] };
   return data.events || [];
+}
+
+// ============================================================================
+// Deployments
+// ============================================================================
+
+export async function getDeployments(projectId: string): Promise<any[]> {
+  const res = await apiFetch(`/api/projects/${projectId}/deployments`);
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Get deployments failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as { deployments?: any[] };
+  return data.deployments || [];
 }

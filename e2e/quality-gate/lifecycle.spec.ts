@@ -3,13 +3,13 @@ import { expect, test } from '@playwright/test';
 import {
   deleteProject,
   deployGitProject,
+  getDeployments,
   getProject,
   redeployProject,
   rollbackProject,
   waitForStatus,
 } from './fixtures/api.js';
 
-const BASE_URL = 'http://localhost:10114';
 const R1_REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
@@ -26,23 +26,6 @@ async function fetchWithRetry(url: string, retries = 5, delayMs = 2000): Promise
     }
   }
   throw new Error('unreachable');
-}
-
-type DeploymentSummary = {
-  id: string;
-};
-
-async function getDeployments(projectId: string): Promise<DeploymentSummary[]> {
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/deployments`);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Get deployments failed (${res.status}): ${text}`);
-  }
-
-  const data = (await res.json()) as { deployments?: Array<{ id?: string }> };
-  return (data.deployments ?? [])
-    .map((deployment) => ({ id: deployment.id ?? '' }))
-    .filter((deployment) => deployment.id.length > 0);
 }
 
 if (!isBunRuntime) {
@@ -70,7 +53,7 @@ if (!isBunRuntime) {
 
       const initialDeployments = await getDeployments(projectId);
       expect(initialDeployments.length).toBeGreaterThanOrEqual(1);
-      firstDeployId = initialDeployments[0]?.id ?? null;
+      firstDeployId = (initialDeployments[0] as any)?.id ?? null;
       expect(firstDeployId).toBeTruthy();
 
       await redeployProject(projectId);
@@ -79,14 +62,14 @@ if (!isBunRuntime) {
 
       const deploymentsAfterRedeploy = await getDeployments(projectId);
       const deployIdsAfterRedeploy = new Set(
-        deploymentsAfterRedeploy.map((deployment) => deployment.id),
+        deploymentsAfterRedeploy.map((deployment: any) => deployment.id),
       );
       expect(deploymentsAfterRedeploy.length).toBeGreaterThanOrEqual(2);
       expect(firstDeployId).not.toBeNull();
       expect(deployIdsAfterRedeploy.has(firstDeployId!)).toBe(true);
 
-      const newDeployId = deploymentsAfterRedeploy.find(
-        (deployment) => deployment.id !== firstDeployId,
+      const newDeployId = (
+        deploymentsAfterRedeploy.find((deployment: any) => deployment.id !== firstDeployId) as any
       )?.id;
       expect(newDeployId).toBeTruthy();
 

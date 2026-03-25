@@ -14,15 +14,45 @@ const TEST_REPOS = [
 export default async function globalSetup() {
   console.log('🔍 Running quality-gate precondition checks...\n');
 
-  // Check 1: OpenLander is reachable
   console.log('  ✓ Checking OpenLander at', OPENLANDER_URL);
-  try {
-    const response = await fetch(`${OPENLANDER_URL}/api/projects`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+  const statusRes = await fetch(`${OPENLANDER_URL}/api/setup/status`);
+  const status = (await statusRes.json()) as { hasPassword?: boolean };
+
+  if (!status.hasPassword) {
+    const setupRes = await fetch(`${OPENLANDER_URL}/api/auth/setup-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'e2e-quality-gate' }),
+    });
+    const setupData = (await setupRes.json()) as { apiToken?: string };
+    if (setupData.apiToken) {
+      process.env.OPENLANDER_API_TOKEN = setupData.apiToken;
     }
-  } catch (err) {
-    throw new Error(`OpenLander not reachable at ${OPENLANDER_URL}`);
+  }
+
+  if (!process.env.OPENLANDER_API_TOKEN) {
+    const loginRes = await fetch(`${OPENLANDER_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: 'e2e-quality-gate' }),
+    });
+    const cookies = loginRes.headers.get('set-cookie') ?? '';
+    const sessionMatch = cookies.match(/ol_session=([^;]*)/);
+    if (sessionMatch) {
+      process.env.OPENLANDER_SESSION = sessionMatch[1];
+    }
+  }
+
+  const authHeader: Record<string, string> = {};
+  if (process.env.OPENLANDER_API_TOKEN) {
+    authHeader['Authorization'] = `Bearer ${process.env.OPENLANDER_API_TOKEN}`;
+  } else if (process.env.OPENLANDER_SESSION) {
+    authHeader['Cookie'] = `ol_session=${process.env.OPENLANDER_SESSION}`;
+  }
+
+  const projectsRes = await fetch(`${OPENLANDER_URL}/api/projects`, { headers: authHeader });
+  if (!projectsRes.ok) {
+    throw new Error(`OpenLander API not accessible (${projectsRes.status})`);
   }
 
   // Check 2: Docker daemon is accessible

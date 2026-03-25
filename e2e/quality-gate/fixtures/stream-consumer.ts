@@ -83,8 +83,15 @@ export function consumeDeployStream(
 
   void (async () => {
     try {
+      const authHdrs: Record<string, string> = {};
+      if (process.env.OPENLANDER_API_TOKEN) {
+        authHdrs['Authorization'] = `Bearer ${process.env.OPENLANDER_API_TOKEN}`;
+      } else if (process.env.OPENLANDER_SESSION) {
+        authHdrs['Cookie'] = `ol_session=${process.env.OPENLANDER_SESSION}`;
+      }
       const response = await fetch(`${BASE_URL}/api/projects/${projectId}/build/stream`, {
         signal: controller.signal,
+        headers: authHdrs,
       });
 
       if (!response.ok) {

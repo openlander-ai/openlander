@@ -4,11 +4,11 @@ import {
   configureWebhook,
   deleteProject,
   deployGitProject,
+  getDeployments,
   postWebhook,
   waitForStatus,
 } from './fixtures/api.js';
 
-const BASE_URL = 'http://localhost:10114';
 const R1_REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const WEBHOOK_REPO_CLONE_URL = 'https://github.com/openlander-ai/test-single-dockerfile.git';
 const SCENARIO_TIMEOUT_MS = 180_000;
@@ -21,26 +21,6 @@ type DeploymentSummary = {
   trigger: string;
 };
 
-async function getDeployments(projectId: string): Promise<DeploymentSummary[]> {
-  const res = await fetch(`${BASE_URL}/api/projects/${projectId}/deployments`);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Get deployments failed (${res.status}): ${text}`);
-  }
-
-  const data = (await res.json()) as {
-    deployments?: Array<{ id?: string; status?: string; trigger?: string }>;
-  };
-
-  return (data.deployments ?? [])
-    .map((deployment) => ({
-      id: deployment.id ?? '',
-      status: deployment.status ?? '',
-      trigger: deployment.trigger ?? '',
-    }))
-    .filter((deployment) => deployment.id.length > 0);
-}
-
 async function waitForWebhookDeployment(
   projectId: string,
   minimumDeploymentCount: number,
@@ -51,8 +31,8 @@ async function waitForWebhookDeployment(
   while (Date.now() - startedAt < timeoutMs) {
     const deployments = await getDeployments(projectId);
     const webhookDeployment = deployments.find(
-      (deployment) => deployment.trigger === 'webhook' && deployment.status === 'success',
-    );
+      (deployment: any) => deployment.trigger === 'webhook' && deployment.status === 'success',
+    ) as DeploymentSummary | undefined;
 
     if (deployments.length >= minimumDeploymentCount && webhookDeployment) {
       return webhookDeployment;
@@ -64,7 +44,7 @@ async function waitForWebhookDeployment(
   const lastDeployments = await getDeployments(projectId);
   throw new Error(
     `Timed out waiting for webhook deployment. count=${String(lastDeployments.length)}, triggers=${lastDeployments
-      .map((deployment) => deployment.trigger)
+      .map((deployment: any) => deployment.trigger)
       .join(',')}`,
   );
 }

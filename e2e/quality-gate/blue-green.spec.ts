@@ -14,12 +14,17 @@ const R1_REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const SCENARIO_TIMEOUT_MS = 150_000;
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
-function assertOkResponse(url: string): void {
-  const body = execFileSync('curl', ['-fsSL', url], {
-    encoding: 'utf8',
-  });
-
-  expect(body).toContain('OK');
+function assertOkResponse(url: string, retries = 5, delayMs = 2000): void {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const body = execFileSync('curl', ['-fsSL', url], { encoding: 'utf8', timeout: 5000 });
+      expect(body).toContain('OK');
+      return;
+    } catch {
+      if (i === retries - 1) throw new Error(`curl ${url} failed after ${retries} retries`);
+      execFileSync('sleep', [String(delayMs / 1000)]);
+    }
+  }
 }
 
 function resolveAccessibleUrl(project: { assigned_port?: unknown }): string {

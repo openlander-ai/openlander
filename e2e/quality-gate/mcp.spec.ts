@@ -1,6 +1,8 @@
+import { execSync } from 'node:child_process';
+
 import { expect, test } from '@playwright/test';
 
-import { deleteProject, getProject, mcpCall } from './fixtures/api.js';
+import { deleteProject, getProject, listProjects, mcpCall } from './fixtures/api.js';
 
 const REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const POLL_INTERVAL_MS = 3000;
@@ -30,6 +32,31 @@ test.describe.configure({ mode: 'serial' });
 test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
   let projectId: string | null = null;
 
+  test.beforeAll(async () => {
+    try {
+      const ids = execSync('docker ps -a --filter name=ol-test- -q', { encoding: 'utf-8' })
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+      for (const id of ids) {
+        execSync(`docker rm -f ${id}`, { stdio: 'pipe' });
+      }
+    } catch {
+      // noop
+    }
+
+    try {
+      const projects = await listProjects();
+      for (const p of projects) {
+        if (String(p.name).includes('test-single-dockerfile')) {
+          await deleteProject(String(p.id));
+        }
+      }
+    } catch {
+      // noop
+    }
+  });
+
   test.afterAll(async () => {
     if (!projectId) return;
 
@@ -53,7 +80,7 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
 
     const createPlanEnvelope = (await mcpCall('tools/call', {
       name: 'create_deploy_plan',
-      arguments: { repo_url: REPO_URL },
+      arguments: { repo_url: REPO_URL, branch: 'main' },
     })) as McpToolCallEnvelope;
 
     const createPlan = parseToolCallResult<{ plan_id: string; status: string }>(createPlanEnvelope);
@@ -84,7 +111,7 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
     while (Date.now() - start < POLL_TIMEOUT_MS) {
       const statusEnvelope = (await mcpCall('tools/call', {
         name: 'get_deploy_status',
-        arguments: { project_id: projectId },
+        arguments: { project_name: executeResult.project_name },
       })) as McpToolCallEnvelope;
 
       const statusResult = parseToolCallResult<{
@@ -96,8 +123,11 @@ test.describe('Quality Gate — MCP HTTP Deploy E2E', () => {
         lastPhase = statusResult.jobs[0]?.phase ?? lastPhase;
       }
 
-      if (statusResult.jobs.some((job) => job.phase === 'failed')) {
-        throw new Error(`Deploy failed during polling (phase=${lastPhase})`);
+      const latestJob = statusResult.jobs[0];
+      if (latestJob?.phase === 'failed') {
+        throw new Error(
+          `Deploy failed during polling (phase=${latestJob.phase}, error=${latestJob.error ?? 'unknown'})`,
+        );
       }
 
       const project = await getProject(projectId as string);
