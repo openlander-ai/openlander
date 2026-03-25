@@ -12,6 +12,8 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
 import { ServiceDetail } from '@/pages/ServiceDetail';
 import { useAgentPanel } from '@/contexts/agent-panel';
+import { LoginPage } from '@/pages/LoginPage';
+import { AuthProvider, useAuth } from '@/contexts/auth';
 import './App.css';
 import { getSetupStatus } from '@/lib/api';
 import { Toaster } from 'sonner';
@@ -51,15 +53,26 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
  * On API error, passes through (don't block existing users).
  */
 function SetupGuard() {
-  const [status, setStatus] = useState<'loading' | 'ready' | 'needs-setup'>('loading');
+  const [setupStatus, setSetupStatus] = useState<{
+    loading: boolean;
+    hasPassword: boolean;
+    ready: boolean;
+  }>({ loading: true, hasPassword: false, ready: false });
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     getSetupStatus()
-      .then((s) => setStatus(s.ready ? 'ready' : 'needs-setup'))
-      .catch(() => setStatus('ready'));
+      .then((s) =>
+        setSetupStatus({
+          loading: false,
+          hasPassword: s.hasPassword ?? false,
+          ready: s.ready ?? false,
+        }),
+      )
+      .catch(() => setSetupStatus({ loading: false, hasPassword: true, ready: true }));
   }, []);
 
-  if (status === 'loading') {
+  if (setupStatus.loading || authLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-bg-app">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-agent border-t-transparent" />
@@ -67,7 +80,17 @@ function SetupGuard() {
     );
   }
 
-  if (status === 'needs-setup') return <Navigate to="/setup" replace />;
+  if (!setupStatus.hasPassword) {
+    return <Navigate to="/setup" replace />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!setupStatus.ready) {
+    return <Navigate to="/setup" replace />;
+  }
 
   return <Outlet />;
 }
@@ -88,39 +111,42 @@ function App() {
   return (
     <EnvironmentProvider>
       <LanguageProvider>
-        <ErrorBoundary>
-          <Toaster
-            toastOptions={{
-              className: 'bg-bg-panel border-border text-primary-ol font-body',
-              descriptionClassName: 'text-muted-ol',
-            }}
-          />
-          <BrowserRouter>
-            <Routes>
-              <Route
-                path="/setup"
-                element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
-              />
-              <Route element={<SetupGuard />}>
-                <Route element={<AppLayout />}>
-                  <Route path="/projects" element={<ProjectsGrid />} />
-                  <Route path="/projects/new" element={<NewProjectFlow />} />
-                  <Route
-                    path="/projects/:id/deployments/:deployId"
-                    element={<DeploymentDetail />}
-                  />
-                  <Route path="/projects/:id" element={<ProjectDetail />} />
-                  <Route path="/services" element={<ServicesPage />} />
-                  <Route path="/services/:id" element={<ServiceDetail />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/agent" element={<AgentRouteRedirect />} />
+        <AuthProvider>
+          <ErrorBoundary>
+            <Toaster
+              toastOptions={{
+                className: 'bg-bg-panel border-border text-primary-ol font-body',
+                descriptionClassName: 'text-muted-ol',
+              }}
+            />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route
+                  path="/setup"
+                  element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
+                />
+                <Route element={<SetupGuard />}>
+                  <Route element={<AppLayout />}>
+                    <Route path="/projects" element={<ProjectsGrid />} />
+                    <Route path="/projects/new" element={<NewProjectFlow />} />
+                    <Route
+                      path="/projects/:id/deployments/:deployId"
+                      element={<DeploymentDetail />}
+                    />
+                    <Route path="/projects/:id" element={<ProjectDetail />} />
+                    <Route path="/services" element={<ServicesPage />} />
+                    <Route path="/services/:id" element={<ServiceDetail />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/agent" element={<AgentRouteRedirect />} />
+                  </Route>
                 </Route>
-              </Route>
-              <Route path="/" element={<Navigate to="/projects" replace />} />
-              <Route path="*" element={<Navigate to="/projects" replace />} />
-            </Routes>
-          </BrowserRouter>
-        </ErrorBoundary>
+                <Route path="/" element={<Navigate to="/projects" replace />} />
+                <Route path="*" element={<Navigate to="/projects" replace />} />
+              </Routes>
+            </BrowserRouter>
+          </ErrorBoundary>
+        </AuthProvider>
       </LanguageProvider>
     </EnvironmentProvider>
   );

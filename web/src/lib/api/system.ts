@@ -27,6 +27,7 @@ export async function getSystemStats(): Promise<SystemStats> {
 
 export interface SetupStatus {
   ready: boolean;
+  hasPassword?: boolean;
   language?: 'en' | 'ko';
   docker: { ok: boolean; state?: string; groupFixed?: boolean; message: string };
   traefik: { ok: boolean; message: string };
