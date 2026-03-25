@@ -256,6 +256,7 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         detail: event.detail ?? undefined,
         percent: -1,
         retryCount: event.retryCount,
+        actionButtons: event.actionButtons,
         ...scopedMeta,
       };
     default:

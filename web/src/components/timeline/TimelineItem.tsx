@@ -1,14 +1,7 @@
 import type { TimelineItem as TItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/time';
-import {
-  ExternalLink,
-  AlertCircle,
-  CheckCircle2,
-  Wrench,
-  MessageCircle,
-  Activity,
-} from 'lucide-react';
+import { ExternalLink, AlertCircle, CheckCircle2, Activity, Sparkles } from 'lucide-react';
 import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard';
 import { ToolResultCard } from './ToolResultCard';
 import { ComposeErrorCard } from './ComposeErrorCard';
@@ -47,7 +40,9 @@ export function TimelineItemCard({
   const isAgentToolCall = item.type === 'agent_tool_call';
   const isAgentToolResult = item.type === 'agent_tool_result';
   const isAgentMessage = item.type === 'agent_message';
-  const isAgentEvent = isAgentThinking || isAgentToolCall || isAgentToolResult || isAgentMessage;
+  const isInsight = item.type === 'insight';
+  const isAgentEvent =
+    isAgentThinking || isAgentToolCall || isAgentToolResult || isAgentMessage || isInsight;
   const isRecoveryEvent = item.type.startsWith('recovery_');
 
   if (isRecoveryEvent) {
@@ -88,11 +83,12 @@ export function TimelineItemCard({
     <div
       className={cn(
         'relative flex gap-3.5 py-3.5 px-4 rounded-lg transition-all duration-300 timeline-item-enter border border-transparent',
-        isLatest && isAgentEvent && 'bg-agent/5 border-agent/10 glow-agent',
         isSuccess && 'bg-success/5 border-success/10 glow-success',
         isError && 'bg-error/5 border-error/10 glow-error',
         !isLatest && !isSuccess && !isError && !isAgentEvent && 'hover:bg-bg-subtle/20',
-        isAgentEvent && !isLatest && 'bg-agent/5 border-agent/10',
+        isAgentEvent &&
+          'border-0 border-l-2 border-agent bg-agent/[0.03] pl-3 py-2 my-2 rounded-l-none',
+        isLatest && isAgentEvent && 'glow-agent',
       )}
     >
       <div className="shrink-0 mt-0.5 relative z-10">
@@ -107,21 +103,14 @@ export function TimelineItemCard({
             <AlertCircle className="h-3.5 w-3.5 text-error" />
           </div>
         )}
-        {isAgentThinking && (
+        {isAgentEvent && (
           <div className="mt-1 flex items-center justify-center w-4 h-4">
-            <div
-              className={cn('w-1.5 h-1.5 rounded-full bg-agent/50', isLatest && 'animate-pulse')}
+            <Sparkles
+              className={cn(
+                'h-3.5 w-3.5 text-agent',
+                isLatest && isAgentThinking && 'animate-pulse',
+              )}
             />
-          </div>
-        )}
-        {isAgentToolCall && (
-          <div className="mt-1 flex items-center justify-center w-4 h-4">
-            <Wrench className="h-3 w-3 text-agent/50" />
-          </div>
-        )}
-        {isAgentMessage && (
-          <div className="mt-1 flex items-center justify-center w-4 h-4">
-            <MessageCircle className="h-3 w-3 text-agent/70" />
           </div>
         )}
         {!isSuccess && !isError && !isAgentEvent && (
@@ -138,10 +127,10 @@ export function TimelineItemCard({
               'text-sm font-body leading-snug whitespace-pre-wrap',
               isSuccess && 'text-success font-medium',
               isError && 'text-error font-medium line-clamp-3',
-              isAgentEvent && 'text-agent/90',
-              isAgentThinking && 'text-sm text-secondary-ol',
-              isAgentToolCall && 'text-xs text-agent/70',
-              isAgentMessage && 'text-sm text-primary-ol',
+              isAgentEvent && 'text-agent/90 font-sans text-[13px]',
+              isAgentThinking && 'text-secondary-ol',
+              isAgentToolCall && 'text-agent/70',
+              isAgentMessage && 'text-primary-ol',
             )}
             title={isError ? item.title : undefined}
           >
