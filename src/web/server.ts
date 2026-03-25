@@ -14,6 +14,9 @@ import { createSetupRoutes } from './api/setup-routes.js';
 import { createTerminalRoutes } from './api/terminal-routes.js';
 import { createChatRoutes } from './api/chat-routes.js';
 import { createLlmRoutes } from './api/llm-routes.js';
+import { createAuthRoutes } from './api/auth-routes.js';
+import { createAuthMiddleware } from './middleware/auth.js';
+import { AuthService } from '../auth/auth-service.js';
 import { createMcpHttpRoutes } from '../mcp/server.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
@@ -93,6 +96,9 @@ function createApp(
     }),
   );
 
+  const authService = new AuthService(ctx.db);
+  app.use('*', createAuthMiddleware(authService));
+
   // Health check (enhanced with uptime)
   app.get('/health', async (c) => {
     const uptimeSeconds = getServerUptime();
@@ -120,7 +126,9 @@ function createApp(
     });
   });
 
-  // API routes
+  const authRoutes = createAuthRoutes(authService);
+  app.route('/api', authRoutes);
+
   const apiRoutes = createApiRoutes(ctx);
   app.route('/api', apiRoutes);
 
