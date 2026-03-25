@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-03-25
+
+### Added
+
+- **E2E quality gate test suite**: 20 tests across 10 spec files validating core deployment scenarios
+- **7 test repositories**: Dedicated test repos for deploy pipeline verification (Node.js, Python, Ruby, Java, PHP, .NET, Go)
+- **Event sequence golden path verification**: Q-2 quality gate ensuring deterministic event ordering in deploy lifecycle
+- **Quality gate coverage mapping**: Documentation of test coverage across all deployment paths and failure scenarios
+
+### Fixed
+
+- **Orphaned chat artifacts cleanup**: Removed stale chat session artifacts from previous web agent mode
+- **LSP error fixes**: Resolved TypeScript strict mode violations and type safety issues
+
 ## [0.9.18] - 2026-03-25
 
 ### Added
