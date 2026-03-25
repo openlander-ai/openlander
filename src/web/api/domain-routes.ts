@@ -1,9 +1,16 @@
 import { Hono } from 'hono';
+import { nanoid } from 'nanoid';
 
+import type { Agent } from '../../llm/agent.js';
+import type { QuestionAnswer, QuestionBridge } from '../../lib/question-bridge.js';
 import type { Database } from '../../db/index.js';
+import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import type { DeployPipeline } from '../../pipeline/deploy.js';
 import type { CloudflareTunnelManager } from '../../pipeline/cloudflare.js';
+import type { EnvManager } from '../../pipeline/env.js';
 import type { TraefikManager } from '../../pipeline/traefik.js';
+import type { ChatStreamEvent } from '../../types/agent-events.js';
 
 const log = createModuleLogger('domain-routes');
 
@@ -11,6 +18,10 @@ interface DomainRouteContext {
   db: Database;
   cloudflare: CloudflareTunnelManager;
   traefik: TraefikManager;
+  agent: Agent | null;
+  env: EnvManager;
+  pipeline: DeployPipeline;
+  questionBridge: QuestionBridge;
 }
 
 export function createDomainRoutes(ctx: DomainRouteContext): Hono {
@@ -41,6 +52,11 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
     try {
       await ctx.cloudflare.createTunnel(project.id, domain);
       const mappings = ctx.cloudflare.listDomains(project.id);
+      void runDomainPostAddAnalysis(ctx, {
+        projectId: project.id,
+        projectName: project.name,
+        domain,
+      });
       return c.json(
         {
           status: 'mapped',
@@ -97,6 +113,258 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
   });
 
   return routes;
+}
+
+type DomainAnalysisPayload = {
+  projectId: string;
+  projectName: string;
+  domain: string;
+};
+
+type EnvUpdateProposal = {
+  key: string;
+  suggested: string;
+  reason?: string;
+};
+
+type DomainAnalysisResult = {
+  needs_env_update: boolean;
+  reason?: string;
+  env_updates?: EnvUpdateProposal[];
+};
+
+async function runDomainPostAddAnalysis(
+  ctx: DomainRouteContext,
+  payload: DomainAnalysisPayload,
+): Promise<void> {
+  if (!ctx.agent) {
+    return;
+  }
+
+  const { projectId, projectName, domain } = payload;
+  const sessionId = `domain-analysis-${projectId}-${Date.now().toString(36)}`;
+  let finalMessage = '';
+
+  createTimelineEvent(ctx.db, {
+    projectId,
+    type: 'agent_thinking',
+    message: `AI domain analysis started for ${domain}`,
+  });
+
+  try {
+    await ctx.agent.chatStream(
+      [
+        `프로젝트 ${projectName}에 새 도메인 ${domain}이 추가됨. 환경변수 중 URL/도메인 관련 변수가 있는지 확인하고, 변경이 필요하면 알려주세요.`,
+        'Use existing tools first (scan_project, list_env_vars, get_deploy_status).',
+        'Return ONLY JSON in this exact shape:',
+        '{"needs_env_update":boolean,"reason":"string","env_updates":[{"key":"string","suggested":"string","reason":"string"}]}',
+        'Set env_updates to [] when no change is required.',
+      ].join('\n'),
+      async (event) => {
+        await emitAgentTimelineEvent(ctx, projectId, event);
+        if (event.type === 'message') {
+          finalMessage += event.content;
+        }
+      },
+      sessionId,
+    );
+  } catch (err) {
+    log.warn({ err, projectId, domain }, 'Domain post-add AI analysis failed');
+    return;
+  }
+
+  const parsed = parseDomainAnalysisResult(finalMessage);
+  const updates = (parsed?.env_updates ?? []).filter(
+    (entry): entry is EnvUpdateProposal =>
+      typeof entry.key === 'string' &&
+      entry.key.trim().length > 0 &&
+      typeof entry.suggested === 'string' &&
+      entry.suggested.trim().length > 0,
+  );
+
+  if (!parsed?.needs_env_update || updates.length === 0) {
+    return;
+  }
+
+  await requestEnvUpdateApprovalAndRedeploy(ctx, {
+    projectId,
+    projectName,
+    domain,
+    reason: parsed.reason,
+    updates,
+  });
+}
+
+async function emitAgentTimelineEvent(
+  ctx: DomainRouteContext,
+  projectId: string,
+  event: ChatStreamEvent,
+): Promise<void> {
+  await eventBus.emit('agent:event', {
+    projectId,
+    event: {
+      ...event,
+      timestamp: new Date().toISOString(),
+    },
+  });
+
+  if (event.type === 'thinking') {
+    createTimelineEvent(ctx.db, {
+      projectId,
+      type: 'agent_thinking',
+      message: 'AI is analyzing domain impact',
+    });
+    return;
+  }
+
+  if (event.type === 'tool_call') {
+    createTimelineEvent(ctx.db, {
+      projectId,
+      type: 'agent_tool_call',
+      message: `AI called tool: ${event.toolName}`,
+      toolName: event.toolName,
+      detail: JSON.stringify(event.arguments),
+    });
+    return;
+  }
+
+  if (event.type === 'error') {
+    createTimelineEvent(ctx.db, {
+      projectId,
+      type: 'error',
+      message: `AI analysis failed: ${event.error}`,
+      severity: 'error',
+    });
+  }
+}
+
+function parseDomainAnalysisResult(raw: string): DomainAnalysisResult | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed) as DomainAnalysisResult;
+  } catch {
+    const jsonBlock = trimmed.match(/```json\s*([\s\S]*?)\s*```/i)?.[1] ?? trimmed;
+    try {
+      return JSON.parse(jsonBlock) as DomainAnalysisResult;
+    } catch {
+      return null;
+    }
+  }
+}
+
+async function requestEnvUpdateApprovalAndRedeploy(
+  ctx: DomainRouteContext,
+  args: {
+    projectId: string;
+    projectName: string;
+    domain: string;
+    reason?: string;
+    updates: EnvUpdateProposal[];
+  },
+): Promise<void> {
+  const { projectId, projectName, domain, reason, updates } = args;
+  const updateSummary = updates.map((entry) => `${entry.key}=${entry.suggested}`).join('\n');
+
+  createTimelineEvent(ctx.db, {
+    projectId,
+    type: 'question_pending',
+    message: `AI suggests ${String(updates.length)} URL/domain env update(s) for ${domain}`,
+    detail: updateSummary,
+  });
+
+  ctx.questionBridge.setActiveProject(projectId);
+
+  let answers: QuestionAnswer[] = [];
+  try {
+    answers = await ctx.questionBridge.ask({
+      id: nanoid(16),
+      questions: [
+        {
+          header: 'Domain added — update environment variables?',
+          question: [
+            `Project: ${projectName}`,
+            `New domain: ${domain}`,
+            reason ? `Reason: ${reason}` : undefined,
+            'Suggested updates:',
+            updateSummary,
+          ]
+            .filter((line): line is string => typeof line === 'string')
+            .join('\n'),
+          options: [{ label: 'Approve and redeploy' }, { label: 'Skip for now' }],
+          metadata: {
+            source: 'domain_post_add_analysis',
+            updates,
+          },
+        },
+      ],
+    });
+  } catch (err) {
+    log.warn({ err, projectId, domain }, 'Domain env update approval timed out');
+    createTimelineEvent(ctx.db, {
+      projectId,
+      type: 'status',
+      message: 'Domain env update request timed out',
+      severity: 'warning',
+    });
+    ctx.questionBridge.setActiveProject(null);
+    return;
+  }
+
+  ctx.questionBridge.setActiveProject(null);
+  const approved = answers.some((answer) => answer.selectedLabels.includes('Approve and redeploy'));
+  if (!approved) {
+    createTimelineEvent(ctx.db, {
+      projectId,
+      type: 'status',
+      message: 'User skipped AI-suggested domain env updates',
+    });
+    return;
+  }
+
+  const vars = Object.fromEntries(updates.map((entry) => [entry.key, entry.suggested]));
+  ctx.env.setBulk(projectId, vars);
+
+  createTimelineEvent(ctx.db, {
+    projectId,
+    type: 'status',
+    message: `Updated ${String(updates.length)} env var(s). Triggering redeploy...`,
+  });
+
+  void ctx.pipeline.redeploy(projectId).catch((err: unknown) => {
+    log.error({ err, projectId, domain }, 'Domain env update redeploy failed');
+    createTimelineEvent(ctx.db, {
+      projectId,
+      type: 'error',
+      message: `Redeploy failed after domain env update: ${err instanceof Error ? err.message : String(err)}`,
+      severity: 'error',
+    });
+  });
+}
+
+function createTimelineEvent(
+  db: Database,
+  input: {
+    projectId: string;
+    type: string;
+    message: string;
+    detail?: string;
+    severity?: 'info' | 'warning' | 'error';
+    toolName?: string;
+  },
+): void {
+  db.createTimelineEvent({
+    id: nanoid(16),
+    projectId: input.projectId,
+    type: input.type,
+    message: input.message,
+    detail: input.detail,
+    severity: input.severity,
+    toolName: input.toolName,
+  });
 }
 
 function normalizeDomainParam(domain: string): string {
