@@ -185,4 +185,15 @@ CREATE TABLE IF NOT EXISTS secret_files (
 
 CREATE INDEX IF NOT EXISTS idx_secret_files_project ON secret_files(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_secret_files_unique ON secret_files(project_id, filename);
+
+CREATE TABLE IF NOT EXISTS auth (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  password_hash TEXT NOT NULL,
+  api_token TEXT NOT NULL,
+  api_token_iv TEXT,
+  session_token TEXT,
+  session_created_at INTEGER,
+  session_expires_at INTEGER,
+  CHECK(id = 1)
+);
 `;

@@ -363,4 +363,16 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_deploy_configs_project ON deploy_configs(project_id)',
   );
+
+  // auth table (v1.0.0-rc.2)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS auth (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    password_hash TEXT NOT NULL,
+    api_token TEXT NOT NULL,
+    api_token_iv TEXT,
+    session_token TEXT,
+    session_created_at INTEGER,
+    session_expires_at INTEGER,
+    CHECK(id = 1)
+  )`);
 }

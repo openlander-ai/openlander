@@ -155,3 +155,13 @@ export interface DeployPlanRow {
   executed_at: string | null;
   completed_at: string | null;
 }
+
+export interface AuthRow {
+  id: number;
+  password_hash: string;
+  api_token: string;
+  api_token_iv: string | null;
+  session_token: string | null;
+  session_created_at: number | null;
+  session_expires_at: number | null;
+}

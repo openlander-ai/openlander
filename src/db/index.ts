@@ -17,7 +17,9 @@ import { OAuthRepo } from './repos/oauth.repo.js';
 import { WebhookRepo } from './repos/webhook.repo.js';
 import { DeployPlanRepo } from './repos/deploy-plan.repo.js';
 import { DeployConfigRepo } from './repos/deploy-config.repo.js';
+import { AuthRepo } from './repos/auth.repo.js';
 import type { ProjectRow } from './types.js';
+import type { AuthDatabase } from '../auth/auth-service.js';
 
 export type {
   EnvironmentType,
@@ -31,10 +33,11 @@ export type {
   ServiceRow,
   PendingFixRow,
   DeployPlanRow,
+  AuthRow,
 } from './types.js';
 
 // prettier-ignore
-export class Database {
+export class Database implements AuthDatabase {
   private sqlite: SqliteDatabase;
   private db: DrizzleClient;
   private readonly projectRepo: ProjectRepo;
@@ -50,6 +53,7 @@ export class Database {
   private readonly webhookRepo: WebhookRepo;
   private readonly deployPlanRepo: DeployPlanRepo;
   private readonly deployConfigRepo: DeployConfigRepo;
+  private readonly authRepo: AuthRepo;
 
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
@@ -70,6 +74,7 @@ export class Database {
     this.webhookRepo = new WebhookRepo(this.db, this.sqlite);
     this.deployPlanRepo = new DeployPlanRepo(this.db, this.sqlite);
     this.deployConfigRepo = new DeployConfigRepo(this.db, this.sqlite);
+    this.authRepo = new AuthRepo(this.db);
   }
 
   createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
@@ -137,10 +142,18 @@ export class Database {
   updateDeployPlanStatus(planId: string, status: string) { this.deployPlanRepo.updateDeployPlanStatus(planId, status); }
   listDeployPlans(projectName?: string) { return this.deployPlanRepo.listDeployPlans(projectName); }
   getLatestPlanForProject(projectName: string) { return this.deployPlanRepo.getLatestPlanForProject(projectName); }
-  saveDeployConfig(projectId: string, configJson: string, configVersion: number) { this.deployConfigRepo.save(projectId, configJson, configVersion); }
-  loadDeployConfig(projectId: string) { return this.deployConfigRepo.load(projectId); }
-  deleteDeployConfig(projectId: string) { this.deployConfigRepo.delete(projectId); }
-  getUsedPorts(): number[] { const projectPorts = this.db.select({ assigned_port: projects.assigned_port }).from(projects).where(isNotNull(projects.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...projectPorts, ...envPorts])]; }
-  transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
-  close() { this.sqlite.close(); }
+   saveDeployConfig(projectId: string, configJson: string, configVersion: number) { this.deployConfigRepo.save(projectId, configJson, configVersion); }
+   loadDeployConfig(projectId: string) { return this.deployConfigRepo.load(projectId); }
+   deleteDeployConfig(projectId: string) { this.deployConfigRepo.delete(projectId); }
+   isPasswordSet() { return this.authRepo.isPasswordSet(); }
+   getAuth() { return this.authRepo.getAuth(); }
+   setPassword(hash: string) { this.authRepo.setPassword(hash); }
+   getApiToken() { return this.authRepo.getApiToken(); }
+   setApiToken(encrypted: string, iv: string) { this.authRepo.setApiToken(encrypted, iv); }
+   getSession() { return this.authRepo.getSession(); }
+   createSession(token: string, createdAt: number, expiresAt: number) { this.authRepo.createSession(token, createdAt, expiresAt); }
+   deleteSession() { this.authRepo.deleteSession(); }
+   getUsedPorts(): number[] { const projectPorts = this.db.select({ assigned_port: projects.assigned_port }).from(projects).where(isNotNull(projects.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...projectPorts, ...envPorts])]; }
+   transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
+   close() { this.sqlite.close(); }
 }

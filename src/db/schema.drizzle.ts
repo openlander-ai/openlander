@@ -312,6 +312,20 @@ export const deployPlans = sqliteTable(
   ],
 );
 
+export const auth = sqliteTable(
+  'auth',
+  {
+    id: integer('id').primaryKey().default(1),
+    password_hash: text('password_hash').notNull(),
+    api_token: text('api_token').notNull(),
+    api_token_iv: text('api_token_iv'),
+    session_token: text('session_token'),
+    session_created_at: integer('session_created_at'),
+    session_expires_at: integer('session_expires_at'),
+  },
+  (table) => [check('auth_id_check', sql`${table.id} = 1`)],
+);
+
 export const drizzleSchema = {
   projects,
   environments,
@@ -326,4 +340,5 @@ export const drizzleSchema = {
   deploy_configs,
   secretFiles,
   deployPlans,
+  auth,
 };
