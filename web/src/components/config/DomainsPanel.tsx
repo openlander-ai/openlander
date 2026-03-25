@@ -4,17 +4,24 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import {
+  InputRequestCard,
+  type QuestionAnswerPayload,
+} from '@/components/timeline/InputRequestCard';
+import {
   getProject,
   exposeProject,
   unexposeProject,
   getAllIps,
   type NetworkIp,
   getProjectDomains,
+  getProjectTimeline,
   addProjectDomain,
   removeProjectDomain,
   type DomainMapping,
   getCloudflareStatus,
+  getSetupStatus,
 } from '@/lib/api';
+import type { QuestionData } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
 import {
   Globe,
@@ -50,13 +57,35 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
   const [addingDomain, setAddingDomain] = useState(false);
   const [removingDomain, setRemovingDomain] = useState<string | null>(null);
   const [cfConfigured, setCfConfigured] = useState<boolean | null>(null);
+  const [llmConfigured, setLlmConfigured] = useState(false);
+  const [domainAiProgress, setDomainAiProgress] = useState<{
+    domain: string;
+    startedAt: number;
+    message: string;
+    questionId?: string;
+    questions?: QuestionData[];
+    answered?: boolean;
+  } | null>(null);
+
+  const refreshDomains = useCallback(async () => {
+    const updated = await getProjectDomains(projectId);
+    setDomains(updated);
+  }, [projectId]);
+
+  const finalizeDomainAnalysis = useCallback(async () => {
+    await refreshDomains();
+    setDomainAiProgress(null);
+    toast.success('Domain added');
+  }, [refreshDomains]);
+
   const fetchProject = useCallback(async () => {
     try {
-      const [data, ips, domainsList, cfStatus] = await Promise.all([
+      const [data, ips, domainsList, cfStatus, setupStatus] = await Promise.all([
         getProject(projectId),
         getAllIps(),
         getProjectDomains(projectId),
         getCloudflareStatus().catch(() => ({ configured: false })),
+        getSetupStatus().catch(() => ({ llm: { ok: false } })),
       ]);
       setInternalUrl(data.url ?? null);
       setPublicUrl(data.publicUrl ?? null);
@@ -64,6 +93,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
       setNetworkIps(ips);
       setDomains(domainsList);
       setCfConfigured(cfStatus.configured);
+      setLlmConfigured(setupStatus.llm.ok === true);
     } catch {
       // silent
     } finally {
@@ -74,6 +104,168 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
   useEffect(() => {
     fetchProject();
   }, [fetchProject, projectStatus]);
+
+  useEffect(() => {
+    if (!domainAiProgress) return;
+
+    let cancelled = false;
+    const seen = new Set<string>();
+    let sawAiEvent = false;
+    let lastEventAt = Date.now();
+
+    const isTerminalStatusMessage = (message: string) => {
+      return (
+        message.includes('User skipped AI-suggested domain env updates') ||
+        message.includes('Triggering redeploy') ||
+        message.includes('Domain env update request timed out')
+      );
+    };
+
+    const poll = async () => {
+      if (cancelled) return;
+
+      try {
+        const events = await getProjectTimeline(projectId);
+        let shouldFinalize = false;
+
+        for (const event of events) {
+          const eventTime = Date.parse(event.timestamp);
+          if (!Number.isFinite(eventTime) || eventTime < domainAiProgress.startedAt - 1500) {
+            continue;
+          }
+
+          const key = event.id ?? `${event.type}|${event.timestamp}|${event.message}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          if (
+            event.type === 'agent_thinking' ||
+            event.type === 'agent_tool_call' ||
+            event.type === 'agent_message' ||
+            event.type === 'agent_tool_result' ||
+            event.type === 'question_pending'
+          ) {
+            sawAiEvent = true;
+            lastEventAt = Date.now();
+          }
+
+          if (event.type === 'agent_thinking') {
+            setDomainAiProgress((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    message: event.message || 'AI 분석 중...',
+                  }
+                : prev,
+            );
+            continue;
+          }
+
+          if (event.type === 'question_pending' && event.questionId && event.questions) {
+            setDomainAiProgress((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    message: event.message,
+                    questionId: event.questionId,
+                    questions: event.questions,
+                    answered: false,
+                  }
+                : prev,
+            );
+            continue;
+          }
+
+          if (event.type === 'status' && isTerminalStatusMessage(event.message)) {
+            shouldFinalize = true;
+            break;
+          }
+
+          if (event.type === 'error' && event.message.startsWith('AI analysis failed:')) {
+            shouldFinalize = true;
+            break;
+          }
+        }
+
+        const elapsedFromStart = Date.now() - domainAiProgress.startedAt;
+        const idleFor = Date.now() - lastEventAt;
+
+        if (
+          shouldFinalize ||
+          (sawAiEvent && idleFor > 5000) ||
+          (!sawAiEvent && elapsedFromStart > 8000)
+        ) {
+          await finalizeDomainAnalysis();
+        }
+      } catch {
+        return;
+      }
+    };
+
+    void poll();
+    const interval = setInterval(() => {
+      void poll();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [domainAiProgress, projectId, finalizeDomainAnalysis]);
+
+  const submitDomainQuestion = useCallback(
+    async (questionId: string, answers: QuestionAnswerPayload[]) => {
+      try {
+        const res = await fetch('/api/question/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            request_id: questionId,
+            answers: answers.map((answer) => ({
+              questionIndex: answer.questionIndex,
+              selectedLabels: answer.selectedLabels,
+              customText: answer.customText,
+            })),
+          }),
+        });
+        if (res.ok) {
+          setDomainAiProgress((prev) =>
+            prev && prev.questionId === questionId
+              ? {
+                  ...prev,
+                  answered: true,
+                }
+              : prev,
+          );
+        }
+      } catch {
+        return;
+      }
+    },
+    [],
+  );
+
+  const skipDomainQuestion = useCallback(async (questionId: string) => {
+    try {
+      const res = await fetch('/api/question/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: questionId }),
+      });
+      if (res.ok) {
+        setDomainAiProgress((prev) =>
+          prev && prev.questionId === questionId
+            ? {
+                ...prev,
+                answered: true,
+              }
+            : prev,
+        );
+      }
+    } catch {
+      return;
+    }
+  }, []);
 
   const handleExpose = async () => {
     setExposing(true);
@@ -105,13 +297,21 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
 
   const handleAddDomain = async () => {
     if (!newDomain.trim()) return;
+    const domain = newDomain.trim();
     setAddingDomain(true);
     try {
-      await addProjectDomain(projectId, newDomain.trim());
-      const updated = await getProjectDomains(projectId);
-      setDomains(updated);
+      await addProjectDomain(projectId, domain);
       setNewDomain('');
-      toast.success('Domain added');
+      if (llmConfigured) {
+        setDomainAiProgress({
+          domain,
+          startedAt: Date.now(),
+          message: 'AI 분석 중...',
+        });
+      } else {
+        await refreshDomains();
+        toast.success('Domain added');
+      }
     } catch (err) {
       console.error('Failed to add domain:', err);
       toast.error('Failed to add domain');
@@ -325,7 +525,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                 size="sm"
                 className="h-8 text-xs font-body gap-1.5"
                 onClick={handleAddDomain}
-                disabled={!newDomain.trim() || addingDomain}
+                disabled={!newDomain.trim() || addingDomain || !!domainAiProgress}
               >
                 {addingDomain ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -335,6 +535,29 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                 {'Add Domain'}
               </Button>
             </div>
+
+            {domainAiProgress && (
+              <div className="border-0 border-l-2 border-agent bg-agent/[0.03] pl-3 py-2 my-2 rounded-l-none space-y-2">
+                <p className="text-sm font-body text-agent/90">{domainAiProgress.message}</p>
+                {domainAiProgress.questionId && domainAiProgress.questions && (
+                  <InputRequestCard
+                    questionId={domainAiProgress.questionId}
+                    questions={domainAiProgress.questions}
+                    answered={domainAiProgress.answered}
+                    onSubmit={(questionId, answers) => {
+                      void submitDomainQuestion(questionId, answers);
+                    }}
+                    onSkip={(questionId) => {
+                      void skipDomainQuestion(questionId);
+                    }}
+                  />
+                )}
+                <p className="text-xs font-mono text-muted-ol">
+                  {`domain: ${domainAiProgress.domain}`}
+                </p>
+              </div>
+            )}
+
             <p className="text-sm font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
           </>
         )}

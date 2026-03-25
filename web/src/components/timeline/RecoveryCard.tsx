@@ -3,6 +3,7 @@ import { formatTime } from '@/lib/time';
 import { AlertTriangle, Sparkles, XCircle, CheckCircle2, RefreshCw } from 'lucide-react';
 import type { TimelineItem } from '@/lib/event-types';
 import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
+import { useLanguage } from '@/i18n/context.js';
 
 interface RecoveryCardProps {
   item: TimelineItem;
@@ -10,6 +11,7 @@ interface RecoveryCardProps {
 }
 
 export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
+  const { t } = useLanguage();
   const isStart = item.type === 'recovery_start';
   const isSuccess = item.type === 'recovery_success';
   const isFailed = item.type === 'recovery_failed';
@@ -51,7 +53,9 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
             <p
               className={cn('text-sm font-medium leading-snug whitespace-pre-wrap', topColorClass)}
             >
-              {isSuccess ? item.title : `빌드 실패: ${item.title.replace(/^빌드 실패:\s*/, '')}`}
+              {isSuccess
+                ? item.title
+                : `${t('timeline.buildFailed')}: ${item.title.replace(/^빌드 실패:\s*/, '')}`}
             </p>
             <span className="text-xs font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
               {formatTime(item.timestamp)}
@@ -68,7 +72,7 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
                     'opacity-80 hover:opacity-100',
                   )}
                 >
-                  구체적 원인 설명 ▾
+                  {t('timeline.detailedCauseExplanation')}
                 </summary>
                 <pre
                   className={cn(
@@ -96,7 +100,11 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
 
         <div className="flex-1 min-w-0 pt-0.5">
           <p className="text-sm font-medium text-agent leading-snug">
-            {isSuccess ? 'AI 복구 완료' : isStart ? 'AI 복구 진행 중...' : 'AI 복구 옵션'}
+            {isSuccess
+              ? t('timeline.recovery.complete')
+              : isStart
+                ? t('timeline.recovery.inProgress')
+                : t('timeline.recovery.options')}
           </p>
 
           {item.actionButtons && item.actionButtons.length > 0 && (

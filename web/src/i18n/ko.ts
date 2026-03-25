@@ -58,6 +58,7 @@ export const translations = {
   },
   agent: {
     diagnoseWithAgent: '✨ 에이전트로 진단',
+    aiDiagnosis: 'AI 진단',
   },
   deploy: {
     notFound: '배포를 찾을 수 없습니다',
@@ -171,6 +172,15 @@ export const translations = {
     awaitingInstruction: '다음 지시 대기 중...',
     aiWorking: 'AI가 작업 중입니다...',
     typeAnswer: '직접 답변 입력...',
+    toolExecuting: '실행',
+    analyzing: '분석 중...',
+    buildFailed: '빌드 실패',
+    detailedCauseExplanation: '구체적 원인 설명 ▾',
+    recovery: {
+      complete: 'AI 복구 완료',
+      inProgress: 'AI 복구 진행 중...',
+      options: 'AI 복구 옵션',
+    },
     errorAnalysis: {
       title: '오류 분석',
       viewDetails: '원본 세부 정보 보기 ▾',
@@ -313,5 +323,8 @@ export const translations = {
       freeTier: 'Google은 Gemini 모델에 대해 넉넉한 무료 티어를 제공합니다.',
       getFreeKey: 'Google AI Studio에서 무료 API 키 받기',
     },
+  },
+  llmSettings: {
+    oauthComingSoon: 'Coming Soon — 다음 업데이트에서 OAuth 로그인을 지원합니다',
   },
 } as const;

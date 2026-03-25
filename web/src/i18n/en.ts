@@ -58,6 +58,7 @@ export const translations = {
   },
   agent: {
     diagnoseWithAgent: '✨ Diagnose with Agent',
+    aiDiagnosis: 'AI Diagnosis',
   },
   deploy: {
     notFound: 'Deployment not found',
@@ -171,6 +172,15 @@ export const translations = {
     awaitingInstruction: 'Awaiting next instruction...',
     aiWorking: 'AI is working on it...',
     typeAnswer: 'Type your own answer...',
+    toolExecuting: 'Executing',
+    analyzing: 'Analyzing...',
+    buildFailed: 'Build failed',
+    detailedCauseExplanation: 'Detailed cause explanation ▾',
+    recovery: {
+      complete: 'AI recovery complete',
+      inProgress: 'AI recovery in progress...',
+      options: 'AI recovery options',
+    },
     composeError: {
       title: 'Compose Error Detected',
       selectPattern: 'Select a pattern to apply',
@@ -311,6 +321,9 @@ export const translations = {
       freeTier: 'Google provides a generous free tier for Gemini models.',
       getFreeKey: 'Get a free API key from Google AI Studio',
     },
+  },
+  llmSettings: {
+    oauthComingSoon: 'Coming Soon — Next update will support OAuth login',
   },
 } as const;
 

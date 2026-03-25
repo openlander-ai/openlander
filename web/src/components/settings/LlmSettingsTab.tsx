@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip } from '@/components/ui/tooltip.js';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context.js';
 
 interface LlmSettingsTabProps {
   status: SetupStatus | null;
@@ -37,6 +38,7 @@ function getDefaultModel(provider: ProviderId): string {
 }
 
 export function LlmSettingsTab({ status, refetch }: LlmSettingsTabProps) {
+  const { t } = useLanguage();
   const initialProvider = isProviderId(status?.llm?.provider) ? status.llm.provider : 'gemini';
   const [llmProvider, setLlmProvider] = useState<ProviderId>(initialProvider);
   const [llmModel, setLlmModel] = useState(
@@ -341,7 +343,7 @@ export function LlmSettingsTab({ status, refetch }: LlmSettingsTabProps) {
 
             <div className="space-y-2">
               <p className="text-xs font-body text-muted-ol">Sign in with OAuth</p>
-              <Tooltip content="Coming Soon — Next update will support OAuth login">
+              <Tooltip content={t('llmSettings.oauthComingSoon')}>
                 <Button
                   type="button"
                   variant="outline"

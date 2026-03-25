@@ -1,8 +1,51 @@
-import { beforeAll, describe, it, expect, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { TimelineItem } from '../../web/src/lib/event-types.js';
 
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 let TimelineItemCard: typeof import('../../web/src/components/timeline/TimelineItem.js').TimelineItemCard;
+
+interface HookDispatcher {
+  useState<T>(initial: T | (() => T)): readonly [T, (next: T | ((value: T) => T)) => void];
+  useEffect(effect: () => void | (() => void)): void;
+  useMemo<T>(factory: () => T): T;
+}
+
+interface ReactClientInternals {
+  H: HookDispatcher | null;
+}
+
+interface ReactModuleLike {
+  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE: ReactClientInternals;
+}
+
+let ReactModule: ReactModuleLike;
+let hookIndex = 0;
+const hookSlots: unknown[] = [];
+
+const hookDispatcher: HookDispatcher = {
+  useState<T>(initial: T | (() => T)) {
+    const slotIndex = hookIndex;
+    hookIndex += 1;
+
+    if (hookSlots[slotIndex] === undefined) {
+      hookSlots[slotIndex] = initial instanceof Function ? initial() : initial;
+    }
+
+    const setState = (next: T | ((value: T) => T)) => {
+      const currentValue = hookSlots[slotIndex] as T;
+      hookSlots[slotIndex] = next instanceof Function ? next(currentValue) : next;
+    };
+
+    const state = hookSlots[slotIndex] as T;
+    return [state, setState] as const;
+  },
+  useEffect(effect) {
+    effect();
+  },
+  useMemo(factory) {
+    return factory();
+  },
+};
 
 vi.mock('@/lib/utils', () => ({
   cn: (...values: any[]) => values.filter(Boolean).join(' '),
@@ -10,6 +53,23 @@ vi.mock('@/lib/utils', () => ({
 
 vi.mock('@/lib/time', () => ({
   formatTime: (ts: string) => ts,
+}));
+
+// Mock useLanguage to return a simple translation function
+const mockTranslations: Record<string, string> = {
+  'timeline.toolExecuting': 'Executing',
+  'timeline.analyzing': 'Analyzing...',
+  'timeline.buildFailed': 'Build failed',
+  'timeline.detailedCauseExplanation': 'Detailed cause explanation ▾',
+  'timeline.recovery.complete': 'AI recovery complete',
+  'timeline.recovery.inProgress': 'AI recovery in progress...',
+  'timeline.recovery.options': 'AI recovery options',
+};
+
+vi.mock('@/i18n/context.js', () => ({
+  useLanguage: () => ({
+    t: (key: string) => mockTranslations[key] || key,
+  }),
 }));
 
 vi.mock('../../web/src/components/timeline/InsightCard.js', () => ({
@@ -43,6 +103,10 @@ vi.mock('../../web/src/components/timeline/InputRequestCard.js', () => ({
     questions[0]?.question,
 }));
 
+vi.mock('../../web/src/components/timeline/RecoveryCard.js', () => ({
+  RecoveryCard: ({ item }: { item: { title: string } }) => item.title,
+}));
+
 vi.mock('lucide-react', () => ({
   ExternalLink: () => 'ExternalLink',
   AlertCircle: () => 'AlertCircle',
@@ -73,7 +137,6 @@ vi.mock('lucide-react', () => ({
   ArrowDown: () => 'ArrowDown',
 }));
 
-// Helper to find text in the React element tree
 function findTextInTree(node: any, text: string): boolean {
   if (typeof node === 'string' || typeof node === 'number') {
     return String(node).includes(text);
@@ -92,11 +155,31 @@ function findTextInTree(node: any, text: string): boolean {
   return false;
 }
 
+function renderTimelineItem(item: TimelineItem) {
+  const internals = ReactModule.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+  const previousDispatcher = internals.H;
+  internals.H = hookDispatcher;
+  hookIndex = 0;
+
+  try {
+    return TimelineItemCard({ item });
+  } finally {
+    internals.H = previousDispatcher;
+  }
+}
+
 const describeTimeline = isBunRuntime ? describe.skip : describe;
 
 describeTimeline('TimelineItemCard', () => {
   beforeAll(async () => {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    ReactModule = require('../../web/node_modules/react/index.js') as ReactModuleLike;
     ({ TimelineItemCard } = await import('../../web/src/components/timeline/TimelineItem.js'));
+  });
+
+  beforeEach(() => {
+    hookSlots.length = 0;
   });
 
   it('renders tool call arguments in a collapsible details block', () => {
@@ -113,7 +196,7 @@ describeTimeline('TimelineItemCard', () => {
       },
     };
 
-    const tree = TimelineItemCard({ item });
+    const tree = renderTimelineItem(item);
 
     // Should render the summary
     expect(findTextInTree(tree, 'Arguments ▾')).toBe(true);
@@ -134,7 +217,7 @@ describeTimeline('TimelineItemCard', () => {
       toolArguments: {},
     };
 
-    const tree = TimelineItemCard({ item });
+    const tree = renderTimelineItem(item);
 
     expect(findTextInTree(tree, 'Arguments ▾')).toBe(false);
   });
@@ -155,8 +238,8 @@ describeTimeline('TimelineItemCard', () => {
       percent: 100,
     };
 
-    const insightTree = TimelineItemCard({ item: insightItem });
-    const dockerfileTree = TimelineItemCard({ item: dockerfileFixedItem });
+    const insightTree = renderTimelineItem(insightItem);
+    const dockerfileTree = renderTimelineItem(dockerfileFixedItem);
 
     expect(findTextInTree(insightTree, 'Insight')).toBe(true);
     expect(findTextInTree(dockerfileTree, 'Fixed')).toBe(true);
@@ -173,7 +256,7 @@ describeTimeline('TimelineItemCard', () => {
       toolResult: {},
     };
 
-    const tree = TimelineItemCard({ item });
+    const tree = renderTimelineItem(item);
     expect(findTextInTree(tree, 'Result')).toBe(true);
   });
 
@@ -210,8 +293,8 @@ describeTimeline('TimelineItemCard', () => {
       ],
     };
 
-    const composeTree = TimelineItemCard({ item: composeQuestion });
-    const proposalTree = TimelineItemCard({ item: proposalQuestion });
+    const composeTree = renderTimelineItem(composeQuestion);
+    const proposalTree = renderTimelineItem(proposalQuestion);
 
     expect(findTextInTree(composeTree, 'Fix compose?')).toBe(true);
     expect(findTextInTree(proposalTree, 'Fix dockerfile?')).toBe(true);
@@ -233,7 +316,7 @@ describeTimeline('TimelineItemCard', () => {
       ],
     };
 
-    const tree = TimelineItemCard({ item: plainQuestion });
+    const tree = renderTimelineItem(plainQuestion);
     expect(findTextInTree(tree, 'Choose one')).toBe(true);
   });
 
@@ -255,8 +338,8 @@ describeTimeline('TimelineItemCard', () => {
       detail: `${'x'.repeat(2050)}TAIL`,
     };
 
-    const successTree = TimelineItemCard({ item: successItem });
-    const errorTree = TimelineItemCard({ item: errorItem });
+    const successTree = renderTimelineItem(successItem);
+    const errorTree = renderTimelineItem(errorItem);
 
     expect(findTextInTree(successTree, 'demo.example.com')).toBe(true);
     expect(findTextInTree(successTree, 'https://demo.example.com')).toBe(false);
@@ -274,8 +357,8 @@ describeTimeline('TimelineItemCard', () => {
       toolName: 'deploy_project',
     };
 
-    const tree = TimelineItemCard({ item });
-    expect(findTextInTree(tree, '▸ deploy_project 실행')).toBe(true);
+    const tree = renderTimelineItem(item);
+    expect(findTextInTree(tree, '▸ deploy_project Executing')).toBe(true);
     expect(findTextInTree(tree, 'Arguments ▾')).toBe(false);
   });
 
@@ -295,8 +378,8 @@ describeTimeline('TimelineItemCard', () => {
       percent: -1,
     };
 
-    const normalTree = TimelineItemCard({ item: normalItem });
-    const agentTree = TimelineItemCard({ item: agentMessageItem });
+    const normalTree = renderTimelineItem(normalItem);
+    const agentTree = renderTimelineItem(agentMessageItem);
 
     expect(findTextInTree(normalTree, '**Title**')).toBe(true);
     expect(findTextInTree(normalTree, '[link](https://example.com)')).toBe(true);

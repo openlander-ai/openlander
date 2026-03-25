@@ -16,6 +16,7 @@ import { ToolResultCard } from './ToolResultCard';
 import { ComposeErrorCard } from './ComposeErrorCard';
 import { RecoveryCard } from './RecoveryCard';
 import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
+import { useLanguage } from '@/i18n/context.js';
 
 interface TimelineItemProps {
   item: TItem;
@@ -44,6 +45,7 @@ export function TimelineItemCard({
   onSubmitAnswer,
   onSkipQuestion,
 }: TimelineItemProps) {
+  const { t } = useLanguage();
   const isSuccess = item.type === 'success';
   const isError = item.type === 'error';
   const isQuestion = item.type === 'question';
@@ -81,7 +83,7 @@ export function TimelineItemCard({
 
   const primaryText = useMemo(() => {
     if (isAgentToolCall) {
-      return `▸ ${item.toolName || 'tool'} 실행`;
+      return `▸ ${item.toolName || 'tool'} ${t('timeline.toolExecuting')}`;
     }
 
     if (isAgentMessage) {
@@ -89,7 +91,7 @@ export function TimelineItemCard({
     }
 
     if (isAgentThinking) {
-      return item.content || item.title || '분석 중...';
+      return item.content || item.title || t('timeline.analyzing');
     }
 
     if (isAgentEvent) {
@@ -97,7 +99,7 @@ export function TimelineItemCard({
     }
 
     return item.title;
-  }, [isAgentToolCall, isAgentMessage, isAgentThinking, isAgentEvent, item]);
+  }, [isAgentToolCall, isAgentMessage, isAgentThinking, isAgentEvent, item, t]);
 
   const collapsedSummary = useMemo(() => {
     return `> ✦ ${primaryText.replace(/\s+/g, ' ').trim()}`;

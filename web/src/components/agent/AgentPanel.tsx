@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import type { AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { useStreamChat } from '@/hooks/use-stream-chat';
 import { getSetupStatus } from '@/lib/api';
+import { useLanguage } from '@/i18n/context.js';
 
 interface AgentPanelProps {
   open: boolean;
@@ -41,6 +42,7 @@ export function AgentPanel({
   initialContext,
   onInitialContextConsumed,
 }: AgentPanelProps) {
+  const { t } = useLanguage();
   const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
   const sentContextKeyRef = useRef<string | null>(null);
   const chat = useStreamChat();
@@ -66,7 +68,7 @@ export function AgentPanel({
     onInitialContextConsumed();
   }, [open, initialContext, llmConfigured, chat, onInitialContextConsumed]);
 
-  const panelTitle = useMemo(() => 'AI 진단', []);
+  const panelTitle = useMemo(() => t('agent.aiDiagnosis'), [t]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -91,7 +93,7 @@ export function AgentPanel({
             <div className="flex-1 min-w-0 min-h-0">
               <div className="flex flex-col h-full">
                 <div className="shrink-0 px-4 py-3.5 border-b border-border/50 bg-bg-panel/50 backdrop-blur-sm">
-                  <h2 className="text-sm font-medium text-primary-ol">AI 진단</h2>
+                  <h2 className="text-sm font-medium text-primary-ol">{t('agent.aiDiagnosis')}</h2>
                 </div>
 
                 {chat.messages.some((message) => message.role !== 'system') || chat.isStreaming ? (
