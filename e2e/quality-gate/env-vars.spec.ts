@@ -14,6 +14,21 @@ const SCENARIO_TIMEOUT_MS = 300_000;
 const STATUS_POLL_INTERVAL_MS = 1_500;
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
+async function fetchWithRetry(url: string, retries = 5, delayMs = 2000): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url);
+      return res;
+    } catch {
+      if (i === retries - 1) {
+        throw new Error(`Fetch failed after ${retries} retries: ${url}`);
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -112,7 +127,7 @@ if (!isBunRuntime) {
       expect(runningProject.status).toBe('running');
 
       const accessibleUrl = await resolveAccessibleUrl(projectId);
-      const response = await fetch(accessibleUrl);
+      const response = await fetchWithRetry(accessibleUrl);
       expect(response.ok).toBe(true);
     });
   });

@@ -11,6 +11,21 @@ const R3_REPO_URL = 'https://github.com/openlander-ai/test-compose-multi';
 const SCENARIO_TIMEOUT_MS = 240_000;
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
+async function fetchWithRetry(url: string, retries = 5, delayMs = 2000): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url);
+      return res;
+    } catch {
+      if (i === retries - 1) {
+        throw new Error(`Fetch failed after ${retries} retries: ${url}`);
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 function resolveProjectBaseUrl(project: {
   url?: unknown;
   assigned_port?: unknown;
@@ -86,7 +101,7 @@ if (!isBunRuntime) {
         },
       );
 
-      const countResponse = await fetch(`${baseUrl}/count`);
+      const countResponse = await fetchWithRetry(`${baseUrl}/count`);
       expect(countResponse.ok).toBe(true);
 
       const countPayload = (await countResponse.json()) as { count?: unknown };

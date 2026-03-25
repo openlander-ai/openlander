@@ -13,6 +13,21 @@ const BASE_URL = 'http://localhost:10114';
 const R1_REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
+async function fetchWithRetry(url: string, retries = 5, delayMs = 2000): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url);
+      return res;
+    } catch {
+      if (i === retries - 1) {
+        throw new Error(`Fetch failed after ${retries} retries: ${url}`);
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 type DeploymentSummary = {
   id: string;
 };
@@ -82,7 +97,7 @@ if (!isBunRuntime) {
           : null;
       expect(accessibleUrl).toBeTruthy();
 
-      const urlRes = await fetch(accessibleUrl!);
+      const urlRes = await fetchWithRetry(accessibleUrl!);
       expect(urlRes.ok).toBe(true);
 
       await rollbackProject(projectId, firstDeployId!);
