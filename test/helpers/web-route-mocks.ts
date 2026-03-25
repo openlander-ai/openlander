@@ -183,13 +183,11 @@ export function createMockContext(db: Database): AppContext {
     channelManager: createMockChannelManager() as unknown as AppContext['channelManager'],
     healthMonitor: createMockHealthMonitor() as unknown as AppContext['healthMonitor'],
     agent: createMockAgent() as unknown as AppContext['agent'],
+    model: null,
     deployQueue: new DeployQueue(),
     blueGreen: {
       deploy: vi.fn().mockResolvedValue({ success: true }),
     } as unknown as AppContext['blueGreen'],
-    dbProvisioner: {
-      provision: vi.fn().mockResolvedValue({ host: 'localhost', port: 5432 }),
-    } as unknown as AppContext['dbProvisioner'],
     serviceManager: createMockServiceManager() as unknown as AppContext['serviceManager'],
     buildDebugger: null,
     previewDeployer: {

@@ -111,6 +111,7 @@ export function createMockPlanContext(db?: Database): AppContext {
       getGlobalSecrets: vi.fn().mockReturnValue({}),
     } as unknown as AppContext['env'],
     agent: null,
+    model: null,
     deployQueue: new DeployQueue(),
     healthMonitor: {
       start: vi.fn(),
@@ -123,9 +124,6 @@ export function createMockPlanContext(db?: Database): AppContext {
     blueGreen: {
       deploy: vi.fn().mockResolvedValue({ success: true }),
     } as unknown as AppContext['blueGreen'],
-    dbProvisioner: {
-      provision: vi.fn().mockResolvedValue({ host: 'localhost', port: 5432 }),
-    } as unknown as AppContext['dbProvisioner'],
     buildDebugger: null,
     channelManager: {
       register: vi.fn(),
