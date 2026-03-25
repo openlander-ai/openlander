@@ -77,11 +77,9 @@ if (!isBunRuntime) {
 
       const latestProject = await getProject(projectId);
       const accessibleUrl =
-        typeof latestProject.url === 'string' && latestProject.url.length > 0
-          ? latestProject.url
-          : typeof latestProject.port === 'number'
-            ? `http://localhost:${String(latestProject.port)}`
-            : null;
+        typeof latestProject.assigned_port === 'number' && latestProject.assigned_port > 0
+          ? `http://localhost:${String(latestProject.assigned_port)}`
+          : null;
       expect(accessibleUrl).toBeTruthy();
 
       const urlRes = await fetch(accessibleUrl!);

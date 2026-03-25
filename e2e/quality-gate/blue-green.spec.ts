@@ -22,24 +22,12 @@ function assertOkResponse(url: string): void {
   expect(body).toContain('OK');
 }
 
-function resolveAccessibleUrl(project: {
-  url?: unknown;
-  assigned_port?: unknown;
-  port?: unknown;
-}): string {
-  if (typeof project.url === 'string' && project.url.length > 0) {
-    return project.url;
-  }
-
+function resolveAccessibleUrl(project: { assigned_port?: unknown }): string {
   if (typeof project.assigned_port === 'number' && project.assigned_port > 0) {
     return `http://localhost:${String(project.assigned_port)}`;
   }
 
-  if (typeof project.port === 'number' && project.port > 0) {
-    return `http://localhost:${String(project.port)}`;
-  }
-
-  throw new Error('Project has no accessible URL or port');
+  throw new Error('Project has no accessible assigned_port');
 }
 
 async function waitForContainerSwitch(

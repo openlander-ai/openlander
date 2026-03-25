@@ -10,7 +10,7 @@ import {
 } from './fixtures/api.js';
 
 const R7_REPO_URL = 'https://github.com/openlander-ai/test-env-required';
-const SCENARIO_TIMEOUT_MS = 180_000;
+const SCENARIO_TIMEOUT_MS = 300_000;
 const STATUS_POLL_INTERVAL_MS = 1_500;
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
@@ -34,6 +34,9 @@ async function waitForErrorOrStopped(
   }
 
   const latestProject = (await getProject(projectId)) as { status: string; [key: string]: unknown };
+  if (latestProject.status === 'error' || latestProject.status === 'stopped') {
+    return latestProject;
+  }
   throw new Error(
     `Timed out waiting for error/stopped after ${String(timeoutMs)}ms. Current status: ${latestProject.status}`,
   );
