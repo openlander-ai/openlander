@@ -1,7 +1,16 @@
+import { useEffect, useMemo, useState } from 'react';
 import type { TimelineItem as TItem } from '@/lib/event-types';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/time';
-import { ExternalLink, AlertCircle, CheckCircle2, Activity, Sparkles } from 'lucide-react';
+import {
+  ExternalLink,
+  AlertCircle,
+  CheckCircle2,
+  Activity,
+  Sparkles,
+  ChevronRight,
+  ChevronDown,
+} from 'lucide-react';
 import { InputRequestCard, type QuestionAnswerPayload } from './InputRequestCard';
 import { ToolResultCard } from './ToolResultCard';
 import { ComposeErrorCard } from './ComposeErrorCard';
@@ -11,6 +20,7 @@ import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
 interface TimelineItemProps {
   item: TItem;
   isLatest?: boolean;
+  isStreaming?: boolean;
   onSubmitAnswer?: (questionId: string, answers: QuestionAnswerPayload[]) => void;
   onSkipQuestion?: (questionId: string) => void;
 }
@@ -30,6 +40,7 @@ function cleanMarkdown(text: string): string {
 export function TimelineItemCard({
   item,
   isLatest,
+  isStreaming,
   onSubmitAnswer,
   onSkipQuestion,
 }: TimelineItemProps) {
@@ -41,11 +52,58 @@ export function TimelineItemCard({
   const isAgentToolResult = item.type === 'agent_tool_result';
   const isAgentMessage = item.type === 'agent_message';
   const isInsight = item.type === 'insight';
+  const isRecoverySuccess = item.type === 'recovery_success';
   const isAgentEvent =
-    isAgentThinking || isAgentToolCall || isAgentToolResult || isAgentMessage || isInsight;
+    isAgentThinking ||
+    isAgentToolCall ||
+    isAgentToolResult ||
+    isAgentMessage ||
+    isInsight ||
+    isRecoverySuccess;
   const isRecoveryEvent = item.type.startsWith('recovery_');
 
-  if (isRecoveryEvent) {
+  const isLatestStreaming = Boolean(isLatest && isStreaming);
+  const isAgentInProgress = isAgentThinking || item.status === 'in_progress' || isLatestStreaming;
+  const isAgentFailed = item.status === 'failed' || item.toolSuccess === false;
+  const isAgentSucceeded =
+    isRecoverySuccess ||
+    item.status === 'success' ||
+    (isAgentToolResult && item.toolSuccess === true);
+
+  const isCollapsibleAgentEvent = isAgentEvent && !isAgentInProgress && !isAgentFailed;
+  const shouldAutoCollapse = isCollapsibleAgentEvent && isAgentSucceeded;
+
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(shouldAutoCollapse);
+
+  useEffect(() => {
+    setIsCollapsed(shouldAutoCollapse);
+  }, [item.id, shouldAutoCollapse]);
+
+  const primaryText = useMemo(() => {
+    if (isAgentToolCall) {
+      return `▸ ${item.toolName || 'tool'} 실행`;
+    }
+
+    if (isAgentMessage) {
+      return item.title;
+    }
+
+    if (isAgentThinking) {
+      return item.content || item.title || '분석 중...';
+    }
+
+    if (isAgentEvent) {
+      return cleanMarkdown(item.title);
+    }
+
+    return item.title;
+  }, [isAgentToolCall, isAgentMessage, isAgentThinking, isAgentEvent, item]);
+
+  const collapsedSummary = useMemo(() => {
+    return `> ✦ ${primaryText.replace(/\s+/g, ' ').trim()}`;
+  }, [primaryText]);
+
+  if (isRecoveryEvent && !isRecoverySuccess) {
     return <RecoveryCard item={item} isLatest={isLatest} />;
   }
 
@@ -121,35 +179,53 @@ export function TimelineItemCard({
       </div>
 
       <div className="flex-1 min-w-0 pt-0.5">
-        <div className="flex items-start justify-between gap-2">
+        <div
+          className={cn(
+            'flex items-start justify-between gap-2',
+            isCollapsibleAgentEvent && 'cursor-pointer',
+          )}
+          onClick={isCollapsibleAgentEvent ? () => setIsCollapsed((prev) => !prev) : undefined}
+        >
           <p
             className={cn(
               'text-sm font-body leading-snug whitespace-pre-wrap',
               isSuccess && 'text-success font-medium',
               isError && 'text-error font-medium line-clamp-3',
               isAgentEvent && 'text-agent/90 font-sans text-[13px]',
+              isCollapsed && isAgentEvent && 'line-clamp-1',
               isAgentThinking && 'text-secondary-ol',
               isAgentToolCall && 'text-agent/70',
               isAgentMessage && 'text-primary-ol',
             )}
             title={isError ? item.title : undefined}
           >
-            {isAgentToolCall
-              ? `▸ ${item.toolName || 'tool'} 실행`
-              : isAgentMessage
-                ? item.title
-                : isAgentThinking
-                  ? item.content || item.title || '분석 중...'
-                  : isAgentEvent
-                    ? cleanMarkdown(item.title)
-                    : item.title}
+            {isCollapsed ? collapsedSummary : primaryText}
           </p>
-          <span className="text-xs font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
-            {formatTime(item.timestamp)}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+            {isCollapsibleAgentEvent && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsCollapsed((prev) => !prev);
+                }}
+                className="inline-flex items-center justify-center text-agent/70 hover:text-agent transition-colors cursor-pointer"
+                aria-label={isCollapsed ? '이벤트 펼치기' : '이벤트 접기'}
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+            <span className="text-xs font-mono text-muted-ol opacity-70">
+              {formatTime(item.timestamp)}
+            </span>
+          </div>
         </div>
 
-        {isSuccess && item.url && (
+        {!isCollapsed && isSuccess && item.url && (
           <a
             href={item.url}
             target="_blank"
@@ -161,18 +237,21 @@ export function TimelineItemCard({
           </a>
         )}
 
-        {isAgentToolCall && item.toolArguments && Object.keys(item.toolArguments).length > 0 && (
-          <details className="mt-2 group/args">
-            <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
-              Arguments ▾
-            </summary>
-            <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
-              {JSON.stringify(item.toolArguments, null, 2)}
-            </pre>
-          </details>
-        )}
+        {!isCollapsed &&
+          isAgentToolCall &&
+          item.toolArguments &&
+          Object.keys(item.toolArguments).length > 0 && (
+            <details className="mt-2 group/args">
+              <summary className="text-xs font-mono text-agent/70 cursor-pointer hover:text-agent transition-colors select-none">
+                Arguments ▾
+              </summary>
+              <pre className="mt-1.5 text-xs font-mono text-muted-ol bg-bg-terminal border border-agent/10 rounded-md p-2.5 max-h-48 overflow-auto whitespace-pre-wrap break-all leading-relaxed">
+                {JSON.stringify(item.toolArguments, null, 2)}
+              </pre>
+            </details>
+          )}
 
-        {isError && item.detail && (
+        {!isCollapsed && isError && item.detail && (
           <details className="mt-2 group/log">
             <summary className="text-xs font-mono text-error/70 cursor-pointer hover:text-error transition-colors select-none">
               Build log ▾
@@ -183,7 +262,7 @@ export function TimelineItemCard({
           </details>
         )}
 
-        {isError && (
+        {!isCollapsed && isError && (
           <DiagnoseButton
             className="mt-2"
             projectId={item.sourceProjectId}

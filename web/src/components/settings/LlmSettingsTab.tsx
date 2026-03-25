@@ -3,6 +3,7 @@ import { Check, Eye, EyeOff, Key, Loader2, Save, Zap, Trash2 } from 'lucide-reac
 import { configureLLM, testLLMConnection, deleteLLMConfig, type SetupStatus } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tooltip } from '@/components/ui/tooltip.js';
 import { cn } from '@/lib/utils';
 
 interface LlmSettingsTabProps {
@@ -331,6 +332,29 @@ export function LlmSettingsTab({ status, refetch }: LlmSettingsTabProps) {
               <p className="text-sm font-body text-success">{llmMessage}</p>
             )}
             {llmError && <p className="text-sm font-body text-error">{llmError}</p>}
+
+            <div className="flex items-center gap-3 my-4">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs font-body text-muted-ol">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-body text-muted-ol">Sign in with OAuth</p>
+              <Tooltip content="Coming Soon — Next update will support OAuth login">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled
+                  aria-disabled="true"
+                  tabIndex={-1}
+                  className="w-full opacity-50 grayscale font-body text-xs"
+                >
+                  Sign in with {activeProvider?.label || 'Provider'}
+                </Button>
+              </Tooltip>
+            </div>
           </form>
         </div>
       </div>

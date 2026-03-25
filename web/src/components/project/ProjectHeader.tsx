@@ -1,5 +1,6 @@
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -23,8 +24,10 @@ import {
   Plus,
   Trash2,
   Download,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSetup } from '@/hooks/use-setup.js';
 import type { Project, Environment, EnvironmentType } from '@/types';
 
 interface ProjectHeaderProps {
@@ -74,8 +77,10 @@ export function ProjectHeader({
   onShare,
   onDelete,
 }: ProjectHeaderProps) {
+  const { status: setupStatus } = useSetup();
   const isImageSource = project.source === 'image';
   const statusConfig = getStatusConfig(isImageSource);
+  const isLlmConfigured = setupStatus?.llm.ok === true;
 
   const selectedEnv = environments.find((e) => e.type === currentEnvType);
   const displayStatus = selectedEnv ? selectedEnv.status : project.status;
@@ -111,20 +116,25 @@ export function ProjectHeader({
     }
     if (isStopped && !hasContainer) {
       return (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
-          onClick={onRedeploy}
-          disabled={!!actionLoading}
-        >
-          {actionLoading === 'redeploy' ? (
-            <Spinner className="h-3 w-3" />
-          ) : (
-            <Zap className="h-3 w-3" />
-          )}
-          Deploy
-        </Button>
+        <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs font-body gap-1.5 text-agent hover:text-agent hover:bg-agent/10 hover:border-agent/30"
+            onClick={onRedeploy}
+            disabled={!!actionLoading}
+          >
+            {actionLoading === 'redeploy' ? (
+              <Spinner className="h-3 w-3" />
+            ) : (
+              <>
+                {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                <Zap className="h-3 w-3" />
+              </>
+            )}
+            Deploy
+          </Button>
+        </Tooltip>
       );
     }
     if (isStopped) {
@@ -147,22 +157,25 @@ export function ProjectHeader({
     }
     // running or error → Redeploy or Pull & Restart for image source
     return (
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 text-xs font-body gap-1.5"
-        onClick={onRedeploy}
-        disabled={!!actionLoading}
-      >
-        {actionLoading === 'redeploy' ? (
-          <Spinner className="h-3 w-3" />
-        ) : isImageSource ? (
-          <Download className="h-3 w-3" />
-        ) : (
-          <RotateCw className="h-3 w-3" />
-        )}
-        {isImageSource ? 'Pull & Restart' : 'Redeploy'}
-      </Button>
+      <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs font-body gap-1.5"
+          onClick={onRedeploy}
+          disabled={!!actionLoading}
+        >
+          {actionLoading === 'redeploy' ? (
+            <Spinner className="h-3 w-3" />
+          ) : (
+            <>
+              {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+              {isImageSource ? <Download className="h-3 w-3" /> : <RotateCw className="h-3 w-3" />}
+            </>
+          )}
+          {isImageSource ? 'Pull & Restart' : 'Redeploy'}
+        </Button>
+      </Tooltip>
     );
   };
 
@@ -341,7 +354,10 @@ export function ProjectHeader({
                   onClick={onOpenBlueGreenDialog}
                   disabled={!isRunning || !!actionLoading}
                 >
-                  <Zap className="h-3.5 w-3.5 mr-2" />
+                  <div className="flex items-center gap-2">
+                    {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                    <Zap className="h-3.5 w-3.5" />
+                  </div>
                   Blue-Green Deploy
                 </DropdownMenuItem>
               )}
