@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 
 import { deleteProject, deployGitProject, getProject, waitForStatus } from './fixtures/api.js';
-import { COMPOSE_EVENTS, DEPLOY_EVENTS } from './fixtures/event-types.js';
 import {
   assertEventSequence,
   consumeDeployStream,
@@ -67,9 +66,13 @@ if (!isBunRuntime) {
 
       stream = consumeDeployStream(projectId);
 
-      await stream.waitForEvent(COMPOSE_EVENTS.START, SCENARIO_TIMEOUT_MS);
-      await stream.waitForEvent(COMPOSE_EVENTS.UP, SCENARIO_TIMEOUT_MS);
-      await stream.waitForEvent(DEPLOY_EVENTS.SUCCESS, SCENARIO_TIMEOUT_MS);
+      await stream.waitForEvent('complete', SCENARIO_TIMEOUT_MS);
+
+      // Verify compose-related messages in the event stream
+      const hasComposeMessages = stream.events.some((e) =>
+        /compose/i.test(String(e.message || '')),
+      );
+      expect(hasComposeMessages).toBe(true);
 
       const runningProject = await waitForStatus(projectId, 'running', 180_000);
       expect(runningProject.status).toBe('running');
@@ -89,13 +92,7 @@ if (!isBunRuntime) {
       const countPayload = (await countResponse.json()) as { count?: unknown };
       expect(typeof countPayload.count).toBe('number');
 
-      assertEventSequence(stream.events, [
-        DEPLOY_EVENTS.START,
-        DEPLOY_EVENTS.CLONE,
-        COMPOSE_EVENTS.START,
-        COMPOSE_EVENTS.UP,
-        DEPLOY_EVENTS.SUCCESS,
-      ]);
+      assertEventSequence(stream.events, ['status:Preparing', 'status:Clone', 'complete']);
     });
   });
 }

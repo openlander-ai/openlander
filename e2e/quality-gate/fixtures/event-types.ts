@@ -1,39 +1,31 @@
 export interface TimelineEvent {
+  id?: string;
   type: string;
+  message?: string;
   projectId?: string;
   timestamp?: string;
+  percent?: number;
+  stepName?: string;
+  scope?: string;
+  url?: string;
+  durationMs?: number;
+  severity?: string;
+  logChunk?: string;
   [key: string]: unknown;
 }
 
-export const DEPLOY_EVENTS = {
-  START: 'deploy:start',
-  CLONE: 'deploy:clone',
-  BUILD: 'deploy:build',
-  RUN: 'deploy:run',
-  SUCCESS: 'deploy:success',
-  FAILED: 'deploy:failed',
-  AUTO_DETECT: 'deploy:auto-detect',
-  CRASH: 'deploy:crash',
-  ROLLBACK: 'deploy:rollback',
+export const STREAM_TYPES = {
+  STATUS: 'status',
+  LOG: 'log',
+  COMPLETE: 'complete',
+  ERROR: 'error',
+  INSIGHT: 'insight',
 } as const;
 
-export const RECOVERY_EVENTS = {
-  START: 'recovery:start',
-  SUCCESS: 'recovery:success',
-  FAILED: 'recovery:failed',
-  EXHAUSTED: 'recovery:exhausted',
-} as const;
-
-export const COMPOSE_EVENTS = {
-  START: 'compose:start',
-  UP: 'compose:up',
-  DOWN: 'compose:down',
-  ORPHANS_CLEANED: 'compose:orphans-cleaned',
-  FAILED: 'compose:failed',
-} as const;
-
-export const BUILD_EVENTS = {
-  SUGGEST: 'build:suggest',
-  INFORM: 'build:inform',
-  OUTPUT: 'build:output',
+export const STEP_NAMES = {
+  PREPARING: 'Preparing',
+  CLONE: 'Clone',
+  BUILD: 'Build',
+  START: 'Start',
+  COMPLETE: 'Complete',
 } as const;

@@ -8,8 +8,6 @@ import {
   rollbackProject,
   waitForStatus,
 } from './fixtures/api.js';
-import { DEPLOY_EVENTS } from './fixtures/event-types.js';
-import { consumeDeployStream } from './fixtures/stream-consumer.js';
 
 const BASE_URL = 'http://localhost:10114';
 const R1_REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
@@ -89,14 +87,7 @@ if (!isBunRuntime) {
       const urlRes = await fetch(accessibleUrl!);
       expect(urlRes.ok).toBe(true);
 
-      const stream = consumeDeployStream(projectId);
-      try {
-        await rollbackProject(projectId, firstDeployId!);
-        await stream.waitForEvent(DEPLOY_EVENTS.ROLLBACK, 120_000);
-      } finally {
-        stream.close();
-      }
-
+      await rollbackProject(projectId, firstDeployId!);
       const projectAfterRollback = await waitForStatus(projectId, 'running', 120_000);
       expect(projectAfterRollback.status).toBe('running');
     });

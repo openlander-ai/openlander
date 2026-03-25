@@ -3,6 +3,14 @@ import type { TimelineEvent } from './event-types.js';
 const BASE_URL = 'http://localhost:10114';
 const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 
+export function eventMatches(event: TimelineEvent, matcher: string): boolean {
+  if (matcher.includes(':')) {
+    const [type, stepName] = matcher.split(':');
+    return event.type === type && event.stepName === stepName;
+  }
+  return event.type === matcher;
+}
+
 type Waiter = {
   type: string;
   resolve: (event: TimelineEvent) => void;
@@ -67,7 +75,7 @@ export function consumeDeployStream(
     events.push(event);
 
     for (const waiter of [...waiters]) {
-      if (waiter.type !== event.type) continue;
+      if (!eventMatches(event, waiter.type)) continue;
       clearWaiter(waiter);
       waiter.resolve(event);
     }
@@ -141,7 +149,7 @@ export function consumeDeployStream(
       type: string,
       timeoutMs: number = DEFAULT_WAIT_TIMEOUT_MS,
     ): Promise<TimelineEvent> {
-      const existing = events.find((event) => event.type === type);
+      const existing = events.find((event) => eventMatches(event, type));
       if (existing) {
         return Promise.resolve(existing);
       }
@@ -192,7 +200,7 @@ export function assertEventSequence(actual: TimelineEvent[], expected: string[])
       continue;
     }
 
-    while (actualIndex < actual.length && actual[actualIndex]?.type !== expectedType) {
+    while (actualIndex < actual.length && !eventMatches(actual[actualIndex]!, expectedType)) {
       actualIndex += 1;
     }
 

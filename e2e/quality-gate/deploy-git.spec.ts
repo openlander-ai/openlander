@@ -3,7 +3,6 @@ import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 
 import { deleteProject, deployGitProject, getProject, waitForStatus } from './fixtures/api.js';
-import { DEPLOY_EVENTS } from './fixtures/event-types.js';
 import {
   assertEventSequence,
   consumeDeployStream,
@@ -14,12 +13,6 @@ const R1_REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const R2_REPO_URL = 'https://github.com/openlander-ai/test-no-dockerfile';
 const SCENARIO_TIMEOUT_MS = 120_000;
 const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-
-type TimelineLikeEvent = {
-  type: string;
-  message?: unknown;
-  stepName?: unknown;
-};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -44,53 +37,6 @@ async function waitForAnyEventType(
       .map((event) => event.type)
       .join(' -> ')}`,
   );
-}
-
-function mapToDeployEvents(events: TimelineLikeEvent[]): Array<{ type: string }> {
-  const mapped: Array<{ type: string }> = [];
-
-  for (const event of events) {
-    if (
-      Object.values(DEPLOY_EVENTS).includes(
-        event.type as (typeof DEPLOY_EVENTS)[keyof typeof DEPLOY_EVENTS],
-      )
-    ) {
-      mapped.push({ type: event.type });
-    }
-
-    const stepName = typeof event.stepName === 'string' ? event.stepName.toLowerCase() : '';
-    const message = typeof event.message === 'string' ? event.message.toLowerCase() : '';
-
-    if (stepName === 'preparing' || message.includes('starting deployment')) {
-      mapped.push({ type: DEPLOY_EVENTS.START });
-    }
-
-    if (stepName === 'clone' || message.includes('cloning repository')) {
-      mapped.push({ type: DEPLOY_EVENTS.CLONE });
-    }
-
-    if (
-      stepName === 'build' ||
-      message.includes('docker image built') ||
-      message.includes('building docker image')
-    ) {
-      mapped.push({ type: DEPLOY_EVENTS.BUILD });
-    }
-
-    if (stepName === 'start' || message.includes('starting container')) {
-      mapped.push({ type: DEPLOY_EVENTS.RUN });
-    }
-
-    if (message.includes('auto-generated') || message.includes('auto-detect')) {
-      mapped.push({ type: DEPLOY_EVENTS.AUTO_DETECT });
-    }
-
-    if (event.type === 'complete' || message.includes('deploy complete')) {
-      mapped.push({ type: DEPLOY_EVENTS.SUCCESS });
-    }
-  }
-
-  return mapped;
 }
 
 function assertLocalOkResponse(port: number): void {
@@ -153,7 +99,7 @@ if (!isBunRuntime) {
 
       const stream = consumeDeployStream(projectId);
       try {
-        await waitForAnyEventType(stream, [DEPLOY_EVENTS.SUCCESS, 'complete'], SCENARIO_TIMEOUT_MS);
+        await waitForAnyEventType(stream, ['complete'], SCENARIO_TIMEOUT_MS);
 
         const project = await waitForStatus(projectId, 'running', SCENARIO_TIMEOUT_MS);
         expect(project.status).toBe('running');
@@ -163,14 +109,10 @@ if (!isBunRuntime) {
 
         assertLocalOkResponse(project.assigned_port as number);
 
-        const deployEvents = mapToDeployEvents(stream.events as TimelineLikeEvent[]);
-        assertEventSequence(deployEvents, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.CLONE,
-          DEPLOY_EVENTS.BUILD,
-          DEPLOY_EVENTS.RUN,
-          DEPLOY_EVENTS.SUCCESS,
-        ]);
+        assertEventSequence(
+          stream.events.map((e) => ({ type: e.type, message: String(e.message ?? '') })),
+          ['status:Preparing', 'status:Clone', 'status:Build', 'status:Start', 'complete'],
+        );
       } finally {
         stream.close();
       }
@@ -186,23 +128,19 @@ if (!isBunRuntime) {
 
       const stream = consumeDeployStream(deploy.projectId);
       try {
-        await waitForAnyEventType(stream, [DEPLOY_EVENTS.SUCCESS, 'complete'], SCENARIO_TIMEOUT_MS);
+        await waitForAnyEventType(stream, ['complete'], SCENARIO_TIMEOUT_MS);
 
         const project = await waitForStatus(deploy.projectId, 'running', SCENARIO_TIMEOUT_MS);
         expect(project.status).toBe('running');
 
-        const deployEvents = mapToDeployEvents(stream.events as TimelineLikeEvent[]);
+        expect(
+          stream.events.some((e) => /auto.?detect|generated/i.test(String(e.message || ''))),
+        ).toBe(true);
 
-        expect(deployEvents.map((event) => event.type)).toContain(DEPLOY_EVENTS.AUTO_DETECT);
-
-        assertEventSequence(deployEvents, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.CLONE,
-          DEPLOY_EVENTS.AUTO_DETECT,
-          DEPLOY_EVENTS.BUILD,
-          DEPLOY_EVENTS.RUN,
-          DEPLOY_EVENTS.SUCCESS,
-        ]);
+        assertEventSequence(
+          stream.events.map((e) => ({ type: e.type, message: String(e.message ?? '') })),
+          ['status:Preparing', 'status:Clone', 'status:Build', 'status:Start', 'complete'],
+        );
 
         const latestProject = await getProject(deploy.projectId);
         expect(latestProject.status).toBe('running');

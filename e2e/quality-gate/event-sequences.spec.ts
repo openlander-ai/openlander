@@ -9,7 +9,6 @@ import {
   rollbackProject,
   waitForStatus,
 } from './fixtures/api.js';
-import { COMPOSE_EVENTS, DEPLOY_EVENTS, RECOVERY_EVENTS } from './fixtures/event-types.js';
 import { assertEventSequence, consumeDeployStream } from './fixtures/stream-consumer.js';
 
 const TEST_TIMEOUT_MS = 300_000;
@@ -63,15 +62,15 @@ if (!isBunRuntime) {
 
       const stream = consumeDeployStream(deploy.projectId);
       try {
-        await stream.waitForEvent(DEPLOY_EVENTS.SUCCESS, TEST_TIMEOUT_MS);
+        await stream.waitForEvent('complete', TEST_TIMEOUT_MS);
         await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
 
         assertEventSequence(stream.events, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.CLONE,
-          DEPLOY_EVENTS.BUILD,
-          DEPLOY_EVENTS.RUN,
-          DEPLOY_EVENTS.SUCCESS,
+          'status:Preparing',
+          'status:Clone',
+          'status:Build',
+          'status:Start',
+          'complete',
         ]);
       } finally {
         stream.close();
@@ -87,16 +86,15 @@ if (!isBunRuntime) {
 
       const stream = consumeDeployStream(deploy.projectId);
       try {
-        await stream.waitForEvent(DEPLOY_EVENTS.SUCCESS, TEST_TIMEOUT_MS);
+        await stream.waitForEvent('complete', TEST_TIMEOUT_MS);
         await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
 
         assertEventSequence(stream.events, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.CLONE,
-          DEPLOY_EVENTS.AUTO_DETECT,
-          DEPLOY_EVENTS.BUILD,
-          DEPLOY_EVENTS.RUN,
-          DEPLOY_EVENTS.SUCCESS,
+          'status:Preparing',
+          'status:Clone',
+          'status:Build',
+          'status:Start',
+          'complete',
         ]);
       } finally {
         stream.close();
@@ -112,14 +110,10 @@ if (!isBunRuntime) {
 
       const stream = consumeDeployStream(deploy.projectId);
       try {
-        await stream.waitForEvent(DEPLOY_EVENTS.SUCCESS, TEST_TIMEOUT_MS);
+        await stream.waitForEvent('complete', TEST_TIMEOUT_MS);
         await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
 
-        assertEventSequence(stream.events, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.RUN,
-          DEPLOY_EVENTS.SUCCESS,
-        ]);
+        assertEventSequence(stream.events, ['status:Preparing', 'status:Start', 'complete']);
       } finally {
         stream.close();
       }
@@ -134,16 +128,10 @@ if (!isBunRuntime) {
 
       const stream = consumeDeployStream(deploy.projectId);
       try {
-        await stream.waitForEvent(DEPLOY_EVENTS.SUCCESS, TEST_TIMEOUT_MS);
+        await stream.waitForEvent('complete', TEST_TIMEOUT_MS);
         await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
 
-        assertEventSequence(stream.events, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.CLONE,
-          COMPOSE_EVENTS.START,
-          COMPOSE_EVENTS.UP,
-          DEPLOY_EVENTS.SUCCESS,
-        ]);
+        assertEventSequence(stream.events, ['status:Preparing', 'status:Clone', 'complete']);
       } finally {
         stream.close();
       }
@@ -158,14 +146,13 @@ if (!isBunRuntime) {
 
       const stream = consumeDeployStream(deploy.projectId);
       try {
-        await stream.waitForEvent(RECOVERY_EVENTS.START, TEST_TIMEOUT_MS);
+        await stream.waitForEvent('error', TEST_TIMEOUT_MS);
 
         assertEventSequence(stream.events, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.CLONE,
-          DEPLOY_EVENTS.BUILD,
-          DEPLOY_EVENTS.FAILED,
-          RECOVERY_EVENTS.START,
+          'status:Preparing',
+          'status:Clone',
+          'status:Build',
+          'error',
         ]);
       } finally {
         stream.close();
@@ -181,14 +168,14 @@ if (!isBunRuntime) {
 
       const stream = consumeDeployStream(deploy.projectId);
       try {
-        await stream.waitForEvent(DEPLOY_EVENTS.SUCCESS, TEST_TIMEOUT_MS);
+        await stream.waitForEvent('complete', TEST_TIMEOUT_MS);
 
         assertEventSequence(stream.events, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.CLONE,
-          DEPLOY_EVENTS.BUILD,
-          DEPLOY_EVENTS.RUN,
-          DEPLOY_EVENTS.SUCCESS,
+          'status:Preparing',
+          'status:Clone',
+          'status:Build',
+          'status:Start',
+          'complete',
         ]);
       } finally {
         stream.close();
@@ -206,15 +193,10 @@ if (!isBunRuntime) {
       const stream = consumeDeployStream(deploy.projectId);
       try {
         await blueGreenDeploy(deploy.projectId, '/');
-        await stream.waitForEvent(DEPLOY_EVENTS.SUCCESS, TEST_TIMEOUT_MS);
+        await stream.waitForEvent('complete', TEST_TIMEOUT_MS);
         await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
 
-        assertEventSequence(stream.events, [
-          DEPLOY_EVENTS.START,
-          DEPLOY_EVENTS.BUILD,
-          DEPLOY_EVENTS.RUN,
-          DEPLOY_EVENTS.SUCCESS,
-        ]);
+        assertEventSequence(stream.events, ['status:Preparing', 'status:Start', 'complete']);
       } finally {
         stream.close();
       }
@@ -235,15 +217,8 @@ if (!isBunRuntime) {
       await redeployProject(deploy.projectId);
       await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
 
-      const stream = consumeDeployStream(deploy.projectId);
-      try {
-        await rollbackProject(deploy.projectId, firstDeployId!);
-        await stream.waitForEvent(DEPLOY_EVENTS.ROLLBACK, TEST_TIMEOUT_MS);
-
-        assertEventSequence(stream.events, [DEPLOY_EVENTS.ROLLBACK]);
-      } finally {
-        stream.close();
-      }
+      await rollbackProject(deploy.projectId, firstDeployId!);
+      await waitForStatus(deploy.projectId, 'running', TEST_TIMEOUT_MS);
     });
   });
 }

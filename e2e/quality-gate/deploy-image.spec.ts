@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 
 import { deleteProject, deployImageProject, waitForStatus } from './fixtures/api.js';
-import { DEPLOY_EVENTS } from './fixtures/event-types.js';
 import { assertEventSequence, consumeDeployStream } from './fixtures/stream-consumer.js';
 
 test.describe.configure({ mode: 'serial' });
@@ -24,9 +23,9 @@ test.describe('Quality Gate — Docker Image Deploy', () => {
     const stream = consumeDeployStream(projectId);
 
     try {
-      await stream.waitForEvent(DEPLOY_EVENTS.START, 120_000);
-      await stream.waitForEvent(DEPLOY_EVENTS.RUN, 120_000);
-      await stream.waitForEvent(DEPLOY_EVENTS.SUCCESS, 120_000);
+      await stream.waitForEvent('status:Preparing', 120_000);
+      await stream.waitForEvent('status:Start', 120_000);
+      await stream.waitForEvent('complete', 120_000);
 
       const project = await waitForStatus(projectId, 'running', 120_000);
       expect(project.status).toBe('running');
@@ -40,15 +39,11 @@ test.describe('Quality Gate — Docker Image Deploy', () => {
 
       expect(nginxBody.includes('Welcome to nginx') || nginxResponse.status === 200).toBe(true);
 
-      const eventTypes = stream.events.map((event) => event.type);
-      expect(eventTypes).not.toContain(DEPLOY_EVENTS.CLONE);
-      expect(eventTypes).not.toContain(DEPLOY_EVENTS.BUILD);
+      // Assert NO clone/build: image deploy skips these stages
+      expect(stream.events.filter((e) => e.stepName === 'Clone')).toHaveLength(0);
+      expect(stream.events.filter((e) => e.stepName === 'Build')).toHaveLength(0);
 
-      assertEventSequence(stream.events, [
-        DEPLOY_EVENTS.START,
-        DEPLOY_EVENTS.RUN,
-        DEPLOY_EVENTS.SUCCESS,
-      ]);
+      assertEventSequence(stream.events, ['status:Preparing', 'status:Start', 'complete']);
     } finally {
       stream.close();
     }
