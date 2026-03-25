@@ -13,6 +13,8 @@ export function initializeDatabase(sqlite: SqliteDatabase): void {
  * Run all schema migrations.
  */
 export function runMigrations(sqlite: SqliteDatabase): void {
+  sqlite.exec('DROP TABLE IF EXISTS chat_history');
+
   const columns = sqlite.prepare("PRAGMA table_info('projects')").all() as Array<{
     name: string;
   }>;

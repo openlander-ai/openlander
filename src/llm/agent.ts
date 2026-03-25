@@ -3,7 +3,6 @@ import type { LanguageModel, ToolSet } from 'ai';
 import type { ChatMessage } from './index.js';
 import type { QuestionRequest, QuestionBridge } from '../lib/question-bridge.js';
 import type { Database } from '../db/index.js';
-import type { ChatHistoryRow } from '../db/types.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
 
@@ -86,15 +85,6 @@ export class Agent {
 
       this.history.push({ role: 'user', content: userMessage });
 
-      // Save user message to DB
-      const { nanoid } = await import('nanoid');
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId: resolvedSessionId,
-        role: 'user',
-        content: userMessage,
-      });
-
       const result = await generateText({
         model: this.model,
         messages: this.history.map((m) => ({
@@ -124,14 +114,6 @@ export class Agent {
       this.history.push({ role: 'assistant', content: responseText });
       this.trimHistory();
 
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId: resolvedSessionId,
-        role: 'assistant',
-        content: responseText,
-        toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
-      });
-
       return {
         message: responseText,
         toolResults: allToolResults.length > 0 ? allToolResults : undefined,
@@ -145,11 +127,7 @@ export class Agent {
     }
 
     this.history = [];
-    const rows: ChatHistoryRow[] = this.db.getChatHistory(sessionId);
-    this.history = rows.map((row) => ({
-      role: row.role,
-      content: row.content,
-    }));
+    this.history = [];
     this.currentSessionId = sessionId;
 
     await this.refreshSystemPrompt();
@@ -170,7 +148,6 @@ export class Agent {
     sessionId?: string,
   ): Promise<void> {
     return this.withLock(async () => {
-      const { nanoid } = await import('nanoid');
       const resolvedSessionId = this.resolveSessionId(sessionId);
       if (resolvedSessionId !== this.currentSessionId) {
         await this.switchSession(resolvedSessionId);
@@ -182,14 +159,6 @@ export class Agent {
       await onEvent({ type: 'session', sessionId: resolvedSessionId });
 
       this.history.push({ role: 'user', content: userMessage });
-
-      // Save user message to DB
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId: resolvedSessionId,
-        role: 'user',
-        content: userMessage,
-      });
 
       await onEvent({ type: 'thinking' });
 
@@ -281,14 +250,6 @@ export class Agent {
       // Update history with the final response
       this.history.push({ role: 'assistant', content: finalText });
       this.trimHistory();
-
-      this.db.saveChatMessage({
-        id: nanoid(12),
-        sessionId: resolvedSessionId,
-        role: 'assistant',
-        content: finalText,
-        toolCalls: allToolResults.length > 0 ? allToolResults : undefined,
-      });
 
       await onEvent({ type: 'message', content: finalText });
       await onEvent({

@@ -12,13 +12,13 @@ import { SecretFileRepo } from './repos/secret-file.repo.js';
 import { ServiceRepo } from './repos/service.repo.js';
 import { DeployLogRepo } from './repos/deploy-log.repo.js';
 import { TimelineRepo } from './repos/timeline.repo.js';
-import { ChatRepo } from './repos/chat.repo.js';
 import { DomainMappingRepo } from './repos/domain-mapping.repo.js';
 import { OAuthRepo } from './repos/oauth.repo.js';
 import { WebhookRepo } from './repos/webhook.repo.js';
 import { DeployPlanRepo } from './repos/deploy-plan.repo.js';
 import { DeployConfigRepo } from './repos/deploy-config.repo.js';
 import type { ProjectRow } from './types.js';
+import type { ChatHistoryRow } from './types.js';
 
 export type {
   EnvironmentType,
@@ -47,7 +47,6 @@ export class Database {
   private readonly serviceRepo: ServiceRepo;
   private readonly deployLogRepo: DeployLogRepo;
   private readonly timelineRepo: TimelineRepo;
-  private readonly chatRepo: ChatRepo;
   private readonly domainMappingRepo: DomainMappingRepo;
   private readonly oauthRepo: OAuthRepo;
   private readonly webhookRepo: WebhookRepo;
@@ -68,7 +67,6 @@ export class Database {
     this.serviceRepo = new ServiceRepo(this.db, this.sqlite);
     this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
     this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
-    this.chatRepo = new ChatRepo(this.db, this.sqlite);
     this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
     this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
     this.webhookRepo = new WebhookRepo(this.db, this.sqlite);
@@ -123,10 +121,10 @@ export class Database {
   createTimelineEvent(event: Parameters<TimelineRepo['createTimelineEvent']>[0]) { this.timelineRepo.createTimelineEvent(event); }
   getTimelineEvents(projectId: string, limit = 200) { return this.timelineRepo.getTimelineEvents(projectId, limit); }
   deleteTimelineEvents(projectId: string) { this.timelineRepo.deleteTimelineEvents(projectId); }
-   saveChatMessage(msg: Parameters<ChatRepo['saveChatMessage']>[0]) { this.chatRepo.saveChatMessage(msg); }
-   getChatHistory(sessionId: string, limit = 50) { return this.chatRepo.getChatHistory(sessionId, limit); }
-   listChatSessions() { return this.chatRepo.listChatSessions(); }
-   deleteSession(sessionId: string) { this.chatRepo.deleteSession(sessionId); }
+   saveChatMessage(msg: { id: string; sessionId: string; role: ChatHistoryRow['role']; content: string; toolCalls?: unknown; }) { void msg; }
+   getChatHistory(sessionId: string, limit = 50): ChatHistoryRow[] { void sessionId; void limit; return []; }
+   listChatSessions(): Array<{ session_id: string; message_count: number; last_message: string; first_message: string | null; }> { return []; }
+   deleteSession(sessionId: string) { void sessionId; }
   createDomainMapping(mapping: Parameters<DomainMappingRepo['createDomainMapping']>[0]) { this.domainMappingRepo.createDomainMapping(mapping); }
   getDomainMappings(projectId: string) { return this.domainMappingRepo.getDomainMappings(projectId); }
   listDomainMappings() { return this.domainMappingRepo.listDomainMappings(); }

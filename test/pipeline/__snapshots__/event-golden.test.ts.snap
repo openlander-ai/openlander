@@ -332,32 +332,23 @@ exports[`pipeline event golden snapshots > catalogs all unique deploy.ts + compo
 ]
 `;
 
-exports[`pipeline event golden snapshots catalogs all unique deploy.ts + compose.ts event types 1`] = `
+exports[`pipeline event golden snapshots captures compose failed event sequence and payload shapes 1`] = `
 [
-  "build:inform",
-  "build:output",
-  "build:suggest",
-  "compose:down",
-  "compose:failed",
-  "compose:start",
-  "compose:up",
-  "container:remove",
-  "container:start",
-  "container:stop",
-  "deploy:auto-detect",
-  "deploy:build",
-  "deploy:clone",
-  "deploy:crash",
-  "deploy:diff-analyzed",
-  "deploy:failed",
-  "deploy:rollback",
-  "deploy:run",
-  "deploy:start",
-  "deploy:success",
-  "env:new-keys-detected",
-  "monitor:healthcheck",
-  "secret:detected",
-  "tunnel:url",
+  {
+    "payloadShape": {
+      "composePath": "string",
+      "projectId": "string",
+      "serviceCount": "number",
+    },
+    "type": "compose:start",
+  },
+  {
+    "payloadShape": {
+      "error": "string",
+      "projectId": "string",
+    },
+    "type": "compose:failed",
+  },
 ]
 `;
 
@@ -507,22 +498,31 @@ exports[`pipeline event golden snapshots captures stop/start/remove event sequen
 ]
 `;
 
-exports[`pipeline event golden snapshots captures compose failed event sequence and payload shapes 1`] = `
+exports[`pipeline event golden snapshots catalogs all unique deploy.ts + compose.ts event types 1`] = `
 [
-  {
-    "payloadShape": {
-      "composePath": "string",
-      "projectId": "string",
-      "serviceCount": "number",
-    },
-    "type": "compose:start",
-  },
-  {
-    "payloadShape": {
-      "error": "string",
-      "projectId": "string",
-    },
-    "type": "compose:failed",
-  },
+  "build:inform",
+  "build:output",
+  "build:suggest",
+  "compose:down",
+  "compose:failed",
+  "compose:start",
+  "compose:up",
+  "container:remove",
+  "container:start",
+  "container:stop",
+  "deploy:auto-detect",
+  "deploy:build",
+  "deploy:clone",
+  "deploy:crash",
+  "deploy:diff-analyzed",
+  "deploy:failed",
+  "deploy:rollback",
+  "deploy:run",
+  "deploy:start",
+  "deploy:success",
+  "env:new-keys-detected",
+  "monitor:healthcheck",
+  "secret:detected",
+  "tunnel:url",
 ]
 `;

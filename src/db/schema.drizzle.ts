@@ -163,22 +163,6 @@ export const timelineEvents = sqliteTable(
   (table) => [index('idx_timeline_project').on(table.project_id, table.created_at)],
 );
 
-export const chatHistory = sqliteTable(
-  'chat_history',
-  {
-    id: text('id').primaryKey(),
-    session_id: text('session_id').notNull(),
-    role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
-    content: text('content').notNull(),
-    tool_calls: text('tool_calls'),
-    created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
-  },
-  (table) => [
-    check('chat_history_role_check', sql`${table.role} IN ('user', 'assistant', 'system')`),
-    index('idx_chat_history_session').on(table.session_id),
-  ],
-);
-
 export const domainMappings = sqliteTable(
   'domain_mappings',
   {
@@ -334,7 +318,6 @@ export const drizzleSchema = {
   envVars,
   deployLogs,
   timelineEvents,
-  chatHistory,
   domainMappings,
   oauthTokens,
   webhookConfigs,

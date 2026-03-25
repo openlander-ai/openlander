@@ -128,29 +128,5 @@ export function createChatRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'dismissed' });
   });
 
-  api.get('/sessions', (c) => {
-    const sessions = ctx.db.listChatSessions();
-    return c.json({
-      sessions: sessions.map((session) => ({
-        sessionId: session.session_id,
-        messageCount: session.message_count,
-        lastActive: session.last_message,
-        firstMessage: session.first_message,
-      })),
-    });
-  });
-
-  api.get('/sessions/:id/messages', (c) => {
-    const sessionId = c.req.param('id');
-    const messages = ctx.db.getChatHistory(sessionId);
-    return c.json({ messages });
-  });
-
-  api.delete('/sessions/:id', (c) => {
-    const sessionId = c.req.param('id');
-    ctx.db.deleteSession(sessionId);
-    return c.json({ ok: true });
-  });
-
   return api;
 }

@@ -89,15 +89,6 @@ CREATE TABLE IF NOT EXISTS timeline_events (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS chat_history (
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
-  content TEXT NOT NULL,
-  tool_calls TEXT,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS domain_mappings (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -174,7 +165,6 @@ CREATE INDEX IF NOT EXISTS idx_env_vars_project ON env_vars(project_id);
 CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id);
 CREATE INDEX IF NOT EXISTS idx_deploy_logs_project ON deploy_logs(project_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_project ON timeline_events(project_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_chat_history_session ON chat_history(session_id);
 CREATE INDEX IF NOT EXISTS idx_domain_mappings_project ON domain_mappings(project_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens(provider);
 CREATE INDEX IF NOT EXISTS idx_webhook_configs_project_source ON webhook_configs(project_id, source);
