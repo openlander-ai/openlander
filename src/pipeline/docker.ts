@@ -104,6 +104,7 @@ export interface BuildComposeServiceOptions {
   buildArgs?: Record<string, string>;
   target?: string;
   noCache?: boolean;
+  cacheFrom?: string[];
   onProgress?: (event: { stream?: string; error?: string }) => void;
 }
 
@@ -339,6 +340,8 @@ export class Docker {
           buildargs: opts.buildArgs,
           target: opts.target,
           nocache: opts.noCache === true,
+          ...(opts.cacheFrom &&
+            opts.cacheFrom.length > 0 && { cachefrom: JSON.stringify(opts.cacheFrom) }),
         },
       );
     } catch (error) {

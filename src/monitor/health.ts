@@ -175,6 +175,22 @@ export class HealthMonitor {
     try {
       const container = this.docker.getClient().getContainer(containerId);
       const info = await container.inspect();
+
+      const restartCount = info.RestartCount;
+      if (restartCount >= 3) {
+        log.warn(
+          { projectId, containerId, restartCount },
+          'Container in crash loop — marking project as error',
+        );
+        this.db.updateProject(projectId, { status: 'error' });
+        await this.events.emit('deploy:failed', {
+          projectId,
+          error: `Container crash loop detected (${String(restartCount)} restarts)`,
+          step: 'run',
+        });
+        return lastResult;
+      }
+
       if (info.State.Running && !info.State.Restarting) {
         return {
           ...lastResult,
@@ -183,8 +199,23 @@ export class HealthMonitor {
           consecutiveFailures: 0,
         };
       }
+
+      const exitCode = info.State.ExitCode;
+      if (!info.State.Running && exitCode !== 0) {
+        log.warn(
+          { projectId, containerId, exitCode },
+          'Container crashed — marking project as error',
+        );
+        this.db.updateProject(projectId, { status: 'error' });
+        await this.events.emit('deploy:failed', {
+          projectId,
+          error: `Container exited with code ${String(exitCode)}`,
+          step: 'run',
+        });
+      }
     } catch {
-      return lastResult;
+      log.warn({ projectId, containerId }, 'Container not found — marking project as error');
+      this.db.updateProject(projectId, { status: 'error' });
     }
 
     return lastResult;

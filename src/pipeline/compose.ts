@@ -662,6 +662,16 @@ export class ComposePipeline {
         }
       }
 
+      for (const service of filteredComposeProject.services) {
+        const staleContainerName = `ol-${parentName}-${service.name}`;
+        try {
+          const existing = this.docker.getClient().getContainer(staleContainerName);
+          await existing.remove({ force: true });
+        } catch {
+          // container doesn't exist — expected
+        }
+      }
+
       const orchestration = await orchestrator.executeOrdered(topology, {
         deployService: async (service) => {
           const composeService = serviceByName.get(service.name);
@@ -700,6 +710,7 @@ export class ComposePipeline {
                 contextPath,
                 dockerfile,
                 tag: imageTag,
+                cacheFrom: [imageTag],
               });
             } else {
               buildLog += `[compose pull ${service.name}] ${imageTag}\n`;

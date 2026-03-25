@@ -64,6 +64,7 @@ describe('HealthMonitor checkPort fallback', () => {
 
     const db = {
       getProject,
+      updateProject: vi.fn(),
     } as unknown as Database;
 
     const events = {
