@@ -25,8 +25,9 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const dockerOk = dockerStatus.state === 'running';
     const llmConfigured = ctx.agent !== null;
     const config = loadConfig();
+    const hasPassword = ctx.db.isPasswordSet();
 
-    const ready = dockerOk;
+    const ready = dockerOk && hasPassword;
 
     let dockerMessage: string;
     if (dockerStatus.state === 'running') {
@@ -45,6 +46,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     return c.json({
       ready,
+      hasPassword,
       docker: {
         ok: dockerOk,
         state: dockerStatus.state,
