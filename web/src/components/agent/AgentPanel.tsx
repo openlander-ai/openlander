@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChatLayout } from '@/components/agent/ChatLayout';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bot } from 'lucide-react';
 import { LlmGate } from '@/components/agent/LlmGate';
+import { MessageList } from '@/components/agent/MessageList';
+import { StreamError } from '@/components/agent/EmptyState';
+import { ThinkingIndicator } from '@/components/agent/ThinkingIndicator';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import type { AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { useStreamChat } from '@/hooks/use-stream-chat';
-import { dismissQuestion, getSetupStatus, replyQuestion } from '@/lib/api';
-import type { QuestionAnswer } from '@/lib/chat-types';
+import { getSetupStatus } from '@/lib/api';
 
 interface AgentPanelProps {
   open: boolean;
@@ -64,19 +66,7 @@ export function AgentPanel({
     onInitialContextConsumed();
   }, [open, initialContext, llmConfigured, chat, onInitialContextConsumed]);
 
-  const handleReply = useCallback((requestId: string, answers: QuestionAnswer[]) => {
-    void replyQuestion(requestId, answers).catch((error) => {
-      console.error('Failed to reply to question:', error);
-    });
-  }, []);
-
-  const handleDismiss = useCallback(() => {
-    void dismissQuestion().catch((error) => {
-      console.error('Failed to dismiss question:', error);
-    });
-  }, []);
-
-  const panelTitle = useMemo(() => 'Agent Chat Panel', []);
+  const panelTitle = useMemo(() => 'AI 진단', []);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -99,16 +89,31 @@ export function AgentPanel({
         ) : (
           <div data-testid="agent-panel" className="h-full min-h-0 flex">
             <div className="flex-1 min-w-0 min-h-0">
-              <ChatLayout
-                messages={chat.messages}
-                isStreaming={chat.isStreaming}
-                error={chat.error}
-                pendingQuestion={chat.pendingQuestion}
-                onSendMessage={chat.sendMessage}
-                onAbort={chat.abort}
-                onReply={handleReply}
-                onDismiss={handleDismiss}
-              />
+              <div className="flex flex-col h-full">
+                <div className="shrink-0 px-4 py-3.5 border-b border-border/50 bg-bg-panel/50 backdrop-blur-sm">
+                  <h2 className="text-sm font-medium text-primary-ol">AI 진단</h2>
+                </div>
+
+                {chat.messages.some((message) => message.role !== 'system') || chat.isStreaming ? (
+                  <MessageList messages={chat.messages}>
+                    {chat.isStreaming ? <ThinkingIndicator /> : null}
+                  </MessageList>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center px-6">
+                    <div className="text-center space-y-2">
+                      <div className="mx-auto h-12 w-12 rounded-full bg-bg-subtle flex items-center justify-center">
+                        <Bot className="h-6 w-6 text-muted-ol" />
+                      </div>
+                      <h3 className="text-sm font-medium text-primary-ol">진단 준비 중</h3>
+                      <p className="text-xs text-muted-ol">
+                        Diagnose 버튼으로 전달된 에러 컨텍스트를 분석합니다.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {chat.error ? <StreamError error={chat.error} /> : null}
+              </div>
             </div>
           </div>
         )}
