@@ -1,0 +1,129 @@
+import { useState, useCallback } from 'react';
+import { CheckCircle2, XCircle, Copy, Check } from 'lucide-react';
+
+export function StatusRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <div className="shrink-0">
+        {ok ? (
+          <CheckCircle2 className="h-4 w-4 text-success" />
+        ) : (
+          <XCircle className="h-4 w-4 text-error" />
+        )}
+      </div>
+      <span className="text-sm font-body text-primary-ol">{label}</span>
+      <span className="text-xs font-body text-muted-ol ml-auto">{detail}</span>
+    </div>
+  );
+}
+
+export function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('Copy this command:', text);
+    }
+  }, [text]);
+  return (
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-bg-subtle hover:bg-bg-subtle/80 text-muted-ol hover:text-secondary-ol transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
+const DOCKER_LINUX_CMD = 'curl -fsSL https://get.docker.com | sh && sudo usermod -aG docker $USER';
+const DOCKER_MAC_CMD = 'brew install --cask docker';
+const DOCKER_START_LINUX = 'sudo systemctl start docker';
+const DOCKER_START_MAC = 'open -a Docker';
+const DOCKER_PERM_CMD = 'sudo usermod -aG docker $USER && newgrp docker';
+const DOCKER_AGENT_PROMPT = 'Install Docker on this machine and start the daemon';
+
+export function CommandBlock({ label, cmd }: { label: string; cmd: string }) {
+  return (
+    <div className="rounded-md border border-border bg-bg-subtle/30 p-3">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-body font-medium text-secondary-ol">{label}</span>
+        <CopyButton text={cmd} />
+      </div>
+      <code className="block text-xs bg-bg-app rounded p-2 font-mono break-all text-secondary-ol">
+        {cmd}
+      </code>
+    </div>
+  );
+}
+
+export function AgentHint({ prompt }: { prompt: string }) {
+  return (
+    <div className="rounded-md border border-dashed border-agent/20 bg-agent/5 p-3">
+      <p className="text-sm font-body text-muted-ol">
+        <strong className="text-secondary-ol">Using an AI coding tool?</strong> Paste this:
+      </p>
+      <div className="flex items-center justify-between mt-1">
+        <code className="text-xs font-mono text-agent">{prompt}</code>
+        <CopyButton text={prompt} />
+      </div>
+    </div>
+  );
+}
+
+export function DockerFixGuide({ state }: { state?: string }) {
+  if (state === 'permission_denied') {
+    return (
+      <div className="space-y-2 text-sm">
+        <div className="rounded-md border border-warning/30 bg-warning/5 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-body font-medium text-primary-ol">
+              Fix: Add user to docker group
+            </span>
+            <CopyButton text={DOCKER_PERM_CMD} />
+          </div>
+          <code className="block text-xs bg-bg-app rounded p-2 font-mono break-all text-secondary-ol">
+            {DOCKER_PERM_CMD}
+          </code>
+          <p className="text-sm font-body text-muted-ol mt-1">
+            Then log out and back in for the group change to take effect.
+          </p>
+        </div>
+        <AgentHint prompt="Add the current user to the docker group and restart the Docker daemon" />
+      </div>
+    );
+  }
+
+  if (state === 'not_running') {
+    return (
+      <div className="space-y-2 text-sm">
+        <CommandBlock label="Linux / WSL2" cmd={DOCKER_START_LINUX} />
+        <CommandBlock label="macOS" cmd={DOCKER_START_MAC} />
+        <AgentHint prompt="Start the Docker daemon on this machine" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 text-sm">
+      <CommandBlock label="Linux / WSL2" cmd={DOCKER_LINUX_CMD} />
+      <CommandBlock label="macOS" cmd={DOCKER_MAC_CMD} />
+      <AgentHint prompt={DOCKER_AGENT_PROMPT} />
+    </div>
+  );
+}
