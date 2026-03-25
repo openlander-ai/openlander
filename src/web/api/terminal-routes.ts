@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Duplex } from 'node:stream';
 
 import type { AppContext } from '../../app.js';
+import { AuthService } from '../../auth/auth-service.js';
 import { createModuleLogger } from '../../lib/logger.js';
 
 const log = createModuleLogger('terminal');
@@ -11,11 +12,18 @@ type TerminalExec = {
   resize: (opts: { w: number; h: number }) => Promise<void>;
 };
 
+function parseCookie(cookieHeader: string | undefined, name: string): string | null {
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return match?.[1] ?? null;
+}
+
 export function createTerminalRoutes(
   ctx: AppContext,
   upgradeWebSocket?: NodeWebSocket['upgradeWebSocket'],
 ): Hono {
   const api = new Hono();
+  const authService = new AuthService(ctx.db);
   const sessions = new WeakMap<
     object,
     {
@@ -66,6 +74,16 @@ export function createTerminalRoutes(
         onOpen(_evt, ws) {
           void (async () => {
             try {
+              // Auth check: validate session cookie
+              if (authService.isPasswordSet()) {
+                const cookieHeader = c.req.header('cookie');
+                const sessionToken = parseCookie(cookieHeader, 'ol_session');
+                if (!sessionToken || !authService.validateSession(sessionToken)) {
+                  closeWithError(ws, 'Unauthorized');
+                  return;
+                }
+              }
+
               const originHeader = c.req.header('origin');
               const hostHeader = c.req.header('host');
               const serverHost = ctx.config.server.host.trim().toLowerCase();

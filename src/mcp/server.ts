@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppContext } from '../app.js';
+import { AuthService } from '../auth/auth-service.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { registerMcpTools } from '../tools/adapters/mcp.js';
 import { registerMcpPrompts } from './prompts.js';
@@ -313,6 +314,7 @@ interface McpSession {
 export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => void } {
   const app = new Hono();
   const sessions = new Map<string, McpSession>();
+  const authService = new AuthService(ctx.db);
 
   app.use(
     '*',
@@ -325,12 +327,31 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
         'mcp-session-id',
         'mcp-protocol-version',
         'Last-Event-ID',
+        'Authorization',
       ],
       exposeHeaders: ['mcp-session-id'],
     }),
   );
 
   app.all('/', async (c) => {
+    // Bearer token auth for HTTP MCP
+    if (authService.isPasswordSet()) {
+      const authHeader = c.req.header('authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return c.json(
+          { jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null },
+          401,
+        );
+      }
+      const token = authHeader.slice(7);
+      if (!authService.validateApiToken(token)) {
+        return c.json(
+          { jsonrpc: '2.0', error: { code: -32001, message: 'Invalid token' }, id: null },
+          401,
+        );
+      }
+    }
+
     const sessionId = c.req.header('mcp-session-id');
 
     if (sessionId) {

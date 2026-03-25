@@ -267,7 +267,7 @@ program
 program
   .command('config')
   .description('Manage configuration')
-  .argument('[action]', 'Action: show (default) or reset')
+  .argument('[action]', 'Action: show (default), reset, or reset-password')
   .action(async (action) => {
     const { loadConfig, isOnboarded, getDataDir } = await import('../config/index.js');
     const configPath = join(getDataDir(), 'config.json');
@@ -284,6 +284,41 @@ program
       } else {
         console.log(pc.yellow('No config file found. Already reset.'));
       }
+      return;
+    }
+
+    if (action === 'reset-password') {
+      const { getDbPath } = await import('../config/index.js');
+      const dbPath = getDbPath();
+
+      if (!existsSync(dbPath)) {
+        console.log(pc.red('No database found. Run OpenLander first.'));
+        return;
+      }
+
+      const { password } = await import('@inquirer/prompts');
+
+      const newPassword = await password({ message: 'New password:' });
+      const confirmPassword = await password({ message: 'Confirm password:' });
+
+      if (newPassword !== confirmPassword) {
+        console.log(pc.red('Passwords do not match.'));
+        return;
+      }
+
+      if (!newPassword) {
+        console.log(pc.red('Password cannot be empty.'));
+        return;
+      }
+
+      const { Database } = await import('../db/index.js');
+      const { AuthService } = await import('../auth/auth-service.js');
+
+      const db = new Database(dbPath);
+      const authService = new AuthService(db);
+      authService.resetPassword(newPassword);
+
+      console.log(pc.green('Password reset successfully.'));
       return;
     }
 
