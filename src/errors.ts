@@ -233,3 +233,19 @@ export class PreflightCheckError extends OpenLanderError {
     this.name = 'PreflightCheckError';
   }
 }
+
+// --- Authentication errors ---
+
+export class AuthenticationError extends OpenLanderError {
+  constructor(message = 'Authentication failed') {
+    super(message, 'AUTHENTICATION_FAILED', 401);
+    this.name = 'AuthenticationError';
+  }
+}
+
+export class SetupRequiredError extends OpenLanderError {
+  constructor(message = 'Setup is required before accessing this resource') {
+    super(message, 'SETUP_REQUIRED', 403);
+    this.name = 'SetupRequiredError';
+  }
+}
