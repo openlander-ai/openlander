@@ -35,19 +35,18 @@ function parseEventLine(line: string): ChatStreamEvent | null {
   }
 }
 
-export function useStreamChat(sessionId: string | null): UseStreamChatReturn {
+export function useStreamChat(): UseStreamChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<QuestionRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
-  const activeSessionIdRef = useRef<string | null>(sessionId);
 
   const sendMessage = useCallback(
     (message: string) => {
       const trimmedMessage = message.trim();
-      if (!trimmedMessage || isStreaming || !sessionId) {
+      if (!trimmedMessage || isStreaming) {
         return;
       }
 
@@ -123,10 +122,7 @@ export function useStreamChat(sessionId: string | null): UseStreamChatReturn {
 
       const handleEvent = (event: ChatStreamEvent): void => {
         switch (event.type) {
-          case 'session': {
-            activeSessionIdRef.current = event.sessionId;
-            break;
-          }
+          case 'session':
           case 'thinking': {
             break;
           }
@@ -171,7 +167,7 @@ export function useStreamChat(sessionId: string | null): UseStreamChatReturn {
 
       void (async () => {
         try {
-          const response = await streamChat(trimmedMessage, sessionId, controller.signal);
+          const response = await streamChat(trimmedMessage, controller.signal);
 
           if (!response.body) {
             throw new Error('Response body is null');
@@ -213,7 +209,7 @@ export function useStreamChat(sessionId: string | null): UseStreamChatReturn {
         }
       })();
     },
-    [isStreaming, sessionId],
+    [isStreaming],
   );
 
   const abort = useCallback(() => {

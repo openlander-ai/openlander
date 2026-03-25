@@ -9,7 +9,6 @@ import { useNotifications } from '@/hooks/use-notifications';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { AgentPanelContext, type AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { CommandPalette } from '@/components/command/CommandPalette';
-import { ChatSessionsProvider } from '@/contexts/chat-sessions';
 
 export function AppLayout() {
   const { projects, loading } = useProjects();
@@ -54,57 +53,55 @@ export function AppLayout() {
   );
 
   return (
-    <ChatSessionsProvider>
-      <AgentPanelContext.Provider value={agentPanelContextValue}>
-        <div className="flex flex-col h-screen overflow-hidden bg-bg-app">
-          <Header
-            stats={stats}
-            notifications={notifications}
-            unreadCount={unreadCount}
-            onDismissNotification={dismissNotification}
-            onNotificationAction={(notification, action) => {
-              const projectId = notification.details?.projectId as string | undefined;
-              if (projectId && (action === 'view_logs' || action === 'view_stats')) {
-                navigate(`/projects/${projectId}`);
-              }
-            }}
-            onMenuClick={() => setIsMobileSidebarOpen(true)}
-          />
+    <AgentPanelContext.Provider value={agentPanelContextValue}>
+      <div className="flex flex-col h-screen overflow-hidden bg-bg-app">
+        <Header
+          stats={stats}
+          notifications={notifications}
+          unreadCount={unreadCount}
+          onDismissNotification={dismissNotification}
+          onNotificationAction={(notification, action) => {
+            const projectId = notification.details?.projectId as string | undefined;
+            if (projectId && (action === 'view_logs' || action === 'view_stats')) {
+              navigate(`/projects/${projectId}`);
+            }
+          }}
+          onMenuClick={() => setIsMobileSidebarOpen(true)}
+        />
 
-          <CommandPalette />
+        <CommandPalette />
 
-          <div className="flex flex-1 overflow-hidden pt-12">
-            {/* Desktop Sidebar */}
-            <aside className="hidden md:flex md:w-16 lg:w-[260px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
+        <div className="flex flex-1 overflow-hidden pt-12">
+          {/* Desktop Sidebar */}
+          <aside className="hidden md:flex md:w-16 lg:w-[260px] border-r border-[hsl(var(--border))] bg-bg-panel h-full shrink-0 transition-[width] duration-200">
+            <Sidebar projects={projects} loading={loading} />
+          </aside>
+
+          {/* Mobile Sidebar Sheet */}
+          <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+            <SheetContent
+              side="left"
+              className="p-0 w-[280px] bg-bg-panel border-r border-[hsl(var(--border))]"
+              aria-describedby={undefined}
+            >
+              <SheetTitle className="sr-only">Navigation</SheetTitle>
               <Sidebar projects={projects} loading={loading} />
-            </aside>
+            </SheetContent>
+          </Sheet>
 
-            {/* Mobile Sidebar Sheet */}
-            <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
-              <SheetContent
-                side="left"
-                className="p-0 w-[280px] bg-bg-panel border-r border-[hsl(var(--border))]"
-                aria-describedby={undefined}
-              >
-                <SheetTitle className="sr-only">Navigation</SheetTitle>
-                <Sidebar projects={projects} loading={loading} />
-              </SheetContent>
-            </Sheet>
-
-            {/* Main Content */}
-            <main className="flex-1 flex flex-col min-w-0 h-full overflow-auto bg-bg-app">
-              <Outlet />
-            </main>
-          </div>
-
-          <AgentPanel
-            open={isAgentPanelOpen}
-            onOpenChange={setIsAgentPanelOpen}
-            initialContext={agentPanelInitialContext}
-            onInitialContextConsumed={() => setAgentPanelInitialContext(null)}
-          />
+          {/* Main Content */}
+          <main className="flex-1 flex flex-col min-w-0 h-full overflow-auto bg-bg-app">
+            <Outlet />
+          </main>
         </div>
-      </AgentPanelContext.Provider>
-    </ChatSessionsProvider>
+
+        <AgentPanel
+          open={isAgentPanelOpen}
+          onOpenChange={setIsAgentPanelOpen}
+          initialContext={agentPanelInitialContext}
+          onInitialContextConsumed={() => setAgentPanelInitialContext(null)}
+        />
+      </div>
+    </AgentPanelContext.Provider>
   );
 }

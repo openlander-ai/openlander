@@ -1,8 +1,3 @@
-/**
- * Chat event types — mirrors backend ChatStreamEvent from src/types/agent-events.ts
- * Used for streaming chat responses and session management.
- */
-
 // ---------------------------------------------------------------------------
 // Tool Result
 // ---------------------------------------------------------------------------
@@ -72,15 +67,4 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ToolCallInfo[];
   createdAt?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Chat Session
-// ---------------------------------------------------------------------------
-
-export interface ChatSession {
-  sessionId: string;
-  messageCount: number;
-  lastActive: string;
-  firstMessage?: string;
 }

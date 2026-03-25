@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelLeft, PanelLeftClose } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
 import { ChatLayout } from '@/components/agent/ChatLayout';
-import { ChatSidebar } from '@/components/agent/ChatSidebar';
 import { LlmGate } from '@/components/agent/LlmGate';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { useChatSessions } from '@/contexts/chat-sessions';
 import type { AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { useStreamChat } from '@/hooks/use-stream-chat';
 import { dismissQuestion, getSetupStatus, replyQuestion } from '@/lib/api';
 import type { QuestionAnswer } from '@/lib/chat-types';
-import { cn } from '@/lib/utils';
 
 interface AgentPanelProps {
   open: boolean;
@@ -45,25 +40,8 @@ export function AgentPanel({
   onInitialContextConsumed,
 }: AgentPanelProps) {
   const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
-  const [sessionsCollapsed, setSessionsCollapsed] = useState(true);
   const sentContextKeyRef = useRef<string | null>(null);
-  const [searchParams] = useSearchParams();
-
-  const sessions = useChatSessions();
-  const chat = useStreamChat(sessions.activeSessionId);
-  const { activeSessionId, isLoading, createSession, loadSessionMessages, refreshSessions } =
-    sessions;
-  const { abort, clearMessages, setMessages } = chat;
-
-  const filteredSessions = useMemo(
-    () =>
-      sessions.sessions.filter(
-        (s) =>
-          !s.sessionId.startsWith('rollback-hint-') &&
-          (s.messageCount > 0 || s.sessionId === activeSessionId),
-      ),
-    [sessions.sessions, activeSessionId],
-  );
+  const chat = useStreamChat();
 
   useEffect(() => {
     getSetupStatus()
@@ -72,48 +50,7 @@ export function AgentPanel({
   }, []);
 
   useEffect(() => {
-    if (open && llmConfigured && !isLoading && !activeSessionId && !searchParams.get('session')) {
-      createSession();
-    }
-  }, [open, llmConfigured, isLoading, activeSessionId, createSession, searchParams]);
-
-  useEffect(() => {
-    const sessionId = activeSessionId;
-    if (!sessionId) {
-      abort();
-      clearMessages();
-      return;
-    }
-
-    let cancelled = false;
-    abort();
-    clearMessages();
-
-    void loadSessionMessages(sessionId)
-      .then((sessionMessages) => {
-        if (!cancelled && activeSessionId === sessionId) {
-          setMessages(sessionMessages);
-        }
-      })
-      .catch(() => {
-        if (!cancelled && activeSessionId === sessionId) {
-          setMessages([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSessionId, abort, clearMessages, loadSessionMessages, setMessages]);
-
-  useEffect(() => {
-    if (!chat.isStreaming) {
-      void refreshSessions();
-    }
-  }, [chat.isStreaming, refreshSessions]);
-
-  useEffect(() => {
-    if (!open || !initialContext || !llmConfigured || !activeSessionId) {
+    if (!open || !initialContext || !llmConfigured) {
       return;
     }
 
@@ -125,7 +62,7 @@ export function AgentPanel({
     chat.sendMessage(buildDiagnosticPrompt(initialContext));
     sentContextKeyRef.current = contextKey;
     onInitialContextConsumed();
-  }, [open, initialContext, llmConfigured, activeSessionId, chat, onInitialContextConsumed]);
+  }, [open, initialContext, llmConfigured, chat, onInitialContextConsumed]);
 
   const handleReply = useCallback((requestId: string, answers: QuestionAnswer[]) => {
     void replyQuestion(requestId, answers).catch((error) => {
@@ -161,36 +98,7 @@ export function AgentPanel({
           </div>
         ) : (
           <div data-testid="agent-panel" className="h-full min-h-0 flex">
-            {!sessionsCollapsed ? (
-              <aside className="w-[220px] shrink-0 border-r border-border min-h-0">
-                <ChatSidebar
-                  sessions={filteredSessions}
-                  activeSessionId={sessions.activeSessionId}
-                  onNewChat={() => createSession()}
-                  onSelectSession={(id) => sessions.switchSession(id)}
-                  onDeleteSession={(id) => void sessions.deleteSession(id)}
-                />
-              </aside>
-            ) : null}
-
-            <div className="flex-1 min-w-0 min-h-0 relative">
-              <button
-                type="button"
-                onClick={() => setSessionsCollapsed((prev) => !prev)}
-                className={cn(
-                  'absolute left-2 top-2 z-10 inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-panel/90 backdrop-blur-sm shadow-sm px-2.5 py-1.5 text-xs font-medium text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle transition-all',
-                  sessionsCollapsed ? 'left-3' : undefined,
-                )}
-                title={sessionsCollapsed ? 'Show sessions' : 'Hide sessions'}
-              >
-                {sessionsCollapsed ? (
-                  <PanelLeft className="h-3.5 w-3.5" />
-                ) : (
-                  <PanelLeftClose className="h-3.5 w-3.5" />
-                )}
-                <span>{sessionsCollapsed ? 'Sessions' : 'Collapse'}</span>
-              </button>
-
+            <div className="flex-1 min-w-0 min-h-0">
               <ChatLayout
                 messages={chat.messages}
                 isStreaming={chat.isStreaming}
