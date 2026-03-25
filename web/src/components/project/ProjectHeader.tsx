@@ -350,16 +350,18 @@ export function ProjectHeader({
 
               {/* Blue-Green */}
               {currentEnvType === 'production' && (
-                <DropdownMenuItem
-                  onClick={onOpenBlueGreenDialog}
-                  disabled={!isRunning || !!actionLoading}
-                >
-                  <div className="flex items-center gap-2">
-                    {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
-                    <Zap className="h-3.5 w-3.5" />
-                  </div>
-                  Blue-Green Deploy
-                </DropdownMenuItem>
+                <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+                  <DropdownMenuItem
+                    onClick={onOpenBlueGreenDialog}
+                    disabled={!isRunning || !!actionLoading}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                      <Zap className="h-3.5 w-3.5" />
+                    </div>
+                    Blue-Green Deploy
+                  </DropdownMenuItem>
+                </Tooltip>
               )}
 
               <DropdownMenuSeparator />

@@ -23,10 +23,15 @@ export function createChatRoutes(ctx: AppContext): Hono {
       .catch(() => ({ message: undefined, session_id: undefined }));
 
     const message = typeof body.message === 'string' ? body.message.trim() : '';
-    const sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : '';
+    let sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : '';
 
-    if (!message || !sessionId) {
-      return c.json({ error: 'message and session_id are required' }, 400);
+    if (!message) {
+      return c.json({ error: 'message is required' }, 400);
+    }
+
+    // Auto-generate session_id if not provided
+    if (!sessionId) {
+      sessionId = `domain-diag-${Date.now().toString(36)}`;
     }
 
     activeStream = true;

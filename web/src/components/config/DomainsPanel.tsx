@@ -33,6 +33,7 @@ import {
   Monitor,
   Trash2,
   Plus,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -530,7 +531,10 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                 {addingDomain ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
-                  <Plus className="h-3 w-3" />
+                  <>
+                    {llmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                    <Plus className="h-3 w-3" />
+                  </>
                 )}
                 {'Add Domain'}
               </Button>
