@@ -127,6 +127,8 @@ export interface TimelineItem {
   toolResult?: unknown;
   toolError?: string;
   toolSuccess?: boolean;
+  /** Present only for agent_thinking items — detailed thinking content */
+  content?: string;
 }
 
 /** Message pattern → progress percentage mapping */
@@ -152,6 +154,26 @@ function extractUrl(message: string): string | undefined {
 }
 
 let idCounter = 0;
+
+/**
+ * Filter timeline items to show only the first recovery_start event.
+ * Subsequent recovery_start events are skipped, but all recovery results
+ * (success/failed/exhausted) are always shown.
+ */
+export function filterRecoveryEvents(items: TimelineItem[]): TimelineItem[] {
+  let recoveryStartSeen = false;
+
+  return items.filter((item) => {
+    if (item.type === 'recovery_start') {
+      if (recoveryStartSeen) {
+        return false; // Skip subsequent recovery_start events
+      }
+      recoveryStartSeen = true;
+      return true;
+    }
+    return true;
+  });
+}
 
 /** Convert backend NDJSON event to frontend timeline item */
 export function toTimelineItem(event: BuildStreamEvent): TimelineItem {

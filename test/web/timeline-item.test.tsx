@@ -53,6 +53,7 @@ vi.mock('lucide-react', () => ({
   Info: () => 'Info',
   AlertTriangle: () => 'AlertTriangle',
   Loader2: () => 'Loader2',
+  Sparkles: () => 'Sparkles',
   Search: () => 'Search',
   FileCode2: () => 'FileCode2',
   Check: () => 'Check',

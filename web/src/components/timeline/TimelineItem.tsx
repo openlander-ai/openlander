@@ -108,7 +108,7 @@ export function TimelineItemCard({
             <Sparkles
               className={cn(
                 'h-3.5 w-3.5 text-agent',
-                isLatest && isAgentThinking && 'animate-pulse',
+                isLatest && isAgentThinking && 'animate-breathe',
               )}
             />
           </div>
@@ -136,11 +136,13 @@ export function TimelineItemCard({
           >
             {isAgentToolCall
               ? `▸ ${item.toolName || 'tool'} 실행`
-              : isAgentMessage || isAgentThinking
+              : isAgentMessage
                 ? item.title
-                : isAgentEvent
-                  ? cleanMarkdown(item.title)
-                  : item.title}
+                : isAgentThinking
+                  ? item.content || item.title || '분석 중...'
+                  : isAgentEvent
+                    ? cleanMarkdown(item.title)
+                    : item.title}
           </p>
           <span className="text-xs font-mono text-muted-ol shrink-0 mt-0.5 opacity-70">
             {formatTime(item.timestamp)}

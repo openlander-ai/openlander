@@ -5,6 +5,7 @@ import { formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 
 import type { TimelineItem } from '@/lib/event-types';
+import { filterRecoveryEvents } from '@/lib/event-types';
 
 import { TerminalFrame } from './TerminalFrame';
 import { TerminalHeader } from './TerminalHeader';
@@ -64,7 +65,8 @@ export function DeployTerminalSession({
   className,
 }: DeployTerminalSessionProps) {
   const { t } = useLanguage();
-  const groupedItems = useMemo(() => groupLogs(timelineItems), [timelineItems]);
+  const filteredItems = useMemo(() => filterRecoveryEvents(timelineItems), [timelineItems]);
+  const groupedItems = useMemo(() => groupLogs(filteredItems), [filteredItems]);
 
   const phases = useMemo(() => {
     const steps = ['Preparing', 'Clone', 'Build', 'Start', 'Health Check', 'Complete'];
@@ -78,7 +80,7 @@ export function DeployTerminalSession({
 
     let currentIdx = -1;
 
-    for (const item of timelineItems) {
+    for (const item of filteredItems) {
       const stepFromName = item.stepName ? steps.indexOf(item.stepName) : -1;
       if (stepFromName > currentIdx) {
         currentIdx = stepFromName;
@@ -124,14 +126,14 @@ export function DeployTerminalSession({
       }
       return { id: step, label: step, state };
     });
-  }, [timelineItems, projectStatus]);
+  }, [filteredItems, projectStatus]);
 
   const headerStatus =
     projectStatus === 'error' ? 'error' : projectStatus === 'running' ? 'active' : 'done';
 
   const isBuilding = isTimelineStreaming || projectStatus === 'building';
-  const showIdleSummary = !isBuilding && timelineItems.length < 5;
-  const lastItem = timelineItems[timelineItems.length - 1];
+  const showIdleSummary = !isBuilding && filteredItems.length < 5;
+  const lastItem = filteredItems[filteredItems.length - 1];
   const relativeTime = lastItem ? formatRelativeTime(lastItem.timestamp) : '';
   const isError = projectStatus === 'error';
   const isStopped = projectStatus === 'stopped';
