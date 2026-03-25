@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0-rc.2] - 2026-03-25
+
+### Added
+
+- **Authentication system**: Single-user password login with bcrypt hashing (salt rounds=10), session cookies (HttpOnly, SameSite=Strict, 7-day TTL), Bearer token auth for MCP HTTP
+- **API token management**: Auto-generated `ol_`-prefixed tokens with AES-256-GCM encryption, token show/copy/regenerate in Settings Security tab
+- **Settings Security tab**: API token management + password change in web dashboard
+- **CLI `openlander config reset-password`**: Password recovery without server restart
+- **Onboarding 6-step flow**: Language → Password (required) → Infrastructure → LLM (required) → GitHub → MCP Guide
+- **MCP connection guide**: Setup wizard step showing URL + token for AI coding tool integration
+- **WebSocket terminal auth**: Session cookie validation on WebSocket upgrade
+
+### Changed
+
+- **LLM API Key now required** during onboarding (was optional); enables AI auto-recovery
+- **Setup completion condition** now requires password to be set (in addition to Docker)
+- **MCP HTTP transport** now requires Bearer token when password is configured
+
 ## [1.0.0-rc.1] - 2026-03-25
 
 ### Added

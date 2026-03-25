@@ -206,6 +206,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.9.10**     | UI Polish & Agent DX         | Done   | Deploy terminal readability, log error underline fix, container name truncation, time wrapping, xterm font consistency, no_cache timeout guidance                             |
 | **v0.9.13**     | Platform Debug/Admin Tools   | Done   | Platform debug/admin MCP tools (11 tools, config-gated), generic RingBuffer, EventBus capture, Pino log ring buffer                                                           |
 | **v1.0.0-rc.1** | Release Candidate            | RC     | E2E quality gate test suite (20 tests), 7 test repositories, event sequence golden path verification, quality gate coverage mapping                                           |
+| **v1.0.0-rc.2** | Authentication               | RC     | Password login + session cookies, Bearer token auth for MCP, Settings security tab, 6-step onboarding with MCP guide, CLI password reset                                      |
 | **v1.0.0**      | Stable Release               | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                               |
 
 ## MCP Integration (AI Coding Agents)

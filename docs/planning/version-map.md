@@ -8,7 +8,7 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0 (TBD)
 ```
 
 v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0 (TBD)
@@ -1565,6 +1565,24 @@ AI: bugs.md → 해결됨 + gh issue close
 | MCP image deployment schema    | `create_deploy_plan` 스키마 확장 (source/image/cmd/port 파라미터)                                                     | ✅   |
 | Image URL validation           | `parseImageUrl()`, `getImageExposedPort()`, `mapPullError()` 유틸리티                                                 | ✅   |
 | Pipeline tests                 | 7개 pipeline 테스트 + 10개 MCP schema 테스트 + 3개 E2E integration 테스트                                             | ✅   |
+
+---
+
+## v1.0.0-rc.2 — Release Candidate (2026-03-25) 🧪
+
+| 항목                    | 내용                                                                                                                                 | 상태 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---- |
+| Authentication system   | 단일 사용자 비밀번호 로그인, bcrypt 해싱 (salt rounds=10), 세션 쿠키 (HttpOnly, SameSite=Strict, 7일 TTL), MCP HTTP Bearer 토큰 인증 | ✅   |
+| API token management    | `ol_` 접두사 자동 생성 토큰, AES-256-GCM 암호화, Settings Security 탭에서 토큰 표시/복사/재생성                                      | ✅   |
+| Settings Security tab   | API 토큰 관리 + 웹 대시보드 비밀번호 변경                                                                                            | ✅   |
+| CLI password reset      | `openlander config reset-password` — 서버 재시작 없이 비밀번호 복구                                                                  | ✅   |
+| Onboarding 6-step flow  | 언어 → 비밀번호 (필수) → 인프라 → LLM (필수) → GitHub → MCP 가이드                                                                   | ✅   |
+| MCP connection guide    | 설정 마법사 단계, URL + 토큰 표시 (AI 코딩 도구 통합용)                                                                              | ✅   |
+| WebSocket terminal auth | WebSocket 업그레이드 시 세션 쿠키 검증                                                                                               | ✅   |
+
+**상태**: 🧪 도그푸딩 중 (인증 시스템 및 보안 기능 검증 중)
+
+**다음 단계**: 보안 기능 전체 검증 → v1.0.0 정식 릴리즈
 
 ---
 
