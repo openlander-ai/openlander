@@ -20,7 +20,7 @@ function getStatusConfig(): Record<
   return {
     running: {
       label: 'Healthy',
-      dot: 'bg-success',
+      dot: 'bg-success animate-pulse',
       badge: 'bg-success/10 text-success border border-success/30',
       border: 'border-success/20',
     },
@@ -32,7 +32,7 @@ function getStatusConfig(): Record<
     },
     building: {
       label: 'Deploying',
-      dot: 'bg-warning animate-pulse',
+      dot: 'bg-warning animate-pulse-ring',
       badge: 'bg-warning/10 text-warning border border-warning/30',
       border: 'border-warning/30',
     },

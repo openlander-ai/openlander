@@ -28,9 +28,9 @@ interface SidebarProps {
 }
 
 const statusColor: Record<string, string> = {
-  running: 'bg-success',
+  running: 'bg-success animate-pulse',
   stopped: 'bg-[var(--text-muted)]',
-  building: 'bg-warning animate-pulse',
+  building: 'bg-warning animate-pulse-ring',
   error: 'bg-error',
 };
 

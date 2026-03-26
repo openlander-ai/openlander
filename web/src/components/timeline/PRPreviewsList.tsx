@@ -54,8 +54,8 @@ export function PRPreviewsList({ projectId }: PRPreviewsListProps) {
 
   // Status badge config
   const statusConfig: Record<string, { label: string; color: string; dot: string }> = {
-    running: { label: 'Live', color: 'text-success', dot: 'bg-success' },
-    building: { label: 'Deploying', color: 'text-warning', dot: 'bg-warning animate-pulse' },
+    running: { label: 'Live', color: 'text-success', dot: 'bg-success animate-pulse' },
+    building: { label: 'Deploying', color: 'text-warning', dot: 'bg-warning animate-pulse-ring' },
     stopped: { label: 'Stopped', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
     error: { label: 'Failed', color: 'text-error', dot: 'bg-error' },
   };
