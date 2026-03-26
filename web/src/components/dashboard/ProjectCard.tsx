@@ -4,9 +4,10 @@ import type { ProjectWithOptionalEnvironments } from '@/lib/api';
 import { getSetupStatus } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { Clock, ExternalLink, GitBranch, RotateCw, Settings, Sparkles } from 'lucide-react';
+import { Clock, ExternalLink, GitBranch, RotateCw, Settings } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useEffect, useState } from 'react';
+import { AISparkle } from '@/components/ui/AISparkle';
 
 interface StatusDisplay {
   label: string;
@@ -198,7 +199,7 @@ export function ProjectCard({
             <Spinner className="h-4 w-4" />
           ) : (
             <div className="flex items-center gap-1">
-              {llmConfigured && <Sparkles className="h-3 w-3 text-agent" />}
+              {llmConfigured && <AISparkle className="h-3 w-3" />}
               <RotateCw className="h-4 w-4" />
             </div>
           )}

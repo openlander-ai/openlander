@@ -24,10 +24,10 @@ import {
   Plus,
   Trash2,
   Download,
-  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSetup } from '@/hooks/use-setup.js';
+import { AISparkle } from '@/components/ui/AISparkle';
 import type { Project, Environment, EnvironmentType } from '@/types';
 
 interface ProjectHeaderProps {
@@ -130,7 +130,7 @@ export function ProjectHeader({
               <Spinner className="h-3 w-3" />
             ) : (
               <>
-                {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
                 <Zap className="h-3 w-3" />
               </>
             )}
@@ -171,7 +171,7 @@ export function ProjectHeader({
             <Spinner className="h-3 w-3" />
           ) : (
             <>
-              {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+              {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
               {isImageSource ? <Download className="h-3 w-3" /> : <RotateCw className="h-3 w-3" />}
             </>
           )}
@@ -349,7 +349,7 @@ export function ProjectHeader({
               {/* Rollback */}
               <DropdownMenuItem onClick={onRollback} disabled={!!actionLoading}>
                 <div className="flex items-center gap-2">
-                  {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                  {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
                   <History className="h-3.5 w-3.5" />
                 </div>
                 Rollback
@@ -363,7 +363,7 @@ export function ProjectHeader({
                     disabled={!isRunning || !!actionLoading}
                   >
                     <div className="flex items-center gap-2">
-                      {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                      {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
                       <Zap className="h-3.5 w-3.5" />
                     </div>
                     Blue-Green Deploy

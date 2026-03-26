@@ -33,9 +33,9 @@ import {
   Monitor,
   Trash2,
   Plus,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { AISparkle } from '@/components/ui/AISparkle';
 
 interface DomainsPanelProps {
   projectId: string;
@@ -532,7 +532,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
                   <>
-                    {llmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                    {llmConfigured && <AISparkle className="h-3.5 w-3.5" />}
                     <Plus className="h-3 w-3" />
                   </>
                 )}

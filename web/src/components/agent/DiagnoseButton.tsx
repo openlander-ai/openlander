@@ -1,5 +1,5 @@
-import { Sparkles } from 'lucide-react';
 import { useAgentPanel } from '@/contexts/agent-panel';
+import { AISparkle } from '@/components/ui/AISparkle';
 import { useSetup } from '@/hooks/use-setup';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
@@ -43,7 +43,7 @@ export function DiagnoseButton({
         className,
       )}
     >
-      <Sparkles className="h-3 w-3" />
+      <AISparkle className="h-3 w-3" />
       <span>{t('agent.diagnoseWithAgent')}</span>
     </button>
   );

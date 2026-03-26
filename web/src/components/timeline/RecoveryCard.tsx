@@ -1,8 +1,9 @@
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/time';
-import { AlertTriangle, Sparkles, XCircle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, XCircle, CheckCircle2, RefreshCw } from 'lucide-react';
 import type { TimelineItem } from '@/lib/event-types';
 import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
+import { AISparkle } from '@/components/ui/AISparkle';
 import { useLanguage } from '@/i18n/context.js';
 
 interface RecoveryCardProps {
@@ -94,7 +95,7 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
       <div className="p-4 border-t border-border/50 bg-agent/5 flex gap-3.5">
         <div className="shrink-0 mt-0.5 relative z-10">
           <div className="p-1.5 rounded-md bg-agent/10 border border-agent/20">
-            <Sparkles className="h-3.5 w-3.5 text-agent" />
+            <AISparkle className="h-3.5 w-3.5" />
           </div>
         </div>
 

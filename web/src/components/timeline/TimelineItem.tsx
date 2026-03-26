@@ -7,7 +7,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Activity,
-  Sparkles,
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
@@ -16,6 +15,7 @@ import { ToolResultCard } from './ToolResultCard';
 import { ComposeErrorCard } from './ComposeErrorCard';
 import { RecoveryCard } from './RecoveryCard';
 import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
+import { AISparkle } from '@/components/ui/AISparkle';
 import { useLanguage } from '@/i18n/context.js';
 
 interface TimelineItemProps {
@@ -165,11 +165,8 @@ export function TimelineItemCard({
         )}
         {isAgentEvent && (
           <div className="mt-1 flex items-center justify-center w-4 h-4">
-            <Sparkles
-              className={cn(
-                'h-3.5 w-3.5 text-agent',
-                isLatest && isAgentThinking && 'animate-breathe',
-              )}
+            <AISparkle
+              className={cn('h-3.5 w-3.5', isLatest && isAgentThinking && 'animate-breathe')}
             />
           </div>
         )}

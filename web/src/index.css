@@ -115,6 +115,11 @@
   .ai-deploy-border {
     border-left: 2px solid #f43f5e;
   }
+
+  .ai-sparkle-glow {
+    filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.5))
+      drop-shadow(0 0 6px rgba(244, 63, 94, 0.25));
+  }
 }
 
 @keyframes timeline-slide-in {

@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, XCircle, Square, AlertTriangle, Sparkles } from 'lucide-react';
+import { CheckCircle2, XCircle, Square, AlertTriangle } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
+import { AISparkle } from '@/components/ui/AISparkle';
 
 import type { TimelineItem } from '@/lib/event-types';
 import { filterRecoveryEvents } from '@/lib/event-types';
@@ -201,7 +202,7 @@ export function DeployTerminalSession({
                         <TerminalAIBlock
                           key={item.id}
                           variant="info"
-                          icon={<Sparkles className="h-3.5 w-3.5 animate-pulse" />}
+                          icon={<AISparkle className="h-3.5 w-3.5 animate-pulse" />}
                           title={truncate(item.title, 120)}
                         />
                       );
@@ -233,7 +234,7 @@ export function DeployTerminalSession({
                         <TerminalAIBlock
                           key={item.id}
                           variant="prescription"
-                          icon={<Sparkles className="h-3.5 w-3.5" />}
+                          icon={<AISparkle className="h-3.5 w-3.5" />}
                           title={item.title}
                           detail={item.detail}
                         />
@@ -270,7 +271,7 @@ export function DeployTerminalSession({
                         <TerminalAIBlock
                           key={item.id}
                           variant="diagnostic"
-                          icon={<Sparkles className="h-3.5 w-3.5" />}
+                          icon={<AISparkle className="h-3.5 w-3.5" />}
                           title={item.title}
                         />
                       );

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, GitCommit, History, Sparkles } from 'lucide-react';
+import { AlertTriangle, GitCommit, History } from 'lucide-react';
 
 import {
   Dialog,
@@ -18,6 +18,7 @@ import { formatRelativeTime } from '@/lib/time';
 import type { DeployLogSummary } from '@/types';
 import { cn } from '@/lib/utils';
 import { useSetup } from '@/hooks/use-setup';
+import { AISparkle } from '@/components/ui/AISparkle';
 
 interface RollbackDialogProps {
   open: boolean;
@@ -315,7 +316,7 @@ export function RollbackDialog({
           {llmEnabled && (
             <aside className="border-t md:border-t-0 md:border-l border-border bg-bg-app/60 p-6">
               <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-agent/80">
-                <Sparkles className="h-3.5 w-3.5" />
+                <AISparkle className="h-3.5 w-3.5" />
                 {t('rollback.aiSuggestion')}
               </div>
 
