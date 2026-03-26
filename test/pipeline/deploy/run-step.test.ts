@@ -4,6 +4,7 @@ import type { Database } from '../../../src/db/index.js';
 import type { Docker } from '../../../src/pipeline/docker.js';
 import * as portPipeline from '../../../src/pipeline/port.js';
 import { ContainerRunner } from '../../../src/pipeline/deploy/run-step.js';
+import { SHARED_NETWORK_NAME } from '../../../src/config/index.js';
 
 function createMockDocker(): Docker {
   return {
@@ -53,7 +54,7 @@ describe('ContainerRunner', () => {
         port: 12001,
         containerPort: 12001,
         envVars: { NODE_ENV: 'test' },
-        network: 'openlander-dev',
+        network: SHARED_NETWORK_NAME,
         secretFiles: [{ filename: '.env', content: 'A=1', mountPath: '/run/secrets/.env' }],
       }),
     );
@@ -86,7 +87,7 @@ describe('ContainerRunner', () => {
     expect(result.url).toContain('mono-api.');
   });
 
-  it('passes production network for production environment', async () => {
+  it('passes shared network for production environment', async () => {
     const docker = createMockDocker();
     const db = createMockDatabase();
     const runner = new ContainerRunner(docker, db);
@@ -103,7 +104,7 @@ describe('ContainerRunner', () => {
 
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        network: 'openlander-prod',
+        network: SHARED_NETWORK_NAME,
       }),
     );
   });

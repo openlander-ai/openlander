@@ -7,7 +7,11 @@ import {
   getProjectDeployments,
   getProjectEnv,
   getProjectConnectedServices,
+  connectProjectService,
+  disconnectProjectService,
+  getServices,
   type ConnectedService,
+  type Service,
 } from '@/lib/api';
 import type { Project, DeployLogSummary } from '@/types';
 import {
@@ -27,7 +31,16 @@ import {
   Webhook,
   Rocket,
   SquareTerminal,
+  Plus,
+  X,
+  Loader2,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { formatRelativeTime } from '@/lib/time';
 import { normalizeLogText } from '@/lib/ansi';
 import { cn } from '@/lib/utils';
@@ -114,6 +127,9 @@ export function OverviewTab({
   const [pipelineOpen, setPipelineOpen] = useState(true);
   const [recentDeploys, setRecentDeploys] = useState<DeployLogSummary[]>([]);
   const [connectedServices, setConnectedServices] = useState<ConnectedService[]>([]);
+  const [availableServices, setAvailableServices] = useState<Service[]>([]);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [envVarCount, setEnvVarCount] = useState<number>(0);
   const [errorEntries, setErrorEntries] = useState<LogEntry[]>([]);
   const [now, setNow] = useState(Date.now());
@@ -208,11 +224,12 @@ export function OverviewTab({
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([getProjectConnectedServices(projectId), getProjectEnv(projectId)])
-      .then(([services, envVars]) => {
+    Promise.all([getProjectConnectedServices(projectId), getProjectEnv(projectId), getServices()])
+      .then(([services, envVars, allServices]) => {
         if (!mounted) return;
         setConnectedServices(services);
         setEnvVarCount(Object.keys(envVars).length);
+        setAvailableServices(allServices);
       })
       .catch((err) => console.error('Failed to fetch services/env:', err));
 
@@ -258,6 +275,37 @@ export function OverviewTab({
       clearInterval(interval);
     };
   }, [projectId, isRunning]);
+
+  const handleConnectService = async (serviceId: string) => {
+    try {
+      setIsConnecting(true);
+      await connectProjectService(projectId, serviceId);
+      const updatedServices = await getProjectConnectedServices(projectId);
+      setConnectedServices(updatedServices);
+    } catch (err) {
+      console.error('Failed to connect service:', err);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectService = async (serviceId: string) => {
+    try {
+      setDisconnectingId(serviceId);
+      await disconnectProjectService(projectId, serviceId);
+      const updatedServices = await getProjectConnectedServices(projectId);
+      setConnectedServices(updatedServices);
+    } catch (err) {
+      console.error('Failed to disconnect service:', err);
+    } finally {
+      setDisconnectingId(null);
+    }
+  };
+
+  const unconnectedServices = useMemo(() => {
+    const connectedIds = new Set(connectedServices.map((s) => s.id));
+    return availableServices.filter((s) => !connectedIds.has(s.id));
+  }, [availableServices, connectedServices]);
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -402,25 +450,78 @@ export function OverviewTab({
         <div className="grid grid-cols-2 gap-8">
           {/* Left: Connected Services */}
           <div>
-            <h3 className="text-xs font-medium text-muted-ol tracking-wider mb-3">
-              Connected Services
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-medium text-muted-ol tracking-wider">
+                Connected Services
+              </h3>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    disabled={isConnecting || unconnectedServices.length === 0}
+                    className="flex items-center gap-1 text-xs font-medium text-secondary-ol hover:text-primary-ol transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isConnecting ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Plus className="h-3 w-3" />
+                    )}
+                    Add Service
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {unconnectedServices.length > 0 ? (
+                    unconnectedServices.map((service) => (
+                      <DropdownMenuItem
+                        key={service.id}
+                        onClick={() => void handleConnectService(service.id)}
+                      >
+                        <Database className="h-3.5 w-3.5 mr-2 text-muted-ol" />
+                        {service.name}
+                      </DropdownMenuItem>
+                    ))
+                  ) : (
+                    <div className="px-2 py-1.5 text-xs text-muted-ol">No available services</div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             {connectedServices.length > 0 ? (
               <div className="space-y-2.5">
                 {connectedServices.map((service) => (
-                  <div key={service.id} className="flex items-center gap-2.5 text-sm">
-                    <div
-                      className={cn(
-                        'h-2 w-2 rounded-full shrink-0',
-                        service.status === 'running'
-                          ? 'bg-success shadow-[0_0_4px_rgba(22,163,74,0.4)]'
-                          : service.status === 'error'
-                            ? 'bg-error'
-                            : 'bg-[var(--text-muted)]',
+                  <div key={service.id} className="flex items-center justify-between group">
+                    <div className="flex items-center gap-2.5 text-sm min-w-0">
+                      <div
+                        className={cn(
+                          'h-2 w-2 rounded-full shrink-0',
+                          service.status === 'running'
+                            ? 'bg-success shadow-[0_0_4px_rgba(22,163,74,0.4)]'
+                            : service.status === 'error'
+                              ? 'bg-error'
+                              : 'bg-[var(--text-muted)]',
+                        )}
+                      />
+                      <span className="text-primary-ol font-medium truncate">{service.name}</span>
+                      <span className="text-muted-ol font-mono text-xs shrink-0">
+                        :{service.port}
+                      </span>
+                      {service.autoInjectedEnvKeys && service.autoInjectedEnvKeys.length > 0 && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded bg-agent/10 text-agent text-[10px] font-medium whitespace-nowrap">
+                          Auto-env
+                        </span>
                       )}
-                    />
-                    <span className="text-primary-ol font-medium truncate">{service.name}</span>
-                    <span className="text-muted-ol font-mono text-xs">:{service.port}</span>
+                    </div>
+                    <button
+                      onClick={() => void handleDisconnectService(service.id)}
+                      disabled={disconnectingId === service.id}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-ol hover:text-error disabled:opacity-50"
+                      title="Disconnect service"
+                    >
+                      {disconnectingId === service.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <X className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                   </div>
                 ))}
               </div>

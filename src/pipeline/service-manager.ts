@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { nanoid } from 'nanoid';
 
-import { getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
+import { getDataDir, SHARED_NETWORK_NAME } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import {
@@ -485,12 +485,8 @@ export class ServiceManager {
     await container.start();
 
     const primaryNetwork = this.docker.getNetworkName();
-    const prodNetwork = getPolicy('production').networkName;
-    const devNetwork = getPolicy('development').networkName;
-    const secondaryNetwork = primaryNetwork === prodNetwork ? devNetwork : prodNetwork;
-    const additionalNetworks = [secondaryNetwork, SHARED_NETWORK_NAME].filter(
-      (networkName, index, arr) =>
-        networkName !== primaryNetwork && arr.indexOf(networkName) === index,
+    const additionalNetworks = [SHARED_NETWORK_NAME].filter(
+      (networkName) => networkName !== primaryNetwork,
     );
 
     for (const networkName of additionalNetworks) {

@@ -82,11 +82,9 @@ export class TraefikManager {
    * Called at startup so that either environment can deploy immediately.
    */
   async ensureAllNetworks(): Promise<void> {
-    const prodNetwork = getPolicy('production').networkName;
-    const devNetwork = getPolicy('development').networkName;
     await Promise.all([
-      this.ensureNetworkByName(prodNetwork),
-      this.ensureNetworkByName(devNetwork),
+      this.ensureNetworkByName('openlander-prod'),
+      this.ensureNetworkByName('openlander-dev'),
       this.ensureNetworkByName(SHARED_NETWORK_NAME),
     ]);
   }
@@ -207,19 +205,7 @@ export class TraefikManager {
   }
 
   private async ensureMultiNetwork(): Promise<void> {
-    const devNetwork = getPolicy('development').networkName;
-    const prodNetwork = getPolicy('production').networkName;
-    if (this.networkName === prodNetwork) {
-      await Promise.all([
-        this.connectToNetwork(devNetwork),
-        this.connectToNetwork(SHARED_NETWORK_NAME),
-      ]);
-    } else {
-      await Promise.all([
-        this.connectToNetwork(prodNetwork),
-        this.connectToNetwork(SHARED_NETWORK_NAME),
-      ]);
-    }
+    await this.connectToNetwork(SHARED_NETWORK_NAME);
   }
 
   async stop(): Promise<void> {
@@ -564,7 +550,7 @@ export async function switchToExternalMode(docker: Docker, externalNetwork: stri
 /**
  * Connect a container to the Traefik network.
  * In external mode, connects to the external network.
- * In managed mode, connects to the environment's network (e.g. openlander-prod).
+ * In managed mode, connects to OpenLander's shared network.
  *
  * @param docker - Docker instance
  * @param containerId - Container ID to connect

@@ -294,12 +294,45 @@ export interface ConnectedService {
   status: 'running' | 'stopped' | 'error';
   port: number;
   containerName: string;
+  autoInjectedEnvKeys?: string[];
 }
 
 export async function getProjectConnectedServices(id: string): Promise<ConnectedService[]> {
   const res = await fetch(`/api/projects/${id}/services`);
   if (!res.ok) return [];
   return res.json();
+}
+
+export async function connectProjectService(
+  projectId: string,
+  serviceId: string,
+): Promise<{
+  id: string;
+  service: ConnectedService;
+  createdAt: string;
+  autoInjectedEnvKeys?: string[];
+}> {
+  const res = await fetch(`/api/projects/${projectId}/services/${serviceId}`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to connect service');
+  }
+  return res.json();
+}
+
+export async function disconnectProjectService(
+  projectId: string,
+  serviceId: string,
+): Promise<void> {
+  const res = await fetch(`/api/projects/${projectId}/services/${serviceId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to disconnect service');
+  }
 }
 
 export async function getProjectTimeline(id: string): Promise<BuildStreamEvent[]> {

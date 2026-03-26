@@ -8,6 +8,7 @@ import {
   getDataDir,
   getDbPath,
   getConfigPath,
+  SHARED_NETWORK_NAME,
 } from '../src/config/index.js';
 
 const describeConfig =
@@ -86,7 +87,7 @@ describeConfig('Config DB Path', () => {
 describeConfig('Environment Policies', () => {
   it('returns production policy', () => {
     const policy = getPolicy('production');
-    expect(policy.networkName).toBe('openlander-prod');
+    expect(policy.networkName).toBe(SHARED_NETWORK_NAME);
     expect(policy.portRangeStart).toBe(10001);
     expect(policy.portRangeEnd).toBe(10999);
     expect(policy.traefikContainerName).toBe('traefik-ol-prod');
@@ -96,7 +97,7 @@ describeConfig('Environment Policies', () => {
 
   it('returns development policy with separate port range', () => {
     const policy = getPolicy('development');
-    expect(policy.networkName).toBe('openlander-dev');
+    expect(policy.networkName).toBe(SHARED_NETWORK_NAME);
     expect(policy.portRangeStart).toBe(20001);
     expect(policy.portRangeEnd).toBe(20999);
     expect(policy.traefikContainerName).toBe('traefik-ol-dev');
@@ -110,8 +111,9 @@ describeConfig('Environment Policies', () => {
     expect(prod.portRangeEnd).toBeLessThan(dev.portRangeStart);
   });
 
-  it('network names differ between environments', () => {
-    expect(getPolicy('production').networkName).not.toBe(getPolicy('development').networkName);
+  it('network names converge to shared network across environments', () => {
+    expect(getPolicy('production').networkName).toBe(SHARED_NETWORK_NAME);
+    expect(getPolicy('development').networkName).toBe(SHARED_NETWORK_NAME);
   });
 });
 

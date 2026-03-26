@@ -35,7 +35,7 @@ export interface EnvironmentPolicy {
 /** Default policies per environment. Pipeline functions read these via getPolicy(). */
 const DEFAULT_POLICIES: Record<OpenLanderEnv, EnvironmentPolicy> = {
   production: {
-    networkName: 'openlander-prod',
+    networkName: SHARED_NETWORK_NAME,
     portRangeStart: 10001,
     portRangeEnd: 10999,
     traefikContainerName: 'traefik-ol-prod',
@@ -43,7 +43,7 @@ const DEFAULT_POLICIES: Record<OpenLanderEnv, EnvironmentPolicy> = {
     traefikDashboardPort: 8080,
   },
   development: {
-    networkName: 'openlander-dev',
+    networkName: SHARED_NETWORK_NAME,
     portRangeStart: 20001,
     portRangeEnd: 20999,
     traefikContainerName: 'traefik-ol-dev',

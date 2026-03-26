@@ -11,6 +11,7 @@ import type {
 import { Database } from '../src/db/index.js';
 import { EventBus } from '../src/events/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
+import { SHARED_NETWORK_NAME } from '../src/config/index.js';
 
 const REQUIRED_ENV_VARS = { API_KEY: 'test-api-key' };
 
@@ -71,7 +72,7 @@ describe('ComposePipeline dockerode networking', () => {
     expect(runComposeServiceMock).toHaveBeenCalledTimes(1);
     expect(runComposeServiceMock.mock.calls[0]?.[0]).toMatchObject({
       name: 'ol-stack-api',
-      networks: ['stack-network', 'openlander-prod'],
+      networks: ['stack-network', SHARED_NETWORK_NAME],
     });
   });
 
@@ -109,7 +110,7 @@ describe('ComposePipeline dockerode networking', () => {
     expect(runComposeServiceMock).toHaveBeenCalledTimes(1);
     expect(runComposeServiceMock.mock.calls[0]?.[0]).toMatchObject({
       name: 'ol-stack-api',
-      networks: ['stack-network', 'openlander-dev'],
+      networks: ['stack-network', SHARED_NETWORK_NAME],
     });
   });
 
