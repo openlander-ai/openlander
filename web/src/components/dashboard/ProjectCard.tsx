@@ -1,10 +1,12 @@
 import { useEnvironment } from '@/contexts/environment';
 import { Spinner } from '@/components/ui/spinner';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
+import { getSetupStatus } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
-import { Clock, ExternalLink, GitBranch, RotateCw, Settings } from 'lucide-react';
+import { Clock, ExternalLink, GitBranch, RotateCw, Settings, Sparkles } from 'lucide-react';
 import type { MouseEvent } from 'react';
+import { useEffect, useState } from 'react';
 
 interface StatusDisplay {
   label: string;
@@ -32,6 +34,13 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const { environment: selectedEnv } = useEnvironment();
   const environments = project.environments ?? [];
+  const [llmConfigured, setLlmConfigured] = useState(false);
+
+  useEffect(() => {
+    getSetupStatus()
+      .then((s) => setLlmConfigured(s.llm.ok))
+      .catch(() => setLlmConfigured(false));
+  }, []);
 
   const currentEnvData = environments.find((e) => e.type === selectedEnv);
 
@@ -180,7 +189,10 @@ export function ProjectCard({
           {redeployingId === project.id ? (
             <Spinner className="h-4 w-4" />
           ) : (
-            <RotateCw className="h-4 w-4" />
+            <div className="flex items-center gap-1">
+              {llmConfigured && <Sparkles className="h-3 w-3 text-agent" />}
+              <RotateCw className="h-4 w-4" />
+            </div>
           )}
         </button>
         <button

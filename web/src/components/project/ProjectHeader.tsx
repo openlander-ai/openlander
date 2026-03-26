@@ -50,12 +50,12 @@ type StatusConfig = { label: string; color: string; dot: string };
 
 function getStatusConfig(isImageSource: boolean = false): Record<string, StatusConfig> {
   return {
-    running: { label: 'Live', color: 'text-success', dot: 'bg-success' },
+    running: { label: 'Live', color: 'text-success', dot: 'bg-success animate-pulse' },
     stopped: { label: 'Stopped', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
     building: {
       label: isImageSource ? 'Pulling' : 'Deploying',
       color: 'text-warning',
-      dot: 'bg-warning animate-pulse',
+      dot: 'bg-warning animate-pulse-ring',
     },
     error: { label: 'Failed', color: 'text-error', dot: 'bg-error' },
     idle: { label: 'Idle', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
@@ -349,7 +349,10 @@ export function ProjectHeader({
 
               {/* Rollback */}
               <DropdownMenuItem onClick={onRollback} disabled={!!actionLoading}>
-                <History className="h-3.5 w-3.5 mr-2" />
+                <div className="flex items-center gap-2">
+                  {isLlmConfigured && <Sparkles className="h-3.5 w-3.5 text-agent" />}
+                  <History className="h-3.5 w-3.5" />
+                </div>
                 Rollback
               </DropdownMenuItem>
 
