@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import type { Project } from '@/types';
+import type { Project, Environment } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -20,8 +20,10 @@ import { getSetupStatus } from '@/lib/api';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { formatRelativeTime } from '@/lib/time';
 
+type SidebarProject = Project & { environments?: Environment[] };
+
 interface SidebarProps {
-  projects: Project[];
+  projects: SidebarProject[];
   loading: boolean;
 }
 
@@ -93,15 +95,15 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const isActive = (path: string) => location.pathname === path;
   const isProjectActive = (id: string) => location.pathname === `/projects/${id}`;
 
-  const tempGroups = new Map<string, Project[]>();
+  const tempGroups = new Map<string, SidebarProject[]>();
   for (const p of projects) {
     const url = p.repoUrl ? normalizeRepoUrl(p.repoUrl) : 'unknown';
     if (!tempGroups.has(url)) tempGroups.set(url, []);
     tempGroups.get(url)!.push(p);
   }
 
-  const groups = new Map<string, Project[]>();
-  const singletons: Project[] = [];
+  const groups = new Map<string, SidebarProject[]>();
+  const singletons: SidebarProject[] = [];
 
   for (const [url, projs] of tempGroups.entries()) {
     if (projs.length >= 2) {
@@ -112,21 +114,24 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   }
   singletons.sort(sortProjects);
 
-  const isGroupOpen = (url: string, projs: Project[]) => {
+  const isGroupOpen = (url: string, projs: SidebarProject[]) => {
     if (groupState[url] !== undefined) return groupState[url];
     const hasActive = projs.some((p) => isProjectActive(p.id));
     const hasErrorOrBuilding = projs.some((p) => p.status === 'error' || p.status === 'building');
     return hasActive || hasErrorOrBuilding;
   };
 
-  const toggleGroup = (url: string, projs: Project[]) => {
+  const toggleGroup = (url: string, projs: SidebarProject[]) => {
     setGroupState((prev) => ({
       ...prev,
       [url]: !isGroupOpen(url, projs),
     }));
   };
 
-  const renderProjectItem = (project: Project) => {
+  const renderProjectItem = (project: SidebarProject) => {
+    const envs = project.environments ?? [];
+    const hasMultipleEnvs = envs.length > 1;
+
     let tooltip = project.name;
     if (project.status === 'error') {
       const timeStr = project.updatedAt ? formatRelativeTime(project.updatedAt) : '';
@@ -138,25 +143,54 @@ export function Sidebar({ projects, loading }: SidebarProps) {
     }
 
     return (
-      <button
-        key={project.id}
-        onClick={() => navigate(`/projects/${project.id}`)}
-        title={tooltip}
-        className={cn(
-          'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150',
-          'lg:justify-start justify-center',
-          'hover:bg-bg-subtle',
-          isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
-        )}
-      >
-        <div
+      <div key={project.id}>
+        <button
+          onClick={() => navigate(`/projects/${project.id}`)}
+          title={tooltip}
           className={cn(
-            'h-2 w-2 rounded-full shrink-0',
-            statusColor[project.status] ?? 'bg-[var(--text-muted)]',
+            'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150',
+            'lg:justify-start justify-center',
+            'hover:bg-bg-subtle',
+            isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
           )}
-        />
-        <span className="hidden lg:inline text-xs font-body truncate">{project.name}</span>
-      </button>
+        >
+          <div
+            className={cn(
+              'h-2 w-2 rounded-full shrink-0',
+              statusColor[project.status] ?? 'bg-[var(--text-muted)]',
+            )}
+          />
+          <span className="hidden lg:inline text-xs font-body truncate">{project.name}</span>
+        </button>
+        {hasMultipleEnvs && (
+          <div className="hidden lg:block pl-5 space-y-0.5 mt-0.5">
+            {envs.map((env) => (
+              <button
+                key={env.id}
+                onClick={() => navigate(`/projects/${project.id}?env=${env.type}`)}
+                className={cn(
+                  'w-full flex items-center gap-2 rounded-md px-2 py-1 text-left transition-all duration-150',
+                  'hover:bg-bg-subtle',
+                  isProjectActive(project.id) &&
+                    new URLSearchParams(location.search).get('env') === env.type
+                    ? 'bg-bg-subtle/70 text-primary-ol'
+                    : 'text-muted-ol',
+                )}
+              >
+                <div
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full shrink-0',
+                    statusColor[env.status] ?? 'bg-[var(--text-muted)]',
+                  )}
+                />
+                <span className="text-[11px] font-body truncate">
+                  {env.type === 'production' ? 'prod' : 'dev'}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -167,13 +201,13 @@ export function Sidebar({ projects, loading }: SidebarProps) {
     <div className="flex flex-col h-full">
       <Separator className="bg-[hsl(var(--border))]" />
 
-      <div className="p-2 lg:p-3 shrink-0" data-testid="mode-toggle">
+      <div className="p-2 lg:p-4 shrink-0" data-testid="mode-toggle">
         <div className="flex gap-1 p-1 rounded-lg bg-bg-subtle">
           <button
             data-testid="mode-toggle-dashboard"
             onClick={() => navigate('/projects')}
             className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
+              'flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all',
               isDashboardMode
                 ? 'bg-bg-panel text-primary-ol shadow-sm font-semibold'
                 : 'text-muted-ol hover:text-secondary-ol',
@@ -186,7 +220,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             data-testid="mode-toggle-agent"
             onClick={() => openPanel()}
             className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all',
+              'flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all',
               isAgentMode
                 ? 'bg-agent/10 text-agent shadow-sm font-semibold border border-agent/20'
                 : 'text-muted-ol hover:text-secondary-ol',
@@ -200,35 +234,35 @@ export function Sidebar({ projects, loading }: SidebarProps) {
       </div>
 
       {/* Search — opens Cmd+K */}
-      <div className="px-2 lg:px-3 pb-2 shrink-0">
+      <div className="px-2 lg:px-4 pb-3 shrink-0">
         <button
           onClick={() => {
             const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true });
             document.dispatchEvent(event);
           }}
-          className="w-full flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-muted-ol bg-bg-subtle hover:bg-bg-subtle/80 transition-colors"
+          className="w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-muted-ol bg-bg-subtle hover:bg-bg-subtle/80 transition-colors"
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
           <span className="hidden lg:inline flex-1 text-left">Search...</span>
-          <kbd className="hidden lg:inline text-xs font-mono bg-bg-panel px-1 py-0.5 rounded border border-border">
+          <kbd className="hidden lg:inline text-xs font-mono bg-bg-panel px-1.5 py-0.5 rounded border border-border">
             ⌘K
           </kbd>
         </button>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-2 lg:p-3 space-y-0.5">
+        <div className="p-2 lg:p-4 space-y-1">
           {loading && (
-            <div className="flex items-center justify-center lg:justify-start gap-2 py-3 px-2 text-secondary-ol">
+            <div className="flex items-center justify-center lg:justify-start gap-3 py-3 px-3 text-secondary-ol">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-              <span className="hidden lg:inline text-xs font-body">Loading...</span>
+              <span className="hidden lg:inline text-sm font-body">Loading...</span>
             </div>
           )}
 
           {!loading && projects.length === 0 && (
-            <div className="flex items-center justify-center lg:justify-start gap-2 py-3 px-2 text-muted-ol">
+            <div className="flex items-center justify-center lg:justify-start gap-3 py-3 px-3 text-muted-ol">
               <Box className="h-4 w-4 shrink-0" />
-              <span className="hidden lg:inline text-xs font-body">No projects</span>
+              <span className="hidden lg:inline text-sm font-body">No projects</span>
             </div>
           )}
 
@@ -248,14 +282,14 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                   <button
                     onClick={() => toggleGroup(url, projs)}
                     title={repoName}
-                    className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left text-muted-ol hover:text-secondary-ol transition-colors group"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-muted-ol hover:text-secondary-ol transition-colors group"
                   >
                     {open ? (
                       <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                     ) : (
                       <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                     )}
-                    <span className="text-xs font-medium truncate">{repoName}</span>
+                    <span className="text-sm font-medium truncate">{repoName}</span>
                     <span className="text-xs bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
                       {visibleProjs.length}
                     </span>
@@ -278,14 +312,14 @@ export function Sidebar({ projects, loading }: SidebarProps) {
       <Separator className="bg-[hsl(var(--border))]" />
 
       {/* Bottom: New Project + Services + Settings */}
-      <div className="shrink-0 p-2 lg:p-3 space-y-1">
+      <div className="shrink-0 p-2 lg:p-4 space-y-1.5">
         {/* New Project */}
         <button
           onClick={() => navigate('/projects/new')}
           className={cn(
             'w-full gap-2 border-dashed border-foreground/20 text-foreground hover:bg-foreground hover:text-background hover:border-foreground/50 transition-all',
             'lg:justify-start justify-center',
-            'flex items-center rounded-md px-2.5 py-2 text-xs font-body',
+            'flex items-center rounded-md px-3 py-2.5 text-sm font-body',
           )}
         >
           <Plus className="h-4 w-4 shrink-0" />
@@ -297,14 +331,14 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           onClick={() => navigate('/services')}
           title="Services"
           className={cn(
-            'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150',
+            'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
             isActive('/services') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
           )}
         >
           <Database className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-xs font-body">Services</span>
+          <span className="hidden lg:inline text-sm font-body">Services</span>
         </button>
 
         {/* Settings Link */}
@@ -312,14 +346,14 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           onClick={() => navigate('/settings')}
           title="Settings"
           className={cn(
-            'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-all duration-150',
+            'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
             isActive('/settings') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
           )}
         >
           <Settings className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-xs font-body">Settings</span>
+          <span className="hidden lg:inline text-sm font-body">Settings</span>
         </button>
       </div>
     </div>

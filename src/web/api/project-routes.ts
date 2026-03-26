@@ -1031,10 +1031,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.get('/projects/:id/logs', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
+    const envResolution = resolveEnvironmentByType(c, ctx, project);
+    const envRow = 'environmentRow' in envResolution ? envResolution.environmentRow : undefined;
+    const targetContainerId = envRow?.container_id ?? project.container_id;
+
     const follow = c.req.query('follow');
 
-    if (follow && project.container_id) {
-      const containerId = project.container_id;
+    if (follow && targetContainerId) {
+      const containerId = targetContainerId;
       return stream(c, async (s) => {
         c.header('Content-Type', 'application/x-ndjson');
 

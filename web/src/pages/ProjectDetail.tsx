@@ -388,6 +388,7 @@ export function ProjectDetail() {
           isStreaming={isStreaming}
           timelineDisconnected={timelineDisconnected}
           selectedEnvId={selectedEnv?.id}
+          currentEnvType={currentEnvType}
           onRedeploy={handleRedeploy}
           onStop={handleStop}
           onRollback={handleRollback}

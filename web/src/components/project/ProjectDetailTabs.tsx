@@ -6,6 +6,7 @@ import { ConsoleTab } from '@/components/project/ConsoleTab';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
 import type { TimelineItem } from '@/lib/event-types';
+import { cn } from '@/lib/utils';
 
 interface ProjectDetailTabsProps {
   id?: string;
@@ -16,6 +17,7 @@ interface ProjectDetailTabsProps {
   isStreaming: boolean;
   timelineDisconnected?: boolean;
   selectedEnvId?: string;
+  currentEnvType?: string;
   onRedeploy: () => void;
   onStop: () => void;
   onRollback: () => void;
@@ -28,8 +30,8 @@ export function ProjectDetailTabs({
   displayProject,
   allTimelineItems,
   isStreaming,
-
   selectedEnvId,
+  currentEnvType,
   onRedeploy,
   onStop,
   onRollback,
@@ -40,7 +42,13 @@ export function ProjectDetailTabs({
       onValueChange={onActiveTabChange}
       className="flex-1 flex flex-col min-h-0"
     >
-      <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10">
+      <TabsList
+        className={cn(
+          'shrink-0 w-full justify-start rounded-none border-b border-[hsl(var(--border))] bg-transparent px-6 h-10',
+          currentEnvType === 'development' &&
+            '[&_[data-state=active]]:text-blue-500 [&_[data-state=active]]:border-blue-500',
+        )}
+      >
         <TabsTrigger
           value="overview"
           className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
@@ -106,6 +114,7 @@ export function ProjectDetailTabs({
             projectId={id}
             isActive={activeTab === 'console'}
             projectStatus={displayProject.status}
+            environmentType={currentEnvType}
           />
         )}
       </TabsContent>

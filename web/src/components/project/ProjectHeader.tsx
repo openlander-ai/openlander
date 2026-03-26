@@ -182,7 +182,12 @@ export function ProjectHeader({
   const isShared = project.visibility === 'shared' || project.visibility === 'quick-share';
 
   return (
-    <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+    <div
+      className={cn(
+        'shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4',
+        currentEnvType === 'development' && 'border-t-2 border-t-blue-500/60',
+      )}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />

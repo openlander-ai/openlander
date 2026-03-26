@@ -25,6 +25,7 @@ export interface LogStreamState {
 interface UseLogStreamOptions {
   projectId: string | undefined;
   enabled?: boolean;
+  environmentType?: string;
 }
 
 interface UseLogStreamReturn extends LogStreamState {
@@ -78,8 +79,9 @@ async function fetchLogSnapshot(
   projectId: string,
   lineCount: number,
   signal: AbortSignal,
+  envParam: string = '',
 ): Promise<LogEntry[]> {
-  const res = await fetch(`/api/projects/${projectId}/logs?lines=${lineCount}`, {
+  const res = await fetch(`/api/projects/${projectId}/logs?lines=${lineCount}${envParam}`, {
     signal,
   });
   if (!res.ok) {
@@ -279,10 +281,12 @@ export function parseStreamLine(rawLine: string): ParsedStreamLine {
 export function useLogStream({
   projectId,
   enabled = true,
+  environmentType,
 }: UseLogStreamOptions): UseLogStreamReturn {
   const [state, setState] = useState<LogStreamState>(() => createInitialLogStreamState());
   const abortRef = useRef<AbortController | null>(null);
   const stateRef = useRef(state);
+  const envParam = environmentType ? `&environment=${environmentType}` : '';
 
   useEffect(() => {
     stateRef.current = state;
@@ -305,6 +309,7 @@ export function useLogStream({
           projectId,
           DEFAULT_HISTORY_LINE_COUNT,
           controller.signal,
+          envParam,
         );
         snapshotRefreshSucceeded = true;
 
@@ -322,7 +327,7 @@ export function useLogStream({
         }
       }
 
-      const res = await fetch(`/api/projects/${projectId}/logs?follow=true`, {
+      const res = await fetch(`/api/projects/${projectId}/logs?follow=true${envParam}`, {
         signal: controller.signal,
       });
 
@@ -394,7 +399,7 @@ export function useLogStream({
       const message = err instanceof Error ? err.message : 'Stream failed';
       setState((current) => setLogConnectionState(current, 'error', message));
     }
-  }, [enabled, projectId]);
+  }, [enabled, projectId, envParam]);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -448,7 +453,7 @@ export function useLogStream({
     setState((current) => ({ ...current, isLoadingOlder: true }));
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/logs?lines=${nextLineCount}`);
+      const res = await fetch(`/api/projects/${projectId}/logs?lines=${nextLineCount}${envParam}`);
       if (!res.ok) throw new Error(`Logs error: ${res.status}`);
 
       const data = (await res.json()) as { logs?: unknown };
@@ -470,7 +475,7 @@ export function useLogStream({
         isLoadingOlder: false,
       }));
     }
-  }, [projectId]);
+  }, [projectId, envParam]);
 
   return {
     ...state,
