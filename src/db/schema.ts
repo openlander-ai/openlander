@@ -160,6 +160,22 @@ CREATE TABLE IF NOT EXISTS service_connections (
    UNIQUE(project_id, service_id)
 );
 
+CREATE TABLE IF NOT EXISTS runtime_incidents (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  environment_id TEXT REFERENCES environments(id),
+  category TEXT NOT NULL,
+  exit_code INTEGER,
+  error_snippet TEXT,
+  container_image TEXT,
+  container_uptime_ms INTEGER,
+  restart_count INTEGER,
+  diagnosis TEXT,
+  resolved INTEGER NOT NULL DEFAULT 0,
+  resolved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS deploy_configs (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
@@ -182,6 +198,8 @@ CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key);
 CREATE INDEX IF NOT EXISTS idx_services_type ON services(type);
 CREATE INDEX IF NOT EXISTS idx_service_connections_project ON service_connections(project_id);
 CREATE INDEX IF NOT EXISTS idx_service_connections_service ON service_connections(service_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_incidents_project ON runtime_incidents(project_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_incidents_resolved ON runtime_incidents(resolved);
 
 CREATE TABLE IF NOT EXISTS secret_files (
   id TEXT PRIMARY KEY,

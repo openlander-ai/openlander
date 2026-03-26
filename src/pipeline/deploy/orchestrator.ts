@@ -22,6 +22,7 @@ import type { JobManager } from '../job-manager.js';
 import { JobManager as JobManagerClass } from '../job-manager.js';
 import { DockerfileNotFoundError } from '../../errors.js';
 import { resolveDockerfilePath } from './helpers.js';
+import { checkDeployConnectivity } from './connectivity-check.js';
 import type { BuildExecutor } from './build-step.js';
 import type { ContainerRunner } from './run-step.js';
 import type { DeployResult, ProjectConfig } from '../deploy-core.js';
@@ -529,6 +530,36 @@ export async function runAndVerify(
     throw new Error(
       `Container crashed after start: ${healthResult.error ?? 'unknown'}\n\nContainer logs:\n${containerLogs}`,
     );
+  }
+
+  try {
+    const connectivityResults = await checkDeployConnectivity({
+      docker: deps.docker,
+      containerId,
+      envVars,
+    });
+
+    if (connectivityResults.length === 0) {
+      buildLog += '[connectivity] skipped (tools not available in container)\n';
+    } else {
+      for (const result of connectivityResults) {
+        const endpoint =
+          result.port !== undefined ? `${result.hostname}:${String(result.port)}` : result.hostname;
+        const dnsStatus = result.dnsResolved ? 'DNS OK' : 'DNS FAIL';
+        const tcpStatus =
+          result.port === undefined ? 'TCP SKIP' : result.tcpReachable ? 'TCP OK' : 'TCP FAIL';
+        const summary = `(${dnsStatus}, ${tcpStatus})`;
+        const detail = result.error ? ` - ${result.error}` : '';
+        const isHealthy = result.dnsResolved && (result.port === undefined || result.tcpReachable);
+        buildLog += isHealthy
+          ? `[connectivity] ✓ ${endpoint} ${summary}${detail}\n`
+          : `[connectivity] ⚠ ${endpoint} ${summary}${detail}\n`;
+      }
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    buildLog += `[connectivity] ⚠ check failed: ${message}\n`;
+    log.warn({ projectId, containerId, err }, 'Post-deploy connectivity check failed');
   }
 
   deps.db.updateEnvironment(environmentId, {

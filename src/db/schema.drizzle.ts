@@ -287,6 +287,35 @@ export const serviceConnections = sqliteTable(
   ],
 );
 
+export const runtimeIncidents = sqliteTable(
+  'runtime_incidents',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    environment_id: text('environment_id').references(() => environments.id),
+    category: text('category').notNull(),
+    exit_code: integer('exit_code'),
+    error_snippet: text('error_snippet'),
+    container_image: text('container_image'),
+    container_uptime_ms: integer('container_uptime_ms'),
+    restart_count: integer('restart_count'),
+    diagnosis: text('diagnosis'),
+    resolved: integer('resolved').notNull().default(0),
+    resolved_at: text('resolved_at'),
+    created_at: text('created_at')
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    index('idx_runtime_incidents_project').on(table.project_id),
+    index('idx_runtime_incidents_resolved').on(table.resolved),
+  ],
+);
+
 export const deploy_configs = sqliteTable('deploy_configs', {
   id: text('id').primaryKey(),
   project_id: text('project_id')
@@ -365,6 +394,7 @@ export const drizzleSchema = {
   globalSecrets,
   services,
   serviceConnections,
+  runtimeIncidents,
   deploy_configs,
   secretFiles,
   deployPlans,

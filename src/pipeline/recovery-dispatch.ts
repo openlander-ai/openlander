@@ -19,6 +19,10 @@ export type RecoveryCategory =
   | 'test_failure'
   | 'runtime_crash'
   | 'runtime_generic'
+  | 'network_dns'
+  | 'resource_oom'
+  | 'port_conflict'
+  | 'dependency_unavailable'
   | 'unknown';
 
 export interface UserActionStep {
@@ -72,6 +76,36 @@ const TEST_FAILURE_PATTERNS = [/tests? failed/i, /\bFAIL\b/i];
 const ENV_MISSING_PATTERNS = [/required environment variable/i, /Missing required config/i];
 
 const RUNTIME_CRASH_PATTERNS = [/crashed/i, /exited with code/i, /restart loop/i];
+
+const NETWORK_DNS_PATTERNS = [
+  /Name or service not known/i,
+  /getaddrinfo/i,
+  /ENOTFOUND/i,
+  /DNS resolution failed/i,
+  /Could not resolve host/i,
+];
+
+const RESOURCE_OOM_PATTERNS = [
+  /Out of memory/i,
+  /OOMKilled/i,
+  /memory allocation failed/i,
+  /Cannot allocate memory/i,
+  /JavaScript heap out of memory/i,
+];
+
+const PORT_CONFLICT_PATTERNS = [
+  /Address already in use/i,
+  /EADDRINUSE/i,
+  /bind: address already in use/i,
+];
+
+const DEPENDENCY_UNAVAILABLE_PATTERNS = [
+  /Connection refused/i,
+  /ECONNREFUSED/i,
+  /connect ECONNREFUSED/i,
+  /Connection reset by peer/i,
+  /ECONNRESET/i,
+];
 
 const RECOVERY_TEMPLATES: Record<RecoveryCategory, RecoveryTemplate> = {
   clone_auth: {
@@ -338,6 +372,82 @@ Do NOT: Assume Docker infrastructure is broken unless logs clearly indicate daem
       'execute_deploy_plan',
     ],
   },
+  network_dns: {
+    fixability: 'agent',
+    title: { en: 'DNS Resolution Failed', ko: 'DNS 해석 실패' },
+    description: {
+      en: 'The application could not resolve a hostname to an IP address.',
+      ko: '애플리케이션이 호스트명을 IP 주소로 해석하지 못했습니다.',
+    },
+    userSteps: [],
+    agentGuidance: `## OpenLander Context (for this failure)
+Category: network_dns
+What happened: DNS resolution failed for a hostname (e.g., database, API endpoint).
+What you can do: Check if the service is running and accessible. Verify environment variables for hostnames. Use get_logs to inspect the error, then ask_user_question if a service URL is needed. Retry with create_deploy_plan and execute_deploy_plan after confirming connectivity.
+Allowed tools: get_logs, ask_user_question, set_env_vars, create_deploy_plan, execute_deploy_plan
+Do NOT: Assume the service is down without checking logs first.`,
+    allowedTools: [
+      'get_logs',
+      'ask_user_question',
+      'set_env_vars',
+      'create_deploy_plan',
+      'execute_deploy_plan',
+    ],
+  },
+  resource_oom: {
+    fixability: 'agent',
+    title: { en: 'Out of Memory', ko: '메모리 부족' },
+    description: {
+      en: 'The container ran out of memory and was killed by the system.',
+      ko: '컨테이너의 메모리가 부족하여 시스템에 의해 종료되었습니다.',
+    },
+    userSteps: [],
+    agentGuidance: `## OpenLander Context (for this failure)
+Category: resource_oom
+What happened: The application exceeded available memory and was OOMKilled.
+What you can do: Increase the container memory limit or optimize the application. Use get_logs to confirm OOMKilled status. Ask the user for memory requirements, then adjust the deployment configuration. Retry with create_deploy_plan and execute_deploy_plan.
+Allowed tools: get_logs, ask_user_question, create_deploy_plan, execute_deploy_plan
+Do NOT: Retry with the same memory limit.`,
+    allowedTools: ['get_logs', 'ask_user_question', 'create_deploy_plan', 'execute_deploy_plan'],
+  },
+  port_conflict: {
+    fixability: 'agent',
+    title: { en: 'Port Already in Use', ko: '포트가 이미 사용 중' },
+    description: {
+      en: 'The port the application tried to bind to is already in use by another process.',
+      ko: '애플리케이션이 바인드하려는 포트가 이미 다른 프로세스에서 사용 중입니다.',
+    },
+    userSteps: [],
+    agentGuidance: `## OpenLander Context (for this failure)
+Category: port_conflict
+What happened: The application could not bind to its configured port (EADDRINUSE).
+What you can do: Check if another container is using the same port. OpenLander auto-assigns ports, but if a specific port is required, verify it's available. Use get_logs to see the exact port. Retry with create_deploy_plan and execute_deploy_plan.
+Allowed tools: get_logs, create_deploy_plan, execute_deploy_plan
+Do NOT: Assume the port is permanently blocked.`,
+    allowedTools: ['get_logs', 'create_deploy_plan', 'execute_deploy_plan'],
+  },
+  dependency_unavailable: {
+    fixability: 'agent',
+    title: { en: 'Dependency Unavailable', ko: '의존성을 사용할 수 없음' },
+    description: {
+      en: 'The application could not connect to a required service (database, cache, API).',
+      ko: '애플리케이션이 필요한 서비스(데이터베이스, 캐시, API)에 연결할 수 없습니다.',
+    },
+    userSteps: [],
+    agentGuidance: `## OpenLander Context (for this failure)
+Category: dependency_unavailable
+What happened: Connection refused to a dependency (ECONNREFUSED or ECONNRESET).
+What you can do: Verify the dependency service is running and accessible. Check environment variables for correct hostnames and ports. Use get_logs to identify which service failed. Ask the user if the service needs to be provisioned. Retry with create_deploy_plan and execute_deploy_plan.
+Allowed tools: get_logs, ask_user_question, set_env_vars, create_deploy_plan, execute_deploy_plan
+Do NOT: Retry without confirming the dependency is available.`,
+    allowedTools: [
+      'get_logs',
+      'ask_user_question',
+      'set_env_vars',
+      'create_deploy_plan',
+      'execute_deploy_plan',
+    ],
+  },
   unknown: {
     fixability: 'agent',
     title: { en: 'Unknown Deployment Failure', ko: '알 수 없는 배포 실패' },
@@ -439,6 +549,22 @@ function classifyCategory(step: string, error: string, buildLog?: string): Recov
   if (step === 'run' || step === 'runtime') {
     if (matchesAny(error, RUNTIME_CRASH_PATTERNS)) {
       return 'runtime_crash';
+    }
+
+    if (matchesAny(error, NETWORK_DNS_PATTERNS)) {
+      return 'network_dns';
+    }
+
+    if (matchesAny(error, RESOURCE_OOM_PATTERNS)) {
+      return 'resource_oom';
+    }
+
+    if (matchesAny(error, PORT_CONFLICT_PATTERNS)) {
+      return 'port_conflict';
+    }
+
+    if (matchesAny(error, DEPENDENCY_UNAVAILABLE_PATTERNS)) {
+      return 'dependency_unavailable';
     }
 
     return 'runtime_generic';

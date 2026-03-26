@@ -136,6 +136,22 @@ export interface ServiceConnectionRow {
   created_at: string;
 }
 
+export interface RuntimeIncidentRow {
+  id: string;
+  project_id: string;
+  environment_id: string | null;
+  category: string;
+  exit_code: number | null;
+  error_snippet: string | null;
+  container_image: string | null;
+  container_uptime_ms: number | null;
+  restart_count: number | null;
+  diagnosis: string | null;
+  resolved: number;
+  resolved_at: string | null;
+  created_at: string;
+}
+
 export interface DeployConfigRow {
   id: string;
   project_id: string;

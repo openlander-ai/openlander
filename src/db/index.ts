@@ -11,6 +11,7 @@ import { GlobalSecretRepo } from './repos/global-secret.repo.js';
 import { SecretFileRepo } from './repos/secret-file.repo.js';
 import { ServiceRepo } from './repos/service.repo.js';
 import { ServiceConnectionRepo } from './repos/service-connection.repo.js';
+import { RuntimeIncidentRepo } from './repos/runtime-incident.repo.js';
 import { DeployLogRepo } from './repos/deploy-log.repo.js';
 import { TimelineRepo } from './repos/timeline.repo.js';
 import { DomainMappingRepo } from './repos/domain-mapping.repo.js';
@@ -33,6 +34,7 @@ export type {
   WebhookConfigRow,
   ServiceRow,
   ServiceConnectionRow,
+  RuntimeIncidentRow,
   PendingFixRow,
   DeployPlanRow,
   AuthRow,
@@ -49,6 +51,7 @@ export class Database implements AuthDatabase {
    private readonly secretFileRepo: SecretFileRepo;
    private readonly serviceRepo: ServiceRepo;
    private readonly serviceConnectionRepo: ServiceConnectionRepo;
+   private readonly runtimeIncidentRepo: RuntimeIncidentRepo;
    private readonly deployLogRepo: DeployLogRepo;
    private readonly timelineRepo: TimelineRepo;
    private readonly domainMappingRepo: DomainMappingRepo;
@@ -69,9 +72,10 @@ export class Database implements AuthDatabase {
      this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);
      this.globalSecretRepo = new GlobalSecretRepo(this.db, this.sqlite);
      this.secretFileRepo = new SecretFileRepo(this.db, this.sqlite);
-     this.serviceRepo = new ServiceRepo(this.db, this.sqlite);
-     this.serviceConnectionRepo = new ServiceConnectionRepo(this.db, this.sqlite);
-     this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
+      this.serviceRepo = new ServiceRepo(this.db, this.sqlite);
+      this.serviceConnectionRepo = new ServiceConnectionRepo(this.db, this.sqlite);
+      this.runtimeIncidentRepo = new RuntimeIncidentRepo(this.db, this.sqlite);
+      this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
      this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
      this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
      this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
@@ -124,11 +128,17 @@ export class Database implements AuthDatabase {
    getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }
    getServiceConnectionByProjectAndService(projectId: string, serviceId: string) { return this.serviceConnectionRepo.getConnectionByProjectAndService(projectId, serviceId); }
    listServiceConnectionsByProject(projectId: string) { return this.serviceConnectionRepo.listConnectionsByProject(projectId); }
-   listServiceConnectionsByService(serviceId: string) { return this.serviceConnectionRepo.listConnectionsByService(serviceId); }
-   updateServiceConnection(id: string, updates: Parameters<ServiceConnectionRepo['updateConnection']>[1]) { this.serviceConnectionRepo.updateConnection(id, updates); }
-   deleteServiceConnection(id: string) { this.serviceConnectionRepo.deleteConnection(id); }
-   deleteServiceConnectionByProjectAndService(projectId: string, serviceId: string) { this.serviceConnectionRepo.deleteConnectionByProjectAndService(projectId, serviceId); }
-   createDeployLog(log: Parameters<DeployLogRepo['createDeployLog']>[0]) { this.deployLogRepo.createDeployLog(log); }
+    listServiceConnectionsByService(serviceId: string) { return this.serviceConnectionRepo.listConnectionsByService(serviceId); }
+    updateServiceConnection(id: string, updates: Parameters<ServiceConnectionRepo['updateConnection']>[1]) { this.serviceConnectionRepo.updateConnection(id, updates); }
+    deleteServiceConnection(id: string) { this.serviceConnectionRepo.deleteConnection(id); }
+    deleteServiceConnectionByProjectAndService(projectId: string, serviceId: string) { this.serviceConnectionRepo.deleteConnectionByProjectAndService(projectId, serviceId); }
+    createRuntimeIncident(opts: Parameters<RuntimeIncidentRepo['createIncident']>[0]) { return this.runtimeIncidentRepo.createIncident(opts); }
+    getRuntimeIncident(id: string) { return this.runtimeIncidentRepo.getIncident(id); }
+    listRuntimeIncidentsByProject(projectId: string, opts?: Parameters<RuntimeIncidentRepo['listByProject']>[1]) { return this.runtimeIncidentRepo.listByProject(projectId, opts); }
+    listUnresolvedRuntimeIncidents() { return this.runtimeIncidentRepo.listUnresolved(); }
+    resolveRuntimeIncident(id: string) { this.runtimeIncidentRepo.resolveIncident(id); }
+    updateRuntimeIncidentDiagnosis(id: string, diagnosis: string) { this.runtimeIncidentRepo.updateDiagnosis(id, diagnosis); }
+    createDeployLog(log: Parameters<DeployLogRepo['createDeployLog']>[0]) { this.deployLogRepo.createDeployLog(log); }
   getDeployLogs(projectId: string, limit = 20, environmentId?: string) { return this.deployLogRepo.getDeployLogs(projectId, limit, environmentId); }
   getLastDeployLog(projectId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLog(projectId, environmentId); }
   getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }

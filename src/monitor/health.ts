@@ -3,6 +3,7 @@ import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { shouldRunCleanup, diskThresholdCleanup } from '../pipeline/cleanup.js';
+import type { RecoveryCategory } from '../pipeline/recovery-dispatch.js';
 
 const log = createModuleLogger('health');
 
@@ -31,6 +32,7 @@ const DEFAULT_OPTIONS: Required<HealthMonitorOptions> = {
 const INACTIVE_FAILURE_THRESHOLD = 5;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CLEANUP_COOLDOWN_MS = 10 * 60 * 1000;
+const INCIDENT_ERROR_SNIPPET_LINES = 40;
 
 export class HealthMonitor {
   private readonly docker: Docker;
@@ -178,14 +180,22 @@ export class HealthMonitor {
 
       const restartCount = info.RestartCount;
       if (restartCount >= 3) {
+        this.recordRuntimeIncident({
+          projectId,
+          containerId,
+          category: 'runtime_crash',
+          environmentId: this.resolveIncidentEnvironmentId(projectId, containerId),
+          exitCode: info.State.ExitCode,
+          errorSnippet: await this.getContainerStderrSnippet(containerId),
+          containerImage: info.Config.Image,
+          containerUptimeMs: this.getContainerUptimeMs(info.State.StartedAt),
+          restartCount,
+        });
         log.warn(
           { projectId, containerId, restartCount },
           'Container in crash loop — marking project as error',
         );
-        this.db.updateProject(projectId, { status: 'error' });
-        for (const env of this.db.getEnvironmentsByProject(projectId)) {
-          this.db.updateEnvironment(env.id, { status: 'error' });
-        }
+        this.markProjectAndEnvironmentsError(projectId);
         await this.events.emit('deploy:failed', {
           projectId,
           error: `Container crash loop detected (${String(restartCount)} restarts)`,
@@ -205,26 +215,38 @@ export class HealthMonitor {
 
       const exitCode = info.State.ExitCode;
       if (!info.State.Running && exitCode !== 0) {
+        this.recordRuntimeIncident({
+          projectId,
+          containerId,
+          category: 'runtime_crash',
+          environmentId: this.resolveIncidentEnvironmentId(projectId, containerId),
+          exitCode,
+          errorSnippet: await this.getContainerStderrSnippet(containerId),
+          containerImage: info.Config.Image,
+          containerUptimeMs: this.getContainerUptimeMs(info.State.StartedAt),
+          restartCount,
+        });
         log.warn(
           { projectId, containerId, exitCode },
           'Container crashed — marking project as error',
         );
-        this.db.updateProject(projectId, { status: 'error' });
-        for (const env of this.db.getEnvironmentsByProject(projectId)) {
-          this.db.updateEnvironment(env.id, { status: 'error' });
-        }
+        this.markProjectAndEnvironmentsError(projectId);
         await this.events.emit('deploy:failed', {
           projectId,
           error: `Container exited with code ${String(exitCode)}`,
           step: 'run',
         });
       }
-    } catch {
+    } catch (error) {
+      this.recordRuntimeIncident({
+        projectId,
+        containerId,
+        category: 'runtime_generic',
+        environmentId: this.resolveIncidentEnvironmentId(projectId, containerId),
+        errorSnippet: error instanceof Error ? error.message : String(error),
+      });
       log.warn({ projectId, containerId }, 'Container not found — marking project as error');
-      this.db.updateProject(projectId, { status: 'error' });
-      for (const env of this.db.getEnvironmentsByProject(projectId)) {
-        this.db.updateEnvironment(env.id, { status: 'error' });
-      }
+      this.markProjectAndEnvironmentsError(projectId);
     }
 
     return lastResult;
@@ -279,4 +301,154 @@ export class HealthMonitor {
       clearTimeout(timeoutId);
     }
   }
+
+  private resolveIncidentEnvironmentId(projectId: string, containerId: string): string | null {
+    const maybeDb = this.db as {
+      getEnvironmentsByProject?: (id: string) => Array<{
+        id: string;
+        type: 'production' | 'development';
+        container_id: string | null;
+      }>;
+    };
+
+    if (typeof maybeDb.getEnvironmentsByProject !== 'function') {
+      return null;
+    }
+
+    const environments = maybeDb.getEnvironmentsByProject(projectId);
+    const matchingEnvironment = environments.find(
+      (environment) => environment.container_id === containerId,
+    );
+    if (matchingEnvironment) {
+      return matchingEnvironment.id;
+    }
+
+    const productionEnvironment = environments.find(
+      (environment) => environment.type === 'production',
+    );
+    return productionEnvironment?.id ?? null;
+  }
+
+  private markProjectAndEnvironmentsError(projectId: string): void {
+    this.db.updateProject(projectId, { status: 'error' });
+
+    const maybeDb = this.db as {
+      getEnvironmentsByProject?: (id: string) => Array<{ id: string }>;
+      updateEnvironment?: (id: string, updates: { status: 'error' }) => void;
+    };
+
+    if (
+      typeof maybeDb.getEnvironmentsByProject !== 'function' ||
+      typeof maybeDb.updateEnvironment !== 'function'
+    ) {
+      return;
+    }
+
+    for (const environment of maybeDb.getEnvironmentsByProject(projectId)) {
+      maybeDb.updateEnvironment(environment.id, { status: 'error' });
+    }
+  }
+
+  private async getContainerStderrSnippet(
+    containerId: string,
+    tail = INCIDENT_ERROR_SNIPPET_LINES,
+  ): Promise<string | null> {
+    try {
+      const container = this.docker.getClient().getContainer(containerId);
+      const logs = await container.logs({
+        stdout: false,
+        stderr: true,
+        tail,
+        follow: false,
+      });
+      const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(logs as string);
+      const decoded = stripDockerStreamHeaders(buffer).trim();
+      return decoded.length > 0 ? decoded : null;
+    } catch (error) {
+      log.debug({ containerId, error }, 'Failed to read container stderr snippet');
+      return null;
+    }
+  }
+
+  private getContainerUptimeMs(startedAt: string | undefined): number | null {
+    if (!startedAt) {
+      return null;
+    }
+
+    const startedAtMs = Date.parse(startedAt);
+    if (Number.isNaN(startedAtMs)) {
+      return null;
+    }
+
+    return Math.max(0, Date.now() - startedAtMs);
+  }
+
+  private recordRuntimeIncident(opts: {
+    projectId: string;
+    containerId: string;
+    category: RecoveryCategory;
+    environmentId?: string | null;
+    exitCode?: number | null;
+    errorSnippet?: string | null;
+    containerImage?: string | null;
+    containerUptimeMs?: number | null;
+    restartCount?: number | null;
+  }): void {
+    try {
+      this.db.createRuntimeIncident({
+        projectId: opts.projectId,
+        environmentId: opts.environmentId,
+        category: opts.category,
+        exitCode: opts.exitCode,
+        errorSnippet: opts.errorSnippet,
+        containerImage: opts.containerImage,
+        containerUptimeMs: opts.containerUptimeMs,
+        restartCount: opts.restartCount,
+      });
+    } catch (error) {
+      log.warn(
+        {
+          projectId: opts.projectId,
+          containerId: opts.containerId,
+          category: opts.category,
+          error,
+        },
+        'Failed to persist runtime incident',
+      );
+    }
+  }
+}
+
+function stripDockerStreamHeaders(buffer: Buffer): string {
+  if (buffer.length === 0) return '';
+
+  const firstByte = buffer[0];
+  if (firstByte !== 0 && firstByte !== 1 && firstByte !== 2) {
+    return buffer.toString('utf8');
+  }
+
+  const HEADER_SIZE = 8;
+  const chunks: string[] = [];
+  let offset = 0;
+
+  while (offset < buffer.length) {
+    if (offset + HEADER_SIZE > buffer.length) {
+      chunks.push(buffer.subarray(offset).toString('utf8'));
+      break;
+    }
+
+    const payloadSize = buffer.readUInt32BE(offset + 4);
+    const payloadStart = offset + HEADER_SIZE;
+    const payloadEnd = payloadStart + payloadSize;
+
+    if (payloadEnd > buffer.length) {
+      chunks.push(buffer.subarray(payloadStart).toString('utf8'));
+      break;
+    }
+
+    chunks.push(buffer.subarray(payloadStart, payloadEnd).toString('utf8'));
+    offset = payloadEnd;
+  }
+
+  return chunks.join('');
 }
