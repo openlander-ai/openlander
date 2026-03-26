@@ -165,22 +165,27 @@ export function ProjectDetail() {
     }
   };
 
-  const handleStop = async () => {
+  const handleStop = () => {
     if (isMobile) {
       showMobileToast();
       return;
     }
     if (!id || actionLoading) return;
-    setActionLoading('stop');
-    try {
-      await stopProject(id, currentEnvType);
-      toast.success('Project stopped');
-    } catch (err) {
-      console.error('Stop failed:', err);
-      toast.error('Stop failed: ' + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setActionLoading(null);
-    }
+    setConfirmAction({
+      type: 'stop',
+      handler: async () => {
+        setActionLoading('stop');
+        try {
+          await stopProject(id, currentEnvType);
+          toast.success('Project stopped');
+        } catch (err) {
+          console.error('Stop failed:', err);
+          toast.error('Stop failed: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleRedeploySkip = async () => {
