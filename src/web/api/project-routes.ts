@@ -9,7 +9,11 @@ import { encrypt } from '../../env/crypto.js';
 import { getProjectUrl, getProjectUrls, getAllIps } from '../../pipeline/traefik.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import { scanForEnvUsage } from '../../pipeline/env-scan.js';
-import { generateEnvExample } from '../../pipeline/env-inject.js';
+import {
+  autoInjectServiceEnv,
+  cleanupAutoInjectedEnv,
+  generateEnvExample,
+} from '../../pipeline/env-inject.js';
 import type { EnvironmentRow, EnvironmentType, ProjectRow } from '../../db/index.js';
 import {
   getEnvironmentByIdOrThrow,
@@ -43,6 +47,34 @@ function parseImageCmd(imageCmd: string | null): string[] | null {
       : null;
   } catch {
     return null;
+  }
+}
+
+function parseServiceCredentials(credentials: string | null): Record<string, string> | undefined {
+  if (!credentials) {
+    return undefined;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(credentials);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    const entries = Object.entries(parsed);
+    const normalized: Record<string, string> = {};
+    for (const [key, value] of entries) {
+      if (typeof value === 'string') {
+        normalized[key] = value;
+        continue;
+      }
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        normalized[key] = String(value);
+      }
+    }
+    return normalized;
+  } catch {
+    return undefined;
   }
 }
 
@@ -536,6 +568,21 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       serviceId,
     });
 
+    const credentials = parseServiceCredentials(service.credentials);
+    const injectedKeys = autoInjectServiceEnv({
+      db: ctx.db,
+      env: ctx.env,
+      projectId: project.id,
+      serviceId: service.id,
+      serviceName: service.name,
+      serviceType: service.type,
+      containerName: service.container_name,
+      credentials,
+    });
+    ctx.db.updateServiceConnection(connection.id, {
+      autoInjectedEnvKeys: JSON.stringify(injectedKeys),
+    });
+
     return c.json(
       {
         id: connection.id,
@@ -548,6 +595,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           containerName: service.container_name,
         },
         createdAt: connection.created_at,
+        autoInjectedEnvKeys: injectedKeys,
       },
       201,
     );
@@ -564,6 +612,17 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         404,
       );
     }
+
+    const parsedAutoInjected = JSON.parse(existing.auto_injected_env_keys ?? '[]') as unknown;
+    const autoInjectedEnvKeys = Array.isArray(parsedAutoInjected)
+      ? parsedAutoInjected.filter((key): key is string => typeof key === 'string')
+      : [];
+    cleanupAutoInjectedEnv({
+      db: ctx.db,
+      env: ctx.env,
+      projectId: project.id,
+      autoInjectedEnvKeys,
+    });
 
     ctx.db.deleteServiceConnectionByProjectAndService(project.id, serviceId);
 
