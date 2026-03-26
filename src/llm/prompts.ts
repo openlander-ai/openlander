@@ -12,7 +12,7 @@
  */
 
 import { getSystemStats } from '../monitor/stats.js';
-import type { ProjectRow, DeployLogRow, Database } from '../db/index.js';
+import type { ProjectRow, DeployLogRow, RuntimeIncidentRow, Database } from '../db/index.js';
 import type { Docker } from '../pipeline/docker.js';
 import { scanUsedPorts } from '../pipeline/port.js';
 import { detectReverseProxy } from '../pipeline/traefik.js';
@@ -579,6 +579,46 @@ Messages prefixed with [Tool Results] are automated responses from tool executio
 // Legacy export for backward compatibility (static, no context).
 export const SYSTEM_PROMPT = BASE_PROMPT;
 
+export function buildIncidentBriefing(incidents: RuntimeIncidentRow[], db: Database): string {
+  if (incidents.length === 0) return '';
+
+  const incidentsByProject = new Map<string, RuntimeIncidentRow[]>();
+  for (const incident of incidents) {
+    const projectIncidents = incidentsByProject.get(incident.project_id);
+    if (projectIncidents) {
+      projectIncidents.push(incident);
+      continue;
+    }
+    incidentsByProject.set(incident.project_id, [incident]);
+  }
+
+  const lines: string[] = ['⚠️ Active incidents:'];
+
+  for (const [projectId, projectIncidents] of incidentsByProject) {
+    if (projectIncidents.length === 0) continue;
+
+    const project = db.getProject(projectId);
+    const projectName = project ? project.name : projectId;
+
+    const categories = Array.from(new Set(projectIncidents.map((incident) => incident.category)));
+    const categorySummary = categories.join(', ');
+    const restartCountSum = projectIncidents.reduce(
+      (sum, incident) => sum + (incident.restart_count ?? 0),
+      0,
+    );
+    const crashCount = restartCountSum > 0 ? restartCountSum : projectIncidents.length;
+    const latestIncident = projectIncidents[0];
+    if (!latestIncident) continue;
+    const errorSnippet = formatIncidentErrorSnippet(latestIncident.error_snippet);
+
+    lines.push(
+      `- ${projectName}: ${categorySummary} (${String(crashCount)}x crashes). Last error: ${errorSnippet}`,
+    );
+  }
+
+  return lines.join('\n');
+}
+
 /**
  * Build deployment history section for the system prompt.
  * Shows last 2 deploy logs per project (max 5 projects) so the LLM
@@ -624,6 +664,18 @@ function extractFailureHint(buildLog: string): string {
     return lastErrorLine.replace('[error] ', '').slice(0, 80);
   }
   return 'see logs';
+}
+
+function formatIncidentErrorSnippet(errorSnippet: string | null): string {
+  if (errorSnippet === null || errorSnippet.trim().length === 0) {
+    return 'n/a';
+  }
+
+  const normalized = errorSnippet.replace(/\s+/g, ' ').trim();
+  const MAX_SNIPPET_LENGTH = 120;
+  return normalized.length > MAX_SNIPPET_LENGTH
+    ? `${normalized.slice(0, MAX_SNIPPET_LENGTH - 3)}...`
+    : normalized;
 }
 
 // ---------------------------------------------------------------------------

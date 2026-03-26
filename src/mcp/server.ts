@@ -24,6 +24,7 @@ import { platformReadToolDefs } from '../tools/defs/platform-read.js';
 import { platformDebugToolDefs } from '../tools/defs/platform-debug.js';
 import { platformActionToolDefs } from '../tools/defs/platform-actions.js';
 import type { ToolDef } from '../tools/defs/types.js';
+import { buildIncidentBriefing } from '../llm/prompts.js';
 
 const log = createModuleLogger('mcp');
 
@@ -283,10 +284,16 @@ No extra configuration needed. Pass them via env_vars in create_deploy_plan or s
 
 // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
 function createMcpServerInstance(ctx: AppContext): Server {
+  const unresolvedIncidents = ctx.db.listUnresolvedRuntimeIncidents();
+  const incidentBriefing = buildIncidentBriefing(unresolvedIncidents, ctx.db);
+  const instructions = incidentBriefing
+    ? `${SERVER_INSTRUCTIONS}\n\n${incidentBriefing}`
+    : SERVER_INSTRUCTIONS;
+
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(
     { name: 'openlander', version: '0.4.1' },
-    { capabilities: { tools: {}, prompts: {} }, instructions: SERVER_INSTRUCTIONS },
+    { capabilities: { tools: {}, prompts: {} }, instructions },
   );
 
   const toolDefs = getMcpToolDefs(ctx.config.mcp.platformTools === true);
