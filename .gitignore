@@ -54,4 +54,4 @@ runtime_err.txt
 
 # Stale artifacts
 references/
-web/@/
+web/@/test-results/
