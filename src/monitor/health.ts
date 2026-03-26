@@ -1,9 +1,11 @@
 import type { Docker } from '../pipeline/docker.js';
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import type { LanguageModel } from 'ai';
 import { createModuleLogger } from '../lib/logger.js';
 import { shouldRunCleanup, diskThresholdCleanup } from '../pipeline/cleanup.js';
 import type { RecoveryCategory } from '../pipeline/recovery-dispatch.js';
+import { diagnoseRuntimeCrash } from './llm-diagnosis.js';
 
 const log = createModuleLogger('health');
 
@@ -11,7 +13,10 @@ export interface HealthMonitorOptions {
   intervalMs?: number;
   timeoutMs?: number;
   maxRetries?: number;
+  aiProvider?: LanguageModel | null;
 }
+
+type MonitorTimingOptions = Omit<HealthMonitorOptions, 'aiProvider'>;
 
 export interface HealthCheckResult {
   projectId: string;
@@ -23,7 +28,7 @@ export interface HealthCheckResult {
   consecutiveFailures: number;
 }
 
-const DEFAULT_OPTIONS: Required<HealthMonitorOptions> = {
+const DEFAULT_OPTIONS: Required<MonitorTimingOptions> = {
   intervalMs: 30000,
   timeoutMs: 5000,
   maxRetries: 3,
@@ -38,17 +43,20 @@ export class HealthMonitor {
   private readonly docker: Docker;
   private readonly db: Database;
   private readonly events: EventBus;
-  private readonly options: Required<HealthMonitorOptions>;
+  private readonly options: Required<MonitorTimingOptions>;
+  private readonly aiProvider: LanguageModel | null;
   private readonly status = new Map<string, HealthCheckResult>();
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private checking = false;
   private lastCleanupAt = 0;
 
   constructor(docker: Docker, db: Database, events: EventBus, options?: HealthMonitorOptions) {
+    const { aiProvider = null, ...monitorOptions } = options ?? {};
     this.docker = docker;
     this.db = db;
     this.events = events;
-    this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.options = { ...DEFAULT_OPTIONS, ...monitorOptions };
+    this.aiProvider = aiProvider;
   }
 
   start(): void {
@@ -128,7 +136,10 @@ export class HealthMonitor {
         .listProjects('running')
         .filter((project) => project.assigned_port != null);
 
-      await Promise.all(projects.map((project) => this.checkProject(project.id)));
+      await Promise.all([
+        Promise.all(projects.map((project) => this.checkProject(project.id))),
+        this.checkServiceHealth(),
+      ]);
 
       const now = Date.now();
       if (shouldRunCleanup() && now - this.lastCleanupAt >= CLEANUP_COOLDOWN_MS) {
@@ -144,6 +155,108 @@ export class HealthMonitor {
     } finally {
       this.checking = false;
     }
+  }
+
+  private async checkServiceHealth(): Promise<void> {
+    const services = this.db
+      .listServices()
+      .filter((service) => service.container_id !== null || service.container_name.length > 0);
+
+    await Promise.all(
+      services.map(async (service) => {
+        const containerRef = service.container_id ?? service.container_name;
+
+        try {
+          const container = this.docker.getClient().getContainer(containerRef);
+          const info = await container.inspect();
+
+          if (!info.State.Running) {
+            if (service.status === 'running') {
+              this.db.updateService(service.id, { status: 'stopped' });
+              const projects = this.db.listServiceConnectionsByService(service.id);
+              const affectedProjects = [...new Set(projects.map((project) => project.project_id))];
+
+              try {
+                this.db.createRuntimeIncident({
+                  projectId: affectedProjects[0] ?? 'unknown',
+                  category: 'service_down',
+                  errorSnippet: JSON.stringify({
+                    serviceName: service.name,
+                    serviceType: service.type,
+                    affectedProjects,
+                  }),
+                });
+              } catch (incidentError) {
+                log.warn(
+                  {
+                    serviceId: service.id,
+                    serviceName: service.name,
+                    containerRef,
+                    error: incidentError,
+                  },
+                  'Failed to persist service-down incident',
+                );
+              }
+
+              log.warn(
+                {
+                  serviceId: service.id,
+                  serviceName: service.name,
+                  containerRef,
+                  affectedProjects,
+                },
+                'Service container is down — incident recorded',
+              );
+            }
+            return;
+          }
+
+          if (service.status === 'stopped' || service.status === 'error') {
+            this.db.updateService(service.id, { status: 'running' });
+          }
+        } catch (error) {
+          log.warn(
+            {
+              serviceId: service.id,
+              serviceName: service.name,
+              containerRef,
+              error,
+            },
+            'Failed to inspect service container',
+          );
+
+          if (service.status !== 'running') {
+            return;
+          }
+
+          this.db.updateService(service.id, { status: 'error' });
+          const projects = this.db.listServiceConnectionsByService(service.id);
+          const affectedProjects = [...new Set(projects.map((project) => project.project_id))];
+
+          try {
+            this.db.createRuntimeIncident({
+              projectId: affectedProjects[0] ?? 'unknown',
+              category: 'service_down',
+              errorSnippet: JSON.stringify({
+                serviceName: service.name,
+                serviceType: service.type,
+                affectedProjects,
+              }),
+            });
+          } catch (incidentError) {
+            log.warn(
+              {
+                serviceId: service.id,
+                serviceName: service.name,
+                containerRef,
+                error: incidentError,
+              },
+              'Failed to persist service-down incident after inspect failure',
+            );
+          }
+        }
+      }),
+    );
   }
 
   private async checkPort(projectId: string, port: number): Promise<HealthCheckResult> {
@@ -173,26 +286,35 @@ export class HealthMonitor {
     if (!containerId) {
       return lastResult;
     }
+    const ensuredContainerId = containerId;
 
     try {
-      const container = this.docker.getClient().getContainer(containerId);
+      const container = this.docker.getClient().getContainer(ensuredContainerId);
       const info = await container.inspect();
 
       const restartCount = info.RestartCount;
       if (restartCount >= 3) {
-        this.recordRuntimeIncident({
+        const errorSnippet = await this.getContainerStderrSnippet(ensuredContainerId);
+        const incidentId = this.recordRuntimeIncident({
           projectId,
-          containerId,
+          containerId: ensuredContainerId,
           category: 'runtime_crash',
-          environmentId: this.resolveIncidentEnvironmentId(projectId, containerId),
+          environmentId: this.resolveIncidentEnvironmentId(projectId, ensuredContainerId),
           exitCode: info.State.ExitCode,
-          errorSnippet: await this.getContainerStderrSnippet(containerId),
+          errorSnippet,
           containerImage: info.Config.Image,
           containerUptimeMs: this.getContainerUptimeMs(info.State.StartedAt),
           restartCount,
         });
+        this.triggerRuntimeCrashDiagnosis({
+          projectId,
+          incidentId,
+          category: 'runtime_crash',
+          errorSnippet,
+          restartCount,
+        });
         log.warn(
-          { projectId, containerId, restartCount },
+          { projectId, containerId: ensuredContainerId, restartCount },
           'Container in crash loop — marking project as error',
         );
         this.markProjectAndEnvironmentsError(projectId);
@@ -215,19 +337,27 @@ export class HealthMonitor {
 
       const exitCode = info.State.ExitCode;
       if (!info.State.Running && exitCode !== 0) {
-        this.recordRuntimeIncident({
+        const errorSnippet = await this.getContainerStderrSnippet(ensuredContainerId);
+        const incidentId = this.recordRuntimeIncident({
           projectId,
-          containerId,
+          containerId: ensuredContainerId,
           category: 'runtime_crash',
-          environmentId: this.resolveIncidentEnvironmentId(projectId, containerId),
+          environmentId: this.resolveIncidentEnvironmentId(projectId, ensuredContainerId),
           exitCode,
-          errorSnippet: await this.getContainerStderrSnippet(containerId),
+          errorSnippet,
           containerImage: info.Config.Image,
           containerUptimeMs: this.getContainerUptimeMs(info.State.StartedAt),
           restartCount,
         });
+        this.triggerRuntimeCrashDiagnosis({
+          projectId,
+          incidentId,
+          category: 'runtime_crash',
+          errorSnippet,
+          restartCount,
+        });
         log.warn(
-          { projectId, containerId, exitCode },
+          { projectId, containerId: ensuredContainerId, exitCode },
           'Container crashed — marking project as error',
         );
         this.markProjectAndEnvironmentsError(projectId);
@@ -240,12 +370,15 @@ export class HealthMonitor {
     } catch (error) {
       this.recordRuntimeIncident({
         projectId,
-        containerId,
+        containerId: ensuredContainerId,
         category: 'runtime_generic',
-        environmentId: this.resolveIncidentEnvironmentId(projectId, containerId),
+        environmentId: this.resolveIncidentEnvironmentId(projectId, ensuredContainerId),
         errorSnippet: error instanceof Error ? error.message : String(error),
       });
-      log.warn({ projectId, containerId }, 'Container not found — marking project as error');
+      log.warn(
+        { projectId, containerId: ensuredContainerId },
+        'Container not found — marking project as error',
+      );
       this.markProjectAndEnvironmentsError(projectId);
     }
 
@@ -393,9 +526,9 @@ export class HealthMonitor {
     containerImage?: string | null;
     containerUptimeMs?: number | null;
     restartCount?: number | null;
-  }): void {
+  }): string | null {
     try {
-      this.db.createRuntimeIncident({
+      const incident = this.db.createRuntimeIncident({
         projectId: opts.projectId,
         environmentId: opts.environmentId,
         category: opts.category,
@@ -405,6 +538,7 @@ export class HealthMonitor {
         containerUptimeMs: opts.containerUptimeMs,
         restartCount: opts.restartCount,
       });
+      return incident.id;
     } catch (error) {
       log.warn(
         {
@@ -415,7 +549,37 @@ export class HealthMonitor {
         },
         'Failed to persist runtime incident',
       );
+      return null;
     }
+  }
+
+  private triggerRuntimeCrashDiagnosis(opts: {
+    projectId: string;
+    incidentId: string | null;
+    category: RecoveryCategory;
+    errorSnippet: string | null;
+    restartCount: number | null;
+  }): void {
+    if (!opts.incidentId || opts.restartCount == null || opts.restartCount < 3) {
+      return;
+    }
+
+    const projectName = this.db.getProject(opts.projectId)?.name;
+
+    void diagnoseRuntimeCrash({
+      db: this.db,
+      incidentId: opts.incidentId,
+      errorSnippet: opts.errorSnippet ?? '',
+      category: opts.category,
+      restartCount: opts.restartCount,
+      projectName,
+      aiProvider: this.aiProvider,
+    }).catch((err: unknown) => {
+      log.warn(
+        { err, incidentId: opts.incidentId, projectId: opts.projectId },
+        'LLM diagnosis failed',
+      );
+    });
   }
 }
 

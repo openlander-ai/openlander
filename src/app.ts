@@ -219,6 +219,7 @@ export async function createAppContext(
   // v0.2: Health monitoring
   const healthMonitor = new HealthMonitor(docker, db, eventBus, {
     intervalMs: config.monitoring.healthcheckIntervalSec * 1000,
+    aiProvider: model,
   });
 
   // v0.2: Webhook auto-redeploy
