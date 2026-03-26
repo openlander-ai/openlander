@@ -545,10 +545,13 @@ function handleInitialStatusCheck(
         projectId: project.id,
       });
     } else if (fresh.status === 'error') {
+      const lastLog = ctx.db.getLastDeployLog(project.id);
+      const isBuildFailure =
+        lastLog?.status === 'failed' && lastLog.build_log?.includes('Build failed');
       write({
         id: 'current-error',
         type: 'error',
-        message: 'Build failed',
+        message: isBuildFailure ? 'Build failed' : 'Container crashed',
         projectId: project.id,
       });
     } else {

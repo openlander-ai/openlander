@@ -42,12 +42,18 @@ export class ContainerLifecycle {
           'Container not found during start — may have been removed externally',
         );
         this.db.updateProject(projectId, { status: 'error' });
+        for (const env of this.db.getEnvironmentsByProject(projectId)) {
+          this.db.updateEnvironment(env.id, { status: 'error' });
+        }
         throw new Error(`Container for project ${project.name} no longer exists. Please redeploy.`);
       }
       throw err;
     }
 
     this.db.updateProject(projectId, { status: 'running' });
+    for (const env of this.db.getEnvironmentsByProject(projectId)) {
+      this.db.updateEnvironment(env.id, { status: 'running' });
+    }
     await eventBus.emit('container:start', { projectId, containerId: project.container_id });
   }
 
@@ -75,6 +81,9 @@ export class ContainerLifecycle {
     }
 
     this.db.updateProject(projectId, { status: 'stopped' });
+    for (const env of this.db.getEnvironmentsByProject(projectId)) {
+      this.db.updateEnvironment(env.id, { status: 'stopped' });
+    }
     await eventBus.emit('container:stop', { projectId, containerId: project.container_id });
   }
 

@@ -183,6 +183,9 @@ export class HealthMonitor {
           'Container in crash loop — marking project as error',
         );
         this.db.updateProject(projectId, { status: 'error' });
+        for (const env of this.db.getEnvironmentsByProject(projectId)) {
+          this.db.updateEnvironment(env.id, { status: 'error' });
+        }
         await this.events.emit('deploy:failed', {
           projectId,
           error: `Container crash loop detected (${String(restartCount)} restarts)`,
@@ -207,6 +210,9 @@ export class HealthMonitor {
           'Container crashed — marking project as error',
         );
         this.db.updateProject(projectId, { status: 'error' });
+        for (const env of this.db.getEnvironmentsByProject(projectId)) {
+          this.db.updateEnvironment(env.id, { status: 'error' });
+        }
         await this.events.emit('deploy:failed', {
           projectId,
           error: `Container exited with code ${String(exitCode)}`,
@@ -216,6 +222,9 @@ export class HealthMonitor {
     } catch {
       log.warn({ projectId, containerId }, 'Container not found — marking project as error');
       this.db.updateProject(projectId, { status: 'error' });
+      for (const env of this.db.getEnvironmentsByProject(projectId)) {
+        this.db.updateEnvironment(env.id, { status: 'error' });
+      }
     }
 
     return lastResult;

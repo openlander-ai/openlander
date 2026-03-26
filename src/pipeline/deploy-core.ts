@@ -449,6 +449,9 @@ export class DeployPipeline {
     log.error({ projectId, error: errMsg }, 'Background deploy failed');
     this.jobManager?.updatePhase(projectId, 'failed', errMsg);
     this.db.updateProject(projectId, { status: 'error' });
+    for (const env of this.db.getEnvironmentsByProject(projectId)) {
+      this.db.updateEnvironment(env.id, { status: 'error' });
+    }
     try {
       const lastLog = this.db.getLastDeployLog(projectId);
       if (lastLog?.status === 'failed') {

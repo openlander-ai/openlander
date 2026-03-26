@@ -4,7 +4,8 @@ import type { ConsoleLogLevel } from '@/types';
 /** Detect log level from line content */
 export function detectLevel(line: string): ConsoleLogLevel {
   const lower = normalizeLogText(line).toLowerCase();
-  if (/\berror\b|\bfatal\b|\bpanic\b/.test(lower)) return 'error';
+  if (/\berror\b|\w+error\b|\bfatal\b|\bpanic\b|\bexception\b|\btraceback\b|\berrno\b/.test(lower))
+    return 'error';
   if (/\bwarn(ing)?\b/.test(lower)) return 'warn';
   if (/\binfo\b/.test(lower)) return 'info';
   if (/\bdebug\b|\btrace\b/.test(lower)) return 'debug';

@@ -38,6 +38,7 @@ import {
   formatDeploymentDuration,
 } from '@/lib/deployments';
 import { parseStaticLogEntries, type LogEntry } from '@/hooks/use-log-stream';
+import { detectLevel } from '@/lib/log-utils';
 
 // ── Error boundary for deploy terminal ──────────────────────────────────────
 
@@ -66,17 +67,6 @@ class LocalErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
     }
     return this.props.children;
   }
-}
-
-// ── Log level detection (shared with LogViewer) ─────────────────────────────
-
-function detectLevel(line: string): 'error' | 'warn' | 'info' | 'debug' | 'plain' {
-  const lower = normalizeLogText(line).toLowerCase();
-  if (/\berror\b|\bfatal\b|\bpanic\b/.test(lower)) return 'error';
-  if (/\bwarn(ing)?\b/.test(lower)) return 'warn';
-  if (/\binfo\b/.test(lower)) return 'info';
-  if (/\bdebug\b|\btrace\b/.test(lower)) return 'debug';
-  return 'plain';
 }
 
 // ── Trigger icon resolver ───────────────────────────────────────────────────

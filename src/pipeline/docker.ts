@@ -419,7 +419,7 @@ export class Docker {
         },
         Binds: binds.length > 0 ? binds : undefined,
         NetworkMode: options.network ?? this.networkName,
-        RestartPolicy: { Name: 'unless-stopped' },
+        RestartPolicy: { Name: 'on-failure', MaximumRetryCount: 5 },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
       },
