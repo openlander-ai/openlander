@@ -54,20 +54,24 @@ export function InfraStep({
 
         {/* Infrastructure status */}
         <div className="space-y-3 text-left">
-          <StatusRow ok={status.docker.ok} label={'Docker Engine'} detail={status.docker.message} />
+          <StatusRow
+            ok={status.docker.ok}
+            label={t('setup.infra.dockerEngine')}
+            detail={status.docker.message}
+          />
           {!status.docker.ok && (
             <div className="ml-10 space-y-2">
               <DockerFixGuide state={status.docker.state} />
               <Button onClick={refetch} variant="outline" size="sm" className="text-xs">
-                {'Refresh Status'}
+                {t('setup.common.refreshStatus')}
               </Button>
             </div>
           )}
 
           <StatusRow
             ok={status.traefik.ok}
-            label={'Traefik Proxy'}
-            detail={status.traefik.ok ? 'Running' : 'Stopped'}
+            label={t('setup.infra.traefikProxy')}
+            detail={status.traefik.ok ? t('setup.infra.running') : t('setup.infra.stopped')}
           />
           {!status.traefik.ok && status.docker.ok && (
             <div className="ml-10">
@@ -80,7 +84,7 @@ export function InfraStep({
               >
                 {startingTraefik && <Loader2 className="h-3 w-3 animate-spin" />}
                 <Network className="h-3 w-3" />
-                {'Traefik Proxy'}
+                {t('setup.infra.traefikProxy')}
               </Button>
             </div>
           )}
@@ -92,7 +96,7 @@ export function InfraStep({
           size="lg"
           className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
         >
-          {'Get Started'}
+          {t('setup.common.getStarted')}
           <ArrowRight className="h-4 w-4" />
         </Button>
 

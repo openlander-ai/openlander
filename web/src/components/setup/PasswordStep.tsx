@@ -3,12 +3,15 @@ import { Lock } from 'lucide-react';
 import { setupPassword } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useLanguage } from '@/i18n/context';
 
 interface PasswordStepProps {
   onNext: () => void;
+  onBack: () => void;
 }
 
-export function PasswordStep({ onNext }: PasswordStepProps) {
+export function PasswordStep({ onNext, onBack }: PasswordStepProps) {
+  const { t } = useLanguage();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
@@ -18,11 +21,11 @@ export function PasswordStep({ onNext }: PasswordStepProps) {
     e.preventDefault();
     setError('');
     if (password !== confirm) {
-      setError('Passwords do not match');
+      setError(t('setup.password.mismatch'));
       return;
     }
     if (!password) {
-      setError('Password cannot be empty');
+      setError(t('setup.password.empty'));
       return;
     }
     setSaving(true);
@@ -37,46 +40,53 @@ export function PasswordStep({ onNext }: PasswordStepProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Lock className="h-6 w-6 text-agent" />
-        <div>
-          <h2 className="font-display text-xl font-bold text-primary-ol">Set Password</h2>
-          <p className="text-sm font-body text-secondary-ol mt-0.5">
-            Protect your dashboard with a password
-          </p>
+    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+      <div className="text-center space-y-6">
+        <div className="mx-auto w-16 h-16 rounded-2xl bg-agent/10 flex items-center justify-center">
+          <Lock className="h-8 w-8 text-agent" />
         </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="bg-bg-panel border-border"
-            autoFocus
-          />
-          <Input
-            type="password"
-            placeholder="Confirm password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            className="bg-bg-panel border-border"
-          />
+          <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+            {t('setup.password.title')}
+          </h2>
+          <p className="text-sm font-body text-secondary-ol">{t('setup.password.subtitle')}</p>
         </div>
 
-        {error && <p className="text-sm text-red-400 font-body">{error}</p>}
+        <form onSubmit={handleSubmit} className="space-y-4 text-left">
+          <div className="space-y-2">
+            <Input
+              type="password"
+              placeholder={t('setup.password.placeholder')}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="bg-bg-panel border-border"
+              autoFocus
+            />
+            <Input
+              type="password"
+              placeholder={t('setup.password.confirmPlaceholder')}
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className="bg-bg-panel border-border"
+            />
+          </div>
 
-        <Button
-          type="submit"
-          disabled={saving || !password || !confirm}
-          className="w-full bg-agent hover:bg-agent/90 text-white font-body"
-        >
-          {saving ? 'Setting up...' : 'Set Password & Continue'}
-        </Button>
-      </form>
+          {error && <p className="text-sm text-red-400 font-body">{error}</p>}
+
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onBack}>
+              {t('setup.common.back')}
+            </Button>
+            <Button
+              type="submit"
+              disabled={saving || !password || !confirm}
+              className="flex-1 bg-agent hover:bg-agent/90 text-bg-app font-body"
+            >
+              {saving ? t('setup.password.saving') : t('setup.password.submit')}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

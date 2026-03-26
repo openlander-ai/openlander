@@ -22,6 +22,14 @@ export function createAuthRoutes(authService: AuthService): Hono {
     }
 
     const { apiToken } = authService.setupPassword(body.password);
+
+    // Auto-login: create session so subsequent setup API calls work
+    const session = authService.createSession();
+    c.header(
+      'Set-Cookie',
+      `ol_session=${session.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${String(SESSION_MAX_AGE)}`,
+    );
+
     return c.json({ success: true, apiToken });
   });
 

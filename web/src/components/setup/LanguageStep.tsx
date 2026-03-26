@@ -1,6 +1,13 @@
 import { Globe, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
+import { useLanguage } from '@/i18n/context';
 
 type Language = 'en' | 'ko';
 
@@ -11,6 +18,8 @@ interface LanguageStepProps {
 }
 
 export function LanguageStep({ language, setLanguage, onNext }: LanguageStepProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="text-center space-y-6">
@@ -18,47 +27,28 @@ export function LanguageStep({ language, setLanguage, onNext }: LanguageStepProp
           <Globe className="h-8 w-8 text-agent" />
         </div>
         <div className="space-y-2">
-          <h1 className="font-display text-3xl font-bold text-primary-ol tracking-tight">
-            {'Language 🌐'}
-          </h1>
+          <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
+            {t('setup.language.title')}
+          </h2>
+          <p className="text-sm font-body text-secondary-ol">{t('setup.language.subtitle')}</p>
         </div>
 
-        {/* Language selection cards */}
-        <div className="grid grid-cols-2 gap-4">
-          <button
-            type="button"
-            onClick={() => setLanguage('en')}
-            className={cn(
-              'flex flex-col items-center gap-3 p-6 rounded-xl border-2 transition-all',
-              language === 'en'
-                ? 'border-foreground bg-bg-subtle/50'
-                : 'border-border bg-bg-subtle/30 hover:border-border/80',
-            )}
-          >
-            <span className="text-4xl">🇺🇸</span>
-            <span className="text-sm font-body font-medium">{'English'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setLanguage('ko')}
-            className={cn(
-              'flex flex-col items-center gap-3 p-6 rounded-xl border-2 transition-all',
-              language === 'ko'
-                ? 'border-foreground bg-bg-subtle/50'
-                : 'border-border bg-bg-subtle/30 hover:border-border/80',
-            )}
-          >
-            <span className="text-4xl">🇰🇷</span>
-            <span className="text-sm font-body font-medium">{'한국어'}</span>
-          </button>
-        </div>
+        <Select value={language} onValueChange={(val) => setLanguage(val as Language)}>
+          <SelectTrigger className="w-full bg-bg-app border-border font-mono text-sm">
+            <SelectValue placeholder="Choose language..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="ko">한국어</SelectItem>
+          </SelectContent>
+        </Select>
 
         <Button
           onClick={onNext}
           size="lg"
           className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
         >
-          {'Continue'}
+          {t('setup.common.continue')}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>

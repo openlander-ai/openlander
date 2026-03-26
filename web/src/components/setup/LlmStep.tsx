@@ -1,7 +1,15 @@
 import { Key, Loader2, ArrowLeft, Rocket, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select';
 import { StatusRow } from './shared';
+import { useLanguage } from '@/i18n/context';
 
 interface SetupStatus {
   docker: {
@@ -49,6 +57,8 @@ export function LlmStep({
   onComplete,
   onBack,
 }: LlmStepProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
       <div className="space-y-6">
@@ -57,36 +67,32 @@ export function LlmStep({
             <Key className="h-8 w-8 text-agent" />
           </div>
           <h2 className="font-display text-2xl font-bold text-primary-ol tracking-tight">
-            {'API Key'}
+            {t('setup.llmStep.title')}
           </h2>
-          <p className="text-sm font-body text-secondary-ol">
-            {'Required — AI analyzes build failures and auto-fixes them'}
-          </p>
+          <p className="text-sm font-body text-secondary-ol">{t('setup.llmStep.subtitle')}</p>
         </div>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
-          <p className="text-sm font-body text-muted-ol">
-            An LLM API key is required for OpenLander to analyze build failures and automatically
-            fix them. This is the core feature that sets OpenLander apart.
-          </p>
+          <p className="text-sm font-body text-muted-ol">{t('setup.llmStep.description')}</p>
 
           <form onSubmit={onSaveApiKey} className="space-y-3">
             <div className="space-y-1.5">
-              <p className="text-xs font-body text-muted-ol">Provider</p>
-              <select
-                value={llmProvider}
-                onChange={(e) => onSetLlmProvider(e.target.value)}
-                className="w-full rounded-md border border-border bg-bg-app px-3 py-2 text-sm font-mono"
-              >
-                <option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-                <option value="openrouter">OpenRouter</option>
-                <option value="ollama">Ollama (Local)</option>
-              </select>
+              <p className="text-xs font-body text-muted-ol">{t('setup.llmStep.provider')}</p>
+              <Select value={llmProvider} onValueChange={onSetLlmProvider}>
+                <SelectTrigger className="w-full bg-bg-app border-border font-mono text-sm">
+                  <SelectValue placeholder="Choose provider..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gemini">Google Gemini</SelectItem>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="anthropic">Anthropic</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                  <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
-              <p className="text-xs font-body text-muted-ol">API Key</p>
+              <p className="text-xs font-body text-muted-ol">{t('setup.llmStep.apiKeyLabel')}</p>
               <Input
                 type="password"
                 placeholder={
@@ -113,7 +119,7 @@ export function LlmStep({
               ) : (
                 <Save className="h-3.5 w-3.5" />
               )}
-              Test & Save
+              {t('setup.llmStep.testAndSave')}
             </Button>
             {llmError && <p className="text-sm font-body text-error">{llmError}</p>}
           </form>
@@ -122,34 +128,34 @@ export function LlmStep({
         {/* Summary */}
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
           <p className="text-xs font-body text-muted-ol uppercase tracking-wider">
-            {'Setup Summary'}
+            {t('setup.llmStep.setupSummary')}
           </p>
           <StatusRow
             ok={status.docker.ok}
-            label="Docker"
-            detail={status.docker.ok ? 'Running' : 'Error'}
+            label={t('setup.llmStep.docker')}
+            detail={status.docker.ok ? t('setup.infra.running') : t('setup.llmStep.error')}
           />
           <StatusRow
             ok={status.traefik.ok}
-            label="Traefik"
-            detail={status.traefik.ok ? 'Running' : 'Stopped'}
+            label={t('setup.llmStep.traefik')}
+            detail={status.traefik.ok ? t('setup.infra.running') : t('setup.infra.stopped')}
           />
           <StatusRow
             ok={status.github?.ok || false}
-            label="GitHub"
-            detail={status.github?.ok ? 'Connected' : 'Skipped'}
+            label={t('setup.llmStep.github')}
+            detail={status.github?.ok ? t('setup.llmStep.connected') : t('setup.llmStep.skipped')}
           />
           <StatusRow
             ok={status.llm?.ok || false}
-            label="API Key"
-            detail={status.llm?.ok ? 'Configured' : 'Skipped'}
+            label={t('setup.llmStep.title')}
+            detail={status.llm?.ok ? t('setup.llmStep.configured') : t('setup.llmStep.skipped')}
           />
         </div>
 
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={onBack} className="gap-1.5 font-body">
             <ArrowLeft className="h-3.5 w-3.5" />
-            {'Back'}
+            {t('setup.common.back')}
           </Button>
           <Button
             onClick={onComplete}
@@ -162,7 +168,7 @@ export function LlmStep({
             ) : (
               <Rocket className="h-4 w-4" />
             )}
-            {'Start Deploying'}
+            {t('setup.llmStep.startDeploying')}
           </Button>
         </div>
       </div>
