@@ -232,6 +232,13 @@ export async function createAppContext(
 
   const serviceManager = new ServiceManager(docker, db);
 
+  try {
+    await traefik.ensureAllNetworks();
+    await serviceManager.reconcileServiceNetworks();
+  } catch (err) {
+    log.warn({ err }, 'Service network reconciliation failed during startup');
+  }
+
   // (Build debugger moved above pipeline creation)
 
   // v0.4: Preview deployer

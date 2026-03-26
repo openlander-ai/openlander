@@ -485,6 +485,25 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/services', (c) => {
     const project = getProjectOrThrow(c, ctx);
+    const connections = ctx.db.listServiceConnectionsByProject(project.id);
+
+    if (connections.length > 0) {
+      const services = connections
+        .map((connection) => ctx.db.getService(connection.service_id))
+        .filter((service) => service !== undefined);
+
+      return c.json(
+        services.map((service) => ({
+          id: service.id,
+          name: service.name,
+          type: service.type,
+          status: service.status,
+          port: service.port,
+          containerName: service.container_name,
+        })),
+      );
+    }
+
     const services = ctx.serviceManager.getProjectServices(project.id);
     return c.json(
       services.map((s) => ({
@@ -496,6 +515,59 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         containerName: s.container_name,
       })),
     );
+  });
+
+  api.post('/projects/:id/services/:serviceId', (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    const serviceId = c.req.param('serviceId');
+
+    const service = ctx.db.getService(serviceId);
+    if (!service) {
+      return c.json({ error: 'SERVICE_NOT_FOUND', message: 'Service not found' }, 404);
+    }
+
+    const existing = ctx.db.getServiceConnectionByProjectAndService(project.id, serviceId);
+    if (existing) {
+      return c.json({ error: 'ALREADY_CONNECTED', message: 'Service already connected' }, 409);
+    }
+
+    const connection = ctx.db.createServiceConnection({
+      projectId: project.id,
+      serviceId,
+    });
+
+    return c.json(
+      {
+        id: connection.id,
+        service: {
+          id: service.id,
+          name: service.name,
+          type: service.type,
+          status: service.status,
+          port: service.port,
+          containerName: service.container_name,
+        },
+        createdAt: connection.created_at,
+      },
+      201,
+    );
+  });
+
+  api.delete('/projects/:id/services/:serviceId', (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    const serviceId = c.req.param('serviceId');
+
+    const existing = ctx.db.getServiceConnectionByProjectAndService(project.id, serviceId);
+    if (!existing) {
+      return c.json(
+        { error: 'NOT_CONNECTED', message: 'Service not connected to this project' },
+        404,
+      );
+    }
+
+    ctx.db.deleteServiceConnectionByProjectAndService(project.id, serviceId);
+
+    return c.json({ message: 'Service disconnected', serviceId });
   });
 
   // --- Deployment History ---

@@ -192,6 +192,138 @@ export class ServiceManager {
     }
   }
 
+  /**
+   * Reconcile all existing services to the shared network with aliases.
+   * Called at startup to ensure DNS resolution works for pre-existing services.
+   * Idempotent: skips services already connected with correct alias.
+   */
+  async reconcileServiceNetworks(): Promise<void> {
+    const services = this.db.listServices();
+    const client = this.docker.getClient();
+
+    let reconciled = 0;
+    let migrated = 0;
+    let alreadyConnected = 0;
+
+    for (const service of services) {
+      const containerRef = service.container_id ?? service.container_name;
+      if (!containerRef) {
+        continue;
+      }
+
+      reconciled += 1;
+
+      try {
+        const container = client.getContainer(containerRef);
+        const info = await container.inspect();
+
+        if (!info.State.Running) {
+          log.warn(
+            { serviceId: service.id, serviceName: service.name, containerRef },
+            'Service container is stopped — skipping shared network reconciliation',
+          );
+          continue;
+        }
+
+        const networks = info.NetworkSettings.Networks;
+        const sharedNetwork = networks[SHARED_NETWORK_NAME];
+        const aliasesRaw: unknown = sharedNetwork?.Aliases;
+        const aliases: string[] = Array.isArray(aliasesRaw)
+          ? aliasesRaw.filter((alias): alias is string => typeof alias === 'string')
+          : [];
+        const hasAlias = aliases.includes(service.name);
+
+        if (!sharedNetwork) {
+          try {
+            await client.getNetwork(SHARED_NETWORK_NAME).connect({
+              Container: info.Id,
+              EndpointConfig: { Aliases: [service.name] },
+            });
+            migrated += 1;
+            log.info(
+              { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+              'Service network reconciled (migrated to shared network)',
+            );
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg.includes('already exists') || msg.includes('already connected')) {
+              alreadyConnected += 1;
+              log.info(
+                { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+                'Service already connected to shared network',
+              );
+              continue;
+            }
+            throw err;
+          }
+          continue;
+        }
+
+        if (hasAlias) {
+          alreadyConnected += 1;
+          log.info(
+            { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+            'Service already connected to shared network with alias',
+          );
+          continue;
+        }
+
+        try {
+          await client.getNetwork(SHARED_NETWORK_NAME).disconnect({
+            Container: info.Id,
+            Force: false,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes('is not connected') && !msg.includes('No such container')) {
+            throw err;
+          }
+        }
+
+        try {
+          await client.getNetwork(SHARED_NETWORK_NAME).connect({
+            Container: info.Id,
+            EndpointConfig: { Aliases: [service.name] },
+          });
+          migrated += 1;
+          log.info(
+            { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+            'Service network reconciled (alias updated on shared network)',
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes('already exists') || msg.includes('already connected')) {
+            alreadyConnected += 1;
+            log.info(
+              { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+              'Service already connected to shared network',
+            );
+            continue;
+          }
+          throw err;
+        }
+      } catch (err) {
+        if (this.isNotFoundError(err)) {
+          log.warn(
+            { err, serviceId: service.id, serviceName: service.name, containerRef },
+            'Service container not found — skipping shared network reconciliation',
+          );
+          continue;
+        }
+
+        log.warn(
+          { err, serviceId: service.id, serviceName: service.name, containerRef },
+          'Failed to reconcile service shared network connection',
+        );
+      }
+    }
+
+    log.info(
+      { reconciled, migrated, alreadyConnected },
+      `Reconciled ${String(reconciled)} services: ${String(migrated)} migrated, ${String(alreadyConnected)} already connected`,
+    );
+  }
+
   async create(opts: {
     name: string;
     template?: string;
