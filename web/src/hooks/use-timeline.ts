@@ -64,7 +64,8 @@ export function useTimeline({
 
       const item = toTimelineItem(event);
       setItems((prev) => {
-        if (item.type === 'progress') {
+        const isProgress = item.type === 'progress';
+        if (isProgress) {
           return [...prev.filter((p) => p.type !== 'progress'), item];
         }
         return [...prev, item];

@@ -259,6 +259,49 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         ...scopedMeta,
       };
 
+    case 'agent_thinking':
+      return {
+        id,
+        type: 'agent_thinking',
+        timestamp: event.timestamp,
+        title: event.message,
+        content: event.message,
+        percent: -1,
+        ...scopedMeta,
+      };
+
+    case 'agent_tool_call':
+      return {
+        id,
+        type: 'agent_tool_call',
+        timestamp: event.timestamp,
+        title: event.message,
+        percent: -1,
+        toolName: event.message.match(/tool:?\s*(\w+)/i)?.[1],
+        ...scopedMeta,
+      };
+
+    case 'agent_tool_result':
+      return {
+        id,
+        type: 'agent_tool_result',
+        timestamp: event.timestamp,
+        title: event.message,
+        percent: -1,
+        ...scopedMeta,
+      };
+
+    case 'agent_message':
+      return {
+        id,
+        type: 'agent_message',
+        timestamp: event.timestamp,
+        title: event.message,
+        detail: event.detail ?? undefined,
+        percent: -1,
+        ...scopedMeta,
+      };
+
     case 'needs_user_action':
       return {
         id,
