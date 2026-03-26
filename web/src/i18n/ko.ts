@@ -380,4 +380,26 @@ export const translations = {
   llmSettings: {
     oauthComingSoon: 'Coming Soon — 다음 업데이트에서 OAuth 로그인을 지원합니다',
   },
+  project: {
+    confirm: {
+      stopTitle: '프로젝트 중지',
+      stopDescription: '{env} 환경에서 이 프로젝트를 중지하시겠습니까?',
+      deleteTitle: '프로젝트 삭제',
+      deleteDescription: '이 프로젝트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
+      confirm: '확인',
+      cancel: '취소',
+    },
+    compare: {
+      title: '환경 비교',
+      button: '비교',
+      noDevEnv: '개발 환경 없음',
+      status: '상태',
+      branch: '브랜치',
+      url: 'URL',
+      lastDeploy: '최근 배포',
+      imageTag: '이미지 태그',
+      production: '프로덕션',
+      development: '개발',
+    },
+  },
 } as const;

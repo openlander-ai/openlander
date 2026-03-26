@@ -21,6 +21,7 @@ import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/layout/ShareDialog';
 import type { EnvironmentType } from '@/types';
 import { parseEnvContent } from '@/lib/parse-env';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 import { ProjectHeader } from '@/components/project/ProjectHeader';
 import { ProjectDetailLoading } from '@/components/project/ProjectDetailLoading';
@@ -51,6 +52,10 @@ export function ProjectDetail() {
     type: null,
   });
   const [addEnvBranch, setAddEnvBranch] = useState('');
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'stop' | 'delete';
+    handler: () => void;
+  } | null>(null);
 
   const validEnvs: EnvironmentType[] = ['production', 'development'];
   const envParam = searchParams.get('env') as EnvironmentType;
@@ -310,30 +315,40 @@ export function ProjectDetail() {
   const handleDelete = async () => {
     if (!id || actionLoading) return;
     if (currentEnvType === 'production') {
-      if (!confirm('Are you sure you want to delete this project?')) return;
-      setActionLoading('delete');
-      try {
-        await deleteProject(id);
-        window.location.href = '/projects';
-      } catch (err) {
-        toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
-      } finally {
-        setActionLoading(null);
-      }
+      setConfirmAction({
+        type: 'delete',
+        handler: async () => {
+          setActionLoading('delete');
+          try {
+            await deleteProject(id);
+            window.location.href = '/projects';
+          } catch (err) {
+            toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
+          } finally {
+            setActionLoading(null);
+          }
+        },
+      });
+      return;
     } else {
       if (!selectedEnv) return;
-      if (!confirm(`Are you sure you want to delete the ${currentEnvType} environment?`)) return;
-      setActionLoading('delete');
-      try {
-        await deleteEnvironment(id, selectedEnv.id);
-        toast.success('Environment deleted');
-        handleEnvChange('production');
-        await fetchProject();
-      } catch (err) {
-        toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
-      } finally {
-        setActionLoading(null);
-      }
+      setConfirmAction({
+        type: 'delete',
+        handler: async () => {
+          setActionLoading('delete');
+          try {
+            await deleteEnvironment(id, selectedEnv.id);
+            toast.success('Environment deleted');
+            handleEnvChange('production');
+            await fetchProject();
+          } catch (err) {
+            toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
+          } finally {
+            setActionLoading(null);
+          }
+        },
+      });
+      return;
     }
   };
 
@@ -384,6 +399,7 @@ export function ProjectDetail() {
           activeTab={activeTab}
           onActiveTabChange={setActiveTab}
           displayProject={displayProject}
+          environments={environments}
           allTimelineItems={allTimelineItems}
           isStreaming={isStreaming}
           timelineDisconnected={timelineDisconnected}
@@ -444,6 +460,30 @@ export function ProjectDetail() {
         open={shareOpen}
         onOpenChange={setShareOpen}
         onShareChange={fetchProject}
+      />
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+        title={
+          confirmAction?.type === 'delete'
+            ? t('project.confirm.deleteTitle')
+            : t('project.confirm.stopTitle')
+        }
+        description={
+          confirmAction?.type === 'delete'
+            ? t('project.confirm.deleteDescription')
+            : t('project.confirm.stopDescription').replace('{env}', currentEnvType ?? 'production')
+        }
+        confirmLabel={t('project.confirm.confirm')}
+        cancelLabel={t('project.confirm.cancel')}
+        variant={confirmAction?.type === 'delete' ? 'destructive' : 'default'}
+        onConfirm={() => {
+          confirmAction?.handler();
+          setConfirmAction(null);
+        }}
       />
     </>
   );

@@ -86,14 +86,22 @@ export function ProjectCard({
                 return null;
               const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
               return (
-                <div
+                <button
                   key={env.type}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-[10px] font-mono text-secondary-ol"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onNavigate(`/projects/${project.id}?env=${env.type}`);
+                  }}
+                  className={cn(
+                    'flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-[10px] font-mono text-secondary-ol',
+                    'cursor-pointer transition-all hover:ring-1 hover:ring-current/30',
+                  )}
                   title={`${env.type} - ${envStatus.label}`}
                 >
                   <div className={cn('h-1.5 w-1.5 rounded-full', envStatus.dot)} />
                   {env.type === 'production' ? 'PROD' : 'DEV'}
-                </div>
+                </button>
               );
             })}
           </div>

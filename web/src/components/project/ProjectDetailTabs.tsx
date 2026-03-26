@@ -6,6 +6,7 @@ import { ConsoleTab } from '@/components/project/ConsoleTab';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
 import type { TimelineItem } from '@/lib/event-types';
+import type { Environment } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface ProjectDetailTabsProps {
@@ -13,6 +14,7 @@ interface ProjectDetailTabsProps {
   activeTab: string;
   onActiveTabChange: (value: string) => void;
   displayProject: ProjectWithOptionalEnvironments | null;
+  environments?: Environment[];
   allTimelineItems: TimelineItem[];
   isStreaming: boolean;
   timelineDisconnected?: boolean;
@@ -28,6 +30,7 @@ export function ProjectDetailTabs({
   activeTab,
   onActiveTabChange,
   displayProject,
+  environments,
   allTimelineItems,
   isStreaming,
   selectedEnvId,
@@ -85,6 +88,7 @@ export function ProjectDetailTabs({
             projectId={id}
             projectStatus={displayProject.status}
             displayProject={displayProject}
+            environments={environments}
             timelineItems={allTimelineItems}
             isTimelineStreaming={isStreaming}
             onOpenLogs={() => onActiveTabChange('console')}

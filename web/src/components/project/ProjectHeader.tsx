@@ -95,8 +95,10 @@ export function ProjectHeader({
   const hasContainer = selectedEnv ? !!selectedEnv.containerId : !!project.port;
 
   const envColors: Record<EnvironmentType, string> = {
-    production: 'bg-success/10 text-success border-success/20',
-    development: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+    production:
+      'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-xs font-medium',
+    development:
+      'bg-blue-500/15 text-blue-400 border border-blue-500/30 px-2.5 py-0.5 rounded-full text-xs font-medium',
   };
 
   const envLabels: Record<EnvironmentType, string> = {
@@ -185,7 +187,7 @@ export function ProjectHeader({
     <div
       className={cn(
         'shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4',
-        currentEnvType === 'development' && 'border-t-2 border-t-blue-500/60',
+        currentEnvType === 'development' && 'bg-blue-950/15',
       )}
     >
       <div className="flex items-center justify-between">
@@ -201,10 +203,7 @@ export function ProjectHeader({
                   <Button
                     variant="outline"
                     size="sm"
-                    className={cn(
-                      'h-6 px-2 text-xs font-body gap-1 border',
-                      envColors[currentEnvType],
-                    )}
+                    className={cn('h-6 gap-1 font-body', envColors[currentEnvType])}
                   >
                     {envLabels[currentEnvType]}
                     <ChevronDown className="h-3 w-3 opacity-50" />

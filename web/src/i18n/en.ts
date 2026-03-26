@@ -378,6 +378,29 @@ export const translations = {
   llmSettings: {
     oauthComingSoon: 'Coming Soon — Next update will support OAuth login',
   },
+  project: {
+    confirm: {
+      stopTitle: 'Stop Project',
+      stopDescription: 'Are you sure you want to stop this project in the {env} environment?',
+      deleteTitle: 'Delete Project',
+      deleteDescription:
+        'Are you sure you want to delete this project? This action cannot be undone.',
+      confirm: 'Confirm',
+      cancel: 'Cancel',
+    },
+    compare: {
+      title: 'Compare Environments',
+      button: 'Compare',
+      noDevEnv: 'No development environment',
+      status: 'Status',
+      branch: 'Branch',
+      url: 'URL',
+      lastDeploy: 'Last Deploy',
+      imageTag: 'Image Tag',
+      production: 'Production',
+      development: 'Development',
+    },
+  },
 } as const;
 
 export type TranslationType = typeof translations;
