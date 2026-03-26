@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, XCircle, Square, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Square, AlertTriangle, Sparkles } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 
@@ -13,6 +13,7 @@ import { TerminalPhaseRail, type Phase } from './TerminalPhaseRail';
 import { TerminalScrollback } from './TerminalScrollback';
 import { TerminalLogBlock } from './TerminalLogBlock';
 import { TerminalLine } from './TerminalLine';
+import { TerminalAIBlock } from './TerminalAIBlock';
 
 export interface DeployTerminalSessionProps {
   projectName: string;
@@ -53,6 +54,11 @@ function groupLogs(items: TimelineItem[]): GroupedItem[] {
   }
 
   return grouped;
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1)}…`;
 }
 
 export function DeployTerminalSession({
@@ -188,6 +194,120 @@ export function DeployTerminalSession({
                           )}
                         </TerminalLine>
                       );
+                    }
+
+                    if (item.type === 'agent_thinking') {
+                      return (
+                        <TerminalAIBlock
+                          key={item.id}
+                          variant="info"
+                          icon={<Sparkles className="h-3.5 w-3.5 animate-pulse" />}
+                          title={truncate(item.title, 120)}
+                        />
+                      );
+                    }
+
+                    if (item.type === 'agent_tool_call') {
+                      return (
+                        <TerminalLine key={item.id} glyphState="active" textColor="info">
+                          {item.title}
+                        </TerminalLine>
+                      );
+                    }
+
+                    if (item.type === 'agent_tool_result') {
+                      const isToolError = item.toolSuccess === false;
+                      return (
+                        <TerminalLine
+                          key={item.id}
+                          glyphState={isToolError ? 'error' : 'done'}
+                          textColor={isToolError ? 'error' : 'secondary'}
+                        >
+                          {item.title}
+                        </TerminalLine>
+                      );
+                    }
+
+                    if (item.type === 'agent_message') {
+                      return (
+                        <TerminalAIBlock
+                          key={item.id}
+                          variant="prescription"
+                          icon={<Sparkles className="h-3.5 w-3.5" />}
+                          title={item.title}
+                          detail={item.detail}
+                        />
+                      );
+                    }
+
+                    if (item.type === 'insight') {
+                      return (
+                        <TerminalAIBlock
+                          key={item.id}
+                          variant={
+                            item.severity === 'error' || item.severity === 'warning'
+                              ? 'diagnostic'
+                              : 'info'
+                          }
+                          title={item.title}
+                          detail={item.detail}
+                        />
+                      );
+                    }
+
+                    if (item.type === 'dockerfile_fixed') {
+                      return (
+                        <TerminalAIBlock key={item.id} variant="prescription" title={item.title}>
+                          {item.dockerfileChanges?.map((change, index) => (
+                            <div key={`${change}-${index}`}>{change}</div>
+                          ))}
+                        </TerminalAIBlock>
+                      );
+                    }
+
+                    if (item.type === 'recovery_start') {
+                      return (
+                        <TerminalAIBlock
+                          key={item.id}
+                          variant="diagnostic"
+                          icon={<Sparkles className="h-3.5 w-3.5" />}
+                          title={item.title}
+                        />
+                      );
+                    }
+
+                    if (item.type === 'recovery_success') {
+                      return (
+                        <TerminalLine key={item.id} glyphState="done" textColor="success">
+                          {item.title}
+                        </TerminalLine>
+                      );
+                    }
+
+                    if (item.type === 'recovery_failed' || item.type === 'recovery_exhausted') {
+                      return (
+                        <TerminalAIBlock
+                          key={item.id}
+                          variant="diagnostic"
+                          title={item.title}
+                          detail={item.detail}
+                        />
+                      );
+                    }
+
+                    if (item.type === 'needs_user_action') {
+                      return (
+                        <TerminalAIBlock
+                          key={item.id}
+                          variant="info"
+                          title={item.title}
+                          detail={item.detail}
+                        />
+                      );
+                    }
+
+                    if (item.type === 'question') {
+                      return <TerminalAIBlock key={item.id} variant="info" title={item.title} />;
                     }
 
                     return (
