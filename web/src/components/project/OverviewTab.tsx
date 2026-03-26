@@ -15,8 +15,6 @@ import {
 } from '@/lib/api';
 import type { Project, DeployLogSummary } from '@/types';
 import {
-  ExternalLink,
-  Globe,
   ChevronDown,
   ChevronRight,
   ArrowRight,
@@ -313,42 +311,6 @@ export function OverviewTab({
     <div className="flex flex-col h-full min-h-0 p-6 bg-bg-app">
       {/* ── Section 1: Current State ─────────────────────────────────────── */}
       <section className="space-y-4 pb-6">
-        {/* Endpoint */}
-        {(activeProject?.publicUrl || activeProject?.url) && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-ol" />
-              <a
-                href={activeProject.publicUrl || activeProject.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium text-agent hover:underline"
-              >
-                {(activeProject.publicUrl || activeProject.url)?.replace(/^https?:\/\//, '')}
-              </a>
-              <ExternalLink className="h-3 w-3 text-muted-ol" />
-            </div>
-            {activeProject?.urls
-              ?.filter((u) => u.type === 'vpn')
-              .map((vpn) => (
-                <div key={vpn.ip} className="flex items-center gap-2">
-                  <div className="h-4 w-4 shrink-0 flex items-center justify-center">
-                    <span className="text-[9px] font-mono font-medium text-purple-400">VPN</span>
-                  </div>
-                  <a
-                    href={vpn.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-purple-400 hover:underline"
-                  >
-                    {vpn.url.replace(/^https?:\/\//, '')}
-                  </a>
-                  <ExternalLink className="h-3 w-3 text-muted-ol" />
-                </div>
-              ))}
-          </div>
-        )}
-
         {/* Latest Deploy */}
         {latestDeploy && (
           <div className="flex items-center justify-between">

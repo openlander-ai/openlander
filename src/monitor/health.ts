@@ -327,6 +327,31 @@ export class HealthMonitor {
       }
 
       if (info.State.Running && !info.State.Restarting) {
+        if (restartCount > 0) {
+          const errorSnippet = await this.getContainerStderrSnippet(ensuredContainerId);
+          this.recordRuntimeIncident({
+            projectId,
+            containerId: ensuredContainerId,
+            category: 'runtime_crash',
+            environmentId: this.resolveIncidentEnvironmentId(projectId, ensuredContainerId),
+            exitCode: info.State.ExitCode,
+            errorSnippet,
+            containerImage: info.Config.Image,
+            containerUptimeMs: this.getContainerUptimeMs(info.State.StartedAt),
+            restartCount,
+          });
+          log.warn(
+            { projectId, containerId: ensuredContainerId, restartCount },
+            'Container restarted with failing health check — marking as error',
+          );
+          this.markProjectAndEnvironmentsError(projectId);
+          await this.events.emit('deploy:failed', {
+            projectId,
+            error: `Container restarted (${String(restartCount)}x) and health check failing`,
+            step: 'run',
+          });
+          return lastResult;
+        }
         return {
           ...lastResult,
           healthy: true,
