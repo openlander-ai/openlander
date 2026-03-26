@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Deploy terminal AI inline events**: Agent events render as visually distinct blocks (diagnostic=red, prescription=purple, info=blue) inside the deploy terminal
+- **TerminalAIBlock component**: Terminal-native block with 3 variants using terminal-tokens color system
+- **Premium AISparkle icon**: Gradient purple→rose fill + glow effect on all AI-enhanced buttons
+- **Status dot animations**: Building uses pulse-ring, running uses breathing pulse
+- **Environment-aware UI**: Sidebar sub-items with environment color coding and comparison views
+- **Stop action confirmation**: ConfirmDialog added to stop button
+
+### Fixed
+
+- **Agent event pipeline bug**: toTimelineItem() now preserves agent event types instead of converting to progress
+- **Missing sparkle icons**: Rollback and ProjectCard Redeploy now show conditional sparkle (DEC-046)
+- **pulse-ring animation**: Registered in tailwind.config.js
+
+### Changed
+
+- **Vision document**: Acknowledges Agent Mode (v0.9.0) coexistence with Smart Deploy Terminal
+
 ## [1.0.0-rc.3] - 2026-03-26
 
 ### Added
