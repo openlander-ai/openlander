@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0-rc.3] - 2026-03-26
+
+### Added
+
+- **Shared `openlander` network with service-name DNS aliases**: All containers now connect to a shared Docker network enabling service-to-service communication via container names
+- **`service_connections` table with CRUD API**: Database schema and REST endpoints for managing service interconnections
+- **Auto env injection on service connect/disconnect**: Environment variables automatically updated when services are connected or disconnected
+- **Connected Services writable UI**: Web dashboard panel for adding and removing service connections
+- **Env vars plaintext by default**: Environment variables displayed in plaintext in the UI (with secure storage in database)
+- **Runtime incidents system with LLM diagnosis**: Automatic detection and AI-powered analysis of runtime failures
+- **Deploy connectivity check (DNS+TCP)**: Preflight validation ensuring services can reach their dependencies before deployment
+- **Service health monitoring**: Continuous health checks for all deployed services with status reporting
+- **MCP session incident briefing**: AI agents receive incident context in MCP tool responses for better recovery guidance
+
 ## [1.0.0-rc.2] - 2026-03-25
 
 ### Added
