@@ -57,8 +57,7 @@ export function createMockPipeline() {
 
 export function createMockEnvManager() {
   return {
-    getAll: vi.fn().mockReturnValue({}),
-    getAllMasked: vi.fn().mockReturnValue({ API_KEY: 'sk-***' }),
+    getAll: vi.fn().mockReturnValue({ API_KEY: 'sk-1234567890abcdef' }),
     setBulk: vi.fn().mockReturnValue(true),
     getGlobalSecrets: vi.fn().mockReturnValue({}),
   };

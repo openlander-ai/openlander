@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('node:fs', () => ({
-  readdirSync: vi.fn(),
-  statSync: vi.fn(),
-}));
-
-import { readdirSync, statSync } from 'node:fs';
+import * as nodeFs from 'node:fs';
 import { findDockerfiles, scanRepoShape } from '../../src/lib/repo-scanner.js';
 
 type DirNode = {
@@ -24,26 +18,28 @@ type MockStat = {
   isDirectory: () => boolean;
 };
 
-const mockReaddirSync = readdirSync as unknown as ReturnType<typeof vi.fn>;
-const mockStatSync = statSync as unknown as ReturnType<typeof vi.fn>;
+const mockReaddirSync = vi.spyOn(nodeFs, 'readdirSync') as unknown as ReturnType<typeof vi.fn>;
+const mockStatSync = vi.spyOn(nodeFs, 'statSync') as unknown as ReturnType<typeof vi.fn>;
 
 function createFsMap(entries: Array<[string, Node]>): Map<string, Node> {
   return new Map(entries);
 }
 
 function wireFsMap(fsMap: Map<string, Node>): void {
-  mockReaddirSync.mockImplementation((dirPath: string) => {
-    const node = fsMap.get(dirPath);
+  mockReaddirSync.mockImplementation((dirPath) => {
+    const normalizedPath = String(dirPath);
+    const node = fsMap.get(normalizedPath);
     if (!node || node.type !== 'dir') {
-      throw new Error(`ENOENT: ${dirPath}`);
+      throw new Error(`ENOENT: ${normalizedPath}`);
     }
     return node.entries;
   });
 
-  mockStatSync.mockImplementation((targetPath: string) => {
-    const node = fsMap.get(targetPath);
+  mockStatSync.mockImplementation((targetPath) => {
+    const normalizedPath = String(targetPath);
+    const node = fsMap.get(normalizedPath);
     if (!node) {
-      throw new Error(`ENOENT: ${targetPath}`);
+      throw new Error(`ENOENT: ${normalizedPath}`);
     }
 
     const stat: MockStat = {

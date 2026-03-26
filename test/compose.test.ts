@@ -8,10 +8,16 @@ import {
   filterServicesByProfiles,
   type ComposeService,
 } from '../src/pipeline/compose.js';
+import type {
+  ComposeDeployConfig,
+  ComposePipeline as ComposePipelineType,
+} from '../src/pipeline/compose.js';
 import { Database } from '../src/db/index.js';
 import { EventBus } from '../src/events/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { formatEnvValue } from '../src/pipeline/env-inject.js';
+
+const REQUIRED_ENV_VARS = { API_KEY: 'test-api-key' };
 
 function createMockDocker(): Docker {
   return {
@@ -35,7 +41,14 @@ describe('ComposePipeline', () => {
   let tmpDir: string;
   let db: Database;
   let events: EventBus;
-  let pipeline: ComposePipeline;
+  let pipeline: ComposePipelineType;
+
+  async function deployWithEnv(targetPipeline: ComposePipelineType, config: ComposeDeployConfig) {
+    return targetPipeline.deployCompose({
+      ...config,
+      envVars: { ...REQUIRED_ENV_VARS, ...(config.envVars ?? {}) },
+    });
+  }
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-compose-test-'));
@@ -59,12 +72,14 @@ describe('ComposePipeline', () => {
   });
 
   it('detectComposeFile checks supported filenames in order', () => {
+    writeFileSync(join(tmpDir, 'docker-compose.yaml'), 'services: {}\n', 'utf8');
     writeFileSync(join(tmpDir, 'compose.yml'), 'services: {}\n', 'utf8');
     writeFileSync(join(tmpDir, 'compose.yaml'), 'services: {}\n', 'utf8');
+    writeFileSync(join(tmpDir, 'docker-compose.yml'), 'services: {}\n', 'utf8');
 
     const detected = pipeline.detectComposeFile(tmpDir);
 
-    expect(detected).toBe(join(tmpDir, 'compose.yml'));
+    expect(detected).toBe(join(tmpDir, 'docker-compose.yml'));
   });
 
   it('parses compose file with service variants', () => {
@@ -297,7 +312,7 @@ describe('ComposePipeline', () => {
     const detectedComposePath = pipeline.detectComposeFile(tmpDir);
     expect(detectedComposePath).toBe(composePath);
 
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath: detectedComposePath ?? composePath,
@@ -334,7 +349,7 @@ describe('ComposePipeline', () => {
     const docker = createMockDocker();
     pipeline = new ComposePipeline(docker, db, events);
 
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -366,7 +381,7 @@ describe('ComposePipeline', () => {
     } as unknown as Docker;
     pipeline = new ComposePipeline(docker, db, events);
 
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -394,7 +409,7 @@ describe('ComposePipeline', () => {
       startEvents.push({ serviceCount: payload.serviceCount });
     });
 
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -430,7 +445,7 @@ describe('ComposePipeline', () => {
       startEvents.push({ serviceCount: payload.serviceCount });
     });
 
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -464,7 +479,7 @@ describe('ComposePipeline', () => {
     const docker = createMockDocker();
     pipeline = new ComposePipeline(docker, db, events);
 
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -506,7 +521,7 @@ describe('ComposePipeline', () => {
         orphanEvents.push(payload);
       });
 
-      const firstDeploy = await pipeline.deployCompose({
+      const firstDeploy = await deployWithEnv(pipeline, {
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
         composePath,
@@ -532,7 +547,7 @@ describe('ComposePipeline', () => {
         `services:\n  web:\n    image: nginx\n  api:\n    image: node:20\n`,
         'utf8',
       );
-      const secondDeploy = await pipeline.deployCompose({
+      const secondDeploy = await deployWithEnv(pipeline, {
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
         composePath,
@@ -574,7 +589,7 @@ describe('ComposePipeline', () => {
       } as unknown as Docker;
       pipeline = new ComposePipeline(docker, db, events);
 
-      const firstDeploy = await pipeline.deployCompose({
+      const firstDeploy = await deployWithEnv(pipeline, {
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
         composePath,
@@ -590,7 +605,7 @@ describe('ComposePipeline', () => {
       const deleteProjectMock = vi.spyOn(db, 'deleteProject');
 
       const runComposeServiceMock = docker.runComposeService as ReturnType<typeof vi.fn>;
-      const secondDeploy = await pipeline.deployCompose({
+      const secondDeploy = await deployWithEnv(pipeline, {
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
         composePath,
@@ -642,7 +657,7 @@ describe('ComposePipeline', () => {
         orphanEvents.push(payload);
       });
 
-      const firstDeploy = await pipeline.deployCompose({
+      const firstDeploy = await deployWithEnv(pipeline, {
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
         composePath,
@@ -666,7 +681,7 @@ describe('ComposePipeline', () => {
         `services:\n  web:\n    image: nginx\n  api:\n    image: node:20\n  worker:\n    image: busybox\n`,
         'utf8',
       );
-      const secondDeploy = await pipeline.deployCompose({
+      const secondDeploy = await deployWithEnv(pipeline, {
         repoUrl: 'https://github.com/example/stack',
         clonePath: tmpDir,
         composePath,
@@ -718,7 +733,7 @@ describe('ComposePipeline', () => {
     } as unknown as Docker;
     pipeline = new ComposePipeline(docker, db, events);
 
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -764,7 +779,7 @@ describe('ComposePipeline', () => {
     } as unknown as Docker;
     pipeline = new ComposePipeline(docker, db, events);
 
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -842,7 +857,7 @@ describe('ComposePipeline', () => {
     const docker = createMockDocker();
     const freshPipeline = new ComposePipeline(docker, db, events);
 
-    const result = await freshPipeline.deployCompose({
+    const result = await deployWithEnv(freshPipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -865,7 +880,7 @@ describe('ComposePipeline', () => {
     const docker = createMockDocker();
     const freshPipeline = new ComposePipeline(docker, db, events);
 
-    const result = await freshPipeline.deployCompose({
+    const result = await deployWithEnv(freshPipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,

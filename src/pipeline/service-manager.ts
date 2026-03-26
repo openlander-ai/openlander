@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { nanoid } from 'nanoid';
 
-import { getDataDir, getPolicy } from '../config/index.js';
+import { getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import {
@@ -334,6 +334,11 @@ export class ServiceManager {
       ExposedPorts: {
         [`${String(containerPort)}/tcp`]: {},
       },
+      NetworkingConfig: {
+        EndpointsConfig: {
+          [SHARED_NETWORK_NAME]: { Aliases: [opts.name] },
+        },
+      },
       HostConfig: {
         NetworkMode: this.docker.getNetworkName(),
         RestartPolicy: { Name: 'unless-stopped' },
@@ -351,14 +356,28 @@ export class ServiceManager {
     const prodNetwork = getPolicy('production').networkName;
     const devNetwork = getPolicy('development').networkName;
     const secondaryNetwork = primaryNetwork === prodNetwork ? devNetwork : prodNetwork;
-    try {
-      const client = this.docker.getClient();
-      await client.getNetwork(secondaryNetwork).connect({ Container: container.id });
-    } catch (err) {
-      log.warn(
-        { err, secondaryNetwork, containerName },
-        'Failed to connect service to secondary network',
-      );
+    const additionalNetworks = [secondaryNetwork, SHARED_NETWORK_NAME].filter(
+      (networkName, index, arr) =>
+        networkName !== primaryNetwork && arr.indexOf(networkName) === index,
+    );
+
+    for (const networkName of additionalNetworks) {
+      try {
+        const client = this.docker.getClient();
+        await client.getNetwork(networkName).connect({
+          Container: container.id,
+          EndpointConfig: { Aliases: [opts.name] },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('already exists') || msg.includes('already connected')) {
+          continue;
+        }
+        log.warn(
+          { err, networkName, containerName },
+          'Failed to connect service to additional network',
+        );
+      }
     }
 
     this.db.createService({

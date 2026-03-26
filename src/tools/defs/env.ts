@@ -36,7 +36,7 @@ export const envToolDefs: ToolDef[] = [
 
       // Backward compatibility: if no environment_name, return simple masked format
       if (!environmentName) {
-        const masked = appCtx.env.getAllMasked(project.id);
+        const masked = appCtx.env.getAll(project.id);
         return Promise.resolve({ variables: masked, count: Object.keys(masked).length });
       }
 

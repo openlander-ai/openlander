@@ -106,7 +106,6 @@ export function createMockPlanContext(db?: Database): AppContext {
     traefik: {} as unknown as AppContext['traefik'],
     env: {
       getAll: vi.fn().mockReturnValue({}),
-      getAllMasked: vi.fn().mockReturnValue({}),
       setBulk: vi.fn().mockReturnValue(true),
       getGlobalSecrets: vi.fn().mockReturnValue({}),
     } as unknown as AppContext['env'],

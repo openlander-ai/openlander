@@ -136,18 +136,28 @@ CREATE TABLE IF NOT EXISTS global_secrets (
 );
 
 CREATE TABLE IF NOT EXISTS services (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  type TEXT NOT NULL,
-  image TEXT NOT NULL,
-  status TEXT DEFAULT 'stopped' CHECK(status IN ('running', 'stopped', 'error')),
-  container_id TEXT,
-  container_name TEXT NOT NULL UNIQUE,
-  port INTEGER NOT NULL,
-  env_vars TEXT,
-  credentials TEXT,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+   id TEXT PRIMARY KEY,
+   name TEXT NOT NULL UNIQUE,
+   type TEXT NOT NULL,
+   image TEXT NOT NULL,
+   status TEXT DEFAULT 'stopped' CHECK(status IN ('running', 'stopped', 'error')),
+   container_id TEXT,
+   container_name TEXT NOT NULL UNIQUE,
+   port INTEGER NOT NULL,
+   env_vars TEXT,
+   credentials TEXT,
+   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS service_connections (
+   id TEXT PRIMARY KEY,
+   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+   service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+   environment_id TEXT REFERENCES environments(id) ON DELETE SET NULL,
+   auto_injected_env_keys TEXT,
+   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+   UNIQUE(project_id, service_id)
 );
 
 CREATE TABLE IF NOT EXISTS deploy_configs (
@@ -170,6 +180,8 @@ CREATE INDEX IF NOT EXISTS idx_oauth_tokens_provider ON oauth_tokens(provider);
 CREATE INDEX IF NOT EXISTS idx_webhook_configs_project_source ON webhook_configs(project_id, source);
 CREATE INDEX IF NOT EXISTS idx_global_secrets_key ON global_secrets(key);
 CREATE INDEX IF NOT EXISTS idx_services_type ON services(type);
+CREATE INDEX IF NOT EXISTS idx_service_connections_project ON service_connections(project_id);
+CREATE INDEX IF NOT EXISTS idx_service_connections_service ON service_connections(service_id);
 
 CREATE TABLE IF NOT EXISTS secret_files (
   id TEXT PRIMARY KEY,

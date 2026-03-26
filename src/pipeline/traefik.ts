@@ -4,7 +4,7 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('traefik');
 
 import type { Docker } from './docker.js';
-import { getDataDir, getPolicy } from '../config/index.js';
+import { getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
 import { join } from 'node:path';
 
 const TRAEFIK_IMAGE = 'traefik:v3.6';
@@ -87,6 +87,7 @@ export class TraefikManager {
     await Promise.all([
       this.ensureNetworkByName(prodNetwork),
       this.ensureNetworkByName(devNetwork),
+      this.ensureNetworkByName(SHARED_NETWORK_NAME),
     ]);
   }
 
@@ -209,9 +210,15 @@ export class TraefikManager {
     const devNetwork = getPolicy('development').networkName;
     const prodNetwork = getPolicy('production').networkName;
     if (this.networkName === prodNetwork) {
-      await this.connectToNetwork(devNetwork);
+      await Promise.all([
+        this.connectToNetwork(devNetwork),
+        this.connectToNetwork(SHARED_NETWORK_NAME),
+      ]);
     } else {
-      await this.connectToNetwork(prodNetwork);
+      await Promise.all([
+        this.connectToNetwork(prodNetwork),
+        this.connectToNetwork(SHARED_NETWORK_NAME),
+      ]);
     }
   }
 

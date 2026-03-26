@@ -307,12 +307,17 @@ describe('DeployPipeline deployEnvironment', () => {
       }),
     });
 
+    let builtDockerfile = '';
+    (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementationOnce(async (path: string) => {
+      builtDockerfile = readFileSync(join(path, 'Dockerfile'), 'utf8');
+    });
+
     const result = await pipeline.deployEnvironment('p8', productionEnvironment!.id, {
       repoUrl: 'https://github.com/openlander/pending-fix-app',
     });
 
     expect(result.success).toBe(true);
-    expect(readFileSync(join(clonePath, 'Dockerfile'), 'utf8')).toContain('FROM node:20');
+    expect(builtDockerfile).toContain('FROM node:20');
     expect(db.getProject('p8')?.pending_fix).toBeNull();
   });
 
@@ -357,12 +362,26 @@ describe('DeployPipeline deployEnvironment', () => {
       composePipeline as never,
     );
 
+    let delegatedComposeFile = '';
+    composePipeline.deployCompose.mockImplementationOnce(
+      async (config: { composePath: string }) => {
+        delegatedComposeFile = readFileSync(config.composePath, 'utf8');
+        return {
+          success: true,
+          parentProjectId: 'p9',
+          parentName: 'compose-fix-app',
+          services: [],
+          buildDurationMs: 123,
+        };
+      },
+    );
+
     const result = await composeEnabledPipeline.deployEnvironment('p9', 'p9-development', {
       repoUrl: 'https://github.com/openlander/compose-fix-app',
     });
 
     expect(result.success).toBe(true);
-    expect(readFileSync(composePath, 'utf8')).toContain('nginx:2');
+    expect(delegatedComposeFile).toContain('nginx:2');
     expect(db.getProject('p9')?.pending_fix).toBeNull();
     expect(composePipeline.deployCompose).toHaveBeenCalledOnce();
   });
@@ -468,6 +487,11 @@ describe('DeployPipeline deployEnvironment', () => {
       },
     );
 
+    let builtDockerfile = '';
+    (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementationOnce(async (path: string) => {
+      builtDockerfile = readFileSync(join(path, 'Dockerfile'), 'utf8');
+    });
+
     const result = await pipeline.deployEnvironment('p7', productionEnvironment!.id, {
       repoUrl: 'https://github.com/openlander/build-args-app',
       envVars: {
@@ -488,7 +512,7 @@ describe('DeployPipeline deployEnvironment', () => {
       }),
     );
 
-    const dockerfileContent = readFileSync(join(clonePath, 'Dockerfile'), 'utf8');
+    const dockerfileContent = builtDockerfile;
     expect(dockerfileContent).toContain('ARG VITE_CLIENT_FLAG');
     expect(dockerfileContent).toContain('ARG NEXT_PUBLIC_API_URL');
     expect(dockerfileContent).not.toContain('ARG SERVER_ONLY_TOKEN');

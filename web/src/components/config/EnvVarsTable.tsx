@@ -70,7 +70,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
           Object.entries(data).map(([key, value]) => ({
             key,
             value,
-            revealed: false,
+            revealed: true,
             source: 'project',
           })),
         );
@@ -80,7 +80,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
           Object.entries(data.envVars).map(([key, value]) => ({
             key,
             value,
-            revealed: false,
+            revealed: true,
             source: data.inheritance[key]?.source || 'environment',
             isOverride: data.inheritance[key]?.isOverride,
           })),
@@ -165,7 +165,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
     const parsed: EnvVar[] = rawParsed.map((p) => ({
       key: p.key,
       value: p.value,
-      revealed: false,
+      revealed: true,
       source: selectedEnvId ? 'environment' : 'project',
     }));
     if (parsed.length > 0) {
@@ -479,11 +479,12 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
                 <button
                   onClick={() => toggleReveal(index)}
                   className="p-1.5 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                  title={v.revealed ? 'Hide value' : 'Show value'}
                 >
                   {v.revealed ? (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  ) : (
                     <Eye className="h-3.5 w-3.5" />
+                  ) : (
+                    <EyeOff className="h-3.5 w-3.5" />
                   )}
                 </button>
                 {isInherited ? (

@@ -260,6 +260,33 @@ export const services = sqliteTable(
   ],
 );
 
+export const serviceConnections = sqliteTable(
+  'service_connections',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    project_id: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    service_id: text('service_id')
+      .notNull()
+      .references(() => services.id, { onDelete: 'cascade' }),
+    environment_id: text('environment_id').references(() => environments.id, {
+      onDelete: 'set null',
+    }),
+    auto_injected_env_keys: text('auto_injected_env_keys'),
+    created_at: text('created_at')
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex('service_connections_project_service_idx').on(table.project_id, table.service_id),
+    index('idx_service_connections_project').on(table.project_id),
+    index('idx_service_connections_service').on(table.service_id),
+  ],
+);
+
 export const deploy_configs = sqliteTable('deploy_configs', {
   id: text('id').primaryKey(),
   project_id: text('project_id')
@@ -337,6 +364,7 @@ export const drizzleSchema = {
   webhookConfigs,
   globalSecrets,
   services,
+  serviceConnections,
   deploy_configs,
   secretFiles,
   deployPlans,

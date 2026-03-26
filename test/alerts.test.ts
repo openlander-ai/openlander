@@ -4,12 +4,9 @@ import { AlertMonitor } from '../src/monitor/alerts.js';
 import type { Database, ProjectRow } from '../src/db/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import type { EventBus } from '../src/events/index.js';
+import * as statsModule from '../src/monitor/stats.js';
 
 let getSystemStatsMock = vi.fn();
-
-vi.mock('../src/monitor/stats.js', () => ({
-  getSystemStats: (...args: unknown[]) => getSystemStatsMock(...args),
-}));
 
 function makeStats(usagePercent: number): {
   disk: { usagePercent: number; usedGB: number; freeGB: number; totalGB: number };
@@ -60,6 +57,9 @@ describe('AlertMonitor', () => {
   }
 
   beforeEach(() => {
+    vi.spyOn(statsModule, 'getSystemStats').mockImplementation((...args) =>
+      getSystemStatsMock(...args),
+    );
     emit = vi.fn().mockResolvedValue(undefined);
     listProjects = vi.fn().mockReturnValue([]);
     listImages = vi.fn().mockResolvedValue([]);

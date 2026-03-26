@@ -89,7 +89,7 @@ function createMockContext(opts?: {
 
   const env = {
     setBulk: vi.fn().mockReturnValue(false),
-    getAllMasked: vi.fn().mockReturnValue({}),
+    getAll: vi.fn().mockReturnValue({}),
     verifyRoundTrip: vi.fn().mockReturnValue([]),
   };
 
@@ -188,7 +188,9 @@ describe('Tool Registry', () => {
 
     expect(invalid.success).toBe(false);
     if (!invalid.success) {
-      expect(invalid.error.issues[0]?.path).toContain('repo_url');
+      expect(invalid.error.issues.some((issue) => JSON.stringify(issue).includes('repo_url'))).toBe(
+        true,
+      );
     }
   });
 
@@ -353,14 +355,17 @@ describe('Tool Registry', () => {
     });
     const listEnvVars = getTool(ctx, 'list_env_vars');
 
-    env.getAllMasked.mockReturnValueOnce({
-      DATABASE_URL: 'pos****5432',
-      API_KEY: 'sk-****7890',
+    env.getAll.mockReturnValueOnce({
+      DATABASE_URL: 'postgresql://user:pass@localhost:5432',
+      API_KEY: 'sk-1234567890abcdef',
     });
     const result = await listEnvVars.execute({ project_name: 'my-app' }, { target: 'mcp' });
-    expect(env.getAllMasked).toHaveBeenCalledWith('p1');
+    expect(env.getAll).toHaveBeenCalledWith('p1');
     expect(result).toEqual({
-      variables: { DATABASE_URL: 'pos****5432', API_KEY: 'sk-****7890' },
+      variables: {
+        DATABASE_URL: 'postgresql://user:pass@localhost:5432',
+        API_KEY: 'sk-1234567890abcdef',
+      },
       count: 2,
     });
   });

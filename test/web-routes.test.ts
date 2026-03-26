@@ -9,6 +9,7 @@ import { Database } from '../src/db/index.js';
 import { eventBus } from '../src/events/index.js';
 import { createApiRoutes } from '../src/web/api/routes.js';
 import { createMockContext } from './helpers/web-route-mocks.js';
+import * as statsModule from '../src/monitor/stats.js';
 // Mock preflight check to always pass in tests
 vi.mock('../src/pipeline/git.js', () => ({
   cloneRepo: vi.fn().mockResolvedValue({ path: '/tmp/fake-clone' }),
@@ -54,6 +55,20 @@ describe('Web API Routes', () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-web-test-'));
     db = new Database(join(tmpDir, 'test.db'));
     ctx = createMockContext(db);
+    vi.spyOn(statsModule, 'getSystemStats').mockReturnValue({
+      hostname: 'test-host',
+      uptime: { seconds: 3600, formatted: '1h 0m' },
+      cpu: {
+        cores: 4,
+        model: 'Test CPU',
+        loadAvg1m: 1,
+        loadAvg5m: 1,
+        loadAvg15m: 1,
+        usagePercent: 25,
+      },
+      memory: { totalMB: 16000, usedMB: 8000, freeMB: 8000, usagePercent: 50 },
+      disk: { totalGB: 100, usedGB: 40, freeGB: 60, usagePercent: 40 },
+    });
     app = new Hono();
     app.route('/api', createApiRoutes(ctx));
   });
@@ -836,7 +851,10 @@ describe('Web API Routes', () => {
 
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(ctx.blueGreen.deploy).toHaveBeenCalledWith('p1', { healthCheckPath: undefined });
+    expect(ctx.blueGreen.deploy).toHaveBeenCalledWith('p1', {
+      environmentType: 'production',
+      healthCheckPath: undefined,
+    });
   });
 
   it('POST /api/projects/:id/blue-green returns 404 for unknown project', async () => {
@@ -1433,7 +1451,7 @@ describe('Web API Routes', () => {
 
     const body = await res.json();
     expect(body).toHaveProperty('envVars');
-    expect(ctx.env.getAllMasked).toHaveBeenCalledWith('p1');
+    expect(ctx.env.getAll).toHaveBeenCalledWith('p1');
   });
 
   // ---------------------------------------------------------------------------

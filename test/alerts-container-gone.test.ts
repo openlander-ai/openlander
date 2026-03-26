@@ -4,12 +4,9 @@ import { AlertMonitor } from '../src/monitor/alerts.js';
 import type { Database, ProjectRow } from '../src/db/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import type { EventBus } from '../src/events/index.js';
+import * as statsModule from '../src/monitor/stats.js';
 
 let getSystemStatsMock = vi.fn();
-
-vi.mock('../src/monitor/stats.js', () => ({
-  getSystemStats: (...args: unknown[]) => getSystemStatsMock(...args),
-}));
 
 function createProject(partial?: Partial<ProjectRow>): ProjectRow {
   return {
@@ -55,6 +52,9 @@ describe('AlertMonitor missing container handling', () => {
   }
 
   beforeEach(() => {
+    vi.spyOn(statsModule, 'getSystemStats').mockImplementation((...args) =>
+      getSystemStatsMock(...args),
+    );
     emit = vi.fn().mockResolvedValue(undefined);
     updateProject = vi.fn();
     listImages = vi.fn().mockResolvedValue([]);

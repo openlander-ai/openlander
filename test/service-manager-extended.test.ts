@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockServiceManagerLogger = vi.hoisted(() => ({
+const mockServiceManagerLogger = {
   debug: vi.fn(),
   warn: vi.fn(),
   info: vi.fn(),
   error: vi.fn(),
-}));
+};
 
 vi.mock('../src/lib/logger.js', () => ({
   createModuleLogger: vi.fn(() => mockServiceManagerLogger),

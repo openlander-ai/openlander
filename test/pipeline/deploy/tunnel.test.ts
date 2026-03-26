@@ -7,11 +7,11 @@ import { Database } from '../../../src/db/index.js';
 import { eventBus } from '../../../src/events/index.js';
 import { TunnelManager } from '../../../src/pipeline/deploy/tunnel.js';
 
-const tunnelMocks = vi.hoisted(() => ({
+const tunnelMocks = {
   start: vi.fn<(...args: unknown[]) => Promise<string>>(),
   stop: vi.fn<(...args: unknown[]) => void>(),
   constructed: vi.fn<(...args: unknown[]) => void>(),
-}));
+};
 
 vi.mock('../../../src/pipeline/tunnel.js', () => {
   class MockCloudflareTunnel {

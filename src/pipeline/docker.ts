@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { getDataDir, getPolicy } from '../config/index.js';
+import { getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
 import type Dockerode from 'dockerode';
 
 import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
@@ -426,6 +426,8 @@ export class Docker {
     });
 
     await container.start();
+
+    await this.connectContainerToSharedNetwork(container.id, projectName);
     return container.id;
   }
 
@@ -495,6 +497,8 @@ export class Docker {
 
     await container.start();
 
+    await this.connectContainerToSharedNetwork(container.id, projectName);
+
     const additionalNetworks =
       opts.networks
         ?.slice(1)
@@ -520,6 +524,21 @@ export class Docker {
     }
 
     return container.id;
+  }
+
+  private async connectContainerToSharedNetwork(containerId: string, alias: string): Promise<void> {
+    try {
+      await this.client.getNetwork(SHARED_NETWORK_NAME).connect({
+        Container: containerId,
+        EndpointConfig: { Aliases: [alias] },
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('already exists') || msg.includes('already connected')) {
+        return;
+      }
+      throw error;
+    }
   }
 
   private writeSecretFiles(containerName: string, files: SecretFileMount[]): string[] {

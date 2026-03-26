@@ -10,6 +10,7 @@ import { EnvVarRepo } from './repos/env-var.repo.js';
 import { GlobalSecretRepo } from './repos/global-secret.repo.js';
 import { SecretFileRepo } from './repos/secret-file.repo.js';
 import { ServiceRepo } from './repos/service.repo.js';
+import { ServiceConnectionRepo } from './repos/service-connection.repo.js';
 import { DeployLogRepo } from './repos/deploy-log.repo.js';
 import { TimelineRepo } from './repos/timeline.repo.js';
 import { DomainMappingRepo } from './repos/domain-mapping.repo.js';
@@ -31,6 +32,7 @@ export type {
   OAuthTokenRow,
   WebhookConfigRow,
   ServiceRow,
+  ServiceConnectionRow,
   PendingFixRow,
   DeployPlanRow,
   AuthRow,
@@ -38,44 +40,46 @@ export type {
 
 // prettier-ignore
 export class Database implements AuthDatabase {
-  private sqlite: SqliteDatabase;
-  private db: DrizzleClient;
-  private readonly projectRepo: ProjectRepo;
-  private readonly environmentRepo: EnvironmentRepo;
-  private readonly envVarRepo: EnvVarRepo;
-  private readonly globalSecretRepo: GlobalSecretRepo;
-  private readonly secretFileRepo: SecretFileRepo;
-  private readonly serviceRepo: ServiceRepo;
-  private readonly deployLogRepo: DeployLogRepo;
-  private readonly timelineRepo: TimelineRepo;
-  private readonly domainMappingRepo: DomainMappingRepo;
-  private readonly oauthRepo: OAuthRepo;
-  private readonly webhookRepo: WebhookRepo;
-  private readonly deployPlanRepo: DeployPlanRepo;
-  private readonly deployConfigRepo: DeployConfigRepo;
-  private readonly authRepo: AuthRepo;
+   private sqlite: SqliteDatabase;
+   private db: DrizzleClient;
+   private readonly projectRepo: ProjectRepo;
+   private readonly environmentRepo: EnvironmentRepo;
+   private readonly envVarRepo: EnvVarRepo;
+   private readonly globalSecretRepo: GlobalSecretRepo;
+   private readonly secretFileRepo: SecretFileRepo;
+   private readonly serviceRepo: ServiceRepo;
+   private readonly serviceConnectionRepo: ServiceConnectionRepo;
+   private readonly deployLogRepo: DeployLogRepo;
+   private readonly timelineRepo: TimelineRepo;
+   private readonly domainMappingRepo: DomainMappingRepo;
+   private readonly oauthRepo: OAuthRepo;
+   private readonly webhookRepo: WebhookRepo;
+   private readonly deployPlanRepo: DeployPlanRepo;
+   private readonly deployConfigRepo: DeployConfigRepo;
+   private readonly authRepo: AuthRepo;
 
-  constructor(dbPath: string) {
-    mkdirSync(dirname(dbPath), { recursive: true });
-    const { sqlite, db } = createDrizzleDatabase(dbPath);
-    this.sqlite = sqlite;
-    this.db = db;
-    initializeDatabase(this.sqlite);
-    this.projectRepo = new ProjectRepo(this.db, this.sqlite);
-    this.environmentRepo = new EnvironmentRepo(this.db, this.sqlite);
-    this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);
-    this.globalSecretRepo = new GlobalSecretRepo(this.db, this.sqlite);
-    this.secretFileRepo = new SecretFileRepo(this.db, this.sqlite);
-    this.serviceRepo = new ServiceRepo(this.db, this.sqlite);
-    this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
-    this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
-    this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
-    this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
-    this.webhookRepo = new WebhookRepo(this.db, this.sqlite);
-    this.deployPlanRepo = new DeployPlanRepo(this.db, this.sqlite);
-    this.deployConfigRepo = new DeployConfigRepo(this.db, this.sqlite);
-    this.authRepo = new AuthRepo(this.db);
-  }
+   constructor(dbPath: string) {
+     mkdirSync(dirname(dbPath), { recursive: true });
+     const { sqlite, db } = createDrizzleDatabase(dbPath);
+     this.sqlite = sqlite;
+     this.db = db;
+     initializeDatabase(this.sqlite);
+     this.projectRepo = new ProjectRepo(this.db, this.sqlite);
+     this.environmentRepo = new EnvironmentRepo(this.db, this.sqlite);
+     this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);
+     this.globalSecretRepo = new GlobalSecretRepo(this.db, this.sqlite);
+     this.secretFileRepo = new SecretFileRepo(this.db, this.sqlite);
+     this.serviceRepo = new ServiceRepo(this.db, this.sqlite);
+     this.serviceConnectionRepo = new ServiceConnectionRepo(this.db, this.sqlite);
+     this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
+     this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
+     this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
+     this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
+     this.webhookRepo = new WebhookRepo(this.db, this.sqlite);
+     this.deployPlanRepo = new DeployPlanRepo(this.db, this.sqlite);
+     this.deployConfigRepo = new DeployConfigRepo(this.db, this.sqlite);
+     this.authRepo = new AuthRepo(this.db);
+   }
 
   createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
   getProject(id: string) { return this.projectRepo.getProject(id); }
@@ -111,12 +115,20 @@ export class Database implements AuthDatabase {
   getSecretFilesForDeploy(projectId: string) { return this.secretFileRepo.getSecretFilesForDeploy(projectId); }
   upsertSecretFile(projectId: string | null, filename: string, encryptedContent: string, iv: string, mountPath: string = '/run/secrets') { this.secretFileRepo.upsertSecretFile(projectId, filename, encryptedContent, iv, mountPath); }
   deleteSecretFile(projectId: string | null, filename: string) { return this.secretFileRepo.deleteSecretFile(projectId, filename); }
-  createService(service: Parameters<ServiceRepo['createService']>[0]) { return this.serviceRepo.createService(service); }
-  getService(id: string) { return this.serviceRepo.getService(id); }
-  listServices() { return this.serviceRepo.listServices(); }
-  updateService(id: string, updates: Parameters<ServiceRepo['updateService']>[1]) { this.serviceRepo.updateService(id, updates); }
-  deleteService(id: string) { this.serviceRepo.deleteService(id); }
-  createDeployLog(log: Parameters<DeployLogRepo['createDeployLog']>[0]) { this.deployLogRepo.createDeployLog(log); }
+   createService(service: Parameters<ServiceRepo['createService']>[0]) { return this.serviceRepo.createService(service); }
+   getService(id: string) { return this.serviceRepo.getService(id); }
+   listServices() { return this.serviceRepo.listServices(); }
+   updateService(id: string, updates: Parameters<ServiceRepo['updateService']>[1]) { this.serviceRepo.updateService(id, updates); }
+   deleteService(id: string) { this.serviceRepo.deleteService(id); }
+   createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }
+   getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }
+   getServiceConnectionByProjectAndService(projectId: string, serviceId: string) { return this.serviceConnectionRepo.getConnectionByProjectAndService(projectId, serviceId); }
+   listServiceConnectionsByProject(projectId: string) { return this.serviceConnectionRepo.listConnectionsByProject(projectId); }
+   listServiceConnectionsByService(serviceId: string) { return this.serviceConnectionRepo.listConnectionsByService(serviceId); }
+   updateServiceConnection(id: string, updates: Parameters<ServiceConnectionRepo['updateConnection']>[1]) { this.serviceConnectionRepo.updateConnection(id, updates); }
+   deleteServiceConnection(id: string) { this.serviceConnectionRepo.deleteConnection(id); }
+   deleteServiceConnectionByProjectAndService(projectId: string, serviceId: string) { this.serviceConnectionRepo.deleteConnectionByProjectAndService(projectId, serviceId); }
+   createDeployLog(log: Parameters<DeployLogRepo['createDeployLog']>[0]) { this.deployLogRepo.createDeployLog(log); }
   getDeployLogs(projectId: string, limit = 20, environmentId?: string) { return this.deployLogRepo.getDeployLogs(projectId, limit, environmentId); }
   getLastDeployLog(projectId: string, environmentId?: string) { return this.deployLogRepo.getLastDeployLog(projectId, environmentId); }
   getDeployLog(deployId: string) { return this.deployLogRepo.getDeployLog(deployId); }

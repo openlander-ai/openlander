@@ -75,6 +75,14 @@ function createTestHarness(execFactory: (cmd: string[]) => ExecMock) {
     db: {
       getProject: vi.fn((id: string) => (id === project.id ? project : null)),
       getProjectByName: vi.fn().mockReturnValue(null),
+      isPasswordSet: vi.fn().mockReturnValue(false),
+      getAuth: vi.fn().mockReturnValue(null),
+      setPassword: vi.fn(),
+      getApiToken: vi.fn().mockReturnValue(null),
+      setApiToken: vi.fn(),
+      getSession: vi.fn().mockReturnValue(null),
+      createSession: vi.fn(),
+      deleteSession: vi.fn(),
     },
     docker: {
       getClient: vi.fn(() => ({

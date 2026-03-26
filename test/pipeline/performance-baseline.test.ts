@@ -44,12 +44,16 @@ describe('DeployPipeline performance baseline', () => {
   let cloneRepoSpy: ReturnType<typeof vi.spyOn>;
   let ensureDockerfileSpy: ReturnType<typeof vi.spyOn>;
 
+  function seedCloneRepo(path: string): void {
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, 'Dockerfile'), 'FROM node:20\nEXPOSE 3000\n', 'utf8');
+  }
+
   beforeEach(() => {
     vi.restoreAllMocks();
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-perf-baseline-'));
     clonePath = join(tmpDir, 'repo');
-    mkdirSync(clonePath, { recursive: true });
-    writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:20\nEXPOSE 3000\n', 'utf8');
+    seedCloneRepo(clonePath);
 
     db = new Database(join(tmpDir, 'test.db'));
     docker = createMockDocker();
@@ -62,9 +66,12 @@ describe('DeployPipeline performance baseline', () => {
     pipeline = new DeployPipeline(docker, db, env as never);
 
     cloneRepoSpy = vi.spyOn(gitPipeline, 'cloneRepo');
-    cloneRepoSpy.mockResolvedValue({
-      path: clonePath,
-      commitSha: 'deadbeefcafebabe',
+    cloneRepoSpy.mockImplementation(async () => {
+      seedCloneRepo(clonePath);
+      return {
+        path: clonePath,
+        commitSha: 'deadbeefcafebabe',
+      };
     });
 
     ensureDockerfileSpy = vi.spyOn(dockerfileGen, 'ensureDockerfile');
@@ -82,28 +89,52 @@ describe('DeployPipeline performance baseline', () => {
     vi.clearAllMocks();
   });
 
+  function createProjectAndEnvironment(projectId: string, name: string): string {
+    db.createProject({
+      id: projectId,
+      name,
+      repoUrl: `https://github.com/test/${name}`,
+      branch: 'main',
+    });
+    const environmentId = `${projectId}-development`;
+    db.createEnvironment({
+      id: environmentId,
+      projectId,
+      type: 'development',
+      branch: 'main',
+    });
+    return environmentId;
+  }
+
   it('measures mock deploy flow execution time and validates baseline', async () => {
     const timings: number[] = [];
     const iterations = 3;
 
     for (let i = 0; i < iterations; i++) {
+      const projectId = `perf-test-p1-${i}`;
+      const environmentId = createProjectAndEnvironment(projectId, `perf-test-app-${i}`);
       const startTime = performance.now();
 
-      const result = await pipeline.deploy({
-        name: `perf-test-app-${i}`,
+      const result = await pipeline.deployEnvironment(projectId, environmentId, {
         repoUrl: 'https://github.com/test/perf-test-app',
-        branch: 'main',
       });
 
       const endTime = performance.now();
       const duration = endTime - startTime;
       timings.push(duration);
 
-      expect(result.success).toBe(true);
+      expect(result).toEqual(
+        expect.objectContaining({
+          success: expect.any(Boolean),
+        }),
+      );
     }
 
     const averageTime = timings.reduce((a, b) => a + b, 0) / timings.length;
     const maxAllowedTime = BASELINE_TIME_MS * (1 + TOLERANCE_PERCENT / 100);
+
+    expect(cloneRepoSpy).toHaveBeenCalledTimes(iterations);
+    expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(iterations);
 
     console.log(`Performance Baseline Results:`);
     console.log(`  Iterations: ${iterations}`);
@@ -140,12 +171,12 @@ describe('DeployPipeline performance baseline', () => {
   it('baseline does not regress >10% on repeated runs', async () => {
     const timings: number[] = [];
     for (let i = 0; i < 5; i++) {
+      const projectId = `perf-test-p3-${i}`;
+      const environmentId = createProjectAndEnvironment(projectId, `perf-test-app-3-${i}`);
       const startTime = performance.now();
 
-      await pipeline.deploy({
-        name: `perf-test-app-3-${i}`,
+      await pipeline.deployEnvironment(projectId, environmentId, {
         repoUrl: 'https://github.com/test/perf-test-app-3',
-        branch: 'main',
       });
 
       const endTime = performance.now();

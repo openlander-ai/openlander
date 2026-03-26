@@ -4,14 +4,27 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { ComposePipeline } from '../src/pipeline/compose.js';
+import type {
+  ComposeDeployConfig,
+  ComposePipeline as ComposePipelineType,
+} from '../src/pipeline/compose.js';
 import { Database } from '../src/db/index.js';
 import { EventBus } from '../src/events/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
+
+const REQUIRED_ENV_VARS = { API_KEY: 'test-api-key' };
 
 describe('ComposePipeline dockerode networking', () => {
   let tmpDir: string;
   let db: Database;
   let events: EventBus;
+
+  async function deployWithEnv(targetPipeline: ComposePipelineType, config: ComposeDeployConfig) {
+    return targetPipeline.deployCompose({
+      ...config,
+      envVars: { ...REQUIRED_ENV_VARS, ...(config.envVars ?? {}) },
+    });
+  }
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-compose-network-test-'));
@@ -46,7 +59,7 @@ describe('ComposePipeline dockerode networking', () => {
     } as unknown as Docker;
 
     const pipeline = new ComposePipeline(docker, db, events);
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -83,7 +96,7 @@ describe('ComposePipeline dockerode networking', () => {
     } as unknown as Docker;
 
     const pipeline = new ComposePipeline(docker, db, events);
-    const result = await pipeline.deployCompose({
+    const result = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,
@@ -121,7 +134,7 @@ describe('ComposePipeline dockerode networking', () => {
     } as unknown as Docker;
 
     const pipeline = new ComposePipeline(docker, db, events);
-    const deployResult = await pipeline.deployCompose({
+    const deployResult = await deployWithEnv(pipeline, {
       repoUrl: 'https://github.com/example/stack',
       clonePath: tmpDir,
       composePath,

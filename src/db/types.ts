@@ -127,6 +127,15 @@ export interface ServiceRow {
   updated_at: string;
 }
 
+export interface ServiceConnectionRow {
+  id: string;
+  project_id: string;
+  service_id: string;
+  environment_id: string | null;
+  auto_injected_env_keys: string | null;
+  created_at: string;
+}
+
 export interface DeployConfigRow {
   id: string;
   project_id: string;

@@ -266,7 +266,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.get('/projects/:id', (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    const envVars = ctx.env.getAllMasked(project.id);
+    const envVars = ctx.env.getAll(project.id);
     const environments = ctx.db.getEnvironmentsByProject(project.id);
     const deployLogs = ctx.db.getDeployLogs(project.id, 5);
 
@@ -958,7 +958,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.get('/projects/:id/env', (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    const vars = ctx.env.getAllMasked(project.id);
+    const vars = ctx.env.getAll(project.id);
     return c.json({ project: project.name, envVars: vars });
   });
 

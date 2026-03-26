@@ -63,7 +63,8 @@ describe('project-ops restart_project non-blocking', () => {
     expect(result).toEqual({
       status: 'restarting',
       project: 'demo-app',
-      message: 'Redeployment started. Use get_deploy_status to track progress.',
+      message:
+        'Restart initiated (no_cache). Full rebuild may take 3-5+ minutes. Use get_deploy_status with wait=true and timeout=600.',
     });
   });
 });

@@ -33,7 +33,7 @@ describe('list_env_vars tool with source tracking', () => {
   });
 
   describe('backward compatibility (no environment_name)', () => {
-    it('returns simple masked format when environment_name is omitted', async () => {
+    it('returns plaintext format when environment_name is omitted', async () => {
       db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
       const env = new EnvManager(db);
       env.set('p1', 'DATABASE_URL', 'postgresql://user:pass@localhost:5432/db');
@@ -46,8 +46,8 @@ describe('list_env_vars tool with source tracking', () => {
 
       expect(result).toEqual({
         variables: {
-          DATABASE_URL: 'pos****2/db',
-          API_KEY: 'sk-****cdef',
+          DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+          API_KEY: 'sk-1234567890abcdef',
         },
         count: 2,
       });

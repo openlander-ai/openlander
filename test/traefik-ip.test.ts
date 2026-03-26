@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockNetworkInterfaces } = vi.hoisted(() => ({
-  mockNetworkInterfaces: vi.fn(),
-}));
+const mockNetworkInterfaces = vi.fn();
 
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return { ...actual, networkInterfaces: mockNetworkInterfaces };
-});
+vi.mock('node:os', () => ({
+  networkInterfaces: mockNetworkInterfaces,
+}));
 
 import { getLanIp, getAllIps } from '../src/pipeline/traefik.js';
 
@@ -25,6 +22,10 @@ function ipv4(address: string, iface?: { internal?: boolean }) {
 describe('getLanIp', () => {
   beforeEach(() => {
     mockNetworkInterfaces.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('returns LAN IP when only LAN interfaces exist', () => {
