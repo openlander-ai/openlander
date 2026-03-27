@@ -52,6 +52,13 @@ export interface ToolResult {
   error?: string;
 }
 
+export interface UsageSummary {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number | null;
+}
+
 export type ChatStreamEvent =
   | { type: 'session'; sessionId: string }
   | { type: 'thinking' }
@@ -59,7 +66,7 @@ export type ChatStreamEvent =
   | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
   | { type: 'text_delta'; text: string }
   | { type: 'message'; content: string }
-  | { type: 'done'; toolResults?: ToolResult[] }
+  | { type: 'done'; toolResults?: ToolResult[]; usage?: UsageSummary }
   | { type: 'error'; error: string }
   | {
       type: 'question';

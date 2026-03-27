@@ -9,6 +9,13 @@ export interface ToolResult {
   error?: string;
 }
 
+export interface UsageSummary {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number | null;
+}
+
 // ---------------------------------------------------------------------------
 // Question types (mirrors backend QuestionBridge)
 // ---------------------------------------------------------------------------
@@ -48,7 +55,7 @@ export type ChatStreamEvent =
   | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
   | { type: 'message'; content: string }
   | { type: 'question'; request: QuestionRequest }
-  | { type: 'done'; toolResults?: ToolResult[] }
+  | { type: 'done'; toolResults?: ToolResult[]; usage?: UsageSummary }
   | { type: 'error'; error: string };
 
 // ---------------------------------------------------------------------------

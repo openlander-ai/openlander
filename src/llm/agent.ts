@@ -4,6 +4,8 @@ import type { ChatMessage } from './index.js';
 import type { QuestionRequest, QuestionBridge } from '../lib/question-bridge.js';
 import type { Database } from '../db/index.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
+import { createModuleLogger } from '../lib/logger.js';
+import { calculateCost, extractUsageFromResult, logAiUsage } from './transparency.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
 
 /**
@@ -36,6 +38,7 @@ const MAX_HISTORY_MESSAGES = 40;
 const KEEP_RECENT = 30;
 
 const DEFAULT_CHANNEL_SESSION_ID = 'channel-default';
+const log = createModuleLogger('agent');
 
 export class Agent {
   private history: ChatMessage[] = [];
@@ -84,6 +87,7 @@ export class Agent {
       }
 
       this.history.push({ role: 'user', content: userMessage });
+      const startedAt = Date.now();
 
       const result = await generateText({
         model: this.model,
@@ -113,6 +117,21 @@ export class Agent {
       // Update history with the final response
       this.history.push({ role: 'assistant', content: responseText });
       this.trimHistory();
+
+      const usage = extractUsageFromResult(result.usage);
+      await this.logUsageSafe({
+        sessionId: resolvedSessionId,
+        actionType: 'web_agent',
+        modelName: this.getModelName(),
+        provider: this.provider,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
+        result: 'success',
+        durationMs: Date.now() - startedAt,
+        source: 'web',
+      });
 
       return {
         message: responseText,
@@ -171,6 +190,9 @@ export class Agent {
 
       const allToolResults: ToolResult[] = [];
       let responseText = '';
+      const startedAt = Date.now();
+      let didStreamFail = false;
+      let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
       try {
         const result = streamText({
@@ -184,7 +206,7 @@ export class Agent {
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
         });
 
-        for await (const part of result.fullStream) {
+        streamLoop: for await (const part of result.fullStream) {
           switch (part.type) {
             case 'text-delta': {
               responseText += part.text;
@@ -226,12 +248,16 @@ export class Agent {
             case 'error': {
               const errMsg = part.error instanceof Error ? part.error.message : String(part.error);
               await onEvent({ type: 'error', error: errMsg });
-              return;
+              didStreamFail = true;
+              break streamLoop;
             }
             default:
-              // Ignore other event types (start, start-step, text-start, text-end, etc.)
               break;
           }
+        }
+
+        if (!didStreamFail) {
+          usage = extractUsageFromResult(await result.usage);
         }
       } catch (error) {
         const rawMsg = error instanceof Error ? error.message : String(error);
@@ -240,6 +266,23 @@ export class Agent {
           ? `LLM rate limit exceeded. Please wait a moment and try again. (${rawMsg})`
           : rawMsg;
         await onEvent({ type: 'error', error: errMsg });
+        didStreamFail = true;
+      }
+
+      if (didStreamFail) {
+        await this.logUsageSafe({
+          sessionId: resolvedSessionId,
+          actionType: 'web_agent',
+          modelName: this.getModelName(),
+          provider: this.provider,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
+          result: 'failure',
+          durationMs: Date.now() - startedAt,
+          source: 'web',
+        });
         return;
       }
 
@@ -252,9 +295,37 @@ export class Agent {
       this.trimHistory();
 
       await onEvent({ type: 'message', content: finalText });
+
+      await this.logUsageSafe({
+        sessionId: resolvedSessionId,
+        actionType: 'web_agent',
+        modelName: this.getModelName(),
+        provider: this.provider,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+        toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
+        result: 'success',
+        durationMs: Date.now() - startedAt,
+        source: 'web',
+      });
+
+      const costUsd = calculateCost(
+        this.provider,
+        this.getModelName(),
+        usage.inputTokens,
+        usage.outputTokens,
+      );
+
       await onEvent({
         type: 'done',
         toolResults: allToolResults.length > 0 ? allToolResults : undefined,
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
+          costUsd,
+        },
       });
     });
   }
@@ -315,6 +386,19 @@ export class Agent {
 
   private resolveSessionId(sessionId?: string): string {
     return sessionId ?? DEFAULT_CHANNEL_SESSION_ID;
+  }
+
+  private getModelName(): string {
+    const modelMeta = this.model as { modelId?: string; model?: string };
+    return modelMeta.modelId ?? modelMeta.model ?? 'unknown';
+  }
+
+  private async logUsageSafe(params: Parameters<typeof logAiUsage>[1]): Promise<void> {
+    try {
+      await logAiUsage(this.db, params);
+    } catch (error) {
+      log.warn({ error }, 'Failed to persist AI usage log entry');
+    }
   }
 
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {
