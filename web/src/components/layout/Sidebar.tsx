@@ -32,6 +32,7 @@ const statusColor: Record<string, string> = {
   stopped: 'bg-[var(--text-muted)]',
   building: 'bg-warning animate-pulse-ring',
   error: 'bg-error',
+  idle: 'bg-[var(--text-muted)]',
 };
 
 const VISIBILITY_ORDER: Record<string, number> = {
