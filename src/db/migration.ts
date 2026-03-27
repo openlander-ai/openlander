@@ -72,16 +72,6 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   if (!colNames.has('container_port')) {
     sqlite.exec('ALTER TABLE projects ADD COLUMN container_port INTEGER DEFAULT NULL');
   }
-  const hasMonitoringPaused = colNames.has('monitoring_paused');
-  const hasAutoRecoveryPaused = colNames.has('auto_recovery_paused');
-  if (hasMonitoringPaused && !hasAutoRecoveryPaused) {
-    sqlite.exec('ALTER TABLE projects RENAME COLUMN monitoring_paused TO auto_recovery_paused');
-  } else if (!hasMonitoringPaused && !hasAutoRecoveryPaused) {
-    sqlite.exec(
-      'ALTER TABLE projects ADD COLUMN auto_recovery_paused INTEGER DEFAULT 0 CHECK(auto_recovery_paused IN (0, 1))',
-    );
-  }
-
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
 
   sqlite.exec(`CREATE TABLE IF NOT EXISTS environments (

@@ -17,10 +17,6 @@ const MAX_RECOVERY_ATTEMPTS = 3;
 const RECOVERY_OUTCOME_TIMEOUT_MS = 300_000;
 const recoveryAttempts = new Map<string, { count: number; lastError: string }>();
 
-export function resetRecoveryAttempts(projectId: string): void {
-  recoveryAttempts.delete(projectId);
-}
-
 export interface AutoRecoveryAgent {
   chatStream(
     input: string,
@@ -369,15 +365,6 @@ ${plan.agentGuidance}
     setTimeout(() => {
       enqueueRecoveryCall(
         async () => {
-          const project = db.getProject(payload.projectId);
-          if (!project || project.status === 'stopped' || project.auto_recovery_paused) {
-            log.info(
-              { projectId: payload.projectId },
-              'Skipping recovery: project stopped or paused',
-            );
-            return;
-          }
-
           await handleAutoRecovery(
             payload.projectId,
             payload.error,
@@ -402,15 +389,6 @@ ${plan.agentGuidance}
     setTimeout(() => {
       enqueueRecoveryCall(
         async () => {
-          const project = db.getProject(payload.projectId);
-          if (!project || project.status === 'stopped' || project.auto_recovery_paused) {
-            log.info(
-              { projectId: payload.projectId },
-              'Skipping recovery: project stopped or paused',
-            );
-            return;
-          }
-
           await handleAutoRecovery(payload.projectId, payload.error);
         },
         {
@@ -507,15 +485,6 @@ ${plan.agentGuidance}
     const message = `Health checks are failing for ${payload.projectName} after deployment. ${String(payload.consecutiveFailures)} consecutive failures. Previous version available (${payload.previousImageTag}). Ask the user if they want to rollback.`;
     enqueueRecoveryCall(
       async () => {
-        const project = db.getProject(payload.projectId);
-        if (!project || project.status === 'stopped' || project.auto_recovery_paused) {
-          log.info(
-            { projectId: payload.projectId },
-            'Skipping recovery: project stopped or paused',
-          );
-          return;
-        }
-
         await agent.chatStream(
           message,
           async (event) => {

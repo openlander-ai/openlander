@@ -104,7 +104,6 @@ export class ProjectRepo {
       isPreview: 0 | 1;
       prNumber: number | null;
       branch: string;
-      autoRecoveryPaused: 0 | 1;
     }>,
   ): void {
     const setValues: Partial<typeof projects.$inferInsert> = {};
@@ -175,10 +174,6 @@ export class ProjectRepo {
     if (updates.branch !== undefined) {
       setValues.branch = updates.branch;
     }
-    if (updates.autoRecoveryPaused !== undefined) {
-      setValues.auto_recovery_paused = updates.autoRecoveryPaused;
-    }
-
     if (Object.keys(setValues).length === 0) return;
 
     this.db

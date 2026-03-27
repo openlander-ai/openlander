@@ -1,16 +1,12 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
-import { resetRecoveryAttempts } from '../../pipeline/auto-recovery.js';
-import { resetRollbackWatch } from '../../monitor/rollback-watcher.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import {
   emptySchema,
   removeProjectSchema,
   restartProjectSchema,
   stopProjectSchema,
-  pauseAutoRecoverySchema,
-  resumeAutoRecoverySchema,
   startProjectSchema,
   redeployProjectSchema,
   shareProjectSchema,
@@ -142,60 +138,6 @@ export const projectOpsToolDefs: ToolDef[] = [
         project: projectName,
         _agent_guidance: {
           next_steps: ['Project removed. Use create_deploy_plan to redeploy if needed.'],
-        },
-      };
-    },
-  },
-  {
-    name: 'pause_auto_recovery',
-    description:
-      'Pause automatic recovery for a project. When paused, build/deploy failures will NOT trigger auto-recovery. Use when debugging or switching to a different environment. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription:
-      'Pause auto-recovery for a project. Failures will not trigger automatic fix attempts.',
-    inputSchema: pauseAutoRecoverySchema,
-    execute: (args, context) => {
-      const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
-
-      context.appCtx.db.updateProject(project.id, { autoRecoveryPaused: 1 });
-
-      return {
-        status: 'paused',
-        project: projectName,
-        _agent_guidance: {
-          next_steps: [
-            'Auto-recovery is now paused. Call resume_auto_recovery when ready to re-enable.',
-          ],
-        },
-      };
-    },
-  },
-  {
-    name: 'resume_auto_recovery',
-    description:
-      'Resume automatic recovery for a project. When resumed, build/deploy failures will trigger auto-recovery again. Use after debugging or once environment changes are complete. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription:
-      'Resume auto-recovery for a project. Failures will trigger automatic fix attempts again.',
-    inputSchema: resumeAutoRecoverySchema,
-    execute: (args, context) => {
-      const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
-
-      context.appCtx.db.updateProject(project.id, { autoRecoveryPaused: 0 });
-      resetRecoveryAttempts(project.id);
-      resetRollbackWatch(project.id);
-
-      return {
-        status: 'resumed',
-        project: projectName,
-        _agent_guidance: {
-          next_steps: ['Auto-recovery re-enabled. Failures will trigger automatic recovery.'],
         },
       };
     },

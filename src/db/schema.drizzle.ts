@@ -47,7 +47,6 @@ export const projects = sqliteTable(
     access_code_iv: text('access_code_iv'),
     is_preview: integer('is_preview').default(0),
     pr_number: integer('pr_number'),
-    auto_recovery_paused: integer('auto_recovery_paused').default(0),
   },
   (table) => [
     check(
@@ -60,7 +59,6 @@ export const projects = sqliteTable(
     ),
     check('projects_build_method_check', sql`${table.build_method} IN ('dockerfile', 'compose')`),
     check('projects_is_preview_check', sql`${table.is_preview} IN (0, 1)`),
-    check('projects_auto_recovery_paused_check', sql`${table.auto_recovery_paused} IN (0, 1)`),
     index('idx_projects_parent').on(table.parent_project_id),
   ],
 );
