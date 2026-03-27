@@ -549,6 +549,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
+    // If filtering by environment and no connections found, return empty array
+    if (environmentId) {
+      return c.json([]);
+    }
+
+    // Only fall back to project services when no environment filter
     const services = ctx.serviceManager.getProjectServices(project.id);
     return c.json(
       services.map((s) => ({
@@ -1099,7 +1105,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
 
     const lines = parseInt(c.req.query('lines') ?? '50', 10);
-    const logs = await ctx.pipeline.getLogs(project.id, lines);
+
+    let logs: string;
+    if (targetContainerId) {
+      logs = await ctx.docker.getLogs(targetContainerId, lines);
+    } else {
+      logs = 'No container running for this project.';
+    }
+
     return c.json({ project: project.name, logs });
   });
 
