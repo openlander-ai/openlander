@@ -95,42 +95,56 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const isActive = (path: string) => location.pathname === path;
   const isProjectActive = (id: string) => location.pathname === `/projects/${id}`;
 
+  const children = projects.filter((p) => p.parentProjectId);
+  const topLevel = projects.filter((p) => !p.parentProjectId);
+
+  const composeParents = topLevel.filter((p) => p.isCompose);
+  const standalone = topLevel.filter((p) => !p.isCompose);
+
   const tempGroups = new Map<string, SidebarProject[]>();
-  for (const p of projects) {
+  for (const p of standalone) {
     const url = p.repoUrl ? normalizeRepoUrl(p.repoUrl) : 'unknown';
     if (!tempGroups.has(url)) tempGroups.set(url, []);
     tempGroups.get(url)!.push(p);
   }
 
-  const groups = new Map<string, SidebarProject[]>();
+  const repoGroups = new Map<string, SidebarProject[]>();
   const singletons: SidebarProject[] = [];
 
   for (const [url, projs] of tempGroups.entries()) {
     if (projs.length >= 2) {
-      groups.set(url, projs.sort(sortProjects));
+      repoGroups.set(url, projs.sort(sortProjects));
     } else {
       singletons.push(...projs);
     }
   }
   singletons.sort(sortProjects);
+  composeParents.sort(sortProjects);
 
-  const isGroupOpen = (url: string, projs: SidebarProject[]) => {
-    if (groupState[url] !== undefined) return groupState[url];
-    const hasActive = projs.some((p) => isProjectActive(p.id));
+  const getComposeStatus = (children: SidebarProject[]) => {
+    if (children.some((c) => c.status === 'error')) return 'error';
+    if (children.some((c) => c.status === 'building')) return 'building';
+    if (children.length > 0 && children.every((c) => c.status === 'running')) return 'running';
+    return 'stopped';
+  };
+
+  const isGroupOpen = (key: string, projs: SidebarProject[]) => {
+    if (groupState[key] !== undefined) return groupState[key];
+    const hasActive = projs.some((p) => isProjectActive(p.id)) || isProjectActive(key);
     const hasErrorOrBuilding = projs.some((p) => p.status === 'error' || p.status === 'building');
     return hasActive || hasErrorOrBuilding;
   };
 
-  const toggleGroup = (url: string, projs: SidebarProject[]) => {
+  const toggleGroup = (key: string, projs: SidebarProject[]) => {
     setGroupState((prev) => ({
       ...prev,
-      [url]: !isGroupOpen(url, projs),
+      [key]: !isGroupOpen(key, projs),
     }));
   };
 
-  const renderProjectItem = (project: SidebarProject) => {
+  const renderProjectItem = (project: SidebarProject, hideEnvs = false) => {
     const envs = project.environments ?? [];
-    const hasMultipleEnvs = envs.length > 1;
+    const hasMultipleEnvs = !hideEnvs && envs.length > 1;
 
     let tooltip = project.name;
     if (project.status === 'error') {
@@ -267,11 +281,60 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           )}
 
           {/* Flat list for collapsed mode (< lg) */}
-          <div className="lg:hidden space-y-0.5">{allSortedProjects.map(renderProjectItem)}</div>
+          <div className="lg:hidden space-y-0.5">
+            {allSortedProjects.map((p) => renderProjectItem(p))}
+          </div>
 
           {/* Grouped list for expanded mode (>= lg) */}
           <div className="hidden lg:block space-y-4">
-            {Array.from(groups.entries()).map(([url, projs]) => {
+            {composeParents.map((parent) => {
+              const parentChildren = children
+                .filter((c) => c.parentProjectId === parent.id)
+                .sort(sortProjects);
+              const open = isGroupOpen(parent.id, parentChildren);
+              const status = getComposeStatus(parentChildren);
+
+              return (
+                <div key={parent.id} className="space-y-0.5">
+                  <button
+                    onClick={() => {
+                      navigate(`/projects/${parent.id}`);
+                      toggleGroup(parent.id, parentChildren);
+                    }}
+                    title={parent.name}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors group',
+                      isProjectActive(parent.id)
+                        ? 'text-primary-ol'
+                        : 'text-muted-ol hover:text-secondary-ol',
+                    )}
+                  >
+                    {open ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <div
+                      className={cn(
+                        'h-2 w-2 rounded-full shrink-0',
+                        statusColor[status] ?? 'bg-[var(--text-muted)]',
+                      )}
+                    />
+                    <span className="text-sm font-medium truncate">{parent.name}</span>
+                    <span className="text-xs bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
+                      {parentChildren.length}
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="space-y-0.5 pl-2 border-l border-border/50 ml-3 mt-1">
+                      {parentChildren.map((p) => renderProjectItem(p, true))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {Array.from(repoGroups.entries()).map(([url, projs]) => {
               const visibleProjs = projs;
 
               const open = isGroupOpen(url, projs);
@@ -296,7 +359,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                   </button>
                   {open && (
                     <div className="space-y-0.5 pl-2 border-l border-border/50 ml-3 mt-1">
-                      {visibleProjs.map(renderProjectItem)}
+                      {visibleProjs.map((p) => renderProjectItem(p))}
                     </div>
                   )}
                 </div>
@@ -304,7 +367,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             })}
 
             {/* Singletons */}
-            <div className="space-y-0.5">{singletons.map(renderProjectItem)}</div>
+            <div className="space-y-0.5">{singletons.map((p) => renderProjectItem(p))}</div>
           </div>
         </div>
       </ScrollArea>

@@ -34,6 +34,9 @@ export interface Project {
   imageUrl?: string;
   imageCmd?: string[];
   containerPort?: number;
+  parentProjectId?: string | null;
+  isCompose?: boolean;
+  serviceCount?: number;
 }
 
 export interface ProjectWithEnvironments extends Project {
