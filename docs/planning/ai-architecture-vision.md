@@ -182,14 +182,14 @@ LLM 호출이 아닌 룰 기반으로 동작한다. 빠르고 예측 가능하�
 
 도구별 기본 위험도 매핑:
 
-| 도구                                              | 위험도 | 결과              |
-| ------------------------------------------------- | ------ | ----------------- |
-| `get_project_status`, `get_logs`, `get_build_log` | Low    | ALLOW             |
-| `set_env_vars`, `list_env_vars`                   | Low    | ALLOW             |
-| `redeploy_project`, `restart_container`           | Medium | NOTIFY_THEN_ALLOW |
-| `rollback_project`, `deploy_blue_green`           | High   | REQUIRE_APPROVAL  |
-| `delete_project`, `remove_service`                | High   | REQUIRE_APPROVAL  |
-| `provision_database`                              | High   | REQUIRE_APPROVAL  |
+| 도구                                                 | 위험도 | 결과              |
+| ---------------------------------------------------- | ------ | ----------------- |
+| `get_deploy_status`, `get_logs`, `get_project_stats` | Low    | ALLOW             |
+| `set_env_vars`, `list_env_vars`                      | Low    | ALLOW             |
+| `redeploy_project`, `restart_project`                | Medium | NOTIFY_THEN_ALLOW |
+| `rollback_project`, `deploy_blue_green`              | High   | REQUIRE_APPROVAL  |
+| `remove_project`, `remove_service`                   | High   | REQUIRE_APPROVAL  |
+| `create_database`                                    | High   | REQUIRE_APPROVAL  |
 
 유저가 Settings에서 Medium risk 도구를 `REQUIRE_APPROVAL`로 올릴 수 있다. High risk를 낮추는 건 불가능하다. 위험도 매핑은 DB 또는 config 파일에 저장되어 코드 변경 없이 조정 가능하다.
 
@@ -332,7 +332,7 @@ _agent_guidance: "주의 — 5분 전 동일 프로젝트 배포 실패.
 
 **파괴적 도구에 대한 강제 모드 (Phase 4+)**
 
-`delete_project`, `rollback_project` 등 비가역/고위험 도구에 한해서만 서버 측 강제 승인을 적용한다. 대부분의 도구는 기존 advisory 그대로다.
+`remove_project`, `rollback_project` 등 비가역/고위험 도구에 한해서만 서버 측 강제 승인을 적용한다. 대부분의 도구는 기존 advisory 그대로다.
 
 동작 방식:
 
@@ -413,7 +413,7 @@ Stop, Start, Restart, Redeploy, Rollback, Delete — 모두 직접 실행. LLM �
 - 더 자율적이고 덜 대화적
 - Phase 4에서는 AI Agent Layer를 경유해서 위험 평가를 받는다
 
-두 경로 모두 AI Agent Layer를 통과한다. 차이는 사람이 얼마나 개입하느냐다.
+Web Agent는 항상 AI Agent Layer를 통과한다. MCP는 Phase 1~3에서는 ToolDef를 직접 호출하고, Phase 4에서 AI Agent Layer(Decision Engine 체크 + `_agent_guidance` 주입)를 경유한다.
 
 ### 확장성 모델
 
@@ -445,16 +445,26 @@ MCP, 웹 에이전트, 자동복구, 채널 — 모든 진입점에서 자동으
 
 같은 프로젝트에 여러 AI 액션이 동시에 요청될 때의 처리 규칙이다. 현재는 `Agent` 클래스 내의 `lockPromise`로 직렬화되지만, 이는 단일 에이전트 인스턴스 수준의 락이다. 여러 진입점(웹 에이전트 + MCP + 자동복구)이 동시에 같은 프로젝트를 건드릴 수 있어서 더 명확한 규칙이 필요하다.
 
-**규칙**:
+**Renewable lease 모델**:
 
-- 같은 프로젝트에 수동 배포(Web UI 버튼)와 자동복구가 동시에 발생하면 자동복구는 양보한다. 사람의 명시적 의도가 AI의 자율 판단보다 우선한다.
-- 같은 프로젝트에 웹 에이전트 요청과 MCP 에이전트 요청이 동시에 들어오면 먼저 도착한 요청이 `action_runs` 레코드를 생성하고 실행권을 가진다. 후속 요청은 대기하거나 "이미 다른 작업이 진행 중입니다"를 반환한다.
-- 장시간 실행(빌드 5분+)에 대한 lease 타임아웃: 락이 타임아웃 시간을 초과하면 자동 해제된다. 다음 요청이 안전하게 시작할 수 있다.
-- 실행 중 취소: operation을 `cancelled` 상태로 전환하고 현재 단계까지만 보상 처리한다.
+`action_runs`의 `running` 레코드가 락을 소유한다. 단순 타임아웃이 아니라 heartbeat 또는 step 진행으로 lease를 연장한다. 진행 중인 작업이 살아있는 한 락을 유지한다. heartbeat가 일정 시간(3분) 없으면 stale로 판정하고 정리 대상으로 표시한다.
+
+**취소 요청 상태**:
+
+수동 작업(Web UI 버튼)이 자동복구를 즉시 중단시키지 않는다. 대신 `action_runs`를 `cancellation_requested` 상태로 전환한다. 자동복구는 현재 단계를 완료하거나 안전한 경계(롤백 완료, 헬스체크 후)에 도달한 후에 중단한다. 이후 수동 작업이 프로젝트 제어를 인계받는다.
+
+빌드 중간에 락을 강제로 빼앗으면 컨테이너가 불완전한 상태로 남을 수 있기 때문이다.
+
+**동시성 규칙 요약**:
+
+1. 자동복구 실행 중 수동 배포 요청 → 자동복구에 `cancellation_requested` → 안전 경계 후 수동에 인계
+2. 수동 배포 실행 중 자동복구 트리거 → 자동복구 양보 (사람 의도 우선)
+3. 웹 에이전트 vs MCP 에이전트 동시 요청 → `action_runs` 기반 직렬화, 후속 요청은 "진행 중" 반환
+4. Stale lease → heartbeat 3분 없으면 자동 정리 가능
 
 **구현**:
 
-기존 `deploy_lock_session` 컬럼을 AI 레이어 수준의 프로젝트 락으로 확장한다. `action_runs`의 `status = 'running'`인 레코드가 있으면 신규 요청은 대기 또는 거부한다. 수동 배포(Web UI)는 이 락을 무시하고 AI 복구를 중단시킨다.
+기존 `deploy_lock_session` 컬럼을 AI 레이어 수준의 프로젝트 락으로 확장한다. `action_runs`에 `last_heartbeat_at` 컬럼을 추가해 stale 감지에 활용한다.
 
 ---
 
@@ -471,9 +481,10 @@ MCP, 웹 에이전트, 자동복구, 채널 — 모든 진입점에서 자동으
 - Recovery Planner (자동복구 전용 — 범용 Action Executor 아님)
 - 간단한 승인 게이트 (자동복구가 고위험/비가역 액션 감지 시에만)
 - AgentPool — 세션별 Agent 인스턴스 분리 (현재는 단일 인스턴스 + 락)
-- Operation 레저 (`action_runs` 테이블) — 기본 상태 추적
+- Operation 레저 (`action_runs` 테이블) — auto-recovery 전용, 기본 상태만 추적 (`running` / `succeeded` / `failed`). 전체 상태 기계(`partial`, `rolled_back`, `manual_intervention`, `cancelled`)는 Phase 2~3에서 확장
 - 자동 복구 안정화
 - MCP 도구 품질 강화
+- 운영 모니터링 기본 대응: 컨테이너 크래시 반복 시 자동 재시작, 디스크 80% 도달 시 감지 + 정리 권장 알림 + 원클릭 실행 (자동 정리는 v1.x), 헬스체크 연속 실패 시 롤백 제안 (AlertMonitor + rollback:suggested 이벤트 활용)
 
 **v1.0에 포함되지 않는 것**:
 
@@ -630,7 +641,7 @@ deployment_patterns
 
 **동시성 규칙 적용**:
 
-Phase 1의 기본 동시성 규칙을 완성한다. `action_runs`의 running 레코드 기반 프로젝트 락, lease 타임아웃, 수동 작업 우선 규칙.
+Phase 1의 기본 동시성 규칙을 완성한다. renewable lease 모델, `cancellation_requested` 상태, stale 감지(heartbeat 3분), 수동 작업 우선 인계.
 
 **세션 영속화**:
 
@@ -940,23 +951,33 @@ AI 레이어는 LLM에 의존하는 부분과 그렇지 않은 부분이 섞여 
 
 ```
 RequestIdentity {
-  userId?:  string   // 요청한 유저
-  tenantId?: string  // 소속 팀/조직
-  role?:    string   // admin / member / viewer
-  source:   'web' | 'mcp' | 'auto-recovery' | 'monitor'  // 진입점
+  userId?:      string   // 감사 기준 책임자 (accountable owner)
+  tenantId?:    string   // 소속 팀/조직
+  role?:        string   // admin / member / viewer (향후 enum으로 강화)
+  source:       'web' | 'mcp' | 'auto-recovery' | 'monitor'  // 기술적 진입점
+  initiatedBy?: string   // 사람 기준 요청자 (source와 구분)
 }
 ```
+
+`source`와 `initiatedBy`의 구분이 중요하다:
+
+- `source`: 기술적 진입점. 어떤 경로로 요청이 들어왔는지. auto-recovery가 실행하면 `source = 'auto-recovery'`.
+- `initiatedBy` / `userId`: 감사 기준 책임자. 누가 이 액션의 owner인지. auto-recovery가 실행해도 해당 프로젝트 owner가 감사 대상. MCP 호출이면 MCP 클라이언트를 인증한 유저가 `userId`.
+
+예시: 자동복구가 rollback을 실행할 때 `source = 'auto-recovery'`, `userId = 프로젝트_owner`. 감사 로그에는 "프로젝트 owner의 프로젝트에서 auto-recovery가 rollback 실행"으로 기록된다.
 
 이 타입을 아래 인터페이스에 optional로 포함:
 
 - `ToolContext` → `identity?: RequestIdentity`
 - Decision Engine 입력 → `identity?: RequestIdentity`
 - Context Assembler 입력 → `identity?: RequestIdentity`
-- `ai_usage_log` 테이블 → `user_id`, `tenant_id` 컬럼
+- `ai_usage_log` 테이블 → `user_id`, `tenant_id`, `source` 컬럼
 - `deployment_patterns` 테이블 → `tenant_id` 컬럼
 - EventBus 페이로드 → `tenantId?: string`
 
 단일 유저 모드에서는 모든 identity 필드가 생략된다. 기존 동작과 완전히 동일하다. 기업용 활성화 시 미들웨어에서 자동 주입한다.
+
+**주의**: 단일 유저 모드에서 `tenantId = null`이 "스코핑 스킵"의 숏컷이 되어선 안 된다. 코드에서 단일 유저 모드를 별도 플래그로 명시적으로 확인해야 한다. `tenantId = null`을 보고 "전체 조회"로 해석하는 버그는 기업용 전환 시 데이터 누출로 이어진다.
 
 ### 종합 판정
 
