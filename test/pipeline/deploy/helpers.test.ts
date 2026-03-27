@@ -121,14 +121,14 @@ describe('resolveDockerfilePath', () => {
 });
 
 describe('deriveServiceName', () => {
-  it('returns main for root Dockerfile', () => {
+  it('returns app for root Dockerfile', () => {
     const result = deriveServiceName('Dockerfile');
-    expect(result).toBe('main');
+    expect(result).toBe('app');
   });
 
-  it('returns main for current directory', () => {
+  it('returns app for current directory', () => {
     const result = deriveServiceName('./Dockerfile');
-    expect(result).toBe('main');
+    expect(result).toBe('app');
   });
 
   it('returns first directory component for nested path', () => {
@@ -136,9 +136,9 @@ describe('deriveServiceName', () => {
     expect(result).toBe('services');
   });
 
-  it('returns main when dirname is dot', () => {
+  it('returns app when dirname is dot', () => {
     const result = deriveServiceName('');
-    expect(result).toBe('main');
+    expect(result).toBe('app');
   });
 
   it('extracts service name from single-level subdirectory', () => {

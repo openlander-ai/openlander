@@ -21,6 +21,7 @@ interface DeploymentsListProps {
   projectBranch?: string;
   statusFilter?: DeploymentHistoryFilter;
   environmentId?: string;
+  environmentType?: string;
 }
 
 export function DeploymentsList({
@@ -29,6 +30,7 @@ export function DeploymentsList({
   projectBranch,
   statusFilter = 'all',
   environmentId,
+  environmentType,
 }: DeploymentsListProps) {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -88,72 +90,81 @@ export function DeploymentsList({
   }
 
   return (
-    <div className="divide-y divide-border overflow-auto h-full">
-      {filteredDeployments.map((deploy) => {
-        const statusMeta = getDeploymentStatusMeta(deploy.status);
-        const shortCommitSha = getShortCommitSha(deploy.commitSha);
-        const triggerIconName = getDeploymentTriggerIcon(deploy.trigger);
+    <div className="flex flex-col h-full">
+      {environmentType && environmentType !== 'production' && (
+        <div className="shrink-0 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-app/60 flex items-center">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            {environmentType}
+          </span>
+        </div>
+      )}
+      <div className="divide-y divide-border overflow-auto flex-1">
+        {filteredDeployments.map((deploy) => {
+          const statusMeta = getDeploymentStatusMeta(deploy.status);
+          const shortCommitSha = getShortCommitSha(deploy.commitSha);
+          const triggerIconName = getDeploymentTriggerIcon(deploy.trigger);
 
-        const TriggerIcon =
-          triggerIconName === 'Bot'
-            ? Bot
-            : triggerIconName === 'Webhook'
-              ? Webhook
-              : triggerIconName === 'Zap'
-                ? Zap
-                : Rocket;
+          const TriggerIcon =
+            triggerIconName === 'Bot'
+              ? Bot
+              : triggerIconName === 'Webhook'
+                ? Webhook
+                : triggerIconName === 'Zap'
+                  ? Zap
+                  : Rocket;
 
-        return (
-          <div
-            key={deploy.id}
-            onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
-            className={cn(
-              'flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-colors hover:bg-bg-subtle/50',
-              deploy.trigger === 'chat' && 'ai-deploy-border',
-            )}
-          >
-            <div className={cn('h-2 w-2 rounded-full shrink-0', statusMeta.dotClass)} />
+          return (
+            <div
+              key={deploy.id}
+              onClick={() => navigate(`/projects/${projectId}/deployments/${deploy.id}`)}
+              className={cn(
+                'flex items-center gap-3 py-2.5 px-4 cursor-pointer transition-colors hover:bg-bg-subtle/50',
+                deploy.trigger === 'chat' && 'ai-deploy-border',
+              )}
+            >
+              <div className={cn('h-2 w-2 rounded-full shrink-0', statusMeta.dotClass)} />
 
-            <span className="flex items-center gap-1.5 text-sm font-semibold text-primary-ol truncate shrink-0">
-              <TriggerIcon className="h-3.5 w-3.5 text-muted-ol shrink-0" />
-              {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail)}
-            </span>
-            <span className={cn('text-xs font-body shrink-0', statusMeta.textClass)}>
-              {statusMeta.label}
-            </span>
-            {shortCommitSha && (
-              <span className="text-xs font-mono text-muted-ol shrink-0">{shortCommitSha}</span>
-            )}
-
-            {deploy.failureSummary && (
-              <span className="text-xs font-body text-error truncate min-w-0">
-                {deploy.failureSummary}
+              <span className="flex items-center gap-1.5 text-sm font-semibold text-primary-ol truncate shrink-0">
+                <TriggerIcon className="h-3.5 w-3.5 text-muted-ol shrink-0" />
+                {getDeploymentTriggerLabel(deploy.trigger, deploy.triggerDetail)}
               </span>
-            )}
+              <span className={cn('text-xs font-body shrink-0', statusMeta.textClass)}>
+                {statusMeta.label}
+              </span>
+              {shortCommitSha && (
+                <span className="text-xs font-mono text-muted-ol shrink-0">{shortCommitSha}</span>
+              )}
 
-            <div className="flex-1" />
-
-            <div className="flex items-center gap-3 text-xs font-body text-muted-ol shrink-0">
-              {projectBranch && (
-                <span className="flex items-center gap-1">
-                  <GitBranch className="h-3 w-3" />
-                  {projectBranch}
+              {deploy.failureSummary && (
+                <span className="text-xs font-body text-error truncate min-w-0">
+                  {deploy.failureSummary}
                 </span>
               )}
-              {deploy.durationMs && (
-                <span className="flex items-center gap-1">
-                  <Activity className="h-3 w-3" />
-                  {formatDeploymentDuration(deploy.durationMs)}
+
+              <div className="flex-1" />
+
+              <div className="flex items-center gap-3 text-xs font-body text-muted-ol shrink-0">
+                {projectBranch && (
+                  <span className="flex items-center gap-1">
+                    <GitBranch className="h-3 w-3" />
+                    {projectBranch}
+                  </span>
+                )}
+                {deploy.durationMs && (
+                  <span className="flex items-center gap-1">
+                    <Activity className="h-3 w-3" />
+                    {formatDeploymentDuration(deploy.durationMs)}
+                  </span>
+                )}
+                <span className="flex items-center gap-1 whitespace-nowrap justify-end">
+                  <Clock className="h-3 w-3" />
+                  {formatRelativeTime(deploy.createdAt, t)}
                 </span>
-              )}
-              <span className="flex items-center gap-1 whitespace-nowrap justify-end">
-                <Clock className="h-3 w-3" />
-                {formatRelativeTime(deploy.createdAt, t)}
-              </span>
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

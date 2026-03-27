@@ -18,6 +18,8 @@ interface BackendEnvironment {
   image_tag: string | null;
   previous_image_tag: string | null;
   public_url: string | null;
+  url?: string;
+  urls?: Array<{ url: string; type: 'lan' | 'vpn'; ip: string }>;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +51,8 @@ function mapEnvironment(environment: BackendEnvironment): Environment {
     imageTag: environment.image_tag,
     previousImageTag: environment.previous_image_tag,
     publicUrl: environment.public_url,
+    url: environment.url,
+    urls: environment.urls,
     createdAt: environment.created_at,
     updatedAt: environment.updated_at,
   };
@@ -297,8 +301,12 @@ export interface ConnectedService {
   autoInjectedEnvKeys?: string[];
 }
 
-export async function getProjectConnectedServices(id: string): Promise<ConnectedService[]> {
-  const res = await fetch(`/api/projects/${id}/services`);
+export async function getProjectConnectedServices(
+  id: string,
+  environmentId?: string,
+): Promise<ConnectedService[]> {
+  const params = environmentId ? `?environmentId=${environmentId}` : '';
+  const res = await fetch(`/api/projects/${id}/services${params}`);
   if (!res.ok) return [];
   return res.json();
 }

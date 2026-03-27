@@ -6,6 +6,7 @@ import type { TimelineItem } from '@/lib/event-types';
 import {
   getProjectDeployments,
   getProjectEnv,
+  getEnvironmentEnvVars,
   getProjectConnectedServices,
   connectProjectService,
   disconnectProjectService,
@@ -106,6 +107,8 @@ interface OverviewTabProps {
   projectStatus: string;
   displayProject?: Project;
   environments?: Environment[];
+  selectedEnvId?: string;
+  currentEnvType?: string;
   // Timeline props
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
@@ -125,6 +128,8 @@ export function OverviewTab({
   projectStatus,
   displayProject,
   environments,
+  selectedEnvId,
+  currentEnvType,
   timelineItems,
   isTimelineStreaming,
   timelineDisconnected,
@@ -218,7 +223,7 @@ export function OverviewTab({
 
   useEffect(() => {
     let mounted = true;
-    getProjectDeployments(projectId, 5)
+    getProjectDeployments(projectId, 5, selectedEnvId)
       .then((deployments) => {
         if (mounted) {
           setRecentDeploys(deployments);
@@ -232,15 +237,25 @@ export function OverviewTab({
     return () => {
       mounted = false;
     };
-  }, [projectId]);
+  }, [projectId, selectedEnvId]);
 
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([getProjectConnectedServices(projectId), getProjectEnv(projectId), getServices()])
-      .then(([services, envVars, allServices]) => {
+    const envVarsPromise = selectedEnvId
+      ? getEnvironmentEnvVars(projectId, selectedEnvId)
+      : getProjectEnv(projectId);
+
+    Promise.all([
+      getProjectConnectedServices(projectId, selectedEnvId),
+      envVarsPromise,
+      getServices(),
+    ])
+      .then(([services, envVarsData, allServices]) => {
         if (!mounted) return;
         setConnectedServices(services);
+        // Handle both direct object (getProjectEnv) and response object (getEnvironmentEnvVars)
+        const envVars = 'envVars' in envVarsData ? envVarsData.envVars : envVarsData;
         setEnvVarCount(Object.keys(envVars).length);
         setAvailableServices(allServices);
       })
@@ -249,7 +264,7 @@ export function OverviewTab({
     return () => {
       mounted = false;
     };
-  }, [projectId]);
+  }, [projectId, selectedEnvId]);
 
   useEffect(() => {
     if (!isRunning) {
@@ -262,7 +277,8 @@ export function OverviewTab({
 
     async function fetchErrors() {
       try {
-        const res = await fetch(`/api/projects/${projectId}/logs?lines=200`, {
+        const envParam = currentEnvType ? `&environment=${currentEnvType}` : '';
+        const res = await fetch(`/api/projects/${projectId}/logs?lines=200${envParam}`, {
           signal: controller.signal,
         });
         if (!res.ok || !mounted) return;
@@ -287,13 +303,13 @@ export function OverviewTab({
       controller.abort();
       clearInterval(interval);
     };
-  }, [projectId, isRunning]);
+  }, [projectId, isRunning, currentEnvType]);
 
   const handleConnectService = async (serviceId: string) => {
     try {
       setIsConnecting(true);
       await connectProjectService(projectId, serviceId);
-      const updatedServices = await getProjectConnectedServices(projectId);
+      const updatedServices = await getProjectConnectedServices(projectId, selectedEnvId);
       setConnectedServices(updatedServices);
     } catch (err) {
       console.error('Failed to connect service:', err);
@@ -306,7 +322,7 @@ export function OverviewTab({
     try {
       setDisconnectingId(serviceId);
       await disconnectProjectService(projectId, serviceId);
-      const updatedServices = await getProjectConnectedServices(projectId);
+      const updatedServices = await getProjectConnectedServices(projectId, selectedEnvId);
       setConnectedServices(updatedServices);
     } catch (err) {
       console.error('Failed to disconnect service:', err);

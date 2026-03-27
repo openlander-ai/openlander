@@ -24,22 +24,23 @@
 - 에러 0이어야 함 (warning은 허용)
 - 에러 있으면 고치고 다시 확인
 
-### Step 3: bun run build
+### Step 3: npm run build
 
-- `bun run build` 실행하여 타입 에러 없이 빌드 성공 확인
+- `npm run build` 실행하여 타입 에러 없이 빌드 성공 확인
 - exit code 0 필수
 
-### Step 4: bun test
+### Step 4: npm test
 
-- `bun test` 전체 실행
+- `npm test` 전체 실행
 - 0 failures 필수
 - 기존 테스트가 깨졌으면 내가 깨뜨린 것 → 반드시 수정
 
 ### Step 5: 테스트 존재 확인
 
 - 새 로직(hook, 유틸, 상태 관리)에 대응하는 테스트가 **존재**하는지 확인
-- TUI 렌더링 자체는 테스트 어려우나, **상태 로직과 유틸리티 함수는 반드시 테스트**
+- React 컴포넌트 렌더링 자체는 테스트 어려우나, **상태 로직과 유틸리티 함수는 반드시 테스트**
 - 테스트 없으면 작성
+- 테스트 위치: `test/` 디렉토리 (소스와 분리, co-locate 금지)
 
 ### Step 6: 결과 보고
 
@@ -53,8 +54,8 @@
 
 ## 검증 결과
 - lsp_diagnostics: ✅ 에러 0 (파일1.tsx, 파일2.ts)
-- bun run build: ✅ 성공
-- bun test: ✅ N/N 통과
+- npm run build: ✅ 성공
+- npm test: ✅ N/N 통과
 - 테스트 추가: ✅ test/파일.test.ts (M개 케이스)
 ```
 
@@ -71,13 +72,16 @@
 - **타입**: strict mode — 타입 단언/무시 절대 금지
 - **함수 추가**: 기존 모듈에 추가 우선, 새 파일은 정말 필요할 때만
 - **함수 시그니처**: 기존 함수 변경 금지 → 새 함수 추가
-- **테스트**: `test/[모듈명]/[파일명].test.ts` 경로
+- **테스트**: `test/[모듈명]/[파일명].test.ts` 경로 (Vitest)
+- **프론트엔드**: `cn()` 클래스 머저, `t()` i18n (en.ts + ko.ts 둘 다), `fetchWithAuth()` API
+- **에러**: `OpenLanderError` 상속 (`src/errors.ts`)
 
-> 상세 패턴은 `codebase-guide` 스킬의 `references/codebase-patterns.md` 참조
+> 상세 아키텍처/패턴은 `AGENTS.md` 참조
 
 ## 참조 문서
 
-| 문서                           | 용도                |
-| ------------------------------ | ------------------- |
-| `docs/planning/version-map.md` | 현재 버전/상태 파악 |
-| `.opencode/instructions.md`    | 프로젝트 개발 규칙  |
+| 문서                           | 용도                          |
+| ------------------------------ | ----------------------------- |
+| `AGENTS.md`                    | 아키텍처, 패턴, 디렉토리 구조 |
+| `docs/planning/version-map.md` | 현재 버전/상태 파악           |
+| `.opencode/instructions.md`    | 프로젝트 개발 규칙            |

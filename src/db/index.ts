@@ -127,7 +127,7 @@ export class Database implements AuthDatabase {
    createServiceConnection(opts: Parameters<ServiceConnectionRepo['createConnection']>[0]) { return this.serviceConnectionRepo.createConnection(opts); }
    getServiceConnection(id: string) { return this.serviceConnectionRepo.getConnection(id); }
    getServiceConnectionByProjectAndService(projectId: string, serviceId: string) { return this.serviceConnectionRepo.getConnectionByProjectAndService(projectId, serviceId); }
-   listServiceConnectionsByProject(projectId: string) { return this.serviceConnectionRepo.listConnectionsByProject(projectId); }
+   listServiceConnectionsByProject(projectId: string, environmentId?: string) { return this.serviceConnectionRepo.listConnectionsByProject(projectId, environmentId); }
     listServiceConnectionsByService(serviceId: string) { return this.serviceConnectionRepo.listConnectionsByService(serviceId); }
     updateServiceConnection(id: string, updates: Parameters<ServiceConnectionRepo['updateConnection']>[1]) { this.serviceConnectionRepo.updateConnection(id, updates); }
     deleteServiceConnection(id: string) { this.serviceConnectionRepo.deleteConnection(id); }
