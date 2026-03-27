@@ -7,13 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0-rc.5] - 2026-03-27
+
 ### Added
 
 - **Deploy terminal AI inline events**: Agent events render as visually distinct blocks (diagnostic=red, prescription=purple, info=blue) inside the deploy terminal
 - **TerminalAIBlock component**: Terminal-native block with 3 variants using terminal-tokens color system
 - **Premium AISparkle icon**: Gradient purple→rose fill + glow effect on all AI-enhanced buttons
 - **Status dot animations**: Building uses pulse-ring, running uses breathing pulse
-- **Environment-aware UI**: Sidebar sub-items with environment color coding and comparison views
 - **Stop action confirmation**: ConfirmDialog added to stop button
 
 ### Fixed
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Single-environment model**: Reverted multi-env UI to single production environment; removed segment control, EnvironmentContext, and env-specific filtering across all components
 - **Vision document**: Acknowledges Agent Mode (v0.9.0) coexistence with Smart Deploy Terminal
 
 ## [1.0.0-rc.3] - 2026-03-26
