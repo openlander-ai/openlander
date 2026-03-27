@@ -6,7 +6,14 @@ function parseCookie(cookieHeader: string, name: string): string | null {
   return match?.[1] ?? null;
 }
 
-const EXEMPT_PREFIXES = ['/api/webhooks/', '/webhooks/', '/auth/', '/api/auth/', '/assets/'];
+const EXEMPT_PREFIXES = [
+  '/api/webhooks/',
+  '/webhooks/',
+  '/auth/',
+  '/api/auth/',
+  '/assets/',
+  '/mcp',
+];
 
 const EXEMPT_EXTENSIONS = [
   '.js',
@@ -69,7 +76,7 @@ export function createAuthMiddleware(authService: AuthService) {
       }
     }
 
-    if (!path.startsWith('/api/') && !path.startsWith('/mcp')) {
+    if (!path.startsWith('/api/')) {
       return next();
     }
 
