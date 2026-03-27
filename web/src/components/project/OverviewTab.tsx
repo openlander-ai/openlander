@@ -129,7 +129,7 @@ export function OverviewTab({
   displayProject,
   environments,
   selectedEnvId,
-  currentEnvType, // eslint-disable-line @typescript-eslint/no-unused-vars
+  currentEnvType,
   timelineItems,
   isTimelineStreaming,
   timelineDisconnected,
@@ -273,7 +273,8 @@ export function OverviewTab({
 
     async function fetchErrors() {
       try {
-        const res = await fetch(`/api/projects/${projectId}/logs?lines=200`, {
+        const envParam = currentEnvType ? `&environment=${currentEnvType}` : '';
+        const res = await fetch(`/api/projects/${projectId}/logs?lines=200${envParam}`, {
           signal: controller.signal,
         });
         if (!res.ok || !mounted) return;
@@ -298,7 +299,7 @@ export function OverviewTab({
       controller.abort();
       clearInterval(interval);
     };
-  }, [projectId, isRunning]);
+  }, [projectId, isRunning, currentEnvType]);
 
   const handleConnectService = async (serviceId: string) => {
     try {
