@@ -52,7 +52,7 @@ export class TraefikManager {
     try {
       const client = this.docker.getClient();
       const containers = await client.listContainers({
-        filters: { name: [this.containerName] },
+        filters: { label: ['openlander.role=traefik'] },
       });
       return containers.length > 0;
     } catch (err) {
@@ -147,9 +147,16 @@ export class TraefikManager {
     const client = this.docker.getClient();
 
     try {
-      const existing = client.getContainer(this.containerName);
-      await existing.remove({ force: true });
-      log.debug('Removed existing Traefik container before recreation');
+      const existing = await client.listContainers({
+        all: true,
+        filters: { label: ['openlander.role=traefik'] },
+      });
+      for (const c of existing) {
+        await client.getContainer(c.Id).remove({ force: true });
+      }
+      if (existing.length > 0) {
+        log.debug(`Removed ${existing.length} existing Traefik container(s) before recreation`);
+      }
     } catch (_err) {
       // Container doesn't exist — expected on first run
     }

@@ -89,9 +89,28 @@ export const envToolDefs: ToolDef[] = [
     inputSchema: setEnvVarsSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
+      const environmentName = args['environment_name'] as string | undefined;
       const project = getProjectByName(appCtx, projectName);
       const vars = JSON.parse(args['variables'] as string) as Record<string, string>;
-      const changed = appCtx.env.setBulk(project.id, vars);
+
+      let environmentId: string | undefined;
+      let deploymentEnvironment: 'production' | 'development' | undefined;
+
+      if (environmentName) {
+        const environments = appCtx.db.getEnvironmentsByProject(project.id);
+        const environment = environments.find((e) => e.type === environmentName);
+
+        if (!environment) {
+          throw new Error(
+            `ENVIRONMENT_NOT_FOUND: No environment named "${environmentName}" found for project "${projectName}"`,
+          );
+        }
+
+        environmentId = environment.id;
+        deploymentEnvironment = environment.type as 'production' | 'development';
+      }
+
+      const changed = appCtx.env.setBulk(project.id, vars, environmentId);
       const mismatches = appCtx.env.verifyRoundTrip(project.id, vars);
 
       if (mismatches.length > 0) {
@@ -104,7 +123,7 @@ export const envToolDefs: ToolDef[] = [
       }
 
       if (changed && project.status === 'running') {
-        await appCtx.pipeline.redeploy(project.id);
+        await appCtx.pipeline.redeploy(project.id, { environment: deploymentEnvironment });
         return {
           status: 'updated_and_redeployed',
           project: projectName,
