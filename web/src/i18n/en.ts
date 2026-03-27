@@ -218,6 +218,7 @@ export const translations = {
     customImage: 'Custom Docker Image',
     imagePlaceholder: 'ghcr.io/berriai/litellm:latest',
     orCustom: 'Or run any Docker image:',
+    createdAgo: '{time} ago',
   },
   timeline: {
     empty: 'No activity yet',
