@@ -352,6 +352,14 @@ export const stopProjectSchema = z.object({
   environment: deploymentEnvironmentSchema,
 });
 
+export const pauseAutoRecoverySchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+});
+
+export const resumeAutoRecoverySchema = z.object({
+  project_name: z.string().min(1).describe('Project name'),
+});
+
 // Remove project schema
 export const removeProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),

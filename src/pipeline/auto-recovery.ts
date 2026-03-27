@@ -364,7 +364,23 @@ ${plan.agentGuidance}
     }
     setTimeout(() => {
       enqueueRecoveryCall(
-        () => handleAutoRecovery(payload.projectId, payload.error, payload.step, payload.buildLog),
+        async () => {
+          const project = db.getProject(payload.projectId);
+          if (!project || project.status === 'stopped' || project.monitoring_paused) {
+            log.info(
+              { projectId: payload.projectId },
+              'Skipping recovery: project stopped or paused',
+            );
+            return;
+          }
+
+          await handleAutoRecovery(
+            payload.projectId,
+            payload.error,
+            payload.step,
+            payload.buildLog,
+          );
+        },
         { projectId: payload.projectId, eventType: 'deploy:failed' },
       );
     }, 2000);
@@ -380,10 +396,24 @@ ${plan.agentGuidance}
       return;
     }
     setTimeout(() => {
-      enqueueRecoveryCall(() => handleAutoRecovery(payload.projectId, payload.error), {
-        projectId: payload.projectId,
-        eventType: 'compose:failed',
-      });
+      enqueueRecoveryCall(
+        async () => {
+          const project = db.getProject(payload.projectId);
+          if (!project || project.status === 'stopped' || project.monitoring_paused) {
+            log.info(
+              { projectId: payload.projectId },
+              'Skipping recovery: project stopped or paused',
+            );
+            return;
+          }
+
+          await handleAutoRecovery(payload.projectId, payload.error);
+        },
+        {
+          projectId: payload.projectId,
+          eventType: 'compose:failed',
+        },
+      );
     }, 2000);
   });
 
@@ -473,6 +503,15 @@ ${plan.agentGuidance}
     const message = `Health checks are failing for ${payload.projectName} after deployment. ${String(payload.consecutiveFailures)} consecutive failures. Previous version available (${payload.previousImageTag}). Ask the user if they want to rollback.`;
     enqueueRecoveryCall(
       async () => {
+        const project = db.getProject(payload.projectId);
+        if (!project || project.status === 'stopped' || project.monitoring_paused) {
+          log.info(
+            { projectId: payload.projectId },
+            'Skipping recovery: project stopped or paused',
+          );
+          return;
+        }
+
         await agent.chatStream(
           message,
           async (event) => {

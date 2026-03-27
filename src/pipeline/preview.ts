@@ -110,6 +110,7 @@ export class PreviewDeployer {
       const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? port;
       const traefikLabels = buildTraefikLabels(previewName, containerPort);
 
+      await this.docker.ensureProjectNetwork(projectId);
       const containerId = await this.docker.runContainer({
         imageTag,
         name: `ol-preview-${safeBranch}`,
@@ -117,6 +118,7 @@ export class PreviewDeployer {
         containerPort,
         envVars: {},
         traefikLabels,
+        network: getPolicy('production').networkName,
       });
 
       const url = getProjectUrl(previewName);

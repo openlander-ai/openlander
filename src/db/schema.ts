@@ -30,10 +30,11 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
   deploy_lock_session TEXT,
   deploy_lock_at TEXT,
-  access_code TEXT,
-  access_code_iv TEXT,
-  is_preview INTEGER DEFAULT 0 CHECK(is_preview IN (0, 1)),
-  pr_number INTEGER
+   access_code TEXT,
+   access_code_iv TEXT,
+   is_preview INTEGER DEFAULT 0 CHECK(is_preview IN (0, 1)),
+   pr_number INTEGER,
+   monitoring_paused INTEGER DEFAULT 0 CHECK(monitoring_paused IN (0, 1))
 );
 
 CREATE TABLE IF NOT EXISTS environments (

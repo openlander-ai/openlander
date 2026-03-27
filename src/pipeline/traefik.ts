@@ -80,6 +80,12 @@ export class TraefikManager {
   /**
    * Ensure both production and development Docker networks exist.
    * Called at startup so that either environment can deploy immediately.
+   *
+   * NOTE: Currently both environments use SHARED_NETWORK_NAME ('openlander')
+   * via getPolicy(). The openlander-prod and openlander-dev networks are
+   * pre-created for future multi-environment network isolation but not
+   * actively routed to by containers. Do NOT remove — they serve as
+   * reserved infrastructure for environment-scoped networking.
    */
   async ensureAllNetworks(): Promise<void> {
     await Promise.all([

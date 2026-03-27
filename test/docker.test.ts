@@ -12,6 +12,7 @@ const mockCreateContainer = vi.fn();
 const mockGetImage = vi.fn();
 const mockGetContainer = vi.fn();
 const mockFollowProgress = vi.fn();
+const mockGetNetwork = vi.fn();
 
 // Mock dockerode module by injecting into require.cache
 const require = createRequire(import.meta.url);
@@ -22,6 +23,7 @@ const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
   this.createContainer = mockCreateContainer;
   this.getImage = mockGetImage;
   this.getContainer = mockGetContainer;
+  this.getNetwork = mockGetNetwork;
   this.modem = {
     followProgress: mockFollowProgress,
   };
@@ -70,6 +72,9 @@ const resetDockerodeMocks = () => {
   mockGetImage.mockReset();
   mockGetContainer.mockReset();
   mockFollowProgress.mockReset();
+  mockGetNetwork.mockReset().mockReturnValue({
+    connect: vi.fn().mockResolvedValue(undefined),
+  });
 };
 
 type MockContainerHandleOptions = {

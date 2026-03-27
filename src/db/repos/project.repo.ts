@@ -104,6 +104,7 @@ export class ProjectRepo {
       isPreview: 0 | 1;
       prNumber: number | null;
       branch: string;
+      monitoringPaused: 0 | 1;
     }>,
   ): void {
     const setValues: Partial<typeof projects.$inferInsert> = {};
@@ -173,6 +174,9 @@ export class ProjectRepo {
     }
     if (updates.branch !== undefined) {
       setValues.branch = updates.branch;
+    }
+    if (updates.monitoringPaused !== undefined) {
+      setValues.monitoring_paused = updates.monitoringPaused;
     }
 
     if (Object.keys(setValues).length === 0) return;

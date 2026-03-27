@@ -267,6 +267,9 @@ export async function createAppContext(
   });
 
   eventBus.on('monitor:healthcheck', ({ projectId, healthy }) => {
+    const project = db.getProject(projectId);
+    if (!project || project.status === 'stopped' || project.monitoring_paused) return;
+
     if (healthy) {
       crashFailureCounts.delete(projectId);
       return;
@@ -274,8 +277,7 @@ export async function createAppContext(
     const count = (crashFailureCounts.get(projectId) ?? 0) + 1;
     crashFailureCounts.set(projectId, count);
     if (count >= HEALTH_FAILURE_THRESHOLD) {
-      const project = db.getProject(projectId);
-      if (project && project.status === 'running') {
+      if (project.status === 'running') {
         db.updateProject(projectId, { status: 'error' });
         log.info(
           { projectId, failures: count },

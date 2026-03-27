@@ -56,6 +56,7 @@ export class ContainerRunner {
       );
 
       try {
+        await this.docker.ensureProjectNetwork(config.projectName);
         const containerId = await this.docker.runContainer({
           imageTag: config.imageTag,
           name: containerName,

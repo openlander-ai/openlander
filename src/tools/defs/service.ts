@@ -1,5 +1,6 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
+import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
@@ -134,6 +135,7 @@ export const serviceToolDefs: ToolDef[] = [
             type: service.type,
             status: service.status,
             port: service.port,
+            network: SHARED_NETWORK_NAME,
             image: service.image,
             createdAt: service.created_at,
             externalAccess: getServiceExternalAccess(service.port),
@@ -330,6 +332,7 @@ export const serviceToolDefs: ToolDef[] = [
         health,
         ...(healthDetail ? { healthDetail } : {}),
         port: service.port,
+        network: SHARED_NETWORK_NAME,
         image: service.image,
         containerName: service.container_name,
         containerId: service.container_id,

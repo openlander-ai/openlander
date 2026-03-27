@@ -139,6 +139,7 @@ export class BlueGreenDeployer {
       const envVars = resolveEnvVars({ projectId }, { env: this.env });
       const traefikLabels = buildTraefikLabels(projectName, containerPort, undefined, envType);
 
+      await this.docker.ensureProjectNetwork(projectName);
       greenContainerId = await this.docker.runContainer({
         imageTag,
         name: `ol-${projectName}-green`,

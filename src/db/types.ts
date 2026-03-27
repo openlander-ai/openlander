@@ -32,6 +32,7 @@ export interface ProjectRow {
   access_code_iv: string | null;
   is_preview: 0 | 1;
   pr_number: number | null;
+  monitoring_paused: 0 | 1;
 }
 
 export interface EnvironmentRow {

@@ -72,6 +72,11 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   if (!colNames.has('container_port')) {
     sqlite.exec('ALTER TABLE projects ADD COLUMN container_port INTEGER DEFAULT NULL');
   }
+  if (!colNames.has('monitoring_paused')) {
+    sqlite.exec(
+      'ALTER TABLE projects ADD COLUMN monitoring_paused INTEGER DEFAULT 0 CHECK(monitoring_paused IN (0, 1))',
+    );
+  }
 
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
 

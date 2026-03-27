@@ -99,6 +99,16 @@ export class ContainerLifecycle {
     if (!project) return;
 
     await this.cleanupProjectContainers(projectId);
+
+    try {
+      await this.docker.removeProjectNetwork(project.name);
+    } catch (err) {
+      log.warn(
+        { err, projectId, projectName: project.name },
+        'Failed to remove project network (non-fatal)',
+      );
+    }
+
     tunnelManager?.close(projectId);
     this.db.deleteProject(projectId);
     await eventBus.emit('container:remove', { projectId, containerId: project.container_id ?? '' });

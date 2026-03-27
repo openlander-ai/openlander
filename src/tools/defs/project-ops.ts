@@ -1,11 +1,14 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
+import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import {
   emptySchema,
   removeProjectSchema,
   restartProjectSchema,
   stopProjectSchema,
+  pauseAutoRecoverySchema,
+  resumeAutoRecoverySchema,
   startProjectSchema,
   redeployProjectSchema,
   shareProjectSchema,
@@ -142,11 +145,63 @@ export const projectOpsToolDefs: ToolDef[] = [
     },
   },
   {
+    name: 'pause_auto_recovery',
+    description:
+      'Pause automatic recovery for a project. When paused, build/deploy failures will NOT trigger auto-recovery. Use when debugging or switching to a different environment. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription:
+      'Pause auto-recovery for a project. Failures will not trigger automatic fix attempts.',
+    inputSchema: pauseAutoRecoverySchema,
+    execute: (args, context) => {
+      const projectName = args['project_name'] as string;
+      const project = context.appCtx.db.getProjectByName(projectName);
+      if (!project) {
+        throw new ProjectNotFoundError(projectName);
+      }
+
+      context.appCtx.db.updateProject(project.id, { monitoringPaused: 1 });
+
+      return {
+        status: 'paused',
+        project: projectName,
+        _agent_guidance: {
+          next_steps: [
+            'Auto-recovery is now paused. Call resume_auto_recovery when ready to re-enable.',
+          ],
+        },
+      };
+    },
+  },
+  {
+    name: 'resume_auto_recovery',
+    description:
+      'Resume automatic recovery for a project. When resumed, build/deploy failures will trigger auto-recovery again. Use after debugging or once environment changes are complete. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription:
+      'Resume auto-recovery for a project. Failures will trigger automatic fix attempts again.',
+    inputSchema: resumeAutoRecoverySchema,
+    execute: (args, context) => {
+      const projectName = args['project_name'] as string;
+      const project = context.appCtx.db.getProjectByName(projectName);
+      if (!project) {
+        throw new ProjectNotFoundError(projectName);
+      }
+
+      context.appCtx.db.updateProject(project.id, { monitoringPaused: 0 });
+
+      return {
+        status: 'resumed',
+        project: projectName,
+        _agent_guidance: {
+          next_steps: ['Auto-recovery re-enabled. Failures will trigger automatic recovery.'],
+        },
+      };
+    },
+  },
+  {
     name: 'list_projects',
     description:
       'List all deployed projects with name, status (running/stopped/error), ports, containerName (for inter-project communication via Docker network, e.g. http://ol-myapp:3000), local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
     mcpDescription:
-      'List all deployed projects with status, ports, and URLs. For container-to-container communication, use http://ol-{name}:{port}. containerName field shows Docker internal DNS name.',
+      'List all deployed projects with status, ports, and URLs. For container-to-container communication, use http://ol-{name}:{port}. containerName field shows Docker internal DNS name. All projects share the openlander Docker network. Do NOT create networks manually.',
     inputSchema: emptySchema,
     execute: async (_args, context) => {
       if (context.target === 'mcp') {
@@ -167,12 +222,20 @@ export const projectOpsToolDefs: ToolDef[] = [
             branch: project.branch,
             port: project.assigned_port,
             containerName: project.container_id ? `ol-${project.name}` : null,
+            network: SHARED_NETWORK_NAME,
             url: project.assigned_port ? getProjectUrl(project.name) : null,
             urls: project.assigned_port ? getProjectUrls(project.name) : [],
             publicUrl: project.public_url,
             createdAt: project.created_at,
             updatedAt: project.updated_at,
           })),
+          _agent_guidance: {
+            networking: [
+              `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
+              'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+              'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+            ],
+          },
         };
       }
 
@@ -244,15 +307,28 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: startProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
+      const environment = resolveEnvironmentType(args);
+      const explicitEnvironment = hasExplicitEnvironment(args);
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      await context.appCtx.pipeline.start(project.id);
+      if (explicitEnvironment) {
+        const environmentId = resolveEnvironmentId(
+          context.appCtx,
+          project.id,
+          projectName,
+          environment,
+        );
+        await context.appCtx.pipeline.start(project.id, environmentId);
+      } else {
+        await context.appCtx.pipeline.start(project.id);
+      }
       return {
         status: 'started',
         project: projectName,
+        ...(explicitEnvironment ? { environment } : {}),
         _agent_guidance: {
           next_steps: [
             'Call list_projects to verify the project is running, or stop_project to pause it again.',

@@ -77,6 +77,7 @@ export class RollbackExecutor {
 
       const envType: OpenLanderEnv =
         environmentType === 'development' ? 'development' : 'production';
+      await this.docker.ensureProjectNetwork(project.name);
       const containerId = await this.docker.runContainer({
         imageTag: rollbackImageTag,
         name: containerName,

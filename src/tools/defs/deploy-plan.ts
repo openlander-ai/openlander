@@ -5,6 +5,7 @@ import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
+import { SHARED_NETWORK_NAME } from '../../config/index.js';
 
 import {
   createDeployPlanSchema,
@@ -554,6 +555,13 @@ export const deployPlanToolDefs: ToolDef[] = [
               : `All ${String(passCount)} check(s) passed`,
         checks,
         warnings: plan.warnings,
+        _agent_guidance: {
+          networking: [
+            `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
+            'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+            'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+          ],
+        },
       });
     },
   },
