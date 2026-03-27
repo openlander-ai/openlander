@@ -375,7 +375,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               href={internalUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-mono text-agent hover:text-agent/80 transition-colors flex items-center gap-1"
+              className="text-sm font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors flex items-center gap-1"
             >
               {internalUrl}
               <ExternalLink className="h-3 w-3" />
@@ -416,7 +416,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                     href={directUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-mono text-agent hover:text-agent/80 transition-colors flex items-center gap-1"
+                    className="text-sm font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors flex items-center gap-1"
                   >
                     {directUrl}
                     <ExternalLink className="h-3 w-3" />
@@ -463,7 +463,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                     href={`https://${d.domain}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-mono text-agent hover:text-agent/80 transition-colors flex items-center gap-1 truncate"
+                    className="text-sm font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors flex items-center gap-1 truncate"
                   >
                     {d.domain}
                     <ExternalLink className="h-3 w-3 shrink-0" />
@@ -610,7 +610,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               href={publicUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-mono text-agent hover:text-agent/80 transition-colors flex items-center gap-1"
+              className="text-sm font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors flex items-center gap-1"
             >
               {publicUrl}
               <ExternalLink className="h-3 w-3" />

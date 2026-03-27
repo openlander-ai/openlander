@@ -373,7 +373,7 @@ export function OverviewTab({
                           href={env.publicUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-agent hover:underline truncate max-w-[180px]"
+                          className="text-xs text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors truncate max-w-[180px]"
                         >
                           {env.publicUrl.replace(/^https?:\/\//, '')}
                         </a>

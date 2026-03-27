@@ -103,7 +103,7 @@ export function ProjectCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-agent hover:text-agent/80 truncate transition-colors"
+              className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {(project.url ?? '').replace(/^https?:\/\//, '')}
@@ -136,7 +136,7 @@ export function ProjectCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="flex items-center gap-1.5 text-xs font-mono text-success hover:text-success/80 truncate transition-colors"
+              className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               {project.publicUrl.replace(/^https?:\/\//, '')}
