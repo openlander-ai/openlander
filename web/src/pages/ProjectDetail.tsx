@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   getProject,
@@ -11,15 +11,12 @@ import {
   blueGreenProject,
   scanProjectEnvVars,
   deleteProject,
-  deleteEnvironment,
-  createEnvironment,
   type EnvVarInfo,
   type ProjectWithOptionalEnvironments,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/layout/ShareDialog';
-import type { EnvironmentType } from '@/types';
 import { parseEnvContent } from '@/lib/parse-env';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
@@ -27,13 +24,11 @@ import { ProjectHeader } from '@/components/project/ProjectHeader';
 import { ProjectDetailLoading } from '@/components/project/ProjectDetailLoading';
 import { ProjectDetailTabs } from '@/components/project/ProjectDetailTabs';
 import { RedeployEnvDialog } from '@/components/project/RedeployEnvDialog';
-import { AddEnvironmentDialog } from '@/components/project/AddEnvironmentDialog';
 import { RollbackDialog } from '@/components/project/RollbackDialog';
 import { BlueGreenDialog } from '@/components/project/BlueGreenDialog';
 
 export function ProjectDetail() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useLanguage();
   const [project, setProject] = useState<ProjectWithOptionalEnvironments | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,59 +42,10 @@ export function ProjectDetail() {
   const [blueGreenDialogOpen, setBlueGreenDialogOpen] = useState(false);
   const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
   const [redeployPasteText, setRedeployPasteText] = useState('');
-  const [addEnvSheet, setAddEnvSheet] = useState<{ open: boolean; type: EnvironmentType | null }>({
-    open: false,
-    type: null,
-  });
-  const [addEnvBranch, setAddEnvBranch] = useState('');
   const [confirmAction, setConfirmAction] = useState<{
     type: 'stop' | 'delete';
     handler: () => void;
   } | null>(null);
-  const [envFade, setEnvFade] = useState(false);
-
-  const validEnvs: EnvironmentType[] = ['production', 'development'];
-  const envParam = searchParams.get('env') as EnvironmentType;
-  const currentEnvType = validEnvs.includes(envParam) ? envParam : 'production';
-
-  const environments = project?.environments;
-  const selectedEnv = environments?.find((e) => e.type === currentEnvType);
-
-  // Trigger opacity fade when environment changes
-  useEffect(() => {
-    setEnvFade(true);
-    const timer = setTimeout(() => setEnvFade(false), 150);
-    return () => clearTimeout(timer);
-  }, [currentEnvType]);
-
-  const handleEnvChange = (env: EnvironmentType) => {
-    setSearchParams({ env });
-  };
-
-  const handleAddEnv = (env: EnvironmentType) => {
-    setAddEnvBranch(project?.branch ?? 'main');
-    setAddEnvSheet({ open: true, type: env });
-  };
-
-  const confirmAddEnv = async () => {
-    const envType = addEnvSheet.type;
-    if (!id || !envType || actionLoading) return;
-    setActionLoading('add-env');
-    try {
-      await createEnvironment(id, envType, addEnvBranch.trim() || undefined);
-      await fetchProject();
-      toast.success(`Created ${envType} environment`);
-      setSearchParams({ env: envType });
-      setAddEnvSheet({ open: false, type: null });
-    } catch (err) {
-      console.error('Failed to create environment:', err);
-      toast.error(
-        'Failed to create environment: ' + (err instanceof Error ? err.message : String(err)),
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
   // Fetch project details
   const fetchProject = useCallback(async () => {
@@ -131,7 +77,7 @@ export function ProjectDetail() {
     onSettled: fetchProject,
   });
 
-  const allTimelineItems = useMemo(() => items, [items]);
+  const allTimelineItems = items;
 
   const handleRedeploy = async () => {
     if (isMobile) {
@@ -142,7 +88,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
 
     try {
-      const scan = await scanProjectEnvVars(id, currentEnvType);
+      const scan = await scanProjectEnvVars(id);
       if (scan.newVars.length > 0) {
         setRedeployVars(scan.newVars);
         setRedeployPasteText('');
@@ -156,7 +102,7 @@ export function ProjectDetail() {
 
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id, undefined, currentEnvType);
+      await redeployProject(id, undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project redeploying');
     } catch (err) {
@@ -184,7 +130,7 @@ export function ProjectDetail() {
       handler: async () => {
         setActionLoading('stop');
         try {
-          await stopProject(id, currentEnvType);
+          await stopProject(id);
           toast.success('Project stopped');
         } catch (err) {
           console.error('Stop failed:', err);
@@ -201,7 +147,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id!, undefined, currentEnvType);
+      await redeployProject(id!, undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project redeploying');
     } catch (err) {
@@ -221,7 +167,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id!, Object.keys(vars).length > 0 ? vars : undefined, currentEnvType);
+      await redeployProject(id!, Object.keys(vars).length > 0 ? vars : undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project deploying');
     } catch (err) {
@@ -239,7 +185,7 @@ export function ProjectDetail() {
     if (!id || actionLoading) return;
     setActionLoading('start');
     try {
-      await startProject(id, currentEnvType);
+      await startProject(id);
       await fetchProject();
       toast.success('Project started');
     } catch (err) {
@@ -266,7 +212,7 @@ export function ProjectDetail() {
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
 
     try {
-      await rollbackProject(id, currentEnvType, deploymentId);
+      await rollbackProject(id, deploymentId);
       setTimelineRunKey((k) => k + 1);
       setRollbackDialogOpen(false);
       toast.success('Project rolling back');
@@ -305,7 +251,7 @@ export function ProjectDetail() {
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
 
     try {
-      await blueGreenProject(id, healthCheckPath, currentEnvType);
+      await blueGreenProject(id, healthCheckPath);
       setTimelineRunKey((k) => k + 1);
       setBlueGreenDialogOpen(false);
       toast.success('Blue-green deploy started');
@@ -327,58 +273,21 @@ export function ProjectDetail() {
 
   const handleDelete = async () => {
     if (!id || actionLoading) return;
-    if (currentEnvType === 'production') {
-      setConfirmAction({
-        type: 'delete',
-        handler: async () => {
-          setActionLoading('delete');
-          try {
-            await deleteProject(id);
-            window.location.href = '/projects';
-          } catch (err) {
-            toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      });
-      return;
-    } else {
-      if (!selectedEnv) return;
-      setConfirmAction({
-        type: 'delete',
-        handler: async () => {
-          setActionLoading('delete');
-          try {
-            await deleteEnvironment(id, selectedEnv.id);
-            toast.success('Environment deleted');
-            handleEnvChange('production');
-            await fetchProject();
-          } catch (err) {
-            toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      });
-      return;
-    }
+    setConfirmAction({
+      type: 'delete',
+      handler: async () => {
+        setActionLoading('delete');
+        try {
+          await deleteProject(id);
+          window.location.href = '/projects';
+        } catch (err) {
+          toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
-
-  const displayProject = useMemo(() => {
-    if (!project) return null;
-    if (!selectedEnv) return project;
-    return {
-      ...project,
-      status: selectedEnv.status,
-      branch: selectedEnv.branch,
-      publicUrl: selectedEnv.publicUrl,
-      port: selectedEnv.assignedPort ?? project.port,
-      url: selectedEnv.url || (currentEnvType === 'production' ? project.url : undefined),
-      urls: selectedEnv.urls || (currentEnvType === 'production' ? project.urls : undefined),
-      previousImageTag: selectedEnv.previousImageTag ?? project.previousImageTag,
-    };
-  }, [project, selectedEnv, currentEnvType]);
 
   if (loading) return <ProjectDetailLoading />;
 
@@ -395,10 +304,6 @@ export function ProjectDetail() {
       <div className="flex flex-col h-full">
         <ProjectHeader
           project={project}
-          environments={environments}
-          currentEnvType={currentEnvType}
-          onEnvChange={handleEnvChange}
-          onAddEnv={handleAddEnv}
           actionLoading={actionLoading}
           onRedeploy={handleRedeploy}
           onStop={handleStop}
@@ -413,14 +318,10 @@ export function ProjectDetail() {
           id={id}
           activeTab={activeTab}
           onActiveTabChange={setActiveTab}
-          displayProject={displayProject}
-          environments={environments}
+          displayProject={project}
           allTimelineItems={allTimelineItems}
           isStreaming={isStreaming}
           timelineDisconnected={timelineDisconnected}
-          selectedEnvId={selectedEnv?.id}
-          currentEnvType={currentEnvType}
-          envFade={envFade}
           onRedeploy={handleRedeploy}
           onStop={handleStop}
           onRollback={handleRollback}
@@ -437,24 +338,11 @@ export function ProjectDetail() {
         onDeploy={handleRedeployWithEnv}
       />
 
-      <AddEnvironmentDialog
-        open={addEnvSheet.open}
-        type={addEnvSheet.type}
-        projectBranch={project?.branch}
-        branchValue={addEnvBranch}
-        onOpenChange={(open) => setAddEnvSheet((prev) => ({ ...prev, open }))}
-        onBranchChange={setAddEnvBranch}
-        onCancel={() => setAddEnvSheet({ open: false, type: null })}
-        onConfirm={() => void confirmAddEnv()}
-        isSubmitting={actionLoading === 'add-env'}
-      />
-
       <RollbackDialog
         open={rollbackDialogOpen}
         onOpenChange={setRollbackDialogOpen}
         projectId={id!}
         projectName={project.name}
-        currentEnvironment={currentEnvType}
         isSubmitting={actionLoading === 'rollback'}
         onConfirm={handleRollbackConfirm}
       />
@@ -470,9 +358,9 @@ export function ProjectDetail() {
       <ShareDialog
         projectId={id!}
         projectName={project.name}
-        isRunning={displayProject?.status === 'running'}
+        isRunning={project.status === 'running'}
         visibility={project.visibility}
-        publicUrl={displayProject?.publicUrl ?? null}
+        publicUrl={project.publicUrl ?? null}
         open={shareOpen}
         onOpenChange={setShareOpen}
         onShareChange={fetchProject}
@@ -491,7 +379,7 @@ export function ProjectDetail() {
         description={
           confirmAction?.type === 'delete'
             ? t('project.confirm.deleteDescription')
-            : t('project.confirm.stopDescription').replace('{env}', currentEnvType ?? 'production')
+            : t('project.confirm.stopDescription').replace('{env}', 'production')
         }
         confirmLabel={t('project.confirm.confirm')}
         cancelLabel={t('project.confirm.cancel')}

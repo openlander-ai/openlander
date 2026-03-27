@@ -5,14 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { updateProject, getProject, type ProjectWithOptionalEnvironments } from '@/lib/api';
 import { Loader2, Save, GitBranch, Box } from 'lucide-react';
-import type { Environment } from '@/types';
 
 interface DeploymentSourcePanelProps {
   projectId: string;
-  selectedEnv?: Environment;
 }
 
-export function DeploymentSourcePanel({ projectId, selectedEnv }: DeploymentSourcePanelProps) {
+export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps) {
   const [project, setProject] = useState<ProjectWithOptionalEnvironments | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageUrl, setImageUrl] = useState('');
@@ -76,20 +74,6 @@ export function DeploymentSourcePanel({ projectId, selectedEnv }: DeploymentSour
   if (!isImage) {
     return (
       <div className="space-y-4 p-4">
-        {selectedEnv && selectedEnv.type !== 'production' && (
-          <div className="mb-4 p-3 rounded-md bg-blue-950/20 border border-blue-500/20 text-xs">
-            <div className="flex justify-between">
-              <span className="text-muted-ol">Environment Branch</span>
-              <span className="text-blue-400 font-mono">{selectedEnv.branch}</span>
-            </div>
-            {selectedEnv.assignedPort && (
-              <div className="flex justify-between mt-1">
-                <span className="text-muted-ol">Assigned Port</span>
-                <span className="text-blue-400 font-mono">{selectedEnv.assignedPort}</span>
-              </div>
-            )}
-          </div>
-        )}
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-muted-ol" />
@@ -117,20 +101,6 @@ export function DeploymentSourcePanel({ projectId, selectedEnv }: DeploymentSour
 
   return (
     <div className="space-y-4 p-4">
-      {selectedEnv && selectedEnv.type !== 'production' && (
-        <div className="mb-4 p-3 rounded-md bg-blue-950/20 border border-blue-500/20 text-xs">
-          <div className="flex justify-between">
-            <span className="text-muted-ol">Environment Branch</span>
-            <span className="text-blue-400 font-mono">{selectedEnv.branch}</span>
-          </div>
-          {selectedEnv.assignedPort && (
-            <div className="flex justify-between mt-1">
-              <span className="text-muted-ol">Assigned Port</span>
-              <span className="text-blue-400 font-mono">{selectedEnv.assignedPort}</span>
-            </div>
-          )}
-        </div>
-      )}
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Box className="h-4 w-4 text-muted-ol" />

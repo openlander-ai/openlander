@@ -9,15 +9,9 @@ interface ConsoleTabProps {
   projectId: string;
   isActive: boolean;
   projectStatus: string;
-  environmentType?: string;
 }
 
-export function ConsoleTab({
-  projectId,
-  isActive,
-  projectStatus,
-  environmentType,
-}: ConsoleTabProps) {
+export function ConsoleTab({ projectId, isActive, projectStatus }: ConsoleTabProps) {
   const [showTerminal, setShowTerminal] = useState(DEFAULT_CONSOLE_VIEW_STATE.showTerminal);
   const isRunning = projectStatus === 'running';
   const terminalToggleLabel = showTerminal ? 'Hide terminal' : 'Show terminal';
@@ -38,7 +32,6 @@ export function ConsoleTab({
         >
           <LogViewer
             projectId={projectId}
-            environmentType={environmentType}
             toolbarActions={
               <button
                 type="button"

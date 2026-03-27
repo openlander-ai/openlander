@@ -119,7 +119,7 @@ export class TraefikManager {
     });
 
     const candidate = containers.find((c) => {
-      const name = (c.Names?.[0] ?? '').replace(/^\//, '');
+      const name = (c.Names[0] ?? '').replace(/^\//, '');
       return name !== this.containerName;
     });
 
@@ -127,7 +127,7 @@ export class TraefikManager {
       return false;
     }
 
-    const candidateName = (candidate.Names?.[0] ?? '').replace(/^\//, '');
+    const candidateName = (candidate.Names[0] ?? '').replace(/^\//, '');
     log.info(
       { existingContainer: candidateName, managedContainer: this.containerName },
       'Found legacy OpenLander Traefik — adopting',
@@ -208,7 +208,9 @@ export class TraefikManager {
         await client.getContainer(c.Id).remove({ force: true });
       }
       if (existing.length > 0) {
-        log.debug(`Removed ${existing.length} existing Traefik container(s) before recreation`);
+        log.debug(
+          `Removed ${existing.length.toString()} existing Traefik container(s) before recreation`,
+        );
       }
     } catch (_err) {
       // Container doesn't exist — expected on first run
@@ -297,10 +299,10 @@ export function getProjectHostname(projectName: string, lanIp?: string): string 
 
 export function getEnvironmentProjectHostname(
   projectName: string,
-  environment: TraefikEnvironment,
+  _environment: TraefikEnvironment,
   lanIp?: string,
 ): string {
-  const envProjectName = getEnvironmentProjectName(projectName, environment);
+  const envProjectName = getEnvironmentProjectName(projectName);
   const ip = lanIp ?? getLanIp();
   if (ip) {
     return `${envProjectName}.${ip}.sslip.io`;
@@ -315,11 +317,7 @@ export function getProjectUrl(projectName: string, lanIp?: string): string {
   return `http://${getProjectHostname(projectName, lanIp)}`;
 }
 
-function getEnvironmentProjectName(projectName: string, environment: TraefikEnvironment): string {
-  if (environment === 'development') {
-    return `dev-${projectName}`;
-  }
-
+function getEnvironmentProjectName(projectName: string): string {
   return projectName;
 }
 

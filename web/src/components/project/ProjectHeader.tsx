@@ -19,7 +19,6 @@ import {
   History,
   Zap,
   MoreHorizontal,
-  Plus,
   Trash2,
   Download,
 } from 'lucide-react';
@@ -27,14 +26,10 @@ import { cn } from '@/lib/utils';
 import { useSetup } from '@/hooks/use-setup.js';
 import { AISparkle } from '@/components/ui/AISparkle';
 import { DomainUrlDisplay } from './DomainUrlDisplay';
-import type { Project, Environment, EnvironmentType } from '@/types';
+import type { Project } from '@/types';
 
 interface ProjectHeaderProps {
   project: Project;
-  environments?: Environment[];
-  currentEnvType?: EnvironmentType;
-  onEnvChange?: (env: EnvironmentType) => void;
-  onAddEnv?: (env: EnvironmentType) => void;
   actionLoading: string | null;
   onRedeploy: () => void;
   onStop: () => void;
@@ -63,10 +58,6 @@ function getStatusConfig(isImageSource: boolean = false): Record<string, StatusC
 
 export function ProjectHeader({
   project,
-  environments = [],
-  currentEnvType = 'production',
-  onEnvChange,
-  onAddEnv,
   actionLoading,
   onRedeploy,
   onStop,
@@ -81,31 +72,15 @@ export function ProjectHeader({
   const statusConfig = getStatusConfig(isImageSource);
   const isLlmConfigured = setupStatus?.llm.ok === true;
 
-  const selectedEnv = environments.find((e) => e.type === currentEnvType);
-  const displayStatus = selectedEnv ? selectedEnv.status : project.status;
-  const displayBranch = selectedEnv ? selectedEnv.branch : project.branch;
-  const displayPublicUrl = selectedEnv ? selectedEnv.publicUrl : project.publicUrl;
+  const displayStatus = project.status;
+  const displayBranch = project.branch;
+  const displayPublicUrl = project.publicUrl;
 
   const status = statusConfig[displayStatus] ?? statusConfig.stopped;
   const isBuilding = displayStatus === 'building';
   const isRunning = displayStatus === 'running';
   const isStopped = displayStatus === 'stopped' || displayStatus === 'idle';
-  const hasContainer = selectedEnv ? !!selectedEnv.containerId : !!project.port;
-
-  const envColors: Record<EnvironmentType, string> = {
-    production: 'bg-emerald-500/15 border-emerald-500/30',
-    development: 'bg-blue-500/15 border-blue-500/30',
-  };
-
-  const getEnvStatus = (type: EnvironmentType) => {
-    const env = environments.find((e) => e.type === type);
-    if (env) return env.status;
-    if (type === 'production') return project.status;
-    return 'idle';
-  };
-
-  const devEnv = environments.find((e) => e.type === 'development');
-  const devStatus = devEnv ? devEnv.status : 'idle';
+  const hasContainer = !!project.port;
 
   // Determine primary action
   const renderPrimaryAction = () => {
@@ -185,12 +160,7 @@ export function ProjectHeader({
   const isShared = project.visibility === 'shared' || project.visibility === 'quick-share';
 
   return (
-    <div
-      className={cn(
-        'shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4',
-        currentEnvType === 'development' && 'bg-blue-950/15',
-      )}
-    >
+    <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn('h-3 w-3 rounded-full shrink-0', status.dot)} />
@@ -199,52 +169,6 @@ export function ProjectHeader({
               <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
                 {project.name}
               </h1>
-              <div className="flex bg-zinc-900/50 rounded-lg border border-zinc-800/80 p-0.5">
-                <button
-                  onClick={() => onEnvChange?.('production')}
-                  className={cn(
-                    'px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 flex items-center gap-1.5 border',
-                    currentEnvType === 'production'
-                      ? cn(envColors.production, 'text-white')
-                      : 'border-transparent text-zinc-400 hover:text-zinc-200',
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'h-1 w-1 rounded-full shrink-0',
-                      statusConfig[getEnvStatus('production')]?.dot ?? statusConfig.stopped.dot,
-                    )}
-                  />
-                  Production
-                </button>
-                <button
-                  onClick={() => {
-                    if (devEnv) {
-                      onEnvChange?.('development');
-                    } else {
-                      onAddEnv?.('development');
-                    }
-                  }}
-                  className={cn(
-                    'px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 flex items-center gap-1.5 border',
-                    currentEnvType === 'development'
-                      ? cn(envColors.development, 'text-white')
-                      : 'border-transparent text-zinc-400 hover:text-zinc-200',
-                  )}
-                >
-                  {devEnv ? (
-                    <div
-                      className={cn(
-                        'h-1 w-1 rounded-full shrink-0',
-                        statusConfig[devStatus]?.dot ?? statusConfig.stopped.dot,
-                      )}
-                    />
-                  ) : (
-                    <Plus className="h-3 w-3 opacity-50" />
-                  )}
-                  Development
-                </button>
-              </div>
             </div>
             <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
               <span className={status.color}>{status.label}</span>
@@ -254,12 +178,7 @@ export function ProjectHeader({
                   {displayBranch}
                 </span>
               )}
-              <DomainUrlDisplay
-                publicUrl={displayPublicUrl}
-                urls={
-                  selectedEnv?.urls || (currentEnvType === 'production' ? project.urls : undefined)
-                }
-              />
+              <DomainUrlDisplay publicUrl={displayPublicUrl} urls={project.urls} />
             </div>
             {displayPublicUrl && (
               <a
@@ -348,20 +267,18 @@ export function ProjectHeader({
               </DropdownMenuItem>
 
               {/* Blue-Green */}
-              {currentEnvType === 'production' && (
-                <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
-                  <DropdownMenuItem
-                    onClick={onOpenBlueGreenDialog}
-                    disabled={!isRunning || !!actionLoading}
-                  >
-                    <div className="flex items-center gap-2">
-                      {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
-                      <Zap className="h-3.5 w-3.5" />
-                    </div>
-                    Blue-Green Deploy
-                  </DropdownMenuItem>
-                </Tooltip>
-              )}
+              <Tooltip content="AI가 전체 파이프라인을 처리합니다" side="bottom">
+                <DropdownMenuItem
+                  onClick={onOpenBlueGreenDialog}
+                  disabled={!isRunning || !!actionLoading}
+                >
+                  <div className="flex items-center gap-2">
+                    {isLlmConfigured && <AISparkle className="h-3.5 w-3.5" />}
+                    <Zap className="h-3.5 w-3.5" />
+                  </div>
+                  Blue-Green Deploy
+                </DropdownMenuItem>
+              </Tooltip>
 
               <DropdownMenuSeparator />
 
@@ -391,7 +308,7 @@ export function ProjectHeader({
                 className="text-error focus:text-error"
               >
                 <Trash2 className="h-3.5 w-3.5 mr-2" />
-                Delete {currentEnvType === 'production' ? 'Project' : 'Environment'}
+                Delete Project
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -1,4 +1,3 @@
-import { useEnvironment } from '@/contexts/environment';
 import { Spinner } from '@/components/ui/spinner';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
 import { getSetupStatus } from '@/lib/api';
@@ -33,7 +32,6 @@ export function ProjectCard({
   onRedeploy,
   t,
 }: ProjectCardProps) {
-  const { environment: selectedEnv } = useEnvironment();
   const environments = project.environments ?? [];
   const [llmConfigured, setLlmConfigured] = useState(false);
 
@@ -43,15 +41,7 @@ export function ProjectCard({
       .catch(() => setLlmConfigured(false));
   }, []);
 
-  const currentEnvData = environments.find((e) => e.type === selectedEnv);
-
-  const currentStatus = currentEnvData
-    ? currentEnvData.status
-    : selectedEnv === 'production'
-      ? project.status
-      : 'idle';
-
-  const status = statusConfig[currentStatus] ?? statusConfig.stopped;
+  const status = statusConfig[project.status] ?? statusConfig.stopped;
 
   const hasProd = environments.some((environment) => environment.type === 'production');
   const allEnvironments = hasProd
@@ -73,9 +63,9 @@ export function ProjectCard({
             className={cn(
               'h-2.5 w-2.5 rounded-full shrink-0 shadow-[0_0_6px_rgba(0,0,0,0.1)]',
               status.dot,
-              currentStatus === 'running' && 'shadow-[0_0_6px_rgba(22,163,74,0.4)]',
-              currentStatus === 'error' && 'shadow-[0_0_6px_rgba(220,38,38,0.4)]',
-              currentStatus === 'building' && 'shadow-[0_0_6px_rgba(217,119,6,0.4)]',
+              project.status === 'running' && 'shadow-[0_0_6px_rgba(22,163,74,0.4)]',
+              project.status === 'error' && 'shadow-[0_0_6px_rgba(220,38,38,0.4)]',
+              project.status === 'building' && 'shadow-[0_0_6px_rgba(217,119,6,0.4)]',
             )}
           />
           <h3 className="font-display font-semibold text-base text-primary-ol truncate">
@@ -108,7 +98,7 @@ export function ProjectCard({
           </div>
         </div>
         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium shrink-0', status.badge)}>
-          {status.label}
+          {statusConfig[project.status]?.label ?? 'Unknown'}
         </span>
       </div>
 
@@ -134,20 +124,20 @@ export function ProjectCard({
           </div>
         </div>
 
-        {(currentEnvData?.publicUrl ?? project.url) && (
+        {project.url && (
           <div>
             <p className="text-xs font-mono text-muted-ol mb-1 uppercase tracking-[0.08em]">
               Endpoint
             </p>
             <a
-              href={currentEnvData?.publicUrl ?? project.url ?? '#'}
+              href={project.url ?? '#'}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
               className="flex items-center gap-1.5 text-xs font-mono text-agent hover:text-agent/80 truncate transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-              {(currentEnvData?.publicUrl ?? project.url ?? '').replace(/^https?:\/\//, '')}
+              {(project.url ?? '').replace(/^https?:\/\//, '')}
             </a>
             {project.urls
               ?.filter((u) => u.type === 'vpn')

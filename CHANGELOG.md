@@ -11,18 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Environment segment control**: Replaces dropdown in ProjectHeader for faster environment switching
-- **DomainUrlDisplay component**: Shows environment-specific URLs with priority ordering and popover details
-- **Environment-specific API URLs**: API returns dev-prefixed URLs for development environment
-- **set_env_vars MCP tool enhancement**: Supports optional `environment_name` parameter for environment-specific variables
-- **Traefik label-based environment detection**: Auto-detects environment from container labels and generates dev routes
-- **Sidebar project dot aggregation**: Status dot aggregates environment statuses (all green/any red/any yellow)
-- **Environment switch opacity fade**: 150ms fade animation on environment switch for visual feedback
-- **env-status aggregation utility**: Helper function with 13 comprehensive tests for environment status logic
+- **Deploy terminal AI inline events**: Agent events render as visually distinct blocks (diagnostic=red, prescription=purple, info=blue) inside the deploy terminal
+- **TerminalAIBlock component**: Terminal-native block with 3 variants using terminal-tokens color system
+- **Premium AISparkle icon**: Gradient purple→rose fill + glow effect on all AI-enhanced buttons
+- **Status dot animations**: Building uses pulse-ring, running uses breathing pulse
+- **Stop action confirmation**: ConfirmDialog added to stop button
+
+### Fixed
+
+- **Agent event pipeline bug**: toTimelineItem() now preserves agent event types instead of converting to progress
+- **Missing sparkle icons**: Rollback and ProjectCard Redeploy now show conditional sparkle (DEC-046)
+- **pulse-ring animation**: Registered in tailwind.config.js
 
 ### Changed
 
-- **Dead traefik-ol-dev config removed**: Cleaned up obsolete Traefik configuration
+- **Single-environment model**: Reverted multi-env UI to single production environment; removed segment control, EnvironmentContext, and env-specific filtering across all components
+- **Vision document**: Acknowledges Agent Mode (v0.9.0) coexistence with Smart Deploy Terminal
 
 ## [1.0.0-rc.3] - 2026-03-26
 

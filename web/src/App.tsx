@@ -1,4 +1,3 @@
-import { EnvironmentProvider } from '@/contexts/environment';
 import { LanguageProvider } from '@/i18n/context';
 import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom';
@@ -109,46 +108,44 @@ function AgentRouteRedirect() {
 
 function App() {
   return (
-    <EnvironmentProvider>
-      <LanguageProvider>
-        <AuthProvider>
-          <ErrorBoundary>
-            <Toaster
-              toastOptions={{
-                className: 'bg-bg-panel border-border text-primary-ol font-body',
-                descriptionClassName: 'text-muted-ol',
-              }}
-            />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route
-                  path="/setup"
-                  element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
-                />
-                <Route element={<SetupGuard />}>
-                  <Route element={<AppLayout />}>
-                    <Route path="/projects" element={<ProjectsGrid />} />
-                    <Route path="/projects/new" element={<NewProjectFlow />} />
-                    <Route
-                      path="/projects/:id/deployments/:deployId"
-                      element={<DeploymentDetail />}
-                    />
-                    <Route path="/projects/:id" element={<ProjectDetail />} />
-                    <Route path="/services" element={<ServicesPage />} />
-                    <Route path="/services/:id" element={<ServiceDetail />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/agent" element={<AgentRouteRedirect />} />
-                  </Route>
+    <LanguageProvider>
+      <AuthProvider>
+        <ErrorBoundary>
+          <Toaster
+            toastOptions={{
+              className: 'bg-bg-panel border-border text-primary-ol font-body',
+              descriptionClassName: 'text-muted-ol',
+            }}
+          />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/setup"
+                element={<SetupScreen onComplete={() => (window.location.href = '/projects')} />}
+              />
+              <Route element={<SetupGuard />}>
+                <Route element={<AppLayout />}>
+                  <Route path="/projects" element={<ProjectsGrid />} />
+                  <Route path="/projects/new" element={<NewProjectFlow />} />
+                  <Route
+                    path="/projects/:id/deployments/:deployId"
+                    element={<DeploymentDetail />}
+                  />
+                  <Route path="/projects/:id" element={<ProjectDetail />} />
+                  <Route path="/services" element={<ServicesPage />} />
+                  <Route path="/services/:id" element={<ServiceDetail />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/agent" element={<AgentRouteRedirect />} />
                 </Route>
-                <Route path="/" element={<Navigate to="/projects" replace />} />
-                <Route path="*" element={<Navigate to="/projects" replace />} />
-              </Routes>
-            </BrowserRouter>
-          </ErrorBoundary>
-        </AuthProvider>
-      </LanguageProvider>
-    </EnvironmentProvider>
+              </Route>
+              <Route path="/" element={<Navigate to="/projects" replace />} />
+              <Route path="*" element={<Navigate to="/projects" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </ErrorBoundary>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }
 
