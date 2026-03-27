@@ -16,11 +16,10 @@ import {
 
 interface LogViewerProps {
   projectId: string;
-  environmentType?: string;
   toolbarActions?: React.ReactNode;
 }
 
-export function LogViewer({ projectId, environmentType, toolbarActions }: LogViewerProps) {
+export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
   const { t } = useLanguage();
   const [filters, setFilters] = useState<
     Pick<ConsoleFilterState, 'searchMode' | 'searchQuery' | 'logLevel'>
@@ -49,7 +48,6 @@ export function LogViewer({ projectId, environmentType, toolbarActions }: LogVie
     loadOlder,
   } = useLogStream({
     projectId,
-    environmentType,
     enabled: true,
   });
   const isFollowing = followMode === 'follow';

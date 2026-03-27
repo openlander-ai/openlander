@@ -25,7 +25,6 @@ export interface LogStreamState {
 interface UseLogStreamOptions {
   projectId: string | undefined;
   enabled?: boolean;
-  environmentType?: string;
 }
 
 interface UseLogStreamReturn extends LogStreamState {
@@ -281,12 +280,10 @@ export function parseStreamLine(rawLine: string): ParsedStreamLine {
 export function useLogStream({
   projectId,
   enabled = true,
-  environmentType,
 }: UseLogStreamOptions): UseLogStreamReturn {
   const [state, setState] = useState<LogStreamState>(() => createInitialLogStreamState());
   const abortRef = useRef<AbortController | null>(null);
   const stateRef = useRef(state);
-  const envParam = environmentType ? `&environment=${environmentType}` : '';
 
   useEffect(() => {
     stateRef.current = state;
@@ -309,7 +306,6 @@ export function useLogStream({
           projectId,
           DEFAULT_HISTORY_LINE_COUNT,
           controller.signal,
-          envParam,
         );
         snapshotRefreshSucceeded = true;
 
@@ -327,7 +323,7 @@ export function useLogStream({
         }
       }
 
-      const res = await fetch(`/api/projects/${projectId}/logs?follow=true${envParam}`, {
+      const res = await fetch(`/api/projects/${projectId}/logs?follow=true`, {
         signal: controller.signal,
       });
 
@@ -399,7 +395,7 @@ export function useLogStream({
       const message = err instanceof Error ? err.message : 'Stream failed';
       setState((current) => setLogConnectionState(current, 'error', message));
     }
-  }, [enabled, projectId, envParam]);
+  }, [enabled, projectId]);
 
   useEffect(() => {
     abortRef.current?.abort();
@@ -453,7 +449,7 @@ export function useLogStream({
     setState((current) => ({ ...current, isLoadingOlder: true }));
 
     try {
-      const res = await fetch(`/api/projects/${projectId}/logs?lines=${nextLineCount}${envParam}`);
+      const res = await fetch(`/api/projects/${projectId}/logs?lines=${nextLineCount}`);
       if (!res.ok) throw new Error(`Logs error: ${res.status}`);
 
       const data = (await res.json()) as { logs?: unknown };
@@ -475,7 +471,7 @@ export function useLogStream({
         isLoadingOlder: false,
       }));
     }
-  }, [projectId, envParam]);
+  }, [projectId]);
 
   return {
     ...state,

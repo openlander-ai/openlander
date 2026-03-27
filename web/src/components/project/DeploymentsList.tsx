@@ -20,8 +20,6 @@ interface DeploymentsListProps {
   projectStatus?: string;
   projectBranch?: string;
   statusFilter?: DeploymentHistoryFilter;
-  environmentId?: string;
-  environmentType?: string;
 }
 
 export function DeploymentsList({
@@ -29,16 +27,10 @@ export function DeploymentsList({
   projectStatus,
   projectBranch,
   statusFilter = 'all',
-  environmentId,
-  environmentType,
 }: DeploymentsListProps) {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { deployments, loading, error, refetch } = useDeployments(
-    projectId,
-    projectStatus,
-    environmentId,
-  );
+  const { deployments, loading, error, refetch } = useDeployments(projectId, projectStatus);
   const filteredDeployments = deployments.filter((deploy) => {
     if (statusFilter === 'all') return true;
     if (statusFilter === 'in_progress') return false;
@@ -91,13 +83,6 @@ export function DeploymentsList({
 
   return (
     <div className="flex flex-col h-full">
-      {environmentType && environmentType !== 'production' && (
-        <div className="shrink-0 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-app/60 flex items-center">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            {environmentType}
-          </span>
-        </div>
-      )}
       <div className="divide-y divide-border overflow-auto flex-1">
         {filteredDeployments.map((deploy) => {
           const statusMeta = getDeploymentStatusMeta(deploy.status);
