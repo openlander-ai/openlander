@@ -87,23 +87,72 @@ export class TraefikManager {
    * No-op if already connected.
    */
   async connectToNetwork(networkName: string): Promise<void> {
+    await this.connectContainerToNetworkByName(this.containerName, networkName);
+  }
+
+  private async connectContainerToNetworkByName(
+    containerName: string,
+    networkName: string,
+  ): Promise<boolean> {
     try {
       const client = this.docker.getClient();
-      const container = client.getContainer(this.containerName);
+      const container = client.getContainer(containerName);
       const info = await container.inspect();
       const connected = Object.keys(info.NetworkSettings.Networks);
       if (connected.includes(networkName)) {
-        return;
+        return true;
       }
       const network = client.getNetwork(networkName);
       await network.connect({ Container: container.id });
-      log.info(
-        { containerName: this.containerName, networkName },
-        'Traefik connected to additional network',
-      );
+      log.info({ containerName, networkName }, 'Traefik connected to network');
+      return true;
     } catch (err) {
-      log.warn({ err, networkName }, 'Failed to connect Traefik to additional network');
+      log.warn({ err, containerName, networkName }, 'Failed to connect Traefik to network');
+      return false;
     }
+  }
+
+  private async tryAdoptExistingTraefik(): Promise<boolean> {
+    const client = this.docker.getClient();
+    const containers = await client.listContainers({
+      filters: { label: ['openlander.role=traefik'], status: ['running'] },
+    });
+
+    const candidate = containers.find((c) => {
+      const name = (c.Names?.[0] ?? '').replace(/^\//, '');
+      return name !== this.containerName;
+    });
+
+    if (!candidate) {
+      return false;
+    }
+
+    const candidateName = (candidate.Names?.[0] ?? '').replace(/^\//, '');
+    log.info(
+      { existingContainer: candidateName, managedContainer: this.containerName },
+      'Found legacy OpenLander Traefik — adopting',
+    );
+
+    const connected = await this.connectContainerToNetworkByName(
+      candidateName,
+      SHARED_NETWORK_NAME,
+    );
+    if (!connected) {
+      log.warn(
+        'Failed to connect adopted Traefik to shared network — falling back to new container',
+      );
+      return false;
+    }
+
+    try {
+      const stale = client.getContainer(this.containerName);
+      await stale.remove({ force: true });
+      log.debug({ containerName: this.containerName }, 'Removed stale managed Traefik container');
+    } catch {
+      // Container doesn't exist — expected
+    }
+
+    return true;
   }
 
   private async ensureNetworkByName(name: string): Promise<void> {
@@ -143,6 +192,10 @@ export class TraefikManager {
     }
 
     await this.ensureAllNetworks();
+
+    if (await this.tryAdoptExistingTraefik()) {
+      return;
+    }
 
     const client = this.docker.getClient();
 
