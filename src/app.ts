@@ -167,7 +167,7 @@ export async function createAppContext(
   let buildDebugger: BuildDebugger | null = null;
   if (model && buildDebuggerEnabled) {
     try {
-      buildDebugger = new BuildDebugger(model, config.language);
+      buildDebugger = new BuildDebugger(model, config.language, db, config.llm.provider);
     } catch (err) {
       log.debug({ err }, 'Build debugger creation failed');
     }

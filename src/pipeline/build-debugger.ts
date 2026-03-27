@@ -3,9 +3,11 @@ import { join } from 'node:path';
 import { generateText } from 'ai';
 import type { LanguageModel } from 'ai';
 import type { ChatMessage } from '../llm/index.js';
+import type { Database } from '../db/index.js';
 import { matchRecipe } from './recipes.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { collectProjectContext } from './auto-detect.js';
+import { logAiUsage, extractUsageFromResult } from '../llm/transparency.js';
 
 const log = createModuleLogger('debugger');
 
@@ -169,7 +171,14 @@ export class BuildDebugger {
   constructor(
     private readonly model: LanguageModel,
     private readonly locale: string = 'en',
+    private readonly db?: Database,
+    private readonly provider: string = 'gemini',
   ) {}
+
+  private getModelName(): string {
+    const modelMeta = this.model as { modelId?: string; model?: string };
+    return modelMeta.modelId ?? modelMeta.model ?? 'unknown';
+  }
 
   /**
    * Analyze a build failure and return diagnosis.
@@ -233,6 +242,25 @@ Diagnose this build failure. Respond ONLY with the JSON format specified.`;
         content: m.content,
       })),
     });
+
+    // Log token usage if db is available
+    if (this.db) {
+      try {
+        const usage = extractUsageFromResult(response.usage);
+        await logAiUsage(this.db, {
+          actionType: 'build_debugger',
+          modelName: this.getModelName(),
+          provider: this.provider,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
+          result: 'success',
+          durationMs: 0,
+        });
+      } catch (err) {
+        log.debug({ err }, 'Failed to log AI usage for build debugger');
+      }
+    }
 
     try {
       return {
