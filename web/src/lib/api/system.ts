@@ -270,3 +270,38 @@ export async function getServerStatus(): Promise<ServerStatus> {
   const res = await fetch('/api/server/status');
   return res.json();
 }
+
+export interface AiFeatureState {
+  enabled: boolean;
+  available: boolean;
+}
+
+export interface AiFeaturesResponse {
+  features: {
+    autoRecovery: AiFeatureState;
+    buildDebugger: AiFeatureState;
+    webAgent: AiFeatureState;
+    envDetection: AiFeatureState;
+    secretScan: AiFeatureState;
+    rollbackSuggestion: AiFeatureState;
+    operationalMonitoring: AiFeatureState;
+  };
+}
+
+export async function getAiFeatures(): Promise<AiFeaturesResponse> {
+  const res = await fetch('/api/setup/ai-features');
+  if (!res.ok) throw new Error('Failed to fetch AI features');
+  return res.json();
+}
+
+export async function updateAiFeatures(
+  updates: Partial<Record<keyof AiFeaturesResponse['features'], { enabled: boolean }>>,
+): Promise<AiFeaturesResponse> {
+  const res = await fetch('/api/setup/ai-features', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) throw new Error('Failed to update AI features');
+  return res.json();
+}

@@ -7,6 +7,7 @@ import { TraefikSettingsTab } from '@/components/settings/TraefikSettingsTab';
 import { GithubSettingsTab } from '@/components/settings/GithubSettingsTab';
 import { LlmSettingsTab } from '@/components/settings/LlmSettingsTab';
 import { SecuritySettingsTab } from '@/components/settings/SecuritySettingsTab';
+import { AiSettingsTab } from '@/components/settings/AiSettingsTab';
 
 export function SettingsPage() {
   const { status, loading, refetch } = useSetup();
@@ -30,7 +31,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs defaultValue="system" className="space-y-6 min-h-[480px]">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto gap-1 bg-bg-subtle/50 p-1">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6 h-auto gap-1 bg-bg-subtle/50 p-1">
           <TabsTrigger value="system" className="font-body text-xs sm:text-sm">
             {t('settings.tabs.system')}
           </TabsTrigger>
@@ -45,6 +46,9 @@ export function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="llm" className="font-body text-xs sm:text-sm">
             {t('settings.tabs.llm')}
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="font-body text-xs sm:text-sm">
+            {t('settings.ai.title')}
           </TabsTrigger>
         </TabsList>
 
@@ -77,6 +81,12 @@ export function SettingsPage() {
           className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
         >
           <LlmSettingsTab status={status} refetch={refetch} />
+        </TabsContent>
+        <TabsContent
+          value="ai"
+          className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+        >
+          <AiSettingsTab />
         </TabsContent>
       </Tabs>
     </div>
