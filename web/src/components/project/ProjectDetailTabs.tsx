@@ -113,6 +113,7 @@ export function ProjectDetailTabs({
             projectStatus={displayProject.status}
             projectBranch={displayProject.branch}
             environmentId={selectedEnvId}
+            currentEnvType={currentEnvType}
           />
         )}
       </TabsContent>

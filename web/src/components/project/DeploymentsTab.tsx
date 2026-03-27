@@ -13,6 +13,7 @@ interface DeploymentsTabProps {
   projectStatus?: string;
   projectBranch?: string;
   environmentId?: string;
+  currentEnvType?: string;
 }
 
 export function DeploymentsTab({
@@ -20,6 +21,7 @@ export function DeploymentsTab({
   projectStatus,
   projectBranch,
   environmentId,
+  currentEnvType,
 }: DeploymentsTabProps) {
   const [filter, setFilter] = useState<FilterMode>('deploys');
   const [statusFilter, setStatusFilter] = useState<DeploymentHistoryFilter>('all');
@@ -82,6 +84,7 @@ export function DeploymentsTab({
             projectBranch={projectBranch}
             statusFilter={statusFilter}
             environmentId={environmentId}
+            environmentType={currentEnvType}
           />
         ) : (
           <PRPreviewsList projectId={projectId} />
