@@ -529,8 +529,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/services', (c) => {
     const project = getProjectOrThrow(c, ctx);
-    const environmentId = c.req.query('environmentId');
-    const connections = ctx.db.listServiceConnectionsByProject(project.id, environmentId);
+    const connections = ctx.db.listServiceConnectionsByProject(project.id);
 
     if (connections.length > 0) {
       const services = connections
@@ -549,12 +548,6 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
-    // If filtering by environment and no connections found, return empty array
-    if (environmentId) {
-      return c.json([]);
-    }
-
-    // Only fall back to project services when no environment filter
     const services = ctx.serviceManager.getProjectServices(project.id);
     return c.json(
       services.map((s) => ({
@@ -1047,17 +1040,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'removed', project: project.name });
   });
 
-  api.get('/projects/:id/logs', async (c) => {
+  api.get('/projects/:id/logs', (c) => {
     const project = getProjectOrThrow(c, ctx);
-
-    const envResolution = resolveEnvironmentByType(c, ctx, project);
-    const envRow = 'environmentRow' in envResolution ? envResolution.environmentRow : undefined;
-    const targetContainerId = envRow?.container_id ?? project.container_id;
 
     const follow = c.req.query('follow');
 
-    if (follow && targetContainerId) {
-      const containerId = targetContainerId;
+    if (follow && project.container_id) {
+      const containerId = project.container_id;
       return stream(c, async (s) => {
         c.header('Content-Type', 'application/x-ndjson');
 
@@ -1105,13 +1094,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
 
     const lines = parseInt(c.req.query('lines') ?? '50', 10);
-
-    let logs: string;
-    if (targetContainerId) {
-      logs = await ctx.docker.getLogs(targetContainerId, lines);
-    } else {
-      logs = 'No container running for this project.';
-    }
+    const logs = ctx.pipeline.getLogs(project.id, lines);
 
     return c.json({ project: project.name, logs });
   });
