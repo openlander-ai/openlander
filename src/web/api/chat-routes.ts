@@ -6,16 +6,15 @@ import type { ChatStreamEvent } from '../../types/agent-events.js';
 
 export function createChatRoutes(ctx: AppContext): Hono {
   const api = new Hono();
-  let activeStream = false;
+  const activeStreams = new Map<string, boolean>();
 
   api.post('/chat/stream', async (c) => {
-    if (!ctx.agent) {
-      return c.json({ error: 'LLM not configured' }, 503);
+    if (!ctx.config.ai.webAgent.enabled) {
+      return c.json({ error: 'Web agent is disabled' }, 503);
     }
-    const agent = ctx.agent;
 
-    if (activeStream) {
-      return c.json({ error: 'Another chat stream is already active' }, 429);
+    if (!ctx.agentPool) {
+      return c.json({ error: 'LLM not configured' }, 503);
     }
 
     const body = await c.req
@@ -31,10 +30,15 @@ export function createChatRoutes(ctx: AppContext): Hono {
 
     // Auto-generate session_id if not provided
     if (!sessionId) {
-      sessionId = `domain-diag-${Date.now().toString(36)}`;
+      sessionId = `web-agent-${Date.now().toString(36)}`;
     }
 
-    activeStream = true;
+    if (activeStreams.get(sessionId)) {
+      return c.json({ error: 'Another message is being processed for this session' }, 429);
+    }
+
+    const agent = ctx.agentPool.getOrCreate(sessionId);
+    activeStreams.set(sessionId, true);
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -57,12 +61,14 @@ export function createChatRoutes(ctx: AppContext): Hono {
           const error = err instanceof Error ? err.message : String(err);
           write({ type: 'error', error });
         } finally {
-          activeStream = false;
+          activeStreams.delete(sessionId);
+          ctx.agentPool?.release(sessionId);
           controller.close();
         }
       },
       cancel() {
-        activeStream = false;
+        activeStreams.delete(sessionId);
+        ctx.agentPool?.release(sessionId);
       },
     });
 
