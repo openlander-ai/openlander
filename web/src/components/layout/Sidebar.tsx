@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import type { Project, Environment } from '@/types';
+import type { Project } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -20,7 +20,7 @@ import { getSetupStatus } from '@/lib/api';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { formatRelativeTime } from '@/lib/time';
 
-type SidebarProject = Project & { environments?: Environment[] };
+type SidebarProject = Project;
 
 interface SidebarProps {
   projects: SidebarProject[];
@@ -143,10 +143,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
     }));
   };
 
-  const renderProjectItem = (project: SidebarProject, hideEnvs = false) => {
-    const envs = project.environments ?? [];
-    const hasMultipleEnvs = !hideEnvs && envs.length > 1;
-
+  const renderProjectItem = (project: SidebarProject) => {
     let tooltip = project.name;
     if (project.status === 'error') {
       const timeStr = project.updatedAt ? formatRelativeTime(project.updatedAt) : '';
@@ -177,34 +174,6 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           />
           <span className="hidden lg:inline text-xs font-body truncate">{project.name}</span>
         </button>
-        {hasMultipleEnvs && (
-          <div className="hidden lg:block pl-5 space-y-0.5 mt-0.5">
-            {envs.map((env) => (
-              <button
-                key={env.id}
-                onClick={() => navigate(`/projects/${project.id}?env=${env.type}`)}
-                className={cn(
-                  'w-full flex items-center gap-2 rounded-md px-2 py-1 text-left transition-all duration-150',
-                  'hover:bg-bg-subtle',
-                  isProjectActive(project.id) &&
-                    new URLSearchParams(location.search).get('env') === env.type
-                    ? 'bg-bg-subtle/70 text-primary-ol'
-                    : 'text-muted-ol',
-                )}
-              >
-                <div
-                  className={cn(
-                    'h-1.5 w-1.5 rounded-full shrink-0',
-                    statusColor[env.status] ?? 'bg-[var(--text-muted)]',
-                  )}
-                />
-                <span className="text-[11px] font-body truncate">
-                  {env.type === 'production' ? 'prod' : 'dev'}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     );
   };
@@ -328,7 +297,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                   </button>
                   {open && (
                     <div className="space-y-0.5 pl-2 border-l border-border/50 ml-3 mt-1">
-                      {parentChildren.map((p) => renderProjectItem(p, true))}
+                      {parentChildren.map((p) => renderProjectItem(p))}
                     </div>
                   )}
                 </div>
