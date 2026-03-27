@@ -149,6 +149,42 @@ export const translations = {
       proxy: 'Proxy',
       github: 'GitHub',
       llm: 'AI Model',
+      ai: 'AI Features',
+    },
+    ai: {
+      title: 'AI Features',
+      description: 'Configure AI-powered features',
+      requiresApiKey: 'LLM API key required to enable AI features',
+      requiresApiKeyDescription: 'Changes take effect after server restart',
+      requiresRestart: 'Changes take effect after server restart',
+      autoRecovery: {
+        label: 'Auto Recovery',
+        description: 'Automatically attempt to fix build failures',
+      },
+      buildDebugger: {
+        label: 'Build Debugger',
+        description: 'AI analysis of build errors',
+      },
+      webAgent: {
+        label: 'Web Agent',
+        description: 'Conversational AI assistant in the dashboard',
+      },
+      envDetection: {
+        label: 'Env Detection',
+        description: 'Auto-detect environment variables from .env.example',
+      },
+      secretScan: {
+        label: 'Secret Scan',
+        description: 'Detect hardcoded secrets in code',
+      },
+      rollbackSuggestion: {
+        label: 'Rollback Suggestion',
+        description: 'Suggest rollback on health check failures',
+      },
+      operationalMonitoring: {
+        label: 'Operational Monitoring',
+        description: 'Monitor crashes, disk usage, and health',
+      },
     },
     system: {
       globalSecrets: 'Global Secrets',

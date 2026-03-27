@@ -149,6 +149,42 @@ export const translations = {
       proxy: '프록시',
       github: 'GitHub',
       llm: 'AI 모델',
+      ai: 'AI 기능',
+    },
+    ai: {
+      title: 'AI 기능',
+      description: 'AI 기반 기능을 설정합니다',
+      requiresApiKey: 'AI 기능을 활성화하려면 LLM API 키가 필요합니다',
+      requiresApiKeyDescription: '변경사항은 서버 재시작 후 적용됩니다',
+      requiresRestart: '변경사항은 서버 재시작 후 적용됩니다',
+      autoRecovery: {
+        label: '자동 복구',
+        description: '빌드 실패 시 자동으로 수정을 시도합니다',
+      },
+      buildDebugger: {
+        label: '빌드 디버거',
+        description: '빌드 오류 AI 분석',
+      },
+      webAgent: {
+        label: '웹 에이전트',
+        description: '대시보드의 대화형 AI 어시스턴트',
+      },
+      envDetection: {
+        label: '환경변수 감지',
+        description: '.env.example에서 환경변수 자동 감지',
+      },
+      secretScan: {
+        label: '시크릿 스캔',
+        description: '코드에 하드코딩된 시크릿 감지',
+      },
+      rollbackSuggestion: {
+        label: '롤백 제안',
+        description: '헬스체크 실패 시 롤백 제안',
+      },
+      operationalMonitoring: {
+        label: '운영 모니터링',
+        description: '크래시, 디스크 사용량, 헬스 모니터링',
+      },
     },
     system: {
       globalSecrets: '전역 비밀값',
