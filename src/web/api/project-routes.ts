@@ -529,7 +529,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.get('/projects/:id/services', (c) => {
     const project = getProjectOrThrow(c, ctx);
-    const connections = ctx.db.listServiceConnectionsByProject(project.id);
+    const environmentId = c.req.query('environmentId');
+    const connections = ctx.db.listServiceConnectionsByProject(project.id, environmentId);
 
     if (connections.length > 0) {
       const services = connections
