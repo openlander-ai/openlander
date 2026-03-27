@@ -376,10 +376,7 @@ export const unexposePublicSchema = z.object({
 
 export const startProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-  environment: z
-    .string()
-    .optional()
-    .describe('Environment to start (e.g. "production", "development"). Omit for default.'),
+  environment: deploymentEnvironmentSchema,
 });
 
 export const shareProjectSchema = z.object({

@@ -26,7 +26,7 @@ import {
   setPostmortemInstance,
   getPostmortemInstance,
 } from './monitor/postmortem.js';
-import { RollbackWatcher } from './monitor/rollback-watcher.js';
+import { RollbackWatcher, setRollbackWatcherInstance } from './monitor/rollback-watcher.js';
 import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
 import { eventBus } from './events/index.js';
@@ -268,7 +268,7 @@ export async function createAppContext(
 
   eventBus.on('monitor:healthcheck', ({ projectId, healthy }) => {
     const project = db.getProject(projectId);
-    if (!project || project.status === 'stopped' || project.monitoring_paused) return;
+    if (!project || project.status === 'stopped' || project.auto_recovery_paused) return;
 
     if (healthy) {
       crashFailureCounts.delete(projectId);
@@ -356,6 +356,7 @@ export async function createAppContext(
   }
 
   const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline);
+  setRollbackWatcherInstance(rollbackWatcher);
   rollbackWatcher.start();
   activeRollbackWatcher = rollbackWatcher;
 

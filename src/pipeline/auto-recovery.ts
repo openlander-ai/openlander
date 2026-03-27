@@ -15,6 +15,11 @@ const log = createModuleLogger('auto-recovery');
 
 const MAX_RECOVERY_ATTEMPTS = 3;
 const RECOVERY_OUTCOME_TIMEOUT_MS = 300_000;
+const recoveryAttempts = new Map<string, { count: number; lastError: string }>();
+
+export function resetRecoveryAttempts(projectId: string): void {
+  recoveryAttempts.delete(projectId);
+}
 
 export interface AutoRecoveryAgent {
   chatStream(
@@ -123,7 +128,6 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     params;
 
   let recoveryChain = Promise.resolve();
-  const recoveryAttempts = new Map<string, { count: number; lastError: string }>();
 
   function enqueueRecoveryCall(
     fn: () => Promise<void>,
@@ -366,7 +370,7 @@ ${plan.agentGuidance}
       enqueueRecoveryCall(
         async () => {
           const project = db.getProject(payload.projectId);
-          if (!project || project.status === 'stopped' || project.monitoring_paused) {
+          if (!project || project.status === 'stopped' || project.auto_recovery_paused) {
             log.info(
               { projectId: payload.projectId },
               'Skipping recovery: project stopped or paused',
@@ -399,7 +403,7 @@ ${plan.agentGuidance}
       enqueueRecoveryCall(
         async () => {
           const project = db.getProject(payload.projectId);
-          if (!project || project.status === 'stopped' || project.monitoring_paused) {
+          if (!project || project.status === 'stopped' || project.auto_recovery_paused) {
             log.info(
               { projectId: payload.projectId },
               'Skipping recovery: project stopped or paused',
@@ -504,7 +508,7 @@ ${plan.agentGuidance}
     enqueueRecoveryCall(
       async () => {
         const project = db.getProject(payload.projectId);
-        if (!project || project.status === 'stopped' || project.monitoring_paused) {
+        if (!project || project.status === 'stopped' || project.auto_recovery_paused) {
           log.info(
             { projectId: payload.projectId },
             'Skipping recovery: project stopped or paused',

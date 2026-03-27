@@ -16,7 +16,6 @@ function createMockDocker(): Docker {
     runContainer: vi.fn().mockResolvedValue('container-rollback-new'),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     listAllContainers: vi.fn().mockResolvedValue([]),
-    ensureProjectNetwork: vi.fn().mockResolvedValue('ol-env-app'),
   } as unknown as Docker;
 }
 

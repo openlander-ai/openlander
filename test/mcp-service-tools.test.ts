@@ -302,6 +302,13 @@ describe('MCP service tools (Task 8)', () => {
           port: 6379,
         }),
       ]),
+      _agent_guidance: {
+        networking: [
+          'All containers are on the shared Docker network ("openlander"). Do NOT create Docker networks manually.',
+          'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+          'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+        ],
+      },
     });
 
     serviceManager.list.mockRejectedValueOnce(new Error('Service list unavailable'));

@@ -28,7 +28,6 @@ function createMockDocker(): Docker {
     listAllContainers: vi.fn().mockResolvedValue([]),
     removeContainer: vi.fn().mockResolvedValue(undefined),
     stopContainer: vi.fn().mockResolvedValue(undefined),
-    ensureProjectNetwork: vi.fn().mockResolvedValue('ol-test-project'),
   } as unknown as Docker;
 }
 

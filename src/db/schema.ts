@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS projects (
    access_code_iv TEXT,
    is_preview INTEGER DEFAULT 0 CHECK(is_preview IN (0, 1)),
    pr_number INTEGER,
-   monitoring_paused INTEGER DEFAULT 0 CHECK(monitoring_paused IN (0, 1))
+    auto_recovery_paused INTEGER DEFAULT 0 CHECK(auto_recovery_paused IN (0, 1))
 );
 
 CREATE TABLE IF NOT EXISTS environments (

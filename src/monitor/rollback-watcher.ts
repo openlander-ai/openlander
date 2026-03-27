@@ -49,6 +49,10 @@ export class RollbackWatcher {
     this.watchers.clear();
   }
 
+  public resetProjectWatch(projectId: string): void {
+    this.stopWatching(projectId);
+  }
+
   private startWatching(projectId: string, planId?: string): void {
     const project = this.db.getProject(projectId);
     if (!project?.previous_image_tag) return;
@@ -82,7 +86,7 @@ export class RollbackWatcher {
     if (!watcher) return;
 
     const project = this.db.getProject(projectId);
-    if (!project || project.status === 'stopped' || project.monitoring_paused) {
+    if (!project || project.status === 'stopped' || project.auto_recovery_paused) {
       this.stopWatching(projectId);
       return;
     }
@@ -135,4 +139,14 @@ export class RollbackWatcher {
       log.error({ projectId, planId, err }, 'Error during auto-rollback execution');
     }
   }
+}
+
+let watcherInstance: RollbackWatcher | null = null;
+
+export function setRollbackWatcherInstance(watcher: RollbackWatcher | null): void {
+  watcherInstance = watcher;
+}
+
+export function resetRollbackWatch(projectId: string): void {
+  watcherInstance?.resetProjectWatch(projectId);
 }

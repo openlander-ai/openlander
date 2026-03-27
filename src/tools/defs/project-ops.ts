@@ -1,6 +1,8 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
+import { resetRecoveryAttempts } from '../../pipeline/auto-recovery.js';
+import { resetRollbackWatch } from '../../monitor/rollback-watcher.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import {
   emptySchema,
@@ -158,7 +160,7 @@ export const projectOpsToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
-      context.appCtx.db.updateProject(project.id, { monitoringPaused: 1 });
+      context.appCtx.db.updateProject(project.id, { autoRecoveryPaused: 1 });
 
       return {
         status: 'paused',
@@ -185,7 +187,9 @@ export const projectOpsToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
-      context.appCtx.db.updateProject(project.id, { monitoringPaused: 0 });
+      context.appCtx.db.updateProject(project.id, { autoRecoveryPaused: 0 });
+      resetRecoveryAttempts(project.id);
+      resetRollbackWatch(project.id);
 
       return {
         status: 'resumed',

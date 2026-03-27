@@ -140,6 +140,13 @@ export const serviceToolDefs: ToolDef[] = [
             createdAt: service.created_at,
             externalAccess: getServiceExternalAccess(service.port),
           })),
+          _agent_guidance: {
+            networking: [
+              `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
+              'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+              'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+            ],
+          },
         };
       }
 
@@ -339,6 +346,13 @@ export const serviceToolDefs: ToolDef[] = [
         createdAt: service.created_at,
         updatedAt: service.updated_at,
         externalAccess: getServiceExternalAccess(service.port),
+        _agent_guidance: {
+          networking: [
+            `All containers are on the shared Docker network ("${SHARED_NETWORK_NAME}"). Do NOT create Docker networks manually.`,
+            'For inter-container communication, use http://ol-{project-name}:{port} (DNS auto-resolved).',
+            'Networks are auto-managed by OpenLander. Manual docker network commands will cause conflicts.',
+          ],
+        },
       };
     },
     targets: ['mcp'],
