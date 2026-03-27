@@ -485,6 +485,21 @@ MCP, 웹 에이전트, 자동복구, 채널 — 모든 진입점에서 자동으
 - 자동 복구 안정화
 - MCP 도구 품질 강화
 - 운영 모니터링 기본 대응: 컨테이너 크래시 반복 시 자동 재시작, 디스크 80% 도달 시 감지 + 정리 권장 알림 + 원클릭 실행 (자동 정리는 v1.x), 헬스체크 연속 실패 시 롤백 제안 (AlertMonitor + rollback:suggested 이벤트 활용)
+- AI 기능 설정화: 모든 AI 관련 기능을 개별 on/off 설정으로 제어 가능하게 리팩토링. 현재 API 키 유무로 암묵적 활성화되는 구조를 명시적 설정으로 전환
+
+**AI 기능 설정 항목**:
+
+| 설정 키                            | 기본값 | 설명                                     |
+| ---------------------------------- | ------ | ---------------------------------------- |
+| `ai.autoRecovery.enabled`          | `true` | 빌드 실패 시 자동 복구 시도              |
+| `ai.buildDebugger.enabled`         | `true` | 빌드 로그 AI 분석                        |
+| `ai.webAgent.enabled`              | `true` | 웹 에이전트 채팅 인터페이스              |
+| `ai.envDetection.enabled`          | `true` | .env.example 기반 환경변수 자동 감지     |
+| `ai.secretScan.enabled`            | `true` | 하드코딩된 시크릿 감지                   |
+| `ai.rollbackSuggestion.enabled`    | `true` | 헬스체크 실패 시 롤백 제안               |
+| `ai.operationalMonitoring.enabled` | `true` | 운영 중 크래시/디스크/헬스 모니터링 대응 |
+
+API 키가 없으면 모든 AI 기능이 자동 비활성화 (현재와 동일). API 키가 있어도 개별 기능을 끌 수 있음. 설정은 `~/.openlander/config.yml`과 웹 대시보드 Settings 양쪽에서 관리.
 
 **v1.0에 포함되지 않는 것**:
 
