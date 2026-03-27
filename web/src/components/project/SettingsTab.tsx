@@ -30,6 +30,8 @@ export function SettingsTab({
 }: SettingsTabProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>('source');
 
+  const selectedEnv = environments?.find((e) => e.type === currentEnvType);
+
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0 overflow-hidden">
       {/* Left nav: horizontal on mobile, vertical on desktop */}
@@ -73,7 +75,9 @@ export function SettingsTab({
 
       {/* Right pane: settings form */}
       <div className="flex-1 min-w-0 overflow-auto p-4">
-        {activeSection === 'source' && <DeploymentSourcePanel projectId={projectId} />}
+        {activeSection === 'source' && (
+          <DeploymentSourcePanel projectId={projectId} selectedEnv={selectedEnv} />
+        )}
         {activeSection === 'env' && (
           <EnvVarsTable
             projectId={projectId}
