@@ -53,11 +53,15 @@ export class ServiceConnectionRepo {
       .get() as ServiceConnectionRow | undefined;
   }
 
-  listConnectionsByProject(projectId: string): ServiceConnectionRow[] {
+  listConnectionsByProject(projectId: string, environmentId?: string): ServiceConnectionRow[] {
+    const conditions = [eq(serviceConnections.project_id, projectId)];
+    if (environmentId) {
+      conditions.push(eq(serviceConnections.environment_id, environmentId));
+    }
     return this.db
       .select()
       .from(serviceConnections)
-      .where(eq(serviceConnections.project_id, projectId))
+      .where(and(...conditions))
       .orderBy(desc(serviceConnections.created_at))
       .all() as ServiceConnectionRow[];
   }

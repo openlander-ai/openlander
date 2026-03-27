@@ -28,6 +28,8 @@ import { Button } from '@/components/ui/button';
 
 interface EnvVarsTableProps {
   projectId: string;
+  initialEnvType?: string;
+  environments?: Environment[];
 }
 
 interface EnvVar {
@@ -38,9 +40,13 @@ interface EnvVar {
   isOverride?: boolean;
 }
 
-export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
+export function EnvVarsTable({
+  projectId,
+  initialEnvType,
+  environments: passedEnvironments,
+}: EnvVarsTableProps) {
   const { t } = useLanguage();
-  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [environments, setEnvironments] = useState<Environment[]>(passedEnvironments || []);
   const [selectedEnvId, setSelectedEnvId] = useState<string>('');
   const [vars, setVars] = useState<EnvVar[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +107,16 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   useEffect(() => {
     fetchEnv();
   }, [fetchEnv]);
+
+  // Auto-sync environment when initialEnvType changes
+  useEffect(() => {
+    if (initialEnvType && environments.length > 0) {
+      const env = environments.find((e) => e.type === initialEnvType);
+      if (env && env.id !== selectedEnvId) {
+        setSelectedEnvId(env.id);
+      }
+    }
+  }, [initialEnvType, environments]);
 
   const handleSave = async () => {
     setSaving(true);

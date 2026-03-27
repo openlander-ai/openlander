@@ -92,6 +92,8 @@ export function ProjectDetailTabs({
             projectStatus={displayProject.status}
             displayProject={displayProject}
             environments={environments}
+            selectedEnvId={selectedEnvId}
+            currentEnvType={currentEnvType}
             timelineItems={allTimelineItems}
             isTimelineStreaming={isStreaming}
             onOpenLogs={() => onActiveTabChange('console')}
@@ -111,6 +113,7 @@ export function ProjectDetailTabs({
             projectStatus={displayProject.status}
             projectBranch={displayProject.branch}
             environmentId={selectedEnvId}
+            currentEnvType={currentEnvType}
           />
         )}
       </TabsContent>
@@ -128,7 +131,12 @@ export function ProjectDetailTabs({
 
       <TabsContent value="settings" className="flex-1 min-h-0 mt-0">
         {id && displayProject && (
-          <SettingsTab projectId={id} projectStatus={displayProject.status} />
+          <SettingsTab
+            projectId={id}
+            projectStatus={displayProject.status}
+            currentEnvType={currentEnvType}
+            environments={environments}
+          />
         )}
       </TabsContent>
     </Tabs>

@@ -50,8 +50,8 @@ export function resolveDockerfilePath(clonePath: string, dockerfilePath?: string
 
 export function deriveServiceName(dockerfilePath: string): string {
   const dir = dirname(dockerfilePath);
-  if (dir === '.' || dir === '') return 'main';
-  return dir.split('/')[0] ?? 'service';
+  if (dir === '.' || dir === '') return 'app';
+  return dir.split('/')[0] ?? 'app';
 }
 
 export function getRouteName(projectName: string, environmentType: string): string {
