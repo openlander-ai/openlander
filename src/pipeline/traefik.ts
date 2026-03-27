@@ -77,22 +77,8 @@ export class TraefikManager {
     await this.ensureNetworkByName(this.networkName);
   }
 
-  /**
-   * Ensure both production and development Docker networks exist.
-   * Called at startup so that either environment can deploy immediately.
-   *
-   * NOTE: Currently both environments use SHARED_NETWORK_NAME ('openlander')
-   * via getPolicy(). The openlander-prod and openlander-dev networks are
-   * pre-created for future multi-environment network isolation but not
-   * actively routed to by containers. Do NOT remove — they serve as
-   * reserved infrastructure for environment-scoped networking.
-   */
   async ensureAllNetworks(): Promise<void> {
-    await Promise.all([
-      this.ensureNetworkByName('openlander-prod'),
-      this.ensureNetworkByName('openlander-dev'),
-      this.ensureNetworkByName(SHARED_NETWORK_NAME),
-    ]);
+    await this.ensureNetworkByName(SHARED_NETWORK_NAME);
   }
 
   /**
@@ -123,9 +109,6 @@ export class TraefikManager {
   private async ensureNetworkByName(name: string): Promise<void> {
     const client = this.docker.getClient();
 
-    // Use inspect() for exact name lookup. listNetworks({ name }) does substring
-    // matching, so filtering for 'openlander' also returns 'openlander-prod' and
-    // 'openlander-dev', causing the shared network to never be created.
     try {
       await client.getNetwork(name).inspect();
       return;

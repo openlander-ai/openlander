@@ -69,7 +69,7 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - deploy_blue_green — Zero-downtime deploy with health check before traffic switch. Use for production projects where downtime is unacceptable.
 - preview_deploy / cleanup_preview / list_previews — Ephemeral branch previews for PR testing.
 - deploy_environment — Deploy a specific environment (production/development) for a project. Returns immediately.
-- get_deploy_status — Poll build progress. Shows phase (queued/cloning/building/starting/done/failed) and elapsed time. Pass wait=true to block until completion instead of polling.
+- get_deploy_status — Poll build progress. Shows phase (queued/cloning/building/starting/done/failed) and elapsed time. Call periodically to track progress. Avoid wait=true as it blocks the agent.
 
 ### Services (Databases, Caches & Object Storage)
 - create_service — Create PostgreSQL/MySQL/Redis/MongoDB/MinIO via template, or any Docker image. Data persisted in Docker named volumes. Returns suggested_env with connection string for auto-linking. For databases, use template="postgres" and set DATABASE_URL from suggested_env.

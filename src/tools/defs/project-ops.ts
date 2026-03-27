@@ -240,8 +240,8 @@ export const projectOpsToolDefs: ToolDef[] = [
         project: projectName,
         ...(explicitEnvironment ? { environment } : {}),
         message: noCache
-          ? 'Restart initiated (no_cache). Full rebuild may take 3-5+ minutes. Use get_deploy_status with wait=true and timeout=600.'
-          : 'Redeployment started. Use get_deploy_status to track progress.',
+          ? 'Restart initiated (no_cache). Full rebuild may take 3-5+ minutes. Poll get_deploy_status to track progress.'
+          : 'Redeployment started. Poll get_deploy_status to track progress.',
       };
     },
   },
@@ -311,8 +311,8 @@ export const projectOpsToolDefs: ToolDef[] = [
         project: projectName,
         ...(explicitEnvironment ? { environment } : {}),
         message: noCache
-          ? 'Redeployment started (no_cache). Full rebuild may take 3-5+ minutes. Use get_deploy_status with wait=true and timeout=600.'
-          : 'Redeployment started. Use get_deploy_status to track progress.',
+          ? 'Redeployment started (no_cache). Full rebuild may take 3-5+ minutes. Poll get_deploy_status to track progress.'
+          : 'Redeployment started. Poll get_deploy_status to track progress.',
       };
     },
   },

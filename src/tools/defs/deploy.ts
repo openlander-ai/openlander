@@ -81,7 +81,7 @@ export const deployToolDefs: ToolDef[] = [
         ...result,
         _agent_guidance: {
           next_steps: [
-            'Call get_deploy_status with wait=true to monitor blue-green deployment progress.',
+            'Call get_deploy_status to poll blue-green deployment progress. Do NOT use wait=true — it blocks the agent.',
           ],
         },
       };
@@ -209,7 +209,7 @@ export const deployToolDefs: ToolDef[] = [
           ? {
               _agent_guidance: {
                 next_steps: [
-                  'Deploy is in progress. Call get_deploy_status with wait=true to block until completion, or poll periodically',
+                  'Deploy is in progress. Poll get_deploy_status periodically to check completion. Do NOT use wait=true — it blocks the agent from responding to the user.',
                 ],
               },
             }

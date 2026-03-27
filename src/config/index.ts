@@ -35,9 +35,6 @@ export interface EnvironmentPolicy {
 /** Default policies per environment. Pipeline functions read these via getPolicy(). */
 const DEFAULT_POLICIES: Record<OpenLanderEnv, EnvironmentPolicy> = {
   production: {
-    // Both environments currently share the same network for simplicity.
-    // Environment-specific networks (openlander-prod/dev) exist but are reserved
-    // for future isolation features. See traefik.ts ensureAllNetworks().
     networkName: SHARED_NETWORK_NAME,
     portRangeStart: 10001,
     portRangeEnd: 10999,
@@ -46,9 +43,6 @@ const DEFAULT_POLICIES: Record<OpenLanderEnv, EnvironmentPolicy> = {
     traefikDashboardPort: 8080,
   },
   development: {
-    // Both environments currently share the same network for simplicity.
-    // Environment-specific networks (openlander-prod/dev) exist but are reserved
-    // for future isolation features. See traefik.ts ensureAllNetworks().
     networkName: SHARED_NETWORK_NAME,
     portRangeStart: 20001,
     portRangeEnd: 20999,
