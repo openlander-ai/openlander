@@ -6,7 +6,6 @@ import { deleteProject, deployGitProject, getProject, waitForStatus } from './fi
 
 const R3_REPO_URL = 'https://github.com/openlander-ai/test-compose-multi';
 const SCENARIO_TIMEOUT_MS = 300_000;
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
 async function fetchWithRetry(url: string, retries = 5, delayMs = 2000): Promise<Response> {
   for (let i = 0; i < retries; i++) {
@@ -21,66 +20,64 @@ async function fetchWithRetry(url: string, retries = 5, delayMs = 2000): Promise
   throw new Error(`Fetch failed after ${retries} retries: ${url}`);
 }
 
-if (!isBunRuntime) {
-  test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'serial' });
 
-  test.describe('Quality Gate — Compose multi-service deploy', () => {
-    let projectId: string | null = null;
+test.describe('Quality Gate — Compose multi-service deploy', () => {
+  let projectId: string | null = null;
 
-    test.beforeAll(() => {
-      try {
-        const ids = execSync('docker ps -a --filter name=ol-test-compose -q', {
-          encoding: 'utf-8',
-        })
-          .trim()
-          .split('\n')
-          .filter(Boolean);
-        for (const id of ids) {
-          execSync(`docker rm -f ${id}`, { stdio: 'pipe' });
-        }
-      } catch {
-        // noop
+  test.beforeAll(() => {
+    try {
+      const ids = execSync('docker ps -a --filter name=ol-test-compose -q', {
+        encoding: 'utf-8',
+      })
+        .trim()
+        .split('\n')
+        .filter(Boolean);
+      for (const id of ids) {
+        execSync(`docker rm -f ${id}`, { stdio: 'pipe' });
       }
+    } catch {
+      // noop
+    }
 
-      execSync(
-        'test -d /tmp/e2e-compose-cache || git clone --depth=1 https://github.com/openlander-ai/test-compose-multi /tmp/e2e-compose-cache; docker build -t ol-test-compose-multi-web:latest /tmp/e2e-compose-cache',
-        { stdio: 'pipe', timeout: 120_000 },
-      );
-    });
-
-    test.afterAll(async () => {
-      if (projectId) {
-        try {
-          await deleteProject(projectId);
-        } catch (error) {
-          console.warn(`Failed to delete project ${projectId}:`, error);
-        }
-      }
-    });
-
-    test.fixme('deploys compose repo and serves /count endpoint', async () => {
-      test.setTimeout(SCENARIO_TIMEOUT_MS);
-
-      const deploy = await deployGitProject(R3_REPO_URL);
-      expect(deploy.success).toBe(true);
-      expect(deploy.projectId).toBeTruthy();
-      projectId = deploy.projectId;
-
-      const runningProject = await waitForStatus(projectId, 'running', SCENARIO_TIMEOUT_MS);
-      expect(runningProject.status).toBe('running');
-
-      const latestProject = (await getProject(projectId)) as {
-        assigned_port?: number;
-        port?: number;
-      };
-      const port = latestProject.assigned_port ?? latestProject.port;
-      expect(port).toBeTruthy();
-
-      const countResponse = await fetchWithRetry(`http://localhost:${String(port)}/count`);
-      expect(countResponse.ok).toBe(true);
-
-      const countPayload = (await countResponse.json()) as { count?: unknown };
-      expect(typeof countPayload.count).toBe('number');
-    });
+    execSync(
+      'test -d /tmp/e2e-compose-cache || git clone --depth=1 https://github.com/openlander-ai/test-compose-multi /tmp/e2e-compose-cache; docker build -t ol-test-compose-multi-web:latest /tmp/e2e-compose-cache',
+      { stdio: 'pipe', timeout: 120_000 },
+    );
   });
-}
+
+  test.afterAll(async () => {
+    if (projectId) {
+      try {
+        await deleteProject(projectId);
+      } catch (error) {
+        console.warn(`Failed to delete project ${projectId}:`, error);
+      }
+    }
+  });
+
+  test.fixme('deploys compose repo and serves /count endpoint', async () => {
+    test.setTimeout(SCENARIO_TIMEOUT_MS);
+
+    const deploy = await deployGitProject(R3_REPO_URL);
+    expect(deploy.success).toBe(true);
+    expect(deploy.projectId).toBeTruthy();
+    projectId = deploy.projectId;
+
+    const runningProject = await waitForStatus(projectId, 'running', SCENARIO_TIMEOUT_MS);
+    expect(runningProject.status).toBe('running');
+
+    const latestProject = (await getProject(projectId)) as {
+      assigned_port?: number;
+      port?: number;
+    };
+    const port = latestProject.assigned_port ?? latestProject.port;
+    expect(port).toBeTruthy();
+
+    const countResponse = await fetchWithRetry(`http://localhost:${String(port)}/count`);
+    expect(countResponse.ok).toBe(true);
+
+    const countPayload = (await countResponse.json()) as { count?: unknown };
+    expect(typeof countPayload.count).toBe('number');
+  });
+});

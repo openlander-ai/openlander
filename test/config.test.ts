@@ -11,8 +11,7 @@ import {
   SHARED_NETWORK_NAME,
 } from '../src/config/index.js';
 
-const describeConfig =
-  typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined' ? describe.skip : describe;
+const describeConfig = describe;
 
 describeConfig('Config Deep Merge', () => {
   it('preserves defaults for missing fields', () => {

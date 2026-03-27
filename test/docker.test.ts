@@ -3,8 +3,7 @@ import { createRequire } from 'node:module';
 
 import { Docker, type AllContainerInfo } from '../src/pipeline/docker.js';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-const describeDocker = isBunRuntime ? describe.skip : describe;
+const describeDocker = describe;
 
 const mockPing = vi.fn();
 const mockListContainers = vi.fn();
@@ -15,29 +14,27 @@ const mockGetContainer = vi.fn();
 const mockFollowProgress = vi.fn();
 
 // Mock dockerode module by injecting into require.cache
-if (!isBunRuntime) {
-  const require = createRequire(import.meta.url);
-  const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
-    this.ping = mockPing;
-    this.listContainers = mockListContainers;
-    this.buildImage = mockBuildImage;
-    this.createContainer = mockCreateContainer;
-    this.getImage = mockGetImage;
-    this.getContainer = mockGetContainer;
-    this.modem = {
-      followProgress: mockFollowProgress,
-    };
-  });
+const require = createRequire(import.meta.url);
+const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
+  this.ping = mockPing;
+  this.listContainers = mockListContainers;
+  this.buildImage = mockBuildImage;
+  this.createContainer = mockCreateContainer;
+  this.getImage = mockGetImage;
+  this.getContainer = mockGetContainer;
+  this.modem = {
+    followProgress: mockFollowProgress,
+  };
+});
 
-  // Inject mock into require.cache before Docker class is instantiated
-  const dockerodePath = require.resolve('dockerode');
-  require.cache[dockerodePath] = {
-    id: dockerodePath,
-    filename: dockerodePath,
-    loaded: true,
-    exports: mockDockerodeClass,
-  } as unknown as NodeJS.Module;
-}
+// Inject mock into require.cache before Docker class is instantiated
+const dockerodePath = require.resolve('dockerode');
+require.cache[dockerodePath] = {
+  id: dockerodePath,
+  filename: dockerodePath,
+  loaded: true,
+  exports: mockDockerodeClass,
+} as unknown as NodeJS.Module;
 
 // ---------------------------------------------------------------------------
 // Test Data

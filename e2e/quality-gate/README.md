@@ -14,7 +14,8 @@ Operational guide for running the quality-gate E2E test suite against a live Ope
 Start the server for E2E:
 
 ```bash
-OPENLANDER_NO_AUTH=1 bun run src/cli/index.ts --no-open
+npm run build
+OPENLANDER_NO_AUTH=1 node dist/cli/index.js --no-open
 ```
 
 ## Running

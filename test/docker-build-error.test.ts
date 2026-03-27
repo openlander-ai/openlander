@@ -3,30 +3,27 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Docker } from '../src/pipeline/docker.js';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-const describeDocker = isBunRuntime ? describe.skip : describe;
+const describeDocker = describe;
 
 const mockBuildImage = vi.fn();
 
-if (!isBunRuntime) {
-  const require = createRequire(import.meta.url);
-  const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
-    this.ping = vi.fn();
-    this.listContainers = vi.fn();
-    this.buildImage = mockBuildImage;
-    this.modem = {
-      followProgress: vi.fn(),
-    };
-  });
+const require = createRequire(import.meta.url);
+const mockDockerodeClass = vi.fn(function (this: Record<string, unknown>) {
+  this.ping = vi.fn();
+  this.listContainers = vi.fn();
+  this.buildImage = mockBuildImage;
+  this.modem = {
+    followProgress: vi.fn(),
+  };
+});
 
-  const dockerodePath = require.resolve('dockerode');
-  require.cache[dockerodePath] = {
-    id: dockerodePath,
-    filename: dockerodePath,
-    loaded: true,
-    exports: mockDockerodeClass,
-  } as unknown as NodeJS.Module;
-}
+const dockerodePath = require.resolve('dockerode');
+require.cache[dockerodePath] = {
+  id: dockerodePath,
+  filename: dockerodePath,
+  loaded: true,
+  exports: mockDockerodeClass,
+} as unknown as NodeJS.Module;
 
 describeDocker('Docker build startup error context', () => {
   it('includes image tag and context path in DockerBuildError when stream fails to start', async () => {

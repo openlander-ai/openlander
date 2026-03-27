@@ -1,7 +1,6 @@
 import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import type { TimelineItem } from '../../web/src/lib/event-types.js';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 let TimelineItemCard: typeof import('../../web/src/components/timeline/TimelineItem.js').TimelineItemCard;
 
 interface HookDispatcher {
@@ -168,9 +167,7 @@ function renderTimelineItem(item: TimelineItem) {
   }
 }
 
-const describeTimeline = isBunRuntime ? describe.skip : describe;
-
-describeTimeline('TimelineItemCard', () => {
+describe('TimelineItemCard', () => {
   beforeAll(async () => {
     const { createRequire } = await import('node:module');
     const require = createRequire(import.meta.url);

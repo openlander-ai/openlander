@@ -1,7 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-
 interface HookDispatcher {
   useState<T>(initial: T | (() => T)): readonly [T, (next: T | ((value: T) => T)) => void];
   useCallback<T extends (...args: never[]) => unknown>(callback: T): T;
@@ -89,9 +87,7 @@ function renderCard(props: any) {
   }
 }
 
-const describeCard = isBunRuntime ? describe.skip : describe;
-
-describeCard('ComposeErrorCard', () => {
+describe('ComposeErrorCard', () => {
   beforeAll(async () => {
     const { createRequire } = await import('node:module');
     const require = createRequire(import.meta.url);

@@ -1,16 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+vi.mock('node:child_process', () => ({
+  execFile: vi.fn(),
+}));
 
-if (!isBunRuntime) {
-  vi.mock('node:child_process', () => ({
-    execFile: vi.fn(),
-  }));
-
-  vi.mock('../src/config/index.js', () => ({
-    loadConfig: vi.fn(),
-  }));
-}
+vi.mock('../src/config/index.js', () => ({
+  loadConfig: vi.fn(),
+}));
 
 import { execFile } from 'node:child_process';
 import { cloneRepo } from '../src/pipeline/git.js';
@@ -24,7 +20,7 @@ import {
 
 const mockExecFile = execFile as unknown as ReturnType<typeof vi.fn>;
 const mockLoadConfig = loadConfig as unknown as ReturnType<typeof vi.fn>;
-const describeGitClone = isBunRuntime ? describe.skip : describe;
+const describeGitClone = describe;
 
 // Make promisified execFile resolve by default
 beforeEach(() => {

@@ -12,7 +12,6 @@ import {
 
 const R1_REPO_URL = 'https://github.com/openlander-ai/test-single-dockerfile';
 const SCENARIO_TIMEOUT_MS = 150_000;
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 
 function assertOkResponse(url: string, retries = 5, delayMs = 2000): void {
   for (let i = 0; i < retries; i++) {
@@ -63,49 +62,47 @@ async function waitForContainerSwitch(
   );
 }
 
-if (!isBunRuntime) {
-  test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'serial' });
 
-  test.describe('quality-gate lifecycle: blue-green deploy', () => {
-    let projectId: string | null = null;
+test.describe('quality-gate lifecycle: blue-green deploy', () => {
+  let projectId: string | null = null;
 
-    test.afterAll(async () => {
-      if (projectId) {
-        await deleteProject(projectId);
-      }
-    });
-
-    test('blue-green deploy swaps container without downtime', async () => {
-      test.setTimeout(240_000);
-
-      const deploy = await deployGitProject(R1_REPO_URL);
-      expect(deploy.success).toBe(true);
-      expect(deploy.projectId).toBeTruthy();
-
-      projectId = deploy.projectId;
-
-      const runningBefore = await waitForStatus(projectId, 'running', SCENARIO_TIMEOUT_MS);
-      expect(typeof runningBefore.container_id).toBe('string');
-      expect((runningBefore.container_id as string).length).toBeGreaterThan(0);
-
-      const originalContainerId = runningBefore.container_id as string;
-      const beforeUrl = resolveAccessibleUrl(runningBefore);
-      assertOkResponse(beforeUrl);
-
-      await blueGreenDeploy(projectId, '/');
-      await waitForStatus(projectId, 'running', SCENARIO_TIMEOUT_MS);
-
-      const runningAfterSwitch = await waitForContainerSwitch(
-        projectId,
-        originalContainerId,
-        SCENARIO_TIMEOUT_MS,
-      );
-
-      expect(runningAfterSwitch.container_id).not.toBe(originalContainerId);
-
-      const latestProject = await getProject(projectId);
-      const afterUrl = resolveAccessibleUrl(latestProject);
-      assertOkResponse(afterUrl);
-    });
+  test.afterAll(async () => {
+    if (projectId) {
+      await deleteProject(projectId);
+    }
   });
-}
+
+  test('blue-green deploy swaps container without downtime', async () => {
+    test.setTimeout(240_000);
+
+    const deploy = await deployGitProject(R1_REPO_URL);
+    expect(deploy.success).toBe(true);
+    expect(deploy.projectId).toBeTruthy();
+
+    projectId = deploy.projectId;
+
+    const runningBefore = await waitForStatus(projectId, 'running', SCENARIO_TIMEOUT_MS);
+    expect(typeof runningBefore.container_id).toBe('string');
+    expect((runningBefore.container_id as string).length).toBeGreaterThan(0);
+
+    const originalContainerId = runningBefore.container_id as string;
+    const beforeUrl = resolveAccessibleUrl(runningBefore);
+    assertOkResponse(beforeUrl);
+
+    await blueGreenDeploy(projectId, '/');
+    await waitForStatus(projectId, 'running', SCENARIO_TIMEOUT_MS);
+
+    const runningAfterSwitch = await waitForContainerSwitch(
+      projectId,
+      originalContainerId,
+      SCENARIO_TIMEOUT_MS,
+    );
+
+    expect(runningAfterSwitch.container_id).not.toBe(originalContainerId);
+
+    const latestProject = await getProject(projectId);
+    const afterUrl = resolveAccessibleUrl(latestProject);
+    assertOkResponse(afterUrl);
+  });
+});

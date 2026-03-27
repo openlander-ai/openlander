@@ -5,8 +5,6 @@ import {
   createMockUseLogStreamResult,
 } from '../helpers/console-fixtures.js';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-
 type SearchState = {
   searchMode: 'text' | 'regex';
   searchQuery: string;
@@ -243,9 +241,7 @@ function renderLogViewer() {
   }
 }
 
-const describeLogViewer = isBunRuntime ? describe.skip : describe;
-
-describeLogViewer('LogViewer UI behavior', () => {
+describe('LogViewer UI behavior', () => {
   beforeAll(async () => {
     const { createRequire } = await import('node:module');
     const require = createRequire(import.meta.url);

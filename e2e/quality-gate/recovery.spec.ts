@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 
 import { deleteProject, deployGitProject, getProject, waitForStatus } from './fixtures/api.js';
 
-const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
 const SCENARIO_TIMEOUT_MS = 180_000;
 const PROJECT_STATUS_TIMEOUT_MS = 120_000;
 const POLL_INTERVAL_MS = 1_000;
@@ -33,55 +32,53 @@ async function waitForProjectStatus(
   );
 }
 
-if (!isBunRuntime) {
-  test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'serial' });
 
-  test.describe('Quality Gate Recovery (R5/R6)', () => {
-    const createdProjectIds: string[] = [];
+test.describe('Quality Gate Recovery (R5/R6)', () => {
+  const createdProjectIds: string[] = [];
 
-    test.afterAll(async () => {
-      const uniqueProjectIds = Array.from(new Set(createdProjectIds));
-      for (const projectId of uniqueProjectIds) {
-        try {
-          await deleteProject(projectId);
-        } catch (error) {
-          console.warn(`Failed to delete project ${projectId}:`, error);
-        }
+  test.afterAll(async () => {
+    const uniqueProjectIds = Array.from(new Set(createdProjectIds));
+    for (const projectId of uniqueProjectIds) {
+      try {
+        await deleteProject(projectId);
+      } catch (error) {
+        console.warn(`Failed to delete project ${projectId}:`, error);
       }
-    });
-
-    test('Scenario A: R5 build fail reaches error/stopped status', async () => {
-      test.setTimeout(SCENARIO_TIMEOUT_MS);
-
-      const deploy = await deployGitProject('https://github.com/openlander-ai/test-build-fail');
-      expect(deploy.success).toBe(true);
-      expect(deploy.projectId).toBeTruthy();
-      createdProjectIds.push(deploy.projectId);
-
-      const project = await waitForProjectStatus(
-        deploy.projectId,
-        ['error', 'stopped'],
-        PROJECT_STATUS_TIMEOUT_MS,
-      );
-      expect(['error', 'stopped']).toContain(project.status);
-    });
-
-    test('Scenario B: R6 runtime crash detected after successful deploy', async () => {
-      test.setTimeout(SCENARIO_TIMEOUT_MS);
-
-      const deploy = await deployGitProject('https://github.com/openlander-ai/test-runtime-crash');
-      expect(deploy.success).toBe(true);
-      expect(deploy.projectId).toBeTruthy();
-      createdProjectIds.push(deploy.projectId);
-
-      await waitForStatus(deploy.projectId, 'running', SCENARIO_TIMEOUT_MS);
-
-      const crashedProject = await waitForProjectStatus(
-        deploy.projectId,
-        ['error', 'stopped'],
-        PROJECT_STATUS_TIMEOUT_MS,
-      );
-      expect(['error', 'stopped']).toContain(crashedProject.status);
-    });
+    }
   });
-}
+
+  test('Scenario A: R5 build fail reaches error/stopped status', async () => {
+    test.setTimeout(SCENARIO_TIMEOUT_MS);
+
+    const deploy = await deployGitProject('https://github.com/openlander-ai/test-build-fail');
+    expect(deploy.success).toBe(true);
+    expect(deploy.projectId).toBeTruthy();
+    createdProjectIds.push(deploy.projectId);
+
+    const project = await waitForProjectStatus(
+      deploy.projectId,
+      ['error', 'stopped'],
+      PROJECT_STATUS_TIMEOUT_MS,
+    );
+    expect(['error', 'stopped']).toContain(project.status);
+  });
+
+  test('Scenario B: R6 runtime crash detected after successful deploy', async () => {
+    test.setTimeout(SCENARIO_TIMEOUT_MS);
+
+    const deploy = await deployGitProject('https://github.com/openlander-ai/test-runtime-crash');
+    expect(deploy.success).toBe(true);
+    expect(deploy.projectId).toBeTruthy();
+    createdProjectIds.push(deploy.projectId);
+
+    await waitForStatus(deploy.projectId, 'running', SCENARIO_TIMEOUT_MS);
+
+    const crashedProject = await waitForProjectStatus(
+      deploy.projectId,
+      ['error', 'stopped'],
+      PROJECT_STATUS_TIMEOUT_MS,
+    );
+    expect(['error', 'stopped']).toContain(crashedProject.status);
+  });
+});

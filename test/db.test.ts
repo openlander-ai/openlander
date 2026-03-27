@@ -14,14 +14,6 @@ type LegacySqlite = {
 
 function createLegacySqlite(dbPath: string): LegacySqlite {
   const require = createRequire(import.meta.url);
-  const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
-
-  if (isBunRuntime) {
-    const BunSqlite = require('bun:sqlite') as {
-      Database: new (path: string) => LegacySqlite;
-    };
-    return new BunSqlite.Database(dbPath);
-  }
 
   const BetterSqlite3 = require('better-sqlite3') as new (path: string) => LegacySqlite;
   return new BetterSqlite3(dbPath);
