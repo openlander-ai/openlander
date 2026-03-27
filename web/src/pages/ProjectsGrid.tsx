@@ -51,7 +51,7 @@ export function ProjectsGrid() {
   const { serverStatus, setupStatus, loading: systemLoading } = useSystemStatus();
   const { t } = useLanguage();
   const statusConfig = getStatusConfig();
-  const [redeployingId, setRedeployingId] = useState<string | null>(null);
+  const [redeployingIds, setRedeployingIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
     return (localStorage.getItem('openlander-view-mode') as 'grid' | 'table') || 'grid';
   });
@@ -69,14 +69,18 @@ export function ProjectsGrid() {
       showMobileToast();
       return;
     }
-    setRedeployingId(projectId);
+    setRedeployingIds((prev) => new Set(prev).add(projectId));
     try {
       await redeployProject(projectId);
       refetch();
     } catch (error) {
       console.error('Redeploy failed:', error);
     } finally {
-      setRedeployingId(null);
+      setRedeployingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(projectId);
+        return next;
+      });
     }
   };
 
@@ -185,7 +189,7 @@ export function ProjectsGrid() {
               key={project.id}
               project={project}
               statusConfig={statusConfig}
-              redeployingId={redeployingId}
+              redeployingIds={redeployingIds}
               onNavigate={navigate}
               onRedeploy={handleRedeploy}
               t={t}

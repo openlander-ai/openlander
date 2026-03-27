@@ -18,7 +18,7 @@ interface StatusDisplay {
 interface ProjectCardProps {
   project: Project;
   statusConfig: Record<string, StatusDisplay>;
-  redeployingId: string | null;
+  redeployingIds: Set<string>;
   onNavigate: (path: string) => void;
   onRedeploy: (event: MouseEvent, projectId: string) => Promise<void>;
   t: (key: string) => string;
@@ -27,7 +27,7 @@ interface ProjectCardProps {
 export function ProjectCard({
   project,
   statusConfig,
-  redeployingId,
+  redeployingIds,
   onNavigate,
   onRedeploy,
   t,
@@ -150,11 +150,11 @@ export function ProjectCard({
           onClick={(event) => {
             void onRedeploy(event, project.id);
           }}
-          disabled={redeployingId === project.id}
+          disabled={redeployingIds.has(project.id)}
           className="p-1.5 rounded text-secondary-ol hover:text-agent hover:bg-agent/10 transition-colors disabled:opacity-50"
           title="Redeploy"
         >
-          {redeployingId === project.id ? (
+          {redeployingIds.has(project.id) ? (
             <Spinner className="h-4 w-4" />
           ) : (
             <div className="flex items-center gap-1">
