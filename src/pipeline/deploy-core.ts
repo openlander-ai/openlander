@@ -959,6 +959,27 @@ export class DeployPipeline {
       };
     });
 
+    const serviceNames = new Set(services.map((s) => s.name));
+    if (serviceNames.has('app') && !serviceNames.has('main')) {
+      const legacyChildren = this.db
+        .getChildProjects(parentId)
+        .filter((c) => c.name === `${parentName}/main`);
+      for (const child of legacyChildren) {
+        if (child.container_id) {
+          try {
+            await this.docker.removeContainer(child.container_id);
+          } catch {
+            /* best effort */
+          }
+        }
+        this.db.updateProject(child.id, { status: 'stopped', containerId: null });
+        log.info(
+          { childId: child.id, oldName: child.name },
+          'Cleaned up legacy "main" child (renamed to "app")',
+        );
+      }
+    }
+
     const orchestrator = new DeployOrchestrator();
     let topology;
     try {
