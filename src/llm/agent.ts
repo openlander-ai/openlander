@@ -119,7 +119,7 @@ export class Agent {
       this.trimHistory();
 
       const usage = extractUsageFromResult(result.usage);
-      await this.logUsageSafe({
+      this.logUsageSafe({
         sessionId: resolvedSessionId,
         actionType: 'web_agent',
         modelName: this.getModelName(),
@@ -145,7 +145,6 @@ export class Agent {
       return;
     }
 
-    this.history = [];
     this.history = [];
     this.currentSessionId = sessionId;
 
@@ -270,7 +269,7 @@ export class Agent {
       }
 
       if (didStreamFail) {
-        await this.logUsageSafe({
+        this.logUsageSafe({
           sessionId: resolvedSessionId,
           actionType: 'web_agent',
           modelName: this.getModelName(),
@@ -296,7 +295,7 @@ export class Agent {
 
       await onEvent({ type: 'message', content: finalText });
 
-      await this.logUsageSafe({
+      this.logUsageSafe({
         sessionId: resolvedSessionId,
         actionType: 'web_agent',
         modelName: this.getModelName(),
@@ -393,9 +392,9 @@ export class Agent {
     return modelMeta.modelId ?? modelMeta.model ?? 'unknown';
   }
 
-  private async logUsageSafe(params: Parameters<typeof logAiUsage>[1]): Promise<void> {
+  private logUsageSafe(params: Parameters<typeof logAiUsage>[1]): void {
     try {
-      await logAiUsage(this.db, params);
+      logAiUsage(this.db, params);
     } catch (error) {
       log.warn({ error }, 'Failed to persist AI usage log entry');
     }

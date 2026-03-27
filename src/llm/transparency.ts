@@ -95,7 +95,7 @@ export function extractUsageFromResult(usage: UsageShape | undefined | null): Us
   return { inputTokens, outputTokens, totalTokens };
 }
 
-export async function logAiUsage(
+export function logAiUsage(
   db: Database,
   params: {
     projectId?: string;
@@ -111,7 +111,7 @@ export async function logAiUsage(
     durationMs: number;
     source?: string;
   },
-): Promise<string> {
+): string {
   const costUsd = calculateCost(
     params.provider,
     params.modelName,
@@ -137,5 +137,5 @@ export async function logAiUsage(
     source: normalizeSource(params.source),
   });
 
-  return Promise.resolve(id);
+  return id;
 }
