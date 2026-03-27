@@ -242,6 +242,7 @@ export async function createAppContext(
     pipeline,
     questionBridge,
     language: config.language,
+    config,
   });
 
   // v0.2: Health monitoring

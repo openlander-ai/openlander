@@ -11,6 +11,7 @@ import { dispatchRecovery, type Locale, type RecoveryPlan } from './recovery-dis
 import { matchRecipe } from './recipes.js';
 import type { DeployQueue } from './deploy-queue.js';
 import type { DeployPipeline } from './deploy.js';
+import type { OpenLanderConfig } from '../config/index.js';
 
 const log = createModuleLogger('auto-recovery');
 
@@ -46,6 +47,7 @@ export interface SetupAutoRecoveryParams {
   pipeline: DeployPipeline;
   questionBridge: QuestionBridge;
   language: Locale;
+  config: OpenLanderConfig;
 }
 
 function normalizeError(error: string): string {
@@ -208,8 +210,17 @@ export function markMcpDeploy(projectId: string): void {
 }
 
 export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
-  const { eventBus, agent, db, buildDebugger, deployQueue, pipeline, questionBridge, language } =
-    params;
+  const {
+    eventBus,
+    agent,
+    db,
+    buildDebugger,
+    deployQueue,
+    pipeline,
+    questionBridge,
+    language,
+    config,
+  } = params;
 
   let recoveryChain = Promise.resolve();
 
@@ -516,6 +527,7 @@ ${plan.agentGuidance}
   });
 
   eventBus.on('env:new-keys-detected', (payload) => {
+    if (!config.ai.envDetection.enabled) return;
     if (!agent) {
       void eventBus.emit('deploy:needs-user-action', {
         projectId: payload.projectId,
@@ -546,6 +558,7 @@ ${plan.agentGuidance}
   });
 
   eventBus.on('secret:detected', (payload) => {
+    if (!config.ai.secretScan.enabled) return;
     if (!agent) {
       void eventBus.emit('deploy:needs-user-action', {
         projectId: payload.projectId,
@@ -583,6 +596,7 @@ ${plan.agentGuidance}
   });
 
   eventBus.on('rollback:suggested', (payload) => {
+    if (!config.ai.rollbackSuggestion.enabled) return;
     if (!agent) {
       void eventBus.emit('deploy:needs-user-action', {
         projectId: payload.projectId,

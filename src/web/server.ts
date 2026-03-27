@@ -285,8 +285,10 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   injectWebSocket(server);
 
   // v0.2: Start health monitoring
-  ctx.healthMonitor.start();
-  ctx.alertMonitor.start();
+  if (ctx.config.ai.operationalMonitoring.enabled) {
+    ctx.healthMonitor.start();
+    ctx.alertMonitor.start();
+  }
 
   // v0.4: Start channel connections
   void ctx.channelManager.start();
@@ -328,8 +330,10 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
   });
 
   // v0.2: Start health monitoring
-  ctx.healthMonitor.start();
-  ctx.alertMonitor.start();
+  if (ctx.config.ai.operationalMonitoring.enabled) {
+    ctx.healthMonitor.start();
+    ctx.alertMonitor.start();
+  }
 
   // v0.4: Start channel connections
   void ctx.channelManager.start();

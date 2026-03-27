@@ -18,7 +18,7 @@ export function AiSettingsTab() {
         const data = await getAiFeatures();
         setFeatures(data.features);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load AI features');
+        setError(err instanceof Error ? err.message : t('settings.ai.errorLoad'));
       } finally {
         setLoading(false);
       }
@@ -51,7 +51,7 @@ export function AiSettingsTab() {
           [key]: { ...prev[key], enabled: !enabled },
         };
       });
-      setError(err instanceof Error ? err.message : 'Failed to update feature');
+      setError(err instanceof Error ? err.message : t('settings.ai.errorUpdate'));
     } finally {
       setUpdating(null);
     }
@@ -127,7 +127,7 @@ export function AiSettingsTab() {
                     </p>
                     {!feature.available && (
                       <span className="text-[10px] uppercase tracking-wider font-semibold bg-bg-subtle text-muted-ol px-1.5 py-0.5 rounded">
-                        Unavailable
+                        {t('settings.ai.unavailable')}
                       </span>
                     )}
                   </div>

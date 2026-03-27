@@ -157,6 +157,9 @@ export const translations = {
       requiresApiKey: 'LLM API key required to enable AI features',
       requiresApiKeyDescription: 'Changes take effect after server restart',
       requiresRestart: 'Changes take effect after server restart',
+      errorLoad: 'Failed to load AI features',
+      errorUpdate: 'Failed to update feature',
+      unavailable: 'Unavailable',
       autoRecovery: {
         label: 'Auto Recovery',
         description: 'Automatically attempt to fix build failures',
