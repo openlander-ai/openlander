@@ -208,6 +208,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v1.0.0-rc.1** | Release Candidate            | RC     | E2E quality gate test suite (20 tests), 7 test repositories, event sequence golden path verification, quality gate coverage mapping                                           |
 | **v1.0.0-rc.2** | Authentication               | RC     | Password login + session cookies, Bearer token auth for MCP, Settings security tab, 6-step onboarding with MCP guide, CLI password reset                                      |
 | **v1.0.0-rc.3** | Service Connectivity         | RC     | Shared network with DNS aliases, service connections CRUD, auto env injection, connected services UI, runtime incidents with LLM diagnosis, deploy connectivity check         |
+| **v1.0.0-rc.5** | Environment UI               | RC     | Env segment control, domain URL display, per-env API URLs, Traefik label detection, sidebar status aggregation                                                                |
 | **v1.0.0**      | Stable Release               | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                               |
 
 ## MCP Integration (AI Coding Agents)

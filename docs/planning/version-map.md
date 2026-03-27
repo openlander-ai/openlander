@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0 (TBD)
 
 ```
 
@@ -1620,5 +1620,27 @@ AI: bugs.md → 해결됨 + gh issue close
 | Deploy connectivity check (DNS+TCP)               | 배포 전 서비스 간 연결성 검증 (DNS + TCP 포트 확인)                             | ✅   |
 | Service health monitoring                         | 모든 배포된 서비스의 지속적 헬스 체크 및 상태 리포팅                            | ✅   |
 | MCP session incident briefing                     | MCP 도구 응답에 장애 컨텍스트 포함, AI 에이전트의 복구 가이드 개선              | ✅   |
+
+**다음 단계**: 도그푸딩 완료 → v1.0.0 정식 릴리즈
+
+---
+
+### v1.0.0-rc.5 — Environment UI Redesign 🧪
+
+**상태**: 🧪 도그푸딩 중 | **날짜**: 2026-03-27
+
+**핵심 가치**: 환경 전환 UX 개선 + 환경별 URL 관리 + Traefik 라벨 기반 자동 감지
+
+| 항목                                      | 내용                                                               | 상태 |
+| ----------------------------------------- | ------------------------------------------------------------------ | ---- |
+| Environment segment control               | ProjectHeader의 드롭다운을 세그먼트 컨트롤로 교체 (빠른 환경 전환) | ✅   |
+| DomainUrlDisplay component                | 환경별 URL 우선순위 표시 + 팝오버 상세 정보                        | ✅   |
+| Environment-specific API URLs             | API가 개발 환경에 dev- 접두사 URL 반환                             | ✅   |
+| set_env_vars MCP tool enhancement         | 선택적 `environment_name` 파라미터 지원 (환경별 변수 설정)         | ✅   |
+| Traefik label-based environment detection | 컨테이너 라벨에서 환경 자동 감지 및 dev 라우트 생성                | ✅   |
+| Sidebar project dot aggregation           | 상태 점이 환경 상태 집계 (모두 초록/일부 빨강/일부 노랑)           | ✅   |
+| Environment switch opacity fade           | 환경 전환 시 150ms 페이드 애니메이션 (시각적 피드백)               | ✅   |
+| env-status aggregation utility            | 환경 상태 로직용 헬퍼 함수 + 13개 포괄적 테스트                    | ✅   |
+| Dead traefik-ol-dev config removed        | 더 이상 사용하지 않는 Traefik 설정 정리                            | ✅   |
 
 **다음 단계**: 도그푸딩 완료 → v1.0.0 정식 릴리즈
