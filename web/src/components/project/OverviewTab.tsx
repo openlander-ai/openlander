@@ -6,6 +6,7 @@ import type { TimelineItem } from '@/lib/event-types';
 import {
   getProjectDeployments,
   getProjectEnv,
+  getEnvironmentEnvVars,
   getProjectConnectedServices,
   connectProjectService,
   disconnectProjectService,
@@ -127,7 +128,7 @@ export function OverviewTab({
   projectStatus,
   displayProject,
   environments,
-  selectedEnvId, // eslint-disable-line @typescript-eslint/no-unused-vars
+  selectedEnvId,
   currentEnvType, // eslint-disable-line @typescript-eslint/no-unused-vars
   timelineItems,
   isTimelineStreaming,
@@ -222,7 +223,7 @@ export function OverviewTab({
 
   useEffect(() => {
     let mounted = true;
-    getProjectDeployments(projectId, 5)
+    getProjectDeployments(projectId, 5, selectedEnvId)
       .then((deployments) => {
         if (mounted) {
           setRecentDeploys(deployments);
@@ -236,15 +237,21 @@ export function OverviewTab({
     return () => {
       mounted = false;
     };
-  }, [projectId]);
+  }, [projectId, selectedEnvId]);
 
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([getProjectConnectedServices(projectId), getProjectEnv(projectId), getServices()])
-      .then(([services, envVars, allServices]) => {
+    const envVarsPromise = selectedEnvId
+      ? getEnvironmentEnvVars(projectId, selectedEnvId)
+      : getProjectEnv(projectId);
+
+    Promise.all([getProjectConnectedServices(projectId), envVarsPromise, getServices()])
+      .then(([services, envVarsData, allServices]) => {
         if (!mounted) return;
         setConnectedServices(services);
+        // Handle both direct object (getProjectEnv) and response object (getEnvironmentEnvVars)
+        const envVars = 'envVars' in envVarsData ? envVarsData.envVars : envVarsData;
         setEnvVarCount(Object.keys(envVars).length);
         setAvailableServices(allServices);
       })
@@ -253,7 +260,7 @@ export function OverviewTab({
     return () => {
       mounted = false;
     };
-  }, [projectId]);
+  }, [projectId, selectedEnvId]);
 
   useEffect(() => {
     if (!isRunning) {
