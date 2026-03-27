@@ -297,10 +297,10 @@ export function getProjectHostname(projectName: string, lanIp?: string): string 
 
 export function getEnvironmentProjectHostname(
   projectName: string,
-  environment: TraefikEnvironment,
+  _environment: TraefikEnvironment,
   lanIp?: string,
 ): string {
-  const envProjectName = getEnvironmentProjectName(projectName, environment);
+  const envProjectName = getEnvironmentProjectName(projectName);
   const ip = lanIp ?? getLanIp();
   if (ip) {
     return `${envProjectName}.${ip}.sslip.io`;
@@ -315,11 +315,7 @@ export function getProjectUrl(projectName: string, lanIp?: string): string {
   return `http://${getProjectHostname(projectName, lanIp)}`;
 }
 
-function getEnvironmentProjectName(projectName: string, environment: TraefikEnvironment): string {
-  if (environment === 'development') {
-    return `dev-${projectName}`;
-  }
-
+function getEnvironmentProjectName(projectName: string): string {
   return projectName;
 }
 

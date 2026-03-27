@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   getProject,
@@ -11,15 +11,12 @@ import {
   blueGreenProject,
   scanProjectEnvVars,
   deleteProject,
-  deleteEnvironment,
-  createEnvironment,
   type EnvVarInfo,
   type ProjectWithOptionalEnvironments,
 } from '@/lib/api';
 import { useIsMobile, showMobileToast } from '@/hooks/use-mobile';
 import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/layout/ShareDialog';
-import type { EnvironmentType } from '@/types';
 import { parseEnvContent } from '@/lib/parse-env';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
@@ -33,7 +30,6 @@ import { BlueGreenDialog } from '@/components/project/BlueGreenDialog';
 
 export function ProjectDetail() {
   const { id } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useLanguage();
   const [project, setProject] = useState<ProjectWithOptionalEnvironments | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,59 +43,10 @@ export function ProjectDetail() {
   const [blueGreenDialogOpen, setBlueGreenDialogOpen] = useState(false);
   const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
   const [redeployPasteText, setRedeployPasteText] = useState('');
-  const [addEnvSheet, setAddEnvSheet] = useState<{ open: boolean; type: EnvironmentType | null }>({
-    open: false,
-    type: null,
-  });
-  const [addEnvBranch, setAddEnvBranch] = useState('');
   const [confirmAction, setConfirmAction] = useState<{
     type: 'stop' | 'delete';
     handler: () => void;
   } | null>(null);
-  const [envFade, setEnvFade] = useState(false);
-
-  const validEnvs: EnvironmentType[] = ['production', 'development'];
-  const envParam = searchParams.get('env') as EnvironmentType;
-  const currentEnvType = validEnvs.includes(envParam) ? envParam : 'production';
-
-  const environments = project?.environments;
-  const selectedEnv = environments?.find((e) => e.type === currentEnvType);
-
-  // Trigger opacity fade when environment changes
-  useEffect(() => {
-    setEnvFade(true);
-    const timer = setTimeout(() => setEnvFade(false), 150);
-    return () => clearTimeout(timer);
-  }, [currentEnvType]);
-
-  const handleEnvChange = (env: EnvironmentType) => {
-    setSearchParams({ env });
-  };
-
-  const handleAddEnv = (env: EnvironmentType) => {
-    setAddEnvBranch(project?.branch ?? 'main');
-    setAddEnvSheet({ open: true, type: env });
-  };
-
-  const confirmAddEnv = async () => {
-    const envType = addEnvSheet.type;
-    if (!id || !envType || actionLoading) return;
-    setActionLoading('add-env');
-    try {
-      await createEnvironment(id, envType, addEnvBranch.trim() || undefined);
-      await fetchProject();
-      toast.success(`Created ${envType} environment`);
-      setSearchParams({ env: envType });
-      setAddEnvSheet({ open: false, type: null });
-    } catch (err) {
-      console.error('Failed to create environment:', err);
-      toast.error(
-        'Failed to create environment: ' + (err instanceof Error ? err.message : String(err)),
-      );
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
   // Fetch project details
   const fetchProject = useCallback(async () => {
@@ -142,7 +89,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
 
     try {
-      const scan = await scanProjectEnvVars(id, currentEnvType);
+      const scan = await scanProjectEnvVars(id);
       if (scan.newVars.length > 0) {
         setRedeployVars(scan.newVars);
         setRedeployPasteText('');
@@ -156,7 +103,7 @@ export function ProjectDetail() {
 
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id, undefined, currentEnvType);
+      await redeployProject(id, undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project redeploying');
     } catch (err) {
@@ -184,7 +131,7 @@ export function ProjectDetail() {
       handler: async () => {
         setActionLoading('stop');
         try {
-          await stopProject(id, currentEnvType);
+          await stopProject(id);
           toast.success('Project stopped');
         } catch (err) {
           console.error('Stop failed:', err);
@@ -201,7 +148,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id!, undefined, currentEnvType);
+      await redeployProject(id!, undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project redeploying');
     } catch (err) {
@@ -221,7 +168,7 @@ export function ProjectDetail() {
     setActionLoading('redeploy');
     setProject((prev) => (prev ? { ...prev, status: 'building' } : prev));
     try {
-      await redeployProject(id!, Object.keys(vars).length > 0 ? vars : undefined, currentEnvType);
+      await redeployProject(id!, Object.keys(vars).length > 0 ? vars : undefined);
       setTimelineRunKey((k) => k + 1);
       toast.success('Project deploying');
     } catch (err) {
@@ -239,7 +186,7 @@ export function ProjectDetail() {
     if (!id || actionLoading) return;
     setActionLoading('start');
     try {
-      await startProject(id, currentEnvType);
+      await startProject(id);
       await fetchProject();
       toast.success('Project started');
     } catch (err) {

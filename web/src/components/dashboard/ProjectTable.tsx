@@ -1,4 +1,3 @@
-import { useEnvironment } from '@/contexts/environment';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -18,8 +17,6 @@ interface ProjectTableProps {
 }
 
 export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectTableProps) {
-  const { environment: selectedEnv } = useEnvironment();
-
   return (
     <div className="border border-[hsl(var(--border))] rounded-lg overflow-hidden bg-bg-panel">
       <table className="w-full text-sm">
@@ -41,13 +38,7 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
         <tbody>
           {projects.map((project) => {
             const environments = project.environments ?? [];
-            const currentEnvData = environments.find((e) => e.type === selectedEnv);
-            const currentStatus = currentEnvData
-              ? currentEnvData.status
-              : selectedEnv === 'production'
-                ? project.status
-                : 'idle';
-            const status = statusConfig[currentStatus] ?? statusConfig.stopped;
+            const status = statusConfig[project.status] ?? statusConfig.stopped;
 
             const hasProd = environments.some((environment) => environment.type === 'production');
             const allEnvironments = hasProd

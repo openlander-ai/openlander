@@ -1,4 +1,3 @@
-import { useEnvironment } from '@/contexts/environment';
 import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutGrid, List, Plus } from 'lucide-react';
@@ -52,28 +51,12 @@ export function ProjectsGrid() {
   const { serverStatus, setupStatus, loading: systemLoading } = useSystemStatus();
   const { t } = useLanguage();
   const statusConfig = getStatusConfig();
-  const { environment: selectedEnv } = useEnvironment();
   const [redeployingId, setRedeployingId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>(() => {
     return (localStorage.getItem('openlander-view-mode') as 'grid' | 'table') || 'grid';
   });
 
-  const filteredProjects = projects
-    .filter((project) => {
-      if (selectedEnv === 'production') return true;
-      const environments = project.environments ?? [];
-      return environments.some((e) => e.type === selectedEnv);
-    })
-    .map((project) => {
-      const environments = project.environments ?? [];
-      const currentEnvData = environments.find((e) => e.type === selectedEnv);
-      const currentStatus = currentEnvData
-        ? currentEnvData.status
-        : selectedEnv === 'production'
-          ? project.status
-          : 'idle';
-      return { ...project, status: currentStatus };
-    });
+  const filteredProjects = projects;
 
   const toggleView = (mode: 'grid' | 'table') => {
     setViewMode(mode);
