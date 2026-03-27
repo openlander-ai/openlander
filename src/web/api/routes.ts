@@ -237,13 +237,16 @@ export function createApiRoutes(ctx: AppContext): Hono {
     const detectedIps = getAllIps();
     for (const project of allProjects) {
       for (const ip of detectedIps) {
-        const sslipHost = getEnvironmentProjectHostname(project.name, 'production', ip.address);
-        if (sslipHost && !sslipHost.endsWith('.localhost')) {
-          routers[`sslip-${project.name}-${ip.type}`] = {
-            rule: `Host(\`${sslipHost}\`)`,
-            entryPoints: ['web'],
-            service: `ol-${project.name}@docker`,
-          };
+        for (const envType of ['production', 'development'] as const) {
+          const sslipHost = getEnvironmentProjectHostname(project.name, envType, ip.address);
+          if (sslipHost && !sslipHost.endsWith('.localhost')) {
+            routers[`sslip-${envType === 'development' ? 'dev-' : ''}${project.name}-${ip.type}`] =
+              {
+                rule: `Host(\`${sslipHost}\`)`,
+                entryPoints: ['web'],
+                service: `ol-${project.name}@docker`,
+              };
+          }
         }
       }
 
