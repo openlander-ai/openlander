@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
 import { loadDecryptedToken } from '../../auth/token-store.js';
-import type { OpenLanderConfig } from '../../config/index.js';
+import type { OpenLanderConfig, AIFeaturesConfig } from '../../config/index.js';
 import type { LLMConfig } from '../../llm/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
@@ -277,6 +277,61 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     }
 
     return c.json({ status: 'saved', language });
+  });
+
+  api.get('/setup/ai-features', (c) => {
+    const config = ctx.config;
+    const hasModel = ctx.model !== null;
+
+    const featureKeys: Array<keyof AIFeaturesConfig> = [
+      'autoRecovery',
+      'buildDebugger',
+      'webAgent',
+      'envDetection',
+      'secretScan',
+      'rollbackSuggestion',
+      'operationalMonitoring',
+    ];
+
+    const features: Record<string, { enabled: boolean; available: boolean }> = {};
+    for (const key of featureKeys) {
+      features[key] = { enabled: config.ai[key].enabled, available: hasModel };
+    }
+
+    return c.json({ features });
+  });
+
+  api.put('/setup/ai-features', async (c) => {
+    const body = await c.req.json<Partial<Record<keyof AIFeaturesConfig, { enabled: boolean }>>>();
+
+    const config = loadConfig();
+    const merged: AIFeaturesConfig = { ...config.ai };
+    for (const [key, value] of Object.entries(body)) {
+      if (key in merged) {
+        merged[key as keyof AIFeaturesConfig] = { enabled: value.enabled };
+      }
+    }
+
+    const updated = updateConfig({ ai: merged });
+    ctx.config = updated;
+
+    const hasModel = ctx.model !== null;
+    const featureKeys: Array<keyof AIFeaturesConfig> = [
+      'autoRecovery',
+      'buildDebugger',
+      'webAgent',
+      'envDetection',
+      'secretScan',
+      'rollbackSuggestion',
+      'operationalMonitoring',
+    ];
+
+    const features: Record<string, { enabled: boolean; available: boolean }> = {};
+    for (const key of featureKeys) {
+      features[key] = { enabled: updated.ai[key].enabled, available: hasModel };
+    }
+
+    return c.json({ features });
   });
 
   api.post('/setup/complete', (c) => {

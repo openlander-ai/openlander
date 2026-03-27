@@ -95,6 +95,9 @@ export interface OpenLanderConfig {
 
   /** v0.9: Traefik reverse proxy settings */
   traefik: TraefikConfig;
+
+  /** v1.0: AI feature toggles */
+  ai: AIFeaturesConfig;
 }
 
 export interface LLMProviderConfig {
@@ -204,6 +207,20 @@ export interface TraefikConfig {
   externalNetwork?: string;
 }
 
+export interface AIFeatureToggle {
+  enabled: boolean;
+}
+
+export interface AIFeaturesConfig {
+  autoRecovery: AIFeatureToggle;
+  buildDebugger: AIFeatureToggle;
+  webAgent: AIFeatureToggle;
+  envDetection: AIFeatureToggle;
+  secretScan: AIFeatureToggle;
+  rollbackSuggestion: AIFeatureToggle;
+  operationalMonitoring: AIFeatureToggle;
+}
+
 export interface GitProviderEntry {
   /** Personal Access Token or API token */
   token: string;
@@ -290,6 +307,15 @@ function buildDefaultConfig(): OpenLanderConfig {
     traefik: {
       mode: 'managed',
       externalNetwork: undefined,
+    },
+    ai: {
+      autoRecovery: { enabled: true },
+      buildDebugger: { enabled: true },
+      webAgent: { enabled: true },
+      envDetection: { enabled: true },
+      secretScan: { enabled: true },
+      rollbackSuggestion: { enabled: true },
+      operationalMonitoring: { enabled: true },
     },
   };
 }
