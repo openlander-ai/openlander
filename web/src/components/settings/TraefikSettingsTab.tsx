@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useCopy } from '@/hooks/use-copy';
 import {
   AlertTriangle,
   Check,
@@ -29,10 +30,10 @@ import { StatCard } from '@/components/settings/shared';
 
 export function TraefikSettingsTab() {
   const { t } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
   const [serverStatusLoading, setServerStatusLoading] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [copiedServiceUrl, setCopiedServiceUrl] = useState(false);
   const [cloudflareApiToken, setCloudflareApiToken] = useState('');
   const [cloudflareAccountId, setCloudflareAccountId] = useState('');
   const [cloudflareAccountName, setCloudflareAccountName] = useState('');
@@ -79,14 +80,8 @@ export function TraefikSettingsTab() {
     fetchCloudflareStatus();
   }, [fetchCloudflareStatus]);
 
-  const handleCopyServiceUrl = async () => {
-    try {
-      await navigator.clipboard.writeText('http://localhost:80');
-      setCopiedServiceUrl(true);
-      setTimeout(() => setCopiedServiceUrl(false), 2000);
-    } catch {
-      window.prompt('Copy this URL:', 'http://localhost:80');
-    }
+  const handleCopyServiceUrl = () => {
+    void copy('http://localhost:80');
   };
 
   const handleConfigureCloudflare = async (e: React.FormEvent) => {
@@ -405,7 +400,7 @@ export function TraefikSettingsTab() {
                             onClick={handleCopyServiceUrl}
                             className="shrink-0"
                           >
-                            {copiedServiceUrl ? (
+                            {isCopied() ? (
                               <Check className="h-4 w-4 text-success" />
                             ) : (
                               <Copy className="h-4 w-4" />

@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Eye, EyeOff, Copy, Check, RefreshCw, Lock, Key } from 'lucide-react';
 import { toast } from 'sonner';
+import { useCopy } from '@/hooks/use-copy';
 
 export function SecuritySettingsTab() {
   const [apiToken, setApiToken] = useState<string>('');
   const [showToken, setShowToken] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copy, isCopied } = useCopy();
   const [regenerating, setRegenerating] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -25,9 +26,7 @@ export function SecuritySettingsTab() {
 
   const handleCopyToken = () => {
     if (!apiToken) return;
-    navigator.clipboard.writeText(apiToken);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    void copy(apiToken);
   };
 
   const handleRegenerateToken = async () => {
@@ -109,8 +108,8 @@ export function SecuritySettingsTab() {
               className="gap-1.5 font-body border-border bg-bg-app hover:bg-bg-subtle"
               onClick={handleCopyToken}
             >
-              {copied ? <Check className="h-4 w-4 text-agent" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Copied!' : 'Copy'}
+              {isCopied() ? <Check className="h-4 w-4 text-agent" /> : <Copy className="h-4 w-4" />}
+              {isCopied() ? 'Copied!' : 'Copy'}
             </Button>
             <Button
               variant="outline"

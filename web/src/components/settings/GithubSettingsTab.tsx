@@ -10,6 +10,7 @@ import {
 import { useLanguage } from '@/i18n/context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useCopy } from '@/hooks/use-copy';
 
 interface GithubSettingsTabProps {
   status: SetupStatus | null;
@@ -18,6 +19,7 @@ interface GithubSettingsTabProps {
 
 export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
   const { t } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [githubToken, setGithubToken] = useState('');
   const [githubConnecting, setGithubConnecting] = useState(false);
   const [githubDisconnecting, setGithubDisconnecting] = useState(false);
@@ -29,7 +31,6 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
     interval: number;
   } | null>(null);
   const [deviceFlowPolling, setDeviceFlowPolling] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
 
   const handleConnectGithub = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,24 +81,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
 
   const handleCopyCode = async () => {
     if (!deviceFlow?.userCode) return;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(deviceFlow.userCode);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = deviceFlow.userCode;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    } catch {
-      window.prompt('Copy this code:', deviceFlow.userCode);
-    }
+    await copy(deviceFlow.userCode);
   };
 
   const handleCancelDeviceFlow = () => {
@@ -203,12 +187,12 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 onClick={handleCopyCode}
                 className="gap-1.5 font-body"
               >
-                {copiedCode ? (
+                {isCopied() ? (
                   <Check className="h-3.5 w-3.5 text-success" />
                 ) : (
                   <Copy className="h-3.5 w-3.5" />
                 )}
-                {copiedCode ? 'Copied' : 'Copy Code'}
+                {isCopied() ? 'Copied' : 'Copy Code'}
               </Button>
             </div>
             <div className="flex items-center justify-center gap-2 text-muted-ol">

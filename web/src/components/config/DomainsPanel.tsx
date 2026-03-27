@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
 import { toast } from 'sonner';
+import { useCopy } from '@/hooks/use-copy';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import {
@@ -45,6 +46,7 @@ interface DomainsPanelProps {
 
 export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
   const { t } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [internalUrl, setInternalUrl] = useState<string | null>(null);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
   const [assignedPort, setAssignedPort] = useState<number | null>(null);
@@ -52,7 +54,6 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
   const [loading, setLoading] = useState(true);
   const [exposing, setExposing] = useState(false);
   const [unexposing, setUnexposing] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
   const [domains, setDomains] = useState<DomainMapping[]>([]);
   const [newDomain, setNewDomain] = useState('');
   const [addingDomain, setAddingDomain] = useState(false);
@@ -334,14 +335,8 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
       setRemovingDomain(null);
     }
   };
-  const copyToClipboard = async (url: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(label);
-      setTimeout(() => setCopied(null), 2000);
-    } catch {
-      // Clipboard API not available
-    }
+  const copyToClipboard = (url: string, label: string) => {
+    void copy(url, label);
   };
 
   if (loading) {
@@ -389,7 +384,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               onClick={() => copyToClipboard(internalUrl, 'internal')}
               className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
             >
-              {copied === 'internal' ? (
+              {isCopied('internal') ? (
                 <Check className="h-3.5 w-3.5 text-success" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
@@ -433,7 +428,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                     onClick={() => copyToClipboard(directUrl, ip.address)}
                     className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
                   >
-                    {copied === ip.address ? (
+                    {isCopied(ip.address) ? (
                       <Check className="h-3.5 w-3.5 text-success" />
                     ) : (
                       <Copy className="h-3.5 w-3.5" />
@@ -624,7 +619,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               onClick={() => copyToClipboard(publicUrl, 'public')}
               className="p-1 rounded text-muted-ol hover:text-secondary-ol transition-colors"
             >
-              {copied === 'public' ? (
+              {isCopied('public') ? (
                 <Check className="h-3.5 w-3.5 text-success" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />

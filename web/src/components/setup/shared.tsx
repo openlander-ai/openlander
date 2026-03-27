@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
 import { CheckCircle2, XCircle, Copy, Check } from 'lucide-react';
+import { useCopy } from '@/hooks/use-copy';
 
 export function StatusRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
   return (
@@ -18,35 +18,18 @@ export function StatusRow({ ok, label, detail }: { ok: boolean; label: string; d
 }
 
 export function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = useCallback(async () => {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt('Copy this command:', text);
-    }
-  }, [text]);
+  const { copy, isCopied } = useCopy();
+  const handleCopy = () => {
+    void copy(text);
+  };
   return (
     <button
       onClick={handleCopy}
       className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-bg-subtle hover:bg-bg-subtle/80 text-muted-ol hover:text-secondary-ol transition-colors"
       title="Copy to clipboard"
     >
-      {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
-      {copied ? 'Copied' : 'Copy'}
+      {isCopied() ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+      {isCopied() ? 'Copied' : 'Copy'}
     </button>
   );
 }

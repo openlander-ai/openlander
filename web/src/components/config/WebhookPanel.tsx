@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Webhook, Trash2, Check, Copy, Loader2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCopy } from '@/hooks/use-copy';
 
 interface WebhookPanelProps {
   projectId: string;
@@ -13,12 +14,12 @@ interface WebhookPanelProps {
 
 export function WebhookPanel({ projectId }: WebhookPanelProps) {
   const { t } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [selectedSource, setSelectedSource] = useState<string>('github');
   const [branchFilter, setBranchFilter] = useState('main');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchWebhooks = useCallback(async () => {
     try {
@@ -75,9 +76,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
   };
 
   const handleCopy = (text: string, id: string) => {
-    void navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    void copy(text, id);
   };
 
   const configuredSources = new Set(webhooks.map((w) => w.source));
@@ -188,7 +187,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                         className="h-6 w-6 p-0 shrink-0"
                         onClick={() => handleCopy(fullUrl, `url-${webhook.id}`)}
                       >
-                        {copiedId === `url-${webhook.id}` ? (
+                        {isCopied(`url-${webhook.id}`) ? (
                           <Check className="h-3 w-3 text-success" />
                         ) : (
                           <Copy className="h-3 w-3" />
@@ -209,7 +208,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                         className="h-6 w-6 p-0 shrink-0"
                         onClick={() => handleCopy(webhook.secret, `secret-${webhook.id}`)}
                       >
-                        {copiedId === `secret-${webhook.id}` ? (
+                        {isCopied(`secret-${webhook.id}`) ? (
                           <Check className="h-3 w-3 text-success" />
                         ) : (
                           <Copy className="h-3 w-3" />

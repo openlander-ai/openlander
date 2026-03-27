@@ -1,5 +1,4 @@
 import {
-  useState,
   useCallback,
   type ReactNode,
   type HTMLAttributes,
@@ -14,6 +13,7 @@ import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 import { Bot, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCopy } from '@/hooks/use-copy';
 import { ToolCallCard } from './ToolCallCard';
 
 function extractLanguage(children: ReactNode): string | null {
@@ -33,16 +33,13 @@ function extractText(node: ReactNode): string {
 }
 
 function CodeBlock({ children, ...rest }: HTMLAttributes<HTMLPreElement>) {
-  const [copied, setCopied] = useState(false);
+  const { copy, isCopied } = useCopy();
   const language = extractLanguage(children);
 
   const handleCopy = useCallback(() => {
     const text = extractText(children as ReactNode);
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [children]);
+    void copy(text);
+  }, [children, copy]);
 
   return (
     <div className="relative group rounded-lg overflow-hidden my-3 border border-border">
@@ -52,7 +49,7 @@ function CodeBlock({ children, ...rest }: HTMLAttributes<HTMLPreElement>) {
           onClick={handleCopy}
           className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
         >
-          {copied ? (
+          {isCopied() ? (
             <>
               <Check className="h-3 w-3" />
               Copied

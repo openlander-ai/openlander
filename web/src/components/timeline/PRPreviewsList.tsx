@@ -7,6 +7,7 @@ import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import { GitPullRequest, ExternalLink, Trash2, Clock, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useCopy } from '@/hooks/use-copy';
 
 interface PRPreviewsListProps {
   projectId: string;
@@ -14,10 +15,10 @@ interface PRPreviewsListProps {
 
 export function PRPreviewsList({ projectId }: PRPreviewsListProps) {
   const { t } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [previews, setPreviews] = useState<PRPreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const fetchPreviews = useCallback(async () => {
     try {
@@ -47,9 +48,7 @@ export function PRPreviewsList({ projectId }: PRPreviewsListProps) {
   };
 
   const handleCopy = (url: string, id: string) => {
-    void navigator.clipboard.writeText(url);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    void copy(url, id);
   };
 
   // Status badge config
@@ -142,7 +141,7 @@ export function PRPreviewsList({ projectId }: PRPreviewsListProps) {
                     className="h-7 w-7 p-0"
                     onClick={() => handleCopy(previewUrl, preview.id)}
                   >
-                    {copiedId === preview.id ? (
+                    {isCopied(preview.id) ? (
                       <Check className="h-3 w-3 text-success" />
                     ) : (
                       <Copy className="h-3 w-3 text-muted-ol" />

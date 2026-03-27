@@ -23,6 +23,7 @@ import {
 import { shareProject, unshareProject } from '@/lib/api';
 import { useLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
+import { useCopy } from '@/hooks/use-copy';
 
 interface ShareDialogProps {
   projectId: string;
@@ -55,11 +56,10 @@ export function ShareDialog({
   onShareChange,
 }: ShareDialogProps) {
   const { t } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [accessCode, setAccessCode] = useState('');
   const [showCode, setShowCode] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [copiedUrl, setCopiedUrl] = useState(false);
-  const [copiedInvite, setCopiedInvite] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isShared = visibility === 'shared';
@@ -105,19 +105,8 @@ export function ShareDialog({
     }
   };
 
-  const copyToClipboard = async (text: string, type: 'url' | 'invite') => {
-    try {
-      await navigator.clipboard.writeText(text);
-      if (type === 'url') {
-        setCopiedUrl(true);
-        setTimeout(() => setCopiedUrl(false), 2000);
-      } else {
-        setCopiedInvite(true);
-        setTimeout(() => setCopiedInvite(false), 2000);
-      }
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
+  const copyToClipboard = (text: string, type: 'url' | 'invite') => {
+    void copy(text, type);
   };
 
   return (
@@ -283,7 +272,7 @@ export function ShareDialog({
                           size="icon"
                           onClick={() => copyToClipboard(publicUrl || '', 'url')}
                         >
-                          {copiedUrl ? (
+                          {isCopied('url') ? (
                             <Check className="h-4 w-4 text-success" />
                           ) : (
                             <Copy className="h-4 w-4" />
@@ -300,7 +289,7 @@ export function ShareDialog({
                           copyToClipboard(`${publicUrl}\nAccess Code: [Hidden]`, 'invite')
                         }
                       >
-                        {copiedInvite ? (
+                        {isCopied('invite') ? (
                           <Check className="h-4 w-4 mr-2 text-success" />
                         ) : (
                           <Copy className="h-4 w-4 mr-2" />

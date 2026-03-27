@@ -10,6 +10,7 @@ import {
 } from '@/lib/api';
 import { Loader2, Check } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
+import { useCopy } from '@/hooks/use-copy';
 import { LanguageStep } from './LanguageStep';
 import { InfraStep } from './InfraStep';
 import { GithubStep } from './GithubStep';
@@ -48,6 +49,7 @@ function clearStoredStep(): void {
 export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   const { status, loading, refetch } = useSetup();
   const { language, setLanguage } = useLanguage();
+  const { copy, isCopied } = useCopy();
   const [step, setStep] = useState(getStoredStep);
   const [startingTraefik, setStartingTraefik] = useState(false);
 
@@ -63,7 +65,6 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
     interval: number;
   } | null>(null);
   const [deviceFlowPolling, setDeviceFlowPolling] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
 
   // LLM Form State
   const [llmProvider, setLlmProvider] = useState(status?.llm?.provider || 'gemini');
@@ -127,24 +128,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
 
   const handleCopyCode = async () => {
     if (!deviceFlow?.userCode) return;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(deviceFlow.userCode);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = deviceFlow.userCode;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    } catch {
-      window.prompt('Copy this code:', deviceFlow.userCode);
-    }
+    await copy(deviceFlow.userCode, 'code');
   };
 
   const handleCancelDeviceFlow = () => {
@@ -294,7 +278,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
             githubToken={githubToken}
             githubConnecting={githubConnecting}
             githubError={githubError}
-            copiedCode={copiedCode}
+            copiedCode={isCopied('code')}
             onSetGithubToken={setGithubToken}
             onConnectGithub={handleConnectGithub}
             onStartDeviceFlow={handleStartDeviceFlow}
