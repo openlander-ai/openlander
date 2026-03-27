@@ -24,38 +24,38 @@
 ## 1. 작업 시작 전 (MANDATORY)
 
 - `docs/planning/version-map.md`를 읽고 현재 버전/진행 상태 파악
-- `docs/planning/v0.0.9/bugs.md`의 "활성 버그" 테이블 확인 — 미해결 버그 있으면 우선 처리
-- 작업할 TASK-XX의 **수락기준 전부** 읽고 시작
-- 스펙 문서(버전별 `docs/planning/v0.0.X/*.md`)의 해당 라인 참조
+- 관련 릴리즈 문서 확인: `docs/planning/release/v1.0.0-roadmap.md`
+- `AGENTS.md`에서 해당 모듈의 아키텍처/패턴 확인
 
 ## 2. 구현 중
 
 - `lsp_diagnostics` 수시 확인 (변경 파일)
 - `as any`, `@ts-ignore`, `@ts-expect-error` 금지
 - 빈 catch 블록 `catch(e) {}` 금지 (최소한 주석이라도)
-- 기존 코드 스타일 따르기: theme.ts 색상, .js 확장자 import, SolidJS 패턴
+- 기존 코드 스타일 따르기:
+  - 백엔드: `.js` 확장자 import (ESM), AppContext 패턴, Hono 라우트 팩토리
+  - 프론트엔드: `cn()` 클래스 머저, `t()` i18n, `fetchWithAuth()` API 호출
+  - 테스트: `test/` 디렉토리, Vitest, `.js` 확장자 import
 
 ## 3. 구현 후 검증 (하나라도 빠지면 미완료)
 
 ```
 □ lsp_diagnostics: 변경 파일 전부 에러 0
-□ bun run build: 성공 (exit code 0)
-□ bun test: 전체 통과 (0 failures)
-□ 스펙 크로스체크: 해당 스펙 문서 라인을 실제로 다시 읽고 구현 코드와 1:1 대조
+□ npm run build: 성공 (exit code 0)
+□ npm test: 전체 통과 (0 failures)
 □ 테스트 존재: 새 기능/로직에 대응하는 테스트 코드가 있는지 확인
-□ 수락기준 전부 충족: TASK-XX의 체크박스를 하나씩 실제 코드로 검증
+□ i18n: 사용자 노출 문자열에 t() 사용, en.ts + ko.ts 둘 다 업데이트
 ```
 
 ## 4. 완료 처리 (즉시, 배치 금지)
 
-- 해당 태스크 문서에서 TASK 체크박스 업데이트
-- 상태를 `완료`로 변경
-- **다음 TASK로 넘어가기 전에** 반드시 파일 업데이트
+- todo 항목 즉시 `completed`로 변경
+- **다음 작업으로 넘어가기 전에** 반드시 업데이트
 
 ## 5. 태스크 위임 시
 
 - `load_skills=["quality-gate"]` **필수** (백엔드 작업이면 `codebase-guide`도 함께)
-- 프롬프트에 해당 TASK의 **수락기준 전문**을 포함
+- 프롬프트에 **수락기준 전문** 포함
 - 위임 결과 받으면 수락기준 1:1 검증 후 승인/반려
 
 ## 6. 빼먹기 방지 체크리스트
@@ -63,80 +63,59 @@
 구현 완료 후 스스로에게 묻기:
 
 ```
-1. 스펙에서 이 기능이 영향주는 모든 모드(monitoring/deploying/debugging)를 다 처리했나?
-2. StatusBar에 반영할 것은 없나?
-3. compact 모드(배포 중 상단)에서의 동작도 확인했나?
-4. 키보드 단축키가 overlayActive() 가드를 통과하나?
-5. 포커스 상태(chat/status)에 따른 분기가 맞나?
+1. 관련 모듈에 영향 주는 부분을 다 처리했나? (routes, tools, DB, frontend)
+2. i18n 문자열을 en.ts/ko.ts 둘 다 추가했나?
+3. 에러 처리가 OpenLanderError 패턴을 따르나?
+4. MCP 도구에 영향이 있으면 mcpDescription도 업데이트했나?
+5. _agent_guidance 필드를 건드리지 않았나?
 ```
 
-## 7. TUI 작업 시
+## 7. 프론트엔드 작업 시
 
-- TUI는 SolidJS + OpenTUI 기반. `src/tui/` 하위.
-- 유효 요소: `<box>`, `<text>`, `<textarea>`, `<input>`, `<span>` 만 사용
-- `useKeyboard`는 try-catch 필수 (오버레이 컴포넌트 제외)
-- 색상은 `theme.ts`에서 import, hex 형식만
+- React 19 + Tailwind CSS v3 + Radix UI 기반. `web/src/` 하위.
+- 컴포넌트: shadcn/ui 스타일, CVA variants, `cn()` 클래스 머저
+- 상태: React Context + custom hooks only (외부 라이브러리 금지)
+- 데이터: native `fetch` + `fetchWithAuth()` + polling hooks (react-query/SWR 금지)
+- 스타일: Tailwind utility classes, CSS variables (`web/src/index.css`)
+- 라우팅: React Router 7 (`web/src/App.tsx`)
 
-## 8. 커밋 규칙
+## 8. 백엔드 작업 시
+
+- Hono 웹 프레임워크 (Express 아님). `src/web/` 하위.
+- 라우트: `createXxxRoutes(ctx: AppContext): Hono` 팩토리 패턴
+- DB: Drizzle ORM + SQLite. Repository 패턴 (`src/db/repos/*.repo.ts`)
+- 에러: `OpenLanderError` 상속 (`src/errors.ts`). `code` + `statusCode` + `details`
+- 도구: `ToolDef` 인터페이스 (`src/tools/defs/types.ts`). snake_case 이름 불변.
+- 이벤트: `EventBus` (`src/events/index.ts`). 40+ 이벤트 타입.
+
+## 9. 커밋 규칙
 
 - 유저가 명시적으로 요청할 때만 커밋
 - `.env`, credentials 등 시크릿 파일 커밋 금지
 - pre-commit hook 실패 시 amend 하지 말고 새 커밋
-
-## 9. 버그 워크플로우 (MANDATORY)
-
-사용자가 버그를 보고하면 ("안 돼", "이상해", "깨져" 등):
-
-```
-1. version-map.md에서 관련 버전/스펙 찾기
-2. bugs.md "활성 버그" 테이블에 항목 추가 (BUG-NNN, 관련 태스크 ID 매핑)
-3. GitHub Issue 생성:
-   gh issue create --title "BUG-NNN: [설명]" --label "bug,[버전]" \
-     --body "관련: TASK-XX | 스펙: [doc] L[line]\n\n재현: ...\n기대: ...\n실제: ..."
-4. 버그 수정 완료 후:
-   - bun run build + bun test 통과 확인
-   - bugs.md: 활성 → 해결됨으로 이동, 상태 ✅
-   - gh issue close [번호]
-```
-
-**버그 ID 규칙**: BUG-001 ~ BUG-999 (전체 순번, 버전 무관, 재사용 금지)
-**GitHub Labels**: `bug` + 버전 태그(`v0.0.6`~`v0.0.10`) + `priority:high`/`priority:low`
+- Conventional Commits: `feat(web):`, `fix(pipeline):`, `refactor(mcp):`, `test:`
 
 ## 10. 문서 체계 참조
 
 ```
 docs/planning/
 ├── version-map.md              # SSOT — 전체 버전/스펙/상태 매핑
-├── dev-lifecycle.md             # 11단계 개발 라이프사이클
-├── requirements.md              # 전체 요구사항 (v0.0.1~v0.0.8)
+├── dev-lifecycle.md            # 개발 라이프사이클
+├── quality-gate-coverage.md    # 품질 게이트 커버리지
+├── release-checklist.md        # 릴리즈 체크리스트
+├── v1-architecture-decision.md # v1 아키텍처 결정
 │
-├── context/                    # 제품 컨텍스트 (아키텍처, 경쟁 분석, 의사결정 로그)
+├── context/                    # 제품 컨텍스트
 │   ├── product-context.md
 │   ├── architecture.md
 │   ├── competitive.md
 │   └── decision-log.md
 │
-├── v0.0.6/                      # ✅ 완료
-│   ├── tasks.md
-│   ├── tui-spec.md
-│   └── ui-ux-build-compose.md
+├── release/                    # v1.0.0 릴리즈 문서
+│   ├── v1.0.0-roadmap.md
+│   ├── v1.0.0-web-ui-vision.md
+│   ├── v1.0.0-ai-copilot.md
+│   └── quality-gate.md
 │
-├── v0.0.7/                      # ✅ 완료
-│   ├── implementation-tasks.md
-│   ├── phase1-plan.md
-│   └── ui-ux-layout.md
-│
-├── v0.0.8/                      # 📋 미착수
-│   └── vercel-ai-sdk-migration.md
-│
-├── v0.0.9/                      # 🧪 도그푸딩 중
-│   ├── server-awareness.md      # 스펙
-│   ├── dogfooding.md            # 테스트 체크리스트
-│   └── bugs.md                  # 버그 트래커
-│
-├── v0.0.10/                     # 📋 기획 완료
-│   └── env-secrets.md
-│
-└── archive/                     # ⚠ 아카이브
-    └── v0.0.9-10-unified-spec.md
+└── archive/                    # 과거 버전 아카이브 (v0.0.6 ~ v0.2.6)
 ```
