@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import type { AppContext } from '../../app.js';
+import type { RequestIdentity } from '../../types/identity.js';
 
 /**
  * Target platform for tool execution.
@@ -15,6 +16,7 @@ export type ToolTarget = 'agent' | 'mcp';
 export interface ToolContext {
   target: ToolTarget;
   appCtx: AppContext;
+  identity?: RequestIdentity;
 }
 
 /**

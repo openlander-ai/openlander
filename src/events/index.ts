@@ -14,6 +14,7 @@ import type { BuildTier } from '../pipeline/build-recovery.js';
 import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { Question } from '../lib/question-bridge.js';
 import type { Alert } from '../monitor/alerts.js';
+import type { RequestIdentity } from '../types/identity.js';
 
 const log = createModuleLogger('events');
 
@@ -239,16 +240,42 @@ export interface EventPayload {
   'alert:dismissed': { alertId: string };
   'question:pending': { projectId: string; requestId: string; questions: Question[] };
   'question:answered': { projectId: string; requestId: string };
-  'agent:event': { projectId: string; event: ChatStreamEvent & { timestamp: string } };
-  'recovery:start': { projectId: string; error: string; attempt: number };
+  'agent:event': {
+    projectId: string;
+    event: ChatStreamEvent & { timestamp: string };
+    identity?: RequestIdentity;
+  };
+  'recovery:start': {
+    projectId: string;
+    error: string;
+    attempt: number;
+    source?: string;
+    identity?: RequestIdentity;
+  };
   'recovery:success': {
     projectId: string;
     attempt: number;
     durationMs: number;
     lastError?: string;
+    source?: string;
+    identity?: RequestIdentity;
+    tokenCount?: number;
+    costUsd?: number | null;
   };
-  'recovery:failed': { projectId: string; error: string; attempt: number };
-  'recovery:exhausted': { projectId: string; totalAttempts: number; lastError: string };
+  'recovery:failed': {
+    projectId: string;
+    error: string;
+    attempt: number;
+    source?: string;
+    identity?: RequestIdentity;
+  };
+  'recovery:exhausted': {
+    projectId: string;
+    totalAttempts: number;
+    lastError: string;
+    source?: string;
+    identity?: RequestIdentity;
+  };
   'env:new-keys-detected': {
     projectId: string;
     projectName: string;
