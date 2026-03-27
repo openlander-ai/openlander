@@ -309,7 +309,7 @@ export function OverviewTab({
     try {
       setIsConnecting(true);
       await connectProjectService(projectId, serviceId);
-      const updatedServices = await getProjectConnectedServices(projectId);
+      const updatedServices = await getProjectConnectedServices(projectId, selectedEnvId);
       setConnectedServices(updatedServices);
     } catch (err) {
       console.error('Failed to connect service:', err);
@@ -322,7 +322,7 @@ export function OverviewTab({
     try {
       setDisconnectingId(serviceId);
       await disconnectProjectService(projectId, serviceId);
-      const updatedServices = await getProjectConnectedServices(projectId);
+      const updatedServices = await getProjectConnectedServices(projectId, selectedEnvId);
       setConnectedServices(updatedServices);
     } catch (err) {
       console.error('Failed to disconnect service:', err);

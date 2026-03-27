@@ -18,6 +18,8 @@ interface BackendEnvironment {
   image_tag: string | null;
   previous_image_tag: string | null;
   public_url: string | null;
+  url?: string;
+  urls?: Array<{ url: string; type: 'lan' | 'vpn'; ip: string }>;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +51,8 @@ function mapEnvironment(environment: BackendEnvironment): Environment {
     imageTag: environment.image_tag,
     previousImageTag: environment.previous_image_tag,
     publicUrl: environment.public_url,
+    url: environment.url,
+    urls: environment.urls,
     createdAt: environment.created_at,
     updatedAt: environment.updated_at,
   };
