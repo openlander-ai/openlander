@@ -470,9 +470,9 @@ export function ProjectDetail() {
       <ShareDialog
         projectId={id!}
         projectName={project.name}
-        isRunning={project.status === 'running'}
+        isRunning={displayProject?.status === 'running'}
         visibility={project.visibility}
-        publicUrl={project.publicUrl ?? null}
+        publicUrl={displayProject?.publicUrl ?? null}
         open={shareOpen}
         onOpenChange={setShareOpen}
         onShareChange={fetchProject}
