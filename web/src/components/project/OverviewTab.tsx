@@ -209,12 +209,8 @@ export function OverviewTab({
   const displayErrors = useMemo(() => errorEntries.slice(-3), [errorEntries]);
 
   useEffect(() => {
-    if (isBuilding) {
-      setPipelineOpen(true);
-    } else {
-      setPipelineOpen(false);
-    }
-  }, [isBuilding]);
+    setPipelineOpen(isBuilding || projectStatus === 'error');
+  }, [isBuilding, projectStatus]);
 
   useEffect(() => {
     let mounted = true;
