@@ -160,7 +160,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           onClick={() => navigate(`/projects/${project.id}`)}
           title={tooltip}
           className={cn(
-            'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-all duration-150',
+            'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 lg:text-left transition-all duration-150',
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
             isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
@@ -273,7 +273,8 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                     }}
                     title={parent.name}
                     className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors group',
+                      'w-full flex items-center gap-2 px-3 py-2 lg:text-left transition-colors group',
+                      'lg:justify-start justify-center',
                       isProjectActive(parent.id)
                         ? 'text-primary-ol'
                         : 'text-muted-ol hover:text-secondary-ol',
@@ -315,7 +316,11 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                   <button
                     onClick={() => toggleGroup(url, projs)}
                     title={repoName}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-muted-ol hover:text-secondary-ol transition-colors group"
+                    className={cn(
+                      'w-full flex items-center gap-2 px-3 py-2 lg:text-left transition-colors group',
+                      'lg:justify-start justify-center',
+                      'text-muted-ol hover:text-secondary-ol',
+                    )}
                   >
                     {open ? (
                       <ChevronDown className="h-3.5 w-3.5 shrink-0" />
