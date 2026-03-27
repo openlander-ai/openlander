@@ -111,7 +111,7 @@ export const envToolDefs: ToolDef[] = [
       }
 
       const changed = appCtx.env.setBulk(project.id, vars, environmentId);
-      const mismatches = appCtx.env.verifyRoundTrip(project.id, vars);
+      const mismatches = appCtx.env.verifyRoundTrip(project.id, vars, environmentId);
 
       if (mismatches.length > 0) {
         return {
