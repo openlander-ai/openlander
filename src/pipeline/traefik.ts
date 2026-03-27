@@ -122,15 +122,31 @@ export class TraefikManager {
 
   private async ensureNetworkByName(name: string): Promise<void> {
     const client = this.docker.getClient();
-    const networks = await client.listNetworks({
-      filters: { name: [name] },
-    });
 
-    if (networks.length === 0) {
+    // Use inspect() for exact name lookup. listNetworks({ name }) does substring
+    // matching, so filtering for 'openlander' also returns 'openlander-prod' and
+    // 'openlander-dev', causing the shared network to never be created.
+    try {
+      await client.getNetwork(name).inspect();
+      return;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (!msg.includes('not found') && !msg.includes('No such network')) {
+        throw error;
+      }
+    }
+
+    try {
       await client.createNetwork({
         Name: name,
         Driver: 'bridge',
       });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('already exists')) {
+        return;
+      }
+      throw error;
     }
   }
 
