@@ -63,19 +63,17 @@ export const deployToolDefs: ToolDef[] = [
   {
     name: 'deploy_blue_green',
     description:
-      'Deploy a project with zero downtime using blue-green strategy. Builds a new version alongside the current one, runs health checks, then switches traffic atomically. Use for production projects where downtime is unacceptable. Returns deployment result with old/new container info. Errors: PROJECT_NOT_FOUND, HEALTH_CHECK_FAILED (new version unhealthy — old version kept running).',
+      'Deploy a project with zero downtime using blue-green strategy. Builds a new version alongside the current one, runs health checks, then switches traffic atomically. Use when downtime is unacceptable. Returns deployment result with old/new container info. Errors: PROJECT_NOT_FOUND, HEALTH_CHECK_FAILED (new version unhealthy — old version kept running).',
     mcpDescription: 'Deploy with zero downtime using blue-green strategy.',
     inputSchema: deployBlueGreenSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
-      const environment =
-        (args['environment'] as 'production' | 'development' | undefined) ?? 'production';
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
       const result = await context.appCtx.blueGreen.deploy(project.id, {
-        environmentType: environment,
+        environmentType: 'production',
       });
       return {
         ...result,
@@ -397,21 +395,12 @@ export const deployToolDefs: ToolDef[] = [
     execute: (args, context) => {
       const appCtx = context.appCtx;
       const projectName = args['project_name'] as string;
-      const environmentName = args['environment_name'] as string | undefined;
       const limit = (args['limit'] as number | undefined) ?? 10;
 
       const project = appCtx.db.getProjectByName(projectName);
       if (!project) throw new ProjectNotFoundError(projectName);
 
-      let environmentId: string | undefined;
-      if (environmentName) {
-        const env = appCtx.db
-          .getEnvironmentsByProject(project.id)
-          .find((e) => e.type === environmentName);
-        if (env) environmentId = env.id;
-      }
-
-      const logs = appCtx.db.getDeployLogs(project.id, limit, environmentId);
+      const logs = appCtx.db.getDeployLogs(project.id, limit);
 
       return Promise.resolve({
         project: projectName,

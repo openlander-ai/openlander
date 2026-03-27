@@ -27,10 +27,6 @@ export const deployPlanToolDefs: ToolDef[] = [
       const appCtx = context.appCtx;
       const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
-      const environment =
-        args['environment'] === 'production' || args['environment'] === 'development'
-          ? args['environment']
-          : undefined;
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
@@ -40,7 +36,6 @@ export const deployPlanToolDefs: ToolDef[] = [
         imageUrl: (args['image'] as string | undefined) ?? undefined,
         imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
         containerPort: (args['port'] as number | undefined) ?? undefined,
-        ...(environment ? { environment } : {}),
         envVars,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,
@@ -186,10 +181,6 @@ export const deployPlanToolDefs: ToolDef[] = [
       const appCtx = context.appCtx;
       const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
-      const environment =
-        args['environment'] === 'production' || args['environment'] === 'development'
-          ? args['environment']
-          : undefined;
       const wait = (args['wait'] as boolean | undefined) ?? true;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
 
@@ -201,7 +192,6 @@ export const deployPlanToolDefs: ToolDef[] = [
         imageUrl: (args['image'] as string | undefined) ?? undefined,
         imageCmd: (args['cmd'] as string[] | undefined) ?? undefined,
         containerPort: (args['port'] as number | undefined) ?? undefined,
-        ...(environment ? { environment } : {}),
         envVars,
         preferDockerfile: (args['prefer_dockerfile'] as boolean | undefined) ?? undefined,
         dockerfilePath: (args['dockerfile_path'] as string | undefined) ?? undefined,

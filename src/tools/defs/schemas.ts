@@ -1,10 +1,5 @@
 import { z } from 'zod';
 
-const deploymentEnvironmentSchema = z
-  .enum(['production', 'development'])
-  .optional()
-  .describe('Target deployment environment');
-
 // Core project/deployment schemas
 export const deployProjectSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL (e.g., github.com/user/repo)'),
@@ -130,20 +125,10 @@ export const setEnvVarsSchema = z.object({
     .string()
     .min(1)
     .describe('JSON object of key-value pairs (e.g., {"DATABASE_URL": "..."})'),
-  environment_name: z
-    .string()
-    .optional()
-    .describe('Environment name (production/development). Omit for project-level vars.'),
 });
 
 export const listEnvVarsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-  environment_name: z
-    .string()
-    .optional()
-    .describe(
-      'Environment name to show source tracking (global/project/production/environment). Omit for backward-compatible response.',
-    ),
 });
 
 export const getEnvVarSchema = z.object({
@@ -213,7 +198,6 @@ export const searchGithubReposSchema = z.object({
 export const deployComposeSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),
   branch: z.string().optional().describe('Branch'),
-  environment: deploymentEnvironmentSchema,
 });
 
 export const listComposeServicesSchema = z.object({
@@ -318,7 +302,6 @@ export const scanProjectSchema = z.object({
 // Redeploy schema
 export const redeployProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-  environment: deploymentEnvironmentSchema,
   no_cache: z
     .boolean()
     .optional()
@@ -335,13 +318,11 @@ export const rollbackProjectSchema = z.object({
 // Blue-green deploy schema
 export const deployBlueGreenSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-  environment: deploymentEnvironmentSchema,
 });
 
 // Restart project schema
 export const restartProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-  environment: deploymentEnvironmentSchema,
   no_cache: z
     .boolean()
     .optional()
@@ -353,7 +334,6 @@ export const restartProjectSchema = z.object({
 // Stop project schema
 export const stopProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-  environment: deploymentEnvironmentSchema,
 });
 
 // Remove project schema
@@ -372,7 +352,6 @@ export const unexposePublicSchema = z.object({
 
 export const startProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-  environment: deploymentEnvironmentSchema,
 });
 
 export const shareProjectSchema = z.object({
@@ -500,7 +479,6 @@ export const createDeployPlanSchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().optional().describe('Container port'),
-    environment: deploymentEnvironmentSchema,
     env_vars: z
       .string()
       .optional()
@@ -567,7 +545,6 @@ export const deploySchema = z
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
     port: z.number().int().positive().optional().describe('Container port'),
-    environment: deploymentEnvironmentSchema,
     env_vars: z
       .string()
       .optional()
@@ -649,10 +626,6 @@ export const updateProjectConfigSchema = z
 // Deployment history schema
 export const deployHistorySchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-  environment_name: z
-    .string()
-    .optional()
-    .describe('Filter by environment (e.g. "production", "development")'),
   limit: z.number().optional().describe('Max entries to return (default 10)'),
 });
 

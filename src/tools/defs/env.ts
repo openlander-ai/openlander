@@ -1,6 +1,5 @@
 import type { ToolDef } from './types.js';
 import { ProjectNotFoundError } from '../../errors.js';
-import { EnvManager } from '../../pipeline/env.js';
 import {
   getEnvVarSchema,
   listEnvVarsSchema,
@@ -25,41 +24,13 @@ export const envToolDefs: ToolDef[] = [
   {
     name: 'list_env_vars',
     description:
-      'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count } or with source tracking { variables: { KEY: { value: "sk-****7890", source: "project" } }, count }. Errors: PROJECT_NOT_FOUND, ENVIRONMENT_NOT_FOUND.',
-    mcpDescription:
-      'List environment variables with optional source tracking. Priority: global < project < production < environment. Pass environment_name to see source (global/project/production/environment) for each var. Values always masked.',
+      'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription: 'List project-scoped environment variables with masked values.',
     inputSchema: listEnvVarsSchema,
     execute: (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
-      const environmentName = _args['environment_name'] as string | undefined;
       const project = getProjectByName(appCtx, projectName);
-
-      // Backward compatibility: if no environment_name, return simple masked format
-      if (!environmentName) {
-        const masked = appCtx.env.getAll(project.id);
-        return Promise.resolve({ variables: masked, count: Object.keys(masked).length });
-      }
-
-      // With environment_name: return source tracking
-      const environments = appCtx.db.getEnvironmentsByProject(project.id);
-      const environment = environments.find((e) => e.type === environmentName);
-
-      if (!environment) {
-        throw new Error(
-          `ENVIRONMENT_NOT_FOUND: No environment named "${environmentName}" found for project "${projectName}"`,
-        );
-      }
-
-      const inheritanceInfo = appCtx.env.getInheritanceInfo(project.id, environment.id);
-      const masked: Record<string, { value: string; source: string }> = {};
-
-      for (const [key, info] of Object.entries(inheritanceInfo)) {
-        masked[key] = {
-          value: EnvManager.mask(info.value),
-          source: info.source,
-        };
-      }
-
+      const masked = appCtx.env.getAll(project.id);
       return Promise.resolve({ variables: masked, count: Object.keys(masked).length });
     },
   },
@@ -85,33 +56,15 @@ export const envToolDefs: ToolDef[] = [
     description:
       'Set environment variables for a project and trigger a redeploy if running. Use when user needs to configure DATABASE_URL, API keys, or other env vars. The variables parameter must be a JSON string of key-value pairs, e.g. {"DATABASE_URL": "postgresql://user:pass@ol-svc-pg:5432/db", "REDIS_URL": "redis://ol-svc-redis:6379"}. For host services use host.docker.internal as hostname. For OpenLander services use the container name (ol-svc-*). Returns { status, project, keys[] }. Errors: PROJECT_NOT_FOUND, JSON parse error if variables is malformed.',
     mcpDescription:
-      'Set environment variables at project level (priority: global < project < production < environment). Triggers redeploy if project running. Use for DATABASE_URL, API keys, etc. For services: ol-svc-* for OpenLander, host.docker.internal for host.',
+      'Set project-scoped environment variables. Triggers redeploy if project running. Use for DATABASE_URL, API keys, etc. For services: ol-svc-* for OpenLander, host.docker.internal for host.',
     inputSchema: setEnvVarsSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string;
-      const environmentName = args['environment_name'] as string | undefined;
       const project = getProjectByName(appCtx, projectName);
       const vars = JSON.parse(args['variables'] as string) as Record<string, string>;
 
-      let environmentId: string | undefined;
-      let deploymentEnvironment: 'production' | 'development' | undefined;
-
-      if (environmentName) {
-        const environments = appCtx.db.getEnvironmentsByProject(project.id);
-        const environment = environments.find((e) => e.type === environmentName);
-
-        if (!environment) {
-          throw new Error(
-            `ENVIRONMENT_NOT_FOUND: No environment named "${environmentName}" found for project "${projectName}"`,
-          );
-        }
-
-        environmentId = environment.id;
-        deploymentEnvironment = environment.type as 'production' | 'development';
-      }
-
-      const changed = appCtx.env.setBulk(project.id, vars, environmentId);
-      const mismatches = appCtx.env.verifyRoundTrip(project.id, vars, environmentId);
+      const changed = appCtx.env.setBulk(project.id, vars);
+      const mismatches = appCtx.env.verifyRoundTrip(project.id, vars);
 
       if (mismatches.length > 0) {
         return {
@@ -123,7 +76,7 @@ export const envToolDefs: ToolDef[] = [
       }
 
       if (changed && project.status === 'running') {
-        await appCtx.pipeline.redeploy(project.id, { environment: deploymentEnvironment });
+        await appCtx.pipeline.redeploy(project.id);
         return {
           status: 'updated_and_redeployed',
           project: projectName,
