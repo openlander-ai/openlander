@@ -42,10 +42,10 @@ export class TraefikManager {
     options?: TraefikManagerOptions,
   ) {
     const defaultPolicy = getPolicy('production');
-    this.containerName = options?.containerName ?? defaultPolicy.traefikContainerName;
+    this.containerName = options?.containerName ?? 'traefik-ol';
     this.networkName = options?.networkName ?? defaultPolicy.networkName;
-    this.httpPort = options?.httpPort ?? defaultPolicy.traefikHttpPort;
-    this.dashboardPort = options?.dashboardPort ?? defaultPolicy.traefikDashboardPort;
+    this.httpPort = options?.httpPort ?? 80;
+    this.dashboardPort = options?.dashboardPort ?? 8080;
   }
 
   async isRunning(): Promise<boolean> {
