@@ -246,7 +246,11 @@ export function OverviewTab({
       ? getEnvironmentEnvVars(projectId, selectedEnvId)
       : getProjectEnv(projectId);
 
-    Promise.all([getProjectConnectedServices(projectId), envVarsPromise, getServices()])
+    Promise.all([
+      getProjectConnectedServices(projectId, selectedEnvId),
+      envVarsPromise,
+      getServices(),
+    ])
       .then(([services, envVarsData, allServices]) => {
         if (!mounted) return;
         setConnectedServices(services);

@@ -297,8 +297,12 @@ export interface ConnectedService {
   autoInjectedEnvKeys?: string[];
 }
 
-export async function getProjectConnectedServices(id: string): Promise<ConnectedService[]> {
-  const res = await fetch(`/api/projects/${id}/services`);
+export async function getProjectConnectedServices(
+  id: string,
+  environmentId?: string,
+): Promise<ConnectedService[]> {
+  const params = environmentId ? `?environmentId=${environmentId}` : '';
+  const res = await fetch(`/api/projects/${id}/services${params}`);
   if (!res.ok) return [];
   return res.json();
 }
