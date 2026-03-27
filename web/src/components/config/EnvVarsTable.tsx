@@ -2,15 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '@/i18n/context';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  getProjectEnv,
-  updateProjectEnv,
-  getEnvironments,
-  getEnvironmentEnvVars,
-  updateEnvironmentEnvVars,
-  generateEnvExample,
-} from '@/lib/api';
-import type { Environment } from '@/types';
+import { getProjectEnv, updateProjectEnv, generateEnvExample } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { parseEnvContent } from '@/lib/parse-env';
 import {
@@ -34,14 +26,10 @@ interface EnvVar {
   key: string;
   value: string;
   revealed: boolean;
-  source?: 'global' | 'project' | 'production' | 'environment';
-  isOverride?: boolean;
 }
 
 export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   const { t } = useLanguage();
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [selectedEnvId, setSelectedEnvId] = useState<string>('');
   const [vars, setVars] = useState<EnvVar[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,51 +40,24 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   const [envExampleText, setEnvExampleText] = useState('');
   const [generatingExample, setGeneratingExample] = useState(false);
 
-  const fetchEnvironments = useCallback(async () => {
-    try {
-      const envs = await getEnvironments(projectId);
-      setEnvironments(envs);
-    } catch (err) {
-      console.error('Failed to fetch environments:', err);
-    }
-  }, [projectId]);
-
   const fetchEnv = useCallback(async () => {
     setLoading(true);
     try {
-      if (!selectedEnvId) {
-        const data = await getProjectEnv(projectId);
-        setVars(
-          Object.entries(data).map(([key, value]) => ({
-            key,
-            value,
-            revealed: true,
-            source: 'project',
-          })),
-        );
-      } else {
-        const data = await getEnvironmentEnvVars(projectId, selectedEnvId);
-        setVars(
-          Object.entries(data.envVars).map(([key, value]) => ({
-            key,
-            value,
-            revealed: true,
-            source: data.inheritance[key]?.source || 'environment',
-            isOverride: data.inheritance[key]?.isOverride,
-          })),
-        );
-      }
+      const data = await getProjectEnv(projectId);
+      setVars(
+        Object.entries(data).map(([key, value]) => ({
+          key,
+          value,
+          revealed: true,
+        })),
+      );
       setDirty(false);
     } catch {
       // silent
     } finally {
       setLoading(false);
     }
-  }, [projectId, selectedEnvId]);
-
-  useEffect(() => {
-    fetchEnvironments();
-  }, [fetchEnvironments]);
+  }, [projectId]);
 
   useEffect(() => {
     fetchEnv();
@@ -108,17 +69,11 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       const envMap: Record<string, string> = {};
       for (const v of vars) {
         if (v.key.trim()) {
-          if (!selectedEnvId || v.source === 'environment' || !v.source) {
-            envMap[v.key.trim()] = v.value;
-          }
+          envMap[v.key.trim()] = v.value;
         }
       }
 
-      if (!selectedEnvId) {
-        await updateProjectEnv(projectId, envMap);
-      } else {
-        await updateEnvironmentEnvVars(projectId, selectedEnvId, envMap);
-      }
+      await updateProjectEnv(projectId, envMap);
 
       setDirty(false);
       toast.success('Environment variables saved');
@@ -132,10 +87,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   };
 
   const addVar = () => {
-    setVars((prev) => [
-      ...prev,
-      { key: '', value: '', revealed: true, source: selectedEnvId ? 'environment' : 'project' },
-    ]);
+    setVars((prev) => [...prev, { key: '', value: '', revealed: true }]);
     setDirty(true);
   };
 
@@ -166,19 +118,12 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       key: p.key,
       value: p.value,
       revealed: true,
-      source: selectedEnvId ? 'environment' : 'project',
     }));
     if (parsed.length > 0) {
       setVars((prev) => {
         // Merge: update existing keys, add new ones
         const existing = new Map(prev.map((v) => [v.key, v]));
         for (const p of parsed) {
-          const existingVar = existing.get(p.key);
-          if (existingVar && selectedEnvId) {
-            if (existingVar.source !== 'environment' || existingVar.isOverride) {
-              p.isOverride = true;
-            }
-          }
           existing.set(p.key, p);
         }
         return Array.from(existing.values());
@@ -192,10 +137,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
   const handleGenerateExample = async () => {
     setGeneratingExample(true);
     try {
-      const envType = selectedEnvId
-        ? environments.find((e) => e.id === selectedEnvId)?.type
-        : undefined;
-      const text = await generateEnvExample(projectId, envType);
+      const text = await generateEnvExample(projectId);
       setEnvExampleText(text);
       setEnvExampleMode(true);
     } catch (err) {
@@ -251,18 +193,6 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <select
-            value={selectedEnvId}
-            onChange={(e) => setSelectedEnvId(e.target.value)}
-            className="h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 text-xs font-body text-primary-ol capitalize"
-          >
-            <option value="">Project Defaults</option>
-            {environments.map((env) => (
-              <option key={env.id} value={env.id}>
-                {env.type} ({env.branch})
-              </option>
-            ))}
-          </select>
           <p className="text-xs font-body text-muted-ol">
             {vars.length} {vars.length !== 1 ? 'variables' : 'variable'}
           </p>
@@ -405,114 +335,57 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
       ) : (
         <div className="space-y-1">
           {/* Header */}
-          <div className="grid grid-cols-[1fr_1fr_140px_36px_36px] gap-2 px-2 pb-1 text-xs font-mono text-muted-ol uppercase tracking-wider">
+          <div className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 px-2 pb-1 text-xs font-mono text-muted-ol uppercase tracking-wider">
             <span>{'Key'}</span>
             <span>{'Value'}</span>
-            <span>{'Source'}</span>
             <span />
             <span />
           </div>
           {/* Rows */}
-          {vars.map((v, index) => {
-            const isInherited = selectedEnvId && v.source !== 'environment';
-            return (
-              <div
-                key={index}
-                className="grid grid-cols-[1fr_1fr_140px_36px_36px] gap-2 items-center group"
-              >
-                <input
-                  type="text"
-                  value={v.key}
-                  onChange={(e) => updateVar(index, 'key', e.target.value)}
-                  placeholder={'KEY'}
-                  readOnly={!!isInherited}
-                  className={cn(
-                    'px-2 py-1.5 rounded-md text-xs font-mono',
-                    'bg-bg-app border border-border text-primary-ol',
-                    'placeholder:text-muted-ol',
-                    'focus:outline-none focus:ring-1 focus:ring-agent/40',
-                    isInherited && 'text-muted-ol bg-bg-subtle cursor-not-allowed',
-                  )}
-                />
-                <input
-                  type={v.revealed ? 'text' : 'password'}
-                  value={v.value}
-                  onChange={(e) => updateVar(index, 'value', e.target.value)}
-                  placeholder={'value'}
-                  readOnly={!!isInherited}
-                  className={cn(
-                    'px-2 py-1.5 rounded-md text-xs font-mono',
-                    'bg-bg-app border border-border text-primary-ol',
-                    'placeholder:text-muted-ol',
-                    'focus:outline-none focus:ring-1 focus:ring-agent/40',
-                    isInherited && 'text-muted-ol bg-bg-subtle cursor-not-allowed',
-                  )}
-                />
-                <div className="flex items-center">
-                  {selectedEnvId && (
-                    <span
-                      className={cn(
-                        'text-xs px-1.5 py-0.5 rounded font-body whitespace-nowrap',
-                        v.source === 'global' && 'bg-purple-500/10 text-purple-500',
-                        v.source === 'project' && 'bg-blue-500/10 text-blue-500',
-                        v.source === 'production' && 'bg-orange-500/10 text-orange-500',
-                        v.source === 'environment' &&
-                          !v.isOverride &&
-                          'bg-green-500/10 text-green-500 capitalize',
-                        v.source === 'environment' &&
-                          v.isOverride &&
-                          'bg-yellow-500/10 text-yellow-500',
-                      )}
-                    >
-                      {v.source === 'environment' && v.isOverride
-                        ? 'Override'
-                        : v.source === 'production'
-                          ? 'Inherited from Production'
-                          : v.source === 'project'
-                            ? 'Inherited from Project'
-                            : v.source === 'global'
-                              ? 'Inherited from Global'
-                              : v.source}
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => toggleReveal(index)}
-                  className="p-1.5 rounded text-muted-ol hover:text-secondary-ol transition-colors"
-                  title={v.revealed ? 'Hide value' : 'Show value'}
-                >
-                  {v.revealed ? (
-                    <Eye className="h-3.5 w-3.5" />
-                  ) : (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  )}
-                </button>
-                {isInherited ? (
-                  <button
-                    onClick={() => {
-                      setVars((prev) =>
-                        prev.map((item, i) =>
-                          i === index ? { ...item, source: 'environment', isOverride: true } : item,
-                        ),
-                      );
-                      setDirty(true);
-                    }}
-                    className="p-1.5 rounded text-muted-ol hover:text-agent transition-colors opacity-0 group-hover:opacity-100"
-                    title="Override this variable"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => removeVar(index)}
-                    className="p-1.5 rounded text-muted-ol hover:text-error transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+          {vars.map((v, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-[1fr_1fr_36px_36px] gap-2 items-center group"
+            >
+              <input
+                type="text"
+                value={v.key}
+                onChange={(e) => updateVar(index, 'key', e.target.value)}
+                placeholder={'KEY'}
+                className={cn(
+                  'px-2 py-1.5 rounded-md text-xs font-mono',
+                  'bg-bg-app border border-border text-primary-ol',
+                  'placeholder:text-muted-ol',
+                  'focus:outline-none focus:ring-1 focus:ring-agent/40',
                 )}
-              </div>
-            );
-          })}
+              />
+              <input
+                type={v.revealed ? 'text' : 'password'}
+                value={v.value}
+                onChange={(e) => updateVar(index, 'value', e.target.value)}
+                placeholder={'value'}
+                className={cn(
+                  'px-2 py-1.5 rounded-md text-xs font-mono',
+                  'bg-bg-app border border-border text-primary-ol',
+                  'placeholder:text-muted-ol',
+                  'focus:outline-none focus:ring-1 focus:ring-agent/40',
+                )}
+              />
+              <button
+                onClick={() => toggleReveal(index)}
+                className="p-1.5 rounded text-muted-ol hover:text-secondary-ol transition-colors"
+                title={v.revealed ? 'Hide value' : 'Show value'}
+              >
+                {v.revealed ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => removeVar(index)}
+                className="p-1.5 rounded text-muted-ol hover:text-error transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
