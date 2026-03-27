@@ -11,13 +11,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { deployProject } from '@/lib/api';
 import { useEnvScanFlow } from '@/hooks/use-env-scan-flow';
 import { cn } from '@/lib/utils';
@@ -36,7 +29,6 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
   const [imageUrl, setImageUrl] = useState('');
   const [port, setPort] = useState('');
   const [imageCmd, setImageCmd] = useState('');
-  const [environment, setEnvironment] = useState<string>('production');
   const [branch, setBranch] = useState('main');
   const [name, setName] = useState('');
   const [step, setStep] = useState<Step>('form');
@@ -69,16 +61,11 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
     setImageUrl('');
     setPort('');
     setImageCmd('');
-    setEnvironment('production');
     setBranch('main');
     setName('');
     setStep('form');
     setError(null);
     resetEnvFlow();
-  };
-
-  const handleEnvironmentChange = (value: string) => {
-    setEnvironment(value);
   };
 
   const handleClose = (open: boolean) => {
@@ -144,7 +131,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
           branch || undefined,
           name || undefined,
           filtered,
-          environment,
+          'production',
           'git',
         );
       } else {
@@ -153,7 +140,7 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
           undefined,
           name || undefined,
           filtered,
-          environment,
+          'production',
           'image',
           imageUrl,
           imageCmd || undefined,
@@ -241,23 +228,6 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
                 </div>
                 <div className="space-y-2">
                   <label
-                    htmlFor="environment"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    {'Environment'}
-                  </label>
-                  <Select value={environment} onValueChange={handleEnvironmentChange}>
-                    <SelectTrigger id="environment">
-                      <SelectValue placeholder="Select environment" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="production">Production</SelectItem>
-                      <SelectItem value="development">Development</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label
                     htmlFor="branch"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
@@ -324,23 +294,6 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
                       value={port}
                       onChange={(e) => setPort(e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="environment-image"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      {'Environment'}
-                    </label>
-                    <Select value={environment} onValueChange={handleEnvironmentChange}>
-                      <SelectTrigger id="environment-image">
-                        <SelectValue placeholder="Select environment" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="production">Production</SelectItem>
-                        <SelectItem value="development">Development</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
