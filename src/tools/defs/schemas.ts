@@ -130,6 +130,10 @@ export const setEnvVarsSchema = z.object({
     .string()
     .min(1)
     .describe('JSON object of key-value pairs (e.g., {"DATABASE_URL": "..."})'),
+  environment_name: z
+    .string()
+    .optional()
+    .describe('Environment name (production/development). Omit for project-level vars.'),
 });
 
 export const listEnvVarsSchema = z.object({

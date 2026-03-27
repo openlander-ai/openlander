@@ -9,7 +9,6 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
-  ExternalLink,
   RotateCw,
   Play,
   Square,
@@ -20,7 +19,6 @@ import {
   History,
   Zap,
   MoreHorizontal,
-  ChevronDown,
   Plus,
   Trash2,
   Download,
@@ -28,6 +26,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useSetup } from '@/hooks/use-setup.js';
 import { AISparkle } from '@/components/ui/AISparkle';
+import { DomainUrlDisplay } from './DomainUrlDisplay';
 import type { Project, Environment, EnvironmentType } from '@/types';
 
 interface ProjectHeaderProps {
@@ -86,7 +85,6 @@ export function ProjectHeader({
   const displayStatus = selectedEnv ? selectedEnv.status : project.status;
   const displayBranch = selectedEnv ? selectedEnv.branch : project.branch;
   const displayPublicUrl = selectedEnv ? selectedEnv.publicUrl : project.publicUrl;
-  const displayUrl = currentEnvType === 'production' ? project.url : undefined;
 
   const status = statusConfig[displayStatus] ?? statusConfig.stopped;
   const isBuilding = displayStatus === 'building';
@@ -95,16 +93,19 @@ export function ProjectHeader({
   const hasContainer = selectedEnv ? !!selectedEnv.containerId : !!project.port;
 
   const envColors: Record<EnvironmentType, string> = {
-    production:
-      'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-xs font-medium',
-    development:
-      'bg-blue-500/15 text-blue-400 border border-blue-500/30 px-2.5 py-0.5 rounded-full text-xs font-medium',
+    production: 'bg-emerald-500/15 border-emerald-500/30',
+    development: 'bg-blue-500/15 border-blue-500/30',
   };
 
-  const envLabels: Record<EnvironmentType, string> = {
-    production: 'Production',
-    development: 'Development',
+  const getEnvStatus = (type: EnvironmentType) => {
+    const env = environments.find((e) => e.type === type);
+    if (env) return env.status;
+    if (type === 'production') return project.status;
+    return 'idle';
   };
+
+  const devEnv = environments.find((e) => e.type === 'development');
+  const devStatus = devEnv ? devEnv.status : 'idle';
 
   // Determine primary action
   const renderPrimaryAction = () => {
@@ -198,41 +199,52 @@ export function ProjectHeader({
               <h1 className="font-display font-bold text-lg text-primary-ol tracking-tight truncate">
                 {project.name}
               </h1>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={cn('h-6 gap-1 font-body', envColors[currentEnvType])}
-                  >
-                    {envLabels[currentEnvType]}
-                    <ChevronDown className="h-3 w-3 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40">
-                  {(['production', 'development'] as EnvironmentType[]).map((env) => {
-                    const exists = env === 'production' || environments.some((e) => e.type === env);
-                    return (
-                      <DropdownMenuItem
-                        key={env}
-                        onClick={() => {
-                          if (exists) {
-                            onEnvChange?.(env);
-                          } else {
-                            onAddEnv?.(env);
-                          }
-                        }}
-                        className="flex items-center justify-between"
-                      >
-                        <span className={cn('text-xs', env === currentEnvType && 'font-medium')}>
-                          {exists ? envLabels[env] : `Create ${envLabels[env].toLowerCase()}…`}
-                        </span>
-                        {!exists && <Plus className="h-3 w-3 text-muted-ol" />}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="flex bg-zinc-900/50 rounded-lg border border-zinc-800/80 p-0.5">
+                <button
+                  onClick={() => onEnvChange?.('production')}
+                  className={cn(
+                    'px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 flex items-center gap-1.5 border',
+                    currentEnvType === 'production'
+                      ? cn(envColors.production, 'text-white')
+                      : 'border-transparent text-zinc-400 hover:text-zinc-200',
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'h-1 w-1 rounded-full shrink-0',
+                      statusConfig[getEnvStatus('production')]?.dot ?? statusConfig.stopped.dot,
+                    )}
+                  />
+                  Production
+                </button>
+                <button
+                  onClick={() => {
+                    if (devEnv) {
+                      onEnvChange?.('development');
+                    } else {
+                      onAddEnv?.('development');
+                    }
+                  }}
+                  className={cn(
+                    'px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 flex items-center gap-1.5 border',
+                    currentEnvType === 'development'
+                      ? cn(envColors.development, 'text-white')
+                      : 'border-transparent text-zinc-400 hover:text-zinc-200',
+                  )}
+                >
+                  {devEnv ? (
+                    <div
+                      className={cn(
+                        'h-1 w-1 rounded-full shrink-0',
+                        statusConfig[devStatus]?.dot ?? statusConfig.stopped.dot,
+                      )}
+                    />
+                  ) : (
+                    <Plus className="h-3 w-3 opacity-50" />
+                  )}
+                  Development
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-3 mt-0.5 text-xs font-body text-secondary-ol">
               <span className={status.color}>{status.label}</span>
@@ -242,32 +254,12 @@ export function ProjectHeader({
                   {displayBranch}
                 </span>
               )}
-              {displayUrl && (
-                <a
-                  href={displayUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-agent hover:text-agent/80 transition-colors"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  {displayUrl.replace(/^https?:\/\//, '')}
-                </a>
-              )}
-              {currentEnvType === 'production' &&
-                project.urls
-                  ?.filter((u) => u.type === 'vpn')
-                  .map((vpn) => (
-                    <a
-                      key={vpn.ip}
-                      href={vpn.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      <span className="text-xs">{vpn.url.replace(/^https?:\/\//, '')}</span>
-                    </a>
-                  ))}
+              <DomainUrlDisplay
+                publicUrl={displayPublicUrl}
+                urls={
+                  selectedEnv?.urls || (currentEnvType === 'production' ? project.urls : undefined)
+                }
+              />
             </div>
             {displayPublicUrl && (
               <a

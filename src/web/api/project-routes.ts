@@ -6,7 +6,12 @@ import type { AppContext } from '../../app.js';
 import { TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
-import { getProjectUrl, getProjectUrls, getAllIps } from '../../pipeline/traefik.js';
+import {
+  getProjectUrl,
+  getProjectUrls,
+  getAllIps,
+  getEnvironmentProjectHostname,
+} from '../../pipeline/traefik.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import { scanForEnvUsage } from '../../pipeline/env-scan.js';
 import {
@@ -27,9 +32,16 @@ function isEnvironmentType(value: unknown): value is EnvironmentType {
   return value === 'production' || value === 'development';
 }
 
-function mapEnvironment(environment: EnvironmentRow) {
+function mapEnvironment(projectName: string, environment: EnvironmentRow) {
+  const ips = getAllIps();
   return {
     ...environment,
+    url: `http://${getEnvironmentProjectHostname(projectName, environment.type)}`,
+    urls: ips.map((ip) => ({
+      url: `http://${getEnvironmentProjectHostname(projectName, environment.type, ip.address)}`,
+      type: ip.type,
+      ip: ip.address,
+    })),
     created_at: normalizeTimestamp(environment.created_at),
     updated_at: normalizeTimestamp(environment.updated_at),
   };
@@ -289,7 +301,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
           parentProjectId: p.parent_project_id,
           isCompose: ctx.db.isParentProject(p.id),
           serviceCount: ctx.db.getChildProjects(p.id).length,
-          environments: environments.map(mapEnvironment),
+          environments: environments.map((env) => mapEnvironment(p.name, env)),
         };
       }),
     });
@@ -304,7 +316,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     return c.json({
       ...mapProjectForApi(project),
-      environments: environments.map(mapEnvironment),
+      environments: environments.map((env) => mapEnvironment(project.name, env)),
       envVars,
       recentDeploys: deployLogs.map((log) => ({
         ...log,
@@ -433,14 +445,14 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       branch,
     });
 
-    return c.json({ environment: mapEnvironment(created) }, 201);
+    return c.json({ environment: mapEnvironment(project.name, created) }, 201);
   });
 
   api.get('/projects/:id/environments', (c) => {
     const project = getProjectOrThrow(c, ctx);
 
     const environments = ctx.db.getEnvironmentsByProject(project.id);
-    return c.json({ environments: environments.map(mapEnvironment) });
+    return c.json({ environments: environments.map((env) => mapEnvironment(project.name, env)) });
   });
 
   api.get('/projects/:id/environments/:envId', (c) => {
@@ -450,7 +462,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       return environment;
     }
 
-    return c.json({ environment: mapEnvironment(environment) });
+    return c.json({ environment: mapEnvironment(project.name, environment) });
   });
 
   api.delete('/projects/:id/environments/:envId', (c) => {
@@ -485,7 +497,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const inheritance = ctx.env.getInheritanceInfo(project.id, environment.id);
 
     return c.json({
-      environment: mapEnvironment(environment),
+      environment: mapEnvironment(project.name, environment),
       envVars,
       inheritance,
     });

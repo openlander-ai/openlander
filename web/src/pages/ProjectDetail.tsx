@@ -56,6 +56,7 @@ export function ProjectDetail() {
     type: 'stop' | 'delete';
     handler: () => void;
   } | null>(null);
+  const [envFade, setEnvFade] = useState(false);
 
   const validEnvs: EnvironmentType[] = ['production', 'development'];
   const envParam = searchParams.get('env') as EnvironmentType;
@@ -63,6 +64,13 @@ export function ProjectDetail() {
 
   const environments = project?.environments;
   const selectedEnv = environments?.find((e) => e.type === currentEnvType);
+
+  // Trigger opacity fade when environment changes
+  useEffect(() => {
+    setEnvFade(true);
+    const timer = setTimeout(() => setEnvFade(false), 150);
+    return () => clearTimeout(timer);
+  }, [currentEnvType]);
 
   const handleEnvChange = (env: EnvironmentType) => {
     setSearchParams({ env });
@@ -410,6 +418,7 @@ export function ProjectDetail() {
           timelineDisconnected={timelineDisconnected}
           selectedEnvId={selectedEnv?.id}
           currentEnvType={currentEnvType}
+          envFade={envFade}
           onRedeploy={handleRedeploy}
           onStop={handleStop}
           onRollback={handleRollback}
