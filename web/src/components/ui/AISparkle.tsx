@@ -1,11 +1,11 @@
 import { useId } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function AISparkle({
   className,
   ...props
-}: { className?: string } & React.ComponentProps<typeof Sparkles>) {
+}: { className?: string } & React.ComponentProps<typeof Star>) {
   const id = useId().replace(/:/g, '');
   const gradientId = `ai-sparkle-gradient-${id}`;
 
@@ -19,9 +19,12 @@ export function AISparkle({
           </linearGradient>
         </defs>
       </svg>
-      <Sparkles
+      <Star
         className={cn('ai-sparkle-glow', className)}
-        style={{ stroke: `url(#${gradientId})` }}
+        style={{
+          fill: `url(#${gradientId})`,
+          stroke: `url(#${gradientId})`,
+        }}
         {...props}
       />
     </>
