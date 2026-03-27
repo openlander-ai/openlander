@@ -19,7 +19,6 @@ import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { formatRelativeTime } from '@/lib/time';
-import { getAggregatedEnvStatus } from '@/lib/env-status';
 
 type SidebarProject = Project & { environments?: Environment[] };
 
@@ -147,15 +146,14 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const renderProjectItem = (project: SidebarProject, hideEnvs = false) => {
     const envs = project.environments ?? [];
     const hasMultipleEnvs = !hideEnvs && envs.length > 1;
-    const aggregatedStatus = envs.length ? getAggregatedEnvStatus(envs) : project.status;
 
     let tooltip = project.name;
-    if (aggregatedStatus === 'error') {
+    if (project.status === 'error') {
       const timeStr = project.updatedAt ? formatRelativeTime(project.updatedAt) : '';
       tooltip = timeStr
         ? `${project.name} — Error since ${timeStr}. Click to view.`
         : `${project.name} — Error. Click to view.`;
-    } else if (aggregatedStatus === 'building') {
+    } else if (project.status === 'building') {
       tooltip = `${project.name} — Building...`;
     }
 
@@ -174,7 +172,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           <div
             className={cn(
               'h-2 w-2 rounded-full shrink-0',
-              statusColor[aggregatedStatus] ?? 'bg-[var(--text-muted)]',
+              statusColor[project.status] ?? 'bg-[var(--text-muted)]',
             )}
           />
           <span className="hidden lg:inline text-xs font-body truncate">{project.name}</span>
