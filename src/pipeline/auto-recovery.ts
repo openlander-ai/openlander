@@ -6,6 +6,7 @@ import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import type { QuestionBridge } from '../lib/question-bridge.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { buildContextSnapshot } from '../llm/context-assembler.js';
 import { dispatchRecovery, type Locale, type RecoveryPlan } from './recovery-dispatch.js';
 import { matchRecipe } from './recipes.js';
 import type { DeployQueue } from './deploy-queue.js';
@@ -14,8 +15,19 @@ import type { DeployPipeline } from './deploy.js';
 const log = createModuleLogger('auto-recovery');
 
 const MAX_RECOVERY_ATTEMPTS = 3;
-const RECOVERY_OUTCOME_TIMEOUT_MS = 300_000;
-const recoveryAttempts = new Map<string, { count: number; lastError: string }>();
+const RECOVERY_OUTCOME_FALLBACK_TIMEOUT_MS = 300_000;
+const RECOVERY_OUTCOME_MAX_TIMEOUT_MS = 600_000;
+const RECOVERY_WINDOW_MS = 60 * 60 * 1000;
+const HIGH_RISK_TOOLS = ['rollback_project', 'remove_project', 'remove_service', 'create_database'];
+
+type RecoveryStrategy = 'recipe' | 'llm';
+
+interface GateCheckResult {
+  blocked: boolean;
+  reason?: 'already-running' | 'max-attempts' | 'infra-error';
+  recentFailedCount: number;
+  lastFailedError?: string;
+}
 
 export interface AutoRecoveryAgent {
   chatStream(
@@ -45,6 +57,70 @@ function normalizeError(error: string): string {
     .trim();
 }
 
+function isRecent(createdAt: string, nowMs: number): boolean {
+  const ts = new Date(createdAt).getTime();
+  if (!Number.isFinite(ts)) {
+    return false;
+  }
+  return ts > nowMs - RECOVERY_WINDOW_MS;
+}
+
+function getDynamicOutcomeTimeoutMs(db: Database, projectId: string): number {
+  const logs = db.getDeployLogs(projectId, 10);
+  const durations = logs
+    .map((logRow) => logRow.duration_ms)
+    .filter((duration): duration is number => typeof duration === 'number' && duration > 0);
+
+  if (durations.length === 0) {
+    return RECOVERY_OUTCOME_FALLBACK_TIMEOUT_MS;
+  }
+
+  const averageDuration =
+    durations.reduce((sum, duration) => sum + duration, 0) / Math.max(durations.length, 1);
+
+  const buffered = Math.round(averageDuration * 1.5);
+  return Math.min(
+    Math.max(buffered, RECOVERY_OUTCOME_FALLBACK_TIMEOUT_MS),
+    RECOVERY_OUTCOME_MAX_TIMEOUT_MS,
+  );
+}
+
+function runGateChecks(projectId: string, error: string, db: Database): GateCheckResult {
+  const running = db.getRunningActionRuns(projectId);
+  if (running.length > 0) {
+    return { blocked: true, reason: 'already-running', recentFailedCount: 0 };
+  }
+
+  const infraPatterns = [
+    /docker daemon/i,
+    /cannot connect to docker/i,
+    /permission denied.*docker/i,
+  ];
+  if (infraPatterns.some((pattern) => pattern.test(error))) {
+    return { blocked: true, reason: 'infra-error', recentFailedCount: 0 };
+  }
+
+  const nowMs = Date.now();
+  const recent = db.getActionRunsByProject(projectId, 20);
+  const recentFailed = recent.filter(
+    (run) => run.status === 'failed' && isRecent(run.created_at, nowMs),
+  );
+  if (recentFailed.length >= MAX_RECOVERY_ATTEMPTS) {
+    return {
+      blocked: true,
+      reason: 'max-attempts',
+      recentFailedCount: recentFailed.length,
+      lastFailedError: recentFailed[0]?.error_message ?? normalizeError(error),
+    };
+  }
+
+  return {
+    blocked: false,
+    recentFailedCount: recentFailed.length,
+    lastFailedError: recentFailed[0]?.error_message ?? undefined,
+  };
+}
+
 async function emitTimelineMessage(
   eventBus: EventBus,
   projectId: string,
@@ -62,11 +138,15 @@ async function emitTimelineMessage(
   });
 }
 
-function waitForRecoveryOutcome(eventBus: EventBus, projectId: string): Promise<boolean> {
+function waitForRecoveryOutcome(
+  eventBus: EventBus,
+  projectId: string,
+  timeoutMs: number,
+): Promise<{ success: boolean; timedOut: boolean }> {
   return new Promise((resolve) => {
     let settled = false;
 
-    const finalize = (recovered: boolean): void => {
+    const finalize = (success: boolean, timedOut: boolean): void => {
       if (settled) {
         return;
       }
@@ -75,24 +155,24 @@ function waitForRecoveryOutcome(eventBus: EventBus, projectId: string): Promise<
       clearTimeout(timer);
       unsubscribeSuccess();
       unsubscribeFailed();
-      resolve(recovered);
+      resolve({ success, timedOut });
     };
 
     const unsubscribeSuccess = eventBus.on('deploy:success', (payload) => {
       if (payload.projectId === projectId) {
-        finalize(true);
+        finalize(true, false);
       }
     });
 
     const unsubscribeFailed = eventBus.on('deploy:failed', (payload) => {
       if (payload.projectId === projectId) {
-        finalize(false);
+        finalize(false, false);
       }
     });
 
     const timer = setTimeout(() => {
-      finalize(false);
-    }, RECOVERY_OUTCOME_TIMEOUT_MS);
+      finalize(false, true);
+    }, timeoutMs);
   });
 }
 
@@ -102,6 +182,14 @@ function mapFailStep(step?: string): 'clone' | 'dockerfile' | 'build' | 'run' | 
   }
 
   return 'runtime';
+}
+
+function selectRecoveryStrategy(recipeMatched: boolean, hasAgent: boolean): RecoveryStrategy {
+  if (recipeMatched || !hasAgent) {
+    return 'recipe';
+  }
+
+  return 'llm';
 }
 
 /**
@@ -143,34 +231,30 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     step?: string,
     buildLog?: string,
   ): Promise<void> {
-    const attempts = recoveryAttempts.get(projectId) ?? { count: 0, lastError: '' };
+    const gate = runGateChecks(projectId, error, db);
+    if (gate.blocked) {
+      if (gate.reason === 'max-attempts') {
+        await eventBus.emit('recovery:exhausted', {
+          projectId,
+          totalAttempts: gate.recentFailedCount,
+          lastError: gate.lastFailedError ?? normalizeError(error),
+        });
+        log.info(
+          { projectId, attempts: gate.recentFailedCount },
+          'Auto-recovery exhausted, manual intervention needed',
+        );
+        return;
+      }
 
-    if (attempts.count >= MAX_RECOVERY_ATTEMPTS) {
-      await eventBus.emit('recovery:exhausted', {
-        projectId,
-        totalAttempts: attempts.count,
-        lastError: attempts.lastError,
-      });
-      log.info(
-        { projectId, attempts: attempts.count },
-        'Auto-recovery exhausted, manual intervention needed',
-      );
-      return;
-    }
+      if (gate.reason === 'already-running') {
+        log.info({ projectId }, 'Auto-recovery skipped: action run already in progress');
+        return;
+      }
 
-    if (attempts.lastError === normalizeError(error) && attempts.count > 0) {
-      log.info({ projectId, error }, 'Same error repeating, stopping auto-recovery');
-      return;
-    }
-
-    const infraPatterns = [
-      /docker daemon/i,
-      /cannot connect to docker/i,
-      /permission denied.*docker/i,
-    ];
-    if (infraPatterns.some((pattern) => pattern.test(error))) {
-      log.info({ projectId }, 'Infrastructure error detected, skipping auto-recovery');
-      return;
+      if (gate.reason === 'infra-error') {
+        log.info({ projectId }, 'Infrastructure error detected, skipping auto-recovery');
+        return;
+      }
     }
 
     const advisoryPatterns = [/disk space/i, /no space left/i, /out of memory/i, /killed/i];
@@ -193,15 +277,24 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
       return;
     }
 
-    attempts.count++;
-    attempts.lastError = normalizeError(error);
-    recoveryAttempts.set(projectId, attempts);
+    const attempt = gate.recentFailedCount + 1;
+    const normalizedError = normalizeError(error);
     const recoveryStartTime = Date.now();
+
+    const latestBuildLog = buildLog ?? db.getLastDeployLog(projectId)?.build_log;
+    const combinedForMatch = `${error}\n${latestBuildLog ?? ''}`;
+    const recipe = matchRecipe(combinedForMatch);
+    const strategy = selectRecoveryStrategy(recipe !== null, agent !== null);
+    const actionRunId = db.createActionRun({
+      projectId,
+      triggerSource: 'auto_recovery',
+      recoveryStrategy: strategy,
+    });
 
     await eventBus.emit('recovery:start', {
       projectId,
       error,
-      attempt: attempts.count,
+      attempt,
     });
 
     questionBridge.setActiveProject(projectId);
@@ -209,7 +302,7 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     const project = db.getProject(projectId);
     const projectName = project?.name ?? projectId;
 
-    if (agent) {
+    if (strategy === 'llm' && agent) {
       await emitTimelineMessage(
         eventBus,
         projectId,
@@ -218,6 +311,7 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
 
       try {
         const sessionId = nanoid(12);
+        const contextSnapshot = await buildContextSnapshot(db);
         let recoveryMessage = `Deploy of "${projectName}" failed.
 
 ## Failure Context
@@ -231,6 +325,9 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
 ${buildLog.slice(-3000)}`
             : ''
         }
+
+## Server Context Snapshot
+${contextSnapshot}
 
 ${plan.agentGuidance}
 
@@ -247,6 +344,16 @@ ${plan.agentGuidance}
         await agent.chatStream(
           recoveryMessage,
           async (event) => {
+            if (event.type === 'tool_call' && HIGH_RISK_TOOLS.includes(event.toolName)) {
+              await eventBus.emit('recovery:approval-needed', {
+                projectId,
+                actionRunId,
+                toolName: event.toolName,
+                attempt,
+              });
+              throw new Error(`Approval required for high-risk tool: ${event.toolName}`);
+            }
+
             await eventBus.emit('agent:event', {
               projectId,
               event: { ...event, timestamp: new Date().toISOString() },
@@ -255,31 +362,38 @@ ${plan.agentGuidance}
           sessionId,
         );
 
-        const recovered = await waitForRecoveryOutcome(eventBus, projectId);
+        const timeoutMs = getDynamicOutcomeTimeoutMs(db, projectId);
+        const outcome = await waitForRecoveryOutcome(eventBus, projectId, timeoutMs);
         const durationMs = Date.now() - recoveryStartTime;
-        if (recovered) {
+        if (outcome.success) {
+          db.updateActionRunStatus(actionRunId, 'succeeded');
           await eventBus.emit('recovery:success', {
             projectId,
-            attempt: attempts.count,
+            attempt,
             durationMs,
-            lastError: attempts.lastError,
+            lastError: normalizedError,
           });
-          recoveryAttempts.delete(projectId);
         } else {
+          const failureReason = outcome.timedOut
+            ? `Recovery verification timed out after ${String(Math.round(timeoutMs / 1000))}s`
+            : error;
+          db.updateActionRunStatus(actionRunId, 'failed', failureReason);
           await eventBus.emit('recovery:failed', {
             projectId,
-            error,
-            attempt: attempts.count,
+            error: failureReason,
+            attempt,
           });
         }
 
         return;
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : error;
+        db.updateActionRunStatus(actionRunId, 'failed', errorMessage);
         log.error({ err, projectId }, 'Auto-recovery agent call failed');
         await eventBus.emit('recovery:failed', {
           projectId,
-          error: err instanceof Error ? err.message : error,
-          attempt: attempts.count,
+          error: errorMessage,
+          attempt,
         });
         return;
       }
@@ -289,12 +403,11 @@ ${plan.agentGuidance}
       await emitTimelineMessage(
         eventBus,
         projectId,
-        'No API key detected - running programmatic recovery recipe.',
+        agent
+          ? 'Recipe-based recovery selected for known failure pattern.'
+          : 'No API key detected - running programmatic recovery recipe.',
       );
 
-      const latestBuildLog = buildLog ?? db.getLastDeployLog(projectId)?.build_log;
-      const combinedForMatch = `${error}\n${latestBuildLog ?? ''}`;
-      const recipe = matchRecipe(combinedForMatch);
       if (recipe) {
         await emitTimelineMessage(
           eventBus,
@@ -332,26 +445,29 @@ ${plan.agentGuidance}
 
       const durationMs = Date.now() - recoveryStartTime;
       if (redeploySuccess) {
+        db.updateActionRunStatus(actionRunId, 'succeeded');
         await eventBus.emit('recovery:success', {
           projectId,
-          attempt: attempts.count,
+          attempt,
           durationMs,
-          lastError: attempts.lastError,
+          lastError: normalizedError,
         });
-        recoveryAttempts.delete(projectId);
       } else {
+        db.updateActionRunStatus(actionRunId, 'failed', redeployError);
         await eventBus.emit('recovery:failed', {
           projectId,
           error: redeployError,
-          attempt: attempts.count,
+          attempt,
         });
       }
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : error;
+      db.updateActionRunStatus(actionRunId, 'failed', errorMessage);
       log.error({ err, projectId }, 'Programmatic auto-recovery failed');
       await eventBus.emit('recovery:failed', {
         projectId,
-        error: err instanceof Error ? err.message : error,
-        attempt: attempts.count,
+        error: errorMessage,
+        attempt,
       });
     }
   }

@@ -79,6 +79,7 @@ export type EventType =
   | 'recovery:success'
   | 'recovery:failed'
   | 'recovery:exhausted'
+  | 'recovery:approval-needed'
   | 'env:new-keys-detected'
   | 'rollback:suggested'
   | 'secret:detected'
@@ -273,6 +274,14 @@ export interface EventPayload {
     projectId: string;
     totalAttempts: number;
     lastError: string;
+    source?: string;
+    identity?: RequestIdentity;
+  };
+  'recovery:approval-needed': {
+    projectId: string;
+    actionRunId: string;
+    toolName: string;
+    attempt: number;
     source?: string;
     identity?: RequestIdentity;
   };
