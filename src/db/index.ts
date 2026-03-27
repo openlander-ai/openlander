@@ -20,6 +20,8 @@ import { WebhookRepo } from './repos/webhook.repo.js';
 import { DeployPlanRepo } from './repos/deploy-plan.repo.js';
 import { DeployConfigRepo } from './repos/deploy-config.repo.js';
 import { AuthRepo } from './repos/auth.repo.js';
+import { AiUsageLogRepo } from './repos/ai-usage-log.repo.js';
+import { ActionRunRepo } from './repos/action-run.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 
@@ -60,30 +62,35 @@ export class Database implements AuthDatabase {
    private readonly deployPlanRepo: DeployPlanRepo;
    private readonly deployConfigRepo: DeployConfigRepo;
    private readonly authRepo: AuthRepo;
+   private readonly aiUsageLogRepo: AiUsageLogRepo;
+   private readonly actionRunRepo: ActionRunRepo;
 
    constructor(dbPath: string) {
-     mkdirSync(dirname(dbPath), { recursive: true });
-     const { sqlite, db } = createDrizzleDatabase(dbPath);
-     this.sqlite = sqlite;
-     this.db = db;
-     initializeDatabase(this.sqlite);
-     this.projectRepo = new ProjectRepo(this.db, this.sqlite);
-     this.environmentRepo = new EnvironmentRepo(this.db, this.sqlite);
-     this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);
-     this.globalSecretRepo = new GlobalSecretRepo(this.db, this.sqlite);
-     this.secretFileRepo = new SecretFileRepo(this.db, this.sqlite);
-      this.serviceRepo = new ServiceRepo(this.db, this.sqlite);
-      this.serviceConnectionRepo = new ServiceConnectionRepo(this.db, this.sqlite);
-      this.runtimeIncidentRepo = new RuntimeIncidentRepo(this.db, this.sqlite);
-      this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
-     this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
-     this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
-     this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
-     this.webhookRepo = new WebhookRepo(this.db, this.sqlite);
-     this.deployPlanRepo = new DeployPlanRepo(this.db, this.sqlite);
-     this.deployConfigRepo = new DeployConfigRepo(this.db, this.sqlite);
-     this.authRepo = new AuthRepo(this.db);
-   }
+      mkdirSync(dirname(dbPath), { recursive: true });
+      const { sqlite, db } = createDrizzleDatabase(dbPath);
+      this.sqlite = sqlite;
+      this.db = db;
+      initializeDatabase(this.sqlite);
+      this.projectRepo = new ProjectRepo(this.db, this.sqlite);
+      this.environmentRepo = new EnvironmentRepo(this.db, this.sqlite);
+      this.envVarRepo = new EnvVarRepo(this.db, this.sqlite);
+      this.globalSecretRepo = new GlobalSecretRepo(this.db, this.sqlite);
+      this.secretFileRepo = new SecretFileRepo(this.db, this.sqlite);
+       this.serviceRepo = new ServiceRepo(this.db, this.sqlite);
+       this.serviceConnectionRepo = new ServiceConnectionRepo(this.db, this.sqlite);
+       this.runtimeIncidentRepo = new RuntimeIncidentRepo(this.db, this.sqlite);
+       this.deployLogRepo = new DeployLogRepo(this.db, this.sqlite);
+      this.timelineRepo = new TimelineRepo(this.db, this.sqlite);
+      this.domainMappingRepo = new DomainMappingRepo(this.db, this.sqlite);
+      this.oauthRepo = new OAuthRepo(this.db, this.sqlite);
+      this.webhookRepo = new WebhookRepo(this.db, this.sqlite);
+      this.deployPlanRepo = new DeployPlanRepo(this.db, this.sqlite);
+      this.deployConfigRepo = new DeployConfigRepo(this.db, this.sqlite);
+      this.authRepo = new AuthRepo(this.db);
+      this.aiUsageLogRepo = new AiUsageLogRepo(this.db, this.sqlite);
+      this.actionRunRepo = new ActionRunRepo(this.db, this.sqlite);
+      this.actionRunRepo.markStaleAsFailedOnStartup();
+    }
 
   createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
   getProject(id: string) { return this.projectRepo.getProject(id); }
@@ -175,7 +182,15 @@ export class Database implements AuthDatabase {
    getSession() { return this.authRepo.getSession(); }
    createSession(token: string, createdAt: number, expiresAt: number) { this.authRepo.createSession(token, createdAt, expiresAt); }
    deleteSession() { this.authRepo.deleteSession(); }
-   getUsedPorts(): number[] { const projectPorts = this.db.select({ assigned_port: projects.assigned_port }).from(projects).where(isNotNull(projects.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...projectPorts, ...envPorts])]; }
-   transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
-   close() { this.sqlite.close(); }
+    getUsedPorts(): number[] { const projectPorts = this.db.select({ assigned_port: projects.assigned_port }).from(projects).where(isNotNull(projects.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); const envPorts = this.db.select({ assigned_port: environments.assigned_port }).from(environments).where(isNotNull(environments.assigned_port)).all().flatMap((r: { assigned_port: number | null }) => (r.assigned_port === null ? [] : [r.assigned_port])); return [...new Set([...projectPorts, ...envPorts])]; }
+    createAiUsageLog(data: Parameters<AiUsageLogRepo['create']>[0]) { return this.aiUsageLogRepo.create(data); }
+    getAiUsageLogsByProject(projectId: string) { return this.aiUsageLogRepo.findByProjectId(projectId); }
+    getAiUsageLogsByDateRange(from: Date, to: Date) { return this.aiUsageLogRepo.findByDateRange(from, to); }
+    getAiTokenSummary(projectId?: string) { return this.aiUsageLogRepo.getTokenSummary(projectId); }
+    createActionRun(data: Parameters<ActionRunRepo['create']>[0]) { return this.actionRunRepo.create(data); }
+    updateActionRunStatus(id: string, status: 'succeeded' | 'failed', errorMessage?: string) { this.actionRunRepo.updateStatus(id, status, errorMessage); }
+    getRunningActionRuns(projectId: string) { return this.actionRunRepo.findRunning(projectId); }
+    getActionRunsByProject(projectId: string, limit?: number) { return this.actionRunRepo.findByProjectId(projectId, limit); }
+    transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
+    close() { this.sqlite.close(); }
 }

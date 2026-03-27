@@ -374,4 +374,47 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     session_expires_at INTEGER,
     CHECK(id = 1)
   )`);
+
+  // ai_usage_log table (v1.0.0-ai)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ai_usage_log (
+    id TEXT PRIMARY KEY,
+    project_id TEXT,
+    session_id TEXT,
+    action_type TEXT NOT NULL CHECK(action_type IN ('web_agent', 'auto_recovery', 'build_debugger', 'monitor_alert')),
+    model_name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL,
+    tools_called TEXT NOT NULL DEFAULT '[]',
+    result TEXT NOT NULL CHECK(result IN ('success', 'failure', 'partial')),
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    user_id TEXT,
+    tenant_id TEXT,
+    source TEXT CHECK(source IN ('web', 'mcp', 'auto-recovery', 'monitor')),
+    created_at TEXT NOT NULL
+  )`);
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_project ON ai_usage_log(project_id)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_ai_usage_log_created_at ON ai_usage_log(created_at)');
+
+  // action_runs table (v1.0.0-ai)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS action_runs (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    trigger_source TEXT NOT NULL CHECK(trigger_source IN ('web_agent', 'auto_recovery', 'monitor', 'mcp')),
+    trigger_session_id TEXT,
+    status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed')),
+    error_message TEXT,
+    recovery_strategy TEXT CHECK(recovery_strategy IN ('recipe', 'llm', 'unknown')),
+    steps_json TEXT,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    tenant_id TEXT,
+    user_id TEXT,
+    created_at TEXT NOT NULL
+  )`);
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_project ON action_runs(project_id)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_status ON action_runs(status)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_created_at ON action_runs(created_at)');
 }

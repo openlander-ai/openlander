@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -382,6 +383,68 @@ export const auth = sqliteTable(
   (table) => [check('auth_id_check', sql`${table.id} = 1`)],
 );
 
+export const aiUsageLog = sqliteTable(
+  'ai_usage_log',
+  {
+    id: text('id').notNull().primaryKey(),
+    project_id: text('project_id'),
+    session_id: text('session_id'),
+    action_type: text('action_type', {
+      enum: ['web_agent', 'auto_recovery', 'build_debugger', 'monitor_alert'],
+    }).notNull(),
+    model_name: text('model_name').notNull().default(''),
+    provider: text('provider').notNull().default(''),
+    input_tokens: integer('input_tokens').notNull().default(0),
+    output_tokens: integer('output_tokens').notNull().default(0),
+    total_tokens: integer('total_tokens').notNull().default(0),
+    cost_usd: real('cost_usd'),
+    tools_called: text('tools_called').notNull().default('[]'),
+    result: text('result', { enum: ['success', 'failure', 'partial'] }).notNull(),
+    duration_ms: integer('duration_ms').notNull().default(0),
+    user_id: text('user_id'),
+    tenant_id: text('tenant_id'),
+    source: text('source', { enum: ['web', 'mcp', 'auto-recovery', 'monitor'] }),
+    created_at: text('created_at').notNull().default(''),
+  },
+  (table) => [
+    index('idx_ai_usage_log_project').on(table.project_id),
+    index('idx_ai_usage_log_created_at').on(table.created_at),
+  ],
+);
+
+export const actionRuns = sqliteTable(
+  'action_runs',
+  {
+    id: text('id').notNull().primaryKey(),
+    project_id: text('project_id').notNull().default(''),
+    trigger_source: text('trigger_source', {
+      enum: ['web_agent', 'auto_recovery', 'monitor', 'mcp'],
+    }).notNull(),
+    trigger_session_id: text('trigger_session_id'),
+    status: text('status', { enum: ['running', 'succeeded', 'failed'] })
+      .notNull()
+      .default('running'),
+    error_message: text('error_message'),
+    recovery_strategy: text('recovery_strategy', { enum: ['recipe', 'llm', 'unknown'] }),
+    steps_json: text('steps_json'),
+    started_at: text('started_at').notNull().default(''),
+    completed_at: text('completed_at'),
+    tenant_id: text('tenant_id'),
+    user_id: text('user_id'),
+    created_at: text('created_at').notNull().default(''),
+  },
+  (table) => [
+    index('idx_action_runs_project').on(table.project_id),
+    index('idx_action_runs_status').on(table.status),
+    index('idx_action_runs_created_at').on(table.created_at),
+  ],
+);
+
+export type AiUsageLogRow = typeof aiUsageLog.$inferSelect;
+export type NewAiUsageLog = typeof aiUsageLog.$inferInsert;
+export type ActionRunRow = typeof actionRuns.$inferSelect;
+export type NewActionRun = typeof actionRuns.$inferInsert;
+
 export const drizzleSchema = {
   projects,
   environments,
@@ -399,4 +462,6 @@ export const drizzleSchema = {
   secretFiles,
   deployPlans,
   auth,
+  aiUsageLog,
+  actionRuns,
 };

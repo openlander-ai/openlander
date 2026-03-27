@@ -190,3 +190,39 @@ export interface AuthRow {
   session_created_at: number | null;
   session_expires_at: number | null;
 }
+
+export interface AiUsageLogRow {
+  id: string;
+  project_id: string | null;
+  session_id: string | null;
+  action_type: 'web_agent' | 'auto_recovery' | 'build_debugger' | 'monitor_alert';
+  model_name: string;
+  provider: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number | null;
+  tools_called: string;
+  result: 'success' | 'failure' | 'partial';
+  duration_ms: number;
+  user_id: string | null;
+  tenant_id: string | null;
+  source: 'web' | 'mcp' | 'auto-recovery' | 'monitor' | null;
+  created_at: string;
+}
+
+export interface ActionRunRow {
+  id: string;
+  project_id: string;
+  trigger_source: 'web_agent' | 'auto_recovery' | 'monitor' | 'mcp';
+  trigger_session_id: string | null;
+  status: 'running' | 'succeeded' | 'failed';
+  error_message: string | null;
+  recovery_strategy: 'recipe' | 'llm' | 'unknown' | null;
+  steps_json: string | null;
+  started_at: string;
+  completed_at: string | null;
+  tenant_id: string | null;
+  user_id: string | null;
+  created_at: string;
+}
