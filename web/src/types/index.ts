@@ -11,6 +11,8 @@ export interface Environment {
   imageTag: string | null;
   previousImageTag: string | null;
   publicUrl: string | null;
+  url?: string;
+  urls?: { url: string; type: 'lan' | 'vpn'; ip: string }[];
   createdAt: string;
   updatedAt: string;
 }

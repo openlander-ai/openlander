@@ -9,7 +9,6 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
-  ExternalLink,
   RotateCw,
   Play,
   Square,
@@ -27,6 +26,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useSetup } from '@/hooks/use-setup.js';
 import { AISparkle } from '@/components/ui/AISparkle';
+import { DomainUrlDisplay } from './DomainUrlDisplay';
 import type { Project, Environment, EnvironmentType } from '@/types';
 
 interface ProjectHeaderProps {
@@ -85,7 +85,6 @@ export function ProjectHeader({
   const displayStatus = selectedEnv ? selectedEnv.status : project.status;
   const displayBranch = selectedEnv ? selectedEnv.branch : project.branch;
   const displayPublicUrl = selectedEnv ? selectedEnv.publicUrl : project.publicUrl;
-  const displayUrl = currentEnvType === 'production' ? project.url : undefined;
 
   const status = statusConfig[displayStatus] ?? statusConfig.stopped;
   const isBuilding = displayStatus === 'building';
@@ -255,32 +254,12 @@ export function ProjectHeader({
                   {displayBranch}
                 </span>
               )}
-              {displayUrl && (
-                <a
-                  href={displayUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-agent hover:text-agent/80 transition-colors"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  {displayUrl.replace(/^https?:\/\//, '')}
-                </a>
-              )}
-              {currentEnvType === 'production' &&
-                project.urls
-                  ?.filter((u) => u.type === 'vpn')
-                  .map((vpn) => (
-                    <a
-                      key={vpn.ip}
-                      href={vpn.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-purple-400 hover:text-purple-300 transition-colors"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      <span className="text-xs">{vpn.url.replace(/^https?:\/\//, '')}</span>
-                    </a>
-                  ))}
+              <DomainUrlDisplay
+                publicUrl={displayPublicUrl}
+                urls={
+                  selectedEnv?.urls || (currentEnvType === 'production' ? project.urls : undefined)
+                }
+              />
             </div>
             {displayPublicUrl && (
               <a

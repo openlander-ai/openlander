@@ -20,6 +20,7 @@ interface ProjectDetailTabsProps {
   timelineDisconnected?: boolean;
   selectedEnvId?: string;
   currentEnvType?: string;
+  envFade?: boolean;
   onRedeploy: () => void;
   onStop: () => void;
   onRollback: () => void;
@@ -35,6 +36,7 @@ export function ProjectDetailTabs({
   isStreaming,
   selectedEnvId,
   currentEnvType,
+  envFade,
   onRedeploy,
   onStop,
   onRollback,
@@ -44,6 +46,7 @@ export function ProjectDetailTabs({
       value={activeTab}
       onValueChange={onActiveTabChange}
       className="flex-1 flex flex-col min-h-0"
+      style={{ opacity: envFade ? 0.5 : 1, transition: 'opacity 150ms ease-in-out' }}
     >
       <TabsList
         className={cn(
