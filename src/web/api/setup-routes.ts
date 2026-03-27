@@ -219,6 +219,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       },
     });
 
+    ctx.agentPool = null;
     ctx.agent = null;
     log.info('LLM configuration removed');
 

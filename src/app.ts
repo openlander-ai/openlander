@@ -35,6 +35,8 @@ import type { LanguageModel } from 'ai';
 import { buildContextSnapshot } from './llm/prompts.js';
 import { createModuleLogger } from './lib/logger.js';
 import { setupAutoRecovery } from './pipeline/auto-recovery.js';
+import { AgentPool } from './llm/agent-pool.js';
+import { createTools } from './tools/index.js';
 
 const log = createModuleLogger('app');
 
@@ -55,6 +57,7 @@ export interface AppContext {
   composePipeline: ComposePipeline;
   traefik: TraefikManager;
   env: EnvManager;
+  agentPool: AgentPool | null;
   agent: Agent | null;
   model: LanguageModel | null;
   deployQueue: DeployQueue;
@@ -156,9 +159,13 @@ export async function createAppContext(
 
   const autoDetector = new AutoDetector(model);
 
+  const webAgentEnabled = config.ai.webAgent.enabled;
+  const autoRecoveryEnabled = config.ai.autoRecovery.enabled;
+  const buildDebuggerEnabled = config.ai.buildDebugger.enabled;
+
   // v0.3: Build debugger (requires LLM) — created before pipeline so it can be injected
   let buildDebugger: BuildDebugger | null = null;
-  if (model) {
+  if (model && buildDebuggerEnabled) {
     try {
       buildDebugger = new BuildDebugger(model, config.language);
     } catch (err) {
@@ -168,12 +175,11 @@ export async function createAppContext(
 
   const pipeline = new DeployPipeline(docker, db, env, jobManager, composePipeline, autoDetector);
 
-  // Create agent only if LLM is configured
+  let agentPool: AgentPool | null = null;
   let agent: Agent | null = null;
-  if (model) {
+  if (model && webAgentEnabled) {
     try {
-      // contextProvider: lazily captures `ctx` — resolved when chat() is called, not here
-      agent = new Agent(
+      agentPool = new AgentPool(
         model,
         db,
         async () => buildContextSnapshot(db, docker),
@@ -181,13 +187,35 @@ export async function createAppContext(
         config.language,
       );
     } catch (err) {
-      log.debug({ err }, 'Agent creation failed — agent will be null');
+      log.debug({ err }, 'AgentPool creation failed — web agent disabled');
+      agentPool = null;
+    }
+  }
+
+  if (model && autoRecoveryEnabled) {
+    if (agentPool) {
+      agent = agentPool.getRecoveryAgent();
+    } else {
+      try {
+        agent = new Agent(
+          model,
+          db,
+          async () => buildContextSnapshot(db, docker),
+          config.llm.provider,
+          config.language,
+        );
+      } catch (err) {
+        log.debug({ err }, 'Recovery agent creation failed — agent will be null');
+      }
     }
   }
 
   // v0.7: Question bridge (agent ↔ UI)
   const questionBridge = new QuestionBridge();
   questionBridge.setEventBus(eventBus);
+  if (agentPool) {
+    agentPool.setQuestionBridge(questionBridge);
+  }
   if (agent) {
     agent.setQuestionBridge(questionBridge);
   }
@@ -207,9 +235,9 @@ export async function createAppContext(
 
   setupAutoRecovery({
     eventBus,
-    agent,
+    agent: autoRecoveryEnabled ? agent : null,
     db,
-    buildDebugger,
+    buildDebugger: buildDebuggerEnabled ? buildDebugger : null,
     deployQueue,
     pipeline,
     questionBridge,
@@ -316,6 +344,9 @@ export async function createAppContext(
   });
 
   // Build partial ctx without channelManager, then compose the full AppContext
+  let mutableAgentPool = agentPool;
+  let mutableAgent = agent;
+
   const partialCtx = {
     config,
     db,
@@ -324,7 +355,21 @@ export async function createAppContext(
     composePipeline,
     traefik,
     env,
-    agent,
+    get agentPool() {
+      return mutableAgentPool;
+    },
+    set agentPool(value: AgentPool | null) {
+      if (mutableAgentPool && value === null) {
+        mutableAgentPool.invalidateAll();
+      }
+      mutableAgentPool = value;
+    },
+    get agent() {
+      return mutableAgent ?? mutableAgentPool?.getRecoveryAgent() ?? null;
+    },
+    set agent(value: Agent | null) {
+      mutableAgent = value;
+    },
     model,
     deployQueue,
     healthMonitor,
@@ -345,6 +390,14 @@ export async function createAppContext(
   // v0.4: ChannelManager needs AppContext but never self-references channelManager.
   // We cast partialCtx which is structurally complete for ChannelManager's actual usage.
   const channelManager = new ChannelManager(partialCtx as AppContext);
+  const ctx: AppContext = { ...partialCtx, channelManager };
+
+  if (ctx.agentPool) {
+    const tools = createTools(ctx, ctx.questionBridge);
+    ctx.agentPool.setTools(tools);
+    ctx.agentPool.setQuestionBridge(ctx.questionBridge);
+  }
+
   const incidentReporter = new IncidentReporter(channelManager, eventBus, db, config);
   incidentReporter.start();
   activeIncidentReporter = incidentReporter;
@@ -359,7 +412,7 @@ export async function createAppContext(
   rollbackWatcher.start();
   activeRollbackWatcher = rollbackWatcher;
 
-  return { ...partialCtx, channelManager };
+  return ctx;
 }
 
 /** Shutdown the application context. */
