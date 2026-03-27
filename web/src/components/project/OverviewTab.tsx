@@ -106,6 +106,8 @@ interface OverviewTabProps {
   projectStatus: string;
   displayProject?: Project;
   environments?: Environment[];
+  selectedEnvId?: string;
+  currentEnvType?: string;
   // Timeline props
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
@@ -125,6 +127,8 @@ export function OverviewTab({
   projectStatus,
   displayProject,
   environments,
+  selectedEnvId, // eslint-disable-line @typescript-eslint/no-unused-vars
+  currentEnvType, // eslint-disable-line @typescript-eslint/no-unused-vars
   timelineItems,
   isTimelineStreaming,
   timelineDisconnected,

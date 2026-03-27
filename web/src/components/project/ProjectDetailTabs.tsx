@@ -92,6 +92,8 @@ export function ProjectDetailTabs({
             projectStatus={displayProject.status}
             displayProject={displayProject}
             environments={environments}
+            selectedEnvId={selectedEnvId}
+            currentEnvType={currentEnvType}
             timelineItems={allTimelineItems}
             isTimelineStreaming={isStreaming}
             onOpenLogs={() => onActiveTabChange('console')}
