@@ -1,5 +1,5 @@
 import { Spinner } from '@/components/ui/spinner';
-import type { ProjectWithOptionalEnvironments } from '@/lib/api';
+import type { Project } from '@/types';
 import { getSetupStatus } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ interface StatusDisplay {
 }
 
 interface ProjectCardProps {
-  project: ProjectWithOptionalEnvironments;
+  project: Project;
   statusConfig: Record<string, StatusDisplay>;
   redeployingId: string | null;
   onNavigate: (path: string) => void;
@@ -32,7 +32,6 @@ export function ProjectCard({
   onRedeploy,
   t,
 }: ProjectCardProps) {
-  const environments = project.environments ?? [];
   const [llmConfigured, setLlmConfigured] = useState(false);
 
   useEffect(() => {
@@ -42,11 +41,6 @@ export function ProjectCard({
   }, []);
 
   const status = statusConfig[project.status] ?? statusConfig.stopped;
-
-  const hasProd = environments.some((environment) => environment.type === 'production');
-  const allEnvironments = hasProd
-    ? environments
-    : [{ type: 'production', status: project.status }, ...environments];
 
   return (
     <div
@@ -71,31 +65,6 @@ export function ProjectCard({
           <h3 className="font-display font-semibold text-base text-primary-ol truncate">
             {project.name}
           </h3>
-          <div className="flex items-center gap-1.5 ml-1">
-            {allEnvironments.map((env) => {
-              if (env.type === 'development' && !environments.some((e) => e.type === 'development'))
-                return null;
-              const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
-              return (
-                <button
-                  key={env.type}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    onNavigate(`/projects/${project.id}?env=${env.type}`);
-                  }}
-                  className={cn(
-                    'flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-[10px] font-mono text-secondary-ol',
-                    'cursor-pointer transition-all hover:ring-1 hover:ring-current/30',
-                  )}
-                  title={`${env.type} - ${envStatus.label}`}
-                >
-                  <div className={cn('h-1.5 w-1.5 rounded-full', envStatus.dot)} />
-                  {env.type === 'production' ? 'PROD' : 'DEV'}
-                </button>
-              );
-            })}
-          </div>
         </div>
         <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium shrink-0', status.badge)}>
           {statusConfig[project.status]?.label ?? 'Unknown'}

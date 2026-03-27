@@ -1,4 +1,4 @@
-import type { ProjectWithOptionalEnvironments } from '@/lib/api';
+import type { Project } from '@/types';
 import { formatRelativeTime } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
@@ -10,7 +10,7 @@ interface StatusDisplay {
 }
 
 interface ProjectTableProps {
-  projects: ProjectWithOptionalEnvironments[];
+  projects: Project[];
   statusConfig: Record<string, StatusDisplay>;
   onNavigate: (path: string) => void;
   t: (key: string) => string;
@@ -37,13 +37,7 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
         </thead>
         <tbody>
           {projects.map((project) => {
-            const environments = project.environments ?? [];
             const status = statusConfig[project.status] ?? statusConfig.stopped;
-
-            const hasProd = environments.some((environment) => environment.type === 'production');
-            const allEnvironments = hasProd
-              ? environments
-              : [{ type: 'production', status: project.status }, ...environments];
 
             return (
               <tr
@@ -51,31 +45,7 @@ export function ProjectTable({ projects, statusConfig, onNavigate, t }: ProjectT
                 onClick={() => onNavigate(`/projects/${project.id}`)}
                 className="border-b border-[hsl(var(--border))] last:border-0 hover:bg-bg-subtle/50 cursor-pointer transition-colors"
               >
-                <td className="px-4 py-3 font-medium text-primary-ol">
-                  <div className="flex items-center gap-2">
-                    {project.name}
-                    <div className="flex items-center gap-1.5">
-                      {allEnvironments.map((env) => {
-                        if (
-                          env.type === 'development' &&
-                          !environments.some((e) => e.type === 'development')
-                        )
-                          return null;
-                        const envStatus = statusConfig[env.status] ?? statusConfig.stopped;
-                        return (
-                          <div
-                            key={env.type}
-                            className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-subtle border border-[hsl(var(--border))] text-[10px] font-mono text-secondary-ol"
-                            title={`${env.type} - ${envStatus.label}`}
-                          >
-                            <div className={cn('h-1.5 w-1.5 rounded-full', envStatus.dot)} />
-                            {env.type === 'production' ? 'PROD' : 'DEV'}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </td>
+                <td className="px-4 py-3 font-medium text-primary-ol">{project.name}</td>
                 <td className="px-4 py-3">
                   <span className="inline-flex items-center gap-1.5">
                     <span className={cn('h-2 w-2 rounded-full', status.dot)} />
