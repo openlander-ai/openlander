@@ -70,6 +70,8 @@ export interface BuildStreamEvent {
   durationMs?: number;
   logChunk?: string;
   sourceProjectId?: string;
+  tokenCount?: number;
+  costUsd?: number | null;
 }
 
 /** Action button for insight/anomaly timeline items */
@@ -133,6 +135,8 @@ export interface TimelineItem {
   toolSuccess?: boolean;
   /** Present only for agent_thinking items — detailed thinking content */
   content?: string;
+  tokenCount?: number;
+  costUsd?: number | null;
 }
 
 /** Message pattern → progress percentage mapping */
@@ -326,6 +330,8 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         percent: -1,
         retryCount: event.retryCount,
         actionButtons: event.actionButtons,
+        tokenCount: event.tokenCount,
+        costUsd: event.costUsd,
         ...scopedMeta,
       };
     default:

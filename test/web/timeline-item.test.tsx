@@ -7,6 +7,7 @@ interface HookDispatcher {
   useState<T>(initial: T | (() => T)): readonly [T, (next: T | ((value: T) => T)) => void];
   useEffect(effect: () => void | (() => void)): void;
   useMemo<T>(factory: () => T): T;
+  useId(): string;
 }
 
 interface ReactClientInternals {
@@ -43,6 +44,11 @@ const hookDispatcher: HookDispatcher = {
   },
   useMemo(factory) {
     return factory();
+  },
+  useId() {
+    const slotIndex = hookIndex;
+    hookIndex += 1;
+    return `id-${slotIndex}`;
   },
 };
 
@@ -104,6 +110,10 @@ vi.mock('../../web/src/components/timeline/InputRequestCard.js', () => ({
 
 vi.mock('../../web/src/components/timeline/RecoveryCard.js', () => ({
   RecoveryCard: ({ item }: { item: { title: string } }) => item.title,
+}));
+
+vi.mock('../../web/src/components/ui/AISparkle.js', () => ({
+  AISparkle: () => 'AISparkle',
 }));
 
 vi.mock('lucide-react', () => ({

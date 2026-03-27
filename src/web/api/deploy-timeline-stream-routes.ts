@@ -485,6 +485,8 @@ function registerRecoveryEventHandlers(handlerCtx: StreamHandlerContext): Array<
         message: `Recovery Successful (attempt ${String(payload.attempt)}, ${String(Math.round(payload.durationMs / 1000))}s)`,
         projectId: project.id,
         durationMs: payload.durationMs,
+        tokenCount: payload.tokenCount,
+        costUsd: payload.costUsd,
       });
     }),
     eventBus.on('recovery:failed', (payload) => {
@@ -630,7 +632,14 @@ function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow
         severity: data.severity,
         percent: data.percent,
         toolName: data.toolName,
-        actionButtons: data.actionButtons ? JSON.stringify(data.actionButtons) : undefined,
+        actionButtons:
+          data.actionButtons || data.tokenCount !== undefined || data.costUsd !== undefined
+            ? JSON.stringify({
+                buttons: data.actionButtons,
+                tokenCount: data.tokenCount,
+                costUsd: data.costUsd,
+              })
+            : undefined,
         createdAt: eventTimestamp,
       });
 
@@ -695,6 +704,25 @@ function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow
   });
 }
 
+interface ParsedActionButtons {
+  buttons?: unknown[];
+  tokenCount?: number;
+  costUsd?: number | null;
+}
+
+function parseActionButtons(raw: string | null | undefined): ParsedActionButtons {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as ParsedActionButtons;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
 export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): void {
   api.get('/projects/:id/timeline', (c) => {
     const id = c.req.param('id');
@@ -704,26 +732,23 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
     const events = ctx.db.getTimelineEvents(project.id).reverse();
 
     return c.json({
-      events: events.map((event) => ({
-        id: event.id,
-        type: event.type,
-        message: event.message,
-        detail: event.detail,
-        severity: event.severity,
-        percent: event.percent,
-        toolName: event.tool_name,
-        actionButtons: (() => {
-          if (!event.action_buttons) return undefined;
-          try {
-            return JSON.parse(event.action_buttons) as unknown;
-          } catch (err) {
-            void err;
-            return undefined;
-          }
-        })(),
-        projectId: event.project_id,
-        timestamp: event.created_at,
-      })),
+      events: events.map((event) => {
+        const parsedButtons = parseActionButtons(event.action_buttons);
+        return {
+          id: event.id,
+          type: event.type,
+          message: event.message,
+          detail: event.detail,
+          severity: event.severity,
+          percent: event.percent,
+          toolName: event.tool_name,
+          actionButtons: parsedButtons.buttons,
+          tokenCount: parsedButtons.tokenCount,
+          costUsd: parsedButtons.costUsd,
+          projectId: event.project_id,
+          timestamp: event.created_at,
+        };
+      }),
     });
   });
 

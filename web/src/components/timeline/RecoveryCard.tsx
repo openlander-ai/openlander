@@ -106,6 +106,14 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
               : isStart
                 ? t('timeline.recovery.inProgress')
                 : t('timeline.recovery.options')}
+            {item.tokenCount != null && (
+              <span className="text-xs text-muted-foreground ml-2 font-normal">
+                — {item.tokenCount.toLocaleString()} tokens
+                {item.costUsd != null && item.costUsd > 0 && (
+                  <span> (${item.costUsd.toFixed(3)})</span>
+                )}
+              </span>
+            )}
           </p>
 
           {item.actionButtons && item.actionButtons.length > 0 && (
