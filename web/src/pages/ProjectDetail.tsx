@@ -374,7 +374,9 @@ export function ProjectDetail() {
       branch: selectedEnv.branch,
       publicUrl: selectedEnv.publicUrl,
       port: selectedEnv.assignedPort ?? project.port,
-      url: currentEnvType === 'production' ? project.url : undefined,
+      url: selectedEnv.url || (currentEnvType === 'production' ? project.url : undefined),
+      urls: selectedEnv.urls || (currentEnvType === 'production' ? project.urls : undefined),
+      previousImageTag: selectedEnv.previousImageTag ?? project.previousImageTag,
     };
   }, [project, selectedEnv, currentEnvType]);
 
