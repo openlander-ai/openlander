@@ -85,6 +85,7 @@ export interface AppContext {
   // v1.0 modules
   mcpClientManager: McpClientManager;
   planEngine: PlanEngine;
+  llmVerified: boolean;
 }
 
 /** Reset projects and environments stuck in 'building' status from a previous server run. */
@@ -419,6 +420,7 @@ export async function createAppContext(
     approvalGate,
     mcpClientManager,
     planEngine,
+    llmVerified: false,
   };
 
   // v0.4: ChannelManager needs AppContext but never self-references channelManager.

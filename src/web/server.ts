@@ -115,10 +115,14 @@ function createApp(
       // Docker not accessible
     }
 
+    const llmStatus: 'online' | 'offline' | 'error' =
+      ctx.agent === null ? 'offline' : ctx.llmVerified ? 'online' : 'error';
+
     return c.json({
       status: 'ok',
       version: VERSION,
-      llmConfigured: ctx.agent !== null,
+      llmConfigured: llmStatus === 'online',
+      llmStatus,
       timestamp: new Date().toISOString(),
       uptime,
       dockerContainers,
@@ -292,6 +296,25 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
 
   // v0.4: Start channel connections
   void ctx.channelManager.start();
+
+  void verifyLlmOnStartup(ctx);
+}
+
+async function verifyLlmOnStartup(ctx: AppContext): Promise<void> {
+  if (!ctx.model) return;
+  try {
+    const { generateText } = await import('ai');
+    await generateText({
+      model: ctx.model,
+      prompt: 'Respond with exactly: ok',
+      maxOutputTokens: 5,
+    });
+    ctx.llmVerified = true;
+    log.info('LLM connectivity verified');
+  } catch (err) {
+    ctx.llmVerified = false;
+    log.warn({ err }, 'LLM connectivity check failed');
+  }
 }
 
 // --- Unix Socket Daemon ---
@@ -337,6 +360,8 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
 
   // v0.4: Start channel connections
   void ctx.channelManager.start();
+
+  void verifyLlmOnStartup(ctx);
 
   // Handle graceful shutdown
   const cleanup = (): void => {

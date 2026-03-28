@@ -27,7 +27,7 @@ export function Header({
   onNotificationAction,
   onMenuClick,
 }: HeaderProps) {
-  const [llmConnected, setLlmConnected] = useState<boolean | null>(null);
+  const [llmStatus, setLlmStatus] = useState<'online' | 'offline' | 'error' | null>(null);
   const [version, setVersion] = useState<string | null>(null);
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -40,12 +40,15 @@ export function Header({
         const res = await fetch('/health');
         if (res.ok) {
           const data = await res.json();
-          setLlmConnected(data.llmConfigured === true);
+          setLlmStatus(
+            (data.llmStatus as 'online' | 'offline' | 'error') ??
+              (data.llmConfigured ? 'online' : 'offline'),
+          );
           if (data.version) setVersion(data.version);
         }
       } catch (e) {
         console.error('Health check failed', e);
-        setLlmConnected(false);
+        setLlmStatus('offline');
       }
     };
 
@@ -190,25 +193,35 @@ export function Header({
         <div
           className="flex items-center gap-1.5"
           title={
-            llmConnected === null
+            llmStatus === null
               ? 'Checking LLM...'
-              : llmConnected
+              : llmStatus === 'online'
                 ? 'LLM Connected'
-                : t('header.llmNotConfigured')
+                : llmStatus === 'error'
+                  ? 'LLM configured but not reachable'
+                  : t('header.llmNotConfigured')
           }
         >
           <div
             className={cn(
               'h-2 w-2 rounded-full transition-colors duration-300',
-              llmConnected === null
+              llmStatus === null
                 ? 'bg-muted-foreground/40'
-                : llmConnected
+                : llmStatus === 'online'
                   ? 'bg-ai animate-pulse shadow-[0_0_6px_rgba(244,63,94,0.25)]'
-                  : 'bg-error',
+                  : llmStatus === 'error'
+                    ? 'bg-warning animate-pulse'
+                    : 'bg-muted-foreground/40',
             )}
           />
           <span className="hidden sm:inline text-xs font-body text-secondary-ol">
-            {llmConnected === null ? '...' : llmConnected ? 'AI Online' : 'AI Offline'}
+            {llmStatus === null
+              ? '...'
+              : llmStatus === 'online'
+                ? 'AI Online'
+                : llmStatus === 'error'
+                  ? 'AI Error'
+                  : 'AI Offline'}
           </span>
         </div>
       </div>

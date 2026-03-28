@@ -148,7 +148,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     });
 
     try {
-      await reloadAgent(ctx, {
+      const llmModel = await reloadAgent(ctx, {
         provider: provider as OpenLanderConfig['llm']['provider'],
         apiKey,
         authToken: resolvedAuthToken || undefined,
@@ -156,14 +156,30 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         language: ctx.config.language,
       });
 
+      try {
+        const { generateText } = await import('ai');
+        await generateText({
+          model: llmModel,
+          prompt: 'Respond with exactly: ok',
+          maxOutputTokens: 5,
+        });
+        ctx.llmVerified = true;
+      } catch {
+        ctx.llmVerified = false;
+      }
+
       return c.json({
         status: 'configured',
         provider: body.provider,
         model,
         hot_reloaded: true,
-        message: 'LLM configured and ready. No restart needed.',
+        llmVerified: ctx.llmVerified,
+        message: ctx.llmVerified
+          ? 'LLM configured and verified.'
+          : 'LLM configured but connectivity test failed. Check your API key.',
       });
     } catch (error) {
+      ctx.llmVerified = false;
       return c.json({
         status: 'configured',
         provider: body.provider,
@@ -205,9 +221,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         maxOutputTokens: 5,
       });
       const latencyMs = Date.now() - start;
+      ctx.llmVerified = true;
 
       return c.json({ ok: true, latencyMs, provider, model: config.llm.model });
     } catch (error) {
+      ctx.llmVerified = false;
       return c.json({
         ok: false,
         error: error instanceof Error ? error.message : String(error),
@@ -227,6 +245,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     ctx.agentPool = null;
     ctx.agent = null;
+    ctx.llmVerified = false;
     log.info('LLM configuration removed');
 
     return c.json({ status: 'removed', message: 'LLM configuration cleared.' });
@@ -471,6 +490,8 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       routes: normalizedLlm.routes,
     });
 
+    ctx.llmVerified = false;
+
     return c.json({ status: 'added', id: body.id });
   });
 
@@ -484,10 +505,30 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     }
 
     if (Object.keys(providers).length === 1) {
-      return c.json(
-        { error: 'LAST_PROVIDER', message: 'Cannot delete the only registered provider' },
-        400,
-      );
+      const updated = {
+        ...config,
+        llm: {
+          ...config.llm,
+          provider: 'gemini' as const,
+          apiKey: '',
+          authToken: '',
+          model: 'gemini-2.0-flash',
+          providers: {},
+          defaultRoute: { providerId: '__none__' },
+          routes: {},
+        },
+      };
+      saveConfig(updated);
+      ctx.config = updated;
+      ctx.agentPool = null;
+      ctx.agent = null;
+      ctx.llmVerified = false;
+      ctx.modelRegistry.updateConfig({
+        providers: {},
+        defaultRoute: { providerId: '__none__' },
+      });
+      log.info({ providerId: id }, 'Last LLM provider removed, AI disconnected');
+      return c.json({ status: 'removed', id, llmDisconnected: true });
     }
 
     const defaultProviderId = config.llm.defaultRoute?.providerId;
