@@ -45,10 +45,12 @@ interface GithubStepProps {
   deviceFlow: DeviceFlow | null;
   githubToken: string;
   githubConnecting: boolean;
+  githubDisconnecting: boolean;
   githubError: string;
   copiedCode: boolean;
   onSetGithubToken: (token: string) => void;
   onConnectGithub: (e: React.FormEvent) => Promise<void>;
+  onDisconnectGithub: () => Promise<void>;
   onStartDeviceFlow: () => Promise<void>;
   onCopyCode: () => Promise<void>;
   onCancelDeviceFlow: () => void;
@@ -61,10 +63,12 @@ export function GithubStep({
   deviceFlow,
   githubToken,
   githubConnecting,
+  githubDisconnecting,
   githubError,
   copiedCode,
   onSetGithubToken,
   onConnectGithub,
+  onDisconnectGithub,
   onStartDeviceFlow,
   onCopyCode,
   onCancelDeviceFlow,
@@ -98,9 +102,32 @@ export function GithubStep({
           <p className="text-sm font-body text-muted-ol">{t('setup.github.description')}</p>
 
           {status?.github?.ok ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg border border-success/20 bg-success/5 text-success">
-              <CheckCircle2 className="w-4 h-4" />
-              <span className="text-sm font-medium">Connected as {status.github.username}</span>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 p-3 rounded-lg border border-success/20 bg-success/5 text-success">
+                <div className="flex items-center gap-2 min-w-0">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span className="text-sm font-medium truncate">
+                    {t('setup.github.connectedAs', {
+                      username: status.github.username ?? 'unknown',
+                    })}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs font-body text-error hover:text-error hover:bg-error/10"
+                  onClick={() => void onDisconnectGithub()}
+                  disabled={githubDisconnecting}
+                >
+                  {githubDisconnecting ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    t('setup.github.switchAccount')
+                  )}
+                </Button>
+              </div>
+              {githubError && <p className="text-sm font-body text-error">{githubError}</p>}
             </div>
           ) : deviceFlow ? (
             <DeviceFlowUI

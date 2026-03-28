@@ -14,6 +14,8 @@ export const translations = {
       title: '준비 완료',
       subtitle: '레포지토리 배포를 시작하려면 GitHub 계정을 연결하세요.',
       description: '비공개 레포지토리 배포용입니다. 공개 레포는 없어도 됩니다.',
+      connectedAs: '{username} 계정으로 연결됨',
+      switchAccount: '계정 전환',
     },
     language: {
       title: '언어',

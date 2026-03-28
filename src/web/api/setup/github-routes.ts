@@ -6,7 +6,17 @@ import type { AppContext } from '../../../app.js';
 import { updateConfig } from '../../../config/index.js';
 import { createGitProvider } from '../../../git-providers/index.js';
 
-export function createGithubSetupRoutes(_ctx: AppContext): Hono {
+function syncRuntimeGithubConfig(
+  ctx: AppContext,
+  github: { token: string; username: string; authMethod?: 'oauth' | 'pat' },
+): void {
+  ctx.config.gitProviders.github = {
+    ...ctx.config.gitProviders.github,
+    ...github,
+  };
+}
+
+export function createGithubSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.post('/setup/github', async (c) => {
@@ -36,8 +46,14 @@ export function createGithubSetupRoutes(_ctx: AppContext): Hono {
         github: {
           token: body.token,
           username: validation.user?.username ?? '',
+          authMethod: 'pat',
         },
       },
+    });
+    syncRuntimeGithubConfig(ctx, {
+      token: body.token,
+      username: validation.user?.username ?? '',
+      authMethod: 'pat',
     });
 
     return c.json({
@@ -54,6 +70,7 @@ export function createGithubSetupRoutes(_ctx: AppContext): Hono {
         github: { token: '', username: '' },
       },
     });
+    syncRuntimeGithubConfig(ctx, { token: '', username: '' });
     return c.json({ status: 'disconnected', message: 'GitHub disconnected.' });
   });
 
@@ -151,8 +168,13 @@ export function createGithubSetupRoutes(_ctx: AppContext): Hono {
         const username = validation.user?.username ?? '';
         updateConfig({
           gitProviders: {
-            github: { token: data.access_token, username },
+            github: { token: data.access_token, username, authMethod: 'oauth' },
           },
+        });
+        syncRuntimeGithubConfig(ctx, {
+          token: data.access_token,
+          username,
+          authMethod: 'oauth',
         });
 
         return c.json({ status: 'complete', username });

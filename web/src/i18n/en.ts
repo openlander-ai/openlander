@@ -14,6 +14,8 @@ export const translations = {
       title: 'Ready for Launch',
       subtitle: 'Connect your GitHub account to start deploying repositories.',
       description: 'For deploying private repos. Public repos work without this.',
+      connectedAs: 'Connected as {username}',
+      switchAccount: 'Switch account',
     },
     language: {
       title: 'Language',

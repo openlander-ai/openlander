@@ -4,6 +4,7 @@ import {
   startTraefik,
   completeSetup,
   connectGithub,
+  disconnectGithub,
   startGithubDeviceFlow,
   pollGithubDeviceFlow,
   configureLLM,
@@ -56,6 +57,7 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
   // GitHub Form State
   const [githubToken, setGithubToken] = useState('');
   const [githubConnecting, setGithubConnecting] = useState(false);
+  const [githubDisconnecting, setGithubDisconnecting] = useState(false);
   const [githubError, setGithubError] = useState('');
   // Device Flow state
   const [deviceFlow, setDeviceFlow] = useState<{
@@ -106,6 +108,23 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
       setGithubError(message);
     } finally {
       setGithubConnecting(false);
+    }
+  };
+
+  const handleDisconnectGithub = async () => {
+    setGithubDisconnecting(true);
+    setGithubError('');
+    try {
+      await disconnectGithub();
+      setDeviceFlow(null);
+      setDeviceFlowPolling(false);
+      setGithubToken('');
+      await refetch();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to disconnect GitHub';
+      setGithubError(message);
+    } finally {
+      setGithubDisconnecting(false);
     }
   };
 
@@ -277,10 +296,12 @@ export function SetupScreen({ onComplete }: { onComplete: () => void }) {
             deviceFlow={deviceFlow}
             githubToken={githubToken}
             githubConnecting={githubConnecting}
+            githubDisconnecting={githubDisconnecting}
             githubError={githubError}
             copiedCode={isCopied('code')}
             onSetGithubToken={setGithubToken}
             onConnectGithub={handleConnectGithub}
+            onDisconnectGithub={handleDisconnectGithub}
             onStartDeviceFlow={handleStartDeviceFlow}
             onCopyCode={handleCopyCode}
             onCancelDeviceFlow={handleCancelDeviceFlow}
