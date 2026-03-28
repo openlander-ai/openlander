@@ -404,7 +404,7 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     project_id TEXT NOT NULL,
     trigger_source TEXT NOT NULL CHECK(trigger_source IN ('web_agent', 'auto_recovery', 'monitor', 'mcp')),
     trigger_session_id TEXT,
-    status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed')),
+    status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed', 'pending_approval')),
     error_message TEXT,
     recovery_strategy TEXT CHECK(recovery_strategy IN ('recipe', 'llm', 'unknown')),
     steps_json TEXT,
@@ -414,6 +414,63 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     user_id TEXT,
     created_at TEXT NOT NULL
   )`);
+
+  const actionRunTable = sqlite
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'action_runs'")
+    .get() as { sql: string | null } | undefined;
+  const hasLegacyActionRunStatusCheck =
+    typeof actionRunTable?.sql === 'string' &&
+    actionRunTable.sql.includes("CHECK(status IN ('running', 'succeeded', 'failed'))");
+
+  if (hasLegacyActionRunStatusCheck) {
+    sqlite.exec(`CREATE TABLE action_runs_migrated (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      trigger_source TEXT NOT NULL CHECK(trigger_source IN ('web_agent', 'auto_recovery', 'monitor', 'mcp')),
+      trigger_session_id TEXT,
+      status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed', 'pending_approval')),
+      error_message TEXT,
+      recovery_strategy TEXT CHECK(recovery_strategy IN ('recipe', 'llm', 'unknown')),
+      steps_json TEXT,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      tenant_id TEXT,
+      user_id TEXT,
+      created_at TEXT NOT NULL
+    )`);
+    sqlite.exec(`INSERT INTO action_runs_migrated (
+      id,
+      project_id,
+      trigger_source,
+      trigger_session_id,
+      status,
+      error_message,
+      recovery_strategy,
+      steps_json,
+      started_at,
+      completed_at,
+      tenant_id,
+      user_id,
+      created_at
+    ) SELECT
+      id,
+      project_id,
+      trigger_source,
+      trigger_session_id,
+      status,
+      error_message,
+      recovery_strategy,
+      steps_json,
+      started_at,
+      completed_at,
+      tenant_id,
+      user_id,
+      created_at
+    FROM action_runs`);
+    sqlite.exec('DROP TABLE action_runs');
+    sqlite.exec('ALTER TABLE action_runs_migrated RENAME TO action_runs');
+  }
+
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_project ON action_runs(project_id)');
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_status ON action_runs(status)');
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_created_at ON action_runs(created_at)');

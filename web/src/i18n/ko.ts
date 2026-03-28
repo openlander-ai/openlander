@@ -188,6 +188,17 @@ export const translations = {
         label: '운영 모니터링',
         description: '크래시, 디스크 사용량, 헬스 모니터링',
       },
+      usage: {
+        title: 'AI 사용량',
+        inputTokens: '입력 토큰',
+        outputTokens: '출력 토큰',
+        totalCost: '총 비용',
+        callCount: 'API 호출',
+        tokenUnit: '토큰',
+        recentCalls: '최근 AI 호출',
+        empty: '아직 AI 사용 기록이 없습니다',
+        loading: '사용량 데이터 로딩 중...',
+      },
     },
     system: {
       globalSecrets: '전역 비밀값',
@@ -440,6 +451,19 @@ export const translations = {
       imageTag: '이미지 태그',
       production: '프로덕션',
       development: '개발',
+    },
+  },
+  approval: {
+    banner: {
+      title: '복구 승인 필요',
+      project: '프로젝트',
+      tool: '작업',
+      attempt: '시도',
+      approve: '승인',
+      reject: '거부',
+      approved: '복구가 승인되었습니다',
+      rejected: '복구가 거부되었습니다',
+      error: '승인 처리에 실패했습니다',
     },
   },
 } as const;

@@ -6,6 +6,8 @@ import { AgentPanel } from '@/components/agent/AgentPanel';
 import { useProjects } from '@/hooks/use-projects';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import { useNotifications } from '@/hooks/use-notifications';
+import { useApprovalCheck } from '@/hooks/use-approval-check';
+import { ApprovalBanner } from './ApprovalBanner';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { AgentPanelContext, type AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { CommandPalette } from '@/components/command/CommandPalette';
@@ -14,6 +16,7 @@ export function AppLayout() {
   const { projects, loading } = useProjects();
   const { stats } = useSystemStats();
   const { notifications, unreadCount, dismiss: dismissNotification } = useNotifications();
+  const { pendingApprovals, approve, reject } = useApprovalCheck();
   const navigate = useNavigate();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAgentPanelOpen, setIsAgentPanelOpen] = useState(false);
@@ -90,8 +93,11 @@ export function AppLayout() {
           </Sheet>
 
           {/* Main Content */}
-          <main className="flex-1 flex flex-col min-w-0 h-full overflow-auto bg-bg-app">
-            <Outlet />
+          <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-bg-app">
+            <ApprovalBanner approvals={pendingApprovals} onApprove={approve} onReject={reject} />
+            <div className="flex-1 overflow-auto">
+              <Outlet />
+            </div>
           </main>
         </div>
 

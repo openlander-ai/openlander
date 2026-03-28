@@ -421,7 +421,7 @@ export const actionRuns = sqliteTable(
       enum: ['web_agent', 'auto_recovery', 'monitor', 'mcp'],
     }).notNull(),
     trigger_session_id: text('trigger_session_id'),
-    status: text('status', { enum: ['running', 'succeeded', 'failed'] })
+    status: text('status', { enum: ['running', 'succeeded', 'failed', 'pending_approval'] })
       .notNull()
       .default('running'),
     error_message: text('error_message'),

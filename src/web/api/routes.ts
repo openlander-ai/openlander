@@ -8,6 +8,8 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { createDeployStreamRoutes } from './deploy-stream-routes.js';
 import { createProjectRoutes } from './project-routes.js';
 import { createSystemRoutes } from './system-routes.js';
+import { createAiUsageRoutes } from './ai-usage-routes.js';
+import { createApprovalRoutes } from './approval-routes.js';
 import { getEnvironmentProjectHostname, getAllIps } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('api');
@@ -270,6 +272,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
   api.route('/', createDeployStreamRoutes(ctx));
   api.route('/', createProjectRoutes(ctx));
   api.route('/', createSystemRoutes(ctx));
+  api.route('/', createAiUsageRoutes(ctx));
+  api.route('/', createApprovalRoutes(ctx));
 
   return api;
 }

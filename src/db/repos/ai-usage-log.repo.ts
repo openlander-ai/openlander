@@ -3,6 +3,12 @@ import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { aiUsageLog } from '../schema.drizzle.js';
 import type { AiUsageLogRow } from '../types.js';
 
+interface AiUsageLogFilterOptions {
+  projectId?: string;
+  from?: Date;
+  to?: Date;
+}
+
 export class AiUsageLogRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -72,6 +78,29 @@ export class AiUsageLogRepo {
       .all() as AiUsageLogRow[];
   }
 
+  findRecent(opts: { limit: number } & AiUsageLogFilterOptions): AiUsageLogRow[] {
+    const whereClause = this.buildWhereClause(opts);
+
+    return this.db
+      .select()
+      .from(aiUsageLog)
+      .where(whereClause)
+      .orderBy(desc(aiUsageLog.created_at))
+      .limit(opts.limit)
+      .all() as AiUsageLogRow[];
+  }
+
+  countAll(opts?: AiUsageLogFilterOptions): number {
+    const whereClause = this.buildWhereClause(opts);
+    const row = this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(aiUsageLog)
+      .where(whereClause)
+      .get() as { count: number } | undefined;
+
+    return row?.count ?? 0;
+  }
+
   /**
    * Get token usage summary.
    * If projectId is provided, returns summary for that project.
@@ -105,5 +134,61 @@ export class AiUsageLogRepo {
       totalOutputTokens: result?.totalOutputTokens ?? 0,
       totalCostUsd: result?.totalCostUsd ?? null,
     };
+  }
+
+  getTokenSummaryFiltered(opts?: AiUsageLogFilterOptions): {
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCostUsd: number | null;
+  } {
+    const whereClause = this.buildWhereClause(opts);
+
+    const result = this.db
+      .select({
+        totalInputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.input_tokens}), 0)`,
+        totalOutputTokens: sql<number>`COALESCE(SUM(${aiUsageLog.output_tokens}), 0)`,
+        totalCostUsd: sql<number | null>`SUM(${aiUsageLog.cost_usd})`,
+      })
+      .from(aiUsageLog)
+      .where(whereClause)
+      .get() as
+      | {
+          totalInputTokens: number;
+          totalOutputTokens: number;
+          totalCostUsd: number | null;
+        }
+      | undefined;
+
+    return {
+      totalInputTokens: result?.totalInputTokens ?? 0,
+      totalOutputTokens: result?.totalOutputTokens ?? 0,
+      totalCostUsd: result?.totalCostUsd ?? null,
+    };
+  }
+
+  private buildWhereClause(opts?: AiUsageLogFilterOptions) {
+    const conditions: Array<ReturnType<typeof eq>> = [];
+
+    if (opts?.projectId) {
+      conditions.push(eq(aiUsageLog.project_id, opts.projectId));
+    }
+
+    if (opts?.from) {
+      conditions.push(gte(aiUsageLog.created_at, opts.from.toISOString()));
+    }
+
+    if (opts?.to) {
+      conditions.push(lte(aiUsageLog.created_at, opts.to.toISOString()));
+    }
+
+    if (conditions.length === 0) {
+      return undefined;
+    }
+
+    if (conditions.length === 1) {
+      return conditions[0];
+    }
+
+    return and(...conditions);
   }
 }

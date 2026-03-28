@@ -188,6 +188,17 @@ export const translations = {
         label: 'Operational Monitoring',
         description: 'Monitor crashes, disk usage, and health',
       },
+      usage: {
+        title: 'AI Usage',
+        inputTokens: 'Input Tokens',
+        outputTokens: 'Output Tokens',
+        totalCost: 'Total Cost',
+        callCount: 'API Calls',
+        tokenUnit: 'tokens',
+        recentCalls: 'Recent AI Calls',
+        empty: 'No AI usage recorded yet',
+        loading: 'Loading usage data...',
+      },
     },
     system: {
       globalSecrets: 'Global Secrets',
@@ -439,6 +450,19 @@ export const translations = {
       imageTag: 'Image Tag',
       production: 'Production',
       development: 'Development',
+    },
+  },
+  approval: {
+    banner: {
+      title: 'Recovery Approval Required',
+      project: 'Project',
+      tool: 'Action',
+      attempt: 'Attempt',
+      approve: 'Approve',
+      reject: 'Reject',
+      approved: 'Recovery approved',
+      rejected: 'Recovery rejected',
+      error: 'Failed to process approval',
     },
   },
 } as const;

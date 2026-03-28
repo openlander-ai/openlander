@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, or, sql } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { actionRuns } from '../schema.drizzle.js';
 import type { ActionRunRow } from '../types.js';
@@ -44,12 +44,13 @@ export class ActionRunRepo {
     return id;
   }
 
-  /**
-   * Update the status of an action run.
-   * If status is 'succeeded' or 'failed', sets completed_at timestamp.
-   */
-  updateStatus(id: string, status: 'succeeded' | 'failed', errorMessage?: string): void {
-    const completedAt = new Date().toISOString();
+  updateStatus(
+    id: string,
+    status: 'running' | 'succeeded' | 'failed' | 'pending_approval',
+    errorMessage?: string,
+  ): void {
+    const completedAt =
+      status === 'succeeded' || status === 'failed' ? new Date().toISOString() : null;
 
     this.db
       .update(actionRuns)
@@ -62,14 +63,16 @@ export class ActionRunRepo {
       .run();
   }
 
-  /**
-   * Find all running action runs for a project.
-   */
   findRunning(projectId: string): ActionRunRow[] {
     return this.db
       .select()
       .from(actionRuns)
-      .where(and(eq(actionRuns.project_id, projectId), eq(actionRuns.status, 'running')))
+      .where(
+        and(
+          eq(actionRuns.project_id, projectId),
+          or(eq(actionRuns.status, 'running'), eq(actionRuns.status, 'pending_approval')),
+        ),
+      )
       .orderBy(desc(actionRuns.created_at))
       .all() as ActionRunRow[];
   }
@@ -92,7 +95,7 @@ export class ActionRunRepo {
   }
 
   /**
-   * Mark all stale running action runs as failed on startup.
+   * Mark all stale running and pending_approval action runs as failed on startup.
    * Called during Database initialization to clean up incomplete runs from previous sessions.
    * Returns the count of updated rows.
    */
@@ -104,7 +107,7 @@ export class ActionRunRepo {
         error_message: 'Server restarted',
         completed_at: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(actionRuns.status, 'running'))
+      .where(sql`${actionRuns.status} IN ('running', 'pending_approval')`)
       .run();
 
     const row = this.sqlite.prepare('SELECT changes() as changes').get() as {

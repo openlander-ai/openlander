@@ -37,6 +37,7 @@ import { createModuleLogger } from './lib/logger.js';
 import { setupAutoRecovery } from './pipeline/auto-recovery.js';
 import { AgentPool } from './llm/agent-pool.js';
 import { createTools } from './tools/index.js';
+import { ApprovalGate } from './pipeline/approval-gate.js';
 
 const log = createModuleLogger('app');
 
@@ -77,6 +78,7 @@ export interface AppContext {
   alertMonitor: AlertMonitor;
   questionBridge: QuestionBridge;
   serviceManager: ServiceManager;
+  approvalGate: ApprovalGate;
   // v1.0 modules
   mcpClientManager: McpClientManager;
   planEngine: PlanEngine;
@@ -221,6 +223,7 @@ export async function createAppContext(
   }
 
   const deployQueue = new DeployQueue();
+  const approvalGate = new ApprovalGate();
 
   // Track active project for question events
   eventBus.on('deploy:start', (payload) => {
@@ -241,6 +244,7 @@ export async function createAppContext(
     deployQueue,
     pipeline,
     questionBridge,
+    approvalGate,
     language: config.language,
     config,
   });
@@ -384,6 +388,7 @@ export async function createAppContext(
     alertMonitor,
     questionBridge,
     serviceManager,
+    approvalGate,
     mcpClientManager,
     planEngine,
   };
@@ -427,6 +432,7 @@ export function shutdownAppContext(ctx: AppContext): void {
   ctx.alertMonitor.stop();
   void ctx.channelManager.stop();
   void ctx.previewDeployer.cleanupAll();
+  ctx.approvalGate.dispose();
   ctx.db.close();
   void ctx.mcpClientManager.disconnectAll();
 }

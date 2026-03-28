@@ -97,6 +97,52 @@ describe('ActionRunRepo', () => {
       expect(runs[0].status).toBe('failed');
       expect(runs[0].error_message).toBeNull();
     });
+
+    it('updates status to pending_approval and keeps completed_at null', () => {
+      const id = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'web_agent',
+      });
+
+      repo.updateStatus(id, 'pending_approval');
+
+      const runs = repo.findByProjectId('proj-1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].status).toBe('pending_approval');
+      expect(runs[0].completed_at).toBeNull();
+      expect(runs[0].error_message).toBeNull();
+    });
+
+    it('transitions from pending_approval to succeeded', () => {
+      const id = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'web_agent',
+      });
+
+      repo.updateStatus(id, 'pending_approval');
+      repo.updateStatus(id, 'succeeded');
+
+      const runs = repo.findByProjectId('proj-1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].status).toBe('succeeded');
+      expect(runs[0].completed_at).toBeTruthy();
+    });
+
+    it('transitions from pending_approval to failed', () => {
+      const id = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'auto_recovery',
+      });
+
+      repo.updateStatus(id, 'pending_approval');
+      repo.updateStatus(id, 'failed', 'Approval rejected');
+
+      const runs = repo.findByProjectId('proj-1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].status).toBe('failed');
+      expect(runs[0].error_message).toBe('Approval rejected');
+      expect(runs[0].completed_at).toBeTruthy();
+    });
   });
 
   describe('findRunning', () => {
@@ -140,6 +186,22 @@ describe('ActionRunRepo', () => {
     it('returns empty array for non-existent project', () => {
       const running = repo.findRunning('non-existent');
       expect(running).toHaveLength(0);
+    });
+
+    it('includes pending_approval as active', () => {
+      const projectId = 'proj-1';
+
+      const pendingId = repo.create({
+        projectId,
+        triggerSource: 'web_agent',
+      });
+      repo.updateStatus(pendingId, 'pending_approval');
+
+      const running = repo.findRunning(projectId);
+
+      expect(running).toHaveLength(1);
+      expect(running[0].id).toBe(pendingId);
+      expect(running[0].status).toBe('pending_approval');
     });
   });
 
@@ -267,6 +329,78 @@ describe('ActionRunRepo', () => {
 
       expect(runs1.find((r) => r.id === id3)?.status).toBe('failed');
       expect(runs2.find((r) => r.id === id2)?.status).toBe('failed');
+    });
+
+    it('marks pending_approval action runs as failed on startup', () => {
+      const projectId = 'proj-1';
+
+      const id1 = repo.create({
+        projectId,
+        triggerSource: 'web_agent',
+      });
+
+      const id2 = repo.create({
+        projectId,
+        triggerSource: 'auto_recovery',
+      });
+
+      repo.updateStatus(id1, 'pending_approval');
+      repo.updateStatus(id2, 'succeeded');
+
+      const count = repo.markStaleAsFailedOnStartup();
+
+      expect(count).toBe(1);
+
+      const runs = repo.findByProjectId(projectId);
+      expect(runs).toHaveLength(2);
+
+      const failed = runs.find((r) => r.id === id1);
+      expect(failed?.status).toBe('failed');
+      expect(failed?.error_message).toBe('Server restarted');
+      expect(failed?.completed_at).toBeTruthy();
+
+      const succeeded = runs.find((r) => r.id === id2);
+      expect(succeeded?.status).toBe('succeeded');
+    });
+
+    it('marks both running and pending_approval action runs as failed', () => {
+      const projectId = 'proj-1';
+
+      const id1 = repo.create({
+        projectId,
+        triggerSource: 'web_agent',
+      });
+
+      const id2 = repo.create({
+        projectId,
+        triggerSource: 'auto_recovery',
+      });
+
+      const id3 = repo.create({
+        projectId,
+        triggerSource: 'monitor',
+      });
+
+      repo.updateStatus(id1, 'pending_approval');
+      repo.updateStatus(id3, 'succeeded');
+
+      const count = repo.markStaleAsFailedOnStartup();
+
+      expect(count).toBe(2);
+
+      const runs = repo.findByProjectId(projectId);
+      expect(runs).toHaveLength(3);
+
+      const failed1 = runs.find((r) => r.id === id1);
+      expect(failed1?.status).toBe('failed');
+      expect(failed1?.error_message).toBe('Server restarted');
+
+      const failed2 = runs.find((r) => r.id === id2);
+      expect(failed2?.status).toBe('failed');
+      expect(failed2?.error_message).toBe('Server restarted');
+
+      const succeeded = runs.find((r) => r.id === id3);
+      expect(succeeded?.status).toBe('succeeded');
     });
   });
 });

@@ -1,7 +1,8 @@
 # AI-First 인프라 플랫폼 — 아키텍처 비전
 
 **작성일**: 2026-03-27
-**상태**: 비전 문서 (구현 스펙 아님)
+**최종 업데이트**: 2026-03-28 (Phase 1 구현 상태 반영)
+**상태**: 비전 문서 (구현 스펙 아님) — Phase 1 핵심 항목 구현 완료
 **대상 버전**: v1.0 이후 중장기 방향
 
 ---
@@ -48,9 +49,9 @@ Cursor나 Claude Code 같은 범용 코딩 에이전트는 강력하다. 하지�
 
 ## 2. 아키텍처
 
-### 현재 상태 (v1.0.0-rc.5)
+### 현재 상태 (v1.0.0-rc.5 → v1.0 Phase 1 구현 완료)
 
-현재 코드베이스에 이미 있는 것들:
+현재 코드베이스에 있는 것들:
 
 ```
 AppContext (src/app.ts)
@@ -58,26 +59,52 @@ AppContext (src/app.ts)
   ├── Docker (dockerode 기반)
   ├── Traefik (라우팅 관리)
   ├── Database (Drizzle ORM + SQLite)
-  ├── Agent (src/llm/agent.ts) — 기본 에이전트 루프
-  │     ├── in-memory history (40메시지 슬라이딩 윈도우)
-  │     ├── generateText / streamText (Vercel AI SDK)
-  │     └── 세션 전환 지원 (currentSessionId)
+  │     ├── ai_usage_log 테이블 (토큰/비용 기록)           ← Phase 1 구현 완료
+  │     └── action_runs 테이블 (복구 작업 추적)             ← Phase 1 구현 완료
+  ├── AgentPool (src/llm/agent-pool.ts)                     ← Phase 1 구현 완료
+  │     ├── 세션별 Agent 인스턴스 분리 (MAX_POOL_SIZE=5)
+  │     └── idle timeout 기반 자동 정리
+  ├── Context Assembler (src/llm/context-assembler.ts)      ← Phase 1 구현 완료
+  │     ├── 프로젝트 상태 + 서버 상태 + 최근 배포 히스토리
+  │     └── Memory Store 조회는 Phase 2에서 추가 예정
+  ├── Transparency Layer (src/llm/transparency.ts)          ← Phase 1 구현 완료
+  │     ├── PRICING_TABLE (모델별 토큰 단가)
+  │     ├── calculateCost() + extractUsageFromResult()
+  │     └── logAiUsage() → ai_usage_log DB 기록
+  ├── ApprovalGate (src/pipeline/approval-gate.ts)          ← Phase 1 구현 완료
+  │     ├── in-memory Promise 기반 승인 대기
+  │     ├── approve() / reject() / waitForApproval()
+  │     └── 10분 타임아웃 자동 거부
   ├── ToolDef Hub (src/tools/defs/)
-  │     ├── 12개 카테고리, 60+ 도구
+  │     ├── 14개 카테고리, 60+ 도구
   │     ├── MCP 어댑터 (src/tools/adapters/mcp.ts)
   │     └── AI SDK 어댑터 (src/tools/adapters/ai-sdk.ts)
   ├── EventBus (40+ 이벤트 타입)
   ├── HealthMonitor + AlertMonitor
-  └── AutoRecovery (src/pipeline/auto-recovery.ts)
+  ├── AutoRecovery (src/pipeline/auto-recovery.ts)          ← Phase 1 안정화 완료
+  │     ├── 레시피 기반 fast-path (20+ 패턴)
+  │     ├── LLM fallback + gate checks
+  │     └── 고위험 도구 감지 → ApprovalGate 연동
+  ├── AI Usage API (src/web/api/ai-usage-routes.ts)         ← Phase 1 구현 완료
+  │     ├── GET /api/usage/summary (토큰/비용 집계)
+  │     └── GET /api/usage/recent (최근 AI 호출 로그)
+  ├── Approval API (src/web/api/approval-routes.ts)         ← Phase 1 구현 완료
+  │     ├── GET /api/approvals/pending
+  │     ├── POST /api/projects/:id/recovery/approve
+  │     └── POST /api/projects/:id/recovery/reject
+  └── AI Settings (config + API + UI)                       ← Phase 1 구현 완료
+        ├── 7개 AI 기능 토글 (autoRecovery, buildDebugger 등)
+        ├── AI Usage Dashboard (StatCard 4개 + 최근 호출 리스트)
+        └── Approval Banner (폴링 기반 승인 알림 배너)
 ```
 
-**현재 Agent의 한계**:
+**남은 Agent 한계 (Phase 2+ 에서 해결)**:
 
-- 히스토리가 메모리에만 있다. 서버 재시작하면 사라진다.
-- 모든 세션이 같은 Agent 인스턴스를 공유한다. (락으로 직렬화)
-- 위험도 판단 없이 도구를 실행한다. "DB 삭제해줘"도 그냥 한다.
-- 토큰 사용량을 기록하지 않는다. 비용이 얼마나 드는지 모른다.
-- 과거 배포 패턴을 기억하지 않는다. 같은 실수를 반복할 수 있다.
+- ~~히스토리가 메모리에만 있다. 서버 재시작하면 사라진다.~~ → chat_sessions 테이블 존재, Phase 2에서 확장
+- ~~모든 세션이 같은 Agent 인스턴스를 공유한다.~~ → ✅ AgentPool로 세션별 분리 완료
+- ~~위험도 판단 없이 도구를 실행한다.~~ → ✅ 자동복구 시 고위험 도구(4종) 승인 게이트 적용 완료. 전체 Decision Engine은 Phase 2-3
+- ~~토큰 사용량을 기록하지 않는다.~~ → ✅ ai_usage_log 테이블 + transparency.ts로 전체 기록 + 대시보드 제공
+- 과거 배포 패턴을 기억하지 않는다. 같은 실수를 반복할 수 있다. → Phase 2 Memory Store에서 해결
 
 ### 목표 아키텍처
 
@@ -476,16 +503,16 @@ MCP, 웹 에이전트, 자동복구, 채널 — 모든 진입점에서 자동으
 
 **v1.0에 포함되는 것**:
 
-- Transparency v1 (토큰/비용 로깅)
-- Context Assembler lite (프로젝트 상태 + 최근 배포 결과 — Memory 패턴 조회 제외)
-- Recovery Planner (자동복구 전용 — 범용 Action Executor 아님)
-- 간단한 승인 게이트 (자동복구가 고위험/비가역 액션 감지 시에만)
-- AgentPool — 세션별 Agent 인스턴스 분리 (현재는 단일 인스턴스 + 락)
-- Operation 레저 (`action_runs` 테이블) — auto-recovery 전용, 기본 상태만 추적 (`running` / `succeeded` / `failed`). 전체 상태 기계(`partial`, `rolled_back`, `manual_intervention`, `cancelled`)는 Phase 2~3에서 확장
-- 자동 복구 안정화
-- MCP 도구 품질 강화
-- 운영 모니터링 기본 대응: 컨테이너 크래시 반복 시 자동 재시작, 디스크 80% 도달 시 감지 + 정리 권장 알림 + 원클릭 실행 (자동 정리는 v1.x), 헬스체크 연속 실패 시 롤백 제안 (AlertMonitor + rollback:suggested 이벤트 활용)
-- AI 기능 설정화: 모든 AI 관련 기능을 개별 on/off 설정으로 제어 가능하게 리팩토링. 현재 API 키 유무로 암묵적 활성화되는 구조를 명시적 설정으로 전환
+- ✅ Transparency v1 (토큰/비용 로깅) — `ai_usage_log` 테이블 + `transparency.ts` + AI Usage API (`/api/usage/summary`, `/api/usage/recent`) + Settings AI 탭 대시보드 (StatCard 4개 + 최근 호출 리스트)
+- ✅ Context Assembler lite (프로젝트 상태 + 최근 배포 결과 — Memory 패턴 조회 제외) — `src/llm/context-assembler.ts`
+- ✅ Recovery Planner (자동복구 전용 — 범용 Action Executor 아님) — `src/pipeline/auto-recovery.ts` + `recovery-dispatch.ts` + `recipes.ts` (20+ 레시피 패턴)
+- ✅ 간단한 승인 게이트 (자동복구가 고위험/비가역 액션 감지 시에만) — `src/pipeline/approval-gate.ts` (in-memory Promise + 10분 타임아웃) + 승인 API 3개 (`/api/approvals/pending`, `/api/projects/:id/recovery/approve`, `/api/projects/:id/recovery/reject`) + 폴링 기반 배너 UI (`ApprovalBanner.tsx`)
+- ✅ AgentPool — 세션별 Agent 인스턴스 분리 — `src/llm/agent-pool.ts` (MAX_POOL_SIZE=5, idle timeout)
+- ✅ Operation 레저 (`action_runs` 테이블) — auto-recovery 전용, 상태 추적 (`running` / `succeeded` / `failed` / `pending_approval`). 전체 상태 기계(`partial`, `rolled_back`, `manual_intervention`, `cancelled`)는 Phase 2~3에서 확장
+- ✅ 자동 복구 안정화 — 레시피 기반 fast-path + LLM fallback + gate checks + 고위험 도구 승인 게이트 연동
+- ⬜ MCP 도구 품질 강화 — `mcpDescription` 전체 적용, `_agent_guidance` 개선 (미구현)
+- ⬜ 운영 모니터링 기본 대응: 컨테이너 크래시 반복 시 자동 재시작, 디스크 80% 도달 시 감지 + 정리 권장 알림 + 원클릭 실행 (자동 정리는 v1.x), 헬스체크 연속 실패 시 롤백 제안 (AlertMonitor + rollback:suggested 이벤트 활용) (미구현)
+- ✅ AI 기능 설정화: 모든 AI 관련 기능을 개별 on/off 설정으로 제어 가능하게 리팩토링 — 7개 토글 (`autoRecovery`, `buildDebugger`, `webAgent`, `envDetection`, `secretScan`, `rollbackSuggestion`, `operationalMonitoring`) + config + API (`/api/setup/ai-features`) + Settings UI (`AiSettingsTab.tsx`, `LlmSettingsTab.tsx`)
 
 **AI 기능 설정 항목**:
 
@@ -538,12 +565,23 @@ API 키가 없으면 모든 AI 기능이 자동 비활성화 (현재와 동일).
 - 에러 메시지 표준화: 코딩 에이전트가 에러를 파싱하기 쉽게
 - `mcpDescription` 필드 전체 적용
 
-**현재 코드 변경 범위**:
+**Phase 1 구현 완료된 코드 변경**:
 
-- `src/llm/agent.ts` → `src/llm/agent-pool.ts`: AgentPool로 추출
-- `src/llm/prompts.ts` → `src/llm/context-assembler.ts`: 모듈화
-- `src/db/schema.drizzle.ts`: `ai_usage_log`, `action_runs` 테이블 추가
-- `web/src/components/timeline/`: 토큰 사용량 표시 컴포넌트
+- ✅ `src/llm/agent.ts` → `src/llm/agent-pool.ts`: AgentPool로 추출
+- ✅ `src/llm/prompts.ts` → `src/llm/context-assembler.ts`: 모듈화
+- ✅ `src/llm/transparency.ts`: PRICING_TABLE + calculateCost + logAiUsage
+- ✅ `src/db/schema.drizzle.ts`: `ai_usage_log`, `action_runs` 테이블 추가 (+ `pending_approval` 상태)
+- ✅ `src/pipeline/approval-gate.ts`: ApprovalGate 클래스 (in-memory Promise + 10분 타임아웃)
+- ✅ `src/pipeline/auto-recovery.ts`: 고위험 도구 감지 → ApprovalGate 연동 (throw 대신 blocking)
+- ✅ `src/web/api/ai-usage-routes.ts`: AI Usage API (summary + recent)
+- ✅ `src/web/api/approval-routes.ts`: Approval API (pending + approve + reject)
+- ✅ `web/src/components/settings/AiSettingsTab.tsx`: AI Usage 대시보드 (StatCard 4개 + 최근 호출 리스트)
+- ✅ `web/src/components/layout/ApprovalBanner.tsx`: 승인 알림 배너
+- ✅ `web/src/hooks/use-ai-usage.ts`: AI 사용량 폴링 훅
+- ✅ `web/src/hooks/use-approval-check.ts`: 승인 상태 폴링 훅
+- ✅ `web/src/lib/api/usage.ts`: 프론트엔드 API 클라이언트
+- ✅ `web/src/components/timeline/RecoveryCard.tsx`: 토큰 사용량 표시 컴포넌트
+- ✅ `web/src/i18n/en.ts` + `ko.ts`: i18n 키 추가 (settings.ai.usage._, approval.banner._)
 
 ---
 
@@ -852,32 +890,42 @@ API Key 관리
 
 ### Phase 1에서 필요한 것
 
-| 항목              | 파일                            | 작업                       |
-| ----------------- | ------------------------------- | -------------------------- |
-| AI 호출 토큰 기록 | `src/llm/agent.ts`              | AI SDK `usage` 필드 추출   |
-| 사용량 DB 저장    | `src/db/schema.drizzle.ts`      | `ai_usage_log` 테이블 추가 |
-| 타임라인 표시     | `web/src/components/timeline/`  | 토큰 사용량 컴포넌트       |
-| 자동 복구 안정화  | `src/pipeline/auto-recovery.ts` | 엣지 케이스 처리           |
+| 항목               | 파일                             | 작업                           | 상태      |
+| ------------------ | -------------------------------- | ------------------------------ | --------- |
+| AI 호출 토큰 기록  | `src/llm/agent.ts`               | AI SDK `usage` 필드 추출       | ✅ 완료   |
+| 사용량 DB 저장     | `src/db/schema.drizzle.ts`       | `ai_usage_log` 테이블 추가     | ✅ 완료   |
+| 타임라인 표시      | `web/src/components/timeline/`   | 토큰 사용량 컴포넌트           | ✅ 완료   |
+| 자동 복구 안정화   | `src/pipeline/auto-recovery.ts`  | 엣지 케이스 처리               | ✅ 완료   |
+| AgentPool          | `src/llm/agent-pool.ts`          | 세션별 Agent 인스턴스 분리     | ✅ 완료   |
+| Context Assembler  | `src/llm/context-assembler.ts`   | 구조화된 모듈 추출             | ✅ 완료   |
+| Transparency       | `src/llm/transparency.ts`        | 비용 계산 + 로깅 모듈          | ✅ 완료   |
+| 승인 게이트        | `src/pipeline/approval-gate.ts`  | 고위험 도구 승인 메커니즘      | ✅ 완료   |
+| AI Usage API       | `src/web/api/ai-usage-routes.ts` | 사용량 조회 엔드포인트         | ✅ 완료   |
+| Approval API       | `src/web/api/approval-routes.ts` | 승인 API 엔드포인트            | ✅ 완료   |
+| AI 설정 UI         | `web/src/components/settings/`   | AI 기능 토글 + 사용량 대시보드 | ✅ 완료   |
+| 승인 배너 UI       | `web/src/components/layout/`     | 폴링 기반 승인 알림 배너       | ✅ 완료   |
+| MCP 도구 품질      | `src/tools/defs/`                | mcpDescription 전체 적용       | ⬜ 미구현 |
+| 운영 모니터링 대응 | `src/monitor/`                   | 크래시 재시작, 디스크 알림     | ⬜ 미구현 |
 
 ### Phase 2에서 필요한 것
 
-| 항목                      | 파일                             | 작업                          |
-| ------------------------- | -------------------------------- | ----------------------------- |
-| 배포 패턴 테이블          | `src/db/schema.drizzle.ts`       | `deployment_patterns` 테이블  |
-| 세션 영속화 확장          | `src/db/schema.drizzle.ts`       | `agent_sessions` 테이블 확장  |
-| Memory Store 모듈         | `src/llm/memory.ts`              | 신규 파일                     |
-| 패턴 시스템 프롬프트 주입 | `src/llm/prompts.ts`             | `buildContextSnapshot()` 확장 |
-| 사용량 대시보드           | `web/src/pages/SettingsPage.tsx` | AI 사용량 섹션                |
+| 항목                      | 파일                             | 작업                                                                       |
+| ------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
+| 배포 패턴 테이블          | `src/db/schema.drizzle.ts`       | `deployment_patterns` 테이블                                               |
+| 세션 영속화 확장          | `src/db/schema.drizzle.ts`       | `agent_sessions` 테이블 확장                                               |
+| Memory Store 모듈         | `src/llm/memory.ts`              | 신규 파일                                                                  |
+| 패턴 시스템 프롬프트 주입 | `src/llm/prompts.ts`             | `buildContextSnapshot()` 확장                                              |
+| 사용량 대시보드           | `web/src/pages/SettingsPage.tsx` | 월별 대시보드 + 비용 상한선 (Phase 1에서 기본 StatCard 대시보드 구현 완료) |
 
 ### Phase 3에서 필요한 것
 
-| 항목             | 파일                        | 작업                 |
-| ---------------- | --------------------------- | -------------------- |
-| Decision Engine  | `src/llm/decision.ts`       | 신규 파일            |
-| Action Executor  | `src/llm/executor.ts`       | 신규 파일            |
-| 위험도 분류 로직 | `src/llm/decision.ts`       | 도구별 위험도 매핑   |
-| 승인 게이트 UI   | `web/src/components/agent/` | 승인 요청 컴포넌트   |
-| 자동 운영 루프   | `src/app.ts`                | EventBus 리스너 확장 |
+| 항목             | 파일                        | 작업                                                          |
+| ---------------- | --------------------------- | ------------------------------------------------------------- |
+| Decision Engine  | `src/llm/decision.ts`       | 신규 파일                                                     |
+| Action Executor  | `src/llm/executor.ts`       | 신규 파일                                                     |
+| 위험도 분류 로직 | `src/llm/decision.ts`       | 도구별 위험도 매핑                                            |
+| 승인 게이트 UI   | `web/src/components/agent/` | 웹 에이전트용 승인 UI (Phase 1에서 자동복구용 배너 구현 완료) |
+| 자동 운영 루프   | `src/app.ts`                | EventBus 리스너 확장                                          |
 
 ### Phase 4에서 필요한 것
 

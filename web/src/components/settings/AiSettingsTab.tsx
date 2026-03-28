@@ -1,9 +1,24 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Sparkles, AlertCircle, Info } from 'lucide-react';
+import {
+  Loader2,
+  Sparkles,
+  AlertCircle,
+  Info,
+  Brain,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  DollarSign,
+  Activity,
+  Clock,
+  Zap,
+} from 'lucide-react';
 import { getAiFeatures, updateAiFeatures, type AiFeaturesResponse } from '@/lib/api/system.js';
 import { Switch } from '@/components/ui/switch.js';
 import { useLanguage } from '@/i18n/context.js';
 import { cn } from '@/lib/utils.js';
+import { useAiUsage } from '@/hooks/use-ai-usage.js';
+import { StatCard } from './shared.js';
+import { formatRelativeTime } from '@/lib/time.js';
 
 export function AiSettingsTab() {
   const { t } = useLanguage();
@@ -11,6 +26,8 @@ export function AiSettingsTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+
+  const { summary, recent, isLoading: usageLoading, error: usageError } = useAiUsage();
 
   useEffect(() => {
     async function loadFeatures() {
@@ -152,6 +169,112 @@ export function AiSettingsTab() {
         <Info className="h-3.5 w-3.5" />
         {t('settings.ai.requiresRestart')}
       </p>
+
+      <div className="my-8 h-px bg-border" />
+
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-agent" />
+          <h2 className="font-display text-lg font-semibold text-primary-ol">
+            {t('settings.ai.usage.title')}
+          </h2>
+        </div>
+
+        {usageError && (
+          <div className="rounded-md bg-error/10 p-3 text-sm font-body text-error flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {usageError}
+          </div>
+        )}
+
+        {usageLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-agent" />
+            <span className="ml-2 text-sm text-muted-ol">{t('settings.ai.usage.loading')}</span>
+          </div>
+        ) : summary?.callCount === 0 ? (
+          <div className="rounded-lg border border-border bg-bg-panel/30 p-8 text-center">
+            <p className="text-sm font-body text-muted-ol">{t('settings.ai.usage.empty')}</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div data-testid="usage-total-input-tokens">
+                <StatCard
+                  icon={<ArrowDownToLine className="h-4 w-4" />}
+                  label={t('settings.ai.usage.inputTokens')}
+                  value={summary?.totalInputTokens.toLocaleString() ?? '0'}
+                  color="text-blue-500"
+                />
+              </div>
+              <div data-testid="usage-total-output-tokens">
+                <StatCard
+                  icon={<ArrowUpFromLine className="h-4 w-4" />}
+                  label={t('settings.ai.usage.outputTokens')}
+                  value={summary?.totalOutputTokens.toLocaleString() ?? '0'}
+                  color="text-green-500"
+                />
+              </div>
+              <div data-testid="usage-total-cost">
+                <StatCard
+                  icon={<DollarSign className="h-4 w-4" />}
+                  label={t('settings.ai.usage.totalCost')}
+                  value={`$${summary?.totalCostUsd?.toFixed(3) ?? '0.000'}`}
+                  color="text-yellow-500"
+                />
+              </div>
+              <div data-testid="usage-call-count">
+                <StatCard
+                  icon={<Zap className="h-4 w-4" />}
+                  label={t('settings.ai.usage.callCount')}
+                  value={summary?.callCount.toLocaleString() ?? '0'}
+                  color="text-purple-500"
+                />
+              </div>
+            </div>
+
+            {recent.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h3 className="text-sm font-medium text-primary-ol">
+                  {t('settings.ai.usage.recentCalls')}
+                </h3>
+                <div className="rounded-lg border border-border bg-bg-panel/30 divide-y divide-border">
+                  {recent.slice(0, 10).map((log) => (
+                    <div key={log.id} className="flex items-center justify-between p-3 gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-bg-subtle">
+                          <Brain className="h-4 w-4 text-agent" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-primary-ol flex items-center gap-2">
+                            {log.actionType}
+                            <span className="text-xs font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
+                              {log.modelName}
+                            </span>
+                          </p>
+                          <p className="text-xs text-secondary-ol flex items-center gap-1 mt-0.5">
+                            <Clock className="h-3 w-3" />
+                            {formatRelativeTime(log.createdAt, t)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-primary-ol">
+                          {((log.inputTokens || 0) + (log.outputTokens || 0)).toLocaleString()}{' '}
+                          {t('settings.ai.usage.tokenUnit')}
+                        </p>
+                        {log.costUsd != null && log.costUsd > 0 && (
+                          <p className="text-xs text-muted-ol">${log.costUsd.toFixed(4)}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }
