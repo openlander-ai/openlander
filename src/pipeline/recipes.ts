@@ -16,7 +16,29 @@ export interface Recipe {
   diagnosis: string;
   /** Actionable fix instructions */
   fix: string;
+  action?: RecipeAction;
 }
+
+export type RecipeAction =
+  | {
+      type: 'set_env';
+      key: string;
+      value: string;
+    }
+  | {
+      type: 'dockerfile_replace_pattern';
+      pattern: string;
+      replacement: string;
+    }
+  | {
+      type: 'dockerfile_add_line';
+      line: string;
+      anchor: string;
+      position: 'before' | 'after';
+    }
+  | {
+      type: 'skip';
+    };
 
 /**
  * Top build error patterns, ordered by frequency.
@@ -29,6 +51,11 @@ export const BUILD_RECIPES: Recipe[] = [
     diagnosis:
       'A native Node.js addon failed to compile. Common with packages like bcrypt, sharp, canvas, or sqlite3 on Alpine Linux.',
     fix: 'Switch base image from `node:22-alpine` to `node:22-bookworm-slim`. Or add build dependencies: `RUN apk add --no-cache python3 make g++` for Alpine.',
+    action: {
+      type: 'dockerfile_replace_pattern',
+      pattern: 'FROM (node:[^-\\s]+)-alpine',
+      replacement: 'FROM $1-bookworm-slim',
+    },
   },
   {
     pattern: /sharp\/.*Error|libvips|vips\/vips/i,
@@ -56,6 +83,12 @@ export const BUILD_RECIPES: Recipe[] = [
     diagnosis:
       'The build process ran out of memory. Common with large TypeScript projects or webpack builds.',
     fix: 'Increase Docker memory limit, or add `ENV NODE_OPTIONS="--max-old-space-size=4096"` in the Dockerfile before the build step.',
+    action: {
+      type: 'dockerfile_add_line',
+      line: 'ENV NODE_OPTIONS="--max-old-space-size=4096"',
+      anchor: '^CMD\\b|^ENTRYPOINT\\b',
+      position: 'before',
+    },
   },
   {
     pattern: /COPY failed.*stat.*no such file/i,
