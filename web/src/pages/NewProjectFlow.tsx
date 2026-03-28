@@ -35,16 +35,9 @@ export function NewProjectFlow() {
   const [imageName, setImageName] = useState('');
 
   const [selectedRepo, setSelectedRepo] = useState<GitRepo | null>(null);
-  const [environment, setEnvironment] = useState<string>('production');
   const [branch, setBranch] = useState<string>('main');
 
   const envScan = useEnvScanFlow();
-
-  const handleEnvironmentChange = (value: string) => {
-    setEnvironment(value);
-    if (value === 'production') setBranch('main');
-    else if (value === 'development') setBranch('develop');
-  };
 
   const fetchRepos = useCallback(async (pageNum: number) => {
     setLoading(true);
@@ -101,7 +94,6 @@ export function NewProjectFlow() {
       return;
     }
     setSelectedRepo(repo);
-    setEnvironment('production');
     setBranch(repo.defaultBranch || 'main');
     envScan.reset();
   };
@@ -130,10 +122,10 @@ export function NewProjectFlow() {
         branch,
         selectedRepo.name,
         Object.keys(filtered).length > 0 ? filtered : undefined,
-        environment,
+        'production',
       );
       if (result.success && result.projectId) {
-        navigate(`/projects/${result.projectId}?env=${environment}`);
+        navigate(`/projects/${result.projectId}`);
       } else {
         setError(result.error ?? 'Deploy failed');
         setDeploying(false);
@@ -158,14 +150,14 @@ export function NewProjectFlow() {
         undefined,
         imageName || undefined,
         undefined,
-        environment,
+        'production',
         'image',
         imageUrl,
         imageCmd || undefined,
         port ? parseInt(port, 10) : undefined,
       );
       if (result.success && result.projectId) {
-        navigate(`/projects/${result.projectId}?env=${environment}`);
+        navigate(`/projects/${result.projectId}`);
       } else {
         setError(result.error ?? 'Deploy failed');
         setDeploying(false);
@@ -323,23 +315,6 @@ export function NewProjectFlow() {
                     className="bg-bg-subtle border-[hsl(var(--border))] text-primary-ol"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label
-                    htmlFor="environment-image"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-primary-ol"
-                  >
-                    {'Environment'}
-                  </label>
-                  <select
-                    id="environment-image"
-                    value={environment}
-                    onChange={(e) => handleEnvironmentChange(e.target.value)}
-                    className="flex h-9 w-full items-center justify-between rounded-md border border-[hsl(var(--border))] bg-bg-subtle px-3 py-2 text-sm text-primary-ol shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="production">Production</option>
-                    <option value="development">Development</option>
-                  </select>
-                </div>
               </div>
               <div className="space-y-2">
                 <label
@@ -388,10 +363,8 @@ export function NewProjectFlow() {
       {!deploying && selectedRepo && (
         <ConfigureDeployStep
           selectedRepo={selectedRepo}
-          environment={environment}
           branch={branch}
           onBranchChange={setBranch}
-          onEnvironmentChange={handleEnvironmentChange}
           onCancel={() => {
             setSelectedRepo(null);
             envScan.reset();

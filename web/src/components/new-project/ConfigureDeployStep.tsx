@@ -1,13 +1,7 @@
 import type { useEnvScanFlow } from '@/hooks/use-env-scan-flow';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+
 import { Loader2, Rocket } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,10 +20,8 @@ interface GitRepo {
 
 interface ConfigureDeployStepProps {
   selectedRepo: GitRepo;
-  environment: string;
   branch: string;
   onBranchChange: (value: string) => void;
-  onEnvironmentChange: (value: string) => void;
   onCancel: () => void;
   onConfirmDeploy: () => void;
   onDeployWithVars: (vars: Record<string, string>) => void;
@@ -39,10 +31,8 @@ interface ConfigureDeployStepProps {
 
 export function ConfigureDeployStep({
   selectedRepo,
-  environment,
   branch,
   onBranchChange,
-  onEnvironmentChange,
   onCancel,
   onConfirmDeploy,
   onDeployWithVars,
@@ -224,19 +214,6 @@ export function ConfigureDeployStep({
         {envScan.envStep === 'idle' && (
           <>
             <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-primary-ol">Environment</label>
-                <Select value={environment} onValueChange={onEnvironmentChange}>
-                  <SelectTrigger className="h-8 text-xs bg-bg-subtle border-[hsl(var(--border))]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="production">Production</SelectItem>
-                    <SelectItem value="development">Development</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               <div className="space-y-2">
                 <label className="text-xs font-medium text-primary-ol">Branch</label>
                 <Input
