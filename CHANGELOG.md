@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **AI Usage API**: `GET /api/usage/summary` and `GET /api/usage/recent` endpoints with SQL-level filtering, counting, and camelCase response mapping
+- **Approval Gate**: In-memory Promise-based mechanism with 10-minute auto-reject for high-risk auto-recovery tools (`rollback_project`, `remove_project`, `remove_service`, `create_database`)
+- **Approval API**: `GET /api/approvals/pending`, `POST /api/projects/:id/recovery/approve`, `POST /api/projects/:id/recovery/reject` with projectId ownership validation
+- **AI Usage Dashboard**: StatCards (input tokens, output tokens, total cost, API calls) + recent AI calls list in Settings > AI Features tab
+- **Approval Banner**: Polling-based notification banner in AppLayout for pending recovery approvals
+- **Multi-provider LLM**: ModelRegistry with provider caching, per-feature model routing, provider CRUD API, and LLM Settings UI
+- **AgentPool**: Session-level agent isolation (`MAX_POOL_SIZE=5`) with idle timeout cleanup
+- **Context Assembler**: Structured module extracted from `prompts.ts` — project state, server stats, deploy history
+- **Transparency Layer**: Token tracking (`ai_usage_log` table), cost calculation (`PRICING_TABLE`), usage logging per AI call
+- **AI Feature Settings**: 7 individual toggles (autoRecovery, buildDebugger, webAgent, envDetection, secretScan, rollbackSuggestion, operationalMonitoring) with config + API + Settings UI
+- **RequestIdentity type**: Optional `userId`, `tenantId`, `role`, `source` fields on ToolContext and EventBus payloads for future enterprise extension
+- **action_runs table**: Operation ledger for auto-recovery tracking with `pending_approval` active state and SQLite migration path for existing DBs
+- **i18n**: AI usage dashboard keys (`settings.ai.usage.*`) and approval banner keys (`approval.banner.*`) in en.ts + ko.ts
+
+### Changed
+
+- **Auto-recovery redesign**: Gate Checks → Context Assembler → Recovery Planner (recipe fast-path + LLM fallback) → ApprovalGate for high-risk tools → flag-based reject/timeout short-circuit
+- **Single-environment simplification**: Removed multi-env UI, environment selector, env-specific dropdown; always deploy to production
+- **Token display**: Recovery timeline events now show token usage and cost
+
+### Fixed
+
+- **Auto-recovery callback flow**: Reject/timeout now short-circuits via `approvalState` flag instead of swallowed throws
+- **ModelRegistry logging**: Use Pino logger instead of `console.warn`
+- **Provider delete**: Use `saveConfig` for provider deletion to bypass deepMerge key-preservation
+- **Config gating**: 4 remaining AI toggles now properly gate their features
+- **Parallel redeployment**: Support concurrent project redeployments
+- **Deploy pipeline auto-expand**: Automatically expand on error status
+- **Sidebar icons**: Center icons in collapsed mode
+- **Domain link styling**: Standardized across dashboard, overview, and settings
+
 ## [1.0.0-rc.5] - 2026-03-27
 
 ### Added

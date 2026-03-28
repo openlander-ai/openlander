@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0-rc.6 🧪 ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0-rc.6 🧪 ── v1.0.0 (TBD)
 
 ```
 
@@ -1622,6 +1622,36 @@ AI: bugs.md → 해결됨 + gh issue close
 | MCP session incident briefing                     | MCP 도구 응답에 장애 컨텍스트 포함, AI 에이전트의 복구 가이드 개선              | ✅   |
 
 **다음 단계**: 도그푸딩 완료 → v1.0.0 정식 릴리즈
+
+---
+
+### v1.0.0-rc.6 — AI Architecture Phase 1 🧪
+
+**상태**: 🧪 도그푸딩 중 | **날짜**: 2026-03-28
+
+**핵심 가치**: AI 사용량 가시성 + 자동복구 승인 게이트 + 멀티 LLM 프로바이더 + 환경 단순화
+
+| 항목                      | 내용                                                                    | 상태 |
+| ------------------------- | ----------------------------------------------------------------------- | ---- |
+| AI Usage API              | `GET /api/usage/summary`, `GET /api/usage/recent` (SQL-level filtering) | ✅   |
+| Approval Gate             | 고위험 자동복구 도구 승인 메커니즘 (in-memory Promise, 10분 타임아웃)   | ✅   |
+| Approval API              | `GET /api/approvals/pending`, `POST approve/reject` (projectId 검증)    | ✅   |
+| AI Usage Dashboard        | Settings > AI Features 탭에 StatCard 4개 + 최근 호출 리스트             | ✅   |
+| Approval Banner           | 글로벌 폴링 기반 승인 알림 배너 (AppLayout)                             | ✅   |
+| Multi-provider LLM        | ModelRegistry + provider CRUD + per-feature routing + Settings UI       | ✅   |
+| AgentPool                 | 세션별 Agent 인스턴스 분리 (MAX_POOL_SIZE=5, idle timeout)              | ✅   |
+| Context Assembler         | prompts.ts에서 구조화된 모듈로 추출                                     | ✅   |
+| Transparency Layer        | ai_usage_log 테이블 + PRICING_TABLE + 토큰/비용 추적                    | ✅   |
+| AI Feature Settings       | 7개 개별 토글 + config + API + Settings UI                              | ✅   |
+| Auto-recovery redesign    | Gate Checks → Context Assembler → Recovery Planner → ApprovalGate       | ✅   |
+| action_runs table         | 자동복구 작업 추적 + pending_approval 상태 + SQLite 마이그레이션        | ✅   |
+| RequestIdentity           | ToolContext/EventBus에 optional identity 필드 예약 (기업용 확장 대비)   | ✅   |
+| Single-env simplification | 멀티 환경 UI 제거, 항상 production 배포                                 | ✅   |
+| i18n                      | AI 사용량 + 승인 배너 키 (en + ko)                                      | ✅   |
+
+**남은 Phase 1 항목**: MCP 도구 품질 강화, 운영 모니터링 기본 대응
+
+**다음 단계**: Phase 1 잔여 항목 완료 → v1.0.0 정식 릴리즈
 
 ---
 
