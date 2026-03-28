@@ -155,7 +155,10 @@ function formatProjectLine(p: ProjectRow): string {
       ? `🔒 port ${String(p.assigned_port)}`
       : '';
 
-  return `  ${statusIcon} ${p.name} (${p.status})${url ? ` — ${url}` : ''}`;
+  // Container name follows ol-{name} naming convention (only shown when not stopped)
+  const containerName = p.status !== 'stopped' ? ` [ol-${p.name}]` : '';
+
+  return `  ${statusIcon} ${p.name} (${p.status})${containerName}${url ? ` — ${url}` : ''}`;
 }
 
 /**

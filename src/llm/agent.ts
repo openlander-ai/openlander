@@ -53,6 +53,7 @@ export class Agent {
     private readonly contextProvider?: ContextProvider,
     private readonly provider: LLMProvider = 'gemini',
     private readonly locale: string = 'en',
+    private readonly actionType: 'web_agent' | 'auto_recovery' = 'web_agent',
   ) {}
 
   /** Set the question bridge for ask_user_question tool support. */
@@ -121,7 +122,7 @@ export class Agent {
       const usage = extractUsageFromResult(result.usage);
       this.logUsageSafe({
         sessionId: resolvedSessionId,
-        actionType: 'web_agent',
+        actionType: this.actionType,
         modelName: this.getModelName(),
         provider: this.provider,
         inputTokens: usage.inputTokens,
@@ -130,7 +131,7 @@ export class Agent {
         toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
         result: 'success',
         durationMs: Date.now() - startedAt,
-        source: 'web',
+        source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
       });
 
       return {
@@ -271,7 +272,7 @@ export class Agent {
       if (didStreamFail) {
         this.logUsageSafe({
           sessionId: resolvedSessionId,
-          actionType: 'web_agent',
+          actionType: this.actionType,
           modelName: this.getModelName(),
           provider: this.provider,
           inputTokens: 0,
@@ -280,7 +281,7 @@ export class Agent {
           toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
           result: 'failure',
           durationMs: Date.now() - startedAt,
-          source: 'web',
+          source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
         });
         return;
       }
@@ -297,7 +298,7 @@ export class Agent {
 
       this.logUsageSafe({
         sessionId: resolvedSessionId,
-        actionType: 'web_agent',
+        actionType: this.actionType,
         modelName: this.getModelName(),
         provider: this.provider,
         inputTokens: usage.inputTokens,
@@ -306,7 +307,7 @@ export class Agent {
         toolsCalled: allToolResults.map((toolResult) => toolResult.toolName),
         result: 'success',
         durationMs: Date.now() - startedAt,
-        source: 'web',
+        source: this.actionType === 'auto_recovery' ? 'auto-recovery' : 'web',
       });
 
       const costUsd = calculateCost(
