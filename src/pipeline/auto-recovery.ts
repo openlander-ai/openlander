@@ -8,11 +8,12 @@ import type { QuestionBridge } from '../lib/question-bridge.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { buildContextSnapshot } from '../llm/context-assembler.js';
 import { dispatchRecovery, type Locale, type RecoveryPlan } from './recovery-dispatch.js';
-import { matchRecipe } from './recipes.js';
+import { matchRecipe, type RecipeAction } from './recipes.js';
 import type { DeployQueue } from './deploy-queue.js';
 import type { DeployPipeline } from './deploy.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import type { ApprovalGate } from './approval-gate.js';
+import type { PendingFixPatch } from './deploy/helpers.js';
 
 const log = createModuleLogger('auto-recovery');
 
@@ -194,6 +195,29 @@ function selectRecoveryStrategy(recipeMatched: boolean, hasAgent: boolean): Reco
   }
 
   return 'llm';
+}
+
+function buildPendingFixFromAction(
+  action: RecipeAction,
+): { filePath: string; patches: PendingFixPatch[] } | null {
+  switch (action.type) {
+    case 'dockerfile_replace_pattern':
+      return {
+        filePath: 'Dockerfile',
+        patches: [{ pattern: action.pattern, replacement: action.replacement, flags: 'gm' }],
+      };
+    case 'dockerfile_add_line': {
+      const insertBefore = action.position === 'before';
+      const replacement = insertBefore ? `${action.line}\n$&` : `$&\n${action.line}`;
+      return {
+        filePath: 'Dockerfile',
+        patches: [{ pattern: action.anchor, replacement, flags: 'm' }],
+      };
+    }
+    case 'set_env':
+    case 'skip':
+      return null;
+  }
 }
 
 /**
@@ -467,6 +491,49 @@ ${plan.agentGuidance}
           projectId,
           `Recipe matched: ${recipe.title}. ${recipe.fix}`,
         );
+
+        if (recipe.action && recipe.action.type !== 'skip') {
+          if (recipe.action.type === 'set_env') {
+            try {
+              const productionEnvironment = db
+                .getEnvironmentsByProject(projectId)
+                .find((environment) => environment.type === 'production');
+              db.setEnvVar(
+                projectId,
+                recipe.action.key,
+                recipe.action.value,
+                productionEnvironment?.id,
+              );
+              await emitTimelineMessage(
+                eventBus,
+                projectId,
+                `Applied fix: set ${recipe.action.key} environment variable`,
+              );
+            } catch (err) {
+              log.warn(
+                { err, projectId, actionType: recipe.action.type },
+                'Failed to apply set_env action, continuing with redeploy',
+              );
+            }
+          } else {
+            try {
+              const pendingFix = buildPendingFixFromAction(recipe.action);
+              if (pendingFix) {
+                db.setPendingFix(projectId, pendingFix);
+                await emitTimelineMessage(
+                  eventBus,
+                  projectId,
+                  'Applied fix: Dockerfile patch prepared for next build',
+                );
+              }
+            } catch (err) {
+              log.warn(
+                { err, projectId, actionType: recipe.action.type },
+                'Failed to persist recipe Dockerfile patch, continuing with redeploy',
+              );
+            }
+          }
+        }
       } else {
         await emitTimelineMessage(
           eventBus,

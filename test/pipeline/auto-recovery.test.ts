@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { setupAutoRecovery, type AutoRecoveryAgent } from '../../src/pipeline/auto-recovery.js';
 import { EventBus } from '../../src/events/index.js';
 import { Database } from '../../src/db/index.js';
+import type { OpenLanderConfig } from '../../src/config/index.js';
 import { QuestionBridge } from '../../src/lib/question-bridge.js';
 import type { DeployPipeline, DeployResult } from '../../src/pipeline/deploy.js';
 import type { DeployQueue } from '../../src/pipeline/deploy-queue.js';
@@ -74,6 +75,7 @@ function createHarness(options?: {
 
   const questionBridge = new QuestionBridge();
   const agent = options?.agent ?? null;
+  const testConfig = {} as OpenLanderConfig;
 
   setupAutoRecovery({
     eventBus,
@@ -84,6 +86,7 @@ function createHarness(options?: {
     pipeline,
     questionBridge,
     language: 'en',
+    config: testConfig,
   });
 
   return {
@@ -179,6 +182,12 @@ describe('setupAutoRecovery', () => {
 
     try {
       const projectId = 'proj-recipe-path';
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-recipe-path',
+        branch: 'main',
+      });
       await emitDeployFailed(harness.eventBus, projectId, 'node-gyp ERR! build failed');
 
       expect(harness.redeployMock).toHaveBeenCalledOnce();
@@ -187,6 +196,138 @@ describe('setupAutoRecovery', () => {
       const runs = harness.db.getActionRunsByProject(projectId, 1);
       expect(runs).toHaveLength(1);
       expect(runs[0].recovery_strategy).toBe('recipe');
+
+      const pendingFix = harness.db.getProject(projectId)?.pending_fix;
+      expect(pendingFix).not.toBeNull();
+      const parsedPendingFix = JSON.parse(pendingFix ?? '{}') as {
+        filePath?: string;
+        patches?: Array<{ pattern?: string; replacement?: string; flags?: string }>;
+      };
+      expect(parsedPendingFix.filePath).toBe('Dockerfile');
+      expect(parsedPendingFix.patches?.[0]?.pattern).toBe('FROM (node:[^-\\s]+)-alpine');
+      expect(parsedPendingFix.patches?.[0]?.replacement).toBe('FROM $1-bookworm-slim');
+      expect(parsedPendingFix.patches?.[0]?.flags).toBe('gm');
+    } finally {
+      harness.db.close();
+      rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for approval on high-risk tool call and continues when approved', async () => {
+    const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
+      await onEvent({
+        type: 'tool_call',
+        toolName: 'remove_project',
+        arguments: { project_id: 'proj-approval-approved' },
+      });
+    });
+
+    const harness = createHarness({
+      agent: {
+        chatStream: agentChatMock,
+      },
+    });
+
+    try {
+      const projectId = 'proj-approval-approved';
+      await emitDeployFailed(harness.eventBus, projectId, 'unknown build failure requiring ai');
+
+      const pendingRun = harness.db.getActionRunsByProject(projectId, 1)[0];
+      expect(pendingRun.approval_status).toBe('pending');
+      expect(pendingRun.approval_tool).toBe('remove_project');
+
+      await harness.eventBus.emit('recovery:approval-resolved', {
+        actionRunId: pendingRun.id,
+        approved: true,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      await harness.eventBus.emit('deploy:success', {
+        projectId,
+        url: 'http://example.test',
+        totalDurationMs: 123,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      const updatedRun = harness.db.getActionRunsByProject(projectId, 1)[0];
+      expect(updatedRun.approval_status).toBe('approved');
+      expect(updatedRun.approval_resolved_at).not.toBeNull();
+      expect(updatedRun.status).toBe('succeeded');
+    } finally {
+      harness.db.close();
+      rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('marks high-risk tool as rejected and fails recovery when rejected', async () => {
+    const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
+      await onEvent({
+        type: 'tool_call',
+        toolName: 'remove_project',
+        arguments: { project_id: 'proj-approval-rejected' },
+      });
+    });
+
+    const harness = createHarness({
+      agent: {
+        chatStream: agentChatMock,
+      },
+    });
+
+    try {
+      const projectId = 'proj-approval-rejected';
+      await emitDeployFailed(harness.eventBus, projectId, 'unknown build failure requiring ai');
+
+      const pendingRun = harness.db.getActionRunsByProject(projectId, 1)[0];
+      expect(pendingRun.approval_status).toBe('pending');
+
+      await harness.eventBus.emit('recovery:approval-resolved', {
+        actionRunId: pendingRun.id,
+        approved: false,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      const updatedRun = harness.db.getActionRunsByProject(projectId, 1)[0];
+      expect(updatedRun.approval_status).toBe('rejected');
+      expect(updatedRun.status).toBe('failed');
+      expect(updatedRun.error_message).toContain('was rejected or timed out');
+    } finally {
+      harness.db.close();
+      rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('stores Dockerfile add-line recipe action as pending patch before redeploy', async () => {
+    const harness = createHarness();
+
+    try {
+      const projectId = 'proj-oom-recipe-path';
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-oom-recipe-path',
+        branch: 'main',
+      });
+      await emitDeployFailed(harness.eventBus, projectId, 'JavaScript heap out of memory');
+
+      expect(harness.redeployMock).toHaveBeenCalledOnce();
+
+      const pendingFix = harness.db.getProject(projectId)?.pending_fix;
+      expect(pendingFix).not.toBeNull();
+      const parsedPendingFix = JSON.parse(pendingFix ?? '{}') as {
+        filePath?: string;
+        patches?: Array<{ pattern?: string; replacement?: string; flags?: string }>;
+      };
+
+      expect(parsedPendingFix.filePath).toBe('Dockerfile');
+      expect(parsedPendingFix.patches?.[0]?.pattern).toBe('^CMD\\b|^ENTRYPOINT\\b');
+      expect(parsedPendingFix.patches?.[0]?.replacement).toContain(
+        'ENV NODE_OPTIONS="--max-old-space-size=4096"',
+      );
+      expect(parsedPendingFix.patches?.[0]?.flags).toBe('m');
     } finally {
       harness.db.close();
       rmSync(harness.tmpDir, { recursive: true, force: true });
