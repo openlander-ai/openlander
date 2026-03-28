@@ -29,6 +29,10 @@
     --color-warning: #f59e0b;/* amber-500 */
     --color-error: #ef4444;  /* red-500 */
     
+    /* 💎 AI Sparkle Gradient (Light Mode) 💎 */
+    --sparkle-start: #4f46e5; /* Indigo 600 - Professional and sharp */
+    --sparkle-end: #f43f5e;   /* Rose 500 - Magic AI */
+
     --text-primary: #0f172a; /* slate-900 */
     --text-secondary: #475569; /* slate-600 */
     --text-muted: #94a3b8;   /* slate-400 */
@@ -69,6 +73,10 @@
     --color-warning: #f59e0b;
     --color-error: #ef4444;
     
+    /* 💎 AI Sparkle Gradient (Dark Mode) 💎 */
+    --sparkle-start: #22d3ee; /* Cyan 400 - Futuristic Tech */
+    --sparkle-end: #a855f7;   /* Purple 500 - Deep AI Magic */
+
     --text-primary: #f8fafc; /* slate-50 */
     --text-secondary: #cbd5e1; /* slate-300 */
     --text-muted: #94a3b8;   /* slate-400 */
@@ -204,3 +212,9 @@
     opacity: 1;
   }
 }
+
+.bg-agent, .bg-primary {
+  --sparkle-start: #ffffff;
+  --sparkle-end: #cffafe;
+}
+

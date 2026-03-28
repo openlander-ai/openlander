@@ -17,8 +17,8 @@ export function AISparkle({
     >
       <defs>
         <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#fecdd3" /> {/* rose-200 */}
-          <stop offset="100%" stopColor="#f43f5e" /> {/* rose-500 */}
+          <stop offset="0%" stopColor="var(--sparkle-start, #6366f1)" />
+          <stop offset="100%" stopColor="var(--sparkle-end, #f43f5e)" />
         </linearGradient>
       </defs>
       <path
