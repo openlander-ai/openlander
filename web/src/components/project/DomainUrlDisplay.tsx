@@ -66,7 +66,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
           href={primaryUrl.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-subtle hover:bg-zinc-200/60 text-secondary hover:text-primary transition-colors border border-border shadow-sm"
+          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-bg-panel hover:bg-bg-subtle text-secondary-ol hover:text-primary-ol transition-colors border border-border shadow-sm"
           title={`Open ${primaryUrl.label} URL`}
         >
           <PrimaryIcon className="h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
@@ -94,12 +94,12 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
     <div className={cn('flex items-center', className)}>
       <Popover>
         <PopoverTrigger asChild>
-          <button className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-subtle hover:bg-zinc-200/60 text-secondary hover:text-primary transition-colors border border-border shadow-sm">
+          <button className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-bg-panel hover:bg-bg-subtle text-secondary-ol hover:text-primary-ol transition-colors border border-border shadow-sm">
             <PrimaryIcon className="h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
             <span className="font-mono tracking-tight text-[11px] truncate max-w-[200px] text-left">
               {primaryUrl.url.replace(/^https?:\/\//, '')}
             </span>
-            <span className="ml-[1px] flex items-center justify-center h-[18px] px-1.5 rounded-[4px] bg-zinc-200/50 text-[10px] text-secondary font-semibold border border-border/80 group-hover:bg-zinc-200 group-hover:text-primary transition-colors">
+            <span className="ml-[1px] flex items-center justify-center h-[18px] px-1.5 rounded-[4px] bg-bg-app text-[10px] text-secondary-ol font-semibold border border-transparent group-hover:border-border transition-colors">
               +{additionalUrls.length}
             </span>
             <ChevronDown className="h-3 w-3 opacity-40 ml-0.5 group-hover:opacity-100 transition-opacity" />
@@ -107,12 +107,12 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="w-[320px] p-0 shadow-lg border-border rounded-xl overflow-hidden"
+          className="w-[320px] p-0 shadow-lg border-border rounded-xl bg-bg-panel overflow-hidden"
           sideOffset={6}
         >
-          <div className="bg-subtle/40 px-3 py-2.5 border-b border-border">
-            <h4 className="text-xs font-semibold text-primary">Deployment URLs</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+          <div className="bg-bg-subtle px-3 py-2.5 border-b border-border">
+            <h4 className="text-[13px] font-semibold text-primary-ol">Deployment URLs</h4>
+            <p className="text-[11px] text-muted-ol mt-0.5">
               Explore your service across available networks.
             </p>
           </div>
@@ -124,17 +124,17 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
               return (
                 <div
                   key={`${item.url}-${idx}`}
-                  className="group relative flex items-center justify-between gap-3 px-2 py-2 rounded-lg hover:bg-subtle transition-colors"
+                  className="group relative flex items-center justify-between gap-3 px-2 py-2 rounded-lg hover:bg-bg-subtle transition-colors"
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className="flex items-center justify-center h-7 w-7 rounded-md bg-background border border-border shadow-sm shrink-0">
-                      <Icon className="h-3.5 w-3.5 text-secondary" />
+                    <div className="flex items-center justify-center h-7 w-7 rounded-md bg-bg-panel border border-[hsl(var(--border))] shadow-sm shrink-0">
+                      <Icon className="h-3.5 w-3.5 text-secondary-ol" />
                     </div>
                     <div className="flex flex-col min-w-0 -mt-0.5">
-                      <span className="text-[10px] font-semibold tracking-wide text-secondary-ol uppercase mb-[1px]">
+                      <span className="text-[10px] font-semibold tracking-wide text-muted-ol uppercase mb-[1px]">
                         {item.label}
                       </span>
-                      <span className="text-[11px] font-mono text-primary truncate cursor-default">
+                      <span className="text-[11px] font-mono text-primary-ol truncate cursor-default">
                         {item.url.replace(/^https?:\/\//, '')}
                       </span>
                     </div>
@@ -146,11 +146,11 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
                         e.preventDefault();
                         copy(item.url, item.url);
                       }}
-                      className="flex items-center justify-center h-7 w-7 text-secondary hover:text-primary hover:bg-background rounded-md transition-colors border border-transparent hover:border-border shadow-none hover:shadow-sm"
+                      className="flex items-center justify-center h-7 w-7 text-secondary-ol hover:text-primary-ol hover:bg-bg-panel rounded-md transition-colors border border-transparent hover:border-border shadow-none hover:shadow-sm"
                       title="Copy URL"
                     >
                       {isItemCopied ? (
-                        <Check className="h-3.5 w-3.5 text-green-500" />
+                        <Check className="h-3.5 w-3.5 text-success" />
                       ) : (
                         <Copy className="h-3.5 w-3.5" />
                       )}
@@ -159,7 +159,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center h-7 w-7 text-secondary hover:text-primary hover:bg-background rounded-md transition-colors border border-transparent hover:border-border shadow-none hover:shadow-sm"
+                      className="flex items-center justify-center h-7 w-7 text-secondary-ol hover:text-primary-ol hover:bg-bg-panel rounded-md transition-colors border border-transparent hover:border-border shadow-none hover:shadow-sm"
                       title="Open in new tab"
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
