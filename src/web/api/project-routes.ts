@@ -1045,8 +1045,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     const follow = c.req.query('follow');
 
-    if (follow && project.container_id) {
-      const containerId = project.container_id;
+    // container_id moved to environments table; fall back to production environment
+    const resolvedContainerId =
+      project.container_id ??
+      ctx.db.getEnvironmentsByProject(project.id).find((e) => e.type === 'production')
+        ?.container_id ??
+      null;
+
+    if (follow && resolvedContainerId) {
+      const containerId = resolvedContainerId;
       return stream(c, async (s) => {
         c.header('Content-Type', 'application/x-ndjson');
 
