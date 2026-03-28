@@ -508,9 +508,12 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       Object.entries(existingRoutes).filter(([, route]) => route.providerId !== id),
     );
 
-    const updated = updateConfig({
-      llm: { providers: remainingProviders, routes: cleanedRoutes },
-    });
+    // Use saveConfig directly — deepMerge cannot remove keys from Record fields
+    const updated = {
+      ...config,
+      llm: { ...config.llm, providers: remainingProviders, routes: cleanedRoutes },
+    };
+    saveConfig(updated);
     ctx.config = updated;
 
     const normalizedLlm = normalizeLlmConfig(updated.llm);
