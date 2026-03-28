@@ -40,6 +40,7 @@ export interface DeployOrchestrationDeps {
   jobManager?: JobManager;
   applyPendingFix: (projectId: string, clonePath: string) => string | null;
   exposeTunnel: (projectId: string, port: number) => Promise<string>;
+  secretScanEnabled: boolean;
 }
 
 export async function cloneAndAnalyze(
@@ -120,13 +121,15 @@ export async function cloneAndAnalyze(
     });
   }
 
-  const secretFindings = scanForSecrets(cloneResult.path);
-  if (secretFindings.length > 0) {
-    await eventBus.emit('secret:detected', {
-      projectId,
-      projectName,
-      secrets: secretFindings,
-    });
+  if (deps.secretScanEnabled) {
+    const secretFindings = scanForSecrets(cloneResult.path);
+    if (secretFindings.length > 0) {
+      await eventBus.emit('secret:detected', {
+        projectId,
+        projectName,
+        secrets: secretFindings,
+      });
+    }
   }
 
   return {

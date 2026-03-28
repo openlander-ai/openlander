@@ -1,7 +1,7 @@
 import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('deploy');
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
 
@@ -23,6 +23,7 @@ import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
+import type { OpenLanderConfig } from '../config/index.js';
 
 import { extractProjectName } from './helpers.js';
 import {
@@ -206,6 +207,7 @@ export class DeployPipeline {
     private readonly docker: Docker,
     private readonly db: Database,
     private readonly env: EnvManager,
+    private readonly config: OpenLanderConfig,
     private readonly jobManager?: JobManager,
     private readonly composePipeline?: ComposePipeline,
     private readonly autoDetector?: AutoDetector,
@@ -895,6 +897,7 @@ export class DeployPipeline {
       applyPendingFix: (projectId: string, clonePath: string) =>
         this.applyPendingFix(projectId, clonePath),
       exposeTunnel: (projectId: string, port: number) => this.exposeTunnel(projectId, port),
+      secretScanEnabled: this.config.ai.secretScan.enabled,
     };
   }
 
@@ -1433,8 +1436,25 @@ export class DeployPipeline {
       throw new Error('Pending fix path escaped repository root');
     }
 
-    mkdirSync(dirname(targetPath), { recursive: true });
-    writeFileSync(targetPath, parsed.content, 'utf8');
+    if (parsed.content !== undefined) {
+      mkdirSync(dirname(targetPath), { recursive: true });
+      writeFileSync(targetPath, parsed.content, 'utf8');
+    } else if (parsed.patches && parsed.patches.length > 0) {
+      if (!existsSync(targetPath)) {
+        throw new Error(`Cannot apply patches: ${parsed.filePath} not found in repository`);
+      }
+
+      let content = readFileSync(targetPath, 'utf8');
+      for (const patch of parsed.patches) {
+        const regex = new RegExp(patch.pattern, patch.flags ?? 'gm');
+        content = content.replace(regex, patch.replacement);
+      }
+
+      writeFileSync(targetPath, content, 'utf8');
+    } else {
+      throw new Error('Invalid pending fix: must have content or patches');
+    }
+
     log.info({ projectId, filePath: normalizedPath }, 'Applied pending fix before build');
     return normalizedPath;
   }
