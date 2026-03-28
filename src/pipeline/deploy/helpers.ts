@@ -1,20 +1,51 @@
 import { dirname, join, resolve } from 'node:path';
 
-interface PendingFixPayload {
+export interface PendingFixPatch {
+  pattern: string;
+  replacement: string;
+  flags?: string;
+}
+
+export interface PendingFixPayload {
   filePath: string;
-  content: string;
+  content?: string;
+  patches?: PendingFixPatch[];
 }
 
 export function parsePendingFix(rawPendingFix: string): PendingFixPayload | null {
   try {
     const parsed = JSON.parse(rawPendingFix) as Record<string, unknown>;
-    if (typeof parsed.filePath !== 'string' || typeof parsed.content !== 'string') {
+    if (typeof parsed.filePath !== 'string') {
       return null;
     }
-    return {
-      filePath: parsed.filePath,
-      content: parsed.content,
-    };
+
+    if (typeof parsed.content === 'string') {
+      return {
+        filePath: parsed.filePath,
+        content: parsed.content,
+      };
+    }
+
+    if (Array.isArray(parsed.patches)) {
+      const patches = parsed.patches as Array<Record<string, unknown>>;
+      const validPatches = patches
+        .filter((patch) => {
+          return typeof patch.pattern === 'string' && typeof patch.replacement === 'string';
+        })
+        .map((patch) => ({
+          pattern: patch.pattern as string,
+          replacement: patch.replacement as string,
+          flags: typeof patch.flags === 'string' ? patch.flags : 'gm',
+        }));
+      if (validPatches.length > 0) {
+        return {
+          filePath: parsed.filePath,
+          patches: validPatches,
+        };
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }

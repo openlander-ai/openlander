@@ -31,6 +31,62 @@ describe('parsePendingFix', () => {
     expect(result).toBeNull();
   });
 
+  it('parses valid JSON with filePath and patches', () => {
+    const result = parsePendingFix(
+      JSON.stringify({
+        filePath: 'Dockerfile',
+        patches: [{ pattern: 'FROM node:22-alpine', replacement: 'FROM node:22-bookworm-slim' }],
+      }),
+    );
+
+    expect(result).toEqual({
+      filePath: 'Dockerfile',
+      patches: [
+        {
+          pattern: 'FROM node:22-alpine',
+          replacement: 'FROM node:22-bookworm-slim',
+          flags: 'gm',
+        },
+      ],
+    });
+  });
+
+  it('parses patch flags when provided', () => {
+    const result = parsePendingFix(
+      JSON.stringify({
+        filePath: 'Dockerfile',
+        patches: [
+          {
+            pattern: '^CMD',
+            replacement: 'ENV NODE_OPTIONS="--max-old-space-size=4096"\n$&',
+            flags: 'm',
+          },
+        ],
+      }),
+    );
+
+    expect(result).toEqual({
+      filePath: 'Dockerfile',
+      patches: [
+        {
+          pattern: '^CMD',
+          replacement: 'ENV NODE_OPTIONS="--max-old-space-size=4096"\n$&',
+          flags: 'm',
+        },
+      ],
+    });
+  });
+
+  it('returns null when patches array exists but no valid patches', () => {
+    const result = parsePendingFix(
+      JSON.stringify({
+        filePath: 'Dockerfile',
+        patches: [{ pattern: 123, replacement: false }],
+      }),
+    );
+    expect(result).toBeNull();
+  });
+
   it('returns null when filePath is not a string', () => {
     const result = parsePendingFix('{"filePath":123,"content":"FROM node:20"}');
     expect(result).toBeNull();
