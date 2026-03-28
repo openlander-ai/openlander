@@ -27,6 +27,18 @@ interface UseTimelineReturn {
 const MAX_RETRIES = 5;
 const RETRY_DELAY = 3000;
 
+function shouldTreatEventAsActiveBuild(event: BuildStreamEvent): boolean {
+  if (event.type === 'complete') {
+    return false;
+  }
+
+  if (event.type === 'status') {
+    return /build in progress/i.test(event.message);
+  }
+
+  return true;
+}
+
 export function useTimeline({
   projectId,
   enabled = true,
@@ -102,6 +114,7 @@ export function useTimeline({
       const decoder = new TextDecoder();
       let buffer = '';
       retriesRef.current = 0; // Reset retries on successful connection
+      let sawActiveBuildEvent = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -116,6 +129,9 @@ export function useTimeline({
           try {
             const event: BuildStreamEvent = JSON.parse(line);
             appendEvent(event);
+            if (shouldTreatEventAsActiveBuild(event)) {
+              sawActiveBuildEvent = true;
+            }
 
             if (event.type === 'complete') {
               setIsComplete(true);
@@ -133,6 +149,19 @@ export function useTimeline({
         }
       }
 
+      if (sawActiveBuildEvent && retriesRef.current < MAX_RETRIES) {
+        retriesRef.current += 1;
+        setDisconnected(true);
+        setIsStreaming(false);
+        setTimeout(() => {
+          if (!controller.signal.aborted) {
+            connect();
+          }
+        }, RETRY_DELAY);
+        return;
+      }
+
+      setDisconnected(false);
       setIsStreaming(false);
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -165,14 +194,16 @@ export function useTimeline({
 
     let cancelled = false;
     void (async () => {
-      try {
-        const history = await getProjectTimeline(projectId);
-        if (cancelled) return;
-        for (const event of history) {
-          appendEvent(event);
+      if (runKey === 0) {
+        try {
+          const history = await getProjectTimeline(projectId);
+          if (cancelled) return;
+          for (const event of history) {
+            appendEvent(event);
+          }
+        } catch (err) {
+          void err;
         }
-      } catch (err) {
-        void err;
       }
 
       if (!cancelled) {

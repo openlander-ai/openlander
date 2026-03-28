@@ -30,6 +30,7 @@ export function ProjectDetailTabs({
   environments,
   allTimelineItems,
   isStreaming,
+  timelineDisconnected,
   onRedeploy,
   onStop,
   onRollback,
@@ -80,6 +81,7 @@ export function ProjectDetailTabs({
             environments={environments}
             timelineItems={allTimelineItems}
             isTimelineStreaming={isStreaming}
+            timelineDisconnected={timelineDisconnected}
             onOpenLogs={() => onActiveTabChange('console')}
             onOpenDeployments={() => onActiveTabChange('deployments')}
             onOpenSettings={() => onActiveTabChange('settings')}
