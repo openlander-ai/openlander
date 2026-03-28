@@ -17,80 +17,82 @@
     --font-size-2xl: 1.5rem; /* 24px */
     --font-size-3xl: 1.875rem; /* 30px */
 
-    /* ── OpenLander Signature (Light) ── */
-    --bg-app: #ffffff;
-    --bg-panel: #fafafa;
-    --bg-subtle: #f4f4f5;
-    --bg-surface: #ffffff;
-    --bg-terminal: #000000;
-    --color-accent: #09090b; /* black for primary */
-    --color-ai: #a855f7; /* purple-500 for AI magic */
-    --color-success: #10b981;
-    --color-warning: #f59e0b;
-    --color-error: #ef4444;
-    --text-primary: #09090b;
-    --text-secondary: #52525b;
-    --text-muted: #a1a1aa;
+    /* ── OpenLander Enterprise Cloud (Light Base) ── */
+    --bg-app: #f1f5f9;       /* slate-100 */
+    --bg-panel: #ffffff;     /* crisp white */
+    --bg-subtle: #f8fafc;    /* slate-50 */
+    --bg-surface: #ffffff; 
+    --bg-terminal: #0f172a;  /* slate-900 (sharp contrast for terminal windows) */
+    --color-accent: #6366f1; /* indigo-500 */
+    --color-ai: #f43f5e;     /* rose-500 */
+    --color-success: #10b981;/* emerald-500 */
+    --color-warning: #f59e0b;/* amber-500 */
+    --color-error: #ef4444;  /* red-500 */
+    
+    --text-primary: #0f172a; /* slate-900 */
+    --text-secondary: #475569; /* slate-600 */
+    --text-muted: #94a3b8;   /* slate-400 */
 
-    /* ── shadcn/ui — Light ── */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 4%;
+    /* ── shadcn/ui — Light Slate & Indigo ── */
+    --background: 210 40% 98%; /* slate-50 */
+    --foreground: 222 47% 11%; /* slate-900 */
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 4%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 4%;
-    --primary: 240 10% 4%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 10%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 6% 10%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 239 84% 67%; /* indigo-500 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%; /* slate-100 */
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%; /* slate-500 */
+    --accent: 210 40% 96%;
+    --accent-foreground: 239 84% 67%; /* indigo text when hovered */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 240 10% 4%;
-    --radius: 0.5rem;
+    --border: 214 32% 91%; /* slate-200 */
+    --input: 214 32% 91%;
+    --ring: 239 84% 67%; /* indigo-500 */
+    --radius: 0.5rem; /* rounded-lg */
   }
 
-  [data-theme='dark'] {
-    /* ── OpenLander Signature (Dark) ── */
-    --bg-app: #030303;
-    --bg-panel: #111111;
-    --bg-subtle: #1c1c1c;
-    --bg-surface: #111111;
-    --bg-terminal: #000000;
-    --color-accent: #ffffff;
-    --color-ai: #c084fc; /* purple-400 */
+  [data-theme='dark'], .dark {
+    /* ── OpenLander Enterprise Cloud (Dark Base) ── */
+    --bg-app: #0f172a;       /* slate-900 - deep navy backdrop */
+    --bg-panel: #1e293b;     /* slate-800 - cards structure */
+    --bg-subtle: #334155;    /* slate-700 */
+    --bg-surface: #0f172a; 
+    --bg-terminal: #020617;  /* slate-950 - extremely dark for real terminals */
+    --color-accent: #6366f1; /* indigo-500 */
+    --color-ai: #f43f5e;     /* rose-500 - popping magic */
     --color-success: #10b981;
     --color-warning: #f59e0b;
     --color-error: #ef4444;
-    --text-primary: #ffffff;
-    --text-secondary: #d4d4d8; /* zinc-300 - much brighter */
-    --text-muted: #a1a1aa; /* zinc-400 - much brighter */
+    
+    --text-primary: #f8fafc; /* slate-50 */
+    --text-secondary: #cbd5e1; /* slate-300 */
+    --text-muted: #94a3b8;   /* slate-400 */
 
-    /* ── shadcn/ui — Dark ── */
-    --background: 0 0% 2%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 6%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 6%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 0%;
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 65%; /* zinc-400 */
-    --accent: 0 0% 15%;
-    --accent-foreground: 0 0% 98%;
+    /* ── shadcn/ui — Dark Slate & Indigo ── */
+    --background: 222 47% 11%; /* slate-900 */
+    --foreground: 210 40% 98%; /* slate-50 */
+    --card: 215 28% 17%; /* slate-800 */
+    --card-foreground: 210 40% 98%;
+    --popover: 215 28% 17%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 239 84% 67%; /* indigo-500 */
+    --primary-foreground: 210 40% 98%; /* white text on indigo */
+    --secondary: 215 28% 22%; /* slate-700 */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 215 28% 22%;
+    --muted-foreground: 215 20% 65%; /* slate-400 */
+    --accent: 215 28% 22%;
+    --accent-foreground: 210 40% 98%;
     --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 18%; /* lighter border */
-    --input: 0 0% 18%;
-    --ring: 0 0% 83%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 28% 22%; /* slate-700 */
+    --input: 215 28% 22%;
+    --ring: 239 84% 67%; /* indigo-500 */
   }
 }
 
@@ -144,14 +146,14 @@
       0 1px 3px rgba(0, 0, 0, 0.06);
   }
   .card-hover:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    border-color: rgba(244, 63, 94, 0.2); /* rose-500/20 */
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    border-color: rgba(99, 102, 241, 0.4); /* indigo-500/40 */
   }
 
   /* AI Deployment Border — left accent only */
   .ai-deploy-border {
-    border-left: 2px solid #f43f5e;
+    border-left: 3px solid #f43f5e; /* Rose 500 AI Magic */
   }
 
   .ai-sparkle-glow {
