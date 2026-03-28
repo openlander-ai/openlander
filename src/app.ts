@@ -6,7 +6,8 @@ import { EnvManager } from './pipeline/env.js';
 import { Agent } from './llm/agent.js';
 import { DeployQueue } from './pipeline/deploy-queue.js';
 import { QuestionBridge } from './lib/question-bridge.js';
-import { createModel } from './llm/index.js';
+import { ModelRegistry } from './llm/model-registry.js';
+import { createModelProxy } from './llm/model-proxy.js';
 import { HealthMonitor } from './monitor/health.js';
 import { WebhookManager } from './webhook/index.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
@@ -31,6 +32,7 @@ import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
 import { eventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
+import { normalizeLlmConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
 import { buildContextSnapshot } from './llm/prompts.js';
 import { createModuleLogger } from './lib/logger.js';
@@ -59,6 +61,7 @@ export interface AppContext {
   env: EnvManager;
   agentPool: AgentPool | null;
   agent: Agent | null;
+  modelRegistry: ModelRegistry;
   model: LanguageModel | null;
   deployQueue: DeployQueue;
   // v0.2 modules
@@ -142,22 +145,41 @@ export async function createAppContext(
     networkName: config.docker.networkName,
   });
 
-  let model: LanguageModel | null = null;
-  if (config.llm.apiKey || config.llm.authToken || config.llm.provider === 'ollama') {
-    try {
-      model = createModel({
-        provider: config.llm.provider,
-        apiKey: config.llm.apiKey,
-        model: config.llm.model,
-        authToken: config.llm.authToken || undefined,
-        ollamaBaseUrl: config.llm.ollamaEndpoint || undefined,
-      });
-    } catch (err) {
-      log.debug({ err }, 'LLM model creation failed — LLM-powered features disabled');
-    }
-  }
+  const normalizedLlm = normalizeLlmConfig(config.llm);
 
-  const autoDetector = new AutoDetector(model);
+  const hasLlmConfigured = (() => {
+    if (Object.keys(normalizedLlm.providers).length === 0) {
+      return false;
+    }
+
+    const defaultProvider = normalizedLlm.providers[normalizedLlm.defaultRoute.providerId];
+    if (!defaultProvider) {
+      return false;
+    }
+
+    return (
+      defaultProvider.provider === 'ollama' ||
+      !!(defaultProvider.apiKey || defaultProvider.authToken)
+    );
+  })();
+
+  const modelRegistry = new ModelRegistry(
+    hasLlmConfigured
+      ? {
+          providers: normalizedLlm.providers,
+          defaultRoute: normalizedLlm.defaultRoute,
+          routes: normalizedLlm.routes,
+        }
+      : { providers: {}, defaultRoute: { providerId: '__none__' } },
+  );
+
+  const model: LanguageModel | null = hasLlmConfigured
+    ? createModelProxy(modelRegistry, 'default')
+    : null;
+
+  const autoDetector = new AutoDetector(
+    hasLlmConfigured ? createModelProxy(modelRegistry, 'envDetection') : null,
+  );
 
   const webAgentEnabled = config.ai.webAgent.enabled;
   const autoRecoveryEnabled = config.ai.autoRecovery.enabled;
@@ -165,9 +187,14 @@ export async function createAppContext(
 
   // v0.3: Build debugger (requires LLM) — created before pipeline so it can be injected
   let buildDebugger: BuildDebugger | null = null;
-  if (model && buildDebuggerEnabled) {
+  if (hasLlmConfigured && buildDebuggerEnabled) {
     try {
-      buildDebugger = new BuildDebugger(model, config.language, db, config.llm.provider);
+      buildDebugger = new BuildDebugger(
+        createModelProxy(modelRegistry, 'buildDebugger'),
+        config.language,
+        db,
+        config.llm.provider,
+      );
     } catch (err) {
       log.debug({ err }, 'Build debugger creation failed');
     }
@@ -177,10 +204,10 @@ export async function createAppContext(
 
   let agentPool: AgentPool | null = null;
   let agent: Agent | null = null;
-  if (model && webAgentEnabled) {
+  if (hasLlmConfigured && webAgentEnabled) {
     try {
       agentPool = new AgentPool(
-        model,
+        createModelProxy(modelRegistry, 'webAgent'),
         db,
         async () => buildContextSnapshot(db, docker),
         config.llm.provider,
@@ -192,13 +219,13 @@ export async function createAppContext(
     }
   }
 
-  if (model && autoRecoveryEnabled) {
+  if (hasLlmConfigured && autoRecoveryEnabled) {
     if (agentPool) {
       agent = agentPool.getRecoveryAgent();
     } else {
       try {
         agent = new Agent(
-          model,
+          createModelProxy(modelRegistry, 'autoRecovery'),
           db,
           async () => buildContextSnapshot(db, docker),
           config.llm.provider,
@@ -248,7 +275,7 @@ export async function createAppContext(
   // v0.2: Health monitoring
   const healthMonitor = new HealthMonitor(docker, db, eventBus, {
     intervalMs: config.monitoring.healthcheckIntervalSec * 1000,
-    aiProvider: model,
+    aiProvider: hasLlmConfigured ? createModelProxy(modelRegistry, 'operationalMonitoring') : null,
   });
 
   // v0.2: Webhook auto-redeploy
@@ -371,6 +398,7 @@ export async function createAppContext(
     set agent(value: Agent | null) {
       mutableAgent = value;
     },
+    modelRegistry,
     model,
     deployQueue,
     healthMonitor,

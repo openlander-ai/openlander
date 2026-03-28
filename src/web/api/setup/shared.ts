@@ -2,6 +2,7 @@ import type { LanguageModel, ToolSet } from 'ai';
 
 import type { AppContext } from '../../../app.js';
 import type { OpenLanderConfig } from '../../../config/index.js';
+import { normalizeLlmConfig } from '../../../config/index.js';
 import { Agent } from '../../../llm/agent.js';
 import { createModel } from '../../../llm/index.js';
 import { buildContextSnapshot } from '../../../llm/prompts.js';
@@ -49,6 +50,22 @@ export async function reloadAgent(
   agent.setQuestionBridge(ctx.questionBridge);
 
   ctx.agent = agent;
+
+  const updatedLlm = normalizeLlmConfig({
+    provider: options.provider,
+    apiKey: options.apiKey,
+    model: options.model,
+    authToken: options.authToken ?? '',
+    ollamaEndpoint: ctx.config.llm.ollamaEndpoint,
+    providers: ctx.config.llm.providers,
+    defaultRoute: ctx.config.llm.defaultRoute,
+    routes: ctx.config.llm.routes,
+  });
+  ctx.modelRegistry.updateConfig({
+    providers: updatedLlm.providers,
+    defaultRoute: updatedLlm.defaultRoute,
+    routes: updatedLlm.routes,
+  });
 
   return llmModel;
 }

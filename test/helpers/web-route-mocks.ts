@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
+import { ModelRegistry } from '../../src/llm/model-registry.js';
 import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 
 // ---------------------------------------------------------------------------
@@ -181,7 +182,9 @@ export function createMockContext(db: Database): AppContext {
     env: createMockEnvManager() as unknown as AppContext['env'],
     channelManager: createMockChannelManager() as unknown as AppContext['channelManager'],
     healthMonitor: createMockHealthMonitor() as unknown as AppContext['healthMonitor'],
+    agentPool: null,
     agent: createMockAgent() as unknown as AppContext['agent'],
+    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),
     model: null,
     deployQueue: new DeployQueue(),
     blueGreen: {
