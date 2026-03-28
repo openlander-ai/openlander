@@ -87,7 +87,6 @@ export function ProjectsGrid() {
   if (projectsLoading || systemLoading) {
     return (
       <div className="p-6 xl:p-8 max-w-7xl mx-auto w-full space-y-6">
-        <Skeleton className="h-24 w-full rounded-lg" />
         <div className="flex items-center justify-between mb-6">
           <div>
             <Skeleton className="h-7 w-32 mb-2" />
