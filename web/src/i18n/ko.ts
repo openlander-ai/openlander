@@ -160,6 +160,8 @@ export const translations = {
       errorLoad: 'AI 기능을 불러오지 못했습니다',
       errorUpdate: '기능 업데이트에 실패했습니다',
       unavailable: '사용 불가',
+      modelDefault: '기본값',
+      modelSelector: '모델',
       autoRecovery: {
         label: '자동 복구',
         description: '빌드 실패 시 자동으로 수정을 시도합니다',
@@ -430,6 +432,24 @@ export const translations = {
   },
   llmSettings: {
     oauthComingSoon: 'Coming Soon — 다음 업데이트에서 OAuth 로그인을 지원합니다',
+    title: 'AI 모델 구성',
+    connected: '{n}개의 제공자 연결됨',
+    connectedPlural: '{n}개의 제공자 연결됨',
+    noProviders: '구성된 AI 제공자가 없습니다',
+    addProvider: '제공자 추가',
+    cancel: '취소',
+    id: '제공자 ID',
+    idHint: '이 제공자의 고유 이름',
+    apiKey: 'API Key',
+    defaultModel: '기본 모델',
+    addSuccess: '제공자가 성공적으로 추가되었습니다',
+    deleteConfirm: '이 제공자를 삭제하시겠습니까?',
+    testConnection: '연결 테스트',
+    testSuccess: '연결됨 ({ms}ms)',
+    testFail: '연결 실패',
+    errorLoad: '제공자를 불러오지 못했습니다',
+    errorAdd: '제공자를 추가하지 못했습니다',
+    errorDelete: '제공자를 삭제하지 못했습니다',
   },
   project: {
     confirm: {

@@ -1,9 +1,15 @@
-import { useMemo, useState } from 'react';
-import { Check, Eye, EyeOff, Key, Loader2, Save, Zap, Trash2 } from 'lucide-react';
-import { configureLLM, testLLMConnection, deleteLLMConfig, type SetupStatus } from '@/lib/api';
+import { useEffect, useMemo, useState } from 'react';
+import { Eye, EyeOff, Key, Loader2, Plus, Save, Trash2, Zap } from 'lucide-react';
+import {
+  addProvider,
+  deleteProvider,
+  getProviders,
+  testLLMConnection,
+  type ProviderInfo,
+  type SetupStatus,
+} from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tooltip } from '@/components/ui/tooltip.js';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context.js';
 
@@ -12,354 +18,421 @@ interface LlmSettingsTabProps {
   refetch: () => Promise<void>;
 }
 
-type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'openrouter';
-
-const PROVIDERS: Array<{
-  id: ProviderId;
-  label: string;
-  models: string[];
-}> = [
-  { id: 'openai', label: 'OpenAI', models: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1'] },
+const PROVIDERS = [
+  { id: 'openai', label: 'OpenAI', models: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o'] },
   {
     id: 'anthropic',
     label: 'Anthropic',
-    models: ['claude-sonnet-4-20250514', 'claude-3-7-sonnet-latest'],
+    models: ['claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-sonnet-4-20250514'],
   },
-  { id: 'gemini', label: 'Google Gemini', models: ['gemini-2.0-flash', 'gemini-2.5-flash'] },
+  {
+    id: 'gemini',
+    label: 'Google Gemini',
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+  },
   { id: 'openrouter', label: 'OpenRouter', models: ['openrouter/free', 'openai/gpt-4o-mini'] },
+  { id: 'ollama', label: 'Ollama (Local)', models: ['llama3.2', 'llama3.1', 'mistral'] },
 ];
 
-function isProviderId(value: string | undefined): value is ProviderId {
-  return PROVIDERS.some((provider) => provider.id === value);
+function getDefaultModel(providerId: string): string {
+  return PROVIDERS.find((item) => item.id === providerId)?.models[0] || '';
 }
 
-function getDefaultModel(provider: ProviderId): string {
-  return PROVIDERS.find((item) => item.id === provider)?.models[0] || 'gemini-2.0-flash';
-}
-
-export function LlmSettingsTab({ status, refetch }: LlmSettingsTabProps) {
+export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
   const { t } = useLanguage();
-  const initialProvider = isProviderId(status?.llm?.provider) ? status.llm.provider : 'gemini';
-  const [llmProvider, setLlmProvider] = useState<ProviderId>(initialProvider);
-  const [llmModel, setLlmModel] = useState(
-    status?.llm?.ok && status.llm.provider === initialProvider && status.llm.model
-      ? status.llm.model
-      : getDefaultModel(initialProvider),
-  );
-  const [llmApiKey, setLlmApiKey] = useState('');
+
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newProvider, setNewProvider] = useState({
+    id: `gemini-${Date.now()}`,
+    provider: 'gemini',
+    apiKey: '',
+    defaultModel: getDefaultModel('gemini'),
+  });
   const [showApiKey, setShowApiKey] = useState(false);
-  const [llmSaving, setLlmSaving] = useState(false);
-  const [llmSaved, setLlmSaved] = useState(false);
-  const [llmMessage, setLlmMessage] = useState('');
-  const [llmError, setLlmError] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    ok: boolean;
-    latencyMs?: number;
-    error?: string;
-  } | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; latencyMs?: number; error?: string }>
+  >({});
 
-  const [removing, setRemoving] = useState(false);
+  const loadProviders = async () => {
+    try {
+      setLoadingProviders(true);
+      const res = await getProviders();
+      setProviders(res.providers);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('llmSettings.errorLoad'));
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
 
-  const isConfigured = status?.llm?.ok === true;
-  const activeProvider = useMemo(
-    () => PROVIDERS.find((provider) => provider.id === llmProvider),
-    [llmProvider],
-  );
-  const canTestWithSavedConfig = isConfigured && status?.llm?.provider === llmProvider;
+  useEffect(() => {
+    void loadProviders();
+  }, []);
 
-  const handleSaveApiKey = async (e: { preventDefault: () => void }) => {
+  const handleProviderChange = (providerId: string) => {
+    setNewProvider({
+      ...newProvider,
+      provider: providerId,
+      id: `${providerId}-${Date.now()}`,
+      defaultModel: getDefaultModel(providerId),
+    });
+  };
+
+  const handleAddProvider = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLlmSaving(true);
-    setLlmMessage('');
-    setLlmError('');
-    setTestResult(null);
+    setAdding(true);
+    setError(null);
     try {
-      await configureLLM(llmProvider, llmApiKey.trim(), llmModel);
+      await addProvider(newProvider);
+      await loadProviders();
       await refetch();
-      setLlmMessage('API Key saved successfully');
-      setLlmApiKey('');
-      setLlmSaved(true);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to save API Key';
-      setLlmError(message);
-    } finally {
-      setLlmSaving(false);
-    }
-  };
-
-  const handleTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    setLlmError('');
-    try {
-      const result = await testLLMConnection(
-        llmApiKey.trim() ? llmProvider : undefined,
-        llmApiKey.trim() || undefined,
-      );
-      setTestResult(result);
-    } catch (err: unknown) {
-      setTestResult({
-        ok: false,
-        error: err instanceof Error ? err.message : 'Test failed',
+      setShowAddForm(false);
+      setNewProvider({
+        id: `gemini-${Date.now()}`,
+        provider: 'gemini',
+        apiKey: '',
+        defaultModel: getDefaultModel('gemini'),
       });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('llmSettings.errorAdd'));
     } finally {
-      setTesting(false);
+      setAdding(false);
     }
   };
 
-  const handleRemove = async () => {
-    setRemoving(true);
-    setLlmError('');
+  const handleDeleteProvider = async (id: string) => {
+    if (!window.confirm(t('llmSettings.deleteConfirm'))) return;
+    setDeletingId(id);
+    setError(null);
     try {
-      await deleteLLMConfig();
+      await deleteProvider(id);
+      await loadProviders();
       await refetch();
-      setLlmMessage('');
-      setLlmSaved(false);
-      setTestResult(null);
-    } catch (err: unknown) {
-      setLlmError(err instanceof Error ? err.message : 'Failed to remove');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('llmSettings.errorDelete'));
     } finally {
-      setRemoving(false);
+      setDeletingId(null);
     }
   };
+
+  const handleTestConnection = async (provider: ProviderInfo) => {
+    setTestingId(provider.id);
+    setTestResults((prev) => ({ ...prev, [provider.id]: { ok: false, error: undefined } }));
+    try {
+      const result = await testLLMConnection(provider.provider);
+      setTestResults((prev) => ({ ...prev, [provider.id]: result }));
+    } catch (err) {
+      setTestResults((prev) => ({
+        ...prev,
+        [provider.id]: {
+          ok: false,
+          error: err instanceof Error ? err.message : t('llmSettings.testFail'),
+        },
+      }));
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const handleTestNewConnection = async () => {
+    setTestingId('new');
+    setTestResults((prev) => ({ ...prev, new: { ok: false, error: undefined } }));
+    try {
+      const result = await testLLMConnection(newProvider.provider, newProvider.apiKey);
+      setTestResults((prev) => ({ ...prev, new: result }));
+    } catch (err) {
+      setTestResults((prev) => ({
+        ...prev,
+        new: { ok: false, error: err instanceof Error ? err.message : t('llmSettings.testFail') },
+      }));
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const activeProviderDef = useMemo(
+    () => PROVIDERS.find((p) => p.id === newProvider.provider),
+    [newProvider.provider],
+  );
 
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2">
         <Key className="h-4 w-4 text-secondary-ol" />
         <h2 className="font-display text-lg font-semibold text-primary-ol">
-          AI Model Configuration
+          {t('llmSettings.title')}
         </h2>
       </div>
+
+      {error && (
+        <div className="rounded-md bg-error/10 p-3 text-sm font-body text-error">{error}</div>
+      )}
 
       <div
         className={cn(
           'rounded-lg border p-3 flex items-center justify-between',
-          isConfigured
+          providers.length > 0
             ? 'border-success/30 bg-success/5'
             : 'border-[hsl(var(--border))] bg-bg-subtle/30',
         )}
       >
         <div className="flex items-center gap-2.5">
-          <span className={cn('text-sm', isConfigured ? 'text-success' : 'text-muted-ol')}>
-            {isConfigured ? '✓' : '○'}
+          <span className={cn('text-sm', providers.length > 0 ? 'text-success' : 'text-muted-ol')}>
+            {providers.length > 0 ? '✓' : '○'}
           </span>
           <div>
             <p
               className={cn(
                 'text-sm font-body font-medium',
-                isConfigured ? 'text-primary-ol' : 'text-muted-ol',
+                providers.length > 0 ? 'text-primary-ol' : 'text-muted-ol',
               )}
             >
-              {isConfigured ? 'Connected' : 'Not configured'}
+              {providers.length > 0
+                ? providers.length === 1
+                  ? t('llmSettings.connected').replace('{n}', '1')
+                  : t('llmSettings.connectedPlural').replace('{n}', providers.length.toString())
+                : t('llmSettings.noProviders')}
             </p>
-            {isConfigured && status?.llm && (
-              <p className="text-xs font-body text-muted-ol">
-                {status.llm.provider} · {status.llm.model}
-              </p>
-            )}
           </div>
         </div>
-        {isConfigured && (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={removing}
-            onClick={handleRemove}
-            className="text-xs text-muted-ol hover:text-error h-7 gap-1"
-          >
-            {removing ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Trash2 className="h-3 w-3" />
-            )}
-            Remove
-          </Button>
-        )}
       </div>
 
-      <div className="flex gap-4 rounded-lg border border-border bg-bg-panel/30 p-4">
-        <aside className="w-52 shrink-0 rounded-md border border-border bg-bg-panel p-2">
-          <p className="px-2 pb-2 text-xs font-body text-muted-ol">Providers</p>
-          <div className="space-y-1">
-            {PROVIDERS.map((provider) => {
-              const selected = provider.id === llmProvider;
-              const configured = isConfigured && status?.llm?.provider === provider.id;
+      {loadingProviders ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-ol" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {providers.map((provider) => {
+            const providerDef = PROVIDERS.find((p) => p.id === provider.provider);
+            const isTesting = testingId === provider.id;
+            const testResult = testResults[provider.id];
 
-              return (
-                <button
-                  key={provider.id}
-                  type="button"
-                  onClick={() => {
-                    setLlmProvider(provider.id);
-                    setLlmModel(
-                      isConfigured && status?.llm?.provider === provider.id && status?.llm?.model
-                        ? status.llm.model
-                        : getDefaultModel(provider.id),
-                    );
-                    setLlmSaved(false);
-                    setTestResult(null);
-                    setLlmMessage('');
-                    setLlmError('');
-                  }}
-                  className={cn(
-                    'w-full rounded-md border px-2.5 py-2 text-left text-sm font-body transition-colors',
-                    selected
-                      ? 'border-agent/40 bg-agent/10 text-primary-ol'
-                      : 'border-transparent text-muted-ol hover:border-border hover:bg-bg-app/40 hover:text-primary-ol',
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span>{provider.label}</span>
-                    <span className={cn('text-xs', configured ? 'text-success' : 'text-muted-ol')}>
-                      {configured ? '✓' : '○'}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-
-        <div className="flex-1 rounded-md border border-border bg-bg-panel p-4">
-          <p className="text-sm font-body text-muted-ol">
-            Provide an API key and model for {activeProvider?.label || 'the selected provider'}.
-            This keeps smart auto-recovery enabled.
-          </p>
-
-          <form onSubmit={handleSaveApiKey} className="mt-4 space-y-4">
-            <div className="space-y-1.5">
-              <p className="text-xs font-body text-muted-ol">API Key</p>
-              <div className="relative">
-                <Input
-                  type={showApiKey ? 'text' : 'password'}
-                  placeholder={canTestWithSavedConfig ? '••••••••••••' : 'sk-...'}
-                  value={llmApiKey}
-                  onChange={(e) => {
-                    setLlmApiKey(e.target.value);
-                    setLlmSaved(false);
-                    setTestResult(null);
-                    setLlmMessage('');
-                    setLlmError('');
-                  }}
-                  className="pr-10 font-mono text-sm bg-bg-app border-border"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-ol hover:text-primary-ol"
-                  aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
-                >
-                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <p className="text-xs font-body text-muted-ol">Model</p>
-              <select
-                value={llmModel}
-                onChange={(e) => {
-                  setLlmModel(e.target.value);
-                  setLlmSaved(false);
-                  setTestResult(null);
-                  setLlmMessage('');
-                  setLlmError('');
-                }}
-                className="w-full rounded-md border border-border bg-bg-app px-3 py-2 text-sm font-mono text-primary-ol"
-              >
-                {(activeProvider?.models || []).map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="submit"
-                disabled={llmSaving || llmSaved || !llmApiKey.trim()}
-                size="sm"
-                className={cn(
-                  'gap-1.5 font-body',
-                  llmSaved
-                    ? 'bg-success/10 text-success border border-success/30 hover:bg-success/10'
-                    : 'bg-agent text-bg-app hover:bg-agent/90',
-                )}
-              >
-                {llmSaving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : llmSaved ? (
-                  <Check className="h-3.5 w-3.5" />
-                ) : (
-                  <Save className="h-3.5 w-3.5" />
-                )}
-                {llmSaved ? 'Saved' : 'Save API Key'}
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={testing || (!canTestWithSavedConfig && !llmApiKey.trim())}
-                onClick={handleTest}
-                className="gap-1.5 font-body text-xs"
-              >
-                {testing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Zap className="h-3.5 w-3.5" />
-                )}
-                Test Connection
-              </Button>
-            </div>
-
-            {testResult && (
+            return (
               <div
-                className={cn(
-                  'rounded-md px-3 py-2 text-xs font-body',
-                  testResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error',
-                )}
+                key={provider.id}
+                className="rounded-lg border border-border bg-bg-panel/30 p-4 flex flex-col gap-3"
               >
-                {testResult.ok
-                  ? `✓ Connection successful — responded in ${testResult.latencyMs}ms`
-                  : `✗ ${testResult.error || 'Connection failed'}`}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="px-2 py-1 rounded bg-bg-app border border-border text-xs font-medium text-primary-ol">
+                      {providerDef?.label || provider.provider}
+                    </div>
+                    <div className="text-sm font-mono text-muted-ol">{provider.defaultModel}</div>
+                    {provider.hasApiKey && (
+                      <div className="text-xs font-mono text-muted-ol bg-bg-app px-2 py-0.5 rounded border border-border">
+                        {provider.apiKeyPreview}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTestConnection(provider)}
+                      disabled={isTesting}
+                      className="h-8 text-xs gap-1.5"
+                    >
+                      {isTesting ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Zap className="h-3 w-3" />
+                      )}
+                      {t('llmSettings.testConnection')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteProvider(provider.id)}
+                      disabled={deletingId === provider.id}
+                      className="h-8 w-8 p-0 text-muted-ol hover:text-error"
+                    >
+                      {deletingId === provider.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                {testResult && (
+                  <div
+                    className={cn(
+                      'rounded-md px-3 py-2 text-xs font-body',
+                      testResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error',
+                    )}
+                  >
+                    {testResult.ok
+                      ? t('llmSettings.testSuccess').replace(
+                          '{ms}',
+                          testResult.latencyMs?.toString() || '0',
+                        )
+                      : testResult.error || t('llmSettings.testFail')}
+                  </div>
+                )}
               </div>
-            )}
+            );
+          })}
 
-            {llmMessage && !testResult && (
-              <p className="text-sm font-body text-success">{llmMessage}</p>
-            )}
-            {llmError && <p className="text-sm font-body text-error">{llmError}</p>}
-
-            <div className="flex items-center gap-3 my-4">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs font-body text-muted-ol">or</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs font-body text-muted-ol">Sign in with OAuth</p>
-              <Tooltip content={t('llmSettings.oauthComingSoon')}>
+          {!showAddForm ? (
+            <Button
+              variant="outline"
+              className="w-full border-dashed gap-2 text-muted-ol hover:text-primary-ol"
+              onClick={() => setShowAddForm(true)}
+            >
+              <Plus className="h-4 w-4" />
+              {t('llmSettings.addProvider')}
+            </Button>
+          ) : (
+            <div className="rounded-lg border border-border bg-bg-panel p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-primary-ol">
+                  {t('llmSettings.addProvider')}
+                </h3>
                 <Button
-                  type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  disabled
-                  aria-disabled="true"
-                  tabIndex={-1}
-                  className="w-full opacity-50 grayscale font-body text-xs"
+                  onClick={() => setShowAddForm(false)}
+                  className="h-8 text-xs text-muted-ol"
                 >
-                  Sign in with {activeProvider?.label || 'Provider'}
+                  {t('llmSettings.cancel')}
                 </Button>
-              </Tooltip>
+              </div>
+
+              <form onSubmit={handleAddProvider} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-body text-muted-ol">Provider</p>
+                    <select
+                      value={newProvider.provider}
+                      onChange={(e) => handleProviderChange(e.target.value)}
+                      className="w-full rounded-md border border-border bg-bg-app px-3 py-2 text-sm font-body text-primary-ol"
+                    >
+                      {PROVIDERS.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-body text-muted-ol">{t('llmSettings.id')}</p>
+                    <Input
+                      value={newProvider.id}
+                      onChange={(e) => setNewProvider({ ...newProvider, id: e.target.value })}
+                      placeholder={t('llmSettings.idHint')}
+                      className="font-mono text-sm bg-bg-app border-border"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-body text-muted-ol">{t('llmSettings.apiKey')}</p>
+                  <div className="relative">
+                    <Input
+                      type={showApiKey ? 'text' : 'password'}
+                      placeholder="sk-..."
+                      value={newProvider.apiKey}
+                      onChange={(e) => setNewProvider({ ...newProvider, apiKey: e.target.value })}
+                      className="pr-10 font-mono text-sm bg-bg-app border-border"
+                      required={newProvider.provider !== 'ollama'}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-ol hover:text-primary-ol"
+                    >
+                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-body text-muted-ol">{t('llmSettings.defaultModel')}</p>
+                  <select
+                    value={newProvider.defaultModel}
+                    onChange={(e) =>
+                      setNewProvider({ ...newProvider, defaultModel: e.target.value })
+                    }
+                    className="w-full rounded-md border border-border bg-bg-app px-3 py-2 text-sm font-mono text-primary-ol"
+                  >
+                    {(activeProviderDef?.models || []).map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <Button
+                    type="submit"
+                    disabled={
+                      adding || (!newProvider.apiKey.trim() && newProvider.provider !== 'ollama')
+                    }
+                    size="sm"
+                    className="gap-1.5 font-body bg-agent text-bg-app hover:bg-agent/90"
+                  >
+                    {adding ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="h-3.5 w-3.5" />
+                    )}
+                    {t('llmSettings.addProvider')}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      testingId === 'new' ||
+                      (!newProvider.apiKey.trim() && newProvider.provider !== 'ollama')
+                    }
+                    onClick={handleTestNewConnection}
+                    className="gap-1.5 font-body text-xs"
+                  >
+                    {testingId === 'new' ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Zap className="h-3.5 w-3.5" />
+                    )}
+                    {t('llmSettings.testConnection')}
+                  </Button>
+                </div>
+
+                {testResults['new'] && (
+                  <div
+                    className={cn(
+                      'rounded-md px-3 py-2 text-xs font-body mt-2',
+                      testResults['new'].ok
+                        ? 'bg-success/10 text-success'
+                        : 'bg-error/10 text-error',
+                    )}
+                  >
+                    {testResults['new'].ok
+                      ? t('llmSettings.testSuccess').replace(
+                          '{ms}',
+                          testResults['new'].latencyMs?.toString() || '0',
+                        )
+                      : testResults['new'].error || t('llmSettings.testFail')}
+                  </div>
+                )}
+              </form>
             </div>
-          </form>
+          )}
         </div>
-      </div>
+      )}
     </section>
   );
 }

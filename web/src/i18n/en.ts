@@ -160,6 +160,8 @@ export const translations = {
       errorLoad: 'Failed to load AI features',
       errorUpdate: 'Failed to update feature',
       unavailable: 'Unavailable',
+      modelDefault: 'Default',
+      modelSelector: 'Model',
       autoRecovery: {
         label: 'Auto Recovery',
         description: 'Automatically attempt to fix build failures',
@@ -428,6 +430,24 @@ export const translations = {
   },
   llmSettings: {
     oauthComingSoon: 'Coming Soon — Next update will support OAuth login',
+    title: 'AI Model Configuration',
+    connected: '{n} provider connected',
+    connectedPlural: '{n} providers connected',
+    noProviders: 'No AI providers configured',
+    addProvider: 'Add Provider',
+    cancel: 'Cancel',
+    id: 'Provider ID',
+    idHint: 'Unique name for this provider',
+    apiKey: 'API Key',
+    defaultModel: 'Default Model',
+    addSuccess: 'Provider added successfully',
+    deleteConfirm: 'Remove this provider?',
+    testConnection: 'Test Connection',
+    testSuccess: 'Connected ({ms}ms)',
+    testFail: 'Connection failed',
+    errorLoad: 'Failed to load providers',
+    errorAdd: 'Failed to add provider',
+    errorDelete: 'Failed to remove provider',
   },
   project: {
     confirm: {

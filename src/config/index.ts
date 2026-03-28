@@ -2,6 +2,12 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { createModuleLogger } from '../lib/logger.js';
+import type {
+  LLMProviderEntry,
+  LLMRoute,
+  AIModelFeature,
+  ModelRoutingConfig,
+} from '../llm/model-registry.js';
 
 const log = createModuleLogger('config');
 
@@ -108,6 +114,12 @@ export interface LLMProviderConfig {
   authToken: string;
   /** v0.5: Ollama endpoint for local models */
   ollamaEndpoint: string;
+  /** v1.1: Multi-provider registry. If present, used for feature-based routing. */
+  providers?: Record<string, LLMProviderEntry>;
+  /** v1.1: Default route when no feature-specific route is configured. */
+  defaultRoute?: LLMRoute;
+  /** v1.1: Per-feature model routing overrides. */
+  routes?: Partial<Record<AIModelFeature, LLMRoute>>;
 }
 
 export interface ServerConfig {
@@ -209,6 +221,10 @@ export interface TraefikConfig {
 
 export interface AIFeatureToggle {
   enabled: boolean;
+  /** v1.1: Which registered provider to use for this feature. Falls back to defaultRoute. */
+  providerId?: string;
+  /** v1.1: Model override for this feature. Falls back to provider.defaultModel. */
+  model?: string;
 }
 
 export interface AIFeaturesConfig {
@@ -378,6 +394,42 @@ export function updateConfig(partial: DeepPartial<OpenLanderConfig>): OpenLander
 export function isOnboarded(): boolean {
   return existsSync(getConfigPath());
 }
+
+// --- LLM config normalization ---
+
+export type NormalizedLlmConfig = LLMProviderConfig & {
+  providers: NonNullable<LLMProviderConfig['providers']>;
+  defaultRoute: NonNullable<LLMProviderConfig['defaultRoute']>;
+};
+
+/**
+ * Normalizes LLM config for use with ModelRegistry.
+ * If the new `providers` field is absent, synthesizes it from legacy single-provider fields.
+ * Does NOT mutate the config object or write to disk.
+ */
+export function normalizeLlmConfig(llm: LLMProviderConfig): NormalizedLlmConfig {
+  if (llm.providers && llm.defaultRoute) {
+    return llm as NormalizedLlmConfig;
+  }
+
+  return {
+    ...llm,
+    providers: {
+      default: {
+        provider: llm.provider,
+        apiKey: llm.apiKey,
+        authToken: llm.authToken,
+        ollamaEndpoint: llm.ollamaEndpoint,
+        defaultModel: llm.model,
+      },
+    },
+    defaultRoute: { providerId: 'default' },
+  };
+}
+
+// --- Re-exports from model-registry ---
+
+export type { LLMProviderEntry, LLMRoute, AIModelFeature, ModelRoutingConfig };
 
 // --- Utility types ---
 

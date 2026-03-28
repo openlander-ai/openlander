@@ -50,6 +50,54 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   return res.json();
 }
 
+export interface ProviderInfo {
+  id: string;
+  provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
+  defaultModel: string;
+  hasApiKey: boolean;
+  apiKeyPreview: string;
+}
+
+export interface ProvidersResponse {
+  providers: ProviderInfo[];
+}
+
+export async function getProviders(): Promise<ProvidersResponse> {
+  const res = await fetch('/api/setup/providers');
+  if (!res.ok) throw new Error('Failed to fetch providers');
+  return res.json();
+}
+
+export async function addProvider(data: {
+  id: string;
+  provider: string;
+  apiKey?: string;
+  ollamaEndpoint?: string;
+  defaultModel: string;
+}): Promise<{ status: string; id: string }> {
+  const res = await fetch('/api/setup/providers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? 'Failed to add provider');
+  }
+  return res.json();
+}
+
+export async function deleteProvider(id: string): Promise<{ status: string }> {
+  const res = await fetch(`/api/setup/providers/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? 'Failed to delete provider');
+  }
+  return res.json();
+}
+
 export async function configureLLM(
   provider: string,
   apiKey = '',
@@ -274,6 +322,8 @@ export async function getServerStatus(): Promise<ServerStatus> {
 export interface AiFeatureState {
   enabled: boolean;
   available: boolean;
+  providerId?: string;
+  model?: string;
 }
 
 export interface AiFeaturesResponse {
@@ -295,7 +345,12 @@ export async function getAiFeatures(): Promise<AiFeaturesResponse> {
 }
 
 export async function updateAiFeatures(
-  updates: Partial<Record<keyof AiFeaturesResponse['features'], { enabled: boolean }>>,
+  updates: Partial<
+    Record<
+      keyof AiFeaturesResponse['features'],
+      { enabled: boolean; providerId?: string; model?: string }
+    >
+  >,
 ): Promise<AiFeaturesResponse> {
   const res = await fetch('/api/setup/ai-features', {
     method: 'PUT',

@@ -1,9 +1,15 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
-import { loadConfig, saveConfig, updateConfig } from '../../config/index.js';
+import { loadConfig, saveConfig, updateConfig, normalizeLlmConfig } from '../../config/index.js';
 import { loadDecryptedToken } from '../../auth/token-store.js';
-import type { OpenLanderConfig, AIFeaturesConfig } from '../../config/index.js';
+import type {
+  OpenLanderConfig,
+  AIFeaturesConfig,
+  LLMProviderEntry,
+  LLMRoute,
+  AIModelFeature,
+} from '../../config/index.js';
 import type { LLMConfig } from '../../llm/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
@@ -294,27 +300,68 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'operationalMonitoring',
     ];
 
-    const features: Record<string, { enabled: boolean; available: boolean }> = {};
+    const features: Record<
+      string,
+      { enabled: boolean; available: boolean; providerId?: string; model?: string }
+    > = {};
     for (const key of featureKeys) {
-      features[key] = { enabled: config.ai[key].enabled, available: hasModel };
+      const toggle = config.ai[key];
+      features[key] = {
+        enabled: toggle.enabled,
+        available: hasModel,
+        ...(toggle.providerId !== undefined && { providerId: toggle.providerId }),
+        ...(toggle.model !== undefined && { model: toggle.model }),
+      };
     }
 
     return c.json({ features });
   });
 
   api.put('/setup/ai-features', async (c) => {
-    const body = await c.req.json<Partial<Record<keyof AIFeaturesConfig, { enabled: boolean }>>>();
+    const body =
+      await c.req.json<
+        Partial<
+          Record<keyof AIFeaturesConfig, { enabled: boolean; providerId?: string; model?: string }>
+        >
+      >();
 
     const config = loadConfig();
     const merged: AIFeaturesConfig = { ...config.ai };
     for (const [key, value] of Object.entries(body)) {
       if (key in merged) {
-        merged[key as keyof AIFeaturesConfig] = { enabled: value.enabled };
+        const existing = merged[key as keyof AIFeaturesConfig];
+        merged[key as keyof AIFeaturesConfig] = {
+          ...existing,
+          enabled: value.enabled,
+          ...(value.providerId !== undefined && { providerId: value.providerId }),
+          ...(value.model !== undefined && { model: value.model }),
+        };
       }
     }
 
     const updated = updateConfig({ ai: merged });
     ctx.config = updated;
+
+    const normalizedLlm = normalizeLlmConfig(updated.llm);
+    const newRoutes: Partial<Record<AIModelFeature, LLMRoute>> = {};
+    const featureRoutingKeys: AIModelFeature[] = [
+      'autoRecovery',
+      'buildDebugger',
+      'webAgent',
+      'envDetection',
+      'operationalMonitoring',
+    ];
+    for (const fk of featureRoutingKeys) {
+      const toggle = updated.ai[fk];
+      if (toggle.providerId) {
+        newRoutes[fk] = { providerId: toggle.providerId, model: toggle.model };
+      }
+    }
+    ctx.modelRegistry.updateConfig({
+      providers: normalizedLlm.providers,
+      defaultRoute: normalizedLlm.defaultRoute,
+      routes: { ...normalizedLlm.routes, ...newRoutes },
+    });
 
     const hasModel = ctx.model !== null;
     const featureKeys: Array<keyof AIFeaturesConfig> = [
@@ -327,12 +374,177 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'operationalMonitoring',
     ];
 
-    const features: Record<string, { enabled: boolean; available: boolean }> = {};
+    const features: Record<
+      string,
+      { enabled: boolean; available: boolean; providerId?: string; model?: string }
+    > = {};
     for (const key of featureKeys) {
-      features[key] = { enabled: updated.ai[key].enabled, available: hasModel };
+      const toggle = updated.ai[key];
+      features[key] = {
+        enabled: toggle.enabled,
+        available: hasModel,
+        ...(toggle.providerId !== undefined && { providerId: toggle.providerId }),
+        ...(toggle.model !== undefined && { model: toggle.model }),
+      };
     }
 
     return c.json({ features });
+  });
+
+  api.get('/setup/providers', (c) => {
+    const config = loadConfig();
+    const providers = config.llm.providers ?? {};
+
+    const masked = Object.entries(providers).map(([id, entry]) => ({
+      id,
+      provider: entry.provider,
+      defaultModel: entry.defaultModel,
+      hasApiKey: !!(entry.apiKey || entry.authToken),
+      apiKeyPreview: entry.apiKey
+        ? entry.apiKey.substring(0, 6) + '······'
+        : entry.authToken
+          ? '(oauth)'
+          : '',
+    }));
+
+    return c.json({ providers: masked });
+  });
+
+  api.post('/setup/providers', async (c) => {
+    const body = await c.req.json<{
+      id: string;
+      provider: string;
+      apiKey?: string;
+      authToken?: string;
+      ollamaEndpoint?: string;
+      defaultModel: string;
+    }>();
+
+    if (!body.id || !body.provider || !body.defaultModel) {
+      return c.json(
+        { error: 'MISSING_FIELD', message: 'id, provider, and defaultModel are required' },
+        400,
+      );
+    }
+
+    const validProviders = ['gemini', 'openrouter', 'anthropic', 'openai', 'ollama'];
+    if (!validProviders.includes(body.provider)) {
+      return c.json(
+        {
+          error: 'INVALID_PROVIDER',
+          message: `Invalid provider. Must be one of: ${validProviders.join(', ')}`,
+        },
+        400,
+      );
+    }
+
+    if (body.provider !== 'ollama' && !body.apiKey && !body.authToken) {
+      return c.json({ error: 'MISSING_FIELD', message: 'apiKey or authToken is required' }, 400);
+    }
+
+    const config = loadConfig();
+    const existingProviders = config.llm.providers ?? {};
+
+    const updatedProviders = {
+      ...existingProviders,
+      [body.id]: {
+        provider: body.provider as LLMProviderEntry['provider'],
+        apiKey: body.apiKey,
+        authToken: body.authToken,
+        ollamaEndpoint: body.ollamaEndpoint,
+        defaultModel: body.defaultModel,
+      },
+    };
+
+    const existingDefaultRoute = config.llm.defaultRoute;
+    const defaultRoute = existingDefaultRoute ?? { providerId: body.id };
+
+    const updated = updateConfig({
+      llm: { providers: updatedProviders, defaultRoute },
+    });
+    ctx.config = updated;
+
+    const normalizedLlm = normalizeLlmConfig(updated.llm);
+    ctx.modelRegistry.updateConfig({
+      providers: normalizedLlm.providers,
+      defaultRoute: normalizedLlm.defaultRoute,
+      routes: normalizedLlm.routes,
+    });
+
+    return c.json({ status: 'added', id: body.id });
+  });
+
+  api.delete('/setup/providers/:id', (c) => {
+    const id = c.req.param('id');
+    const config = loadConfig();
+    const providers = config.llm.providers ?? {};
+
+    if (!(id in providers)) {
+      return c.json({ error: 'NOT_FOUND', message: `Provider "${id}" not found` }, 404);
+    }
+
+    if (Object.keys(providers).length === 1) {
+      return c.json(
+        { error: 'LAST_PROVIDER', message: 'Cannot delete the only registered provider' },
+        400,
+      );
+    }
+
+    const defaultProviderId = config.llm.defaultRoute?.providerId;
+    if (defaultProviderId === id) {
+      return c.json(
+        {
+          error: 'DEFAULT_PROVIDER',
+          message: 'Cannot delete the default provider. Reassign defaultRoute first.',
+        },
+        400,
+      );
+    }
+
+    const { [id]: _removed, ...remainingProviders } = providers;
+
+    const existingRoutes = config.llm.routes ?? {};
+    const cleanedRoutes = Object.fromEntries(
+      Object.entries(existingRoutes).filter(([, route]) => route.providerId !== id),
+    );
+
+    // Use saveConfig directly — deepMerge cannot remove keys from Record fields
+    const updated = {
+      ...config,
+      llm: { ...config.llm, providers: remainingProviders, routes: cleanedRoutes },
+    };
+    saveConfig(updated);
+    ctx.config = updated;
+
+    const normalizedLlm = normalizeLlmConfig(updated.llm);
+    ctx.modelRegistry.updateConfig({
+      providers: normalizedLlm.providers,
+      defaultRoute: normalizedLlm.defaultRoute,
+      routes: normalizedLlm.routes,
+    });
+
+    const aiConfig = updated.ai;
+    const aiKeys: Array<keyof typeof aiConfig> = [
+      'autoRecovery',
+      'buildDebugger',
+      'webAgent',
+      'envDetection',
+      'operationalMonitoring',
+    ];
+    let aiUpdated = false;
+    const newAiConfig = { ...aiConfig };
+    for (const key of aiKeys) {
+      if (newAiConfig[key].providerId === id) {
+        newAiConfig[key] = { ...newAiConfig[key], providerId: undefined, model: undefined };
+        aiUpdated = true;
+      }
+    }
+    if (aiUpdated) {
+      updateConfig({ ai: newAiConfig });
+      ctx.config.ai = newAiConfig;
+    }
+
+    return c.json({ status: 'removed', id });
   });
 
   api.post('/setup/complete', (c) => {
