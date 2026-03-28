@@ -43,7 +43,7 @@ const DOCKER_AGENT_PROMPT = 'Install Docker on this machine and start the daemon
 
 export function CommandBlock({ label, cmd }: { label: string; cmd: string }) {
   return (
-    <div className="rounded-md border border-border bg-bg-subtle/30 p-3">
+    <div className="rounded-md border border-border bg-bg-panel p-3">
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-xs font-body font-medium text-secondary-ol">{label}</span>
         <CopyButton text={cmd} />

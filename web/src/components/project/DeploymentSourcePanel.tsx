@@ -39,7 +39,7 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
   if (loading) {
     return (
       <div className="space-y-4 p-4">
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
@@ -74,7 +74,7 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
   if (!isImage) {
     return (
       <div className="space-y-4 p-4">
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-muted-ol" />
             <span className="text-sm font-body font-medium text-primary-ol">Git Repository</span>
@@ -101,7 +101,7 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
 
   return (
     <div className="space-y-4 p-4">
-      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Box className="h-4 w-4 text-muted-ol" />
           <span className="text-sm font-body font-medium text-primary-ol">Docker Image</span>

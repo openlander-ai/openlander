@@ -25,7 +25,7 @@ export function SettingsTab({ projectId, projectStatus }: SettingsTabProps) {
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0 overflow-hidden">
       {/* Left nav: horizontal on mobile, vertical on desktop */}
-      <div className="shrink-0 md:w-48 border-b md:border-b-0 md:border-r border-[hsl(var(--border))] bg-bg-panel/50">
+      <div className="shrink-0 md:w-48 border-b md:border-b-0 md:border-r border-[hsl(var(--border))] bg-bg-panel">
         {/* Mobile: horizontal scroll row */}
         <div className="flex md:hidden overflow-x-auto px-3 py-2 gap-1">
           {NAV_ITEMS.map((item) => (

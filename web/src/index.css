@@ -34,8 +34,8 @@
     --sparkle-end: #f43f5e;   /* Rose 500 - Magic AI */
 
     --text-primary: #0f172a; /* slate-900 */
-    --text-secondary: #475569; /* slate-600 */
-    --text-muted: #94a3b8;   /* slate-400 */
+    --text-secondary: #334155; /* slate-700 (darker for contrast) */
+    --text-muted: #64748b;   /* slate-500 (darker for readability) */
 
     /* ── shadcn/ui — Light Slate & Indigo ── */
     --background: 210 40% 98%; /* slate-50 */
@@ -54,8 +54,8 @@
     --accent-foreground: 239 84% 67%; /* indigo text when hovered */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%; /* slate-200 */
-    --input: 214 32% 91%;
+    --border: 214 32% 84%; /* slate-300 (stronger borders for crisp white panels) */
+    --input: 214 32% 84%;  /* slate-300 input borders */
     --ring: 239 84% 67%; /* indigo-500 */
     --radius: 0.5rem; /* rounded-lg */
   }

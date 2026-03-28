@@ -69,7 +69,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
   return (
     <div className="flex flex-col gap-4">
       {creds && (
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
             <Key className="h-4 w-4 text-muted-ol" />
             Credentials
@@ -127,7 +127,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
       )}
 
       {networkIps.length > 0 && typeof creds?.connectionString === 'string' && (
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
             <Network className="h-4 w-4 text-muted-ol" />
             External Access
@@ -173,7 +173,7 @@ export function ServiceConnectionTab({ service }: ServiceConnectionTabProps) {
       )}
 
       {!creds && parsedEnv && Object.keys(parsedEnv).length > 0 && (
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <h3 className="text-sm font-display font-medium text-primary-ol mb-4 flex items-center gap-2">
             <Terminal className="h-4 w-4 text-muted-ol" />
             Environment Variables

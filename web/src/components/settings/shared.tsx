@@ -18,7 +18,7 @@ export function StatCard({
   color: string;
 }) {
   return (
-    <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
+    <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-2">
       <div className={cn('flex items-center gap-2 text-muted-ol', color)}>
         {icon}
         <span className="text-xs font-body uppercase tracking-wider">{label}</span>

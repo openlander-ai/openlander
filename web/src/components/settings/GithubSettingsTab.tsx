@@ -133,7 +133,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
         </h2>
       </div>
 
-      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
         <p className="text-sm font-body text-secondary-ol">{t('settings.github.description')}</p>
 
         {status?.github?.ok ? (
@@ -228,7 +228,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
                 <span className="w-full border-t border-[hsl(var(--border))]" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">{'or'}</span>
+                <span className="bg-bg-panel px-2 text-muted-ol font-body">{'or'}</span>
               </div>
             </div>
 

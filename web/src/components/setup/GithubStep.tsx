@@ -91,7 +91,7 @@ export function GithubStep({
         </div>
 
         {/* GitHub connection (optional) */}
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Github className="h-4 w-4 text-secondary-ol" />
             <span className="text-sm font-body font-medium text-primary-ol">{'GitHub Access'}</span>
@@ -269,7 +269,7 @@ function GithubConnectionUI({
           <span className="w-full border-t border-[hsl(var(--border))]" />
         </div>
         <div className="relative flex justify-center text-xs">
-          <span className="bg-bg-subtle/30 px-2 text-muted-ol font-body">{'or'}</span>
+          <span className="bg-bg-panel px-2 text-muted-ol font-body">{'or'}</span>
         </div>
       </div>
 

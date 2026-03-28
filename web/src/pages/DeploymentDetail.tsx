@@ -50,7 +50,7 @@ export function DeploymentDetail() {
   if (loading) {
     return (
       <div className="flex flex-col h-full bg-bg-app">
-        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+        <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel px-6 py-4">
           <div className="flex flex-col gap-3">
             <Skeleton className="h-4 w-32" />
             <div className="flex items-center justify-between">
@@ -100,7 +100,7 @@ export function DeploymentDetail() {
 
   return (
     <div className="flex flex-col h-full bg-bg-app">
-      <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+      <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel px-6 py-4">
         <div className="flex flex-col gap-3">
           <button
             onClick={() => navigate(`/projects/${id}`)}
@@ -147,7 +147,7 @@ export function DeploymentDetail() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
               <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Status'}
               </div>
@@ -155,7 +155,7 @@ export function DeploymentDetail() {
                 {statusMeta.label}
               </div>
             </div>
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
               <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Trigger'}
               </div>
@@ -163,7 +163,7 @@ export function DeploymentDetail() {
                 {getDeploymentTriggerMetaLabel(deployment.trigger)}
               </div>
             </div>
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
               <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Started'}
               </div>
@@ -171,7 +171,7 @@ export function DeploymentDetail() {
                 {formatDateTime(deployment.createdAt) || 'Unknown'}
               </div>
             </div>
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel/50 p-3">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-3">
               <div className="text-xs font-body uppercase tracking-wide text-muted-ol">
                 {'Duration'}
               </div>

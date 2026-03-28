@@ -83,7 +83,7 @@ export function SecuritySettingsTab() {
           Use this token to authenticate with the OpenLander API or MCP server.
         </p>
 
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-4">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
               <Input
@@ -134,7 +134,7 @@ export function SecuritySettingsTab() {
           Update your login password. You will remain logged in after changing it.
         </p>
 
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
           <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
             <div className="space-y-2">
               <label className="text-sm font-medium text-primary-ol">Current Password</label>

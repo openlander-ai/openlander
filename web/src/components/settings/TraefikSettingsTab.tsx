@@ -235,7 +235,7 @@ export function TraefikSettingsTab() {
             </div>
 
             <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between gap-4 p-5 border-b border-[hsl(var(--border))] bg-bg-subtle/30">
+              <div className="flex items-center justify-between gap-4 p-5 border-b border-[hsl(var(--border))] bg-bg-panel">
                 <div className="space-y-1">
                   <h3 className="font-display text-base font-semibold text-primary-ol flex items-center gap-2">
                     <Shield className="w-4 h-4 text-agent" /> Cloudflare Tunnel
@@ -270,7 +270,7 @@ export function TraefikSettingsTab() {
               <div className="p-5">
                 {!cloudflareConnected ? (
                   <div className="space-y-5">
-                    <div className="space-y-3 rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4">
+                    <div className="space-y-3 rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
                       <p className="text-sm font-body text-secondary-ol">
                         {t('settings.proxy.cloudflare.tokenHelpTitle')}
                       </p>
@@ -513,7 +513,7 @@ export function TraefikSettingsTab() {
           </div>
         ) : (
           <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel shadow-[0_1px_3px_0_rgba(0,0,0,0.02)] transition-shadow hover:shadow-md overflow-hidden">
-            <div className="px-5 py-4 border-b border-[hsl(var(--border))] bg-bg-subtle/30">
+            <div className="px-5 py-4 border-b border-[hsl(var(--border))] bg-bg-panel">
               <div className="flex items-center gap-6 text-xs font-body">
                 <div>
                   <span className="text-muted-ol">{'Total'}:</span>{' '}

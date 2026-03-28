@@ -134,7 +134,7 @@ export function ComposeErrorCard({
                     'flex flex-col text-left p-3 rounded-md border transition-all duration-200',
                     selectedPatternId === pattern.id
                       ? 'bg-agent/10 border-agent/50 ring-1 ring-agent/50'
-                      : 'bg-bg-subtle/30 border-border hover:border-agent/30 hover:bg-bg-subtle/50',
+                      : 'bg-bg-panel border-border hover:border-agent/30 hover:bg-bg-subtle/50',
                     isSubmitting &&
                       selectedPatternId !== pattern.id &&
                       'opacity-50 cursor-not-allowed',

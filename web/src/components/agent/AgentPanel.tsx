@@ -92,7 +92,7 @@ export function AgentPanel({
           <div data-testid="agent-panel" className="h-full min-h-0 flex">
             <div className="flex-1 min-w-0 min-h-0">
               <div className="flex flex-col h-full">
-                <div className="shrink-0 px-4 py-3.5 border-b border-border/50 bg-bg-panel/50 backdrop-blur-sm">
+                <div className="shrink-0 px-4 py-3.5 border-b border-border/50 bg-bg-panel backdrop-blur-sm">
                   <h2 className="text-sm font-medium text-primary-ol">{t('agent.aiDiagnosis')}</h2>
                 </div>
 

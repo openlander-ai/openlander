@@ -175,7 +175,7 @@ export function NewProjectFlow() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel/50 px-6 py-4">
+      <div className="shrink-0 border-b border-[hsl(var(--border))] bg-bg-panel px-6 py-4">
         <div className="flex items-center gap-3 mb-3">
           <button
             onClick={() => navigate('/projects')}

@@ -85,7 +85,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
     <div className="max-w-3xl space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Status */}
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <Activity className="h-3.5 w-3.5" />
             Status
@@ -103,7 +103,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         </div>
 
         {/* Container */}
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <Box className="h-3.5 w-3.5" />
             Container
@@ -116,7 +116,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         </div>
 
         {/* CPU */}
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <Cpu className="h-3.5 w-3.5" />
             CPU
@@ -133,7 +133,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         </div>
 
         {/* Memory */}
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <MemoryStick className="h-3.5 w-3.5" />
             Memory
@@ -155,7 +155,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         </div>
 
         {/* Network */}
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <Network className="h-3.5 w-3.5" />
             Network
@@ -165,7 +165,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
         </div>
 
         {/* Disk */}
-        <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+        <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
           <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
             <HardDrive className="h-3.5 w-3.5" />
             Volume
@@ -183,7 +183,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
       </div>
 
       {/* Connections */}
-      <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+      <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
         <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
           <Plug className="h-3.5 w-3.5" />
           Connections
@@ -203,7 +203,7 @@ export function ServiceOverviewTab({ service }: ServiceOverviewTabProps) {
       </div>
 
       {/* Connected Projects */}
-      <div className="rounded-lg bg-bg-panel/50 border border-[hsl(var(--border))] p-4">
+      <div className="rounded-lg bg-bg-panel border border-[hsl(var(--border))] p-4">
         <div className="flex items-center gap-2 text-xs font-body text-muted-ol mb-3">
           <FolderGit2 className="h-3.5 w-3.5" />
           Connected Projects

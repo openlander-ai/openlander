@@ -167,7 +167,7 @@ export function ProjectsGrid() {
       {filteredProjects.length === 0 ? (
         <button
           onClick={() => navigate('/projects/new')}
-          className="w-full max-w-md mx-auto flex flex-col items-center gap-4 py-16 px-8 rounded-lg border-2 border-dashed border-[hsl(var(--border))] hover:border-agent/40 bg-bg-panel/50 hover:bg-bg-panel transition-all duration-200 group cursor-pointer"
+          className="w-full max-w-md mx-auto flex flex-col items-center gap-4 py-16 px-8 rounded-lg border-2 border-dashed border-[hsl(var(--border))] hover:border-agent/40 bg-bg-panel hover:bg-bg-panel transition-all duration-200 group cursor-pointer"
         >
           <div className="p-4 rounded-full bg-agent/10 group-hover:bg-agent/15 transition-colors">
             <Plus className="h-8 w-8 text-agent" />

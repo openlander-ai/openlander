@@ -64,7 +64,7 @@ export function ServiceLogViewer({ serviceId, status }: ServiceLogViewerProps) {
   return (
     <div className="flex flex-col h-full border border-[hsl(var(--border))] rounded-lg overflow-hidden bg-bg-app">
       {/* Toolbar */}
-      <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel/50">
+      <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel">
         <div className="flex items-center gap-3">
           <span className="text-xs font-body text-muted-ol">Showing last</span>
           <select

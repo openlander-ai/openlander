@@ -121,7 +121,7 @@ export function StaticLogViewer({ content, className }: StaticLogViewerProps) {
   return (
     <div className={cn('flex flex-col h-full bg-bg-app', className)}>
       {/* Toolbar */}
-      <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel/50">
+      <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-2 border-b border-[hsl(var(--border))] bg-bg-panel">
         {/* Left: Search */}
         <div className="flex items-center gap-1.5 flex-1 max-w-md">
           <Search className="h-3.5 w-3.5 text-muted-ol shrink-0" />

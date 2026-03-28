@@ -345,7 +345,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3"
+            className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3"
           >
             <div className="flex items-center gap-2">
               <Skeleton className="h-3.5 w-3.5" />
@@ -362,7 +362,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
   return (
     <div className="space-y-4 p-4">
       {/* Internal URL */}
-      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-2">
         <div className="flex items-center gap-2">
           <Wifi className="h-3.5 w-3.5 text-muted-ol" />
           <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
@@ -399,7 +399,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
 
       {/* Direct Port Access */}
       {assignedPort && networkIps.length > 0 && (
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-2">
           <div className="flex items-center gap-2">
             <Monitor className="h-3.5 w-3.5 text-muted-ol" />
             <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
@@ -443,7 +443,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
       )}
 
       {/* Custom Domains */}
-      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Globe className="h-3.5 w-3.5 text-muted-ol" />
@@ -563,7 +563,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
       </div>
 
       {/* Public URL */}
-      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Globe className="h-3.5 w-3.5 text-muted-ol" />

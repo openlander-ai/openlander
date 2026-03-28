@@ -182,7 +182,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
           'rounded-lg border p-3 flex items-center justify-between',
           providers.length > 0
             ? 'border-success/30 bg-success/5'
-            : 'border-[hsl(var(--border))] bg-bg-subtle/30',
+            : 'border-[hsl(var(--border))] bg-bg-panel',
         )}
       >
         <div className="flex items-center gap-2.5">

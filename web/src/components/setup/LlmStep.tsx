@@ -72,7 +72,7 @@ export function LlmStep({
           <p className="text-sm font-body text-secondary-ol">{t('setup.llmStep.subtitle')}</p>
         </div>
 
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-3">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
           <p className="text-sm font-body text-muted-ol">{t('setup.llmStep.description')}</p>
 
           <form onSubmit={onSaveApiKey} className="space-y-3">
@@ -126,7 +126,7 @@ export function LlmStep({
         </div>
 
         {/* Summary */}
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/30 p-4 space-y-2">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-2">
           <p className="text-xs font-body text-muted-ol uppercase tracking-wider">
             {t('setup.llmStep.setupSummary')}
           </p>
