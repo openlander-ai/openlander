@@ -29,6 +29,14 @@ function getTypeColor(type: string) {
   return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
 export function ServicesPage() {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -121,7 +129,7 @@ export function ServicesPage() {
             <div
               key={service.id}
               onClick={() => navigate(`/services/${service.id}`)}
-              className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[144px] flex flex-col justify-between cursor-pointer hover:border-primary-ol/50 transition-colors card-hover"
+              className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 min-h-[176px] flex flex-col justify-between cursor-pointer hover:border-primary-ol/50 transition-colors card-hover"
             >
               <div className="space-y-3">
                 <div>
@@ -170,11 +178,40 @@ export function ServicesPage() {
                   </span>
                   <span className="font-mono">:{service.port}</span>
                 </div>
+
+                <div className="grid grid-cols-3 gap-2 text-[11px]">
+                  <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-ol">
+                      {t('services.metrics.connected')}
+                    </div>
+                    <div className="font-mono text-primary-ol">
+                      {service.summary?.connectedProjects ?? 0}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-ol">
+                      {t('services.metrics.cpu')}
+                    </div>
+                    <div className="font-mono text-primary-ol">
+                      {service.summary?.cpuPercent != null ? `${service.summary.cpuPercent}%` : '—'}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-ol">
+                      {t('services.metrics.mem')}
+                    </div>
+                    <div className="font-mono text-primary-ol">
+                      {service.summary?.memoryUsageBytes != null
+                        ? formatBytes(service.summary.memoryUsageBytes)
+                        : '—'}
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {service.created_at && getRelativeTime(service.created_at) && (
+              {service.updated_at && getRelativeTime(service.updated_at) && (
                 <div className="mt-3 pt-3 border-t border-[hsl(var(--border))]/50 flex items-center text-[11px] text-muted-ol font-body">
-                  {t('services.createdAgo', { time: getRelativeTime(service.created_at) })}
+                  {t('services.updatedAgo', { time: getRelativeTime(service.updated_at) })}
                 </div>
               )}
             </div>

@@ -123,7 +123,7 @@ export function createSystemRoutes(ctx: AppContext): Hono {
 
   api.get('/services', async (c) => {
     try {
-      const services = await ctx.serviceManager.list();
+      const services = await ctx.serviceManager.listWithCardSummary();
       return c.json(services);
     } catch (err) {
       log.debug({ err }, 'List services failed');

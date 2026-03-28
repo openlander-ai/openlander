@@ -783,9 +783,81 @@ export class ServiceManager {
     maxConnections: number | null;
   }> {
     const service = await this.getDetail(id);
+    const runtimeStats = await this.collectRuntimeStats(service);
+
+    return {
+      status: service.status,
+      ...runtimeStats,
+    };
+  }
+
+  async listWithCardSummary(): Promise<
+    Array<
+      ServiceRow & {
+        summary: {
+          connectedProjects: number;
+          cpuPercent: number | null;
+          memoryUsageBytes: number | null;
+        };
+      }
+    >
+  > {
+    const services = await this.list();
+    const connectedProjectCounts = this.getConnectedProjectCounts(services);
+
+    return Promise.all(
+      services.map(async (service) => {
+        const runtimeStats = await this.collectRuntimeStats(service);
+        return {
+          ...service,
+          summary: {
+            connectedProjects: connectedProjectCounts.get(service.id) ?? 0,
+            cpuPercent: runtimeStats.cpuPercent,
+            memoryUsageBytes: runtimeStats.memoryUsageBytes,
+          },
+        };
+      }),
+    );
+  }
+
+  private getConnectedProjectCounts(services: ServiceRow[]): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const service of services) {
+      counts.set(service.id, 0);
+    }
+
+    const projects = this.db.listProjects();
+    for (const project of projects) {
+      const envVars = this.db.getEnvVars(project.id);
+      const envValues = Object.values(envVars).filter(
+        (value): value is string => typeof value === 'string',
+      );
+      if (envValues.length === 0) {
+        continue;
+      }
+
+      for (const service of services) {
+        const hasConnection = envValues.some((value) => value.includes(service.container_name));
+        if (!hasConnection) {
+          continue;
+        }
+        counts.set(service.id, (counts.get(service.id) ?? 0) + 1);
+      }
+    }
+
+    return counts;
+  }
+
+  private async collectRuntimeStats(service: ServiceRow): Promise<{
+    diskUsageBytes: number | null;
+    cpuPercent: number | null;
+    memoryUsageBytes: number | null;
+    memoryLimitBytes: number | null;
+    activeConnections: number | null;
+    maxConnections: number | null;
+  }> {
     if (service.status !== 'running') {
       return {
-        status: service.status,
         diskUsageBytes: null,
         cpuPercent: null,
         memoryUsageBytes: null,
@@ -847,7 +919,6 @@ export class ServiceManager {
     }
 
     return {
-      status: service.status,
       diskUsageBytes,
       cpuPercent,
       memoryUsageBytes,

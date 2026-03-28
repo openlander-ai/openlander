@@ -271,6 +271,12 @@ export const translations = {
     imagePlaceholder: 'ghcr.io/berriai/litellm:latest',
     orCustom: '또는 Docker 이미지를 직접 실행:',
     createdAgo: '{time} 전',
+    updatedAgo: '{time} 전에 업데이트',
+    metrics: {
+      connected: '연결',
+      cpu: 'CPU',
+      mem: '메모리',
+    },
   },
   timeline: {
     empty: '아직 활동이 없습니다',

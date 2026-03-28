@@ -271,6 +271,12 @@ export const translations = {
     imagePlaceholder: 'ghcr.io/berriai/litellm:latest',
     orCustom: 'Or run any Docker image:',
     createdAgo: '{time} ago',
+    updatedAgo: 'Updated {time} ago',
+    metrics: {
+      connected: 'Conn',
+      cpu: 'CPU',
+      mem: 'Mem',
+    },
   },
   timeline: {
     empty: 'No activity yet',

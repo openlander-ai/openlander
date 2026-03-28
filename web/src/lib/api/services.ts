@@ -19,6 +19,11 @@ export interface Service {
   credentials: string | null;
   created_at: string;
   updated_at: string;
+  summary?: {
+    connectedProjects: number;
+    cpuPercent: number | null;
+    memoryUsageBytes: number | null;
+  };
 }
 
 export async function getServices(): Promise<Service[]> {

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Globe, Wifi, Shield, ExternalLink } from 'lucide-react';
+import { Globe, Wifi, Shield, ExternalLink, ChevronDown, Copy, Check } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { useCopy } from '@/hooks/use-copy';
 import { cn } from '@/lib/utils';
 
 interface UrlItem {
@@ -16,7 +17,7 @@ interface DomainUrlDisplayProps {
 }
 
 export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlDisplayProps) {
-  // Build the ordered list of URLs based on priority
+  const { copy, isCopied } = useCopy();
   const allUrls: Array<{ url: string; type: string; label: string; icon: React.ElementType }> = [];
 
   if (publicUrl) {
@@ -53,63 +54,123 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
   }
 
   const primaryUrl = allUrls[0];
-  const additionalUrls = allUrls.slice(1);
+  if (!primaryUrl) return null;
 
+  const additionalUrls = allUrls.slice(1);
   const PrimaryIcon = primaryUrl.icon;
 
-  return (
-    <div className={cn('flex items-center gap-2', className)}>
-      <a
-        href={primaryUrl.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-1.5 text-xs font-body text-zinc-400 hover:text-zinc-200 transition-colors"
-      >
-        <PrimaryIcon className="h-3.5 w-3.5" />
-        <span className="truncate max-w-[200px]">{primaryUrl.url.replace(/^https?:\/\//, '')}</span>
-      </a>
+  if (allUrls.length === 1) {
+    return (
+      <div className={cn('flex items-center gap-1.5', className)}>
+        <a
+          href={primaryUrl.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-subtle hover:bg-zinc-200/60 text-secondary hover:text-primary transition-colors border border-border shadow-sm"
+          title={`Open ${primaryUrl.label} URL`}
+        >
+          <PrimaryIcon className="h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <span className="font-mono tracking-tight text-[11px] truncate max-w-[200px]">
+            {primaryUrl.url.replace(/^https?:\/\//, '')}
+          </span>
+          <ExternalLink className="h-3 w-3 opacity-40 ml-0.5 group-hover:opacity-100 transition-opacity" />
+        </a>
+        <button
+          onClick={() => copy(primaryUrl.url, primaryUrl.url)}
+          className="p-1.5 text-muted-foreground hover:text-primary hover:bg-subtle rounded-md transition-colors"
+          title="Copy URL"
+        >
+          {isCopied(primaryUrl.url) ? (
+            <Check className="h-3.5 w-3.5 text-green-500" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+    );
+  }
 
-      {additionalUrls.length > 0 && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="flex items-center justify-center h-5 px-1.5 rounded-md bg-zinc-800/50 border border-zinc-700/50 text-[10px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors">
+  return (
+    <div className={cn('flex items-center', className)}>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-subtle hover:bg-zinc-200/60 text-secondary hover:text-primary transition-colors border border-border shadow-sm">
+            <PrimaryIcon className="h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+            <span className="font-mono tracking-tight text-[11px] truncate max-w-[200px] text-left">
+              {primaryUrl.url.replace(/^https?:\/\//, '')}
+            </span>
+            <span className="ml-[1px] flex items-center justify-center h-[18px] px-1.5 rounded-[4px] bg-zinc-200/50 text-[10px] text-secondary font-semibold border border-border/80 group-hover:bg-zinc-200 group-hover:text-primary transition-colors">
               +{additionalUrls.length}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="start"
-            className="w-auto p-2 bg-zinc-900/95 border-zinc-800/80 backdrop-blur-md"
-          >
-            <div className="flex flex-col gap-1">
-              {allUrls.map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <a
-                    key={`${item.url}-${idx}`}
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between gap-4 px-2 py-1.5 rounded-md hover:bg-zinc-800/50 transition-colors group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-3.5 w-3.5 text-zinc-500 group-hover:text-zinc-300" />
-                      <span className="text-xs font-body text-zinc-300 group-hover:text-zinc-100">
+            </span>
+            <ChevronDown className="h-3 w-3 opacity-40 ml-0.5 group-hover:opacity-100 transition-opacity" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-[320px] p-0 shadow-lg border-border rounded-xl overflow-hidden"
+          sideOffset={6}
+        >
+          <div className="bg-subtle/40 px-3 py-2.5 border-b border-border">
+            <h4 className="text-xs font-semibold text-primary">Deployment URLs</h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Explore your service across available networks.
+            </p>
+          </div>
+          <div className="p-1.5 flex flex-col gap-0.5 max-h-[260px] overflow-y-auto">
+            {allUrls.map((item, idx) => {
+              const Icon = item.icon;
+              const isItemCopied = isCopied(item.url);
+
+              return (
+                <div
+                  key={`${item.url}-${idx}`}
+                  className="group relative flex items-center justify-between gap-3 px-2 py-2 rounded-lg hover:bg-subtle transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="flex items-center justify-center h-7 w-7 rounded-md bg-background border border-border shadow-sm shrink-0">
+                      <Icon className="h-3.5 w-3.5 text-secondary" />
+                    </div>
+                    <div className="flex flex-col min-w-0 -mt-0.5">
+                      <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase mb-[1px]">
+                        {item.label}
+                      </span>
+                      <span className="text-[11px] font-mono text-primary truncate cursor-default">
                         {item.url.replace(/^https?:\/\//, '')}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                        {item.label}
-                      </span>
-                      <ExternalLink className="h-3 w-3 text-zinc-600 group-hover:text-zinc-400" />
-                    </div>
-                  </a>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
-      )}
+                  </div>
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        copy(item.url, item.url);
+                      }}
+                      className="flex items-center justify-center h-7 w-7 text-secondary hover:text-primary hover:bg-background rounded-md transition-colors border border-transparent hover:border-border shadow-none hover:shadow-sm"
+                      title="Copy URL"
+                    >
+                      {isItemCopied ? (
+                        <Check className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center h-7 w-7 text-secondary hover:text-primary hover:bg-background rounded-md transition-colors border border-transparent hover:border-border shadow-none hover:shadow-sm"
+                      title="Open in new tab"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
