@@ -161,6 +161,7 @@ export const translations = {
       github: 'GitHub',
       llm: 'AI Model',
       ai: 'AI Features',
+      mcp: 'MCP',
     },
     ai: {
       title: 'AI Features',
@@ -212,6 +213,22 @@ export const translations = {
         empty: 'No AI usage recorded yet',
         loading: 'Loading usage data...',
       },
+    },
+    mcp: {
+      serverTitle: 'MCP Server',
+      serverDescription:
+        'Connect AI coding tools like Claude Code, Cursor, or Windsurf to deploy and manage projects.',
+      url: 'Server URL',
+      token: 'API Token',
+      manageToken: 'Manage',
+      quickSetupTitle: 'Quick Setup',
+      quickSetupDescription: 'Copy this block into your AI coding tool to connect instantly.',
+      copyPrompt: 'Paste this into your AI tool:',
+      ideTitle: 'IDE Configuration',
+      ideDescription: 'Manual setup instructions for each tool.',
+      runInTerminal: 'Run in terminal',
+      stdioLabel: 'Local (stdio)',
+      stdioHint: 'Use this when OpenLander is installed globally on the same machine as your IDE.',
     },
     system: {
       globalSecrets: 'Global Secrets',

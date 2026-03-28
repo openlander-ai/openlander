@@ -160,6 +160,7 @@ export const translations = {
       github: 'GitHub',
       llm: 'AI 모델',
       ai: 'AI 기능',
+      mcp: 'MCP',
     },
     ai: {
       title: 'AI 기능',
@@ -211,6 +212,22 @@ export const translations = {
         empty: '아직 AI 사용 기록이 없습니다',
         loading: '사용량 데이터 로딩 중...',
       },
+    },
+    mcp: {
+      serverTitle: 'MCP 서버',
+      serverDescription:
+        'Claude Code, Cursor, Windsurf 등 AI 코딩 도구를 연결하여 프로젝트를 배포하고 관리하세요.',
+      url: '서버 URL',
+      token: 'API 토큰',
+      manageToken: '관리',
+      quickSetupTitle: '빠른 설정',
+      quickSetupDescription: '아래 블록을 AI 코딩 도구에 복사하면 바로 연결됩니다.',
+      copyPrompt: 'AI 도구에 붙여넣으세요:',
+      ideTitle: 'IDE 설정',
+      ideDescription: '각 도구별 수동 설정 안내입니다.',
+      runInTerminal: '터미널에서 실행',
+      stdioLabel: '로컬 (stdio)',
+      stdioHint: 'IDE와 같은 머신에 OpenLander가 전역 설치된 경우 사용하세요.',
     },
     system: {
       globalSecrets: '전역 비밀값',
