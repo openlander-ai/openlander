@@ -126,6 +126,13 @@ describe('AI Features API Endpoints', () => {
     ctx = createMockContext(db);
     ctx.config = {
       ...ctx.config,
+      llm: {
+        provider: 'gemini' as const,
+        apiKey: '',
+        model: 'gemini-2.0-flash',
+        authToken: '',
+        ollamaEndpoint: '',
+      },
       ai: { ...AI_DEFAULTS },
     };
     app = new Hono();
