@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   Loader2,
-  Sparkles,
   AlertCircle,
   Info,
   Brain,
@@ -12,6 +11,7 @@ import {
   Clock,
   Zap,
 } from 'lucide-react';
+import { AISparkle } from '@/components/ui/AISparkle.js';
 import {
   getAiFeatures,
   updateAiFeatures,
@@ -143,7 +143,7 @@ export function AiSettingsTab() {
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-agent" />
+        <AISparkle className="h-5 w-5" />
         <h2 className="font-display text-lg font-semibold text-primary-ol">
           {t('settings.ai.title')}
         </h2>
@@ -170,7 +170,7 @@ export function AiSettingsTab() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-bg-panel/30 divide-y divide-border">
+      <div className="rounded-lg border border-border bg-bg-panel shadow-sm overflow-hidden divide-y divide-border">
         {features &&
           featureList.map((key) => {
             const feature = features[key];
@@ -260,7 +260,7 @@ export function AiSettingsTab() {
             <span className="ml-2 text-sm text-muted-ol">{t('settings.ai.usage.loading')}</span>
           </div>
         ) : summary?.callCount === 0 ? (
-          <div className="rounded-lg border border-border bg-bg-panel/30 p-8 text-center">
+          <div className="rounded-lg border border-border bg-bg-panel shadow-sm p-8 text-center">
             <p className="text-sm font-body text-muted-ol">{t('settings.ai.usage.empty')}</p>
           </div>
         ) : (
@@ -305,7 +305,7 @@ export function AiSettingsTab() {
                 <h3 className="text-sm font-medium text-primary-ol">
                   {t('settings.ai.usage.recentCalls')}
                 </h3>
-                <div className="rounded-lg border border-border bg-bg-panel/30 divide-y divide-border">
+                <div className="rounded-lg border border-border bg-bg-panel shadow-sm divide-y divide-border">
                   {recent.slice(0, 10).map((log) => (
                     <div key={log.id} className="flex items-center justify-between p-3 gap-4">
                       <div className="flex items-center gap-3">
