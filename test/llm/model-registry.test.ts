@@ -72,7 +72,6 @@ describe('ModelRegistry', () => {
   });
 
   it('returns null when route provider does not exist', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const registry = new ModelRegistry({
       providers: {},
       defaultRoute: { providerId: 'missing-provider' },
@@ -82,8 +81,6 @@ describe('ModelRegistry', () => {
 
     expect(model).toBeNull();
     expect(createModel).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    warnSpy.mockRestore();
   });
 
   it('updateConfig increments version, clears cache, and rebuilds model', () => {

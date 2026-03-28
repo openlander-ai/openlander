@@ -1,6 +1,9 @@
 import type { LanguageModel } from 'ai';
 import type { LLMProviderConfig } from '../config/index.js';
 import { createModel } from './index.js';
+import { createModuleLogger } from '../lib/logger.js';
+
+const log = createModuleLogger('model-registry');
 
 export interface LLMProviderEntry {
   provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
@@ -75,8 +78,9 @@ export class ModelRegistry {
 
     const providerEntry = this.config.providers[route.providerId];
     if (!providerEntry) {
-      console.warn(
-        `[ModelRegistry] Provider not found for route providerId="${route.providerId}" feature="${feature}"`,
+      log.warn(
+        { providerId: route.providerId, feature },
+        'ModelRegistry: provider not found for route',
       );
       return null;
     }
