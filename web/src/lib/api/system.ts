@@ -322,6 +322,8 @@ export async function getServerStatus(): Promise<ServerStatus> {
 export interface AiFeatureState {
   enabled: boolean;
   available: boolean;
+  providerId?: string;
+  model?: string;
 }
 
 export interface AiFeaturesResponse {
@@ -343,7 +345,12 @@ export async function getAiFeatures(): Promise<AiFeaturesResponse> {
 }
 
 export async function updateAiFeatures(
-  updates: Partial<Record<keyof AiFeaturesResponse['features'], { enabled: boolean }>>,
+  updates: Partial<
+    Record<
+      keyof AiFeaturesResponse['features'],
+      { enabled: boolean; providerId?: string; model?: string }
+    >
+  >,
 ): Promise<AiFeaturesResponse> {
   const res = await fetch('/api/setup/ai-features', {
     method: 'PUT',

@@ -160,6 +160,8 @@ export const translations = {
       errorLoad: 'Failed to load AI features',
       errorUpdate: 'Failed to update feature',
       unavailable: 'Unavailable',
+      modelDefault: 'Default',
+      modelSelector: 'Model',
       autoRecovery: {
         label: 'Auto Recovery',
         description: 'Automatically attempt to fix build failures',

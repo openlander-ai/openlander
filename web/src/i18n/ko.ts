@@ -160,6 +160,8 @@ export const translations = {
       errorLoad: 'AI 기능을 불러오지 못했습니다',
       errorUpdate: '기능 업데이트에 실패했습니다',
       unavailable: '사용 불가',
+      modelDefault: '기본값',
+      modelSelector: '모델',
       autoRecovery: {
         label: '자동 복구',
         description: '빌드 실패 시 자동으로 수정을 시도합니다',
