@@ -126,19 +126,24 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
                   key={`${item.url}-${idx}`}
                   className="group relative flex items-center justify-between gap-3 px-2 py-2 rounded-lg hover:bg-bg-subtle transition-colors"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className="flex items-center justify-center h-7 w-7 rounded-md bg-bg-panel border border-[hsl(var(--border))] shadow-sm shrink-0">
-                      <Icon className="h-3.5 w-3.5 text-secondary-ol" />
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer group/link outline-none"
+                  >
+                    <div className="flex items-center justify-center h-7 w-7 rounded-md bg-bg-panel border border-[hsl(var(--border))] shadow-sm shrink-0 transition-colors group-hover/link:border-agent/30">
+                      <Icon className="h-3.5 w-3.5 text-secondary-ol transition-colors group-hover/link:text-agent" />
                     </div>
                     <div className="flex flex-col min-w-0 -mt-0.5">
                       <span className="text-[10px] font-semibold tracking-wide text-muted-ol uppercase mb-[1px]">
                         {item.label}
                       </span>
-                      <span className="text-[11px] font-mono text-primary-ol truncate cursor-default">
+                      <span className="text-[11px] font-mono text-primary-ol truncate transition-colors group-hover/link:underline group-hover/link:text-agent">
                         {item.url.replace(/^https?:\/\//, '')}
                       </span>
                     </div>
-                  </div>
+                  </a>
 
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
@@ -155,15 +160,6 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
                         <Copy className="h-3.5 w-3.5" />
                       )}
                     </button>
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center h-7 w-7 text-secondary-ol hover:text-primary-ol hover:bg-bg-panel rounded-md transition-colors border border-transparent hover:border-border shadow-none hover:shadow-sm"
-                      title="Open in new tab"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
                   </div>
                 </div>
               );
