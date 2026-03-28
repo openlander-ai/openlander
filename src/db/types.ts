@@ -163,7 +163,12 @@ export interface DeployConfigRow {
 
 export interface PendingFixRow {
   filePath: string;
-  content: string;
+  content?: string;
+  patches?: Array<{
+    pattern: string;
+    replacement: string;
+    flags?: string;
+  }>;
 }
 
 export interface DeployPlanRow {
@@ -218,11 +223,20 @@ export interface ActionRunRow {
   trigger_session_id: string | null;
   status: 'running' | 'succeeded' | 'failed';
   error_message: string | null;
-  recovery_strategy: 'recipe' | 'llm' | 'unknown' | null;
+  recovery_strategy: 'recipe' | 'llm' | 'memory' | 'unknown' | null;
   steps_json: string | null;
   started_at: string;
   completed_at: string | null;
   tenant_id: string | null;
   user_id: string | null;
+  plan: string | null;
+  current_step: number | null;
+  total_steps: number | null;
+  correlation_id: string | null;
+  updated_at: string | null;
+  approval_status: 'pending' | 'approved' | 'rejected' | null;
+  approval_tool: string | null;
+  approval_requested_at: string | null;
+  approval_resolved_at: string | null;
   created_at: string;
 }

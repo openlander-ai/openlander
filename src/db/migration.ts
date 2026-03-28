@@ -406,7 +406,7 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     trigger_session_id TEXT,
     status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed', 'pending_approval')),
     error_message TEXT,
-    recovery_strategy TEXT CHECK(recovery_strategy IN ('recipe', 'llm', 'unknown')),
+    recovery_strategy TEXT CHECK(recovery_strategy IN ('recipe', 'llm', 'memory', 'unknown')),
     steps_json TEXT,
     started_at TEXT NOT NULL,
     completed_at TEXT,
@@ -469,6 +469,39 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     FROM action_runs`);
     sqlite.exec('DROP TABLE action_runs');
     sqlite.exec('ALTER TABLE action_runs_migrated RENAME TO action_runs');
+  }
+
+  const actionRunCols = sqlite.prepare("PRAGMA table_info('action_runs')").all() as Array<{
+    name: string;
+  }>;
+  const actionRunColNames = new Set(actionRunCols.map((c) => c.name));
+
+  if (!actionRunColNames.has('plan')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN plan TEXT');
+  }
+  if (!actionRunColNames.has('current_step')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN current_step INTEGER');
+  }
+  if (!actionRunColNames.has('total_steps')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN total_steps INTEGER');
+  }
+  if (!actionRunColNames.has('correlation_id')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN correlation_id TEXT');
+  }
+  if (!actionRunColNames.has('updated_at')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN updated_at TEXT');
+  }
+  if (!actionRunColNames.has('approval_status')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN approval_status TEXT');
+  }
+  if (!actionRunColNames.has('approval_tool')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN approval_tool TEXT');
+  }
+  if (!actionRunColNames.has('approval_requested_at')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN approval_requested_at TEXT');
+  }
+  if (!actionRunColNames.has('approval_resolved_at')) {
+    sqlite.exec('ALTER TABLE action_runs ADD COLUMN approval_resolved_at TEXT');
   }
 
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_project ON action_runs(project_id)');
