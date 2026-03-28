@@ -9,7 +9,9 @@ import {
   getDbPath,
   getConfigPath,
   SHARED_NETWORK_NAME,
+  normalizeLlmConfig,
 } from '../src/config/index.js';
+import type { LLMProviderConfig } from '../src/config/index.js';
 
 const describeConfig = describe;
 
@@ -140,6 +142,88 @@ describeConfig('Data Paths', () => {
 
   it('getConfigPath returns ~/.openlander/config.json', () => {
     expect(getConfigPath()).toContain('config.json');
+  });
+});
+
+describeConfig('normalizeLlmConfig', () => {
+  const legacyConfig: LLMProviderConfig = {
+    provider: 'gemini',
+    apiKey: 'test-key',
+    model: 'gemini-2.0-flash',
+    authToken: '',
+    ollamaEndpoint: 'http://localhost:11434',
+  };
+
+  it('synthesizes providers and defaultRoute from legacy single-provider config', () => {
+    const normalized = normalizeLlmConfig(legacyConfig);
+
+    expect(normalized.providers).toEqual({
+      default: {
+        provider: 'gemini',
+        apiKey: 'test-key',
+        authToken: '',
+        ollamaEndpoint: 'http://localhost:11434',
+        defaultModel: 'gemini-2.0-flash',
+      },
+    });
+    expect(normalized.defaultRoute).toEqual({ providerId: 'default' });
+  });
+
+  it('preserves original legacy fields alongside synthesized providers', () => {
+    const normalized = normalizeLlmConfig(legacyConfig);
+
+    expect(normalized.provider).toBe('gemini');
+    expect(normalized.apiKey).toBe('test-key');
+    expect(normalized.model).toBe('gemini-2.0-flash');
+  });
+
+  it('passes through config that already has providers and defaultRoute', () => {
+    const newFormatConfig: LLMProviderConfig = {
+      ...legacyConfig,
+      providers: {
+        fast: {
+          provider: 'gemini',
+          apiKey: 'fast-key',
+          defaultModel: 'gemini-2.0-flash',
+        },
+        smart: {
+          provider: 'anthropic',
+          apiKey: 'smart-key',
+          defaultModel: 'claude-sonnet-4-20250514',
+        },
+      },
+      defaultRoute: { providerId: 'fast' },
+      routes: { buildDebugger: { providerId: 'smart' } },
+    };
+
+    const normalized = normalizeLlmConfig(newFormatConfig);
+
+    expect(normalized.providers).toBe(newFormatConfig.providers);
+    expect(normalized.defaultRoute).toBe(newFormatConfig.defaultRoute);
+    expect(normalized.routes).toEqual({ buildDebugger: { providerId: 'smart' } });
+  });
+
+  it('does not mutate the original config object', () => {
+    const original = { ...legacyConfig };
+    normalizeLlmConfig(original);
+
+    expect(original).toEqual(legacyConfig);
+    expect(original).not.toHaveProperty('providers');
+    expect(original).not.toHaveProperty('defaultRoute');
+  });
+
+  it('synthesizes when providers is present but defaultRoute is missing', () => {
+    const partial: LLMProviderConfig = {
+      ...legacyConfig,
+      providers: {
+        custom: { provider: 'openai', apiKey: 'k', defaultModel: 'gpt-4o' },
+      },
+    };
+
+    const normalized = normalizeLlmConfig(partial);
+
+    expect(normalized.defaultRoute).toEqual({ providerId: 'default' });
+    expect(normalized.providers.default).toBeDefined();
   });
 });
 
