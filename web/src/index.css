@@ -57,41 +57,42 @@
 
   [data-theme='dark'] {
     /* ── OpenLander Signature (Dark) ── */
-    --bg-app: #000000;
-    --bg-panel: #0a0a0a;
-    --bg-subtle: #171717;
-    --bg-surface: #0a0a0a;
+    --bg-app: #030303;
+    --bg-panel: #111111;
+    --bg-subtle: #1c1c1c;
+    --bg-surface: #111111;
     --bg-terminal: #000000;
-    --color-accent: #ededed;
+    --color-accent: #ffffff;
     --color-ai: #c084fc; /* purple-400 */
     --color-success: #10b981;
     --color-warning: #f59e0b;
     --color-error: #ef4444;
-    --text-primary: #ededed;
-    --text-secondary: #a1a1aa;
-    --text-muted: #52525b;
+    --text-primary: #ffffff;
+    --text-secondary: #d4d4d8; /* zinc-300 - much brighter */
+    --text-muted: #a1a1aa; /* zinc-400 - much brighter */
 
     /* ── shadcn/ui — Dark ── */
-    --background: 0 0% 0%;
-    --foreground: 0 0% 93%;
-    --card: 0 0% 4%;
-    --card-foreground: 0 0% 93%;
-    --popover: 0 0% 4%;
-    --popover-foreground: 0 0% 93%;
+    --background: 0 0% 2%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 6%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
     --primary-foreground: 0 0% 0%;
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 93%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 64%;
-    --accent: 0 0% 12%;
-    --accent-foreground: 0 0% 93%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%; /* zinc-400 */
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 98%;
     --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 93%;
-    --border: 0 0% 14%;
-    --input: 0 0% 14%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%; /* lighter border */
+    --input: 0 0% 18%;
     --ring: 0 0% 83%;
   }
+}
 
 @layer base {
   * {

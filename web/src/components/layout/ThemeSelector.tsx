@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const themes = [
-  { id: 'light', name: 'Light' },
+  { id: 'light', name: 'Light (Default)' },
   { id: 'dark', name: 'Dark' },
 ];
 
@@ -18,23 +18,28 @@ export function ThemeSelector() {
   const [currentTheme, setCurrentTheme] = useState('light');
 
   useEffect(() => {
-    // on load
-    const saved = localStorage.getItem('ol-theme') || 'light';
-    setCurrentTheme(saved);
-    if (saved !== 'light') {
-      document.documentElement.setAttribute('data-theme', saved);
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
+    // Migrate old themes or load standard theme
+    const saved = localStorage.getItem('ol-theme');
+    const isValid = saved === 'light' || saved === 'dark';
+    const initTheme = isValid
+      ? saved
+      : window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+
+    setTheme(initTheme);
   }, []);
 
   const setTheme = (themeId: string) => {
     setCurrentTheme(themeId);
     localStorage.setItem('ol-theme', themeId);
+
     if (themeId === 'light') {
       document.documentElement.removeAttribute('data-theme');
+      document.documentElement.classList.remove('dark');
     } else {
-      document.documentElement.setAttribute('data-theme', themeId);
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.classList.add('dark');
     }
   };
 
