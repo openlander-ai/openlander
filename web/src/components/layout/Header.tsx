@@ -4,6 +4,7 @@ import type { SystemStats } from '@/types';
 import type { Notification } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
 import { NotificationCenter } from './NotificationCenter';
+import { ThemeSelector } from './ThemeSelector';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
 import { useNavigate } from 'react-router-dom';
@@ -181,6 +182,9 @@ export function Header({
             />
           )}
         </div>
+
+        {/* Theme Selector */}
+        <ThemeSelector />
 
         {/* LLM Status */}
         <div

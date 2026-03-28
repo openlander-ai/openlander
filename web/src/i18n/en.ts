@@ -241,10 +241,12 @@ export const translations = {
         saveFailed: 'Failed to save Cloudflare credentials. Check your values and try again.',
         tokenHelpTitle: 'Need a Cloudflare API token?',
         tokenHelpText:
-          'Click the link below to create a token with the right permissions pre-filled. Just confirm and copy the token.',
-        tokenPermissions:
-          'Zone:Zone (Read); Zone:DNS (Edit); Account:Cloudflare Tunnel (Read, Edit)',
-        tokenPermissionsLabel: 'Required token permissions:',
+          'Click the link below to open the token creation page. Verify all 4 permissions below are checked, then create the token.',
+        tokenPermZone: 'Zone > Zone (Read) > All zones',
+        tokenPermDns: 'Zone > DNS (Edit) > All zones',
+        tokenPermTunnel: 'Account > Cloudflare Tunnel (Read, Edit) > All accounts',
+        tokenPermAccount: 'Account > Account Settings (Read) > All accounts',
+        tokenPermissionsLabel: 'Verification Checklist (All 4 needed):',
         tokenHelpLink: 'Create API token in Cloudflare',
       },
       tunnelGuide: {
