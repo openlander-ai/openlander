@@ -11,13 +11,19 @@ import { cn } from '@/lib/utils';
 
 const themes = [
   { id: 'light', name: 'Light (Default)' },
+  { id: 'ink', name: 'Ink (Mono Light)' },
+  { id: 'glass-light', name: 'Soft Glass' },
+  { id: 'lavender', name: 'Lavender Dream' },
+  { id: 'solar', name: 'Solar (Amber)' },
   { id: 'deep-blue', name: 'Deep Blue (Dark)' },
   { id: 'vercel-dark', name: 'Vercel Dark' },
-  { id: 'glass-light', name: 'Soft Glass' },
-  { id: 'cyber', name: 'Cyberpunk (Neon)' },
+  { id: 'cobalt', name: 'Cobalt (GitHub)' },
+  { id: 'nord', name: 'Nord (Frost)' },
+  { id: 'ocean', name: 'Ocean (Teal)' },
+  { id: 'midnight', name: 'Midnight (Purple)' },
   { id: 'supabase', name: 'Supabase (Emerald)' },
-  { id: 'cobalt', name: 'Cobalt (Deep Cyan)' },
-  { id: 'ruby', name: 'Raycast (Ruby Red)' },
+  { id: 'cyber', name: 'Cyberpunk (Neon)' },
+  { id: 'ruby', name: 'Raycast (Ruby)' },
 ];
 
 export function ThemeSelector() {

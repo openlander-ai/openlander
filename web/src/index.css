@@ -306,6 +306,228 @@
     --input: 0 14% 18%;
     --ring: 0 100% 71%;
   }
+
+  /* ── Lavender Dream — warm purple light ── */
+  [data-theme='lavender'] {
+    --bg-app: #faf8ff;
+    --bg-panel: #f3f0ff;
+    --bg-subtle: #ede8ff;
+    --bg-surface: #f8f6ff;
+    --bg-terminal: #1e1b2e;
+    --color-accent: #7c3aed;
+    --color-ai: #7c3aed;
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-error: #ef4444;
+    --text-primary: #1e1b4b;
+    --text-secondary: #4c1d95;
+    --text-muted: #a78bfa;
+
+    --background: 260 50% 99%;
+    --foreground: 244 55% 15%;
+    --card: 258 100% 97%;
+    --card-foreground: 244 55% 15%;
+    --popover: 258 100% 97%;
+    --popover-foreground: 244 55% 15%;
+    --primary: 263 70% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 258 80% 95%;
+    --secondary-foreground: 244 55% 15%;
+    --muted: 258 80% 95%;
+    --muted-foreground: 257 40% 50%;
+    --accent: 258 80% 95%;
+    --accent-foreground: 244 55% 15%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 258 40% 90%;
+    --input: 258 40% 90%;
+    --ring: 263 70% 58%;
+  }
+
+  /* ── Ocean — deep teal dark ── */
+  [data-theme='ocean'] {
+    --bg-app: #0a1628;
+    --bg-panel: #0f1f36;
+    --bg-subtle: #162a46;
+    --bg-surface: #1c3456;
+    --bg-terminal: #050d1a;
+    --color-accent: #06b6d4;
+    --color-ai: #06b6d4;
+    --color-success: #34d399;
+    --color-warning: #fbbf24;
+    --color-error: #f87171;
+    --text-primary: #e0f2fe;
+    --text-secondary: #7dd3fc;
+    --text-muted: #38608f;
+
+    --background: 218 60% 10%;
+    --foreground: 202 100% 94%;
+    --card: 216 48% 14%;
+    --card-foreground: 202 100% 94%;
+    --popover: 216 48% 14%;
+    --popover-foreground: 202 100% 94%;
+    --primary: 189 94% 43%;
+    --primary-foreground: 218 60% 10%;
+    --secondary: 213 44% 18%;
+    --secondary-foreground: 202 100% 94%;
+    --muted: 213 44% 18%;
+    --muted-foreground: 215 30% 38%;
+    --accent: 213 44% 18%;
+    --accent-foreground: 202 100% 94%;
+    --destructive: 0 96% 71%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 213 35% 22%;
+    --input: 213 35% 22%;
+    --ring: 189 94% 43%;
+  }
+
+  /* ── Solar — warm amber light ── */
+  [data-theme='solar'] {
+    --bg-app: #fffcf0;
+    --bg-panel: #fef9e7;
+    --bg-subtle: #fdf0c8;
+    --bg-surface: #fef7dc;
+    --bg-terminal: #292211;
+    --color-accent: #d97706;
+    --color-ai: #d97706;
+    --color-success: #16a34a;
+    --color-warning: #ca8a04;
+    --color-error: #dc2626;
+    --text-primary: #422006;
+    --text-secondary: #78350f;
+    --text-muted: #b45309;
+
+    --background: 48 100% 97%;
+    --foreground: 28 73% 13%;
+    --card: 46 88% 94%;
+    --card-foreground: 28 73% 13%;
+    --popover: 46 88% 94%;
+    --popover-foreground: 28 73% 13%;
+    --primary: 32 95% 44%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 46 72% 88%;
+    --secondary-foreground: 28 73% 13%;
+    --muted: 46 72% 88%;
+    --muted-foreground: 28 80% 30%;
+    --accent: 46 72% 88%;
+    --accent-foreground: 28 73% 13%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 45 50% 85%;
+    --input: 45 50% 85%;
+    --ring: 32 95% 44%;
+  }
+
+  /* ── Midnight — deep purple dark ── */
+  [data-theme='midnight'] {
+    --bg-app: #0e0b1e;
+    --bg-panel: #16112b;
+    --bg-subtle: #1f1938;
+    --bg-surface: #2a2246;
+    --bg-terminal: #08061a;
+    --color-accent: #a78bfa;
+    --color-ai: #a78bfa;
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
+    --color-error: #fb7185;
+    --text-primary: #ede9fe;
+    --text-secondary: #c4b5fd;
+    --text-muted: #5b4a8a;
+
+    --background: 260 40% 8%;
+    --foreground: 258 100% 95%;
+    --card: 264 38% 12%;
+    --card-foreground: 258 100% 95%;
+    --popover: 264 38% 12%;
+    --popover-foreground: 258 100% 95%;
+    --primary: 262 83% 76%;
+    --primary-foreground: 260 40% 8%;
+    --secondary: 264 34% 16%;
+    --secondary-foreground: 258 100% 95%;
+    --muted: 264 34% 16%;
+    --muted-foreground: 262 30% 42%;
+    --accent: 264 34% 16%;
+    --accent-foreground: 258 100% 95%;
+    --destructive: 348 100% 73%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 264 28% 20%;
+    --input: 264 28% 20%;
+    --ring: 262 83% 76%;
+  }
+
+  /* ── Nord — frost-inspired cool ── */
+  [data-theme='nord'] {
+    --bg-app: #2e3440;
+    --bg-panel: #3b4252;
+    --bg-subtle: #434c5e;
+    --bg-surface: #4c566a;
+    --bg-terminal: #242933;
+    --color-accent: #88c0d0;
+    --color-ai: #88c0d0;
+    --color-success: #a3be8c;
+    --color-warning: #ebcb8b;
+    --color-error: #bf616a;
+    --text-primary: #eceff4;
+    --text-secondary: #d8dee9;
+    --text-muted: #616e88;
+
+    --background: 220 16% 22%;
+    --foreground: 218 27% 94%;
+    --card: 222 16% 28%;
+    --card-foreground: 218 27% 94%;
+    --popover: 222 16% 28%;
+    --popover-foreground: 218 27% 94%;
+    --primary: 193 43% 67%;
+    --primary-foreground: 220 16% 22%;
+    --secondary: 220 16% 32%;
+    --secondary-foreground: 218 27% 94%;
+    --muted: 220 16% 32%;
+    --muted-foreground: 220 17% 46%;
+    --accent: 220 16% 32%;
+    --accent-foreground: 218 27% 94%;
+    --destructive: 354 42% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 16% 36%;
+    --input: 220 16% 36%;
+    --ring: 193 43% 67%;
+  }
+
+  /* ── Ink — minimal monochrome ── */
+  [data-theme='ink'] {
+    --bg-app: #fafafa;
+    --bg-panel: #f5f5f5;
+    --bg-subtle: #e5e5e5;
+    --bg-surface: #eeeeee;
+    --bg-terminal: #1a1a1a;
+    --color-accent: #171717;
+    --color-ai: #404040;
+    --color-success: #15803d;
+    --color-warning: #a16207;
+    --color-error: #b91c1c;
+    --text-primary: #0a0a0a;
+    --text-secondary: #525252;
+    --text-muted: #a3a3a3;
+
+    --background: 0 0% 98%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 96%;
+    --card-foreground: 0 0% 4%;
+    --popover: 0 0% 96%;
+    --popover-foreground: 0 0% 4%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 90%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 90%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 90%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 72% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 85%;
+    --input: 0 0% 85%;
+    --ring: 0 0% 9%;
+  }
 }
 
 @layer base {
