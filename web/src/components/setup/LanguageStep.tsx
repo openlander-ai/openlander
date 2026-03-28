@@ -46,7 +46,7 @@ export function LanguageStep({ language, setLanguage, onNext }: LanguageStepProp
         <Button
           onClick={onNext}
           size="lg"
-          className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
+          className="w-full bg-agent text-white hover:bg-agent/90 font-body gap-2"
         >
           {t('setup.common.continue')}
           <ArrowRight className="h-4 w-4" />

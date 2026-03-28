@@ -139,7 +139,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
           </Button>
           <Button
             onClick={onNext}
-            className="flex-1 bg-agent hover:bg-agent/90 text-bg-app font-body gap-2"
+            className="flex-1 bg-agent hover:bg-agent/90 text-white font-body gap-2"
           >
             <Rocket className="h-4 w-4" /> {t('setup.mcp.startDeploying')}
           </Button>

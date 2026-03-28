@@ -131,7 +131,7 @@ export function SystemSettingsTab() {
               type="submit"
               disabled={secretSaving || !secretKey.trim() || !secretValue.trim()}
               size="sm"
-              className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+              className="gap-1.5 bg-agent text-white hover:bg-agent/90 font-body"
             >
               {secretSaving ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -94,7 +94,7 @@ export function InfraStep({
           onClick={onNext}
           disabled={!status.docker.ok}
           size="lg"
-          className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
+          className="w-full bg-agent text-white hover:bg-agent/90 font-body gap-2"
         >
           {t('setup.common.getStarted')}
           <ArrowRight className="h-4 w-4" />

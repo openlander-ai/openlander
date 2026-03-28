@@ -112,7 +112,7 @@ export function LlmStep({
               type="submit"
               disabled={llmSaving || (llmProvider !== 'ollama' && !llmApiKey.trim())}
               size="sm"
-              className="w-full gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+              className="w-full gap-1.5 bg-agent text-white hover:bg-agent/90 font-body"
             >
               {llmSaving ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -161,7 +161,7 @@ export function LlmStep({
             onClick={onComplete}
             disabled={!status.docker.ok || !status.llm?.ok || completing}
             size="lg"
-            className="flex-1 bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
+            className="flex-1 bg-agent text-white hover:bg-agent/90 font-body gap-2"
           >
             {completing ? (
               <Loader2 className="h-4 w-4 animate-spin" />

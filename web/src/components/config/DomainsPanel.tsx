@@ -593,7 +593,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               disabled={exposing || !internalUrl}
               className={cn(
                 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body',
-                'bg-agent text-bg-app hover:bg-agent/90',
+                'bg-agent text-white hover:bg-agent/90',
                 'transition-colors',
                 (exposing || !internalUrl) && 'opacity-50 cursor-not-allowed',
               )}

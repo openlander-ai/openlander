@@ -80,7 +80,7 @@ export function PasswordStep({ onNext, onBack }: PasswordStepProps) {
             <Button
               type="submit"
               disabled={saving || !password || !confirm}
-              className="flex-1 bg-agent hover:bg-agent/90 text-bg-app font-body"
+              className="flex-1 bg-agent hover:bg-agent/90 text-white font-body"
             >
               {saving ? t('setup.password.saving') : t('setup.password.submit')}
             </Button>

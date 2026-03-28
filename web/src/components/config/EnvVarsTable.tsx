@@ -233,7 +233,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
           {dirty && (
             <Button
               size="sm"
-              className="h-7 text-xs font-body gap-1.5 bg-agent text-bg-app hover:bg-agent/90"
+              className="h-7 text-xs font-body gap-1.5 bg-agent text-white hover:bg-agent/90"
               onClick={handleSave}
               disabled={saving}
             >
@@ -274,7 +274,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             </Button>
             <Button
               size="sm"
-              className="h-7 text-xs bg-agent text-bg-app hover:bg-agent/90"
+              className="h-7 text-xs bg-agent text-white hover:bg-agent/90"
               onClick={handlePaste}
               disabled={!pasteText.trim()}
             >
@@ -316,7 +316,7 @@ export function EnvVarsTable({ projectId }: EnvVarsTableProps) {
             </Button>
             <Button
               size="sm"
-              className="h-7 text-xs bg-agent text-bg-app hover:bg-agent/90 gap-1.5"
+              className="h-7 text-xs bg-agent text-white hover:bg-agent/90 gap-1.5"
               onClick={handleDownloadExample}
             >
               <Download className="h-3 w-3" />

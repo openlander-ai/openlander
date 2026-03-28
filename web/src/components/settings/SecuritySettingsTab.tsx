@@ -172,7 +172,7 @@ export function SecuritySettingsTab() {
             <Button
               type="submit"
               disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
-              className="w-full bg-agent text-bg-app hover:bg-agent/90 font-body"
+              className="w-full bg-agent text-white hover:bg-agent/90 font-body"
             >
               {changingPassword ? 'Changing Password...' : 'Change Password'}
             </Button>

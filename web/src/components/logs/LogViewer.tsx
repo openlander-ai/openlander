@@ -430,7 +430,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
             className={cn(
               'flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-all duration-200',
               unseenCount > 0
-                ? 'bg-primary-ol text-bg-app font-medium hover:scale-105 hover:shadow-xl'
+                ? 'bg-primary-ol text-white font-medium hover:scale-105 hover:shadow-xl'
                 : 'bg-bg-panel border border-[hsl(var(--border))] text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle',
             )}
           >

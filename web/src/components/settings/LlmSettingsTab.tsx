@@ -381,7 +381,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
                       adding || (!newProvider.apiKey.trim() && newProvider.provider !== 'ollama')
                     }
                     size="sm"
-                    className="gap-1.5 font-body bg-agent text-bg-app hover:bg-agent/90"
+                    className="gap-1.5 font-body bg-agent text-white hover:bg-agent/90"
                   >
                     {adding ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -158,7 +158,7 @@ export function GithubStep({
           <Button
             onClick={onNext}
             size="lg"
-            className="flex-1 bg-agent text-bg-app hover:bg-agent/90 font-body gap-2"
+            className="flex-1 bg-agent text-white hover:bg-agent/90 font-body gap-2"
           >
             {status?.github?.ok ? 'Continue' : 'Skip for now'}
             <ArrowRight className="h-4 w-4" />
@@ -258,7 +258,7 @@ function GithubConnectionUI({
         type="button"
         onClick={onStartDeviceFlow}
         size="sm"
-        className="w-full gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+        className="w-full gap-1.5 bg-agent text-white hover:bg-agent/90 font-body"
       >
         <Github className="h-3.5 w-3.5" />
         {t('settings.github.connectWithGithub')}

@@ -329,7 +329,7 @@ export function TraefikSettingsTab() {
                             type="submit"
                             size="sm"
                             disabled={cloudflareConnecting || !cloudflareApiToken.trim()}
-                            className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+                            className="gap-1.5 bg-agent text-white hover:bg-agent/90 font-body"
                           >
                             {cloudflareConnecting ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -398,7 +398,7 @@ export function TraefikSettingsTab() {
                         !cloudflareAccountId.trim() ||
                         !cloudflareTunnelId.trim()
                       }
-                      className="gap-1.5 bg-agent text-bg-app hover:bg-agent/90 font-body"
+                      className="gap-1.5 bg-agent text-white hover:bg-agent/90 font-body"
                     >
                       {cloudflareSaving ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
