@@ -165,7 +165,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
   );
 
   return (
-    <section className="space-y-4">
+    <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
       <div className="flex items-center gap-2">
         <Key className="h-4 w-4 text-secondary-ol" />
         <h2 className="font-display text-lg font-semibold text-primary-ol">
@@ -182,7 +182,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
           'rounded-lg border p-3 flex items-center justify-between',
           providers.length > 0
             ? 'border-success/30 bg-success/5'
-            : 'border-[hsl(var(--border))] bg-bg-panel',
+            : 'border-[hsl(var(--border))] bg-bg-subtle/50',
         )}
       >
         <div className="flex items-center gap-2.5">
@@ -220,7 +220,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
             return (
               <div
                 key={provider.id}
-                className="rounded-lg border border-border bg-bg-panel/30 p-4 flex flex-col gap-3"
+                className="rounded-lg border border-border bg-bg-subtle/50 p-4 flex flex-col gap-3 transition-colors hover:bg-bg-subtle"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -293,7 +293,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
               {t('llmSettings.addProvider')}
             </Button>
           ) : (
-            <div className="rounded-lg border border-border bg-bg-panel p-4 space-y-4">
+            <div className="rounded-lg border border-border bg-bg-subtle/50 p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-primary-ol">
                   {t('llmSettings.addProvider')}

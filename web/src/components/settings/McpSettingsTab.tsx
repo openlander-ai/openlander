@@ -47,16 +47,18 @@ function CollapsibleConfig({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-border rounded-lg overflow-hidden">
+    <div className="border border-border rounded-lg overflow-hidden bg-bg-app transition-colors">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-sm font-body text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle/50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-body text-secondary-ol hover:text-primary-ol hover:bg-bg-subtle transition-colors"
       >
         <span className="font-medium">{title}</span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
-      {open && <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">{children}</div>}
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3 bg-bg-app">{children}</div>
+      )}
     </div>
   );
 }
@@ -114,8 +116,8 @@ export function McpSettingsTab() {
   const stdioCmd = 'openlander mcp';
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
+    <div className="space-y-6">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Cable className="h-4 w-4 text-agent" />
           <h2 className="font-display text-lg font-semibold text-primary-ol">
@@ -124,7 +126,7 @@ export function McpSettingsTab() {
         </div>
         <p className="text-sm font-body text-muted-ol">{t('settings.mcp.serverDescription')}</p>
 
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
           <div className="flex items-center gap-3">
             <span className="text-xs font-body font-medium text-secondary-ol w-20 shrink-0">
               {t('settings.mcp.url')}
@@ -169,7 +171,7 @@ export function McpSettingsTab() {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Zap className="h-4 w-4 text-agent" />
           <h2 className="font-display text-lg font-semibold text-primary-ol">
@@ -181,7 +183,7 @@ export function McpSettingsTab() {
         <CodeBlock label={t('settings.mcp.copyPrompt')} code={quickCopyText} />
       </section>
 
-      <section className="space-y-4">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Terminal className="h-4 w-4 text-agent" />
           <h2 className="font-display text-lg font-semibold text-primary-ol">
