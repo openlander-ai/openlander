@@ -145,6 +145,54 @@ describe('ActionRunRepo', () => {
     });
   });
 
+  describe('updatePlan', () => {
+    it('stores plan JSON and updates updated_at timestamp', () => {
+      const id = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'web_agent',
+      });
+
+      repo.updatePlan(id, '{"steps":["analyze","fix"]}');
+
+      const runs = repo.findByProjectId('proj-1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].plan).toBe('{"steps":["analyze","fix"]}');
+      expect(runs[0].updated_at).toBeTruthy();
+    });
+  });
+
+  describe('updateStep', () => {
+    it('updates current_step and total_steps when both are provided', () => {
+      const id = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'auto_recovery',
+      });
+
+      repo.updateStep(id, 2, 5);
+
+      const runs = repo.findByProjectId('proj-1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].current_step).toBe(2);
+      expect(runs[0].total_steps).toBe(5);
+      expect(runs[0].updated_at).toBeTruthy();
+    });
+
+    it('updates only current_step when totalSteps is omitted', () => {
+      const id = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'monitor',
+      });
+
+      repo.updateStep(id, 1);
+
+      const runs = repo.findByProjectId('proj-1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].current_step).toBe(1);
+      expect(runs[0].total_steps).toBeNull();
+      expect(runs[0].updated_at).toBeTruthy();
+    });
+  });
+
   describe('findRunning', () => {
     it('returns only running action runs for a project', () => {
       const projectId = 'proj-1';

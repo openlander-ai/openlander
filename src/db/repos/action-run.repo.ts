@@ -63,6 +63,75 @@ export class ActionRunRepo {
       .run();
   }
 
+  updatePlan(id: string, plan: string): void {
+    const now = new Date().toISOString();
+    this.db
+      .update(actionRuns)
+      .set({
+        plan,
+        updated_at: now,
+      })
+      .where(eq(actionRuns.id, id))
+      .run();
+  }
+
+  updateStep(id: string, currentStep: number, totalSteps?: number): void {
+    const now = new Date().toISOString();
+    this.db
+      .update(actionRuns)
+      .set({
+        current_step: currentStep,
+        ...(totalSteps !== undefined ? { total_steps: totalSteps } : {}),
+        updated_at: now,
+      })
+      .where(eq(actionRuns.id, id))
+      .run();
+  }
+
+  updateApproval(
+    id: string,
+    approvalStatus: 'pending' | 'approved' | 'rejected',
+    approvalTool?: string,
+  ): void {
+    const now = new Date().toISOString();
+    const isPending = approvalStatus === 'pending';
+
+    this.db
+      .update(actionRuns)
+      .set({
+        approval_status: approvalStatus,
+        approval_tool: approvalTool ?? null,
+        approval_requested_at: isPending ? now : undefined,
+        approval_resolved_at: isPending ? undefined : now,
+        updated_at: now,
+      })
+      .where(eq(actionRuns.id, id))
+      .run();
+  }
+
+  findPendingApproval(actionRunId: string): ActionRunRow | null {
+    const result = this.db
+      .select()
+      .from(actionRuns)
+      .where(and(eq(actionRuns.id, actionRunId), eq(actionRuns.approval_status, 'pending')))
+      .get();
+
+    return (result as ActionRunRow | undefined) ?? null;
+  }
+
+  findByApprovalStatus(status: 'pending' | 'approved' | 'rejected', limit = 20): ActionRunRow[] {
+    return this.db
+      .select()
+      .from(actionRuns)
+      .where(eq(actionRuns.approval_status, status))
+      .orderBy(desc(actionRuns.created_at))
+      .limit(limit)
+      .all() as ActionRunRow[];
+  }
+
+  /**
+   * Find all running action runs for a project.
+   */
   findRunning(projectId: string): ActionRunRow[] {
     return this.db
       .select()
