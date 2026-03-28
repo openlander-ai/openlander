@@ -1040,20 +1040,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'removed', project: project.name });
   });
 
-  api.get('/projects/:id/logs', (c) => {
+  api.get('/projects/:id/logs', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
     const follow = c.req.query('follow');
 
-    // container_id moved to environments table; fall back to production environment
-    const resolvedContainerId =
-      project.container_id ??
-      ctx.db.getEnvironmentsByProject(project.id).find((e) => e.type === 'production')
-        ?.container_id ??
-      null;
-
-    if (follow && resolvedContainerId) {
-      const containerId = resolvedContainerId;
+    if (follow && project.container_id) {
+      const containerId = project.container_id;
       return stream(c, async (s) => {
         c.header('Content-Type', 'application/x-ndjson');
 
@@ -1101,7 +1094,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
 
     const lines = parseInt(c.req.query('lines') ?? '50', 10);
-    const logs = ctx.pipeline.getLogs(project.id, lines);
+    const logs = await ctx.pipeline.getLogs(project.id, lines);
 
     return c.json({ project: project.name, logs });
   });

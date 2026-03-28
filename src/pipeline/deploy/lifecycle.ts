@@ -214,15 +214,10 @@ export class ContainerLifecycle {
 
   async getLogs(projectId: string, tail = 50): Promise<string> {
     const project = this.db.getProject(projectId);
-    const containerId =
-      project?.container_id ??
-      this.db.getEnvironmentsByProject(projectId).find((e) => e.type === 'production')
-        ?.container_id ??
-      null;
-    if (!containerId) {
+    if (!project?.container_id) {
       return 'No container running for this project.';
     }
 
-    return this.docker.getLogs(containerId, tail);
+    return this.docker.getLogs(project.container_id, tail);
   }
 }
