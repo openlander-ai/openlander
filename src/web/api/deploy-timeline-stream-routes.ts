@@ -580,6 +580,9 @@ function handleInitialStatusCheck(
 
 function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow) {
   const unsubscribers: Array<() => void> = [];
+  const skipInitialStatusCheck = ['1', 'true'].includes(
+    (c.req.query('fresh_start') ?? '').toLowerCase(),
+  );
 
   return stream(c, async (s) => {
     c.header('Content-Type', 'application/x-ndjson');
@@ -696,7 +699,14 @@ function handleBuildStreamRoute(c: Context, ctx: AppContext, project: ProjectRow
       cleanup();
     });
 
-    if (handleInitialStatusCheck(ctx, project, write, closeStream)) {
+    if (skipInitialStatusCheck) {
+      write({
+        id: 'fresh-start',
+        type: 'status',
+        message: 'Preparing new deploy...',
+        projectId: project.id,
+      });
+    } else if (handleInitialStatusCheck(ctx, project, write, closeStream)) {
       return;
     }
 

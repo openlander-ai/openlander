@@ -98,7 +98,8 @@ export function useTimeline({
     setDisconnected(false);
 
     try {
-      const response = await fetch(`/api/projects/${projectId}/build/stream`, {
+      const freshStartQuery = runKey > 0 ? '?fresh_start=1' : '';
+      const response = await fetch(`/api/projects/${projectId}/build/stream${freshStartQuery}`, {
         signal: controller.signal,
       });
 
@@ -181,7 +182,7 @@ export function useTimeline({
         }, RETRY_DELAY);
       }
     }
-  }, [projectId, appendEvent]);
+  }, [projectId, appendEvent, runKey]);
 
   useEffect(() => {
     if (!enabled || !projectId) return;
