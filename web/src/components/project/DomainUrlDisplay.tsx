@@ -131,7 +131,7 @@ export function DomainUrlDisplay({ urls = [], publicUrl, className }: DomainUrlD
                       <Icon className="h-3.5 w-3.5 text-secondary" />
                     </div>
                     <div className="flex flex-col min-w-0 -mt-0.5">
-                      <span className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase mb-[1px]">
+                      <span className="text-[10px] font-semibold tracking-wide text-secondary-ol uppercase mb-[1px]">
                         {item.label}
                       </span>
                       <span className="text-[11px] font-mono text-primary truncate cursor-default">

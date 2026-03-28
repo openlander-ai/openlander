@@ -1,13 +1,4 @@
-@import '@fontsource-variable/inter';
-@import '@fontsource-variable/geist-mono';
-@import '@fontsource-variable/jetbrains-mono';
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  :root {
+new_css = """  :root {
     /* ── Typography Scale ── */
     --font-size-xs: 0.75rem; /* 12px */
     --font-size-sm: 0.875rem; /* 14px */
@@ -92,112 +83,12 @@
     --input: 0 0% 14%;
     --ring: 0 0% 83%;
   }
+"""
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  [hidden] {
-    display: none !important;
-  }
-  html,
-  body,
-  #root {
-    height: 100%;
-  }
-  body {
-    @apply bg-background text-foreground;
-    margin: 0;
-    font-family:
-      'Inter Variable',
-      'Inter',
-      system-ui,
-      -apple-system,
-      sans-serif;
-    font-size: 14px;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  h1,
-  h2,
-  h3 {
-    letter-spacing: -0.02em;
-  }
-}
+with open("web/src/index.css", "r") as f:
+    lines = f.readlines()
 
-/* ── Motion & Micro-interactions ── */
-@layer utilities {
-  /* Timeline item slide-in */
-  .timeline-item-enter {
-    animation: timeline-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
+new_content = "".join(lines[:9]) + new_css + "".join(lines[531:])
 
-  /* Card hover micro-interaction */
-  .card-hover {
-    transition:
-      transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-      box-shadow 0.2s ease,
-      border-color 0.2s ease;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 1px 3px rgba(0, 0, 0, 0.06);
-  }
-  .card-hover:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    border-color: rgba(244, 63, 94, 0.2); /* rose-500/20 */
-  }
-
-  /* AI Deployment Border — left accent only */
-  .ai-deploy-border {
-    border-left: 2px solid #f43f5e;
-  }
-
-  .ai-sparkle-glow {
-    filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.5))
-      drop-shadow(0 0 6px rgba(244, 63, 94, 0.25));
-  }
-}
-
-@keyframes timeline-slide-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes pulse-ring {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.5;
-  }
-  100% {
-    transform: scale(1.5);
-    opacity: 0;
-  }
-}
-@keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
-}
-
-@keyframes bounce-dot {
-  0%,
-  80%,
-  100% {
-    transform: scale(0.6);
-    opacity: 0.4;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
+with open("web/src/index.css", "w") as f:
+    f.write(new_content)

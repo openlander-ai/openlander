@@ -10,20 +10,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const themes = [
-  { id: 'light', name: 'Light (Default)' },
-  { id: 'ink', name: 'Ink (Mono Light)' },
-  { id: 'glass-light', name: 'Soft Glass' },
-  { id: 'lavender', name: 'Lavender Dream' },
-  { id: 'solar', name: 'Solar (Amber)' },
-  { id: 'deep-blue', name: 'Deep Blue (Dark)' },
-  { id: 'vercel-dark', name: 'Vercel Dark' },
-  { id: 'cobalt', name: 'Cobalt (GitHub)' },
-  { id: 'nord', name: 'Nord (Frost)' },
-  { id: 'ocean', name: 'Ocean (Teal)' },
-  { id: 'midnight', name: 'Midnight (Purple)' },
-  { id: 'supabase', name: 'Supabase (Emerald)' },
-  { id: 'cyber', name: 'Cyberpunk (Neon)' },
-  { id: 'ruby', name: 'Raycast (Ruby)' },
+  { id: 'light', name: 'Light' },
+  { id: 'dark', name: 'Dark' },
 ];
 
 export function ThemeSelector() {
