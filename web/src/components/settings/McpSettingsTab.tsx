@@ -103,9 +103,47 @@ export function McpSettingsTab() {
     {
       mcpServers: {
         openlander: {
-          type: 'remote',
           url: mcpUrl,
           headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const windsurfConfig = JSON.stringify(
+    {
+      mcpServers: {
+        openlander: {
+          serverUrl: mcpUrl,
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const claudeDesktopConfig = JSON.stringify(
+    {
+      mcpServers: {
+        openlander: {
+          command: 'npx',
+          args: ['-y', 'mcp-remote', mcpUrl, '--header', `Authorization: Bearer ${token}`],
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const vscodeConfig = JSON.stringify(
+    {
+      servers: {
+        openlander: {
+          command: 'npx',
+          args: ['-y', 'mcp-remote', mcpUrl, '--header', `Authorization: Bearer ${token}`],
         },
       },
     },
@@ -201,8 +239,20 @@ export function McpSettingsTab() {
             <CodeBlock label="opencode.json" code={openCodeConfig} />
           </CollapsibleConfig>
 
-          <CollapsibleConfig title="Cursor / Windsurf">
+          <CollapsibleConfig title="Cursor">
             <CodeBlock label=".cursor/mcp.json" code={cursorConfig} />
+          </CollapsibleConfig>
+
+          <CollapsibleConfig title="Windsurf">
+            <CodeBlock label="~/.codeium/windsurf/mcp_config.json" code={windsurfConfig} />
+          </CollapsibleConfig>
+
+          <CollapsibleConfig title="Claude Desktop">
+            <CodeBlock label="claude_desktop_config.json" code={claudeDesktopConfig} />
+          </CollapsibleConfig>
+
+          <CollapsibleConfig title="VS Code">
+            <CodeBlock label=".vscode/mcp.json" code={vscodeConfig} />
           </CollapsibleConfig>
 
           <CollapsibleConfig title={t('settings.mcp.stdioLabel')}>

@@ -34,9 +34,59 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
     {
       mcpServers: {
         openlander: {
-          type: 'remote',
           url: mcpUrl,
           headers: { Authorization: `Bearer ${apiToken || 'ol_YOUR_TOKEN'}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const windsurfConfig = JSON.stringify(
+    {
+      mcpServers: {
+        openlander: {
+          serverUrl: mcpUrl,
+          headers: { Authorization: `Bearer ${apiToken || 'ol_YOUR_TOKEN'}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const claudeDesktopConfig = JSON.stringify(
+    {
+      mcpServers: {
+        openlander: {
+          command: 'npx',
+          args: [
+            '-y',
+            'mcp-remote',
+            mcpUrl,
+            '--header',
+            `Authorization: Bearer ${apiToken || 'ol_YOUR_TOKEN'}`,
+          ],
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  const vscodeConfig = JSON.stringify(
+    {
+      servers: {
+        openlander: {
+          command: 'npx',
+          args: [
+            '-y',
+            'mcp-remote',
+            mcpUrl,
+            '--header',
+            `Authorization: Bearer ${apiToken || 'ol_YOUR_TOKEN'}`,
+          ],
         },
       },
     },
@@ -100,7 +150,7 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
 
               <div className="space-y-1">
                 <p className="text-xs font-body text-secondary-ol font-medium">
-                  Cursor / Windsurf (.cursor/mcp.json)
+                  Cursor (.cursor/mcp.json)
                 </p>
                 <div className="relative bg-bg-app rounded p-3">
                   <pre className="text-xs font-mono text-primary-ol break-all pr-8 overflow-auto max-h-40">
@@ -108,6 +158,48 @@ export function McpGuideStep({ onNext, onBack }: McpGuideStepProps) {
                   </pre>
                   <div className="absolute top-1.5 right-1.5">
                     <CopyButton text={cursorConfig} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-body text-secondary-ol font-medium">
+                  Windsurf (~/.codeium/windsurf/mcp_config.json)
+                </p>
+                <div className="relative bg-bg-app rounded p-3">
+                  <pre className="text-xs font-mono text-primary-ol break-all pr-8 overflow-auto max-h-40">
+                    {windsurfConfig}
+                  </pre>
+                  <div className="absolute top-1.5 right-1.5">
+                    <CopyButton text={windsurfConfig} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-body text-secondary-ol font-medium">
+                  Claude Desktop (claude_desktop_config.json)
+                </p>
+                <div className="relative bg-bg-app rounded p-3">
+                  <pre className="text-xs font-mono text-primary-ol break-all pr-8 overflow-auto max-h-40">
+                    {claudeDesktopConfig}
+                  </pre>
+                  <div className="absolute top-1.5 right-1.5">
+                    <CopyButton text={claudeDesktopConfig} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-body text-secondary-ol font-medium">
+                  VS Code (.vscode/mcp.json)
+                </p>
+                <div className="relative bg-bg-app rounded p-3">
+                  <pre className="text-xs font-mono text-primary-ol break-all pr-8 overflow-auto max-h-40">
+                    {vscodeConfig}
+                  </pre>
+                  <div className="absolute top-1.5 right-1.5">
+                    <CopyButton text={vscodeConfig} />
                   </div>
                 </div>
               </div>
