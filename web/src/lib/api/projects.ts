@@ -36,6 +36,18 @@ export interface EnvironmentEnvVarsResponse {
   inheritance: Record<string, EnvironmentEnvVarMeta>;
 }
 
+export interface ActionRun {
+  id: string;
+  project_id: string;
+  status: 'running' | 'succeeded' | 'failed';
+  approval_status: 'pending' | 'approved' | 'rejected' | null;
+  approval_tool: string | null;
+  approval_requested_at: string | null;
+  approval_resolved_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
 export type ProjectWithOptionalEnvironments = Project & { environments?: Environment[] };
 type BackendProjectWithOptionalEnvironments = Project & { environments?: BackendEnvironment[] };
 
@@ -234,6 +246,39 @@ export async function getEnvironmentEnvVars(
     envVars: data.envVars,
     inheritance: data.inheritance,
   };
+}
+
+export async function fetchPendingApprovals(): Promise<ActionRun[]> {
+  const res = await fetch('/api/action-runs?approval_status=pending');
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to fetch pending approvals');
+  }
+
+  const data = (await res.json()) as { actionRuns?: ActionRun[] };
+  return Array.isArray(data.actionRuns) ? data.actionRuns : [];
+}
+
+export async function approveActionRun(actionRunId: string): Promise<void> {
+  const res = await fetch(`/api/action-runs/${actionRunId}/approve`, {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to approve action run');
+  }
+}
+
+export async function rejectActionRun(actionRunId: string): Promise<void> {
+  const res = await fetch(`/api/action-runs/${actionRunId}/reject`, {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to reject action run');
+  }
 }
 
 export async function updateEnvironmentEnvVars(

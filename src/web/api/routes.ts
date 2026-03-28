@@ -189,6 +189,50 @@ export function createApiRoutes(ctx: AppContext): Hono {
     return c.json({ secrets });
   });
 
+  api.get('/action-runs', (c) => {
+    const approvalStatus = c.req.query('approval_status');
+    if (!approvalStatus) {
+      return c.json({ actionRuns: [] });
+    }
+
+    if (
+      approvalStatus !== 'pending' &&
+      approvalStatus !== 'approved' &&
+      approvalStatus !== 'rejected'
+    ) {
+      return c.json({ error: 'INVALID_FIELD', message: 'approval_status is invalid' }, 400);
+    }
+
+    const actionRuns = ctx.db.getActionRunsByApprovalStatus(approvalStatus, 20);
+    return c.json({ actionRuns });
+  });
+
+  api.post('/action-runs/:id/approve', async (c) => {
+    const id = c.req.param('id');
+    const actionRun = ctx.db.findActionRunPendingApproval(id);
+    if (!actionRun) {
+      return c.json({ error: 'NOT_FOUND', message: 'Action run not found or not pending' }, 404);
+    }
+
+    ctx.db.updateActionRunApproval(id, 'approved', actionRun.approval_tool ?? undefined);
+    await eventBus.emit('recovery:approval-resolved', { actionRunId: id, approved: true });
+
+    return c.json({ success: true, actionRunId: id, status: 'approved' });
+  });
+
+  api.post('/action-runs/:id/reject', async (c) => {
+    const id = c.req.param('id');
+    const actionRun = ctx.db.findActionRunPendingApproval(id);
+    if (!actionRun) {
+      return c.json({ error: 'NOT_FOUND', message: 'Action run not found or not pending' }, 404);
+    }
+
+    ctx.db.updateActionRunApproval(id, 'rejected', actionRun.approval_tool ?? undefined);
+    await eventBus.emit('recovery:approval-resolved', { actionRunId: id, approved: false });
+
+    return c.json({ success: true, actionRunId: id, status: 'rejected' });
+  });
+
   api.post('/secrets', async (c) => {
     const body = await c.req.json<{ key: string; value: string; description?: string }>();
     if (!body.key || !body.value) {

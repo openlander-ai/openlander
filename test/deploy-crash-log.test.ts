@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import { JobManager } from '../src/pipeline/job-manager.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
@@ -37,6 +38,7 @@ describe('DeployPipeline crash logging from startDeploy', () => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-deploy-crash-log-test-'));
     db = new Database(join(tmpDir, 'test.db'));
     jobManager = new JobManager();
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
     pipeline = new DeployPipeline(
       createMockDocker(),
       db,
@@ -44,6 +46,7 @@ describe('DeployPipeline crash logging from startDeploy', () => {
         getEnvVars: vi.fn().mockReturnValue({}),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
+      testConfig,
       jobManager,
     );
   });

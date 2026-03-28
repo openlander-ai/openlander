@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import type { CloudflareTunnelManager } from '../src/pipeline/cloudflare.js';
 import { CloudflareTunnel } from '../src/pipeline/tunnel.js';
@@ -39,6 +40,7 @@ describe('DeployPipeline deploy controls', () => {
   let docker: Docker;
   let env: EnvLike;
   let pipeline: DeployPipeline;
+  const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-deploy-controls-'));
@@ -48,7 +50,7 @@ describe('DeployPipeline deploy controls', () => {
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
-    pipeline = new DeployPipeline(docker, db, env as never);
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
   });
 
   afterEach(() => {

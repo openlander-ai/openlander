@@ -114,6 +114,15 @@ export const translations = {
   agent: {
     diagnoseWithAgent: '✨ Diagnose with Agent',
     aiDiagnosis: 'AI Diagnosis',
+    approval: {
+      title: 'Auto-recovery approval request',
+      description:
+        'Auto-recovery is requesting a high-risk action ({tool}). Do you want to continue?',
+      approve: 'Approve',
+      reject: 'Reject',
+      loadFailed: 'Failed to load pending approvals.',
+      actionFailed: 'Failed to submit approval decision.',
+    },
   },
   deploy: {
     notFound: 'Deployment not found',

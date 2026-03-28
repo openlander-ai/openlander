@@ -13,6 +13,7 @@ export const PRICING_TABLE: Record<string, [number, number]> = {
   'claude-haiku-4-5': [1.0, 5.0],
   'claude-sonnet-4-5': [3.0, 15.0],
   'claude-sonnet-4-6': [3.0, 15.0],
+  'claude-sonnet-4-20250514': [3.0, 15.0],
   'claude-opus-4-5': [15.0, 75.0],
   'claude-opus-4-6': [5.0, 25.0],
   'claude-3-5-sonnet-20241022': [3.0, 15.0],
@@ -27,6 +28,9 @@ export const PRICING_TABLE: Record<string, [number, number]> = {
   'gpt-3.5-turbo': [0.5, 1.5],
   'o3-mini': [1.1, 4.4],
   'o4-mini': [1.1, 4.4],
+  'openrouter/free': [0, 0],
+  'llama3.2': [0, 0],
+  'llama3.1': [0, 0],
   ollama: [0, 0],
 };
 

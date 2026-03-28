@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { AgentPanel } from '@/components/agent/AgentPanel';
+import { ApprovalDialog } from '@/components/agent/ApprovalDialog';
 import { useProjects } from '@/hooks/use-projects';
 import { useSystemStats } from '@/hooks/use-system-stats';
 import { useNotifications } from '@/hooks/use-notifications';
@@ -107,6 +108,7 @@ export function AppLayout() {
           initialContext={agentPanelInitialContext}
           onInitialContextConsumed={() => setAgentPanelInitialContext(null)}
         />
+        <ApprovalDialog />
       </div>
     </AgentPanelContext.Provider>
   );

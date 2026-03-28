@@ -7,6 +7,27 @@ import type { ContextProvider, LLMProvider } from './prompts.js';
 export const MAX_POOL_SIZE = 5;
 export const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
+/**
+ * Tools that change project state and require serialization locking.
+ * Only one session can execute these tools per project at a time.
+ */
+export const STATE_CHANGING_TOOLS = new Set([
+  'deploy',
+  'execute_plan',
+  'redeploy_project',
+  'rollback_project',
+  'stop_project',
+  'remove_project',
+  'deploy_blue_green',
+  'restart_project',
+]);
+
+/**
+ * Stale lock timeout: 5 minutes.
+ * If a lock is older than this, it's considered abandoned and can be evicted.
+ */
+export const PROJECT_LOCK_TIMEOUT_MS = 5 * 60 * 1000;
+
 interface PoolEntry {
   agent: Agent;
   sessionId: string;
@@ -20,6 +41,7 @@ export class AgentPool {
   private idleTimers: Map<string, NodeJS.Timeout> = new Map();
   private tools: ToolSet = {};
   private questionBridge: QuestionBridge | null = null;
+  private projectLocks = new Map<string, { sessionId: string; startedAt: number }>();
 
   constructor(
     private readonly model: LanguageModel,
@@ -78,7 +100,7 @@ export class AgentPool {
 
   getRecoveryAgent(): Agent {
     if (!this.recoveryAgent) {
-      this.recoveryAgent = this.createAgent();
+      this.recoveryAgent = this.createRecoveryAgent();
     }
     return this.recoveryAgent;
   }
@@ -131,6 +153,22 @@ export class AgentPool {
     return agent;
   }
 
+  private createRecoveryAgent(): Agent {
+    const agent = new Agent(
+      this.model,
+      this.db,
+      this.contextProvider,
+      this.provider,
+      this.locale,
+      'auto_recovery',
+    );
+    agent.setTools(this.tools);
+    if (this.questionBridge) {
+      agent.setQuestionBridge(this.questionBridge);
+    }
+    return agent;
+  }
+
   private evictOldest(): void {
     let oldestIdleEntry: PoolEntry | null = null;
 
@@ -171,6 +209,74 @@ export class AgentPool {
     if (timer) {
       clearTimeout(timer);
       this.idleTimers.delete(sessionId);
+    }
+  }
+
+  /**
+   * Acquire project-level lock for state-changing operations.
+   * Returns true if lock acquired, false if project is busy.
+   * Automatically releases stale locks older than PROJECT_LOCK_TIMEOUT_MS.
+   */
+  acquireProjectLock(projectId: string, sessionId: string): boolean {
+    const existing = this.projectLocks.get(projectId);
+    if (existing) {
+      // Check if stale
+      if (Date.now() - existing.startedAt < PROJECT_LOCK_TIMEOUT_MS) {
+        return false; // Lock is still held
+      }
+      // Stale lock — evict and allow acquisition
+    }
+    this.projectLocks.set(projectId, { sessionId, startedAt: Date.now() });
+    return true;
+  }
+
+  /**
+   * Release project-level lock.
+   * Only releases if the sessionId matches the current lock holder.
+   */
+  releaseProjectLock(projectId: string, sessionId: string): void {
+    const existing = this.projectLocks.get(projectId);
+    if (existing && existing.sessionId === sessionId) {
+      this.projectLocks.delete(projectId);
+    }
+  }
+
+  /**
+   * Check if a project is locked by another session.
+   * Returns the locked session info or null.
+   */
+  getProjectLock(projectId: string): { sessionId: string; startedAt: number } | null {
+    const existing = this.projectLocks.get(projectId);
+    if (!existing) return null;
+    if (Date.now() - existing.startedAt >= PROJECT_LOCK_TIMEOUT_MS) {
+      this.projectLocks.delete(projectId); // evict stale
+      return null;
+    }
+    return existing;
+  }
+
+  /**
+   * Execute a function with project-level locking for state-changing operations.
+   * If the lock cannot be acquired, returns an error object.
+   * Otherwise, acquires the lock, executes the function, and releases the lock.
+   */
+  async executeWithProjectLock<T>(
+    sessionId: string,
+    projectId: string,
+    fn: () => Promise<T>,
+  ): Promise<T | { error: 'project_busy'; sessionId: string; message: string }> {
+    if (!this.acquireProjectLock(projectId, sessionId)) {
+      const lock = this.getProjectLock(projectId);
+      return {
+        error: 'project_busy',
+        sessionId: lock?.sessionId ?? 'unknown',
+        message: `Project ${projectId} has an ongoing operation. Please wait.`,
+      };
+    }
+    try {
+      return await fn();
+    } finally {
+      this.releaseProjectLock(projectId, sessionId);
     }
   }
 }

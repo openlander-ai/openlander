@@ -303,6 +303,8 @@ export function toTimelineItem(event: BuildStreamEvent): TimelineItem {
         title: event.message,
         detail: event.detail ?? undefined,
         percent: -1,
+        tokenCount: event.tokenCount,
+        costUsd: event.costUsd,
         ...scopedMeta,
       };
 

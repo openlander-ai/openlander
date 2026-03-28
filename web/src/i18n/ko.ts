@@ -114,6 +114,14 @@ export const translations = {
   agent: {
     diagnoseWithAgent: '✨ 에이전트로 진단',
     aiDiagnosis: 'AI 진단',
+    approval: {
+      title: '자동복구 승인 요청',
+      description: '자동복구가 고위험 작업({tool}) 실행을 요청했습니다. 계속하시겠습니까?',
+      approve: '승인',
+      reject: '거부',
+      loadFailed: '대기 중인 승인 요청을 불러오지 못했습니다.',
+      actionFailed: '승인 처리 요청에 실패했습니다.',
+    },
   },
   deploy: {
     notFound: '배포를 찾을 수 없습니다',

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
 import { ComposePipeline } from '../../src/pipeline/compose.js';
 import { Database } from '../../src/db/index.js';
+import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import { clearPortScanCache, clearPortReservations } from '../../src/pipeline/port.js';
 import { eventBus } from '../../src/events/index.js';
@@ -163,7 +164,8 @@ describe('pipeline event golden snapshots', () => {
   });
 
   it('captures single deploy event sequence and payload shapes', async () => {
-    const pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     db.createProject({
       id: 'single-project',
       name: 'single-app',
@@ -194,7 +196,8 @@ describe('pipeline event golden snapshots', () => {
   });
 
   it('captures monorepo deploy event sequence and payload shapes', async () => {
-    const pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     mkdirSync(join(clonePath, 'frontend'), { recursive: true });
     mkdirSync(join(clonePath, 'backend'), { recursive: true });
     writeFileSync(join(clonePath, 'frontend', 'Dockerfile'), 'FROM node:20\nEXPOSE 3001\n', 'utf8');
@@ -216,7 +219,8 @@ describe('pipeline event golden snapshots', () => {
   });
 
   it('captures rollback event sequence and payload shapes', async () => {
-    const pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     db.createProject({
       id: 'rollback-project',
       name: 'rollback-app',
@@ -240,7 +244,8 @@ describe('pipeline event golden snapshots', () => {
   });
 
   it('captures stop/start/remove event sequence and payload shapes', async () => {
-    const pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(docker, db, env as never, testConfig);
     db.createProject({
       id: 'control-project',
       name: 'control-app',

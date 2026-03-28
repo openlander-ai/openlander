@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import { JobManager } from '../src/pipeline/job-manager.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache, clearPortReservations } from '../src/pipeline/port.js';
@@ -28,6 +29,7 @@ describe('DeployPipeline — non-blocking deploy', () => {
   let tmpDir: string;
   let jobManager: JobManager;
   let pipeline: DeployPipeline;
+  const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-start-deploy-test-'));
@@ -41,6 +43,7 @@ describe('DeployPipeline — non-blocking deploy', () => {
         getAll: vi.fn().mockReturnValue({}),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
+      testConfig,
       jobManager,
     );
     vi.spyOn(pipeline, 'deploy').mockResolvedValue({
@@ -263,6 +266,7 @@ describe('DeployPipeline — non-blocking deploy', () => {
           getAll: vi.fn().mockReturnValue({}),
           getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
         } as never,
+        testConfig,
         jobManager,
       );
 

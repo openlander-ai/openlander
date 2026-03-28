@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { LanguageModel } from 'ai';
 import type { Database } from '../../src/db/index.js';
 import { Agent } from '../../src/llm/agent.js';
-import { AgentPool, MAX_POOL_SIZE } from '../../src/llm/agent-pool.js';
+import { AgentPool, MAX_POOL_SIZE, PROJECT_LOCK_TIMEOUT_MS } from '../../src/llm/agent-pool.js';
 
 function createPool(): AgentPool {
   const model = {} as unknown as LanguageModel;
@@ -99,5 +99,133 @@ describe('AgentPool', () => {
 
     const recoveryAfterInvalidate = pool.getRecoveryAgent();
     expect(recoveryAfterInvalidate).toBeInstanceOf(Agent);
+  });
+});
+
+describe('AgentPool - Project Locking', () => {
+  it('acquireProjectLock returns true for first acquisition', () => {
+    const pool = createPool();
+    expect(pool.acquireProjectLock('p1', 'session-A')).toBe(true);
+  });
+
+  it('acquireProjectLock returns false when project already locked by another session', () => {
+    const pool = createPool();
+    pool.acquireProjectLock('p1', 'session-A');
+    expect(pool.acquireProjectLock('p1', 'session-B')).toBe(false);
+  });
+
+  it('releaseProjectLock allows subsequent acquisition', () => {
+    const pool = createPool();
+    pool.acquireProjectLock('p1', 'session-A');
+    pool.releaseProjectLock('p1', 'session-A');
+    expect(pool.acquireProjectLock('p1', 'session-B')).toBe(true);
+  });
+
+  it('releaseProjectLock is no-op for wrong session', () => {
+    const pool = createPool();
+    pool.acquireProjectLock('p1', 'session-A');
+    pool.releaseProjectLock('p1', 'session-B'); // wrong session
+    expect(pool.acquireProjectLock('p1', 'session-B')).toBe(false); // still locked
+  });
+
+  it('stale locks are evicted on next acquisition attempt', () => {
+    vi.useFakeTimers();
+    try {
+      const pool = createPool();
+      // Manually set a stale lock
+      (pool as unknown as { projectLocks: Map<string, unknown> }).projectLocks.set('p1', {
+        sessionId: 'old-session',
+        startedAt: Date.now() - PROJECT_LOCK_TIMEOUT_MS - 1,
+      });
+
+      // Should succeed because the lock is stale
+      expect(pool.acquireProjectLock('p1', 'session-B')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('different projects can be locked simultaneously', () => {
+    const pool = createPool();
+    expect(pool.acquireProjectLock('p1', 'session-A')).toBe(true);
+    expect(pool.acquireProjectLock('p2', 'session-B')).toBe(true);
+  });
+
+  it('getProjectLock returns null when no lock exists', () => {
+    const pool = createPool();
+    expect(pool.getProjectLock('p1')).toBeNull();
+  });
+
+  it('getProjectLock returns lock info when lock is held', () => {
+    const pool = createPool();
+    pool.acquireProjectLock('p1', 'session-A');
+    const lock = pool.getProjectLock('p1');
+    expect(lock).not.toBeNull();
+    expect(lock?.sessionId).toBe('session-A');
+    expect(typeof lock?.startedAt).toBe('number');
+  });
+
+  it('getProjectLock evicts stale locks', () => {
+    vi.useFakeTimers();
+    try {
+      const pool = createPool();
+      // Manually set a stale lock
+      (pool as unknown as { projectLocks: Map<string, unknown> }).projectLocks.set('p1', {
+        sessionId: 'old-session',
+        startedAt: Date.now() - PROJECT_LOCK_TIMEOUT_MS - 1,
+      });
+
+      // Should return null and evict the stale lock
+      expect(pool.getProjectLock('p1')).toBeNull();
+      // Verify it was evicted
+      expect(pool.getProjectLock('p1')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('executeWithProjectLock acquires lock, executes function, and releases lock', async () => {
+    const pool = createPool();
+    let executed = false;
+
+    const result = await pool.executeWithProjectLock('session-A', 'p1', async () => {
+      executed = true;
+      return 'success';
+    });
+
+    expect(executed).toBe(true);
+    expect(result).toBe('success');
+    // Lock should be released
+    expect(pool.acquireProjectLock('p1', 'session-B')).toBe(true);
+  });
+
+  it('executeWithProjectLock returns error when project is busy', async () => {
+    const pool = createPool();
+    pool.acquireProjectLock('p1', 'session-A');
+
+    const result = await pool.executeWithProjectLock('session-B', 'p1', async () => {
+      return 'should not execute';
+    });
+
+    expect(result).toEqual({
+      error: 'project_busy',
+      sessionId: 'session-A',
+      message: expect.stringContaining('Project p1 has an ongoing operation'),
+    });
+  });
+
+  it('executeWithProjectLock releases lock even if function throws', async () => {
+    const pool = createPool();
+
+    try {
+      await pool.executeWithProjectLock('session-A', 'p1', async () => {
+        throw new Error('test error');
+      });
+    } catch {
+      // Expected
+    }
+
+    // Lock should be released
+    expect(pool.acquireProjectLock('p1', 'session-B')).toBe(true);
   });
 });

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../../src/pipeline/deploy.js';
 import { Database } from '../../src/db/index.js';
+import type { OpenLanderConfig } from '../../src/config/index.js';
 import type { Docker } from '../../src/pipeline/docker.js';
 import { clearPortScanCache } from '../../src/pipeline/port.js';
 import * as gitPipeline from '../../src/pipeline/git.js';
@@ -63,7 +64,8 @@ describe('DeployPipeline performance baseline', () => {
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
-    pipeline = new DeployPipeline(docker, db, env as never);
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
 
     cloneRepoSpy = vi.spyOn(gitPipeline, 'cloneRepo');
     cloneRepoSpy.mockImplementation(async () => {

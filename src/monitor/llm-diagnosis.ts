@@ -2,6 +2,7 @@ import { generateText } from 'ai';
 import type { LanguageModel } from 'ai';
 import type { Database } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { logAiUsage, extractUsageFromResult } from '../llm/transparency.js';
 
 const log = createModuleLogger('llm-diagnosis');
 
@@ -52,6 +53,7 @@ Error: ${snippet.length > 0 ? snippet : '(no stderr snippet available)'}
 
 What's the likely cause and recommended fix?`;
 
+    const diagnosisStartTime = Date.now();
     const response = await generateText({
       model: params.aiProvider,
       messages: [
@@ -61,6 +63,23 @@ What's the likely cause and recommended fix?`;
     });
 
     const diagnosis = response.text.trim();
+    const durationMs = Date.now() - diagnosisStartTime;
+    const usage = extractUsageFromResult(response.usage);
+
+    logAiUsage(params.db, {
+      projectId: existing.project_id,
+      actionType: 'monitor_alert',
+      modelName: '',
+      provider: 'unknown',
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+      toolsCalled: [],
+      result: diagnosis.length > 0 ? 'success' : 'failure',
+      durationMs,
+      source: 'monitor',
+    });
+
     if (diagnosis.length === 0) {
       return null;
     }

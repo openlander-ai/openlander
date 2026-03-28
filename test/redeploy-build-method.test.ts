@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import * as gitPipeline from '../src/pipeline/git.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
@@ -63,6 +64,7 @@ describe('redeploy build_method persistence', () => {
       detectComposeFile: vi.fn().mockReturnValue(join(clonePath, 'docker-compose.yml')),
       deployCompose: vi.fn(),
     };
+    const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
     const pipeline = new DeployPipeline(
       docker,
       db,
@@ -72,6 +74,7 @@ describe('redeploy build_method persistence', () => {
         getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
+      testConfig,
       undefined,
       composePipeline as never,
     );
@@ -113,6 +116,7 @@ describe('redeploy build_method persistence', () => {
         buildDurationMs: 111,
       }),
     };
+    const testConfig2 = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
     const pipeline = new DeployPipeline(
       docker,
       db,
@@ -122,6 +126,7 @@ describe('redeploy build_method persistence', () => {
         getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
+      testConfig2,
       undefined,
       composePipeline as never,
     );
@@ -152,12 +157,18 @@ describe('redeploy build_method persistence', () => {
       branch: 'main',
     });
 
-    const pipeline = new DeployPipeline(docker, db, {
-      getGlobalSecrets: vi.fn().mockReturnValue({}),
-      getAll: vi.fn().mockReturnValue({}),
-      getMergedForDeploy: vi.fn().mockReturnValue({}),
-      getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
-    } as never);
+    const testConfig3 = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
+    const pipeline = new DeployPipeline(
+      docker,
+      db,
+      {
+        getGlobalSecrets: vi.fn().mockReturnValue({}),
+        getAll: vi.fn().mockReturnValue({}),
+        getMergedForDeploy: vi.fn().mockReturnValue({}),
+        getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
+      } as never,
+      testConfig3,
+    );
 
     const baseProject = db.getProject('p-redeploy');
     expect(baseProject).toBeDefined();

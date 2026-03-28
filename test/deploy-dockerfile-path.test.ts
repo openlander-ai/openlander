@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import { JobManager } from '../src/pipeline/job-manager.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
@@ -29,6 +30,7 @@ describe('DeployPipeline — dockerfilePath persistence', () => {
   let jobManager: JobManager;
   let pipeline: DeployPipeline;
   let mockDocker: Docker;
+  const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'openlander-dockerfile-path-test-'));
@@ -42,6 +44,7 @@ describe('DeployPipeline — dockerfilePath persistence', () => {
         getEnvVars: vi.fn().mockReturnValue({}),
         getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
       } as never,
+      testConfig,
       jobManager,
     );
   });

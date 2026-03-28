@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import { DeployPipeline } from '../src/pipeline/deploy.js';
 import { Database } from '../src/db/index.js';
+import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
 import * as gitPipeline from '../src/pipeline/git.js';
@@ -40,6 +41,11 @@ describe('DeployPipeline deployEnvironment', () => {
   let pipeline: DeployPipeline;
   let cloneRepoSpy: ReturnType<typeof vi.spyOn>;
   let ensureDockerfileSpy: ReturnType<typeof vi.spyOn>;
+  const testConfig = {
+    ai: {
+      secretScan: { enabled: false },
+    },
+  } as OpenLanderConfig;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -56,7 +62,7 @@ describe('DeployPipeline deployEnvironment', () => {
       getMergedForDeploy: vi.fn().mockReturnValue({ NODE_ENV: 'test' }),
       getSecretFilesForDeploy: vi.fn().mockReturnValue([]),
     };
-    pipeline = new DeployPipeline(docker, db, env as never);
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
 
     cloneRepoSpy = vi.spyOn(gitPipeline, 'cloneRepo');
     cloneRepoSpy.mockResolvedValue({
@@ -258,6 +264,7 @@ describe('DeployPipeline deployEnvironment', () => {
       docker,
       db,
       env as never,
+      testConfig,
       undefined,
       composePipeline as never,
     );
@@ -358,6 +365,7 @@ describe('DeployPipeline deployEnvironment', () => {
       docker,
       db,
       env as never,
+      testConfig,
       undefined,
       composePipeline as never,
     );
@@ -384,6 +392,56 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(delegatedComposeFile).toContain('nginx:2');
     expect(db.getProject('p9')?.pending_fix).toBeNull();
     expect(composePipeline.deployCompose).toHaveBeenCalledOnce();
+  });
+
+  it('applies patch-based pending fix from DB after clone and clears it', async () => {
+    db.createProject({
+      id: 'p10',
+      name: 'pending-patch-app',
+      repoUrl: 'https://github.com/openlander/pending-patch-app',
+      branch: 'main',
+    });
+    const productionEnvironment = db
+      .getEnvironmentsByProject('p10')
+      .find((environment) => environment.type === 'production');
+    expect(productionEnvironment).toBeDefined();
+
+    writeFileSync(
+      join(clonePath, 'Dockerfile'),
+      'FROM node:22-alpine\nCMD ["npm","start"]\n',
+      'utf8',
+    );
+    db.updateProject('p10', {
+      pendingFix: JSON.stringify({
+        filePath: 'Dockerfile',
+        patches: [
+          {
+            pattern: 'FROM (node:[^-\\s]+)-alpine',
+            replacement: 'FROM $1-bookworm-slim',
+            flags: 'gm',
+          },
+          {
+            pattern: '^CMD\\b|^ENTRYPOINT\\b',
+            replacement: 'ENV NODE_OPTIONS="--max-old-space-size=4096"\\n$&',
+            flags: 'm',
+          },
+        ],
+      }),
+    });
+
+    let builtDockerfile = '';
+    (docker.buildImage as ReturnType<typeof vi.fn>).mockImplementationOnce(async (path: string) => {
+      builtDockerfile = readFileSync(join(path, 'Dockerfile'), 'utf8');
+    });
+
+    const result = await pipeline.deployEnvironment('p10', productionEnvironment!.id, {
+      repoUrl: 'https://github.com/openlander/pending-patch-app',
+    });
+
+    expect(result.success).toBe(true);
+    expect(builtDockerfile).toContain('FROM node:22-bookworm-slim');
+    expect(builtDockerfile).toContain('ENV NODE_OPTIONS="--max-old-space-size=4096"');
+    expect(db.getProject('p10')?.pending_fix).toBeNull();
   });
 
   it('exposes quick-share tunnel for production environment deployments', async () => {
@@ -437,6 +495,7 @@ describe('DeployPipeline deployEnvironment', () => {
       docker,
       db,
       env as never,
+      testConfig,
       undefined,
       undefined,
       autoDetector as never,
@@ -679,7 +738,7 @@ describe('DeployPipeline deployEnvironment', () => {
       publicUrl: 'https://shared.example.com',
     });
 
-    const startupPipeline = new DeployPipeline(docker, db, env as never);
+    const startupPipeline = new DeployPipeline(docker, db, env as never, testConfig);
 
     expect(startupPipeline).toBeDefined();
     expect(db.getProject('p15')?.visibility).toBe('internal');

@@ -21,6 +21,41 @@ describe('transparency', () => {
       const cost = calculateCost('unknown-provider', 'unknown-model', 1000, 500);
       expect(cost).toBeNull();
     });
+
+    it('returns zero cost for openrouter free tier', () => {
+      const cost = calculateCost('openrouter', 'openrouter/free', 1000, 500);
+      expect(cost).toBe(0);
+    });
+
+    it('calculates claude-sonnet-4-20250514 pricing', () => {
+      const cost = calculateCost('anthropic', 'claude-sonnet-4-20250514', 1000, 500);
+      expect(cost).not.toBeNull();
+      expect(cost).toBeGreaterThan(0);
+    });
+
+    it('returns zero for llama3.2 (local model)', () => {
+      const cost = calculateCost('ollama', 'llama3.2', 1000, 500);
+      expect(cost).toBe(0);
+    });
+
+    it('returns zero for llama3.1 (local model)', () => {
+      const cost = calculateCost('ollama', 'llama3.1', 1000, 500);
+      expect(cost).toBe(0);
+    });
+
+    it('all default models return non-null cost', () => {
+      const defaultModels = [
+        ['gemini', 'gemini-2.0-flash'],
+        ['anthropic', 'claude-sonnet-4-20250514'],
+        ['openai', 'gpt-4o-mini'],
+        ['openrouter', 'openrouter/free'],
+        ['ollama', 'llama3.2'],
+      ] as const;
+      for (const [provider, model] of defaultModels) {
+        const cost = calculateCost(provider, model, 1000, 500);
+        expect(cost, `${provider}/${model} should return non-null`).not.toBeNull();
+      }
+    });
   });
 
   describe('extractUsageFromResult', () => {

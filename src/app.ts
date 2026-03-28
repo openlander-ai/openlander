@@ -203,7 +203,15 @@ export async function createAppContext(
     }
   }
 
-  const pipeline = new DeployPipeline(docker, db, env, jobManager, composePipeline, autoDetector);
+  const pipeline = new DeployPipeline(
+    docker,
+    db,
+    env,
+    config,
+    jobManager,
+    composePipeline,
+    autoDetector,
+  );
 
   let agentPool: AgentPool | null = null;
   let agent: Agent | null = null;
@@ -233,6 +241,7 @@ export async function createAppContext(
           async () => buildContextSnapshot(db, docker),
           config.llm.provider,
           config.language,
+          'auto_recovery',
         );
       } catch (err) {
         log.debug({ err }, 'Recovery agent creation failed — agent will be null');
@@ -278,9 +287,13 @@ export async function createAppContext(
   });
 
   // v0.2: Health monitoring
+  const opMonEnabled = config.ai.operationalMonitoring.enabled;
   const healthMonitor = new HealthMonitor(docker, db, eventBus, {
     intervalMs: config.monitoring.healthcheckIntervalSec * 1000,
-    aiProvider: hasLlmConfigured ? createModelProxy(modelRegistry, 'operationalMonitoring') : null,
+    aiProvider:
+      hasLlmConfigured && opMonEnabled
+        ? createModelProxy(modelRegistry, 'operationalMonitoring')
+        : null,
   });
 
   // v0.2: Webhook auto-redeploy
@@ -314,14 +327,56 @@ export async function createAppContext(
   const crashFailureCounts = new Map<string, number>();
   const HEALTH_FAILURE_THRESHOLD = 3;
 
+  // Auto-restart tracking for container crashes
+  const MAX_AUTO_RESTARTS = 3;
+  const RESTART_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+  const containerRestartCounts = new Map<string, { count: number; windowStart: number }>();
+
   eventBus.on('alert:new', ({ alert }) => {
     if (alert.type === 'container-crash') {
       const projectId = alert.details['projectId'];
+      const containerId = alert.details['containerId'];
+
       if (typeof projectId === 'string') {
         const project = db.getProject(projectId);
         if (project && project.status === 'running') {
           db.updateProject(projectId, { status: 'error' });
           log.info({ projectId }, 'Project status set to error (container crash detected)');
+        }
+      }
+
+      // Auto-restart logic (gated by operationalMonitoring config)
+      if (config.ai.operationalMonitoring.enabled && typeof containerId === 'string') {
+        const now = Date.now();
+        const existing = containerRestartCounts.get(containerId);
+
+        // Reset window if expired
+        const isWindowActive = existing && now - existing.windowStart < RESTART_WINDOW_MS;
+        const restartCount = isWindowActive ? existing.count : 0;
+        const windowStart = isWindowActive ? existing.windowStart : now;
+
+        if (restartCount < MAX_AUTO_RESTARTS) {
+          containerRestartCounts.set(containerId, { count: restartCount + 1, windowStart });
+
+          // Attempt container restart (fire-and-forget)
+          const dockerClient = docker.getClient();
+          dockerClient
+            .getContainer(containerId)
+            .restart()
+            .then(() => {
+              log.info(
+                { containerId, projectId, attempt: restartCount + 1 },
+                'Auto-restarted crashed container',
+              );
+            })
+            .catch((err: unknown) => {
+              log.warn({ err, containerId }, 'Container auto-restart failed');
+            });
+        } else {
+          log.info(
+            { containerId, restartCount },
+            'Max auto-restarts exceeded for container, skipping restart',
+          );
         }
       }
     }

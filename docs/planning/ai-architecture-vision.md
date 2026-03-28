@@ -317,7 +317,7 @@ action_runs
 id            TEXT  (UUID)
 project_id    TEXT  (nullable — 프로젝트 무관 작업도 있음)
 session_id    TEXT  (nullable)
-action_type   TEXT  (web_agent / auto_recovery / mcp_middleware / monitor_alert)
+action_type   TEXT  (web_agent / auto_recovery / build_debugger / monitor_alert)
 input_tokens  INT
 output_tokens INT
 cost_usd      REAL
@@ -327,7 +327,9 @@ duration_ms   INT
 created_at    DATETIME
 ```
 
-모든 AI 호출 경로(웹 에이전트, 자동복구, Phase 4 MCP 미들웨어)에서 이 테이블에 기록한다. 웹 대시보드에서 프로젝트별, 기간별, 기능별로 조회 가능.
+모든 AI 호출 경로(웹 에이전트, 자동복구, 빌드 디버거)에서 이 테이블에 기록한다. 웹 대시보드에서 프로젝트별, 기간별, 기능별로 조회 가능.
+
+> **Note**: `mcp_middleware` action_type은 Phase 4에서 추가될 예정입니다. 현재 Phase 1~3에서는 `build_debugger`로 빌드 에러 분석을 기록합니다.
 
 ---
 
