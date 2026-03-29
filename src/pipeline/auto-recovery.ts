@@ -12,7 +12,7 @@ import { matchRecipe, type RecipeAction } from './recipes.js';
 import type { DeployQueue } from './deploy-queue.js';
 import type { DeployPipeline } from './deploy.js';
 import type { OpenLanderConfig } from '../config/index.js';
-import type { ApprovalGate } from './approval-gate.js';
+import { ApprovalGate, type ApprovalGate as ApprovalGateType } from './approval-gate.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
 
 const log = createModuleLogger('auto-recovery');
@@ -48,7 +48,7 @@ export interface SetupAutoRecoveryParams {
   deployQueue: DeployQueue;
   pipeline: DeployPipeline;
   questionBridge: QuestionBridge;
-  approvalGate: ApprovalGate;
+  approvalGate?: ApprovalGateType;
   language: Locale;
   config: OpenLanderConfig;
 }
@@ -244,10 +244,12 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     deployQueue,
     pipeline,
     questionBridge,
-    approvalGate,
+    approvalGate: providedApprovalGate,
     language,
     config,
   } = params;
+
+  const approvalGate = providedApprovalGate ?? new ApprovalGate();
 
   let recoveryChain = Promise.resolve();
 
@@ -350,7 +352,9 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
       try {
         const sessionId = nanoid(12);
         const contextSnapshot = await buildContextSnapshot(db);
-        const approvalState: { blocked: 'rejected' | 'timed_out' | null } = { blocked: null };
+        const approvalState: { blocked: 'rejected' | 'timed_out' | null; toolName?: string } = {
+          blocked: null,
+        };
         let recoveryMessage = `Deploy of "${projectName}" failed.
 
 ## Failure Context
@@ -401,6 +405,8 @@ ${plan.agentGuidance}
               });
 
               db.updateActionRunStatus(actionRunId, 'pending_approval');
+              db.updateActionRunApproval(actionRunId, 'pending', event.toolName);
+              approvalState.toolName = event.toolName;
               const approvalResult = await approvalGate.waitForApproval(
                 actionRunId,
                 approvalMetadata,
@@ -408,15 +414,18 @@ ${plan.agentGuidance}
 
               if (approvalResult === 'rejected') {
                 approvalState.blocked = 'rejected';
+                db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
                 return;
               }
 
               if (approvalResult === 'timed_out') {
                 approvalState.blocked = 'timed_out';
+                db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
                 return;
               }
 
               db.updateActionRunStatus(actionRunId, 'running');
+              db.updateActionRunApproval(actionRunId, 'approved', event.toolName);
             }
 
             await eventBus.emit('agent:event', {
@@ -428,8 +437,7 @@ ${plan.agentGuidance}
         );
 
         if (approvalState.blocked) {
-          const failureReason =
-            approvalState.blocked === 'rejected' ? 'Rejected by user' : 'Approval timed out';
+          const failureReason = 'High-risk tool was rejected or timed out';
           db.updateActionRunStatus(actionRunId, 'failed', failureReason);
           await eventBus.emit('recovery:failed', {
             projectId,
@@ -737,5 +745,13 @@ ${plan.agentGuidance}
       },
       { projectId: payload.projectId, eventType: 'rollback:suggested' },
     );
+  });
+
+  eventBus.on('recovery:approval-resolved', (payload) => {
+    if (payload.approved) {
+      approvalGate.approve(payload.actionRunId);
+    } else {
+      approvalGate.reject(payload.actionRunId);
+    }
   });
 }
