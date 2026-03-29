@@ -280,11 +280,10 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
         </div>
       </div>
 
-      {/* Log content — virtualized */}
       <div
         ref={parentRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-auto font-log text-xs leading-5 bg-bg-app"
+        className="flex-1 overflow-auto font-log text-xs leading-5 bg-bg-panel"
       >
         {showRecoveryBanner && (
           <div className="sticky top-0 z-10 border-b border-[hsl(var(--border))] bg-bg-panel/95 px-4 py-2 backdrop-blur-sm">
@@ -402,7 +401,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                     level !== 'error' &&
                       level !== 'warn' &&
                       virtualItem.index % 2 === 0 &&
-                      'bg-bg-subtle/20',
+                      'bg-bg-subtle',
                   )}
                 >
                   {/* Line number */}
