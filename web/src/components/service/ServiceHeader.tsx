@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Play, Square, Trash2, Database, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Service } from '@/lib/api';
+import { useLanguage } from '@/i18n/context';
 
 interface ServiceHeaderProps {
   service: Service;
@@ -15,11 +16,15 @@ interface ServiceHeaderProps {
 
 type StatusConfig = { label: string; color: string; dot: string };
 
-function getStatusConfig(): Record<string, StatusConfig> {
+function getStatusConfig(t: (key: string) => string): Record<string, StatusConfig> {
   return {
-    running: { label: 'Running', color: 'text-success', dot: 'bg-success' },
-    stopped: { label: 'Stopped', color: 'text-muted-ol', dot: 'bg-[var(--text-muted)]' },
-    error: { label: 'Error', color: 'text-error', dot: 'bg-error' },
+    running: { label: t('services.status.running'), color: 'text-success', dot: 'bg-success' },
+    stopped: {
+      label: t('services.status.stopped'),
+      color: 'text-muted-ol',
+      dot: 'bg-[var(--text-muted)]',
+    },
+    error: { label: t('services.status.error'), color: 'text-error', dot: 'bg-error' },
   };
 }
 
@@ -31,7 +36,8 @@ export function ServiceHeader({
   onDelete,
 }: ServiceHeaderProps) {
   const navigate = useNavigate();
-  const statusConfig = getStatusConfig();
+  const { t } = useLanguage();
+  const statusConfig = getStatusConfig(t);
   const status = statusConfig[service.status] ?? statusConfig.stopped;
   const isRunning = service.status === 'running';
   const isStopped = service.status === 'stopped';
@@ -43,7 +49,7 @@ export function ServiceHeader({
           <button
             onClick={() => navigate('/services')}
             className="shrink-0 p-1 rounded hover:bg-secondary-ol/10 text-secondary-ol hover:text-primary-ol transition-colors"
-            title="Back to Services"
+            title={t('services.detail.header.backToServices')}
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -78,7 +84,7 @@ export function ServiceHeader({
               ) : (
                 <Play className="h-3 w-3" />
               )}
-              Start
+              {t('services.detail.header.start')}
             </Button>
           )}
 
@@ -95,7 +101,7 @@ export function ServiceHeader({
               ) : (
                 <Square className="h-3 w-3" />
               )}
-              Stop
+              {t('services.detail.header.stop')}
             </Button>
           )}
 
@@ -111,7 +117,7 @@ export function ServiceHeader({
             ) : (
               <Trash2 className="h-3 w-3" />
             )}
-            Delete
+            {t('services.detail.header.delete')}
           </Button>
         </div>
       </div>

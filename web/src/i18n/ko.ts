@@ -291,6 +291,8 @@ export const translations = {
     },
   },
   services: {
+    title: '서비스',
+    createService: '서비스 생성',
     subtitle:
       'Docker 이미지를 공유 인프라로 실행합니다. 여러 프로젝트가 이 서비스에 연결할 수 있습니다.',
     noServices: '실행 중인 서비스 없음',
@@ -310,6 +312,35 @@ export const translations = {
       healthy: 'Healthy',
       unhealthy: 'Unhealthy',
       starting: 'Starting',
+    },
+    status: {
+      running: '실행 중',
+      stopped: '중지됨',
+      error: '오류',
+    },
+    detail: {
+      notFound: '서비스를 찾을 수 없습니다',
+      tabs: {
+        overview: '개요',
+        connection: '연결',
+        databases: '데이터베이스',
+        logs: '로그',
+        settings: '설정',
+      },
+      toasts: {
+        started: '서비스가 시작되었습니다',
+        stopped: '서비스가 중지되었습니다',
+        deleted: '서비스가 삭제되었습니다',
+        startFailed: '서비스 시작에 실패했습니다',
+        stopFailed: '서비스 중지에 실패했습니다',
+        deleteFailed: '서비스 삭제에 실패했습니다',
+      },
+      header: {
+        backToServices: '서비스 목록으로',
+        start: '시작',
+        stop: '중지',
+        delete: '삭제',
+      },
     },
   },
   timeline: {

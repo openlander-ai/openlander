@@ -25,6 +25,15 @@ import type { Docker } from './docker.js';
 import { allocatePort } from './port.js';
 
 const log = createModuleLogger('service-manager');
+const SERVICE_CARD_SUMMARY_CACHE_TTL_MS = 15_000;
+
+type ServiceCardSummary = ServiceRow & {
+  summary: {
+    healthStatus: string | null;
+    uptimeSeconds: number | null;
+    restartCount: number | null;
+  };
+};
 
 export const AVAILABLE_VERSIONS: Record<string, string[]> = {
   postgresql: ['17-alpine', '16-alpine', '15-alpine', '14-alpine'],
@@ -130,11 +139,20 @@ const DEFAULT_ENV_KEYS: Record<string, string> = {
 };
 
 export class ServiceManager {
+  private serviceCardSummaryCache: { expiresAt: number; data: ServiceCardSummary[] } | null = null;
+  private serviceCardSummaryInFlight: Promise<ServiceCardSummary[]> | null = null;
+  private serviceCardSummaryEpoch = 0;
+
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
     private readonly dataDir: string = getDataDir(),
   ) {}
+
+  private invalidateServiceCardSummaryCache(): void {
+    this.serviceCardSummaryCache = null;
+    this.serviceCardSummaryEpoch += 1;
+  }
 
   /**
    * Compute suggested env var(s) for a newly created service so the agent
@@ -520,6 +538,7 @@ export class ServiceManager {
     });
 
     this.db.updateService(id, { status: 'running', containerId: container.id });
+    this.invalidateServiceCardSummaryCache();
     const created = this.db.getService(id);
     if (!created) {
       throw new Error(`Failed to create service: ${id}`);
@@ -536,6 +555,7 @@ export class ServiceManager {
     const containerId = service.container_id ?? service.container_name;
     await this.docker.startContainer(containerId);
     this.db.updateService(id, { status: 'running' });
+    this.invalidateServiceCardSummaryCache();
   }
 
   async stop(id: string): Promise<void> {
@@ -547,6 +567,7 @@ export class ServiceManager {
     const containerId = service.container_id ?? service.container_name;
     await this.docker.stopContainer(containerId);
     this.db.updateService(id, { status: 'stopped' });
+    this.invalidateServiceCardSummaryCache();
   }
 
   async remove(id: string): Promise<void> {
@@ -582,6 +603,7 @@ export class ServiceManager {
     }
 
     this.db.deleteService(id);
+    this.invalidateServiceCardSummaryCache();
   }
 
   async backup(id: string): Promise<{ backupId: string; path: string; size: number }> {
@@ -766,35 +788,56 @@ export class ServiceManager {
     };
   }
 
-  async listWithCardSummary(): Promise<
-    Array<
-      ServiceRow & {
-        summary: {
-          healthStatus: string | null;
-          uptimeSeconds: number | null;
-          restartCount: number | null;
+  async listWithCardSummary(): Promise<ServiceCardSummary[]> {
+    const cached = this.serviceCardSummaryCache;
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
+    if (this.serviceCardSummaryInFlight) {
+      return this.serviceCardSummaryInFlight;
+    }
+
+    const epoch = this.serviceCardSummaryEpoch;
+    const loadPromise = (async () => {
+      const services = this.db.listServices();
+      const summaries = await Promise.all(
+        services.map(async (service) => {
+          const inspection = await this.inspectServiceContainer(service);
+          this.syncServiceStateFromInspection(service, inspection);
+
+          return {
+            ...service,
+            status: inspection.status,
+            container_id: inspection.containerId ?? service.container_id,
+            summary: {
+              healthStatus: inspection.healthStatus,
+              uptimeSeconds: this.computeUptimeSeconds(inspection.startedAt, inspection.status),
+              restartCount: inspection.restartCount,
+            },
+          };
+        }),
+      );
+
+      if (this.serviceCardSummaryEpoch === epoch) {
+        this.serviceCardSummaryCache = {
+          expiresAt: Date.now() + SERVICE_CARD_SUMMARY_CACHE_TTL_MS,
+          data: summaries,
         };
       }
-    >
-  > {
-    const services = this.db.listServices();
-    return Promise.all(
-      services.map(async (service) => {
-        const inspection = await this.inspectServiceContainer(service);
-        this.syncServiceStateFromInspection(service, inspection);
 
-        return {
-          ...service,
-          status: inspection.status,
-          container_id: inspection.containerId ?? service.container_id,
-          summary: {
-            healthStatus: inspection.healthStatus,
-            uptimeSeconds: this.computeUptimeSeconds(inspection.startedAt, inspection.status),
-            restartCount: inspection.restartCount,
-          },
-        };
-      }),
-    );
+      return summaries;
+    })();
+
+    this.serviceCardSummaryInFlight = loadPromise;
+
+    try {
+      return await loadPromise;
+    } finally {
+      if (this.serviceCardSummaryInFlight === loadPromise) {
+        this.serviceCardSummaryInFlight = null;
+      }
+    }
   }
 
   private async inspectServiceContainer(service: ServiceRow): Promise<{

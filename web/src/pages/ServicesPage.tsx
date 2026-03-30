@@ -70,9 +70,9 @@ export function ServicesPage() {
   };
 
   const statusLabel = (status: string) => {
-    if (status === 'running') return 'Running';
-    if (status === 'error') return 'Error';
-    return 'Stopped';
+    if (status === 'running') return t('services.status.running');
+    if (status === 'error') return t('services.status.error');
+    return t('services.status.stopped');
   };
 
   const healthLabel = (healthStatus: string | null) => {
@@ -86,7 +86,7 @@ export function ServicesPage() {
     return (
       <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
         <h2 className="text-sm font-body font-medium text-secondary-ol tracking-wide uppercase">
-          Services
+          {t('services.title')}
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
@@ -107,7 +107,7 @@ export function ServicesPage() {
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
       <h2 className="text-sm font-body font-medium text-secondary-ol tracking-wide uppercase">
-        Services
+        {t('services.title')}
       </h2>
 
       <CreateServiceDialog
@@ -126,7 +126,7 @@ export function ServicesPage() {
           <div className="h-10 w-10 rounded-full border-2 border-dashed border-current flex items-center justify-center group-hover:border-solid transition-all">
             <Plus className="h-5 w-5" />
           </div>
-          <span className="text-sm font-body font-medium">Create Service</span>
+          <span className="text-sm font-body font-medium">{t('services.createService')}</span>
         </button>
 
         {services.map((service) => {

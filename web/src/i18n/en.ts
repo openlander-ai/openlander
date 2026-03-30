@@ -292,6 +292,8 @@ export const translations = {
     },
   },
   services: {
+    title: 'Services',
+    createService: 'Create Service',
     subtitle:
       'Run Docker images as shared infrastructure. Multiple projects can connect to these services.',
     noServices: 'No services running',
@@ -311,6 +313,35 @@ export const translations = {
       healthy: 'Healthy',
       unhealthy: 'Unhealthy',
       starting: 'Starting',
+    },
+    status: {
+      running: 'Running',
+      stopped: 'Stopped',
+      error: 'Error',
+    },
+    detail: {
+      notFound: 'Service not found',
+      tabs: {
+        overview: 'Overview',
+        connection: 'Connection',
+        databases: 'Databases',
+        logs: 'Logs',
+        settings: 'Settings',
+      },
+      toasts: {
+        started: 'Service started',
+        stopped: 'Service stopped',
+        deleted: 'Service deleted',
+        startFailed: 'Failed to start service',
+        stopFailed: 'Failed to stop service',
+        deleteFailed: 'Failed to delete service',
+      },
+      header: {
+        backToServices: 'Back to Services',
+        start: 'Start',
+        stop: 'Stop',
+        delete: 'Delete',
+      },
     },
   },
   timeline: {

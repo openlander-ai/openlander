@@ -11,10 +11,12 @@ import { ServiceConnectionTab } from '@/components/service/ServiceConnectionTab'
 import { ServiceDatabasesTab } from '@/components/service/ServiceDatabasesTab';
 import { ServiceLogsTab } from '@/components/service/ServiceLogsTab';
 import { ServiceSettingsTab } from '@/components/service/ServiceSettingsTab';
+import { useLanguage } from '@/i18n/context';
 
 export function ServiceDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [service, setService] = useState<Service | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -28,13 +30,13 @@ export function ServiceDetail() {
     } catch (err) {
       console.error('Failed to fetch service:', err);
       if (err instanceof Error && err.message.includes('404')) {
-        toast.error('Service not found');
+        toast.error(t('services.detail.notFound'));
         navigate('/services');
       }
     } finally {
       setLoading(false);
     }
-  }, [id, navigate]);
+  }, [id, navigate, t]);
 
   useEffect(() => {
     void fetchService();
@@ -49,10 +51,10 @@ export function ServiceDetail() {
     setActionLoading('start');
     try {
       await startService(id);
-      toast.success('Service started');
+      toast.success(t('services.detail.toasts.started'));
       await fetchService();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to start service');
+      toast.error(err instanceof Error ? err.message : t('services.detail.toasts.startFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -63,10 +65,10 @@ export function ServiceDetail() {
     setActionLoading('stop');
     try {
       await stopService(id);
-      toast.success('Service stopped');
+      toast.success(t('services.detail.toasts.stopped'));
       await fetchService();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to stop service');
+      toast.error(err instanceof Error ? err.message : t('services.detail.toasts.stopFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -77,10 +79,10 @@ export function ServiceDetail() {
     setActionLoading('delete');
     try {
       await removeService(id);
-      toast.success('Service deleted');
+      toast.success(t('services.detail.toasts.deleted'));
       navigate('/services');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to delete service');
+      toast.error(err instanceof Error ? err.message : t('services.detail.toasts.deleteFailed'));
       setActionLoading(null);
     }
   };
@@ -97,7 +99,7 @@ export function ServiceDetail() {
   if (!service) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm font-body text-secondary-ol">Service not found</p>
+        <p className="text-sm font-body text-secondary-ol">{t('services.detail.notFound')}</p>
       </div>
     );
   }
@@ -122,14 +124,14 @@ export function ServiceDetail() {
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <Activity className="h-3.5 w-3.5" />
-            Overview
+            {t('services.detail.tabs.overview')}
           </TabsTrigger>
           <TabsTrigger
             value="connection"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <LinkIcon className="h-3.5 w-3.5" />
-            Connection
+            {t('services.detail.tabs.connection')}
           </TabsTrigger>
           {supportsDatabases && (
             <TabsTrigger
@@ -137,7 +139,7 @@ export function ServiceDetail() {
               className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
             >
               <Database className="h-3.5 w-3.5" />
-              Databases
+              {t('services.detail.tabs.databases')}
             </TabsTrigger>
           )}
           <TabsTrigger
@@ -145,14 +147,14 @@ export function ServiceDetail() {
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <SquareTerminal className="h-3.5 w-3.5" />
-            Logs
+            {t('services.detail.tabs.logs')}
           </TabsTrigger>
           <TabsTrigger
             value="settings"
             className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
           >
             <Settings className="h-3.5 w-3.5" />
-            Settings
+            {t('services.detail.tabs.settings')}
           </TabsTrigger>
         </TabsList>
 
