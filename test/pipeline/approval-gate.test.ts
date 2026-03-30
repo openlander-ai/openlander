@@ -36,7 +36,7 @@ describe('ApprovalGate', () => {
 
     const approved = gate.approve('run-approve');
 
-    expect(approved).toBe(true);
+    expect(approved).toBe('approved');
     await expect(promise).resolves.toBe('approved');
   });
 
@@ -49,7 +49,7 @@ describe('ApprovalGate', () => {
 
     const rejected = gate.reject('run-reject');
 
-    expect(rejected).toBe(true);
+    expect(rejected).toBe('rejected');
     await expect(promise).resolves.toBe('rejected');
   });
 
@@ -65,13 +65,13 @@ describe('ApprovalGate', () => {
     await expect(promise).resolves.toBe('timed_out');
   });
 
-  it('returns false when approving a non-existent action run', () => {
+  it('returns not-found when approving a non-existent action run', () => {
     const gate = new ApprovalGate();
 
-    expect(gate.approve('missing-run')).toBe(false);
+    expect(gate.approve('missing-run')).toBe('not-found');
   });
 
-  it('returns false when approving after timeout has already resolved', async () => {
+  it('returns already-processed when approving after timeout has already resolved', async () => {
     const gate = new ApprovalGate();
     const promise = gate.waitForApproval(
       'run-timeout-approve',
@@ -81,7 +81,7 @@ describe('ApprovalGate', () => {
     await vi.advanceTimersByTimeAsync(APPROVAL_TIMEOUT_MS);
     await expect(promise).resolves.toBe('timed_out');
 
-    expect(gate.approve('run-timeout-approve')).toBe(false);
+    expect(gate.approve('run-timeout-approve')).toBe('already-processed');
   });
 
   it('handles two concurrent approvals independently', async () => {
@@ -89,8 +89,8 @@ describe('ApprovalGate', () => {
     const firstPromise = gate.waitForApproval('run-a', createMetadata({ actionRunId: 'run-a' }));
     const secondPromise = gate.waitForApproval('run-b', createMetadata({ actionRunId: 'run-b' }));
 
-    expect(gate.approve('run-a')).toBe(true);
-    expect(gate.reject('run-b')).toBe(true);
+    expect(gate.approve('run-a')).toBe('approved');
+    expect(gate.reject('run-b')).toBe('rejected');
 
     await expect(firstPromise).resolves.toBe('approved');
     await expect(secondPromise).resolves.toBe('rejected');

@@ -259,12 +259,9 @@ export function AiSettingsTab() {
             <Loader2 className="h-6 w-6 animate-spin text-agent" />
             <span className="ml-2 text-sm text-muted-ol">{t('settings.ai.usage.loading')}</span>
           </div>
-        ) : summary?.callCount === 0 ? (
-          <div className="rounded-lg border border-border bg-bg-panel shadow-sm p-8 text-center">
-            <p className="text-sm font-body text-muted-ol">{t('settings.ai.usage.empty')}</p>
-          </div>
         ) : (
           <>
+            {/* Always show stat cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div data-testid="usage-total-input-tokens">
                 <StatCard
@@ -300,11 +297,16 @@ export function AiSettingsTab() {
               </div>
             </div>
 
-            {recent.length > 0 && (
-              <div className="mt-6 space-y-3">
-                <h3 className="text-sm font-medium text-primary-ol">
-                  {t('settings.ai.usage.recentCalls')}
-                </h3>
+            {/* Recent calls section with empty state */}
+            <div className="mt-6 space-y-3">
+              <h3 className="text-sm font-medium text-primary-ol">
+                {t('settings.ai.usage.recentCalls')}
+              </h3>
+              {recent.length === 0 ? (
+                <div className="rounded-lg border border-border bg-bg-panel shadow-sm p-8 text-center">
+                  <p className="text-sm font-body text-muted-ol">{t('settings.ai.usage.empty')}</p>
+                </div>
+              ) : (
                 <div className="rounded-lg border border-border bg-bg-panel shadow-sm divide-y divide-border">
                   {recent.slice(0, 10).map((log) => (
                     <div key={log.id} className="flex items-center justify-between p-3 gap-4">
@@ -337,8 +339,8 @@ export function AiSettingsTab() {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </>
         )}
       </div>

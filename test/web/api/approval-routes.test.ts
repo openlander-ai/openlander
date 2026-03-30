@@ -81,7 +81,22 @@ describe('Approval Routes', () => {
 
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe('Approval not found or already processed');
+      expect(body.error).toBe('Approval not found');
+    });
+
+    it('returns 409 for already-processed actionRunId', async () => {
+      addPendingApproval(gate, 'run-processed');
+      gate.approve('run-processed');
+
+      const res = await app.request('/api/projects/proj-1/recovery/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionRunId: 'run-processed' }),
+      });
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toBe('Approval already processed');
     });
 
     it('returns 403 when actionRunId belongs to a different project', async () => {
@@ -161,7 +176,22 @@ describe('Approval Routes', () => {
 
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe('Approval not found or already processed');
+      expect(body.error).toBe('Approval not found');
+    });
+
+    it('returns 409 for already-processed actionRunId', async () => {
+      addPendingApproval(gate, 'run-processed');
+      gate.reject('run-processed');
+
+      const res = await app.request('/api/projects/proj-1/recovery/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionRunId: 'run-processed' }),
+      });
+
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.error).toBe('Approval already processed');
     });
 
     it('returns 403 when reject actionRunId belongs to a different project', async () => {

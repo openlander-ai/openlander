@@ -42,9 +42,12 @@ export function createApprovalRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'Approval does not belong to this project' }, 403);
     }
 
-    const found = ctx.approvalGate.approve(actionRunId);
-    if (!found) {
-      return c.json({ error: 'Approval not found or already processed' }, 404);
+    const result = ctx.approvalGate.approve(actionRunId);
+    if (result === 'not-found') {
+      return c.json({ error: 'Approval not found' }, 404);
+    }
+    if (result === 'already-processed') {
+      return c.json({ error: 'Approval already processed' }, 409);
     }
 
     return c.json({ success: true, message: 'Recovery approved' });
@@ -70,9 +73,12 @@ export function createApprovalRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'Approval does not belong to this project' }, 403);
     }
 
-    const found = ctx.approvalGate.reject(actionRunId);
-    if (!found) {
-      return c.json({ error: 'Approval not found or already processed' }, 404);
+    const result = ctx.approvalGate.reject(actionRunId);
+    if (result === 'not-found') {
+      return c.json({ error: 'Approval not found' }, 404);
+    }
+    if (result === 'already-processed') {
+      return c.json({ error: 'Approval already processed' }, 409);
     }
 
     return c.json({ success: true, message: 'Recovery rejected' });
