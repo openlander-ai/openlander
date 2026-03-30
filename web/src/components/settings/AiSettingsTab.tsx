@@ -316,7 +316,9 @@ export function AiSettingsTab() {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-primary-ol flex items-center gap-2">
-                            {log.actionType}
+                            {(t as (key: string) => string)(
+                              `settings.ai.usage.actionType.${log.actionType}`,
+                            ) || log.actionType}
                             <span className="text-xs font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
                               {log.modelName}
                             </span>

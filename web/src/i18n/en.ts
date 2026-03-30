@@ -212,6 +212,12 @@ export const translations = {
         recentCalls: 'Recent AI Calls',
         empty: 'No AI usage recorded yet',
         loading: 'Loading usage data...',
+        actionType: {
+          web_agent: 'Web Agent',
+          auto_recovery: 'Auto Recovery',
+          monitor: 'Monitor',
+          mcp: 'MCP',
+        },
       },
     },
     mcp: {
@@ -555,6 +561,7 @@ export const translations = {
       approved: 'Recovery approved',
       rejected: 'Recovery rejected',
       error: 'Failed to process approval',
+      timedOut: 'Approval timed out',
     },
   },
 } as const;

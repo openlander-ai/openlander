@@ -211,6 +211,12 @@ export const translations = {
         recentCalls: '최근 AI 호출',
         empty: '아직 AI 사용 기록이 없습니다',
         loading: '사용량 데이터 로딩 중...',
+        actionType: {
+          web_agent: '웹 에이전트',
+          auto_recovery: '자동 복구',
+          monitor: '모니터',
+          mcp: 'MCP',
+        },
       },
     },
     mcp: {
@@ -555,6 +561,7 @@ export const translations = {
       approved: '복구가 승인되었습니다',
       rejected: '복구가 거부되었습니다',
       error: '승인 처리에 실패했습니다',
+      timedOut: '승인 시간 초과',
     },
   },
 } as const;

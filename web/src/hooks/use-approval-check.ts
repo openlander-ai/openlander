@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import {
   getPendingApprovals,
   approveRecovery,
@@ -51,8 +52,10 @@ export function useApprovalCheck(): UseApprovalCheckReturn {
   const approve = async (projectId: string, actionRunId: string) => {
     try {
       await approveRecovery(projectId, actionRunId);
+      toast.success('Recovery approved');
       void fetchApprovals();
     } catch (err) {
+      toast.error('Failed to approve recovery');
       console.error('Failed to approve recovery action:', err);
       throw err;
     }
@@ -61,8 +64,10 @@ export function useApprovalCheck(): UseApprovalCheckReturn {
   const reject = async (projectId: string, actionRunId: string) => {
     try {
       await rejectRecovery(projectId, actionRunId);
+      toast.info('Recovery rejected');
       void fetchApprovals();
     } catch (err) {
+      toast.error('Failed to reject recovery');
       console.error('Failed to reject recovery action:', err);
       throw err;
     }
