@@ -14,7 +14,7 @@ import 'highlight.js/styles/github-dark.css';
 import { Bot, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCopy } from '@/hooks/use-copy';
-import { ToolCallCard } from './ToolCallCard';
+import { ToolCallGroup } from './ToolCallGroup';
 import { ReasoningBox } from './ReasoningBox';
 
 function extractLanguage(children: ReactNode): string | null {
@@ -131,9 +131,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 </ReactMarkdown>
               </div>
             )}
-            {message.toolCalls?.map((tc, i) => (
-              <ToolCallCard key={i} toolCall={tc} />
-            ))}
+            <ToolCallGroup toolCalls={message.toolCalls ?? []} />
           </>
         )}
       </div>
