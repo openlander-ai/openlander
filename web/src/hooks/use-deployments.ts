@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { getProjectDeployments } from '@/lib/api';
+import { usePollingTask } from '@/hooks/use-polling-task';
 import type { DeployLogSummary } from '@/types';
 
 const IDLE_POLL_MS = 10_000;
@@ -34,25 +35,11 @@ export function useDeployments(
     }
   }, [projectId, environmentId]);
 
-  useEffect(() => {
-    void fetchDeployments();
-
-    const pollMs = projectStatus === 'building' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
-    const interval = setInterval(() => void fetchDeployments(), pollMs);
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        void fetchDeployments();
-      }
-    };
-
-    document.addEventListener('visibilitychange', onVisibility);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [fetchDeployments, projectStatus]);
+  const pollMs = projectStatus === 'building' ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+  usePollingTask(fetchDeployments, {
+    enabled: Boolean(projectId),
+    intervalMs: pollMs,
+  });
 
   return {
     deployments,

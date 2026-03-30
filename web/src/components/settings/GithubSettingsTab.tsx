@@ -1,16 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Check, CheckCircle2, Copy, ExternalLink, Github, Loader2, RefreshCw } from 'lucide-react';
-import {
-  connectGithub,
-  disconnectGithub,
-  pollGithubDeviceFlow,
-  startGithubDeviceFlow,
-  type SetupStatus,
-} from '@/lib/api';
+import { connectGithub, disconnectGithub, type SetupStatus } from '@/lib/api';
 import { useLanguage } from '@/i18n/context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCopy } from '@/hooks/use-copy';
+import { useGithubDeviceFlow } from '@/hooks/use-github-device-flow';
 
 interface GithubSettingsTabProps {
   status: SetupStatus | null;
@@ -23,14 +18,14 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
   const [githubToken, setGithubToken] = useState('');
   const [githubConnecting, setGithubConnecting] = useState(false);
   const [githubDisconnecting, setGithubDisconnecting] = useState(false);
-  const [githubError, setGithubError] = useState('');
-  const [deviceFlow, setDeviceFlow] = useState<{
-    userCode: string;
-    verificationUri: string;
-    deviceCode: string;
-    interval: number;
-  } | null>(null);
-  const [deviceFlowPolling, setDeviceFlowPolling] = useState(false);
+  const {
+    deviceFlow,
+    githubError,
+    setGithubError,
+    startDeviceFlow: handleStartDeviceFlow,
+    cancelDeviceFlow: handleCancelDeviceFlow,
+    resetDeviceFlow,
+  } = useGithubDeviceFlow({ onComplete: refetch });
 
   const handleConnectGithub = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +49,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
     setGithubError('');
     try {
       await disconnectGithub();
+      resetDeviceFlow();
       await refetch();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to disconnect GitHub';
@@ -63,66 +59,10 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
     }
   };
 
-  const handleStartDeviceFlow = async () => {
-    setGithubError('');
-    try {
-      const response = await startGithubDeviceFlow();
-      setDeviceFlow({
-        userCode: response.user_code,
-        verificationUri: response.verification_uri,
-        deviceCode: response.device_code,
-        interval: response.interval,
-      });
-      setDeviceFlowPolling(true);
-    } catch {
-      setGithubError('Failed to start GitHub authorization');
-    }
-  };
-
   const handleCopyCode = async () => {
     if (!deviceFlow?.userCode) return;
     await copy(deviceFlow.userCode);
   };
-
-  const handleCancelDeviceFlow = () => {
-    setDeviceFlow(null);
-    setDeviceFlowPolling(false);
-    setGithubError('');
-  };
-
-  useEffect(() => {
-    if (!deviceFlowPolling || !deviceFlow) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const result = await pollGithubDeviceFlow(deviceFlow.deviceCode, deviceFlow.interval);
-
-        if (result.status === 'complete') {
-          clearInterval(pollInterval);
-          setDeviceFlow(null);
-          setDeviceFlowPolling(false);
-          await refetch();
-        } else if (result.status === 'slow_down') {
-          setDeviceFlow((prev) =>
-            prev ? { ...prev, interval: result.interval ?? prev.interval } : null,
-          );
-        } else if (
-          result.status === 'expired' ||
-          result.status === 'denied' ||
-          result.status === 'error'
-        ) {
-          clearInterval(pollInterval);
-          setDeviceFlow(null);
-          setDeviceFlowPolling(false);
-          setGithubError(result.message || `Authorization ${result.status}`);
-        }
-      } catch {
-        return;
-      }
-    }, deviceFlow.interval * 1000);
-
-    return () => clearInterval(pollInterval);
-  }, [deviceFlowPolling, deviceFlow, refetch]);
 
   return (
     <section className="space-y-4">

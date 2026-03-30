@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -12,6 +12,7 @@ import { ServiceDatabasesTab } from '@/components/service/ServiceDatabasesTab';
 import { ServiceLogsTab } from '@/components/service/ServiceLogsTab';
 import { ServiceSettingsTab } from '@/components/service/ServiceSettingsTab';
 import { useLanguage } from '@/i18n/context';
+import { usePollingTask } from '@/hooks/use-polling-task';
 
 export function ServiceDetail() {
   const { id } = useParams();
@@ -38,13 +39,10 @@ export function ServiceDetail() {
     }
   }, [id, navigate, t]);
 
-  useEffect(() => {
-    void fetchService();
-    const interval = setInterval(() => {
-      void fetchService();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [fetchService]);
+  usePollingTask(fetchService, {
+    enabled: Boolean(id),
+    intervalMs: 5000,
+  });
 
   const handleStart = async () => {
     if (!id) return;

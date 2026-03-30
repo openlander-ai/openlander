@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { getServerStatus, getSetupStatus, type ServerStatus, type SetupStatus } from '../lib/api';
+import { usePollingTask } from './use-polling-task';
 
 const POLL_MS = 10_000;
 
@@ -30,21 +31,7 @@ export function useSystemStatus(): UseSystemStatusReturn {
     }
   }, []);
 
-  useEffect(() => {
-    fetchStatus();
-
-    const interval = setInterval(fetchStatus, POLL_MS);
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void fetchStatus();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [fetchStatus]);
+  usePollingTask(fetchStatus, { intervalMs: POLL_MS });
 
   return { serverStatus, setupStatus, loading, error, refetch: fetchStatus };
 }

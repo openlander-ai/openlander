@@ -13,6 +13,8 @@ import { createApprovalRoutes } from './approval-routes.js';
 import { getEnvironmentProjectHostname, getAllIps } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('api');
+const API_SLOW_REQUEST_MS = 300;
+const API_OBSERVE_REQUEST_MS = 150;
 
 interface ActivityEvent {
   type: string;
@@ -28,6 +30,33 @@ const MAX_ACTIVITY = 100;
 
 export function createApiRoutes(ctx: AppContext): Hono {
   const api = new Hono();
+
+  api.use('*', async (c, next) => {
+    const startedAt = Date.now();
+    try {
+      await next();
+    } finally {
+      const durationMs = Date.now() - startedAt;
+      const contentType = c.res.headers.get('content-type') ?? '';
+      const isStreamingResponse =
+        contentType.includes('application/x-ndjson') || contentType.includes('text/event-stream');
+
+      if (!isStreamingResponse) {
+        const requestMeta = {
+          method: c.req.method,
+          path: c.req.path,
+          status: c.res.status,
+          durationMs,
+        };
+
+        if (durationMs >= API_SLOW_REQUEST_MS) {
+          log.warn(requestMeta, 'Slow API request');
+        } else if (durationMs >= API_OBSERVE_REQUEST_MS) {
+          log.info(requestMeta, 'API request latency');
+        }
+      }
+    }
+  });
 
   // --- Error handler ---
   api.onError((err, c) => {
