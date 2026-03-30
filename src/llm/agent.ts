@@ -4,6 +4,7 @@ import type { ChatMessage } from './index.js';
 import type { QuestionRequest, QuestionBridge } from '../lib/question-bridge.js';
 import type { Database } from '../db/index.js';
 import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './prompts.js';
+import type { ContextScope } from './context-assembler.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { calculateCost, extractUsageFromResult, logAiUsage } from './transparency.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
@@ -46,6 +47,7 @@ export class Agent {
   private tools: ToolSet = {};
   private questionBridge: QuestionBridge | null = null;
   private currentSessionId: string | null = null;
+  private currentScope?: ContextScope;
   private lockPromise: Promise<void> = Promise.resolve();
 
   constructor(
@@ -166,8 +168,10 @@ export class Agent {
     userMessage: string,
     onEvent: (event: ChatStreamEvent) => Promise<void>,
     sessionId?: string,
+    scope?: ContextScope,
   ): Promise<void> {
     return this.withLock(async () => {
+      this.currentScope = scope;
       const resolvedSessionId = this.resolveSessionId(sessionId);
       if (resolvedSessionId !== this.currentSessionId) {
         await this.switchSession(resolvedSessionId);
@@ -366,7 +370,9 @@ export class Agent {
    * Called at the start of every chat() / chatStream() turn.
    */
   private async refreshSystemPrompt(): Promise<void> {
-    const contextSnapshot = this.contextProvider ? await this.contextProvider() : '';
+    const contextSnapshot = this.contextProvider
+      ? await this.contextProvider(this.currentScope)
+      : '';
     const systemContent = buildSystemPrompt(contextSnapshot, this.provider, this.locale);
 
     // Replace or insert system message at position 0

@@ -220,7 +220,7 @@ export async function createAppContext(
       agentPool = new AgentPool(
         createModelProxy(modelRegistry, 'webAgent'),
         db,
-        async () => buildContextSnapshot(db, docker),
+        async (scope) => buildContextSnapshot(db, docker, scope),
         config.llm.provider,
         config.language,
       );
@@ -238,7 +238,7 @@ export async function createAppContext(
         agent = new Agent(
           createModelProxy(modelRegistry, 'autoRecovery'),
           db,
-          async () => buildContextSnapshot(db, docker),
+          async (scope) => buildContextSnapshot(db, docker, scope),
           config.llm.provider,
           config.language,
           'auto_recovery',

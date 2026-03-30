@@ -123,6 +123,18 @@ export const translations = {
       loadFailed: 'Failed to load pending approvals.',
       actionFailed: 'Failed to submit approval decision.',
     },
+    tools: {
+      group: '{{count}} tools',
+      groupNames: '{{names}}',
+    },
+    step: {
+      progress: 'Step {{step}}',
+      tool: '· {{toolName}}',
+    },
+    reasoning: {
+      title: 'Thinking...',
+      toggle: 'Show reasoning',
+    },
   },
   deploy: {
     notFound: 'Deployment not found',

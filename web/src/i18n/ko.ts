@@ -122,6 +122,18 @@ export const translations = {
       loadFailed: '대기 중인 승인 요청을 불러오지 못했습니다.',
       actionFailed: '승인 처리 요청에 실패했습니다.',
     },
+    tools: {
+      group: '{{count}}개 도구',
+      groupNames: '{{names}}',
+    },
+    step: {
+      progress: '스텝 {{step}}',
+      tool: '· {{toolName}}',
+    },
+    reasoning: {
+      title: '생각 중...',
+      toggle: '추론 과정 보기',
+    },
   },
   deploy: {
     notFound: '배포를 찾을 수 없습니다',

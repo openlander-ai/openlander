@@ -10,6 +10,7 @@ import type { OpenLanderConfig } from '../../src/config/index.js';
 import { QuestionBridge } from '../../src/lib/question-bridge.js';
 import type { DeployPipeline, DeployResult } from '../../src/pipeline/deploy.js';
 import type { DeployQueue } from '../../src/pipeline/deploy-queue.js';
+import { normalizeErrorSignature } from '../../src/llm/memory.js';
 
 interface Harness {
   eventBus: EventBus;
@@ -207,6 +208,32 @@ describe('setupAutoRecovery', () => {
       expect(parsedPendingFix.patches?.[0]?.pattern).toBe('FROM (node:[^-\\s]+)-alpine');
       expect(parsedPendingFix.patches?.[0]?.replacement).toBe('FROM $1-bookworm-slim');
       expect(parsedPendingFix.patches?.[0]?.flags).toBe('gm');
+    } finally {
+      harness.db.close();
+      rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('marks recovery strategy as memory when a deployment pattern matches', async () => {
+    const harness = createHarness();
+
+    try {
+      const projectId = 'proj-pattern-hit';
+      const error = 'JavaScript heap out of memory';
+      const signature = normalizeErrorSignature(error);
+      harness.db.upsertDeploymentPattern({
+        project_id: projectId,
+        pattern_type: 'build',
+        error_signature: signature,
+        fix_action: JSON.stringify({ strategy: 'recipe', recipe: 'Use NODE_OPTIONS 4096MB' }),
+      });
+
+      await emitDeployFailed(harness.eventBus, projectId, error);
+
+      const runs = harness.db.getActionRunsByProject(projectId, 1);
+      expect(runs).toHaveLength(1);
+      expect(runs[0].recovery_strategy).toBe('memory');
+      expect(harness.redeployMock).toHaveBeenCalledOnce();
     } finally {
       harness.db.close();
       rmSync(harness.tmpDir, { recursive: true, force: true });

@@ -64,7 +64,7 @@ export function AgentPanel({
       return;
     }
 
-    chat.sendMessage(buildDiagnosticPrompt(initialContext));
+    chat.sendMessage(buildDiagnosticPrompt(initialContext), initialContext.projectId);
     sentContextKeyRef.current = contextKey;
     onInitialContextConsumed();
   }, [open, initialContext, llmConfigured, chat, onInitialContextConsumed]);

@@ -1,10 +1,14 @@
 import type { QuestionAnswer } from '../chat-types.js';
 
-export async function streamChat(message: string, signal?: AbortSignal): Promise<Response> {
+export async function streamChat(
+  message: string,
+  signal?: AbortSignal,
+  projectId?: string,
+): Promise<Response> {
   const res = await fetch('/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, ...(projectId ? { projectId } : {}) }),
     signal,
   });
   if (!res.ok) {

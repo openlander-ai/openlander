@@ -221,14 +221,36 @@ function buildScopedProjectLines(projects: ProjectRow[], focalProjectId?: string
 function buildRecoverySection(db: Database, projectId: string): string | null {
   const logs = db.getDeployLogs(projectId, 5);
   const failedLogs = logs.filter((l) => l.status === 'failed');
-  if (failedLogs.length === 0) return null;
-
   const lines: string[] = ['## Recovery Context'];
 
   for (const logEntry of failedLogs) {
     const time = logEntry.created_at;
     const hint = logEntry.build_log ? extractFailureHint(logEntry.build_log) : 'no build log';
     lines.push(`  ❌ ${time} — ${hint}`);
+  }
+
+  const patterns = db.getTopDeploymentPatterns(projectId, 5);
+  if (patterns.length > 0) {
+    lines.push('\n## Known Patterns for This Project');
+    for (const p of patterns) {
+      let fixDesc: string;
+      try {
+        const fixAction = JSON.parse(p.fix_action) as Record<string, unknown>;
+        fixDesc =
+          typeof fixAction.recipe === 'string' ? fixAction.recipe : JSON.stringify(fixAction);
+      } catch {
+        fixDesc = p.fix_action;
+      }
+
+      lines.push(
+        `- Pattern: ${p.error_signature} (seen ${String(p.success_count + p.failure_count)} times, fixed ${String(p.success_count)} times)`,
+      );
+      lines.push(`  Fix: ${fixDesc}`);
+    }
+  }
+
+  if (failedLogs.length === 0 && patterns.length === 0) {
+    return null;
   }
 
   return lines.join('\n');

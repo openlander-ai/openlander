@@ -71,6 +71,7 @@ describe('context-assembler', () => {
       },
       getDeployLogs: () => [],
       getEnvVars: () => ({}),
+      getTopDeploymentPatterns: () => [],
     };
   });
 
@@ -283,6 +284,7 @@ describe('context-assembler', () => {
         },
         getDeployLogs: (_projectId: string, _limit?: number) => [],
         getEnvVars: () => ({}),
+        getTopDeploymentPatterns: () => [],
       };
     });
 
@@ -369,6 +371,35 @@ describe('context-assembler', () => {
       const scope: ContextScope = { type: 'recovery', projectId: 'proj-2' };
       const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
       expect(snapshot).not.toContain('## Recovery Context');
+    });
+
+    it('should include known patterns in recovery scope even without failed logs', async () => {
+      scopedDb.getDeployLogs = () => [];
+      scopedDb.getTopDeploymentPatterns = () => [
+        {
+          id: 'pattern-1',
+          project_id: 'proj-2',
+          pattern_type: 'build',
+          error_signature: 'OOM killed during build',
+          fix_action: JSON.stringify({
+            strategy: 'recipe',
+            recipe: 'Increase memory limit to 4GB',
+          }),
+          success_count: 3,
+          failure_count: 0,
+          last_seen_at: '2025-01-15T10:00:00Z',
+          created_at: '2025-01-15T10:00:00Z',
+          updated_at: '2025-01-15T10:00:00Z',
+        } as unknown as import('../../src/db/schema.drizzle.js').DeploymentPatternRow,
+      ];
+
+      const scope: ContextScope = { type: 'recovery', projectId: 'proj-2' };
+      const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
+
+      expect(snapshot).toContain('## Recovery Context');
+      expect(snapshot).toContain('## Known Patterns for This Project');
+      expect(snapshot).toContain('Pattern: OOM killed during build (seen 3 times, fixed 3 times)');
+      expect(snapshot).toContain('Fix: Increase memory limit to 4GB');
     });
 
     it('recovery scope should also show scoped project lines', async () => {

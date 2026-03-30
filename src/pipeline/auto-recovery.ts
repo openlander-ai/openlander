@@ -14,7 +14,7 @@ import type { DeployPipeline } from './deploy.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { ApprovalGate, type ApprovalGate as ApprovalGateType } from './approval-gate.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
-import { saveRecoveryPattern } from '../llm/memory.js';
+import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
 
 const log = createModuleLogger('auto-recovery');
 
@@ -322,6 +322,24 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     const normalizedError = normalizeError(error);
     const recoveryStartTime = Date.now();
 
+    let matchingPatterns: ReturnType<typeof findMatchingPatterns> = [];
+    try {
+      matchingPatterns = findMatchingPatterns(db, projectId, error);
+    } catch (patternErr) {
+      log.warn({ err: patternErr, projectId }, 'Failed to lookup recovery patterns');
+    }
+
+    if (matchingPatterns.length > 0) {
+      log.info(
+        {
+          projectId,
+          matchedPatternCount: matchingPatterns.length,
+          topPattern: matchingPatterns[0]?.error_signature,
+        },
+        'Matched deployment pattern before LLM recovery',
+      );
+    }
+
     const latestBuildLog = buildLog ?? db.getLastDeployLog(projectId)?.build_log;
     const combinedForMatch = `${error}\n${latestBuildLog ?? ''}`;
     const recipe = matchRecipe(combinedForMatch);
@@ -339,7 +357,7 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     const actionRunId = db.createActionRun({
       projectId,
       triggerSource: 'auto_recovery',
-      recoveryStrategy: strategy,
+      recoveryStrategy: matchingPatterns.length > 0 ? 'memory' : strategy,
     });
 
     await eventBus.emit('recovery:start', {

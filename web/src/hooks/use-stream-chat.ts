@@ -15,7 +15,7 @@ interface UseStreamChatReturn {
   currentToolName?: string;
   pendingQuestion: QuestionRequest | null;
   error: string | null;
-  sendMessage: (message: string) => void;
+  sendMessage: (message: string, projectId?: string) => void;
   abort: () => void;
   clearMessages: () => void;
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
@@ -48,7 +48,7 @@ export function useStreamChat(): UseStreamChatReturn {
   const abortRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
-    (message: string) => {
+    (message: string, projectId?: string) => {
       const trimmedMessage = message.trim();
       if (!trimmedMessage || isStreaming) {
         return;
@@ -188,7 +188,7 @@ export function useStreamChat(): UseStreamChatReturn {
 
       void (async () => {
         try {
-          const response = await streamChat(trimmedMessage, controller.signal);
+          const response = await streamChat(trimmedMessage, controller.signal, projectId);
 
           if (!response.body) {
             throw new Error('Response body is null');

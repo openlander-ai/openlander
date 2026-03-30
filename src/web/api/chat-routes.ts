@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import type { QuestionAnswer } from '../../lib/question-bridge.js';
 import type { ChatStreamEvent } from '../../types/agent-events.js';
+import type { ContextScope } from '../../llm/context-assembler.js';
 
 export function createChatRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -18,20 +19,23 @@ export function createChatRoutes(ctx: AppContext): Hono {
     }
 
     const body = await c.req
-      .json<{ message?: unknown; session_id?: unknown }>()
-      .catch(() => ({ message: undefined, session_id: undefined }));
+      .json<{ message?: unknown; session_id?: unknown; projectId?: unknown }>()
+      .catch(() => ({ message: undefined, session_id: undefined, projectId: undefined }));
 
     const message = typeof body.message === 'string' ? body.message.trim() : '';
     let sessionId = typeof body.session_id === 'string' ? body.session_id.trim() : '';
+    const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : undefined;
 
     if (!message) {
       return c.json({ error: 'message is required' }, 400);
     }
 
-    // Auto-generate session_id if not provided
+    // Derive session key: project-scoped if projectId provided, otherwise auto-generated
     if (!sessionId) {
-      sessionId = `web-agent-${Date.now().toString(36)}`;
+      sessionId = projectId ? `project:${projectId}` : `web-agent-${Date.now().toString(36)}`;
     }
+
+    const scope: ContextScope | undefined = projectId ? { type: 'project', projectId } : undefined;
 
     if (activeStreams.get(sessionId)) {
       return c.json({ error: 'Another message is being processed for this session' }, 429);
@@ -56,6 +60,7 @@ export function createChatRoutes(ctx: AppContext): Hono {
               return Promise.resolve();
             },
             sessionId,
+            scope,
           );
         } catch (err) {
           const error = err instanceof Error ? err.message : String(err);

@@ -14,12 +14,14 @@
 // Re-export context snapshot builders for backward compatibility
 export { buildContextSnapshot, buildIncidentBriefing } from './context-assembler.js';
 
+import type { ContextScope } from './context-assembler.js';
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /** Callback that returns a context snapshot string at call-time. */
-export type ContextProvider = () => string | Promise<string>;
+export type ContextProvider = (scope?: ContextScope) => string | Promise<string>;
 
 /** LLM provider identifier (matches LLMConfig.provider). */
 export type LLMProvider = 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
