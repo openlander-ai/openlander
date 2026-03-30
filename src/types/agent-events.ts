@@ -22,6 +22,8 @@ export interface UsageSummary {
 export type ChatStreamEvent =
   | { type: 'session'; sessionId: string }
   | { type: 'thinking' }
+  | { type: 'step_progress'; step: number; toolName?: string }
+  | { type: 'reasoning'; content: string }
   | { type: 'tool_call'; toolName: string; arguments: Record<string, unknown>; stepIndex: number }
   | {
       type: 'tool_result';

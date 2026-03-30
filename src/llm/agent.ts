@@ -195,6 +195,7 @@ export class Agent {
       let didStreamFail = false;
       let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
       let currentStepIndex = 0;
+      let lastToolName: string | undefined;
 
       try {
         const result = streamText({
@@ -214,7 +215,12 @@ export class Agent {
               responseText += part.text;
               break;
             }
+            case 'reasoning-delta': {
+              await onEvent({ type: 'reasoning', content: part.text });
+              break;
+            }
             case 'tool-call': {
+              lastToolName = part.toolName;
               await onEvent({
                 type: 'tool_call',
                 toolName: part.toolName,
@@ -245,6 +251,12 @@ export class Agent {
             }
             case 'finish-step': {
               currentStepIndex++;
+              await onEvent({
+                type: 'step_progress',
+                step: currentStepIndex,
+                toolName: lastToolName,
+              });
+              lastToolName = undefined;
               // Emit thinking for next step if there are more steps coming
               await onEvent({ type: 'thinking' });
               break;

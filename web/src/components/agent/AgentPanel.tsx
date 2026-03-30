@@ -4,6 +4,7 @@ import { LlmGate } from '@/components/agent/LlmGate';
 import { MessageList } from '@/components/agent/MessageList';
 import { StreamError } from '@/components/agent/EmptyState';
 import { ThinkingIndicator } from '@/components/agent/ThinkingIndicator';
+import { StepProgress } from '@/components/agent/StepProgress';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import type { AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { useStreamChat } from '@/hooks/use-stream-chat';
@@ -98,6 +99,9 @@ export function AgentPanel({
 
                 {chat.messages.some((message) => message.role !== 'system') || chat.isStreaming ? (
                   <MessageList messages={chat.messages}>
+                    {chat.isStreaming && chat.currentStep > 0 ? (
+                      <StepProgress step={chat.currentStep} toolName={chat.currentToolName} />
+                    ) : null}
                     {chat.isStreaming ? <ThinkingIndicator /> : null}
                   </MessageList>
                 ) : (

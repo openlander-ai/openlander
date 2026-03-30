@@ -15,6 +15,7 @@ import { Bot, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCopy } from '@/hooks/use-copy';
 import { ToolCallCard } from './ToolCallCard';
+import { ReasoningBox } from './ReasoningBox';
 
 function extractLanguage(children: ReactNode): string | null {
   const child = Children.toArray(children)[0];
@@ -106,6 +107,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <p className="text-sm whitespace-pre-wrap">{message.content}</p>
         ) : (
           <>
+            {message.reasoning ? <ReasoningBox content={message.reasoning} /> : null}
             {message.content && (
               <div
                 className="prose prose-sm max-w-none

@@ -11,6 +11,8 @@ import type {
 interface UseStreamChatReturn {
   messages: ChatMessage[];
   isStreaming: boolean;
+  currentStep: number;
+  currentToolName?: string;
   pendingQuestion: QuestionRequest | null;
   error: string | null;
   sendMessage: (message: string) => void;
@@ -38,6 +40,8 @@ function parseEventLine(line: string): ChatStreamEvent | null {
 export function useStreamChat(): UseStreamChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [currentToolName, setCurrentToolName] = useState<string | undefined>(undefined);
   const [pendingQuestion, setPendingQuestion] = useState<QuestionRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,6 +72,8 @@ export function useStreamChat(): UseStreamChatReturn {
 
       setMessages((prev) => [...prev, userMessage, assistantMessage]);
       setIsStreaming(true);
+      setCurrentStep(0);
+      setCurrentToolName(undefined);
       setError(null);
       setPendingQuestion(null);
 
@@ -124,6 +130,18 @@ export function useStreamChat(): UseStreamChatReturn {
         switch (event.type) {
           case 'session':
           case 'thinking': {
+            break;
+          }
+          case 'step_progress': {
+            setCurrentStep(event.step);
+            setCurrentToolName(event.toolName);
+            break;
+          }
+          case 'reasoning': {
+            updateAssistantMessage((draft) => ({
+              ...draft,
+              reasoning: (draft.reasoning ?? '') + event.content,
+            }));
             break;
           }
           case 'tool_call': {
@@ -209,6 +227,8 @@ export function useStreamChat(): UseStreamChatReturn {
             abortRef.current = null;
           }
           setIsStreaming(false);
+          setCurrentStep(0);
+          setCurrentToolName(undefined);
         }
       })();
     },
@@ -225,11 +245,15 @@ export function useStreamChat(): UseStreamChatReturn {
     setMessages([]);
     setError(null);
     setPendingQuestion(null);
+    setCurrentStep(0);
+    setCurrentToolName(undefined);
   }, []);
 
   return {
     messages,
     isStreaming,
+    currentStep,
+    currentToolName,
     pendingQuestion,
     error,
     sendMessage,
