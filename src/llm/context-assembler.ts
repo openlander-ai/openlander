@@ -18,43 +18,40 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('context-assembler');
 
 /**
+ * Scope for context assembly — controls what level of detail is included.
+ *
+ * - `global`: Full server overview (default, backward-compatible behavior)
+ * - `project`: Focused on a single project with full details; other projects shown as summaries
+ * - `recovery`: Same as project scope + recent error logs for diagnosis
+ */
+export interface ContextScope {
+  type: 'project' | 'global' | 'recovery';
+  projectId?: string;
+  deployId?: string;
+}
+
+/**
  * Build a context snapshot from live application state.
  * Lightweight — only queries DB + OS stats. No LLM calls.
  *
  * @param db - Database instance for project data
  * @param docker - Optional Docker instance for server context (containers, ports, proxy)
+ * @param scope - Optional scope to filter/focus the context (defaults to global)
  */
-export async function buildContextSnapshot(db: Database, docker?: Docker): Promise<string> {
+export async function buildContextSnapshot(
+  db: Database,
+  docker?: Docker,
+  scope?: ContextScope,
+): Promise<string> {
   const projects = db.listProjects();
   const stats = getSystemStats();
 
-  // Scale project listing based on count to prevent context distraction.
-  // 0: show "no projects" message
-  // 1-5: show full details per project
-  // 6+: show summary counts + only running/error projects
-  const MAX_DETAILED_PROJECTS = 5;
-  let projectLines: string;
+  const effectiveType = scope?.type ?? 'global';
 
-  if (projects.length === 0) {
-    projectLines = '(no projects deployed yet)';
-  } else if (projects.length <= MAX_DETAILED_PROJECTS) {
-    projectLines = projects.map((p: ProjectRow) => formatProjectLine(p)).join('\n');
-  } else {
-    const running = projects.filter((p) => p.status === 'running');
-    const errored = projects.filter((p) => p.status === 'error');
-    const stopped = projects.filter((p) => p.status === 'stopped');
-    const important = [...running, ...errored];
-    projectLines = [
-      `${String(running.length)} running, ${String(errored.length)} error, ${String(stopped.length)} stopped — use list_projects for full details`,
-      ...important.map((p: ProjectRow) => formatProjectLine(p)),
-    ].join('\n');
-  }
-
-  // Build server context if Docker is available
-  const serverContext = await buildServerContext(db, docker);
-
-  // Build deployment rules from server context
-  const deploymentRules = buildDeploymentRules(serverContext);
+  const projectLines =
+    effectiveType === 'project' || effectiveType === 'recovery'
+      ? buildScopedProjectLines(projects, scope?.projectId)
+      : buildGlobalProjectLines(projects);
 
   const parts: string[] = [
     `## Current Server State (auto-injected)
@@ -63,10 +60,16 @@ ${projectLines}`,
     `Resources: CPU ${String(stats.cpu.usagePercent)}% · Memory ${String(stats.memory.usedMB)}/${String(stats.memory.totalMB)}MB (${String(stats.memory.usagePercent)}%) · Disk ${String(stats.disk.usagePercent)}%${stats.memory.usagePercent > 85 ? '\n⚠️ Memory usage is high — suggest cleaning up unused projects.' : ''}${stats.disk.usagePercent > 90 ? '\n⚠️ Disk usage is critical.' : ''}`,
   ];
 
+  // Build server context if Docker is available
+  const serverContext = await buildServerContext(db, docker);
+
   // Add server context if available
   if (serverContext) {
     parts.push(formatServerContext(serverContext));
   }
+
+  // Build deployment rules from server context
+  const deploymentRules = buildDeploymentRules(serverContext);
 
   // Add deployment rules if we have conflict info
   if (deploymentRules) {
@@ -86,6 +89,13 @@ ${projectLines}`,
     parts.push(
       `Global secrets (${String(globalSecrets.length)}): ${secretKeys}\nThese are automatically injected into all deploys. Project env vars override them.`,
     );
+  }
+
+  if (effectiveType === 'recovery' && scope?.projectId) {
+    const recoverySection = buildRecoverySection(db, scope.projectId);
+    if (recoverySection) {
+      parts.push(recoverySection);
+    }
   }
 
   return parts.join('\n\n');
@@ -159,6 +169,69 @@ function formatProjectLine(p: ProjectRow): string {
   const containerName = p.status !== 'stopped' ? ` [ol-${p.name}]` : '';
 
   return `  ${statusIcon} ${p.name} (${p.status})${containerName}${url ? ` — ${url}` : ''}`;
+}
+
+function formatProjectSummary(p: ProjectRow): string {
+  const statusIcon = p.status === 'running' ? '🟢' : p.status === 'error' ? '🔴' : '⚪';
+  return `  ${statusIcon} ${p.name} (${p.status})`;
+}
+
+function buildGlobalProjectLines(projects: ProjectRow[]): string {
+  const MAX_DETAILED_PROJECTS = 5;
+
+  if (projects.length === 0) {
+    return '(no projects deployed yet)';
+  }
+
+  if (projects.length <= MAX_DETAILED_PROJECTS) {
+    return projects.map((p: ProjectRow) => formatProjectLine(p)).join('\n');
+  }
+
+  const running = projects.filter((p) => p.status === 'running');
+  const errored = projects.filter((p) => p.status === 'error');
+  const stopped = projects.filter((p) => p.status === 'stopped');
+  const important = [...running, ...errored];
+  return [
+    `${String(running.length)} running, ${String(errored.length)} error, ${String(stopped.length)} stopped — use list_projects for full details`,
+    ...important.map((p: ProjectRow) => formatProjectLine(p)),
+  ].join('\n');
+}
+
+function buildScopedProjectLines(projects: ProjectRow[], focalProjectId?: string): string {
+  if (projects.length === 0) {
+    return '(no projects deployed yet)';
+  }
+
+  const focal = focalProjectId ? projects.find((p) => p.id === focalProjectId) : undefined;
+  const others = focalProjectId ? projects.filter((p) => p.id !== focalProjectId) : projects;
+
+  const lines: string[] = [];
+
+  if (focal) {
+    lines.push(formatProjectLine(focal));
+  }
+
+  if (others.length > 0) {
+    lines.push(...others.map((p) => formatProjectSummary(p)));
+  }
+
+  return lines.join('\n');
+}
+
+function buildRecoverySection(db: Database, projectId: string): string | null {
+  const logs = db.getDeployLogs(projectId, 5);
+  const failedLogs = logs.filter((l) => l.status === 'failed');
+  if (failedLogs.length === 0) return null;
+
+  const lines: string[] = ['## Recovery Context'];
+
+  for (const logEntry of failedLogs) {
+    const time = logEntry.created_at;
+    const hint = logEntry.build_log ? extractFailureHint(logEntry.build_log) : 'no build log';
+    lines.push(`  ❌ ${time} — ${hint}`);
+  }
+
+  return lines.join('\n');
 }
 
 /**

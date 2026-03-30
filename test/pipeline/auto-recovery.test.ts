@@ -219,6 +219,7 @@ describe('setupAutoRecovery', () => {
         type: 'tool_call',
         toolName: 'remove_project',
         arguments: { project_id: 'proj-approval-approved' },
+        stepIndex: 0,
       });
     });
 
@@ -267,6 +268,7 @@ describe('setupAutoRecovery', () => {
         type: 'tool_call',
         toolName: 'remove_project',
         arguments: { project_id: 'proj-approval-rejected' },
+        stepIndex: 0,
       });
     });
 

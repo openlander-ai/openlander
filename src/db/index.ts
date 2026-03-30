@@ -22,6 +22,7 @@ import { DeployConfigRepo } from './repos/deploy-config.repo.js';
 import { AuthRepo } from './repos/auth.repo.js';
 import { AiUsageLogRepo } from './repos/ai-usage-log.repo.js';
 import { ActionRunRepo } from './repos/action-run.repo.js';
+import { DeploymentPatternRepo } from './repos/deployment-pattern.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 
@@ -64,6 +65,7 @@ export class Database implements AuthDatabase {
    private readonly authRepo: AuthRepo;
    private readonly aiUsageLogRepo: AiUsageLogRepo;
    private readonly actionRunRepo: ActionRunRepo;
+   private readonly deploymentPatternRepo: DeploymentPatternRepo;
 
    constructor(dbPath: string) {
       mkdirSync(dirname(dbPath), { recursive: true });
@@ -86,11 +88,12 @@ export class Database implements AuthDatabase {
       this.webhookRepo = new WebhookRepo(this.db, this.sqlite);
       this.deployPlanRepo = new DeployPlanRepo(this.db, this.sqlite);
       this.deployConfigRepo = new DeployConfigRepo(this.db, this.sqlite);
-      this.authRepo = new AuthRepo(this.db);
-      this.aiUsageLogRepo = new AiUsageLogRepo(this.db, this.sqlite);
-      this.actionRunRepo = new ActionRunRepo(this.db, this.sqlite);
-      this.actionRunRepo.markStaleAsFailedOnStartup();
-    }
+       this.authRepo = new AuthRepo(this.db);
+       this.aiUsageLogRepo = new AiUsageLogRepo(this.db, this.sqlite);
+       this.actionRunRepo = new ActionRunRepo(this.db, this.sqlite);
+       this.deploymentPatternRepo = new DeploymentPatternRepo(this.db, this.sqlite);
+       this.actionRunRepo.markStaleAsFailedOnStartup();
+     }
 
   createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
   getProject(id: string) { return this.projectRepo.getProject(id); }
@@ -197,6 +200,12 @@ export class Database implements AuthDatabase {
     getActionRunsByProject(projectId: string, limit?: number) { return this.actionRunRepo.findByProjectId(projectId, limit); }
      findActionRunPendingApproval(actionRunId: string) { return this.actionRunRepo.findPendingApproval(actionRunId); }
      getActionRunsByApprovalStatus(status: 'pending' | 'approved' | 'rejected', limit?: number) { return this.actionRunRepo.findByApprovalStatus(status, limit); }
-    transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
-    close() { this.sqlite.close(); }
+     findDeploymentPatternsByProject(projectId: string) { return this.deploymentPatternRepo.findByProject(projectId); }
+     findDeploymentPatternBySignature(projectId: string, signature: string) { return this.deploymentPatternRepo.findBySignature(projectId, signature); }
+     upsertDeploymentPattern(data: { project_id: string; pattern_type: string; error_signature: string; fix_action: string }) { return this.deploymentPatternRepo.upsertPattern(data); }
+     recordDeploymentPatternSuccess(id: string) { this.deploymentPatternRepo.recordSuccess(id); }
+     recordDeploymentPatternFailure(id: string) { this.deploymentPatternRepo.recordFailure(id); }
+     getTopDeploymentPatterns(projectId: string, limit?: number) { return this.deploymentPatternRepo.getTopPatterns(projectId, limit); }
+     transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
+     close() { this.sqlite.close(); }
 }

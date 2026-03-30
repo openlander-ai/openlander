@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildContextSnapshot, buildIncidentBriefing } from '../../src/llm/context-assembler.js';
+import type { ContextScope } from '../../src/llm/context-assembler.js';
 import type { Database, ProjectRow, RuntimeIncidentRow } from '../../src/db/index.js';
 
 /**
@@ -229,6 +230,161 @@ describe('context-assembler', () => {
       ];
       const briefing = buildIncidentBriefing(incidents, mockDb as Database);
       expect(briefing).toContain('5x crashes');
+    });
+  });
+
+  describe('buildContextSnapshot with ContextScope', () => {
+    let scopedDb: Partial<Database>;
+
+    beforeEach(() => {
+      scopedDb = {
+        listProjects: () => [
+          {
+            id: 'proj-1',
+            name: 'frontend',
+            status: 'running',
+            assigned_port: 10001,
+            public_url: 'https://frontend.example.com',
+          } as ProjectRow,
+          {
+            id: 'proj-2',
+            name: 'backend',
+            status: 'error',
+            assigned_port: 10002,
+            public_url: null,
+          } as ProjectRow,
+          {
+            id: 'proj-3',
+            name: 'worker',
+            status: 'stopped',
+            assigned_port: null,
+            public_url: null,
+          } as ProjectRow,
+        ],
+        getGlobalSecrets: () => [],
+        getProject: (id: string) => {
+          const projects: Record<string, ProjectRow> = {
+            'proj-1': {
+              id: 'proj-1',
+              name: 'frontend',
+              status: 'running',
+              assigned_port: 10001,
+              public_url: 'https://frontend.example.com',
+            } as ProjectRow,
+            'proj-2': {
+              id: 'proj-2',
+              name: 'backend',
+              status: 'error',
+              assigned_port: 10002,
+              public_url: null,
+            } as ProjectRow,
+          };
+          return projects[id] ?? null;
+        },
+        getDeployLogs: (_projectId: string, _limit?: number) => [],
+        getEnvVars: () => ({}),
+      };
+    });
+
+    it('should behave identically with no scope (backward compat)', async () => {
+      const withoutScope = await buildContextSnapshot(scopedDb as Database);
+      const withGlobalScope = await buildContextSnapshot(scopedDb as Database, undefined, {
+        type: 'global',
+      });
+      expect(withoutScope).toBe(withGlobalScope);
+    });
+
+    it('should behave identically with explicit global scope', async () => {
+      const noScope = await buildContextSnapshot(scopedDb as Database);
+      const globalScope: ContextScope = { type: 'global' };
+      const withScope = await buildContextSnapshot(scopedDb as Database, undefined, globalScope);
+      expect(noScope).toBe(withScope);
+    });
+
+    it('should show full details for focal project in project scope', async () => {
+      const scope: ContextScope = { type: 'project', projectId: 'proj-1' };
+      const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
+      expect(snapshot).toContain('frontend (running)');
+      expect(snapshot).toContain('[ol-frontend]');
+      expect(snapshot).toContain('https://frontend.example.com');
+    });
+
+    it('should show summary for non-focal projects in project scope', async () => {
+      const scope: ContextScope = { type: 'project', projectId: 'proj-1' };
+      const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
+      expect(snapshot).toContain('backend (error)');
+      expect(snapshot).not.toContain('[ol-backend]');
+      expect(snapshot).not.toContain('10002');
+    });
+
+    it('should still show all project count in project scope', async () => {
+      const scope: ContextScope = { type: 'project', projectId: 'proj-1' };
+      const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
+      expect(snapshot).toContain('Projects deployed: 3');
+    });
+
+    it('should include recovery context section for recovery scope with failed logs', async () => {
+      scopedDb.getDeployLogs = (projectId: string, _limit?: number) => {
+        if (projectId === 'proj-2') {
+          return [
+            {
+              id: 'log-1',
+              project_id: 'proj-2',
+              status: 'failed',
+              build_log: 'Step 5: [error] Cannot find module express',
+              created_at: '2025-01-15T10:00:00Z',
+              duration_ms: 15000,
+            } as unknown as import('../../src/db/index.js').DeployLogRow,
+            {
+              id: 'log-2',
+              project_id: 'proj-2',
+              status: 'success',
+              build_log: null,
+              created_at: '2025-01-14T09:00:00Z',
+              duration_ms: 30000,
+            } as unknown as import('../../src/db/index.js').DeployLogRow,
+          ];
+        }
+        return [];
+      };
+
+      const scope: ContextScope = { type: 'recovery', projectId: 'proj-2' };
+      const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
+      expect(snapshot).toContain('## Recovery Context');
+      expect(snapshot).toContain('Cannot find module express');
+    });
+
+    it('should not include recovery section when no failed logs exist', async () => {
+      scopedDb.getDeployLogs = () => [
+        {
+          id: 'log-1',
+          project_id: 'proj-2',
+          status: 'success',
+          build_log: null,
+          created_at: '2025-01-14T09:00:00Z',
+          duration_ms: 30000,
+        } as unknown as import('../../src/db/index.js').DeployLogRow,
+      ];
+
+      const scope: ContextScope = { type: 'recovery', projectId: 'proj-2' };
+      const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
+      expect(snapshot).not.toContain('## Recovery Context');
+    });
+
+    it('recovery scope should also show scoped project lines', async () => {
+      const scope: ContextScope = { type: 'recovery', projectId: 'proj-2' };
+      const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
+      expect(snapshot).toContain('backend (error)');
+      expect(snapshot).toContain('frontend (running)');
+      expect(snapshot).not.toContain('[ol-frontend]');
+    });
+
+    it('should handle project scope with unknown projectId gracefully', async () => {
+      const scope: ContextScope = { type: 'project', projectId: 'nonexistent' };
+      const snapshot = await buildContextSnapshot(scopedDb as Database, undefined, scope);
+      expect(snapshot).toContain('Projects deployed: 3');
+      expect(snapshot).toContain('frontend (running)');
+      expect(snapshot).toContain('backend (error)');
     });
   });
 });

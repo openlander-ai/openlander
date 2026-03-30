@@ -507,4 +507,22 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_project ON action_runs(project_id)');
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_status ON action_runs(status)');
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_action_runs_created_at ON action_runs(created_at)');
+
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS deployment_patterns (
+     id TEXT PRIMARY KEY,
+     project_id TEXT NOT NULL,
+     pattern_type TEXT NOT NULL DEFAULT '',
+     error_signature TEXT NOT NULL DEFAULT '',
+     fix_action TEXT NOT NULL DEFAULT '{}',
+     success_count INTEGER NOT NULL DEFAULT 0,
+     failure_count INTEGER NOT NULL DEFAULT 0,
+     last_seen_at TEXT,
+     created_at TEXT NOT NULL DEFAULT ''
+   )`);
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_deployment_patterns_project ON deployment_patterns(project_id)',
+  );
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_deployment_patterns_signature ON deployment_patterns(project_id, error_signature)',
+  );
 }

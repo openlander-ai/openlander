@@ -193,6 +193,7 @@ export class Agent {
       const startedAt = Date.now();
       let didStreamFail = false;
       let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+      let currentStepIndex = 0;
 
       try {
         const result = streamText({
@@ -217,6 +218,7 @@ export class Agent {
                 type: 'tool_call',
                 toolName: part.toolName,
                 arguments: part.input as Record<string, unknown>,
+                stepIndex: currentStepIndex,
               });
               break;
             }
@@ -227,7 +229,7 @@ export class Agent {
                 result: part.output,
               };
               allToolResults.push(toolResult);
-              await onEvent({ type: 'tool_result', ...toolResult });
+              await onEvent({ type: 'tool_result', ...toolResult, stepIndex: currentStepIndex });
               break;
             }
             case 'tool-error': {
@@ -237,10 +239,11 @@ export class Agent {
                 error: part.error instanceof Error ? part.error.message : String(part.error),
               };
               allToolResults.push(errorResult);
-              await onEvent({ type: 'tool_result', ...errorResult });
+              await onEvent({ type: 'tool_result', ...errorResult, stepIndex: currentStepIndex });
               break;
             }
             case 'finish-step': {
+              currentStepIndex++;
               // Emit thinking for next step if there are more steps coming
               await onEvent({ type: 'thinking' });
               break;

@@ -51,8 +51,15 @@ export interface QuestionAnswer {
 export type ChatStreamEvent =
   | { type: 'session'; sessionId: string }
   | { type: 'thinking' }
-  | { type: 'tool_call'; toolName: string; arguments: Record<string, unknown> }
-  | { type: 'tool_result'; toolName: string; success: boolean; result?: unknown; error?: string }
+  | { type: 'tool_call'; toolName: string; arguments: Record<string, unknown>; stepIndex: number }
+  | {
+      type: 'tool_result';
+      toolName: string;
+      success: boolean;
+      result?: unknown;
+      error?: string;
+      stepIndex: number;
+    }
   | { type: 'message'; content: string }
   | { type: 'question'; request: QuestionRequest }
   | { type: 'done'; toolResults?: ToolResult[]; usage?: UsageSummary }
@@ -66,6 +73,7 @@ export interface ToolCallInfo {
   toolName: string;
   arguments: Record<string, unknown>;
   toolResult?: ToolResult;
+  stepIndex?: number;
 }
 
 export interface ChatMessage {

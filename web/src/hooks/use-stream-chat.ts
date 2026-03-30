@@ -130,6 +130,7 @@ export function useStreamChat(): UseStreamChatReturn {
             const toolCall: ToolCallInfo = {
               toolName: event.toolName,
               arguments: event.arguments,
+              stepIndex: event.stepIndex,
             };
             updateAssistantMessage((draft) => ({
               ...draft,
@@ -162,6 +163,8 @@ export function useStreamChat(): UseStreamChatReturn {
             setError(event.error);
             break;
           }
+          default:
+            break;
         }
       };
 

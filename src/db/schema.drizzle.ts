@@ -451,10 +451,31 @@ export const actionRuns = sqliteTable(
   ],
 );
 
+export const deploymentPatterns = sqliteTable(
+  'deployment_patterns',
+  {
+    id: text('id').notNull().primaryKey(),
+    project_id: text('project_id').notNull().default(''),
+    pattern_type: text('pattern_type').notNull().default(''),
+    error_signature: text('error_signature').notNull().default(''),
+    fix_action: text('fix_action').notNull().default('{}'),
+    success_count: integer('success_count').notNull().default(0),
+    failure_count: integer('failure_count').notNull().default(0),
+    last_seen_at: text('last_seen_at'),
+    created_at: text('created_at').notNull().default(''),
+  },
+  (table) => [
+    index('idx_deployment_patterns_project').on(table.project_id),
+    index('idx_deployment_patterns_signature').on(table.project_id, table.error_signature),
+  ],
+);
+
 export type AiUsageLogRow = typeof aiUsageLog.$inferSelect;
 export type NewAiUsageLog = typeof aiUsageLog.$inferInsert;
 export type ActionRunRow = typeof actionRuns.$inferSelect;
 export type NewActionRun = typeof actionRuns.$inferInsert;
+export type DeploymentPatternRow = typeof deploymentPatterns.$inferSelect;
+export type NewDeploymentPattern = typeof deploymentPatterns.$inferInsert;
 
 export const drizzleSchema = {
   projects,
@@ -475,4 +496,5 @@ export const drizzleSchema = {
   auth,
   aiUsageLog,
   actionRuns,
+  deploymentPatterns,
 };
