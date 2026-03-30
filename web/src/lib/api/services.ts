@@ -20,9 +20,9 @@ export interface Service {
   created_at: string;
   updated_at: string;
   summary?: {
-    connectedProjects: number;
-    cpuPercent: number | null;
-    memoryUsageBytes: number | null;
+    healthStatus: string | null;
+    uptimeSeconds: number | null;
+    restartCount: number | null;
   };
 }
 

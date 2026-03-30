@@ -303,9 +303,14 @@ export const translations = {
     createdAgo: '{time} ago',
     updatedAgo: 'Updated {time} ago',
     metrics: {
-      connected: 'Conn',
-      cpu: 'CPU',
-      mem: 'Mem',
+      health: 'Health',
+      uptime: 'Uptime',
+      restarts: 'Restarts',
+    },
+    health: {
+      healthy: 'Healthy',
+      unhealthy: 'Unhealthy',
+      starting: 'Starting',
     },
   },
   timeline: {

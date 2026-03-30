@@ -29,12 +29,13 @@ function getTypeColor(type: string) {
   return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${Math.max(mins, 0)}m`;
 }
 
 export function ServicesPage() {
@@ -72,6 +73,13 @@ export function ServicesPage() {
     if (status === 'running') return 'Running';
     if (status === 'error') return 'Error';
     return 'Stopped';
+  };
+
+  const healthLabel = (healthStatus: string | null) => {
+    if (healthStatus === 'healthy') return t('services.health.healthy');
+    if (healthStatus === 'unhealthy') return t('services.health.unhealthy');
+    if (healthStatus === 'starting') return t('services.health.starting');
+    return '—';
   };
 
   if (loading) {
@@ -182,28 +190,28 @@ export function ServicesPage() {
                 <div className="grid grid-cols-3 gap-2 text-[11px]">
                   <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
                     <div className="text-[10px] uppercase tracking-wider text-muted-ol">
-                      {t('services.metrics.connected')}
+                      {t('services.metrics.health')}
                     </div>
                     <div className="font-mono text-primary-ol">
-                      {service.summary?.connectedProjects ?? 0}
+                      {healthLabel(service.summary?.healthStatus ?? null)}
                     </div>
                   </div>
                   <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
                     <div className="text-[10px] uppercase tracking-wider text-muted-ol">
-                      {t('services.metrics.cpu')}
+                      {t('services.metrics.uptime')}
                     </div>
                     <div className="font-mono text-primary-ol">
-                      {service.summary?.cpuPercent != null ? `${service.summary.cpuPercent}%` : '—'}
-                    </div>
-                  </div>
-                  <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-ol">
-                      {t('services.metrics.mem')}
-                    </div>
-                    <div className="font-mono text-primary-ol">
-                      {service.summary?.memoryUsageBytes != null
-                        ? formatBytes(service.summary.memoryUsageBytes)
+                      {service.summary?.uptimeSeconds != null
+                        ? formatUptime(service.summary.uptimeSeconds)
                         : '—'}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-[hsl(var(--border))]/60 bg-bg-app/20 px-2 py-1.5">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-ol">
+                      {t('services.metrics.restarts')}
+                    </div>
+                    <div className="font-mono text-primary-ol">
+                      {service.summary?.restartCount != null ? service.summary.restartCount : '—'}
                     </div>
                   </div>
                 </div>

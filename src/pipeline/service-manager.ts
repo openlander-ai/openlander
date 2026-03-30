@@ -693,37 +693,12 @@ export class ServiceManager {
   async list(): Promise<ServiceRow[]> {
     const services = this.db.listServices();
 
-    for (const service of services) {
-      if (!service.container_id && !service.container_name) {
-        if (service.status !== 'error') {
-          this.db.updateService(service.id, { status: 'error' });
-          log.warn(
-            { serviceId: service.id },
-            'Service has no container reference, marking as error',
-          );
-        }
-        continue;
-      }
-
-      const containerId = service.container_id ?? service.container_name;
-      try {
-        const info = await this.docker.getClient().getContainer(containerId).inspect();
-        const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
-        const containerIdFromDocker = info.Id;
-
-        if (status !== service.status || containerIdFromDocker !== service.container_id) {
-          this.db.updateService(service.id, { status, containerId: containerIdFromDocker });
-        }
-      } catch (err) {
-        log.warn(
-          { err, serviceId: service.id, containerId },
-          'Failed to inspect service container',
-        );
-        if (service.status !== 'error') {
-          this.db.updateService(service.id, { status: 'error' });
-        }
-      }
-    }
+    await Promise.all(
+      services.map(async (service) => {
+        const inspection = await this.inspectServiceContainer(service);
+        this.syncServiceStateFromInspection(service, inspection);
+      }),
+    );
 
     return this.db.listServices();
   }
@@ -795,57 +770,106 @@ export class ServiceManager {
     Array<
       ServiceRow & {
         summary: {
-          connectedProjects: number;
-          cpuPercent: number | null;
-          memoryUsageBytes: number | null;
+          healthStatus: string | null;
+          uptimeSeconds: number | null;
+          restartCount: number | null;
         };
       }
     >
   > {
-    const services = await this.list();
-    const connectedProjectCounts = this.getConnectedProjectCounts(services);
-
+    const services = this.db.listServices();
     return Promise.all(
       services.map(async (service) => {
-        const runtimeStats = await this.collectRuntimeStats(service);
+        const inspection = await this.inspectServiceContainer(service);
+        this.syncServiceStateFromInspection(service, inspection);
+
         return {
           ...service,
+          status: inspection.status,
+          container_id: inspection.containerId ?? service.container_id,
           summary: {
-            connectedProjects: connectedProjectCounts.get(service.id) ?? 0,
-            cpuPercent: runtimeStats.cpuPercent,
-            memoryUsageBytes: runtimeStats.memoryUsageBytes,
+            healthStatus: inspection.healthStatus,
+            uptimeSeconds: this.computeUptimeSeconds(inspection.startedAt, inspection.status),
+            restartCount: inspection.restartCount,
           },
         };
       }),
     );
   }
 
-  private getConnectedProjectCounts(services: ServiceRow[]): Map<string, number> {
-    const counts = new Map<string, number>();
-    for (const service of services) {
-      counts.set(service.id, 0);
+  private async inspectServiceContainer(service: ServiceRow): Promise<{
+    status: ServiceRow['status'];
+    containerId: string | null;
+    healthStatus: string | null;
+    startedAt: string | null;
+    restartCount: number | null;
+  }> {
+    if (!service.container_id && !service.container_name) {
+      log.warn({ serviceId: service.id }, 'Service has no container reference, marking as error');
+      return {
+        status: 'error',
+        containerId: null,
+        healthStatus: null,
+        startedAt: null,
+        restartCount: null,
+      };
     }
 
-    const projects = this.db.listProjects();
-    for (const project of projects) {
-      const envVars = this.db.getEnvVars(project.id);
-      const envValues = Object.values(envVars).filter(
-        (value): value is string => typeof value === 'string',
+    const containerRef = service.container_id ?? service.container_name;
+    try {
+      const info = await this.docker.getClient().getContainer(containerRef).inspect();
+      const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
+      const healthRaw: unknown = info.State.Health?.Status;
+      const startedAtRaw: unknown = info.State.StartedAt;
+      const restartCountRaw: unknown = info.RestartCount;
+
+      return {
+        status,
+        containerId: info.Id,
+        healthStatus: typeof healthRaw === 'string' ? healthRaw : null,
+        startedAt: typeof startedAtRaw === 'string' ? startedAtRaw : null,
+        restartCount: typeof restartCountRaw === 'number' ? restartCountRaw : null,
+      };
+    } catch (err) {
+      log.warn(
+        { err, serviceId: service.id, containerId: containerRef },
+        'Failed to inspect service container',
       );
-      if (envValues.length === 0) {
-        continue;
-      }
-
-      for (const service of services) {
-        const hasConnection = envValues.some((value) => value.includes(service.container_name));
-        if (!hasConnection) {
-          continue;
-        }
-        counts.set(service.id, (counts.get(service.id) ?? 0) + 1);
-      }
+      return {
+        status: 'error',
+        containerId: service.container_id ?? null,
+        healthStatus: null,
+        startedAt: null,
+        restartCount: null,
+      };
     }
+  }
 
-    return counts;
+  private syncServiceStateFromInspection(
+    service: ServiceRow,
+    inspection: { status: ServiceRow['status']; containerId: string | null },
+  ): void {
+    if (inspection.status !== service.status || inspection.containerId !== service.container_id) {
+      this.db.updateService(service.id, {
+        status: inspection.status,
+        containerId: inspection.containerId,
+      });
+    }
+  }
+
+  private computeUptimeSeconds(
+    startedAt: string | null,
+    status: ServiceRow['status'],
+  ): number | null {
+    if (!startedAt || status !== 'running') {
+      return null;
+    }
+    const startedAtMs = Date.parse(startedAt);
+    if (Number.isNaN(startedAtMs)) {
+      return null;
+    }
+    const elapsed = Math.floor((Date.now() - startedAtMs) / 1000);
+    return elapsed >= 0 ? elapsed : null;
   }
 
   private async collectRuntimeStats(service: ServiceRow): Promise<{

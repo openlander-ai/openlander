@@ -302,9 +302,14 @@ export const translations = {
     createdAgo: '{time} 전',
     updatedAgo: '{time} 전에 업데이트',
     metrics: {
-      connected: '연결',
-      cpu: 'CPU',
-      mem: '메모리',
+      health: 'Health',
+      uptime: 'Uptime',
+      restarts: 'Restarts',
+    },
+    health: {
+      healthy: 'Healthy',
+      unhealthy: 'Unhealthy',
+      starting: 'Starting',
     },
   },
   timeline: {
