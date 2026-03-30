@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context.js';
+import { emitLlmChanged } from '@/lib/llm-events';
 
 interface LlmSettingsTabProps {
   status: SetupStatus | null;
@@ -95,6 +96,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
       await addProvider(newProvider);
       await loadProviders();
       await refetch();
+      emitLlmChanged();
       setShowAddForm(false);
       setNewProvider({
         id: `gemini-${Date.now()}`,
@@ -117,6 +119,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
       await deleteProvider(id);
       await loadProviders();
       await refetch();
+      emitLlmChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('llmSettings.errorDelete'));
     } finally {
@@ -126,9 +129,16 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
 
   const handleTestConnection = async (provider: ProviderInfo) => {
     setTestingId(provider.id);
-    setTestResults((prev) => ({ ...prev, [provider.id]: { ok: false, error: undefined } }));
+    setTestResults((prev) => {
+      const next = { ...prev };
+      delete next[provider.id];
+      return next;
+    });
     try {
-      const result = await testLLMConnection(provider.provider);
+      const result = await testLLMConnection({
+        providerId: provider.id,
+        model: provider.defaultModel,
+      });
       setTestResults((prev) => ({ ...prev, [provider.id]: result }));
     } catch (err) {
       setTestResults((prev) => ({
@@ -140,14 +150,23 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
       }));
     } finally {
       setTestingId(null);
+      emitLlmChanged();
     }
   };
 
   const handleTestNewConnection = async () => {
     setTestingId('new');
-    setTestResults((prev) => ({ ...prev, new: { ok: false, error: undefined } }));
+    setTestResults((prev) => {
+      const next = { ...prev };
+      delete next['new'];
+      return next;
+    });
     try {
-      const result = await testLLMConnection(newProvider.provider, newProvider.apiKey);
+      const result = await testLLMConnection({
+        provider: newProvider.provider,
+        apiKey: newProvider.apiKey,
+        model: newProvider.defaultModel,
+      });
       setTestResults((prev) => ({ ...prev, new: result }));
     } catch (err) {
       setTestResults((prev) => ({
@@ -156,6 +175,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
       }));
     } finally {
       setTestingId(null);
+      emitLlmChanged();
     }
   };
 

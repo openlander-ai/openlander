@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
 import { useNavigate } from 'react-router-dom';
 import { Logo } from '@/components/icons/Logo';
+import { subscribeLlmChanged } from '@/lib/llm-events';
 
 interface HeaderProps {
   stats: SystemStats | null;
@@ -52,9 +53,18 @@ export function Header({
       }
     };
 
-    checkHealth();
-    const interval = setInterval(checkHealth, 60000);
-    return () => clearInterval(interval);
+    void checkHealth();
+    const interval = setInterval(() => {
+      void checkHealth();
+    }, 60000);
+    const unsubscribe = subscribeLlmChanged(() => {
+      void checkHealth();
+    });
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
 
   // Close notification dropdown on outside click or Escape key

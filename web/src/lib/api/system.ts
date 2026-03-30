@@ -130,13 +130,28 @@ export async function configureLLM(
   return res.json();
 }
 
-export async function testLLMConnection(
-  provider?: string,
-  apiKey?: string,
-): Promise<{ ok: boolean; latencyMs?: number; provider?: string; model?: string; error?: string }> {
+export interface TestLlmConnectionParams {
+  providerId?: string;
+  provider?: string;
+  apiKey?: string;
+  authToken?: string;
+  model?: string;
+}
+
+export async function testLLMConnection(params: TestLlmConnectionParams = {}): Promise<{
+  ok: boolean;
+  latencyMs?: number;
+  providerId?: string;
+  provider?: string;
+  model?: string;
+  error?: string;
+}> {
   const body: Record<string, string> = {};
-  if (provider) body.provider = provider;
-  if (apiKey) body.api_key = apiKey;
+  if (params.providerId) body.provider_id = params.providerId;
+  if (params.provider) body.provider = params.provider;
+  if (params.apiKey) body.api_key = params.apiKey;
+  if (params.authToken) body.auth_token = params.authToken;
+  if (params.model) body.model = params.model;
 
   const res = await fetch('/api/setup/llm/test', {
     method: 'POST',

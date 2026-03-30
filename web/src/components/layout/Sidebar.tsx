@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import type { Project } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { formatRelativeTime } from '@/lib/time';
+import { subscribeLlmChanged } from '@/lib/llm-events';
 
 type SidebarProject = Project;
 
@@ -84,11 +85,17 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const [agentDisabled, setAgentDisabled] = useState(true);
   const { isOpen: isAgentPanelOpen, openPanel } = useAgentPanel();
 
-  useEffect(() => {
+  const refreshAgentAvailability = useCallback(() => {
     getSetupStatus()
       .then((s) => setAgentDisabled(!s.llm.ok))
       .catch(() => setAgentDisabled(true));
   }, []);
+
+  useEffect(() => {
+    refreshAgentAvailability();
+    const unsubscribe = subscribeLlmChanged(() => refreshAgentAvailability());
+    return () => unsubscribe();
+  }, [refreshAgentAvailability]);
 
   const isDashboardMode = !isAgentPanelOpen;
   const isAgentMode = isAgentPanelOpen;

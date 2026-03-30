@@ -15,7 +15,13 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
 import { createGithubSetupRoutes } from './setup/github-routes.js';
 import { createMcpSetupRoutes } from './setup/mcp-routes.js';
-import { reloadAgent } from './setup/shared.js';
+import {
+  getLlmRuntimeStatus,
+  reloadAgent,
+  resolveDefaultLlmProvider,
+  runLlmConnectivityTest,
+  syncLlmRuntime,
+} from './setup/shared.js';
 
 const log = createModuleLogger('setup-routes');
 
@@ -28,9 +34,9 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       ctx.traefik.isRunning().catch(() => false),
     ]);
 
-    const dockerOk = dockerStatus.state === 'running';
-    const llmConfigured = ctx.agent !== null;
     const config = loadConfig();
+    const dockerOk = dockerStatus.state === 'running';
+    const llmStatus = getLlmRuntimeStatus(config, ctx.llmVerified);
     const hasPassword = ctx.db.isPasswordSet();
 
     const ready = dockerOk && hasPassword;
@@ -67,12 +73,15 @@ export function createSetupRoutes(ctx: AppContext): Hono {
           : 'Traefik is not running. Click "Start Traefik" to set it up.',
       },
       llm: {
-        ok: llmConfigured,
-        provider: config.llm.provider,
-        model: config.llm.model,
-        message: llmConfigured
-          ? `${config.llm.provider} (${config.llm.model})`
-          : 'No LLM configured. Connect a provider and token/API key.',
+        ok: llmStatus.configured,
+        provider: llmStatus.provider,
+        model: llmStatus.model,
+        message:
+          llmStatus.state === 'offline'
+            ? 'No LLM configured. Connect a provider and token/API key.'
+            : llmStatus.state === 'online'
+              ? `${llmStatus.provider} (${llmStatus.model})`
+              : `${llmStatus.provider} (${llmStatus.model}) configured, but the latest connection test failed.`,
       },
       github: {
         ok: Boolean(config.gitProviders.github.token),
@@ -138,7 +147,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const apiKey = !isOauthProvider || rawApiKey ? rawApiKey : '';
     const resolvedAuthToken = isOauthProvider && !apiKey ? authToken : '';
 
-    updateConfig({
+    const updated = updateConfig({
       llm: {
         provider: provider as OpenLanderConfig['llm']['provider'],
         apiKey,
@@ -146,25 +155,21 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         model,
       },
     });
+    ctx.config = updated;
 
     try {
-      const llmModel = await reloadAgent(ctx, {
-        provider: provider as OpenLanderConfig['llm']['provider'],
+      await syncLlmRuntime(ctx);
+
+      const verifyResult = await runLlmConnectivityTest({
+        provider: provider as LLMConfig['provider'],
         apiKey,
         authToken: resolvedAuthToken || undefined,
         model,
-        language: ctx.config.language,
+        ollamaEndpoint: updated.llm.ollamaEndpoint,
       });
-
-      try {
-        const { generateText } = await import('ai');
-        await generateText({
-          model: llmModel,
-          prompt: 'Respond with exactly: ok',
-          maxOutputTokens: 5,
-        });
+      if (verifyResult.ok) {
         ctx.llmVerified = true;
-      } catch {
+      } else {
         ctx.llmVerified = false;
       }
 
@@ -176,10 +181,12 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         llmVerified: ctx.llmVerified,
         message: ctx.llmVerified
           ? 'LLM configured and verified.'
-          : 'LLM configured but connectivity test failed. Check your API key.',
+          : (verifyResult.error ??
+            'LLM configured but connectivity test failed. Check your API key.'),
       });
     } catch (error) {
       ctx.llmVerified = false;
+      await syncLlmRuntime(ctx).catch(() => undefined);
       return c.json({
         status: 'configured',
         provider: body.provider,
@@ -193,59 +200,119 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
   api.post('/setup/llm/test', async (c) => {
     const body = await c.req
-      .json<{ provider?: string; api_key?: string }>()
-      .catch((): { provider?: string; api_key?: string } => ({}));
+      .json<{
+        provider_id?: string;
+        provider?: string;
+        api_key?: string;
+        auth_token?: string;
+        model?: string;
+      }>()
+      .catch(
+        (): {
+          provider_id?: string;
+          provider?: string;
+          api_key?: string;
+          auth_token?: string;
+          model?: string;
+        } => ({}),
+      );
 
-    try {
-      const config = loadConfig();
-      const provider = (body.provider || config.llm.provider) as LLMConfig['provider'];
-      const apiKey = body.api_key || config.llm.apiKey;
+    const config = loadConfig();
+    const providerId = typeof body.provider_id === 'string' ? body.provider_id.trim() : '';
+    let persistVerification = false;
 
-      if (!apiKey && provider !== 'ollama') {
-        return c.json({ ok: false, error: 'No API key configured' }, 400);
+    let provider: LLMConfig['provider'];
+    let model: string;
+    let apiKey = '';
+    let authToken: string | undefined;
+    let ollamaEndpoint: string | undefined;
+
+    if (providerId) {
+      const normalized = normalizeLlmConfig(config.llm);
+      const entry = normalized.providers[providerId];
+      if (!entry) {
+        return c.json({ ok: false, providerId, error: 'Provider not found' }, 404);
       }
 
-      const { createModel: createTestModel } = await import('../../llm/index.js');
-      const { generateText } = await import('ai');
+      provider = entry.provider;
+      model = body.model ?? entry.defaultModel;
+      apiKey = body.api_key?.trim() || entry.apiKey || '';
+      authToken = body.auth_token?.trim() || entry.authToken;
+      ollamaEndpoint = entry.ollamaEndpoint ?? config.llm.ollamaEndpoint;
+      persistVerification = normalized.defaultRoute.providerId === providerId;
+    } else {
+      const useStoredDefault =
+        !body.provider && !body.api_key && !body.auth_token && !body.model && !body.provider_id;
+      const resolvedDefault = useStoredDefault ? resolveDefaultLlmProvider(config) : null;
 
-      const model = createTestModel({
-        provider,
-        apiKey,
-        model: config.llm.model,
-      });
+      provider = (body.provider ||
+        resolvedDefault?.provider ||
+        config.llm.provider) as LLMConfig['provider'];
+      model = body.model || resolvedDefault?.model || config.llm.model;
+      apiKey = body.api_key?.trim() || resolvedDefault?.apiKey || config.llm.apiKey;
+      authToken =
+        body.auth_token?.trim() || resolvedDefault?.authToken || config.llm.authToken || undefined;
+      ollamaEndpoint = resolvedDefault?.ollamaEndpoint ?? config.llm.ollamaEndpoint;
+      persistVerification = useStoredDefault;
+    }
 
-      const start = Date.now();
-      await generateText({
-        model,
-        prompt: 'Respond with exactly: ok',
-        maxOutputTokens: 5,
-      });
-      const latencyMs = Date.now() - start;
-      ctx.llmVerified = true;
+    if (!apiKey && !authToken && provider !== 'ollama') {
+      return c.json(
+        { ok: false, providerId: providerId || undefined, error: 'No API key configured' },
+        400,
+      );
+    }
 
-      return c.json({ ok: true, latencyMs, provider, model: config.llm.model });
-    } catch (error) {
-      ctx.llmVerified = false;
+    const result = await runLlmConnectivityTest({
+      provider,
+      apiKey,
+      authToken,
+      model,
+      ollamaEndpoint,
+    });
+    if (persistVerification) {
+      ctx.llmVerified = result.ok;
+    }
+
+    if (result.ok) {
       return c.json({
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        ok: true,
+        providerId: providerId || undefined,
+        provider,
+        model,
+        latencyMs: result.latencyMs ?? 0,
       });
     }
+
+    return c.json({
+      ok: false,
+      providerId: providerId || undefined,
+      provider,
+      model,
+      error: result.error ?? 'Connection failed',
+    });
   });
 
-  api.delete('/setup/llm', (c) => {
-    updateConfig({
+  api.delete('/setup/llm', async (c) => {
+    const config = loadConfig();
+    const updated = {
+      ...config,
       llm: {
-        provider: 'gemini',
+        ...config.llm,
+        provider: 'gemini' as const,
         apiKey: '',
         authToken: '',
         model: 'gemini-2.0-flash',
+        providers: {},
+        defaultRoute: { providerId: '__none__' },
+        routes: {},
       },
-    });
+    };
+    saveConfig(updated);
+    ctx.config = updated;
 
-    ctx.agentPool = null;
-    ctx.agent = null;
     ctx.llmVerified = false;
+    await syncLlmRuntime(ctx);
     log.info('LLM configuration removed');
 
     return c.json({ status: 'removed', message: 'LLM configuration cleared.' });
@@ -462,6 +529,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     }
 
     const config = loadConfig();
+    const previousDefaultProviderId = normalizeLlmConfig(config.llm).defaultRoute.providerId;
     const existingProviders = config.llm.providers ?? {};
 
     const updatedProviders = {
@@ -483,19 +551,18 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     });
     ctx.config = updated;
 
-    const normalizedLlm = normalizeLlmConfig(updated.llm);
-    ctx.modelRegistry.updateConfig({
-      providers: normalizedLlm.providers,
-      defaultRoute: normalizedLlm.defaultRoute,
-      routes: normalizedLlm.routes,
-    });
+    const normalizedUpdated = normalizeLlmConfig(updated.llm);
+    const activeProviderId = normalizedUpdated.defaultRoute.providerId;
+    if (activeProviderId !== previousDefaultProviderId || activeProviderId === body.id) {
+      ctx.llmVerified = false;
+    }
 
-    ctx.llmVerified = false;
+    await syncLlmRuntime(ctx);
 
     return c.json({ status: 'added', id: body.id });
   });
 
-  api.delete('/setup/providers/:id', (c) => {
+  api.delete('/setup/providers/:id', async (c) => {
     const id = c.req.param('id');
     const config = loadConfig();
     const providers = config.llm.providers ?? {};
@@ -520,13 +587,8 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       };
       saveConfig(updated);
       ctx.config = updated;
-      ctx.agentPool = null;
-      ctx.agent = null;
       ctx.llmVerified = false;
-      ctx.modelRegistry.updateConfig({
-        providers: {},
-        defaultRoute: { providerId: '__none__' },
-      });
+      await syncLlmRuntime(ctx);
       log.info({ providerId: id }, 'Last LLM provider removed, AI disconnected');
       return c.json({ status: 'removed', id, llmDisconnected: true });
     }
@@ -557,13 +619,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     saveConfig(updated);
     ctx.config = updated;
 
-    const normalizedLlm = normalizeLlmConfig(updated.llm);
-    ctx.modelRegistry.updateConfig({
-      providers: normalizedLlm.providers,
-      defaultRoute: normalizedLlm.defaultRoute,
-      routes: normalizedLlm.routes,
-    });
-
     const aiConfig = updated.ai;
     const aiKeys: Array<keyof typeof aiConfig> = [
       'autoRecovery',
@@ -581,9 +636,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       }
     }
     if (aiUpdated) {
-      updateConfig({ ai: newAiConfig });
-      ctx.config.ai = newAiConfig;
+      const updatedWithAi = updateConfig({ ai: newAiConfig });
+      ctx.config = updatedWithAi;
     }
+
+    await syncLlmRuntime(ctx);
 
     return c.json({ status: 'removed', id });
   });

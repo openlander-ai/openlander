@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot } from 'lucide-react';
 import { LlmGate } from '@/components/agent/LlmGate';
 import { MessageList } from '@/components/agent/MessageList';
@@ -10,6 +10,7 @@ import type { AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { useStreamChat } from '@/hooks/use-stream-chat';
 import { getSetupStatus } from '@/lib/api';
 import { useLanguage } from '@/i18n/context.js';
+import { subscribeLlmChanged } from '@/lib/llm-events';
 
 interface AgentPanelProps {
   open: boolean;
@@ -48,11 +49,29 @@ export function AgentPanel({
   const sentContextKeyRef = useRef<string | null>(null);
   const chat = useStreamChat();
 
-  useEffect(() => {
+  const refreshLlmConfigured = useCallback(async () => {
     getSetupStatus()
       .then((status) => setLlmConfigured(status.llm.ok))
       .catch(() => setLlmConfigured(false));
   }, []);
+
+  useEffect(() => {
+    void refreshLlmConfigured();
+  }, [refreshLlmConfigured]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    void refreshLlmConfigured();
+  }, [open, refreshLlmConfigured]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeLlmChanged(() => {
+      void refreshLlmConfigured();
+    });
+    return () => unsubscribe();
+  }, [refreshLlmConfigured]);
 
   useEffect(() => {
     if (!open || !initialContext || !llmConfigured) {

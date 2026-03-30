@@ -23,6 +23,7 @@ import { DiscordChannel, createDiscordInteractionHandler } from '../channels/dis
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
 import type { AppContext } from '../app.js';
 import type { NodeWebSocket } from '@hono/node-ws';
+import { getLlmRuntimeStatus } from './api/setup/shared.js';
 const log = createModuleLogger('web');
 
 import { createModuleLogger } from '../lib/logger.js';
@@ -115,13 +116,13 @@ function createApp(
       // Docker not accessible
     }
 
-    const llmStatus: 'online' | 'offline' | 'error' =
-      ctx.agent === null ? 'offline' : ctx.llmVerified ? 'online' : 'error';
+    const llmRuntime = getLlmRuntimeStatus(ctx.config, ctx.llmVerified);
+    const llmStatus = llmRuntime.state;
 
     return c.json({
       status: 'ok',
       version: VERSION,
-      llmConfigured: llmStatus === 'online',
+      llmConfigured: llmRuntime.configured,
       llmStatus,
       timestamp: new Date().toISOString(),
       uptime,
