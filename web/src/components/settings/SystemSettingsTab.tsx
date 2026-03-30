@@ -61,19 +61,19 @@ export function SystemSettingsTab() {
   };
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
+    <div className="space-y-6">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
             {t('settings.system.globalSecrets')}
           </h2>
         </div>
-        <p className="text-sm font-body text-muted-ol">{t('settings.secrets.description')}</p>
+        <p className="text-xs font-body text-muted-ol">{t('settings.secrets.description')}</p>
 
-        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
+        <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-4">
           {secrets.length === 0 ? (
-            <p className="text-sm font-body text-muted-ol">{t('settings.secrets.noSecrets')}</p>
+            <p className="text-xs font-body text-muted-ol">{t('settings.secrets.noSecrets')}</p>
           ) : (
             <div className="space-y-2">
               {secrets.map((s) => (
@@ -144,10 +144,10 @@ export function SystemSettingsTab() {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Cpu className="h-4 w-4 text-secondary-ol" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
             {t('settings.system.systemResources')}
           </h2>
         </div>
@@ -174,7 +174,7 @@ export function SystemSettingsTab() {
             />
           </div>
         ) : (
-          <p className="text-sm font-body text-muted-ol">{t('settings.system.loading')}</p>
+          <p className="text-xs font-body text-muted-ol">{t('settings.system.loading')}</p>
         )}
       </section>
     </div>

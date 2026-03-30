@@ -77,7 +77,9 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-muted-ol" />
-            <span className="text-sm font-body font-medium text-primary-ol">Git Repository</span>
+            <span className="text-sm font-display font-semibold text-primary-ol">
+              Git Repository
+            </span>
           </div>
           <div className="space-y-2">
             <div>
@@ -104,7 +106,7 @@ export function DeploymentSourcePanel({ projectId }: DeploymentSourcePanelProps)
       <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
         <div className="flex items-center gap-2">
           <Box className="h-4 w-4 text-muted-ol" />
-          <span className="text-sm font-body font-medium text-primary-ol">Docker Image</span>
+          <span className="text-sm font-display font-semibold text-primary-ol">Docker Image</span>
         </div>
 
         <div className="space-y-4">

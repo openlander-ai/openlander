@@ -73,13 +73,13 @@ export function SecuritySettingsTab() {
     : '••••••••••••••••';
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-4">
+    <div className="space-y-6">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Key className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">API Token</h2>
+          <h2 className="font-display text-sm font-semibold text-primary-ol">API Token</h2>
         </div>
-        <p className="text-sm font-body text-muted-ol">
+        <p className="text-xs font-body text-muted-ol">
           Use this token to authenticate with the OpenLander API or MCP server.
         </p>
 
@@ -125,12 +125,12 @@ export function SecuritySettingsTab() {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Lock className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">Change Password</h2>
+          <h2 className="font-display text-sm font-semibold text-primary-ol">Change Password</h2>
         </div>
-        <p className="text-sm font-body text-muted-ol">
+        <p className="text-xs font-body text-muted-ol">
           Update your login password. You will remain logged in after changing it.
         </p>
 

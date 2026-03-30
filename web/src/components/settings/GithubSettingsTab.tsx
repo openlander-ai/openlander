@@ -65,15 +65,15 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
   };
 
   return (
-    <section className="space-y-4">
+    <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
       <div className="flex items-center gap-2">
         <Github className="h-4 w-4 text-secondary-ol" />
-        <h2 className="font-display text-lg font-semibold text-primary-ol">
+        <h2 className="font-display text-sm font-semibold text-primary-ol">
           {'GitHub Connection'}
         </h2>
       </div>
 
-      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-3">
+      <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
         <p className="text-sm font-body text-secondary-ol">{t('settings.github.description')}</p>
 
         {status?.github?.ok ? (
@@ -172,7 +172,7 @@ export function GithubSettingsTab({ status, refetch }: GithubSettingsTabProps) {
               </div>
             </div>
 
-            <p className="text-sm font-body text-muted-ol">{t('settings.github.enterToken')}</p>
+            <p className="text-xs font-body text-muted-ol">{t('settings.github.enterToken')}</p>
             <form onSubmit={handleConnectGithub} className="space-y-3">
               <div className="space-y-2">
                 <Input

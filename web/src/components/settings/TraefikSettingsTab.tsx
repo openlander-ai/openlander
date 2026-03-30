@@ -147,17 +147,17 @@ export function TraefikSettingsTab() {
   };
 
   return (
-    <div className="space-y-10">
-      <section className="space-y-5">
+    <div className="space-y-6">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-6">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-md bg-agent/10 text-agent">
             <Network className="h-4 w-4" />
           </div>
-          <h2 className="font-display text-lg font-semibold text-primary-ol">{'Reverse Proxy'}</h2>
+          <h2 className="font-display text-sm font-semibold text-primary-ol">{'Reverse Proxy'}</h2>
         </div>
 
         {serverStatusLoading ? (
-          <div className="flex items-center gap-2 text-sm font-body text-muted-ol">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol">
             <Loader2 className="w-4 h-4 animate-spin" /> {t('settings.proxy.loading')}
           </div>
         ) : serverStatus ? (
@@ -174,7 +174,7 @@ export function TraefikSettingsTab() {
             {/* Elevated Status Panels instead of 4 generic unstyled cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Card 1: Proxy Engine */}
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)] transition-shadow hover:shadow-md">
+              <div className="rounded-xl border border-border bg-bg-subtle/50 p-5 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)] transition-shadow hover:shadow-md">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-500">
                     <Activity className="h-4 w-4" />
@@ -210,7 +210,7 @@ export function TraefikSettingsTab() {
               </div>
 
               {/* Card 2: Environment Allocation */}
-              <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel p-5 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)] transition-shadow hover:shadow-md">
+              <div className="rounded-xl border border-border bg-bg-subtle/50 p-5 shadow-[0_1px_3px_0_rgba(0,0,0,0.02)] transition-shadow hover:shadow-md">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
                     <HardDrive className="h-4 w-4" />
@@ -234,8 +234,8 @@ export function TraefikSettingsTab() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-[hsl(var(--border))] bg-bg-panel shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between gap-4 p-5 border-b border-[hsl(var(--border))] bg-bg-panel">
+            <div className="rounded-xl border border-border bg-bg-subtle/50 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between gap-4 p-5 border-b border-border bg-bg-subtle/50">
                 <div className="space-y-1">
                   <h3 className="font-display text-base font-semibold text-primary-ol flex items-center gap-2">
                     <Shield className="w-4 h-4 text-agent" /> Cloudflare Tunnel
@@ -274,7 +274,7 @@ export function TraefikSettingsTab() {
                       <p className="text-sm font-body text-secondary-ol">
                         {t('settings.proxy.cloudflare.tokenHelpTitle')}
                       </p>
-                      <p className="text-sm font-body text-muted-ol">
+                      <p className="text-xs font-body text-muted-ol">
                         {t('settings.proxy.cloudflare.tokenHelpText')}
                       </p>
                       <a
@@ -487,12 +487,12 @@ export function TraefikSettingsTab() {
         ) : null}
       </section>
 
-      <section className="space-y-5">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-6">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-md bg-agent/10 text-agent">
             <Server className="h-4 w-4" />
           </div>
-          <h2 className="font-display text-lg font-semibold text-primary-ol">{'Server Scan'}</h2>
+          <h2 className="font-display text-sm font-semibold text-primary-ol">{'Server Scan'}</h2>
 
           <Button
             type="button"
@@ -508,7 +508,7 @@ export function TraefikSettingsTab() {
         </div>
 
         {!serverStatus ? (
-          <div className="flex items-center gap-2 text-sm font-body text-muted-ol">
+          <div className="flex items-center gap-2 text-xs font-body text-muted-ol">
             <Loader2 className="w-4 h-4 animate-spin" /> {'Scanning server...'}
           </div>
         ) : (
@@ -543,7 +543,7 @@ export function TraefikSettingsTab() {
             <div className="p-4">
               {serverStatus.externalContainers && serverStatus.externalContainers.length > 0 ? (
                 <div className="space-y-2">
-                  <p className="text-sm font-body text-muted-ol mb-2">
+                  <p className="text-xs font-body text-muted-ol mb-2">
                     {t('settings.serverScan.externalDescription')}
                   </p>
                   {serverStatus.externalContainers.map((container) => (
@@ -582,7 +582,7 @@ export function TraefikSettingsTab() {
               ) : (
                 <div className="text-center py-4">
                   <p className="text-sm font-body text-success">{'All clear'}</p>
-                  <p className="text-sm font-body text-muted-ol mt-1">
+                  <p className="text-xs font-body text-muted-ol mt-1">
                     {t('settings.serverScan.noExternal')}
                   </p>
                 </div>

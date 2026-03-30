@@ -158,11 +158,11 @@ export function McpSettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Cable className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
             {t('settings.mcp.serverTitle')}
           </h2>
         </div>
-        <p className="text-sm font-body text-muted-ol">{t('settings.mcp.serverDescription')}</p>
+        <p className="text-xs font-body text-muted-ol">{t('settings.mcp.serverDescription')}</p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-3">
           <div className="flex items-center gap-3">
@@ -212,11 +212,11 @@ export function McpSettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Zap className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
             {t('settings.mcp.quickSetupTitle')}
           </h2>
         </div>
-        <p className="text-sm font-body text-muted-ol">{t('settings.mcp.quickSetupDescription')}</p>
+        <p className="text-xs font-body text-muted-ol">{t('settings.mcp.quickSetupDescription')}</p>
 
         <CodeBlock label={t('settings.mcp.copyPrompt')} code={quickCopyText} />
       </section>
@@ -224,11 +224,11 @@ export function McpSettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Terminal className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
             {t('settings.mcp.ideTitle')}
           </h2>
         </div>
-        <p className="text-sm font-body text-muted-ol">{t('settings.mcp.ideDescription')}</p>
+        <p className="text-xs font-body text-muted-ol">{t('settings.mcp.ideDescription')}</p>
 
         <div className="space-y-2">
           <CollapsibleConfig title="Claude Code">

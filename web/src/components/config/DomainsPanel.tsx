@@ -366,7 +366,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-2">
           <div className="flex items-center gap-2">
             <Wifi className="h-3.5 w-3.5 text-muted-ol" />
-            <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
+            <span className="text-sm font-display font-semibold text-primary-ol">
               {'Internal URL'}
             </span>
           </div>
@@ -393,9 +393,9 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </button>
             </div>
           ) : (
-            <p className="text-sm font-body text-muted-ol">{t('domains.notAvailable')}</p>
+            <p className="text-xs font-body text-muted-ol">{t('domains.notAvailable')}</p>
           )}
-          <p className="text-sm font-body text-muted-ol">{t('domains.accessibleFrom')}</p>
+          <p className="text-xs font-body text-muted-ol">{t('domains.accessibleFrom')}</p>
         </div>
 
         {/* Direct Port Access */}
@@ -403,7 +403,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
           <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-subtle/50 p-4 space-y-2">
             <div className="flex items-center gap-2">
               <Monitor className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
+              <span className="text-sm font-display font-semibold text-primary-ol">
                 {'Direct Access'}
               </span>
             </div>
@@ -439,7 +439,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                 );
               })}
             </div>
-            <p className="text-sm font-body text-muted-ol">{t('domains.directPortAccess')}</p>
+            <p className="text-xs font-body text-muted-ol">{t('domains.directPortAccess')}</p>
           </div>
         )}
 
@@ -448,7 +448,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Globe className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
+              <span className="text-sm font-display font-semibold text-primary-ol">
                 {'Custom Domains'}
               </span>
             </div>
@@ -487,7 +487,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               ))}
             </div>
           ) : (
-            <p className="text-sm font-body text-muted-ol">{t('domains.noCustomDomains')}</p>
+            <p className="text-xs font-body text-muted-ol">{t('domains.noCustomDomains')}</p>
           )}
 
           {/* Add domain form */}
@@ -517,7 +517,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                     if (e.key === 'Enter') handleAddDomain();
                   }}
                   placeholder="example.com"
-                  className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-sm font-mono text-primary-ol placeholder:text-muted-ol"
+                  className="flex-1 h-8 rounded-md border border-[hsl(var(--border))] bg-bg-panel px-3 text-xs font-mono text-primary-ol placeholder:text-muted-ol"
                 />
                 <Button
                   variant="outline"
@@ -560,7 +560,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
                 </div>
               )}
 
-              <p className="text-sm font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
+              <p className="text-xs font-body text-muted-ol">{t('domains.customDomainsHelp')}</p>
             </>
           )}
         </div>
@@ -570,7 +570,7 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Globe className="h-3.5 w-3.5 text-muted-ol" />
-              <span className="text-xs font-body font-medium text-secondary-ol uppercase tracking-wider">
+              <span className="text-sm font-display font-semibold text-primary-ol">
                 {'Public URL'}
               </span>
             </div>
@@ -630,10 +630,10 @@ export function DomainsPanel({ projectId, projectStatus }: DomainsPanelProps) {
               </button>
             </div>
           ) : (
-            <p className="text-sm font-body text-muted-ol">{t('domains.notExposed')}</p>
+            <p className="text-xs font-body text-muted-ol">{t('domains.notExposed')}</p>
           )}
 
-          <p className="text-sm font-body text-muted-ol">
+          <p className="text-xs font-body text-muted-ol">
             {publicUrl ? t('domains.anyoneWithUrl') : t('domains.requiresRunning')}
           </p>
         </div>

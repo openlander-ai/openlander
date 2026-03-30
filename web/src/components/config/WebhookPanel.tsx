@@ -141,7 +141,7 @@ export function WebhookPanel({ projectId }: WebhookPanelProps) {
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-display font-medium text-primary-ol capitalize">
+                      <span className="text-sm font-display font-semibold text-primary-ol capitalize">
                         {webhook.source}
                       </span>
                       <span

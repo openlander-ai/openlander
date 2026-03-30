@@ -188,7 +188,7 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
     <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
       <div className="flex items-center gap-2">
         <Key className="h-4 w-4 text-secondary-ol" />
-        <h2 className="font-display text-lg font-semibold text-primary-ol">
+        <h2 className="font-display text-sm font-semibold text-primary-ol">
           {t('llmSettings.title')}
         </h2>
       </div>

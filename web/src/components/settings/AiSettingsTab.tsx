@@ -141,108 +141,108 @@ export function AiSettingsTab() {
   const hasUnavailableFeatures = features && Object.values(features).some((f) => !f.available);
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-2">
-        <AISparkle className="h-5 w-5" />
-        <h2 className="font-display text-lg font-semibold text-primary-ol">
-          {t('settings.ai.title')}
-        </h2>
-      </div>
-
-      {error && (
-        <div className="rounded-md bg-error/10 p-3 text-sm font-body text-error flex items-center gap-2">
-          <AlertCircle className="h-4 w-4" />
-          {error}
+    <div className="space-y-6">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
+        <div className="flex items-center gap-2">
+          <AISparkle className="h-5 w-5" />
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
+            {t('settings.ai.title')}
+          </h2>
         </div>
-      )}
 
-      {hasUnavailableFeatures && (
-        <div className="rounded-md border border-warning/30 bg-warning/5 p-3 flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-warning mt-0.5 shrink-0" />
-          <div className="space-y-1">
-            <p className="text-sm font-body font-medium text-warning">
-              {t('settings.ai.requiresApiKey')}
-            </p>
-            <p className="text-xs font-body text-warning/80">
-              {t('settings.ai.requiresApiKeyDescription')}
-            </p>
+        {error && (
+          <div className="rounded-md bg-error/10 p-3 text-sm font-body text-error flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {error}
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="rounded-lg border border-border bg-bg-panel shadow-sm overflow-hidden divide-y divide-border">
-        {features &&
-          featureList.map((key) => {
-            const feature = features[key];
-            const isUpdating = updating === key;
+        {hasUnavailableFeatures && (
+          <div className="rounded-md border border-warning/30 bg-warning/5 p-3 flex items-start gap-2.5">
+            <Info className="h-4 w-4 text-warning mt-0.5 shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-body font-medium text-warning">
+                {t('settings.ai.requiresApiKey')}
+              </p>
+              <p className="text-xs font-body text-warning/80">
+                {t('settings.ai.requiresApiKeyDescription')}
+              </p>
+            </div>
+          </div>
+        )}
 
-            return (
-              <div key={key} className="flex items-center justify-between p-4 gap-4">
-                <div className="space-y-1 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p
-                      className={cn(
-                        'text-sm font-body font-medium',
-                        feature.available ? 'text-primary-ol' : 'text-muted-ol',
+        <div className="rounded-lg border border-border bg-bg-subtle/50 overflow-hidden divide-y divide-border">
+          {features &&
+            featureList.map((key) => {
+              const feature = features[key];
+              const isUpdating = updating === key;
+
+              return (
+                <div key={key} className="flex items-center justify-between p-4 gap-4">
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p
+                        className={cn(
+                          'text-sm font-body font-medium',
+                          feature.available ? 'text-primary-ol' : 'text-muted-ol',
+                        )}
+                      >
+                        {t(`settings.ai.${key}.label`)}
+                      </p>
+                      {!feature.available && (
+                        <span className="text-[10px] uppercase tracking-wider font-semibold bg-bg-subtle text-muted-ol px-1.5 py-0.5 rounded">
+                          {t('settings.ai.unavailable')}
+                        </span>
                       )}
-                    >
-                      {t(`settings.ai.${key}.label`)}
+                    </div>
+                    <p className="text-xs font-body text-secondary-ol">
+                      {t(`settings.ai.${key}.description`)}
                     </p>
-                    {!feature.available && (
-                      <span className="text-[10px] uppercase tracking-wider font-semibold bg-bg-subtle text-muted-ol px-1.5 py-0.5 rounded">
-                        {t('settings.ai.unavailable')}
-                      </span>
-                    )}
                   </div>
-                  <p className="text-xs font-body text-secondary-ol">
-                    {t(`settings.ai.${key}.description`)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {MODEL_SELECTOR_FEATURES.has(key) && providers.length > 0 && (
-                    <select
-                      value={
-                        feature.providerId && feature.model
-                          ? `${feature.providerId}:${feature.model}`
-                          : ''
-                      }
-                      onChange={(e) => handleModelChange(key, e.target.value)}
+                  <div className="flex items-center gap-3 shrink-0">
+                    {MODEL_SELECTOR_FEATURES.has(key) && providers.length > 0 && (
+                      <select
+                        value={
+                          feature.providerId && feature.model
+                            ? `${feature.providerId}:${feature.model}`
+                            : ''
+                        }
+                        onChange={(e) => handleModelChange(key, e.target.value)}
+                        disabled={!feature.available || isUpdating}
+                        className="w-48 rounded-md border border-border bg-bg-app px-2 py-1 text-xs font-mono text-primary-ol disabled:opacity-50"
+                      >
+                        <option value="">{t('settings.ai.modelDefault')}</option>
+                        {providers.flatMap((p) =>
+                          (PROVIDER_MODELS[p.provider] ?? []).map((m) => (
+                            <option key={`${p.id}:${m}`} value={`${p.id}:${m}`}>
+                              {p.id} — {m}
+                            </option>
+                          )),
+                        )}
+                      </select>
+                    )}
+                    {isUpdating && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-ol" />}
+                    <Switch
+                      checked={feature.enabled}
+                      onCheckedChange={(checked) => handleToggle(key, checked)}
                       disabled={!feature.available || isUpdating}
-                      className="w-48 rounded-md border border-border bg-bg-app px-2 py-1 text-xs font-mono text-primary-ol disabled:opacity-50"
-                    >
-                      <option value="">{t('settings.ai.modelDefault')}</option>
-                      {providers.flatMap((p) =>
-                        (PROVIDER_MODELS[p.provider] ?? []).map((m) => (
-                          <option key={`${p.id}:${m}`} value={`${p.id}:${m}`}>
-                            {p.id} — {m}
-                          </option>
-                        )),
-                      )}
-                    </select>
-                  )}
-                  {isUpdating && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-ol" />}
-                  <Switch
-                    checked={feature.enabled}
-                    onCheckedChange={(checked) => handleToggle(key, checked)}
-                    disabled={!feature.available || isUpdating}
-                  />
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-      </div>
+              );
+            })}
+        </div>
 
-      <p className="text-xs font-body text-muted-ol flex items-center gap-1.5">
-        <Info className="h-3.5 w-3.5" />
-        {t('settings.ai.requiresRestart')}
-      </p>
+        <p className="text-xs font-body text-muted-ol flex items-center gap-1.5">
+          <Info className="h-3.5 w-3.5" />
+          {t('settings.ai.requiresRestart')}
+        </p>
+      </section>
 
-      <div className="my-8 h-px bg-border" />
-
-      <div className="space-y-4">
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
             {t('settings.ai.usage.title')}
           </h2>
         </div>
@@ -304,10 +304,10 @@ export function AiSettingsTab() {
               </h3>
               {recent.length === 0 ? (
                 <div className="rounded-lg border border-border bg-bg-panel shadow-sm p-8 text-center">
-                  <p className="text-sm font-body text-muted-ol">{t('settings.ai.usage.empty')}</p>
+                  <p className="text-xs font-body text-muted-ol">{t('settings.ai.usage.empty')}</p>
                 </div>
               ) : (
-                <div className="rounded-lg border border-border bg-bg-panel shadow-sm divide-y divide-border">
+                <div className="rounded-lg border border-border bg-bg-subtle/50 divide-y divide-border">
                   {recent.slice(0, 10).map((log) => (
                     <div key={log.id} className="flex items-center justify-between p-3 gap-4">
                       <div className="flex items-center gap-3">
@@ -345,7 +345,7 @@ export function AiSettingsTab() {
             </div>
           </>
         )}
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
