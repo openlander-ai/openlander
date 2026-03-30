@@ -7,6 +7,7 @@ import { buildSystemPrompt, type ContextProvider, type LLMProvider } from './pro
 import { createModuleLogger } from '../lib/logger.js';
 import { calculateCost, extractUsageFromResult, logAiUsage } from './transparency.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
+import { compactHistory } from './compaction.js';
 
 /**
  * OpenLander AI Agent.
@@ -117,7 +118,7 @@ export class Agent {
 
       // Update history with the final response
       this.history.push({ role: 'assistant', content: responseText });
-      this.trimHistory();
+      await this.compactAndTrim();
 
       const usage = extractUsageFromResult(result.usage);
       this.logUsageSafe({
@@ -150,7 +151,7 @@ export class Agent {
     this.currentSessionId = sessionId;
 
     await this.refreshSystemPrompt();
-    this.trimHistory();
+    await this.compactAndTrim();
   }
 
   /**
@@ -295,7 +296,7 @@ export class Agent {
 
       // Update history with the final response
       this.history.push({ role: 'assistant', content: finalText });
-      this.trimHistory();
+      await this.compactAndTrim();
 
       await onEvent({ type: 'message', content: finalText });
 
@@ -369,14 +370,28 @@ export class Agent {
    * Trim conversation history to prevent token overflow.
    * Keeps the system prompt + a sliding window of recent messages.
    */
-  private trimHistory(): void {
+  private async compactAndTrim(): Promise<void> {
     if (this.history.length <= MAX_HISTORY_MESSAGES) {
       return;
     }
 
     const system: ChatMessage = this.history[0] ?? { role: 'system', content: '' };
-    const trimmed = this.history.length - MAX_HISTORY_MESSAGES;
     const recent = this.history.slice(-KEEP_RECENT);
+    const messagesToCompact = this.history.slice(1, -KEEP_RECENT);
+
+    try {
+      const summary = await compactHistory(this.model, messagesToCompact);
+      const summaryMessage: ChatMessage = {
+        role: 'system',
+        content: summary.startsWith('[Summary]') ? summary : `[Summary] ${summary}`,
+      };
+      this.history = [system, summaryMessage, ...recent];
+      return;
+    } catch (err) {
+      log.warn({ err }, 'Compaction failed, falling back to simple trim');
+    }
+
+    const trimmed = this.history.length - MAX_HISTORY_MESSAGES;
 
     // Insert a note about trimmed history
     const trimNote: ChatMessage = {

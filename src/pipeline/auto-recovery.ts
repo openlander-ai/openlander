@@ -14,6 +14,7 @@ import type { DeployPipeline } from './deploy.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { ApprovalGate, type ApprovalGate as ApprovalGateType } from './approval-gate.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
+import { saveRecoveryPattern } from '../llm/memory.js';
 
 const log = createModuleLogger('auto-recovery');
 
@@ -325,6 +326,16 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     const combinedForMatch = `${error}\n${latestBuildLog ?? ''}`;
     const recipe = matchRecipe(combinedForMatch);
     const strategy = selectRecoveryStrategy(recipe !== null, agent !== null);
+    const fixActionStr = recipe
+      ? JSON.stringify({ strategy, recipe: recipe.title })
+      : JSON.stringify({ strategy });
+    const trySavePattern = (success: boolean): void => {
+      try {
+        saveRecoveryPattern(db, projectId, error, fixActionStr, success, plan.category);
+      } catch (patternErr) {
+        log.warn({ err: patternErr, projectId }, 'Failed to save recovery pattern');
+      }
+    };
     const actionRunId = db.createActionRun({
       projectId,
       triggerSource: 'auto_recovery',
@@ -444,6 +455,7 @@ ${plan.agentGuidance}
             error: failureReason,
             attempt,
           });
+          trySavePattern(false);
           return;
         }
 
@@ -458,6 +470,7 @@ ${plan.agentGuidance}
             durationMs,
             lastError: normalizedError,
           });
+          trySavePattern(true);
         } else {
           const failureReason = outcome.timedOut
             ? `Recovery verification timed out after ${String(Math.round(timeoutMs / 1000))}s`
@@ -468,6 +481,7 @@ ${plan.agentGuidance}
             error: failureReason,
             attempt,
           });
+          trySavePattern(false);
         }
 
         return;
@@ -480,6 +494,7 @@ ${plan.agentGuidance}
           error: errorMessage,
           attempt,
         });
+        trySavePattern(false);
         return;
       }
     }
@@ -580,6 +595,7 @@ ${plan.agentGuidance}
           durationMs,
           lastError: normalizedError,
         });
+        trySavePattern(true);
       } else {
         db.updateActionRunStatus(actionRunId, 'failed', redeployError);
         await eventBus.emit('recovery:failed', {
@@ -587,6 +603,7 @@ ${plan.agentGuidance}
           error: redeployError,
           attempt,
         });
+        trySavePattern(false);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : error;
@@ -597,6 +614,7 @@ ${plan.agentGuidance}
         error: errorMessage,
         attempt,
       });
+      trySavePattern(false);
     }
   }
 
