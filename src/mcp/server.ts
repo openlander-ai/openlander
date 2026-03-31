@@ -66,7 +66,6 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - rollback_project — Revert to previous Docker image.
 - deploy_blue_green — Zero-downtime deploy with health check before traffic switch. Use for production projects where downtime is unacceptable.
 - preview_deploy / cleanup_preview / list_previews — Ephemeral branch previews for PR testing.
-- deploy_environment — Deploy a specific environment (production/development) for a project. Returns immediately.
 - get_deploy_status — Poll build progress. Shows phase (queued/cloning/building/starting/done/failed) and elapsed time. Call periodically to track progress. Avoid wait=true as it blocks the agent.
 
 ### Services (Databases, Caches & Object Storage)
@@ -121,9 +120,7 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - get_webhook_config — List all webhook configs for a project.
 
 ### Environments
-- create_environment — Add a development environment with a specific branch. Production is auto-created on first deploy.
 - list_environments — See all environments for a project with status and branch info.
-- deploy_environment — Deploy a specific environment (pulls from that environment's branch).
 
 ## Deploy Planning (ALWAYS follow for new deploys)
 
@@ -234,12 +231,6 @@ Deploy responses include URLs for all detected network interfaces (LAN and VPN).
    - Secret: the returned secret
    - Events: Push events (and optionally Pull request events for previews)
 3. Now every push to main auto-triggers create_deploy_plan + execute_deploy_plan
-
-### Deploy to multiple environments
-1. create_deploy_plan({ repo_url: "...", env_vars: '...' }) then execute_deploy_plan — auto-creates production env
-2. create_environment({ project_name: "myapp", type: "development", branch: "develop" })
-3. deploy_environment({ project_name: "myapp", environment_type: "development" })
-4. Each environment has its own container, port, and URL
 
 ## Environment Variable Handling
 
