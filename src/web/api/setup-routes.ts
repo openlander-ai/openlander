@@ -544,7 +544,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     };
 
     const existingDefaultRoute = config.llm.defaultRoute;
-    const defaultRoute = existingDefaultRoute ?? { providerId: body.id };
+    const hasValidExistingDefault =
+      !!existingDefaultRoute &&
+      existingDefaultRoute.providerId !== '__none__' &&
+      existingDefaultRoute.providerId in updatedProviders;
+    const defaultRoute = hasValidExistingDefault ? existingDefaultRoute : { providerId: body.id };
 
     const updated = updateConfig({
       llm: { providers: updatedProviders, defaultRoute },

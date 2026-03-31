@@ -263,4 +263,38 @@ describe('Setup LLM routes', () => {
     expect(body.status).toBe('added');
     expect(ctx.llmVerified).toBe(true);
   });
+
+  it('reassigns defaultRoute when previous default is __none__ and a new provider is added', async () => {
+    configState = {
+      ...configState,
+      llm: {
+        ...configState.llm,
+        providers: {},
+        defaultRoute: { providerId: '__none__' },
+      },
+    };
+    ctx.config = configState;
+    ctx.llmVerified = false;
+
+    const addRes = await app.request('/api/setup/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 'reconnected',
+        provider: 'gemini',
+        apiKey: 'new-gemini-key',
+        defaultModel: 'gemini-2.5-flash',
+      }),
+    });
+    expect(addRes.status).toBe(200);
+
+    expect(configState.llm.defaultRoute?.providerId).toBe('reconnected');
+
+    const statusRes = await app.request('/api/setup/status');
+    expect(statusRes.status).toBe(200);
+    const statusBody = await statusRes.json();
+    expect(statusBody.llm.ok).toBe(true);
+    expect(statusBody.llm.provider).toBe('gemini');
+    expect(statusBody.llm.model).toBe('gemini-2.5-flash');
+  });
 });
