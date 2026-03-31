@@ -4,17 +4,19 @@ const log = createModuleLogger('deploy');
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { nanoid } from 'nanoid';
+import { rm } from 'node:fs/promises';
 
 import type { Docker } from './docker.js';
 import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
-import { scanUsedPorts } from './port.js';
-import { getProjectUrl } from './traefik.js';
+import { allocatePort, scanUsedPorts } from './port.js';
+import { buildTraefikLabels, getProjectUrl } from './traefik.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
 import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
+import { resolveEnvVars } from './resolve-env.js';
 
 import { ContainerNotFoundError, PreflightCheckError } from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
@@ -23,7 +25,7 @@ import type { JobManager } from './job-manager.js';
 import type { ComposePipeline } from './compose.js';
 import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
-import type { OpenLanderConfig } from '../config/index.js';
+import { getPolicy, type OpenLanderConfig } from '../config/index.js';
 
 import { extractProjectName } from './helpers.js';
 import {
@@ -112,6 +114,16 @@ export interface DeployResult {
   error?: string;
   buildLogTail?: string;
   preflightWarnings?: string[];
+}
+
+export type RedeployStrategy = 'blue-green' | 'force';
+
+export interface RedeployOptions {
+  noCache?: boolean;
+  strategy?: RedeployStrategy;
+  healthCheckPath?: string;
+  healthCheckRetries?: number;
+  healthCheckIntervalMs?: number;
 }
 
 export interface MonorepoConfig {
@@ -571,7 +583,7 @@ export class DeployPipeline {
       }
     }
 
-    const envType = (config.environment || 'production') as 'production' | 'development';
+    const envType = 'production' as const;
     let targetEnvironment = this.db
       .getEnvironmentsByProject(projectId)
       .find((env) => env.type === envType);
@@ -638,15 +650,10 @@ export class DeployPipeline {
         buildDurationMs: Date.now() - startTime,
       };
     }
-    const routeName = getRouteName(projectName, environment.type);
-    const shouldSyncProjectState = environment.type === 'production';
+    const routeName = getRouteName(projectName);
     const orchestrationDeps = this.createOrchestrationDeps();
     if (deployConfig.envVars) {
-      this.db.mergeEnvVars(
-        projectId,
-        deployConfig.envVars,
-        shouldSyncProjectState ? undefined : environmentId,
-      );
+      this.db.mergeEnvVars(projectId, deployConfig.envVars);
     }
     if (environment.container_id) {
       try {
@@ -674,14 +681,12 @@ export class DeployPipeline {
       imageTag: null,
       assignedPort: null,
     });
-    if (shouldSyncProjectState) {
-      this.db.updateProject(projectId, {
-        status: 'building',
-        containerId: null,
-        imageTag: null,
-        assignedPort: null,
-      });
-    }
+    this.db.updateProject(projectId, {
+      status: 'building',
+      containerId: null,
+      imageTag: null,
+      assignedPort: null,
+    });
     let buildLog = '';
     let clonePath = '';
     let diffContext: string | undefined;
@@ -746,7 +751,7 @@ export class DeployPipeline {
           imageTag,
           repoUrl,
           startTime,
-          shouldSyncProjectState,
+          shouldSyncProjectState: true,
           config: deployConfig,
           clonePath: cloneResult.clonePath,
           commitSha: cloneResult.commitSha,
@@ -770,7 +775,7 @@ export class DeployPipeline {
         dockerfilePath,
         previousEnvironmentImageTag: environment.image_tag,
         previousProjectImageTag: project.image_tag,
-        shouldSyncProjectState,
+        shouldSyncProjectState: true,
         config: deployConfig,
         buildLog,
       });
@@ -785,7 +790,7 @@ export class DeployPipeline {
         buildLog,
         commitSha,
         commitMessage,
-        shouldSyncProjectState,
+        shouldSyncProjectState: true,
         port: runResult.port,
         internalUrl: runResult.internalUrl,
       });
@@ -840,9 +845,7 @@ export class DeployPipeline {
         log.warn({ err: classifyError, projectId }, 'Build failure classification failed');
       }
       this.db.updateEnvironment(environmentId, { status: 'error' });
-      if (shouldSyncProjectState) {
-        this.db.updateProject(projectId, { status: 'error' });
-      }
+      this.db.updateProject(projectId, { status: 'error' });
       this.db.createDeployLog({
         id: nanoid(12),
         projectId,
@@ -1124,10 +1127,7 @@ export class DeployPipeline {
   }
 
   /** Redeploy an existing project (pull latest, rebuild, swap containers). */
-  async redeploy(
-    projectId: string,
-    options?: { noCache?: boolean; environment?: 'production' | 'development' },
-  ): Promise<DeployResult> {
+  async redeploy(projectId: string, options?: RedeployOptions): Promise<DeployResult> {
     const project = this.db.getProject(projectId);
     if (!project) {
       return {
@@ -1138,55 +1138,21 @@ export class DeployPipeline {
       };
     }
 
-    const environmentType =
-      options?.environment === 'development' ? ('development' as const) : ('production' as const);
     const targetEnvironment = this.db
       .getEnvironmentsByProject(projectId)
-      .find((environment) => environment.type === environmentType);
+      .find((environment) => environment.type === 'production');
     if (!targetEnvironment) {
       return {
         success: false,
         projectId,
         projectName: project.name,
-        error: `Environment not found: ${environmentType}`,
+        error: 'Production environment not found',
       };
     }
 
-    if (environmentType === 'development') {
-      if (targetEnvironment.container_id) {
-        try {
-          await this.docker.removeContainer(targetEnvironment.container_id);
-        } catch (_err) {
-          /* container may already be removed */
-        }
-      }
-
-      if (targetEnvironment.image_tag) {
-        this.db.updateEnvironment(targetEnvironment.id, {
-          previousImageTag: targetEnvironment.image_tag,
-        });
-      }
-
-      this.db.updateEnvironment(targetEnvironment.id, {
-        status: 'building',
-        containerId: null,
-        imageTag: null,
-        assignedPort: null,
-      });
-      this.jobManager?.trackJob(projectId, project.name);
-
-      const config = buildDeployConfig({
-        projectId,
-        runtimeOverrides: {
-          _projectId: projectId,
-          _preferredPort: targetEnvironment.assigned_port ?? undefined,
-          _noCacheBuild: options?.noCache,
-          environment: environmentType,
-        },
-        db: this.db,
-      });
-
-      return this.deploy(config);
+    const strategy = options?.strategy ?? 'force';
+    if (strategy === 'blue-green') {
+      return this.blueGreenRedeploy(projectId, options);
     }
 
     await this.cleanupProjectContainers(projectId, 'remove');
@@ -1217,12 +1183,346 @@ export class DeployPipeline {
         _projectId: projectId,
         _preferredPort: previousPort,
         _noCacheBuild: project.source === 'image' ? true : options?.noCache,
-        environment: environmentType,
+        environment: 'production',
       },
       db: this.db,
     });
 
     return this.deploy(config);
+  }
+
+  private async blueGreenRedeploy(
+    projectId: string,
+    options?: RedeployOptions,
+  ): Promise<DeployResult> {
+    const startTime = Date.now();
+    const healthCheckPath = this.normalizeHealthCheckPath(options?.healthCheckPath ?? '/');
+    const healthCheckRetries = options?.healthCheckRetries ?? 10;
+    const healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 2_000;
+
+    let projectName = 'unknown';
+    let imageTag: string | undefined;
+    let newPort: number | undefined;
+    let greenContainerId: string | undefined;
+    let shouldCleanupGreen = false;
+    let buildLog = '';
+    let clonePath: string | undefined;
+    let commitSha: string | undefined;
+    let blueContainerId: string | undefined;
+    let environmentId: string | undefined;
+
+    try {
+      const project = this.db.getProject(projectId);
+      if (!project) {
+        return {
+          success: false,
+          projectId,
+          projectName,
+          error: `Project not found: ${projectId}`,
+          buildDurationMs: Date.now() - startTime,
+        };
+      }
+
+      projectName = project.name;
+      blueContainerId = project.container_id ?? undefined;
+
+      if (project.status !== 'running' || !blueContainerId) {
+        return {
+          success: false,
+          projectId,
+          projectName,
+          error: `Project ${projectName} is not running`,
+          buildDurationMs: Date.now() - startTime,
+        };
+      }
+
+      if (!project.repo_url) {
+        return {
+          success: false,
+          projectId,
+          projectName,
+          error: `Project ${projectName} does not have a repository URL`,
+          buildDurationMs: Date.now() - startTime,
+        };
+      }
+
+      const prodEnv = this.db
+        .getEnvironmentsByProject(projectId)
+        .find((env) => env.type === 'production');
+      environmentId = prodEnv?.id;
+
+      const deployConfig = buildDeployConfig({
+        projectId,
+        runtimeOverrides: {
+          _projectId: projectId,
+          _noCacheBuild: options?.noCache,
+        },
+        db: this.db,
+      });
+
+      this.jobManager?.trackJob(projectId, projectName);
+      this.db.updateProject(projectId, { status: 'building' });
+      if (prodEnv) {
+        this.db.updateEnvironment(prodEnv.id, { status: 'building' });
+      }
+
+      await eventBus.emit('deploy:start', { projectId, repoUrl: project.repo_url });
+
+      this.jobManager?.updatePhase(projectId, 'cloning');
+      buildLog += '[clone] Cloning repository...\n';
+      const cloneResult = await cloneRepo({
+        repoUrl: project.repo_url,
+        branch: project.branch,
+      });
+      clonePath = cloneResult.path;
+      commitSha = cloneResult.commitSha;
+      buildLog += `[clone] Done (${cloneResult.commitSha})\n`;
+
+      this.jobManager?.updatePhase(projectId, 'building');
+      imageTag = `openlander/${projectName}:${String(Date.now())}`;
+      buildLog += '[build] Building image...\n';
+
+      await this.buildExecutor.build(
+        {
+          clonePath: cloneResult.path,
+          projectId,
+          imageTag,
+          dockerfilePath: deployConfig.dockerfilePath,
+          buildContext: deployConfig.buildContext,
+          dockerTarget: deployConfig.dockerTarget,
+          noCache: options?.noCache,
+        },
+        (line) => {
+          buildLog += `${line}\n`;
+        },
+      );
+
+      const buildDuration = Date.now() - startTime;
+      buildLog += `[build] Done (${String(Math.round(buildDuration / 1000))}s)\n`;
+
+      await eventBus.emit('deploy:build', {
+        projectId,
+        imageTag,
+        durationMs: buildDuration,
+      });
+
+      this.jobManager?.updatePhase(projectId, 'starting');
+      newPort = await allocatePort(this.db, this.docker, {}, 'production');
+      const containerPort = (await this.docker.getImageExposedPort(imageTag)) ?? newPort;
+      const envVars = resolveEnvVars({ projectId, environmentId }, { env: this.env });
+      const secretFiles = this.env.getSecretFilesForDeploy(projectId);
+      const networkName = getPolicy('production').networkName;
+
+      greenContainerId = await this.docker.runContainer({
+        imageTag,
+        name: `ol-${projectName}-green`,
+        port: newPort,
+        containerPort,
+        envVars,
+        traefikLabels: { 'traefik.enable': 'false' },
+        network: networkName,
+        secretFiles,
+      });
+      shouldCleanupGreen = true;
+
+      await eventBus.emit('deploy:run', {
+        projectId,
+        containerId: greenContainerId,
+        port: newPort,
+        url: getProjectUrl(projectName),
+      });
+
+      buildLog += `[health] Checking http://localhost:${String(newPort)}${healthCheckPath}\n`;
+      const healthy = await this.healthCheck(
+        newPort,
+        healthCheckPath,
+        healthCheckRetries,
+        healthCheckIntervalMs,
+      );
+
+      if (!healthy) {
+        throw new Error(
+          `Health check failed for ${projectName} on port ${String(newPort)} path ${healthCheckPath}`,
+        );
+      }
+      buildLog += '[health] Passed\n';
+
+      await this.docker.stopContainer(blueContainerId);
+      await this.docker.removeContainer(blueContainerId);
+
+      const traefikLabels = buildTraefikLabels(projectName, containerPort, undefined, 'production');
+      const promotedContainerId = await this.docker.runContainer({
+        imageTag,
+        name: `ol-${projectName}`,
+        port: newPort,
+        containerPort,
+        envVars,
+        traefikLabels,
+        network: networkName,
+        secretFiles,
+      });
+      await this.cleanupGreenContainer(greenContainerId);
+      shouldCleanupGreen = false;
+      greenContainerId = promotedContainerId;
+
+      this.db.updateProject(projectId, {
+        status: 'running',
+        containerId: greenContainerId,
+        assignedPort: newPort,
+        imageTag,
+        previousImageTag: project.image_tag,
+      });
+      if (prodEnv) {
+        this.db.updateEnvironment(prodEnv.id, {
+          status: 'running',
+          containerId: greenContainerId,
+          assignedPort: newPort,
+          imageTag,
+          previousImageTag: prodEnv.image_tag,
+        });
+      }
+
+      const durationMs = Date.now() - startTime;
+      const projectUrl = getProjectUrl(projectName);
+
+      this.db.createDeployLog({
+        id: nanoid(12),
+        projectId,
+        environmentId,
+        status: 'success',
+        trigger: 'api',
+        commitSha,
+        buildLog,
+        durationMs,
+      });
+
+      this.jobManager?.updatePhase(projectId, 'done');
+      await eventBus.emit('deploy:success', {
+        projectId,
+        url: projectUrl,
+        totalDurationMs: durationMs,
+      });
+
+      return {
+        success: true,
+        projectId,
+        projectName,
+        containerId: greenContainerId,
+        url: projectUrl,
+        port: newPort,
+        commitSha,
+        buildDurationMs: durationMs,
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      buildLog += `[error] ${errorMsg}\n`;
+
+      let blueStillServing = false;
+      if (blueContainerId) {
+        try {
+          const container = this.docker.getClient().getContainer(blueContainerId);
+          const info = await container.inspect();
+          blueStillServing = info.State.Running;
+        } catch {
+          blueStillServing = false;
+        }
+      }
+
+      if (blueStillServing) {
+        this.db.updateProject(projectId, { status: 'running' });
+        if (environmentId) {
+          const prodEnvErr = this.db.getEnvironment(environmentId);
+          if (prodEnvErr) {
+            this.db.updateEnvironment(environmentId, { status: 'running' });
+          }
+        }
+      } else {
+        this.db.updateProject(projectId, { status: 'error' });
+        if (environmentId) {
+          const prodEnvErr = this.db.getEnvironment(environmentId);
+          if (prodEnvErr) {
+            this.db.updateEnvironment(environmentId, { status: 'error' });
+          }
+        }
+      }
+
+      this.db.createDeployLog({
+        id: nanoid(12),
+        projectId,
+        environmentId,
+        status: 'failed',
+        trigger: 'api',
+        commitSha,
+        buildLog,
+        durationMs: Date.now() - startTime,
+      });
+
+      this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
+
+      await eventBus.emit('deploy:failed', {
+        projectId,
+        step: 'blue-green',
+        error: errorMsg,
+        buildLog,
+      });
+
+      return {
+        success: false,
+        projectId,
+        projectName,
+        url: getProjectUrl(projectName),
+        port: newPort,
+        buildDurationMs: Date.now() - startTime,
+        error: blueStillServing
+          ? `Blue-green deploy failed (previous version still serving): ${errorMsg}`
+          : errorMsg,
+      };
+    } finally {
+      if (shouldCleanupGreen && greenContainerId) {
+        await this.cleanupGreenContainer(greenContainerId);
+      }
+      if (clonePath) {
+        await rm(clonePath, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
+  }
+
+  private async healthCheck(
+    port: number,
+    path: string,
+    retries: number,
+    intervalMs: number,
+  ): Promise<boolean> {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const response = await fetch(`http://localhost:${String(port)}${path}`);
+        if (response.ok) return true;
+      } catch (err) {
+        log.debug({ err }, 'Health check probe failed — container not ready yet');
+      }
+      if (i < retries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+    }
+    return false;
+  }
+
+  private normalizeHealthCheckPath(path: string): string {
+    return path.startsWith('/') ? path : `/${path}`;
+  }
+
+  private async cleanupGreenContainer(containerId: string): Promise<void> {
+    try {
+      await this.docker.stopContainer(containerId);
+    } catch (err) {
+      log.warn({ err }, 'Failed to stop green container during cleanup');
+    }
+
+    try {
+      await this.docker.removeContainer(containerId);
+    } catch (err) {
+      log.warn({ err }, 'Failed to remove green container during cleanup');
+    }
   }
 
   async deployPreview(options: PreviewDeployOptions): Promise<PreviewDeployResult> {

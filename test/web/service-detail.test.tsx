@@ -102,6 +102,22 @@ vi.mock('sonner', () => ({
   },
 }));
 
+vi.mock('@/i18n/context', () => ({
+  useLanguage: () => ({
+    t: (key: string) =>
+      (
+        ({
+          'services.detail.notFound': 'Service not found',
+          'services.detail.tabs.overview': 'Overview',
+          'services.detail.tabs.connection': 'Connection',
+          'services.detail.tabs.databases': 'Databases',
+          'services.detail.tabs.logs': 'Logs',
+          'services.detail.tabs.settings': 'Settings',
+        }) as Record<string, string>
+      )[key] ?? key,
+  }),
+}));
+
 vi.mock('@/lib/api', () => ({
   getService: vi.fn().mockResolvedValue({
     id: '123',

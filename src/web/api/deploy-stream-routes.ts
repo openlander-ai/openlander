@@ -38,6 +38,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
     }>();
 
     const source = body.source ?? 'git';
+    const environment = 'production';
 
     let imageUrl: string | undefined;
     let repoUrl: string | undefined;
@@ -80,7 +81,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           envVars: body.env_vars,
           visibility: body.visibility,
           trigger: 'api',
-          environment: body.environment,
+          environment,
         });
         return c.json(result, result.success ? 200 : 500);
       } else if (repoUrl) {
@@ -92,7 +93,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           visibility: body.visibility,
           sshKeyPath: ctx.config.git.sshKeyPath || undefined,
           trigger: 'api',
-          environment: body.environment,
+          environment,
         });
         return c.json(result, result.success ? 200 : 500);
       }
@@ -189,7 +190,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
         branch: body.branch,
         envVars: body.env_vars,
         visibility: body.visibility,
-        environment: body.environment,
+        environment,
         sshKeyPath: ctx.config.git.sshKeyPath,
         trigger: 'api',
         write,
@@ -257,7 +258,7 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
       dockerTarget: body.docker_target,
       sshKeyPath: ctx.config.git.sshKeyPath || undefined,
       trigger: 'api',
-      environment: body.environment,
+      environment: 'production',
     });
 
     return c.json(result, 200);

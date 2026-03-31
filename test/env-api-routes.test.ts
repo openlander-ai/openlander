@@ -31,7 +31,7 @@ describe('Environment API routes', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('POST /api/projects/:id/environments creates fixed-tier environment with default branch', async () => {
+  it('POST /api/projects/:id/environments returns 410 (feature frozen)', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
 
     const res = await app.request('/api/projects/p1/environments', {
@@ -40,18 +40,12 @@ describe('Environment API routes', () => {
       body: JSON.stringify({ type: 'development' }),
     });
 
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(410);
     const body = await res.json();
-    expect(body.environment.type).toBe('development');
-    expect(body.environment.branch).toBe('develop');
-
-    const projectRes = await app.request('/api/projects/p1');
-    const projectBody = await projectRes.json();
-    expect(Array.isArray(projectBody.environments)).toBe(true);
-    expect(projectBody.environments).toHaveLength(2);
+    expect(body.error).toBe('FEATURE_FROZEN');
   });
 
-  it('DELETE /api/projects/:id/environments/:envId rejects production delete', async () => {
+  it('DELETE /api/projects/:id/environments/:envId returns 410 (feature frozen)', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
     const production = db
       .getEnvironmentsByProject('p1')
@@ -62,10 +56,9 @@ describe('Environment API routes', () => {
       method: 'DELETE',
     });
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(410);
     const body = await res.json();
-    expect(body.error).toBe('PRODUCTION_ENVIRONMENT_PROTECTED');
-    expect(db.getEnvironment(production!.id)).toBeDefined();
+    expect(body.error).toBe('FEATURE_FROZEN');
   });
 
   it('GET /api/projects/:id/environments/:envId/env returns inheritance metadata sources', async () => {

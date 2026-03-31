@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AppContext } from '../src/app.js';
-import { ProjectNotFoundError } from '../src/errors.js';
 import type { EnvironmentRow } from '../src/db/index.js';
 import { environmentToolDefs } from '../src/tools/defs/environment.js';
 import type { ToolDef, ToolTarget } from '../src/tools/defs/types.js';
@@ -43,19 +42,13 @@ function createMockContext(options?: {
   const db = {
     getProjectByName: vi.fn(() => project),
     getEnvironmentsByProject: vi.fn(() => environments),
-    createEnvironment: vi.fn(),
-  };
-
-  const pipeline = {
-    deployEnvironment: vi.fn(async () => ({ success: true })),
   };
 
   const ctx = {
     db,
-    pipeline,
   } as unknown as AppContext;
 
-  return { ctx, db, pipeline };
+  return { ctx, db };
 }
 
 function getTool(ctx: AppContext, name: string) {
@@ -79,73 +72,6 @@ function getTool(ctx: AppContext, name: string) {
 }
 
 describe('MCP environment tools', () => {
-  it('create_environment creates new environment with correct ID convention', () => {
-    const { ctx, db } = createMockContext({
-      project: { id: 'project-123', name: 'my-app' },
-      environments: [],
-    });
-    const tool = getTool(ctx, 'create_environment');
-
-    const result = tool.execute(
-      { project_name: 'my-app', type: 'development', branch: 'feature/foo' },
-      { target: 'mcp' },
-    );
-
-    expect(db.createEnvironment).toHaveBeenCalledWith({
-      id: 'project-123-development',
-      projectId: 'project-123',
-      type: 'development',
-      branch: 'feature/foo',
-    });
-    expect(result).toEqual({
-      id: 'project-123-development',
-      type: 'development',
-      branch: 'feature/foo',
-      status: 'idle',
-    });
-  });
-
-  it('create_environment returns existing environment if type already exists', () => {
-    const existing = createEnvironmentRow({
-      id: 'project-123-development',
-      project_id: 'project-123',
-      type: 'development',
-      branch: 'feature/existing',
-      status: 'running',
-    });
-    const { ctx, db } = createMockContext({
-      project: { id: 'project-123', name: 'my-app' },
-      environments: [existing],
-    });
-    const tool = getTool(ctx, 'create_environment');
-
-    const result = tool.execute(
-      { project_name: 'my-app', type: 'development', branch: 'feature/new' },
-      { target: 'mcp' },
-    );
-
-    expect(db.createEnvironment).not.toHaveBeenCalled();
-    expect(result).toEqual({
-      id: 'project-123-development',
-      type: 'development',
-      branch: 'feature/existing',
-      status: 'running',
-      alreadyExists: true,
-    });
-  });
-
-  it('create_environment throws for non-existent project', () => {
-    const { ctx } = createMockContext({ project: null, environments: [] });
-    const tool = getTool(ctx, 'create_environment');
-
-    expect(() =>
-      tool.execute(
-        { project_name: 'missing-app', type: 'development', branch: 'feature/foo' },
-        { target: 'mcp' },
-      ),
-    ).toThrow(ProjectNotFoundError);
-  });
-
   it('list_environments returns all environments', () => {
     const envs: EnvironmentRow[] = [
       createEnvironmentRow({
@@ -196,64 +122,5 @@ describe('MCP environment tools', () => {
         },
       ],
     });
-  });
-
-  it('deploy_environment calls pipeline.deployEnvironment with correct args', () => {
-    const env = createEnvironmentRow({
-      id: 'project-123-development',
-      project_id: 'project-123',
-      type: 'development',
-      branch: 'feature/deploy',
-      status: 'idle',
-    });
-    const { ctx, pipeline } = createMockContext({
-      project: { id: 'project-123', name: 'my-app' },
-      environments: [env],
-    });
-    const tool = getTool(ctx, 'deploy_environment');
-
-    const result = tool.execute(
-      { project_name: 'my-app', environment_type: 'development' },
-      { target: 'mcp' },
-    );
-
-    expect(pipeline.deployEnvironment).toHaveBeenCalledWith(
-      'project-123',
-      'project-123-development',
-      {
-        trigger: 'chat',
-        dockerfilePath: undefined,
-        dockerTarget: undefined,
-        _noCacheBuild: false,
-      },
-    );
-    expect(result).toEqual({
-      status: 'building',
-      projectId: 'project-123',
-      environmentId: 'project-123-development',
-      type: 'development',
-      branch: 'feature/deploy',
-    });
-  });
-
-  it('deploy_environment returns error when environment not found', () => {
-    const { ctx, pipeline } = createMockContext({
-      project: { id: 'project-123', name: 'my-app' },
-      environments: [
-        createEnvironmentRow({
-          id: 'project-123-production',
-          project_id: 'project-123',
-          type: 'production',
-          branch: 'main',
-        }),
-      ],
-    });
-    const tool = getTool(ctx, 'deploy_environment');
-
-    expect(() =>
-      tool.execute({ project_name: 'my-app', environment_type: 'development' }, { target: 'mcp' }),
-    ).toThrow('ENVIRONMENT_NOT_FOUND: No development environment found for project my-app');
-
-    expect(pipeline.deployEnvironment).not.toHaveBeenCalled();
   });
 });

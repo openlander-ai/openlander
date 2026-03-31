@@ -36,14 +36,11 @@ export function resolveEnvironmentByType(
 ):
   | { requestedEnvironment: string; environmentRow: EnvironmentRow | undefined }
   | { response: Response } {
-  const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
+  const requestedEnvironment = 'production';
   const environments = ctx.db.getEnvironmentsByProject(project.id);
-  const environmentRow = environments.find(
-    (environment) => environment.type === requestedEnvironment,
-  );
+  const environmentRow = environments.find((environment) => environment.type === 'production');
   const shouldRequireEnvironment =
-    requestedEnvironment !== 'production' ||
-    (options?.requireExistingEnvironmentWhenAnyExists === true && environments.length > 0);
+    options?.requireExistingEnvironmentWhenAnyExists === true && environments.length > 0;
 
   if (shouldRequireEnvironment && !environmentRow) {
     return {

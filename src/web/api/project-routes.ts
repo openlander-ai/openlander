@@ -19,7 +19,7 @@ import {
   cleanupAutoInjectedEnv,
   generateEnvExample,
 } from '../../pipeline/env-inject.js';
-import type { EnvironmentRow, EnvironmentType, ProjectRow } from '../../db/index.js';
+import type { EnvironmentRow, ProjectRow } from '../../db/index.js';
 import {
   getEnvironmentByIdOrThrow,
   getProjectOrThrow,
@@ -27,10 +27,6 @@ import {
 } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('api');
-
-function isEnvironmentType(value: unknown): value is EnvironmentType {
-  return value === 'production' || value === 'development';
-}
 
 function mapEnvironment(projectName: string, environment: EnvironmentRow) {
   const ips = getAllIps();
@@ -401,51 +397,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return c.json(mapProjectForApi(updatedProject));
   });
 
-  api.post('/projects/:id/environments', async (c) => {
-    const project = getProjectOrThrow(c, ctx);
-
-    const body = await c.req
-      .json<{ type?: unknown; branch?: unknown }>()
-      .catch(() => ({ type: undefined, branch: undefined }));
-
-    if (!isEnvironmentType(body.type)) {
-      return c.json(
-        {
-          error: 'INVALID_ENVIRONMENT_TYPE',
-          message: 'type must be one of: production, development',
-        },
-        400,
-      );
-    }
-
-    const existing = ctx.db
-      .getEnvironmentsByProject(project.id)
-      .find((environment) => environment.type === body.type);
-    if (existing) {
-      return c.json(
-        {
-          error: 'ENVIRONMENT_ALREADY_EXISTS',
-          message: `${body.type} environment already exists for project`,
-        },
-        409,
-      );
-    }
-
-    const branch =
-      typeof body.branch === 'string' && body.branch.trim().length > 0
-        ? body.branch.trim()
-        : body.type === 'development'
-          ? 'develop'
-          : project.branch;
-
-    const created = ctx.db.createEnvironment({
-      id: crypto.randomUUID(),
-      projectId: project.id,
-      type: body.type,
-      branch,
-    });
-
-    return c.json({ environment: mapEnvironment(project.name, created) }, 201);
+  api.post('/projects/:id/environments', (_c) => {
+    return _c.json({ error: 'FEATURE_FROZEN', message: 'Environment creation is disabled' }, 410);
   });
 
   api.get('/projects/:id/environments', (c) => {
@@ -465,25 +418,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     return c.json({ environment: mapEnvironment(project.name, environment) });
   });
 
-  api.delete('/projects/:id/environments/:envId', (c) => {
-    const project = getProjectOrThrow(c, ctx);
-    const environment = getEnvironmentByIdOrThrow(c, ctx, project.id);
-    if (environment instanceof Response) {
-      return environment;
-    }
-
-    if (environment.type === 'production') {
-      return c.json(
-        {
-          error: 'PRODUCTION_ENVIRONMENT_PROTECTED',
-          message: 'Production environment cannot be deleted',
-        },
-        400,
-      );
-    }
-
-    ctx.db.deleteEnvironment(environment.id);
-    return c.json({ status: 'deleted', environmentId: environment.id });
+  api.delete('/projects/:id/environments/:envId', (_c) => {
+    return _c.json({ error: 'FEATURE_FROZEN', message: 'Environment deletion is disabled' }, 410);
   });
 
   api.get('/projects/:id/environments/:envId/env', (c) => {
@@ -694,87 +630,54 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.post('/projects/:id/start', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
-    if ('response' in environmentResolution) {
-      return environmentResolution.response;
+    if (!project.container_id) {
+      return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
     }
-    const { requestedEnvironment, environmentRow } = environmentResolution;
 
-    if (requestedEnvironment === 'production') {
-      if (!project.container_id) {
-        return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
-      }
-      await ctx.pipeline.start(project.id);
-    } else if (environmentRow) {
-      if (!environmentRow.container_id) {
-        return c.json({ error: 'No container to start. Redeploy instead.' }, 400);
-      }
-      await ctx.pipeline.start(project.id, environmentRow.id);
-    }
+    await ctx.pipeline.start(project.id);
     return c.json({ status: 'started', project: project.name });
   });
 
   api.post('/projects/:id/stop', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
-    if ('response' in environmentResolution) {
-      return environmentResolution.response;
-    }
-    const { requestedEnvironment, environmentRow } = environmentResolution;
-
-    if (requestedEnvironment === 'production') {
-      await ctx.pipeline.stop(project.id);
-    } else if (environmentRow) {
-      await ctx.pipeline.stop(project.id, environmentRow.id);
-    }
+    await ctx.pipeline.stop(project.id);
     return c.json({ status: 'stopped', project: project.name });
   });
 
   api.post('/projects/:id/redeploy', async (c) => {
     const project = getProjectOrThrow(c, ctx);
-
-    const environmentResolution = resolveEnvironmentByType(c, ctx, project);
-    if ('response' in environmentResolution) {
-      return environmentResolution.response;
-    }
-    const { requestedEnvironment, environmentRow } = environmentResolution;
+    const strategy = (c.req.query('strategy') ?? 'force') as 'blue-green' | 'force';
 
     // If caller provides env_vars, merge them into existing vars before redeploying
     const body = await c.req
-      .json<{ env_vars?: Record<string, string> }>()
-      .catch(() => ({ env_vars: undefined }));
+      .json<{
+        env_vars?: Record<string, string>;
+        no_cache?: boolean;
+        health_check_path?: string;
+      }>()
+      .catch(() => ({ env_vars: undefined, no_cache: undefined, health_check_path: undefined }));
     if (body.env_vars && typeof body.env_vars === 'object') {
-      const envId = requestedEnvironment === 'production' ? undefined : environmentRow?.id;
       for (const [key, value] of Object.entries(body.env_vars)) {
         if (value.trim()) {
-          ctx.env.set(project.id, key, value.trim(), envId);
+          ctx.env.set(project.id, key, value.trim());
         }
       }
     }
 
     try {
-      if (requestedEnvironment === 'production') {
-        if (project.source === 'git' && !project.repo_url) {
-          return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
-        }
-        ctx.db.updateProject(project.id, { status: 'building' });
-        const result = await ctx.pipeline.redeploy(project.id);
-        return c.json(result, result.success ? 200 : 500);
-      } else if (environmentRow) {
-        ctx.db.updateEnvironment(environmentRow.id, { status: 'building' });
-        const result = await ctx.pipeline.deployEnvironment(project.id, environmentRow.id, {
-          trigger: 'api',
-        });
-        return c.json(result, result.success ? 200 : 500);
+      if (project.source === 'git' && !project.repo_url) {
+        return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
       }
-      return c.json({ success: false, error: 'Unknown environment' }, 500);
+      ctx.db.updateProject(project.id, { status: 'building' });
+      const result = await ctx.pipeline.redeploy(project.id, {
+        noCache: body.no_cache,
+        strategy,
+        healthCheckPath: body.health_check_path,
+      });
+      return c.json(result, result.success ? 200 : 500);
     } catch (err) {
-      if (requestedEnvironment === 'production') {
-        ctx.db.updateProject(project.id, { status: 'error' });
-      } else if (environmentRow) {
-        ctx.db.updateEnvironment(environmentRow.id, { status: 'error' });
-      }
+      ctx.db.updateProject(project.id, { status: 'error' });
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
     }
@@ -788,7 +691,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     if ('response' in environmentResolution) {
       return environmentResolution.response;
     }
-    const { requestedEnvironment, environmentRow } = environmentResolution;
+    const { environmentRow } = environmentResolution;
 
     const body = await c.req
       .json<{ deployment_id?: unknown }>()
@@ -811,10 +714,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
 
       const isRequestedEnvironmentMatch =
-        requestedEnvironment === 'production'
-          ? deployment.environment_id === null ||
-            (!!environmentRow && deployment.environment_id === environmentRow.id)
-          : !!environmentRow && deployment.environment_id === environmentRow.id;
+        deployment.environment_id === null ||
+        (!!environmentRow && deployment.environment_id === environmentRow.id);
 
       if (!isRequestedEnvironmentMatch) {
         return c.json(
@@ -837,46 +738,25 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         );
       }
 
-      if (requestedEnvironment === 'production') {
-        ctx.db.updateProject(project.id, { previousImageTag: imageTag });
-      } else if (environmentRow) {
+      ctx.db.updateProject(project.id, { previousImageTag: imageTag });
+      if (environmentRow) {
         ctx.db.updateEnvironment(environmentRow.id, { previousImageTag: imageTag });
       }
     }
 
-    let result;
-    if (requestedEnvironment === 'production') {
-      result = await ctx.pipeline.rollback(project.id);
-    } else if (environmentRow) {
-      result = await ctx.pipeline.rollback(project.id, environmentRow.id);
-    } else {
-      return c.json({ success: false, error: 'Unknown environment' }, 500);
-    }
+    const result = await ctx.pipeline.rollback(project.id);
     return c.json(result, result.success ? 200 : 500);
   });
 
   // v0.3: Blue-green deployment
   api.post('/projects/:id/blue-green', async (c) => {
     const project = getProjectOrThrow(c, ctx);
-
-    const requestedEnvironment = (c.req.query('environment') ?? 'production').toLowerCase();
-    if (requestedEnvironment !== 'production' && requestedEnvironment !== 'development') {
-      return c.json(
-        {
-          success: false,
-          error: 'Blue-green deployment environment must be "production" or "development".',
-        },
-        400,
-      );
-    }
-    const environmentType = requestedEnvironment;
-
     const body = await c.req
       .json<{ health_check_path?: string }>()
       .catch((): { health_check_path?: string } => ({}));
-    const result = await ctx.blueGreen.deploy(project.id, {
+    const result = await ctx.pipeline.redeploy(project.id, {
+      strategy: 'blue-green',
       healthCheckPath: body.health_check_path,
-      environmentType,
     });
     return c.json(result, result.success ? 200 : 500);
   });

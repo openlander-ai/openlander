@@ -220,14 +220,22 @@ export const projectOpsToolDefs: ToolDef[] = [
     execute: (args, context) => {
       const projectName = args['project_name'] as string;
       const noCache = (args['no_cache'] as boolean | undefined) === true;
+      const strategy = args['strategy'] as 'blue-green' | 'force' | undefined;
+      const healthCheckPath = args['health_check_path'] as string | undefined;
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
 
-      void context.appCtx.pipeline.redeploy(project.id, { noCache }).catch((err: unknown) => {
-        log.error({ err, projectId: project.id }, 'Redeploy failed');
-      });
+      void context.appCtx.pipeline
+        .redeploy(project.id, {
+          noCache,
+          strategy,
+          healthCheckPath: healthCheckPath?.trim() || undefined,
+        })
+        .catch((err: unknown) => {
+          log.error({ err, projectId: project.id }, 'Redeploy failed');
+        });
 
       return {
         status: 'redeploying',

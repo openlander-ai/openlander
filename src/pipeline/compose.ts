@@ -465,7 +465,7 @@ export class ComposePipeline {
     const parentName = config.name ?? extractProjectName(config.repoUrl);
     const projectName = sanitizeComposeProjectName(parentName);
     const parentProjectId = config._parentId ?? nanoid(12);
-    const envType: OpenLanderEnv = config.environmentType ?? 'production';
+    const envType: OpenLanderEnv = 'production';
     let buildLog = '';
     const commitMessage = await getCommitSubject(config.clonePath, config.commitSha);
 

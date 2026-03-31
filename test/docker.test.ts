@@ -500,6 +500,7 @@ describeDocker('Docker core operations', () => {
         status: 'running',
         port: 18080,
         imageTag: 'ol-app:latest',
+        labels: {},
       },
       {
         id: 'def456',
@@ -507,6 +508,7 @@ describeDocker('Docker core operations', () => {
         status: 'exited',
         port: undefined,
         imageTag: 'ol-worker:latest',
+        labels: {},
       },
     ]);
 

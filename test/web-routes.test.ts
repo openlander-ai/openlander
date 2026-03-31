@@ -559,6 +559,7 @@ describe('Web API Routes', () => {
       event: {
         type: 'tool_result',
         toolName: 'deploy_project',
+        stepIndex: 0,
         success: true,
         result: {
           env_vars: {
@@ -851,8 +852,8 @@ describe('Web API Routes', () => {
 
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(ctx.blueGreen.deploy).toHaveBeenCalledWith('p1', {
-      environmentType: 'production',
+    expect(ctx.pipeline.redeploy).toHaveBeenCalledWith('p1', {
+      strategy: 'blue-green',
       healthCheckPath: undefined,
     });
   });
@@ -864,7 +865,7 @@ describe('Web API Routes', () => {
 
   it('POST /api/projects/:id/blue-green returns 500 on failure', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
-    (ctx.blueGreen.deploy as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+    (ctx.pipeline.redeploy as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       success: false,
       message: 'Health check failed',
     });
@@ -947,14 +948,16 @@ describe('Web API Routes', () => {
         updated_at: '2026-01-01T00:00:00.000Z',
       },
     ];
-    (ctx.serviceManager.list as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockServices);
+    (ctx.serviceManager.listWithCardSummary as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      mockServices,
+    );
 
     const res = await app.request('/api/services');
 
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual(mockServices);
-    expect(ctx.serviceManager.list).toHaveBeenCalled();
+    expect(ctx.serviceManager.listWithCardSummary).toHaveBeenCalled();
   });
 
   it('GET /api/services/:id returns service detail', async () => {

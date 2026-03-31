@@ -91,9 +91,6 @@ describeConfig('Environment Policies', () => {
     expect(policy.networkName).toBe(SHARED_NETWORK_NAME);
     expect(policy.portRangeStart).toBe(10001);
     expect(policy.portRangeEnd).toBe(10999);
-    expect(policy.traefikContainerName).toBe('traefik-ol-prod');
-    expect(policy.traefikHttpPort).toBe(80);
-    expect(policy.traefikDashboardPort).toBe(8080);
   });
 
   it('returns development policy with separate port range', () => {
@@ -101,9 +98,6 @@ describeConfig('Environment Policies', () => {
     expect(policy.networkName).toBe(SHARED_NETWORK_NAME);
     expect(policy.portRangeStart).toBe(20001);
     expect(policy.portRangeEnd).toBe(20999);
-    expect(policy.traefikContainerName).toBe('traefik-ol-dev');
-    expect(policy.traefikHttpPort).toBe(20080);
-    expect(policy.traefikDashboardPort).toBe(28080);
   });
 
   it('port ranges do not overlap', () => {

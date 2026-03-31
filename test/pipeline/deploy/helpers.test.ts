@@ -209,23 +209,23 @@ describe('getRouteName', () => {
     expect(result).toBe('myapp');
   });
 
-  it('returns projectName-dev for development environment', () => {
+  it('returns projectName for development environment', () => {
     const result = getRouteName('myapp', 'development');
-    expect(result).toBe('myapp-dev');
+    expect(result).toBe('myapp');
   });
 
-  it('returns projectName-staging for staging environment', () => {
+  it('returns projectName for staging environment', () => {
     const result = getRouteName('myapp', 'staging');
-    expect(result).toBe('myapp-staging');
+    expect(result).toBe('myapp');
   });
 
-  it('returns projectName-custom for custom environment type', () => {
+  it('returns projectName for custom environment type', () => {
     const result = getRouteName('myapp', 'custom');
-    expect(result).toBe('myapp-custom');
+    expect(result).toBe('myapp');
   });
 
   it('handles projectName with hyphens', () => {
     const result = getRouteName('my-app', 'development');
-    expect(result).toBe('my-app-dev');
+    expect(result).toBe('my-app');
   });
 });

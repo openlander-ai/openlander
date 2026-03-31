@@ -85,12 +85,6 @@ export function deriveServiceName(dockerfilePath: string): string {
   return dir.split('/')[0] ?? 'app';
 }
 
-export function getRouteName(projectName: string, environmentType: string): string {
-  if (environmentType === 'production') {
-    return projectName;
-  }
-  if (environmentType === 'development') {
-    return `${projectName}-dev`;
-  }
-  return `${projectName}-${environmentType}`;
+export function getRouteName(projectName: string, _environmentType?: string): string {
+  return projectName;
 }

@@ -53,7 +53,7 @@ export async function startPlanExecution(deps: PlanExecutionDeps): Promise<void>
     name: deps.projectName,
     envVars: deps.envVars,
     visibility: deps.visibility,
-    environment: deps.environment,
+    environment: 'production',
     sshKeyPath: deps.sshKeyPath || undefined,
     trigger: deps.trigger,
     source: deps.source,

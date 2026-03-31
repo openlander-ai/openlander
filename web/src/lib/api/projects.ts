@@ -75,7 +75,6 @@ export async function deployProject(
   branch?: string,
   name?: string,
   envVars?: Record<string, string>,
-  environment?: string,
   source?: 'git' | 'image',
   imageUrl?: string,
   imageCmd?: string | string[],
@@ -85,7 +84,6 @@ export async function deployProject(
     branch,
     name,
     env_vars: envVars,
-    environment,
   };
 
   if (source === 'image') {
@@ -192,26 +190,6 @@ export async function updateProject(
   }
 
   return res.json();
-}
-
-export async function createEnvironment(
-  projectId: string,
-  type: Environment['type'],
-  branch?: string,
-): Promise<Environment> {
-  const res = await fetch(`/api/projects/${projectId}/environments`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, branch }),
-  });
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to create environment');
-  }
-
-  const data = (await res.json()) as { environment: BackendEnvironment };
-  return mapEnvironment(data.environment);
 }
 
 export async function getEnvironments(projectId: string): Promise<Environment[]> {
@@ -406,33 +384,20 @@ export async function getDeploymentDetail(
   return res.json();
 }
 
-export async function stopProject(id: string, environment?: string): Promise<void> {
-  const url = environment
-    ? `/api/projects/${id}/stop?environment=${environment}`
-    : `/api/projects/${id}/stop`;
-  await fetch(url, { method: 'POST' });
+export async function stopProject(id: string): Promise<void> {
+  await fetch(`/api/projects/${id}/stop`, { method: 'POST' });
 }
 
-export async function startProject(id: string, environment?: string): Promise<void> {
-  const url = environment
-    ? `/api/projects/${id}/start?environment=${environment}`
-    : `/api/projects/${id}/start`;
-  const res = await fetch(url, { method: 'POST' });
+export async function startProject(id: string): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/start`, { method: 'POST' });
   if (!res.ok) {
     const error = await res.text();
     throw new Error(error || 'Failed to start project');
   }
 }
 
-export async function redeployProject(
-  id: string,
-  envVars?: Record<string, string>,
-  environment?: string,
-): Promise<void> {
-  const url = environment
-    ? `/api/projects/${id}/redeploy?environment=${environment}`
-    : `/api/projects/${id}/redeploy`;
-  const res = await fetch(url, {
+export async function redeployProject(id: string, envVars?: Record<string, string>): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/redeploy`, {
     method: 'POST',
     headers: envVars ? { 'Content-Type': 'application/json' } : undefined,
     body: envVars ? JSON.stringify({ env_vars: envVars }) : undefined,
@@ -448,15 +413,8 @@ export async function redeployProject(
   }
 }
 
-export async function rollbackProject(
-  id: string,
-  environment?: string,
-  deploymentId?: string,
-): Promise<DeployResult> {
-  const url = environment
-    ? `/api/projects/${id}/rollback?environment=${environment}`
-    : `/api/projects/${id}/rollback`;
-  const res = await fetch(url, {
+export async function rollbackProject(id: string, deploymentId?: string): Promise<DeployResult> {
+  const res = await fetch(`/api/projects/${id}/rollback`, {
     method: 'POST',
     headers: deploymentId ? { 'Content-Type': 'application/json' } : undefined,
     body: deploymentId ? JSON.stringify({ deployment_id: deploymentId }) : undefined,
@@ -480,12 +438,8 @@ export interface BlueGreenResult {
 export async function blueGreenProject(
   id: string,
   healthCheckPath?: string,
-  environment?: string,
 ): Promise<BlueGreenResult> {
-  const url = environment
-    ? `/api/projects/${id}/blue-green?environment=${environment}`
-    : `/api/projects/${id}/blue-green`;
-  const res = await fetch(url, {
+  const res = await fetch(`/api/projects/${id}/redeploy?strategy=blue-green`, {
     method: 'POST',
     headers: healthCheckPath ? { 'Content-Type': 'application/json' } : undefined,
     body: healthCheckPath ? JSON.stringify({ health_check_path: healthCheckPath }) : undefined,
@@ -501,14 +455,6 @@ export async function blueGreenProject(
 
 export async function deleteProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}`, { method: 'DELETE' });
-}
-
-export async function deleteEnvironment(projectId: string, envId: string): Promise<void> {
-  const res = await fetch(`/api/projects/${projectId}/environments/${envId}`, { method: 'DELETE' });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to delete environment');
-  }
 }
 
 export async function getProjectLogs(id: string): Promise<string> {
@@ -532,9 +478,8 @@ export async function getProjectEnv(id: string): Promise<Record<string, string>>
   return data as Record<string, string>;
 }
 
-export async function generateEnvExample(id: string, environment?: string): Promise<string> {
-  const query = environment ? `?environment=${encodeURIComponent(environment)}` : '';
-  const res = await fetch(`/api/projects/${id}/env-example${query}`);
+export async function generateEnvExample(id: string): Promise<string> {
+  const res = await fetch(`/api/projects/${id}/env-example`);
   if (!res.ok) {
     const error = await res.text();
     let message = 'Failed to generate .env.example';

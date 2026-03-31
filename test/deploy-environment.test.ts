@@ -81,7 +81,7 @@ describe('DeployPipeline deployEnvironment', () => {
     vi.clearAllMocks();
   });
 
-  it('deployEnvironment clones environment branch and uses merged env by environment', async () => {
+  it('deployEnvironment clones branch and deploys using production route/container naming', async () => {
     db.createProject({
       id: 'p1',
       name: 'demo-app',
@@ -108,28 +108,28 @@ describe('DeployPipeline deployEnvironment', () => {
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ol-demo-app-dev',
+        name: 'ol-demo-app',
       }),
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         traefikLabels: expect.objectContaining({
-          'traefik.http.routers.ol-demo-app.rule': expect.stringContaining('dev-demo-app.'),
+          'traefik.http.routers.ol-demo-app.rule': expect.stringContaining('demo-app.'),
         }),
       }),
     );
-    expect(result.url).toContain('dev-demo-app.');
+    expect(result.url).toContain('demo-app.');
 
     const developmentEnvironment = db.getEnvironment('p1-development');
     expect(developmentEnvironment?.status).toBe('running');
     expect(developmentEnvironment?.container_id).toBe('container-abc123456789');
     expect(developmentEnvironment?.assigned_port).toBeGreaterThanOrEqual(10001);
-    expect(developmentEnvironment?.image_tag).toBe('openlander/demo-app-dev:latest');
+    expect(developmentEnvironment?.image_tag).toBe('openlander/demo-app:latest');
 
     // Verify passive Docker mocks were called
     expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       clonePath,
-      'openlander/demo-app-dev:latest',
+      'openlander/demo-app:latest',
       expect.any(Object),
     );
     expect(docker.waitForHealthy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
@@ -200,7 +200,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(env.getSecretFilesForDeploy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('p2');
   });
 
-  it('deployEnvironment uses dev suffix for development container naming', async () => {
+  it('deployEnvironment uses project naming without dev suffix', async () => {
     db.createProject({
       id: 'p3',
       name: 'dev-app',
@@ -221,20 +221,20 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(result.success).toBe(true);
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ol-dev-app-dev',
+        name: 'ol-dev-app',
       }),
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         traefikLabels: expect.objectContaining({
-          'traefik.http.routers.ol-dev-app.rule': expect.stringContaining('dev-dev-app.'),
+          'traefik.http.routers.ol-dev-app.rule': expect.stringContaining('dev-app.'),
         }),
       }),
     );
-    expect(result.url).toContain('dev-dev-app.');
+    expect(result.url).toContain('dev-app.');
 
     const developmentEnvironment = db.getEnvironment('p3-development');
-    expect(developmentEnvironment?.image_tag).toBe('openlander/dev-app-dev:latest');
+    expect(developmentEnvironment?.image_tag).toBe('openlander/dev-app:latest');
   });
 
   it('delegates to compose pipeline when compose file is detected', async () => {
@@ -280,7 +280,7 @@ describe('DeployPipeline deployEnvironment', () => {
         branch: 'compose-branch',
         clonePath,
         composePath: join(clonePath, 'docker-compose.yml'),
-        name: 'compose-app-dev',
+        name: 'compose-app',
         trigger: 'api',
       }),
     );
@@ -659,7 +659,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(cloneRepoSpy).not.toHaveBeenCalled();
   });
 
-  it('does not open quick-share tunnel for non-production environments', async () => {
+  it('opens quick-share tunnel even when environment type is development', async () => {
     db.createProject({
       id: 'p12',
       name: 'development-share-app',
@@ -682,11 +682,11 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.publicUrl).toBeUndefined();
-    expect(exposeTunnelSpy).not.toHaveBeenCalled();
+    expect(result.publicUrl).toBe('https://should-not-be-used.example.trycloudflare.com');
+    expect(exposeTunnelSpy).toHaveBeenCalledWith('p12', expect.any(Number));
   });
 
-  it('stores env vars per-environment for non-production deploys', async () => {
+  it('stores env vars at project scope regardless of environment type', async () => {
     db.createProject({
       id: 'p13',
       name: 'env-store-app',
@@ -709,11 +709,9 @@ describe('DeployPipeline deployEnvironment', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(mergeEnvVarsSpy).toHaveBeenCalledWith(
-      'p13',
-      { API_BASE_URL: 'https://dev.example.com' },
-      'p13-development',
-    );
+    expect(mergeEnvVarsSpy).toHaveBeenCalledWith('p13', {
+      API_BASE_URL: 'https://dev.example.com',
+    });
   });
 
   it('cleanupStaleTunnels resets quick-share/shared projects to internal on startup', () => {

@@ -308,6 +308,11 @@ export const redeployProjectSchema = z.object({
     .describe(
       'Force fresh Docker build without cache. Use when dependencies changed but Docker layers are stale.',
     ),
+  strategy: z.enum(['blue-green', 'force']).optional().describe('Deploy strategy (default: force)'),
+  health_check_path: z
+    .string()
+    .optional()
+    .describe('Health check endpoint path (default: /, for blue-green strategy)'),
 });
 
 // Rollback schema
@@ -318,6 +323,7 @@ export const rollbackProjectSchema = z.object({
 // Blue-green deploy schema
 export const deployBlueGreenSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
+  health_check_path: z.string().optional().describe('Health check endpoint path (default: /)'),
 });
 
 // Restart project schema
@@ -444,25 +450,8 @@ export const getWebhookConfigSchema = z.object({
 });
 
 // Environment management schemas
-export const createEnvironmentSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-  type: z.enum(['production', 'development']).describe('Environment type'),
-  branch: z.string().min(1).describe('Git branch for this environment'),
-});
-
 export const listEnvironmentsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
-});
-
-export const deployEnvironmentSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-  environment_type: z.enum(['production', 'development']).describe('Environment to deploy'),
-  no_cache: z
-    .boolean()
-    .optional()
-    .describe(
-      'Force fresh Docker build without cache. Use when dependencies changed but Docker layers are stale.',
-    ),
 });
 
 // Deploy Plan Engine schemas

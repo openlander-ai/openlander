@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as nodeFs from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../src/lib/env-parser.js';
 
-const mockExistsSync = vi.spyOn(nodeFs, 'existsSync');
-const mockReadFileSync = vi.spyOn(nodeFs, 'readFileSync');
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
+  };
+});
+
+const mockExistsSync = vi.mocked(existsSync);
+const mockReadFileSync = vi.mocked(readFileSync);
 
 describe('env-parser', () => {
   beforeEach(() => {

@@ -1,10 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mockNetworkInterfaces = vi.fn();
-
-vi.mock('node:os', () => ({
-  networkInterfaces: mockNetworkInterfaces,
+const { mockNetworkInterfaces } = vi.hoisted(() => ({
+  mockNetworkInterfaces: vi.fn(),
 }));
+
+vi.mock('node:os', async () => {
+  const actual = await vi.importActual<typeof import('node:os')>('node:os');
+  return {
+    ...actual,
+    networkInterfaces: mockNetworkInterfaces,
+  };
+});
 
 import { getLanIp, getAllIps } from '../src/pipeline/traefik.js';
 

@@ -170,9 +170,9 @@ export async function allocatePort(
   db: Database,
   docker: Docker,
   options: AllocatePortOptions = {},
-  envType: OpenLanderEnv = 'production',
+  _envType: OpenLanderEnv = 'production',
 ): Promise<number> {
-  const policy = getPolicy(envType);
+  const policy = getPolicy('production');
   const {
     preferredPort,
     rangeStart = policy.portRangeStart,
@@ -217,9 +217,9 @@ export function getAvailablePortCount(
   db: Database,
   rangeStart?: number,
   rangeEnd?: number,
-  envType: OpenLanderEnv = 'production',
+  _envType: OpenLanderEnv = 'production',
 ): number {
-  const policy = getPolicy(envType);
+  const policy = getPolicy('production');
   const start = rangeStart ?? policy.portRangeStart;
   const end = rangeEnd ?? policy.portRangeEnd;
   const total = end - start + 1;

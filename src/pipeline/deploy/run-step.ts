@@ -26,8 +26,7 @@ export class ContainerRunner {
   ) {}
 
   async run(config: RunConfig): Promise<{ containerId: string; port: number; url: string }> {
-    const envType: OpenLanderEnv =
-      config.environmentType === 'development' ? 'development' : 'production';
+    const envType: OpenLanderEnv = 'production';
     let port = await allocatePort(
       this.db,
       this.docker,

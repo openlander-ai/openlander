@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as nodeFs from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { findDockerfiles, scanRepoShape } from '../../src/lib/repo-scanner.js';
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    readdirSync: vi.fn(),
+    statSync: vi.fn(),
+  };
+});
 
 type DirNode = {
   type: 'dir';
@@ -18,8 +27,8 @@ type MockStat = {
   isDirectory: () => boolean;
 };
 
-const mockReaddirSync = vi.spyOn(nodeFs, 'readdirSync') as unknown as ReturnType<typeof vi.fn>;
-const mockStatSync = vi.spyOn(nodeFs, 'statSync') as unknown as ReturnType<typeof vi.fn>;
+const mockReaddirSync = vi.mocked(readdirSync) as unknown as ReturnType<typeof vi.fn>;
+const mockStatSync = vi.mocked(statSync) as unknown as ReturnType<typeof vi.fn>;
 
 function createFsMap(entries: Array<[string, Node]>): Map<string, Node> {
   return new Map(entries);

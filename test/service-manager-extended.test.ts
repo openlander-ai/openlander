@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockServiceManagerLogger = {
-  debug: vi.fn(),
-  warn: vi.fn(),
-  info: vi.fn(),
-  error: vi.fn(),
-};
+const { mockServiceManagerLogger } = vi.hoisted(() => ({
+  mockServiceManagerLogger: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 vi.mock('../src/lib/logger.js', () => ({
   createModuleLogger: vi.fn(() => mockServiceManagerLogger),
@@ -418,7 +420,10 @@ describe('ServiceManager reconciliation behavior', () => {
     const manager = new ServiceManager(dockerHarness.docker, db);
     const list = await manager.list();
 
-    expect(db.updateService).toHaveBeenCalledWith('svc-failed-inspect', { status: 'error' });
+    expect(db.updateService).toHaveBeenCalledWith('svc-failed-inspect', {
+      status: 'error',
+      containerId: 'svc-failed-inspect-container',
+    });
     expect(list[0]?.status).toBe('error');
   });
 
@@ -434,7 +439,10 @@ describe('ServiceManager reconciliation behavior', () => {
 
     const list = await manager.list();
 
-    expect(db.updateService).toHaveBeenCalledWith('svc-missing-container-ref', { status: 'error' });
+    expect(db.updateService).toHaveBeenCalledWith('svc-missing-container-ref', {
+      status: 'error',
+      containerId: null,
+    });
     expect(list[0]?.status).toBe('error');
   });
 
@@ -480,8 +488,14 @@ describe('ServiceManager reconciliation behavior', () => {
     const manager = new ServiceManager(dockerHarness.docker, db);
     const list = await manager.list();
 
-    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-1', { status: 'error' });
-    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-2', { status: 'error' });
+    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-1', {
+      status: 'error',
+      containerId: 'svc-daemon-1-container',
+    });
+    expect(db.updateService).toHaveBeenCalledWith('svc-daemon-2', {
+      status: 'error',
+      containerId: 'svc-daemon-2-container',
+    });
     expect(list.map((service) => service.status)).toEqual(['error', 'error']);
   });
 });

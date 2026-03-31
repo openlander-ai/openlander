@@ -20,7 +20,6 @@ import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
 import { serviceToolDefs } from '../tools/defs/service.js';
 import { volumeToolDefs } from '../tools/defs/volume.js';
 import { webhookToolDefs } from '../tools/defs/webhook.js';
-import { environmentToolDefs } from '../tools/defs/environment.js';
 import { platformReadToolDefs } from '../tools/defs/platform-read.js';
 import { platformDebugToolDefs } from '../tools/defs/platform-debug.js';
 import { platformActionToolDefs } from '../tools/defs/platform-actions.js';
@@ -46,7 +45,6 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...monitoringToolDefs,
     ...debugToolDefs,
     ...webhookToolDefs,
-    ...environmentToolDefs,
     ...(platformToolsEnabled
       ? [...platformReadToolDefs, ...platformDebugToolDefs, ...platformActionToolDefs]
       : []),

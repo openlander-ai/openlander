@@ -41,7 +41,7 @@ describe('ContainerRunner', () => {
       db,
       docker,
       { preferredPort: 12001 },
-      'development',
+      'production',
     );
     expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('ol-demo-app');
     expect(
@@ -61,7 +61,7 @@ describe('ContainerRunner', () => {
     expect(result).toEqual({
       containerId: 'container-abc123456789',
       port: 12001,
-      url: expect.stringContaining('dev-demo-app.'),
+      url: expect.stringContaining('demo-app.'),
     });
   });
 

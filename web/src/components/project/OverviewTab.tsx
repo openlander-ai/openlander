@@ -13,7 +13,7 @@ import {
   type ConnectedService,
   type Service,
 } from '@/lib/api';
-import type { Project, DeployLogSummary, Environment } from '@/types';
+import type { Project, DeployLogSummary } from '@/types';
 import {
   ChevronDown,
   ChevronRight,
@@ -32,9 +32,7 @@ import {
   Plus,
   X,
   Loader2,
-  GitCompare,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,21 +89,12 @@ function TriggerIcon({ trigger }: { trigger: DeployLogSummary['trigger'] }) {
   return <Icon className="h-3.5 w-3.5 text-muted-ol shrink-0" />;
 }
 
-const statusConfig: Record<string, { label: string; badge: string }> = {
-  running: { label: 'Live', badge: 'bg-success/10 text-success' },
-  stopped: { label: 'Stopped', badge: 'bg-bg-subtle text-muted-ol' },
-  building: { label: 'Deploying', badge: 'bg-warning/10 text-warning' },
-  error: { label: 'Failed', badge: 'bg-error/10 text-error' },
-  idle: { label: 'Idle', badge: 'bg-bg-subtle text-muted-ol' },
-};
-
 // ── Props ───────────────────────────────────────────────────────────────────
 
 interface OverviewTabProps {
   projectId: string;
   projectStatus: string;
   displayProject?: Project;
-  environments?: Environment[];
   // Timeline props
   timelineItems: TimelineItem[];
   isTimelineStreaming: boolean;
@@ -124,7 +113,6 @@ export function OverviewTab({
   projectId,
   projectStatus,
   displayProject,
-  environments,
   timelineItems,
   isTimelineStreaming,
   timelineDisconnected,
@@ -143,9 +131,6 @@ export function OverviewTab({
   const [envVarCount, setEnvVarCount] = useState<number>(0);
   const [errorEntries, setErrorEntries] = useState<LogEntry[]>([]);
   const [now, setNow] = useState(Date.now());
-  const [showComparison, setShowComparison] = useState(false);
-
-  const hasMultipleEnvs = (environments?.length ?? 0) > 1;
 
   const activeProject = displayProject;
   const hasRecentTimeline = timelineItems.length > 0;
@@ -320,92 +305,6 @@ export function OverviewTab({
 
   return (
     <div className="flex flex-col h-full min-h-0 p-6 bg-bg-app">
-      {hasMultipleEnvs && (
-        <div className="flex justify-end mb-4">
-          <Button
-            variant={showComparison ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowComparison(!showComparison)}
-            className="gap-1.5"
-          >
-            <GitCompare className="h-3.5 w-3.5" />
-            {t('project.compare.button')}
-          </Button>
-        </div>
-      )}
-
-      {showComparison && environments && (
-        <div className="grid grid-cols-2 gap-6 pb-6 border-b border-[hsl(var(--border))] mb-6">
-          {(() => {
-            const prodEnv = environments.find((e) => e.type === 'production');
-            const devEnv = environments.find((e) => e.type !== 'production');
-
-            const renderEnvColumn = (env: Environment | undefined, label: string) => (
-              <div className="space-y-3 p-4 rounded-lg bg-bg-subtle/50 border border-[hsl(var(--border))]">
-                <h3 className="font-display font-semibold text-sm text-primary-ol">{label}</h3>
-                {env ? (
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-ol">{t('project.compare.status')}</span>
-                      <span
-                        className={cn(
-                          'px-2 py-0.5 rounded-full text-xs font-medium',
-                          statusConfig[env.status]?.badge ?? 'bg-bg-subtle text-secondary-ol',
-                        )}
-                      >
-                        {statusConfig[env.status]?.label ?? env.status}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-ol">{t('project.compare.branch')}</span>
-                      <span className="font-mono text-xs text-secondary-ol">
-                        {env.branch || '—'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-ol">{t('project.compare.url')}</span>
-                      {env.publicUrl ? (
-                        <a
-                          href={env.publicUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-400 hover:text-blue-300 hover:underline underline-offset-2 transition-colors truncate max-w-[180px]"
-                        >
-                          {env.publicUrl.replace(/^https?:\/\//, '')}
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-ol">—</span>
-                      )}
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-ol">{t('project.compare.lastDeploy')}</span>
-                      <span className="text-xs text-secondary-ol">
-                        {env.updatedAt ? formatRelativeTime(env.updatedAt) : '—'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-ol">{t('project.compare.imageTag')}</span>
-                      <span className="font-mono text-xs text-secondary-ol truncate max-w-[180px]">
-                        {env.imageTag || '—'}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-ol italic">{t('project.compare.noDevEnv')}</p>
-                )}
-              </div>
-            );
-
-            return (
-              <>
-                {renderEnvColumn(prodEnv, t('project.compare.production'))}
-                {renderEnvColumn(devEnv, t('project.compare.development'))}
-              </>
-            );
-          })()}
-        </div>
-      )}
-
       {/* ── Overview Blocks Container ────────────────────────────────────── */}
       <div className="flex flex-col gap-6">
         {/* ── Section 1: Current State ─────────────────────────────────────── */}

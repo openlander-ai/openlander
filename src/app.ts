@@ -11,7 +11,6 @@ import { createModelProxy } from './llm/model-proxy.js';
 import { HealthMonitor } from './monitor/health.js';
 import { WebhookManager } from './webhook/index.js';
 import { CloudflareTunnelManager } from './pipeline/cloudflare.js';
-import { BlueGreenDeployer } from './pipeline/blue-green.js';
 
 import { ServiceManager } from './pipeline/service-manager.js';
 import { BuildDebugger } from './pipeline/build-debugger.js';
@@ -70,7 +69,6 @@ export interface AppContext {
   webhookManager: WebhookManager;
   cloudflare: CloudflareTunnelManager;
   // v0.3 modules
-  blueGreen: BlueGreenDeployer;
   buildDebugger: BuildDebugger | null;
   // v0.4 modules
   channelManager: ChannelManager;
@@ -302,9 +300,6 @@ export async function createAppContext(
   // v0.2: Cloudflare production tunnels
   const cloudflare = new CloudflareTunnelManager(config.cloudflare, db, eventBus);
 
-  // v0.3: Blue-green deployer
-  const blueGreen = new BlueGreenDeployer(docker, db, env, eventBus, jobManager);
-
   const serviceManager = new ServiceManager(docker, db);
 
   try {
@@ -464,7 +459,6 @@ export async function createAppContext(
     healthMonitor,
     webhookManager,
     cloudflare,
-    blueGreen,
     buildDebugger,
     previewDeployer,
     jobManager,

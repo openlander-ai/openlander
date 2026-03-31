@@ -72,7 +72,7 @@ describe('RollbackExecutor', () => {
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         imageTag: 'openlander/env-app:dev-old',
-        name: expect.stringContaining('ol-env-app-dev-'),
+        name: 'ol-env-app',
         port: 11011,
       }),
     );

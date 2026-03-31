@@ -4,18 +4,30 @@ vi.mock('../src/pipeline/git.js', () => ({
   cloneRepo: vi.fn(),
 }));
 
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    existsSync: vi.fn((...args: Parameters<typeof actual.existsSync>) =>
+      actual.existsSync(...args),
+    ),
+    readFileSync: vi.fn((...args: Parameters<typeof actual.readFileSync>) =>
+      actual.readFileSync(...args),
+    ),
+  };
+});
+
 import { PlanEngine } from '../src/pipeline/deploy-plan/engine.js';
 import type { PlanEngineDeps } from '../src/pipeline/deploy-plan/engine.js';
 import { cloneRepo } from '../src/pipeline/git.js';
 import * as infraAnalyzer from '../src/lib/infra-analyzer.js';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import * as nodeFs from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const mockCloneRepo = cloneRepo as unknown as ReturnType<typeof vi.fn>;
-const mockExistsSync = vi.spyOn(nodeFs, 'existsSync');
-const mockReadFileSync = vi.spyOn(nodeFs, 'readFileSync');
+const mockExistsSync = vi.mocked(existsSync);
+const mockReadFileSync = vi.mocked(readFileSync);
 
 describe('PlanEngine.createPlan', () => {
   let engine: PlanEngine;
@@ -64,15 +76,13 @@ describe('PlanEngine.createPlan', () => {
 
     mockCloneRepo.mockReset();
     mockAnalyzeInfra.mockReset();
-    mockExistsSync.mockReset();
-    mockReadFileSync.mockReset();
+    mockExistsSync.mockClear();
+    mockReadFileSync.mockClear();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     mockAnalyzeInfra.mockRestore();
-    mockExistsSync.mockRestore();
-    mockReadFileSync.mockRestore();
   });
 
   it('creates a simple plan when Dockerfile exists and no infra needs', async () => {
@@ -265,7 +275,8 @@ describe('PlanEngine.createPlan', () => {
     });
 
     mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockImplementation(nodeFs.readFileSync);
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    mockReadFileSync.mockImplementation(actualFs.readFileSync);
 
     const plan = await engine.createPlan({
       repoUrl: 'https://github.com/test/env-app',
@@ -442,7 +453,8 @@ describe('PlanEngine.createPlan', () => {
     });
 
     mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockImplementation(nodeFs.readFileSync);
+    const actualFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    mockReadFileSync.mockImplementation(actualFs.readFileSync);
 
     const plan = await engine.createPlan({
       repoUrl: 'https://github.com/test/complex-app',

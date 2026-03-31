@@ -118,6 +118,7 @@ export function createMockServiceManager() {
 
   return {
     list: vi.fn().mockResolvedValue([]),
+    listWithCardSummary: vi.fn().mockResolvedValue([]),
     getDetail: vi.fn().mockResolvedValue(baseService),
     getLogs: vi.fn().mockResolvedValue('service logs'),
     getStats: vi.fn().mockResolvedValue({ status: 'running', diskUsageBytes: 128 }),
@@ -187,9 +188,6 @@ export function createMockContext(db: Database): AppContext {
     modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),
     model: null,
     deployQueue: new DeployQueue(),
-    blueGreen: {
-      deploy: vi.fn().mockResolvedValue({ success: true }),
-    } as unknown as AppContext['blueGreen'],
     serviceManager: createMockServiceManager() as unknown as AppContext['serviceManager'],
     buildDebugger: null,
     previewDeployer: {
@@ -218,5 +216,9 @@ export function createMockContext(db: Database): AppContext {
         .fn()
         .mockResolvedValue({ status: 'building', plan_id: 'plan-test', project_id: 'p1' }),
     } as unknown as AppContext['planEngine'],
+    approvalGate: {
+      dispose: vi.fn(),
+    } as unknown as AppContext['approvalGate'],
+    llmVerified: false,
   };
 }

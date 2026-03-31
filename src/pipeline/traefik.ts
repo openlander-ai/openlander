@@ -302,12 +302,7 @@ export function getEnvironmentProjectHostname(
   _environment: TraefikEnvironment,
   lanIp?: string,
 ): string {
-  const envProjectName = getEnvironmentProjectName(projectName);
-  const ip = lanIp ?? getLanIp();
-  if (ip) {
-    return `${envProjectName}.${ip}.sslip.io`;
-  }
-  return `${envProjectName}.localhost`;
+  return getProjectHostname(projectName, lanIp);
 }
 
 /**
@@ -315,10 +310,6 @@ export function getEnvironmentProjectHostname(
  */
 export function getProjectUrl(projectName: string, lanIp?: string): string {
   return `http://${getProjectHostname(projectName, lanIp)}`;
-}
-
-function getEnvironmentProjectName(projectName: string): string {
-  return projectName;
 }
 
 /**
@@ -425,11 +416,11 @@ export function buildTraefikLabels(
   projectName: string,
   containerPort: number,
   hostname?: string,
-  environment: TraefikEnvironment = 'production',
+  _environment: TraefikEnvironment = 'production',
 ): Record<string, string> {
   const routerName = `ol-${projectName}`;
-  const host = hostname ?? getEnvironmentProjectHostname(projectName, environment);
-  const networkName = getPolicy(environment).networkName;
+  const host = hostname ?? getEnvironmentProjectHostname(projectName, 'production');
+  const networkName = getPolicy('production').networkName;
 
   return {
     'traefik.enable': 'true',

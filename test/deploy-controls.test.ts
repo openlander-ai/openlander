@@ -161,7 +161,7 @@ describe('DeployPipeline deploy controls', () => {
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({
         imageTag: 'openlander/demo-app:development-old',
-        name: expect.stringContaining('ol-demo-app-dev-'),
+        name: 'ol-demo-app',
         port: 11011,
       }),
     );

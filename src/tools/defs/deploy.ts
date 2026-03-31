@@ -68,12 +68,14 @@ export const deployToolDefs: ToolDef[] = [
     inputSchema: deployBlueGreenSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
+      const healthCheckPath = args['health_check_path'] as string | undefined;
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
-      const result = await context.appCtx.blueGreen.deploy(project.id, {
-        environmentType: 'production',
+      const result = await context.appCtx.pipeline.redeploy(project.id, {
+        strategy: 'blue-green',
+        healthCheckPath: healthCheckPath?.trim() || undefined,
       });
       return {
         ...result,

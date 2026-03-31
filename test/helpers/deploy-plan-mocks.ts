@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import type { AppContext } from '../../src/app.js';
 import type { Database } from '../../src/db/index.js';
+import { ModelRegistry } from '../../src/llm/model-registry.js';
 import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 
 // ---------------------------------------------------------------------------
@@ -109,7 +110,9 @@ export function createMockPlanContext(db?: Database): AppContext {
       setBulk: vi.fn().mockReturnValue(true),
       getGlobalSecrets: vi.fn().mockReturnValue({}),
     } as unknown as AppContext['env'],
+    agentPool: null,
     agent: null,
+    modelRegistry: new ModelRegistry({ providers: {}, defaultRoute: { providerId: 'none' } }),
     model: null,
     deployQueue: new DeployQueue(),
     healthMonitor: {
@@ -120,9 +123,6 @@ export function createMockPlanContext(db?: Database): AppContext {
       triggerWebhook: vi.fn(),
     } as unknown as AppContext['webhookManager'],
     cloudflare: {} as unknown as AppContext['cloudflare'],
-    blueGreen: {
-      deploy: vi.fn().mockResolvedValue({ success: true }),
-    } as unknown as AppContext['blueGreen'],
     buildDebugger: null,
     channelManager: {
       register: vi.fn(),
@@ -172,6 +172,10 @@ export function createMockPlanContext(db?: Database): AppContext {
       disconnectAll: vi.fn().mockResolvedValue(undefined),
     } as unknown as AppContext['mcpClientManager'],
     planEngine: createMockPlanEngine() as unknown as AppContext['planEngine'],
+    approvalGate: {
+      dispose: vi.fn(),
+    } as unknown as AppContext['approvalGate'],
+    llmVerified: false,
   };
 }
 
