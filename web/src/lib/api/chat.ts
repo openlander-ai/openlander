@@ -4,11 +4,16 @@ export async function streamChat(
   message: string,
   signal?: AbortSignal,
   projectId?: string,
+  sessionId?: string,
 ): Promise<Response> {
   const res = await fetch('/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, ...(projectId ? { projectId } : {}) }),
+    body: JSON.stringify({
+      message,
+      ...(projectId ? { projectId } : {}),
+      ...(sessionId ? { session_id: sessionId } : {}),
+    }),
     signal,
   });
   if (!res.ok) {

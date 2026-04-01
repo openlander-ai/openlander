@@ -14,6 +14,7 @@ interface UseStreamChatReturn {
   currentStep: number;
   currentToolName?: string;
   pendingQuestion: QuestionRequest | null;
+  setPendingQuestion: Dispatch<SetStateAction<QuestionRequest | null>>;
   error: string | null;
   sendMessage: (message: string, projectId?: string) => void;
   abort: () => void;
@@ -46,12 +47,20 @@ export function useStreamChat(): UseStreamChatReturn {
   const [error, setError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  const sessionIdRef = useRef<string | undefined>(undefined);
+  const scopeKeyRef = useRef<string>('global');
 
   const sendMessage = useCallback(
     (message: string, projectId?: string) => {
       const trimmedMessage = message.trim();
       if (!trimmedMessage || isStreaming) {
         return;
+      }
+
+      const scopeKey = projectId ? `project:${projectId}` : 'global';
+      if (scopeKeyRef.current !== scopeKey) {
+        scopeKeyRef.current = scopeKey;
+        sessionIdRef.current = undefined;
       }
 
       const userMessage: ChatMessage = {
@@ -128,7 +137,10 @@ export function useStreamChat(): UseStreamChatReturn {
 
       const handleEvent = (event: ChatStreamEvent): void => {
         switch (event.type) {
-          case 'session':
+          case 'session': {
+            sessionIdRef.current = event.sessionId;
+            break;
+          }
           case 'thinking': {
             break;
           }
@@ -188,7 +200,12 @@ export function useStreamChat(): UseStreamChatReturn {
 
       void (async () => {
         try {
-          const response = await streamChat(trimmedMessage, controller.signal, projectId);
+          const response = await streamChat(
+            trimmedMessage,
+            controller.signal,
+            projectId,
+            sessionIdRef.current,
+          );
 
           if (!response.body) {
             throw new Error('Response body is null');
@@ -247,6 +264,8 @@ export function useStreamChat(): UseStreamChatReturn {
     setPendingQuestion(null);
     setCurrentStep(0);
     setCurrentToolName(undefined);
+    sessionIdRef.current = undefined;
+    scopeKeyRef.current = 'global';
   }, []);
 
   return {
@@ -255,6 +274,7 @@ export function useStreamChat(): UseStreamChatReturn {
     currentStep,
     currentToolName,
     pendingQuestion,
+    setPendingQuestion,
     error,
     sendMessage,
     abort,

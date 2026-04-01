@@ -5,10 +5,13 @@ import { MessageList } from '@/components/agent/MessageList';
 import { StreamError } from '@/components/agent/EmptyState';
 import { ThinkingIndicator } from '@/components/agent/ThinkingIndicator';
 import { StepProgress } from '@/components/agent/StepProgress';
+import { ChatInput } from '@/components/agent/ChatInput';
+import { ChatQuestion } from '@/components/agent/ChatQuestion';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import type { AgentPanelInitialContext } from '@/contexts/agent-panel';
 import { useStreamChat } from '@/hooks/use-stream-chat';
-import { getSetupStatus } from '@/lib/api';
+import { dismissQuestion, getSetupStatus, replyQuestion } from '@/lib/api';
+import type { QuestionAnswer } from '@/lib/chat-types';
 import { useLanguage } from '@/i18n/context.js';
 import { subscribeLlmChanged } from '@/lib/llm-events';
 
@@ -46,6 +49,7 @@ export function AgentPanel({
 }: AgentPanelProps) {
   const { t } = useLanguage();
   const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | undefined>(undefined);
   const sentContextKeyRef = useRef<string | null>(null);
   const chat = useStreamChat();
 
@@ -74,6 +78,19 @@ export function AgentPanel({
   }, [refreshLlmConfigured]);
 
   useEffect(() => {
+    if (!open) {
+      setActiveProjectId(undefined);
+      sentContextKeyRef.current = null;
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (open && initialContext?.projectId) {
+      setActiveProjectId(initialContext.projectId);
+    }
+  }, [open, initialContext?.projectId]);
+
+  useEffect(() => {
     if (!open || !initialContext || !llmConfigured) {
       return;
     }
@@ -83,10 +100,39 @@ export function AgentPanel({
       return;
     }
 
+    setActiveProjectId(initialContext.projectId);
     chat.sendMessage(buildDiagnosticPrompt(initialContext), initialContext.projectId);
     sentContextKeyRef.current = contextKey;
     onInitialContextConsumed();
   }, [open, initialContext, llmConfigured, chat, onInitialContextConsumed]);
+
+  const handleSend = useCallback(
+    (message: string) => {
+      chat.sendMessage(message, activeProjectId);
+    },
+    [chat, activeProjectId],
+  );
+
+  const handleReplyQuestion = useCallback(
+    async (requestId: string, answers: QuestionAnswer[]) => {
+      try {
+        await replyQuestion(requestId, answers);
+        chat.setPendingQuestion((prev) => (prev?.id === requestId ? null : prev));
+      } catch (err) {
+        console.error('Question reply failed:', err);
+      }
+    },
+    [chat],
+  );
+
+  const handleDismissQuestion = useCallback(async () => {
+    try {
+      await dismissQuestion();
+      chat.setPendingQuestion(null);
+    } catch (err) {
+      console.error('Question dismiss failed:', err);
+    }
+  }, [chat]);
 
   const panelTitle = useMemo(() => t('agent.aiDiagnosis'), [t]);
 
@@ -122,6 +168,13 @@ export function AgentPanel({
                       <StepProgress step={chat.currentStep} toolName={chat.currentToolName} />
                     ) : null}
                     {chat.isStreaming ? <ThinkingIndicator /> : null}
+                    {chat.pendingQuestion ? (
+                      <ChatQuestion
+                        request={chat.pendingQuestion}
+                        onReply={handleReplyQuestion}
+                        onDismiss={handleDismissQuestion}
+                      />
+                    ) : null}
                   </MessageList>
                 ) : (
                   <div className="flex-1 flex items-center justify-center px-6">
@@ -138,6 +191,11 @@ export function AgentPanel({
                 )}
 
                 {chat.error ? <StreamError error={chat.error} /> : null}
+                <ChatInput
+                  onSend={handleSend}
+                  isStreaming={chat.isStreaming}
+                  onAbort={chat.abort}
+                />
               </div>
             </div>
           </div>
