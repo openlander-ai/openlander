@@ -103,5 +103,8 @@ export async function fetchOpsIncident(
 export async function fetchCircuitBreakerState(projectId: string): Promise<CircuitBreakerState> {
   const response = await fetchWithAuth(`/api/ops/circuit-breaker/${projectId}`);
   if (!response.ok) throw new Error('Failed to fetch circuit breaker state');
-  return response.json();
+  const data = (await response.json()) as {
+    state: (CircuitBreakerState & { project_id?: string }) | null;
+  };
+  return data.state ?? { state: 'closed' };
 }
