@@ -112,6 +112,14 @@ export interface OpenLanderConfig {
 
   /** v1.0: AI feature toggles */
   ai: AIFeaturesConfig;
+
+  /** v1.1: Google OAuth credentials for Gemini API access */
+  google: GoogleOAuthConfig;
+}
+
+export interface GoogleOAuthConfig {
+  clientId: string;
+  clientSecret: string;
 }
 
 export interface LLMProviderConfig {
@@ -361,6 +369,10 @@ function buildDefaultConfig(): OpenLanderConfig {
       secretScan: { enabled: true },
       rollbackSuggestion: { enabled: true },
       operationalMonitoring: { enabled: true },
+    },
+    google: {
+      clientId: '',
+      clientSecret: '',
     },
   };
 }

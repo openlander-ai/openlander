@@ -132,7 +132,7 @@ function createApp(
     });
   });
 
-  const authRoutes = createAuthRoutes(authService);
+  const authRoutes = createAuthRoutes(authService, ctx);
   app.route('/api', authRoutes);
 
   const apiRoutes = createApiRoutes(ctx);

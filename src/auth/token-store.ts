@@ -7,9 +7,15 @@
 import { randomUUID } from 'node:crypto';
 import { encrypt, decrypt } from '../env/crypto.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { refreshOAuthToken } from './token-refresh.js';
 import type { Database } from '../db/index.js';
 
 const log = createModuleLogger('auth');
+
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+// 60 second buffer before expiry to trigger refresh
+const EXPIRY_BUFFER_MS = 60 * 1000;
 
 /** Token data to store (before encryption). */
 export interface TokenData {
@@ -118,31 +124,129 @@ export function deleteProviderToken(db: Database, provider: string): void {
   log.info({ provider }, 'OAuth token deleted');
 }
 
+/** Config needed to attempt token refresh for a provider. */
+export interface RefreshConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
+/**
+ * Check if a provider's token is expired (or expiring within buffer) and refresh it.
+ *
+ * Only works for providers with a refresh_token and known token URL (currently Google).
+ * Returns true if a refresh was performed, false if not needed or not possible.
+ */
+export async function refreshIfExpired(
+  db: Database,
+  provider: string,
+  config?: RefreshConfig,
+): Promise<boolean> {
+  const token = loadDecryptedToken(db, provider);
+  if (!token) {
+    return false;
+  }
+
+  if (!token.expiresAt) {
+    return false;
+  }
+
+  const expiresAtMs = new Date(token.expiresAt).getTime();
+  const now = Date.now();
+
+  if (expiresAtMs - now > EXPIRY_BUFFER_MS) {
+    return false;
+  }
+
+  if (!token.refreshToken) {
+    log.info({ provider }, 'Token expired but no refresh_token available');
+    return false;
+  }
+
+  if (!config) {
+    log.info({ provider }, 'Token expired but no refresh config provided');
+    return false;
+  }
+
+  const tokenUrl = provider === 'google' ? GOOGLE_TOKEN_URL : null;
+  if (!tokenUrl) {
+    log.info({ provider }, 'Token expired but no known token URL for provider');
+    return false;
+  }
+
+  const result = await refreshOAuthToken({
+    tokenUrl,
+    refreshToken: token.refreshToken,
+    clientId: config.clientId,
+    clientSecret: config.clientSecret,
+  });
+
+  if (!result) {
+    log.warn({ provider }, 'Token refresh returned null — refresh token may be revoked');
+    return false;
+  }
+
+  const newExpiresAt = new Date(Date.now() + result.expires_in * 1000).toISOString();
+
+  encryptAndStoreToken(db, provider, {
+    accessToken: result.access_token,
+    refreshToken: result.refresh_token ?? token.refreshToken,
+    expiresAt: newExpiresAt,
+    userEmail: token.userEmail,
+  });
+
+  log.info({ provider }, 'Token refreshed and stored');
+  return true;
+}
+
 /**
  * Get a valid access token for a provider.
  *
- * Checks expiry and returns the decrypted access token.
- * For providers that don't expire (like OpenRouter API keys),
- * returns the token directly.
- *
- * @param db - Database instance
- * @param provider - Provider name
- * @returns Valid access token, or null if not found/expired
+ * Checks expiry, attempts refresh if possible, then returns the token.
+ * For providers that don't expire (like OpenRouter API keys), returns directly.
  */
-export function getValidToken(db: Database, provider: string): string | null {
+export async function getValidToken(
+  db: Database,
+  provider: string,
+  refreshConfig?: RefreshConfig,
+): Promise<string | null> {
   const token = loadDecryptedToken(db, provider);
   if (!token) {
     return null;
   }
 
-  // Check expiry if set
   if (token.expiresAt) {
-    const expiresAtDate = new Date(token.expiresAt);
-    const now = new Date();
+    const expiresAtMs = new Date(token.expiresAt).getTime();
+    const now = Date.now();
 
-    // Add 5 minute buffer before expiry
+    if (expiresAtMs - now < EXPIRY_BUFFER_MS) {
+      const refreshed = await refreshIfExpired(db, provider, refreshConfig);
+      if (refreshed) {
+        const updated = loadDecryptedToken(db, provider);
+        return updated?.accessToken ?? null;
+      }
+      log.info({ provider }, 'OAuth token expired or expiring soon');
+      return null;
+    }
+  }
+
+  return token.accessToken;
+}
+
+/**
+ * Get a valid access token synchronously (no refresh attempt).
+ *
+ * For callers that cannot await — checks expiry with 5-minute buffer.
+ */
+export function getValidTokenSync(db: Database, provider: string): string | null {
+  const token = loadDecryptedToken(db, provider);
+  if (!token) {
+    return null;
+  }
+
+  if (token.expiresAt) {
+    const expiresAtMs = new Date(token.expiresAt).getTime();
     const bufferMs = 5 * 60 * 1000;
-    if (expiresAtDate.getTime() - now.getTime() < bufferMs) {
+    if (expiresAtMs - Date.now() < bufferMs) {
       log.info({ provider }, 'OAuth token expired or expiring soon');
       return null;
     }

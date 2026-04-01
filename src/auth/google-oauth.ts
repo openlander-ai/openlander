@@ -1,27 +1,18 @@
 /**
  * Google OAuth PKCE flow for Gemini API access.
  *
- * Implements PKCE (Proof Key for Code Exchange) OAuth flow for Google Gemini.
- * Uses raw HTTP calls — no Google Cloud SDK dependency.
+ * Raw HTTP — no Google Cloud SDK dependency.
  */
 import { randomBytes, createHash } from 'node:crypto';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('auth-google');
 
-// Google OAuth endpoints
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-
-// Gemini API scope
 const GEMINI_SCOPE = 'https://www.googleapis.com/auth/generative-language';
 
-/**
- * Generate PKCE code verifier and challenge.
- *
- * verifier: random 43-128 char base64url string
- * challenge: SHA256 of verifier, base64url-encoded
- */
+/** Generate PKCE code verifier (base64url, 43 chars) and SHA256 challenge. */
 export function generatePkce(): { verifier: string; challenge: string } {
   const verifier = randomBytes(32).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -31,35 +22,9 @@ export function generatePkce(): { verifier: string; challenge: string } {
 /**
  * Build the Google OAuth authorization URL for web PKCE flow.
  *
- * @param callbackUrl - The callback URL (e.g., http://localhost:10114/api/auth/callback/google)
- * @param challenge - PKCE code challenge
- * @param state - Opaque state value for CSRF protection
- * @returns Authorization URL string
+ * Uses access_type=offline + prompt=consent to ensure a refresh token is returned.
  */
-export function getGoogleAuthUrl(callbackUrl: string, challenge: string, state: string): string {
-  const url = new URL(GOOGLE_AUTH_URL);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('client_id', '');
-  url.searchParams.set('redirect_uri', callbackUrl);
-  url.searchParams.set('scope', GEMINI_SCOPE);
-  url.searchParams.set('code_challenge', challenge);
-  url.searchParams.set('code_challenge_method', 'S256');
-  url.searchParams.set('access_type', 'offline');
-  url.searchParams.set('prompt', 'consent');
-  url.searchParams.set('state', state);
-  return url.toString();
-}
-
-/**
- * Build the Google OAuth authorization URL with client ID injected.
- *
- * @param clientId - Google OAuth client ID
- * @param callbackUrl - The callback URL
- * @param challenge - PKCE code challenge
- * @param state - Opaque state value for CSRF protection
- * @returns Authorization URL string
- */
-export function getGoogleAuthUrlWithClientId(
+export function getGoogleAuthUrl(
   clientId: string,
   callbackUrl: string,
   challenge: string,
@@ -78,7 +43,6 @@ export function getGoogleAuthUrlWithClientId(
   return url.toString();
 }
 
-/** Google token endpoint response shape. */
 interface GoogleTokenResponse {
   access_token?: string;
   refresh_token?: string;
@@ -88,7 +52,6 @@ interface GoogleTokenResponse {
   error_description?: string;
 }
 
-/** Successful token exchange result. */
 export interface GoogleTokenResult {
   access_token: string;
   refresh_token: string;
@@ -96,17 +59,9 @@ export interface GoogleTokenResult {
 }
 
 /**
- * Exchange an authorization code for Google OAuth tokens.
+ * Exchange an authorization code for Google OAuth tokens via PKCE.
  *
- * Uses PKCE code verifier for proof. Returns access token, refresh token, and expiry.
- *
- * @param code - Authorization code from callback
- * @param verifier - PKCE code verifier
- * @param redirectUri - The same redirect URI used in the authorization request
- * @param clientId - Google OAuth client ID
- * @param clientSecret - Google OAuth client secret
- * @returns Token result with access_token, refresh_token, and expires_in
- * @throws Error on exchange failure
+ * @throws Error on exchange failure or missing access_token
  */
 export async function exchangeGoogleCode(
   code: string,

@@ -1,14 +1,33 @@
+import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
+import type { AppContext } from '../../app.js';
 import type { AuthService } from '../../auth/auth-service.js';
+import { generatePkce, getGoogleAuthUrl, exchangeGoogleCode } from '../../auth/google-oauth.js';
+import { encryptAndStoreToken } from '../../auth/token-store.js';
+import { createModuleLogger } from '../../lib/logger.js';
+
+const log = createModuleLogger('auth-routes');
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
+
+const pkceVerifiersByState = new Map<string, { verifier: string; createdAt: number }>();
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 function getSessionCookieToken(cookieHeader: string): string | null {
   const match = cookieHeader.match(/(?:^|;\s*)ol_session=([^;]*)/);
   return match?.[1] ?? null;
 }
 
-export function createAuthRoutes(authService: AuthService): Hono {
+function cleanExpiredOAuthStates(): void {
+  const now = Date.now();
+  for (const [state, entry] of pkceVerifiersByState) {
+    if (now - entry.createdAt > OAUTH_STATE_TTL_MS) {
+      pkceVerifiersByState.delete(state);
+    }
+  }
+}
+
+export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Hono {
   const api = new Hono();
 
   api.post('/auth/setup-password', async (c) => {
@@ -116,6 +135,90 @@ export function createAuthRoutes(authService: AuthService): Hono {
 
     const { apiToken } = authService.regenerateToken();
     return c.json({ token: apiToken });
+  });
+
+  api.get('/auth/google/start', (c) => {
+    if (!ctx) {
+      return c.json({ error: 'OAuth not available' }, 500);
+    }
+
+    const googleConfig = ctx.config.google;
+    if (!googleConfig.clientId) {
+      return c.json({ error: 'Google OAuth not configured' }, 400);
+    }
+
+    cleanExpiredOAuthStates();
+
+    const { verifier, challenge } = generatePkce();
+    const state = randomBytes(16).toString('hex');
+
+    pkceVerifiersByState.set(state, { verifier, createdAt: Date.now() });
+
+    const callbackUrl = `${ctx.config.server.baseUrl}/api/auth/callback/google`;
+    const authUrl = getGoogleAuthUrl(googleConfig.clientId, callbackUrl, challenge, state);
+
+    return c.redirect(authUrl);
+  });
+
+  api.get('/auth/callback/google', async (c) => {
+    if (!ctx) {
+      return c.json({ error: 'OAuth not available' }, 500);
+    }
+
+    const code = c.req.query('code');
+    const state = c.req.query('state');
+    const error = c.req.query('error');
+
+    if (error) {
+      log.error({ error }, 'Google OAuth callback error');
+      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${encodeURIComponent(error)}`);
+    }
+
+    if (!code || !state) {
+      return c.json({ error: 'Missing code or state parameter' }, 400);
+    }
+
+    const pending = pkceVerifiersByState.get(state);
+    if (!pending) {
+      log.warn({ state }, 'Unknown or expired OAuth state');
+      return c.json({ error: 'Invalid or expired OAuth state' }, 400);
+    }
+
+    pkceVerifiersByState.delete(state);
+
+    if (Date.now() - pending.createdAt > OAUTH_STATE_TTL_MS) {
+      return c.json({ error: 'OAuth state expired' }, 400);
+    }
+
+    const googleConfig = ctx.config.google;
+    if (!googleConfig.clientId || !googleConfig.clientSecret) {
+      return c.json({ error: 'Google OAuth not configured' }, 500);
+    }
+
+    try {
+      const callbackUrl = `${ctx.config.server.baseUrl}/api/auth/callback/google`;
+      const tokens = await exchangeGoogleCode(
+        code,
+        pending.verifier,
+        callbackUrl,
+        googleConfig.clientId,
+        googleConfig.clientSecret,
+      );
+
+      const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+      encryptAndStoreToken(ctx.db, 'google', {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || null,
+        expiresAt,
+      });
+
+      log.info('Google OAuth tokens stored successfully');
+      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_success=google`);
+    } catch (err) {
+      log.error({ err }, 'Google OAuth code exchange failed');
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      return c.redirect(`${ctx.config.server.baseUrl}/?oauth_error=${encodeURIComponent(msg)}`);
+    }
   });
 
   return api;
