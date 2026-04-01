@@ -5,6 +5,11 @@ import { eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { OpsConfig, OpsEvent } from './ops-types.js';
 import { DEFAULT_OPS_CONFIG } from './ops-types.js';
+import { RecoveryPipeline } from './ops-recovery.js';
+import { OpsAlerting } from './ops-alerting.js';
+import { CascadeDetector } from './ops-cascade.js';
+import { DigestGenerator } from './ops-digest.js';
+import { IncidentManager } from './ops-incidents.js';
 
 const log = createModuleLogger('ops-agent');
 
@@ -18,8 +23,11 @@ export class OpsAgent {
   private readonly eventUnsubscribers = new Map<string, () => void>();
   private readonly llmCallsPerProject = new Map<string, number[]>();
   private readonly llmCallsGlobal: number[] = [];
-  private readonly maxConcurrentLLM = 3;
-  private readonly maxConcurrentRecovery = 5;
+  private readonly recovery: RecoveryPipeline;
+  private readonly alerting: OpsAlerting;
+  private readonly cascade: CascadeDetector;
+  private readonly digest: DigestGenerator;
+  private readonly incidents: IncidentManager;
   private diskCheckTimer: ReturnType<typeof setInterval> | null = null;
   private lastCleanupAt = 0;
   private readonly CLEANUP_COOLDOWN_MS = 10 * 60_000; // 10 minutes
@@ -27,9 +35,11 @@ export class OpsAgent {
   constructor(ctx: AppContext, config?: Partial<OpsConfig>) {
     this.ctx = ctx;
     this.config = { ...DEFAULT_OPS_CONFIG, ...config };
-    void this.ctx;
-    void this.maxConcurrentLLM;
-    void this.maxConcurrentRecovery;
+    this.recovery = new RecoveryPipeline(ctx);
+    this.alerting = new OpsAlerting(ctx, this.config);
+    this.cascade = new CascadeDetector(ctx);
+    this.digest = new DigestGenerator(ctx);
+    this.incidents = new IncidentManager(ctx);
   }
 
   async start(): Promise<void> {
@@ -78,6 +88,10 @@ export class OpsAgent {
 
     await this.reconcileOnBoot();
 
+    if (this.config.thresholds.digest_time) {
+      this.digest.scheduleDigest(this.config.thresholds.digest_time);
+    }
+
     this.diskCheckTimer = setInterval(() => {
       void this.checkAndCleanDisk();
     }, 5 * 60_000);
@@ -100,6 +114,8 @@ export class OpsAgent {
     }
     this.eventUnsubscribers.clear();
     this.eventHandlers.clear();
+
+    this.digest.stopSchedule();
 
     const drainStart = Date.now();
     while (this.processing && Date.now() - drainStart < 5000) {
@@ -215,14 +231,78 @@ export class OpsAgent {
     }
   }
 
-  private handleCrashEvent(_event: OpsEvent): Promise<void> {
-    void _event;
-    return Promise.resolve();
+  private async handleCrashEvent(event: OpsEvent): Promise<void> {
+    const payload = event.payload as {
+      projectId?: string;
+      projectName?: string;
+      containerId?: string;
+    };
+    const projectId = payload.projectId ?? '';
+    const projectName = payload.projectName ?? projectId;
+    const containerId = payload.containerId ?? '';
+
+    if (!projectId) {
+      return;
+    }
+
+    this.cascade.recordFailure(projectId);
+
+    const incident = this.incidents.openIncident(projectId, { type: event.type });
+
+    const cascadeResult = await this.cascade.detectCascade([projectId]);
+    if (cascadeResult) {
+      const cascadeAlert = this.cascade.buildCascadeAlert(cascadeResult, incident.id);
+      await this.alerting.sendAlert(cascadeAlert);
+      return;
+    }
+
+    const alert = this.alerting.buildContextualAlert({
+      severity: 'critical',
+      projectId,
+      projectName,
+      eventType: event.type,
+      title: `Container crash: ${projectName}`,
+      description: `Container for project "${projectName}" has crashed`,
+      incidentId: incident.id,
+    });
+    await this.alerting.sendAlert(alert);
+
+    if (this.config.auto_restart && containerId) {
+      const result = await this.recovery.execute({
+        projectId,
+        projectName,
+        containerId,
+        incidentId: incident.id,
+      });
+      if (result === 'recovered') {
+        this.incidents.resolveIncident(incident.id, 'Auto-recovered after restart');
+      } else if (result === 'escalated') {
+        this.incidents.escalateIncident(incident.id, 'Recovery pipeline exhausted');
+      }
+    }
   }
 
-  private handleHealthDegraded(_event: OpsEvent): Promise<void> {
-    void _event;
-    return Promise.resolve();
+  private async handleHealthDegraded(event: OpsEvent): Promise<void> {
+    const payload = event.payload as {
+      projectId?: string;
+      projectName?: string;
+      failures?: number;
+    };
+    const projectId = payload.projectId ?? '';
+    if (!projectId || (payload.failures ?? 0) < 2) {
+      return;
+    }
+
+    const projectName = payload.projectName ?? projectId;
+    const alert = this.alerting.buildContextualAlert({
+      severity: 'warning',
+      projectId,
+      projectName,
+      eventType: 'health_degraded',
+      title: `Health degraded: ${projectName}`,
+      description: `Health check failing for project "${projectName}"`,
+    });
+    await this.alerting.sendAlert(alert);
   }
 
   private handleDeployFailed(_event: OpsEvent): Promise<void> {
@@ -272,9 +352,14 @@ export class OpsAgent {
     }
   }
 
-  generateDigest(): Promise<void> {
-    void this.processing;
-    return Promise.resolve();
+  async generateDigest(): Promise<void> {
+    const report = this.digest.generateDigest();
+    const alert = this.digest.formatDigestForChannel(report);
+    await this.alerting.sendAlert(alert);
+  }
+
+  getDigest() {
+    return this.digest.getLastReport();
   }
 
   isLlmRateLimited(projectId: string): boolean {
@@ -304,5 +389,13 @@ export class OpsAgent {
 
   reloadConfig(config: Partial<OpsConfig>): void {
     this.config = { ...this.config, ...config };
+    this.alerting.updateConfig(this.config);
+
+    const digestTime = this.config.thresholds.digest_time;
+    if (digestTime) {
+      this.digest.scheduleDigest(digestTime);
+    } else {
+      this.digest.stopSchedule();
+    }
   }
 }

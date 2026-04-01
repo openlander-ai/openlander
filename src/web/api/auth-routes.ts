@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import type { AuthService } from '../../auth/auth-service.js';
 import { generatePkce, getGoogleAuthUrl, exchangeGoogleCode } from '../../auth/google-oauth.js';
-import { encryptAndStoreToken } from '../../auth/token-store.js';
+import { encryptAndStoreToken, loadDecryptedToken } from '../../auth/token-store.js';
 import { createModuleLogger } from '../../lib/logger.js';
 
 const log = createModuleLogger('auth-routes');
@@ -124,6 +124,25 @@ export function createAuthRoutes(authService: AuthService, ctx?: AppContext): Ho
       return c.json({ error: 'No API token configured' }, 404);
     }
     return c.json({ token });
+  });
+
+  api.get('/auth/google/status', async (c) => {
+    const cookieHeader = c.req.header('cookie') || '';
+    const sessionToken = getSessionCookieToken(cookieHeader);
+    if (!sessionToken || !authService.validateSession(sessionToken)) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    if (!ctx) {
+      return c.json({ connected: false });
+    }
+
+    try {
+      const token = await Promise.resolve(loadDecryptedToken(ctx.db, 'google'));
+      return c.json({ connected: token !== null });
+    } catch {
+      return c.json({ connected: false });
+    }
   });
 
   api.post('/auth/token/regenerate', (c) => {

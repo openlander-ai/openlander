@@ -172,20 +172,40 @@ export function OperationsSettings() {
                 }
               />
             </div>
-            <div>
-              <Label>Daily digest time</Label>
-              <Input
-                type="text"
-                placeholder="09:00"
-                value={config.thresholds.digest_time}
-                onChange={(e) =>
-                  setConfig((c) => ({
-                    ...c,
-                    thresholds: { ...c.thresholds, digest_time: e.target.value },
-                  }))
-                }
-              />
-            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Daily Digest</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label>Enable daily digest</Label>
+            <Switch
+              checked={config.thresholds.digest_time !== ''}
+              onCheckedChange={(v) =>
+                setConfig((c) => ({
+                  ...c,
+                  thresholds: { ...c.thresholds, digest_time: v ? '09:00' : '' },
+                }))
+              }
+            />
+          </div>
+          <div>
+            <Label>Digest time</Label>
+            <Input
+              type="text"
+              placeholder="09:00"
+              value={config.thresholds.digest_time}
+              onChange={(e) =>
+                setConfig((c) => ({
+                  ...c,
+                  thresholds: { ...c.thresholds, digest_time: e.target.value },
+                }))
+              }
+            />
           </div>
         </CardContent>
       </Card>

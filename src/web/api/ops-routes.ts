@@ -85,8 +85,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
   // --- Digest ---
 
   api.get('/digest/latest', (c) => {
-    // DigestGenerator not yet implemented — return null placeholder
-    return c.json({ digest: null });
+    const digest = ctx.opsAgent?.getDigest() ?? null;
+    return c.json({ digest });
   });
 
   api.post('/digest/trigger', async (c) => {
