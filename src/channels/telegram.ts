@@ -9,6 +9,7 @@ import {
   type ChannelMessage,
 } from './base.js';
 import { createModuleLogger } from '../lib/logger.js';
+import type { OpsAlert } from '../monitor/ops-types.js';
 
 const log = createModuleLogger('telegram');
 interface TelegramUpdate {
@@ -218,6 +219,20 @@ export class TelegramChannel implements Channel {
     await this.callTelegramApi('answerCallbackQuery', {
       callback_query_id: query.id,
     });
+  }
+
+  /**
+   * Formats an OpsAlert for Telegram with MarkdownV2 escaping.
+   */
+  formatOpsAlert(alert: OpsAlert): { text: string; extra?: unknown } {
+    const icon = alert.severity === 'critical' ? '🔴' : alert.severity === 'warning' ? '🟡' : '🔵';
+    const escape = (s: string) => s.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+    const lines = [
+      `${icon} *\\[${alert.severity.toUpperCase()}\\]* ${escape(alert.project.name)}: ${escape(alert.title)}`,
+      escape(alert.description),
+    ];
+    if (alert.suggestion) lines.push(`_${escape(alert.suggestion)}_`);
+    return { text: lines.join('\n') };
   }
 
   private async callTelegramApi(

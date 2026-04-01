@@ -3,6 +3,7 @@ import { type EventBus, eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { QuestionRequest } from '../lib/question-bridge.js';
+import type { OpsAlert } from '../monitor/ops-types.js';
 
 const log = createModuleLogger('channels');
 export type ChannelType = 'slack' | 'discord' | 'telegram' | 'email';
@@ -42,6 +43,7 @@ export interface Channel {
     text: string,
     components: ChannelComponent[],
   ): Promise<string>;
+  formatOpsAlert?(alert: OpsAlert): { text: string; extra?: unknown };
   isConnected(): boolean;
 }
 
@@ -162,9 +164,7 @@ export class ChannelManager {
           ? this.ctx.config.channels.discord.recoveryChannelId
           : type === 'telegram'
             ? this.ctx.config.channels.telegram.recoveryChannelId
-            : type === 'email'
-              ? 'email-broadcast'
-              : undefined;
+            : 'email-broadcast';
 
     if (!configuredId) {
       return null;
@@ -220,6 +220,31 @@ export class ChannelManager {
         await channel.sendMessage(channelId, text);
       } catch (error) {
         log.error({ error, channelType: type }, 'Failed to broadcast to channel');
+      }
+    }
+  }
+
+  async broadcastStructured(alert: OpsAlert): Promise<void> {
+    for (const [type, channel] of this.channels.entries()) {
+      if (!channel.isConnected()) {
+        continue;
+      }
+
+      const channelId = this.getBroadcastChannelId(type);
+      if (!channelId) {
+        continue;
+      }
+
+      try {
+        if (channel.formatOpsAlert) {
+          const formatted = channel.formatOpsAlert(alert);
+          await channel.sendMessage(channelId, formatted.text);
+        } else {
+          const text = `[${alert.severity.toUpperCase()}] ${alert.project.name}: ${alert.title}\n${alert.description}`;
+          await channel.sendMessage(channelId, text);
+        }
+      } catch (error) {
+        log.error({ error, channelType: type }, 'Failed to broadcastStructured');
       }
     }
   }

@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import type { Channel } from './base.js';
 import { createModuleLogger } from '../lib/logger.js';
+import type { OpsAlert } from '../monitor/ops-types.js';
 
 const log = createModuleLogger('email');
 
@@ -80,6 +81,33 @@ export class EmailChannel implements Channel {
   editMessage(_channelId: string, _messageId: string, _text: string): Promise<void> {
     // no-op: sent emails cannot be edited
     return Promise.resolve();
+  }
+
+  /**
+   * Formats an OpsAlert for email with plain text and subject line.
+   */
+  formatOpsAlert(alert: OpsAlert): { text: string; extra?: unknown } {
+    const icon =
+      alert.severity === 'critical'
+        ? '[CRITICAL]'
+        : alert.severity === 'warning'
+          ? '[WARNING]'
+          : '[INFO]';
+    const lines = [`${icon} ${alert.project.name}: ${alert.title}`, '', alert.description];
+    if (alert.suggestion) {
+      lines.push('', `Suggestion: ${alert.suggestion}`);
+    }
+    if (alert.actions_taken.length > 0) {
+      lines.push('', `Actions taken: ${alert.actions_taken.join(', ')}`);
+    }
+    lines.push('', `Time: ${new Date(alert.timestamp).toISOString()}`);
+    if (alert.incident_id) {
+      lines.push(`Incident ID: ${alert.incident_id}`);
+    }
+    return {
+      text: lines.join('\n'),
+      extra: { subject: `OpenLander ${icon} ${alert.project.name}: ${alert.title}` },
+    };
   }
 
   isConnected(): boolean {
