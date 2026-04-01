@@ -5,6 +5,8 @@ import {
   deleteProvider,
   getProviders,
   testLLMConnection,
+  startGoogleOAuth,
+  getGoogleAuthStatus,
   type ProviderInfo,
   type SetupStatus,
 } from '@/lib/api';
@@ -13,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context.js';
 import { emitLlmChanged } from '@/lib/llm-events';
+import { LlmProviderOAuth } from './LlmProviderOAuth';
 
 interface LlmSettingsTabProps {
   status: SetupStatus | null;
@@ -61,6 +64,16 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
   const [testResults, setTestResults] = useState<
     Record<string, { ok: boolean; latencyMs?: number; error?: string }>
   >({});
+
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [checkingGoogle, setCheckingGoogle] = useState(true);
+
+  useEffect(() => {
+    void getGoogleAuthStatus().then((status) => {
+      setGoogleConnected(status.connected);
+      setCheckingGoogle(false);
+    });
+  }, []);
 
   const loadProviders = async () => {
     try {
@@ -453,6 +466,18 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
           )}
         </div>
       )}
+
+      <div className="pt-6 border-t border-border mt-6">
+        <h3 className="text-sm font-medium text-primary-ol mb-4">OAuth Providers</h3>
+        <LlmProviderOAuth
+          provider="google"
+          label="Google Gemini"
+          description="Connect your Google account to use Gemini models"
+          connected={googleConnected}
+          loading={checkingGoogle}
+          onConnect={startGoogleOAuth}
+        />
+      </div>
     </section>
   );
 }

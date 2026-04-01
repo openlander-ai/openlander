@@ -1,4 +1,4 @@
-async function fetchWithAuth(url: string, options?: RequestInit): Promise<Response> {
+export async function fetchWithAuth(url: string, options?: RequestInit): Promise<Response> {
   const res = await fetch(url, options);
 
   if (res.status === 401 && !url.includes('/auth/')) {
@@ -94,4 +94,19 @@ export async function regenerateApiToken(): Promise<{ token: string }> {
   }
 
   return res.json();
+}
+
+export async function startGoogleOAuth(): Promise<void> {
+  // Navigate to backend start endpoint
+  window.location.href = '/api/auth/google/start';
+}
+
+export async function getGoogleAuthStatus(): Promise<{ connected: boolean; email?: string }> {
+  try {
+    const response = await fetchWithAuth('/api/auth/google/status');
+    if (!response.ok) return { connected: false };
+    return response.json();
+  } catch {
+    return { connected: false };
+  }
 }
