@@ -1,4 +1,14 @@
-import { Loader2, Settings, Shield, Globe, Github, Sparkles, Bot, Cable } from 'lucide-react';
+import {
+  Loader2,
+  Settings,
+  Shield,
+  Globe,
+  Github,
+  Sparkles,
+  Bot,
+  Cable,
+  Activity,
+} from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { useSetup } from '@/hooks/use-setup';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,6 +19,7 @@ import { LlmSettingsTab } from '@/components/settings/LlmSettingsTab';
 import { SecuritySettingsTab } from '@/components/settings/SecuritySettingsTab';
 import { AiSettingsTab } from '@/components/settings/AiSettingsTab';
 import { McpSettingsTab } from '@/components/settings/McpSettingsTab';
+import { OperationsSettings } from '@/components/settings/OperationsSettings';
 
 export function SettingsPage() {
   const { status, loading, refetch } = useSetup();
@@ -64,6 +75,10 @@ export function SettingsPage() {
             <Bot className="w-4 h-4 shrink-0" />
             {t('settings.ai.title')}
           </TabsTrigger>
+          <TabsTrigger value="operations" className={triggerClass}>
+            <Activity className="w-4 h-4 shrink-0" />
+            Operations
+          </TabsTrigger>
           <TabsTrigger value="mcp" className={triggerClass}>
             <Cable className="w-4 h-4 shrink-0" />
             {t('settings.tabs.mcp')}
@@ -107,6 +122,12 @@ export function SettingsPage() {
             className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
           >
             <AiSettingsTab />
+          </TabsContent>
+          <TabsContent
+            value="operations"
+            className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
+          >
+            <OperationsSettings />
           </TabsContent>
           <TabsContent
             value="mcp"

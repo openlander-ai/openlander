@@ -11,19 +11,19 @@ export interface OpsConfig {
     alert_dedup_minutes: number;
     digest_time: string;
   };
-  email: {
-    smtp_host: string;
-    smtp_port: number;
-    smtp_tls: boolean;
-    smtp_user: string;
-    smtp_pass: string;
-    from_address: string;
-    to_addresses: string;
-    daily_digest: boolean;
+  channels: {
+    email?: {
+      host: string;
+      port: number;
+      secure: boolean;
+      auth: { user: string; pass: string };
+      from: string;
+      to: string[];
+    };
   };
 }
 
-export async function fetchOpsConfig(): Promise<OpsConfig> {
+export async function fetchOpsConfig(): Promise<{ config: OpsConfig }> {
   const res = await fetchWithAuth('/api/ops/config');
   if (!res.ok) {
     throw new Error('Failed to fetch operations config');
@@ -31,7 +31,7 @@ export async function fetchOpsConfig(): Promise<OpsConfig> {
   return res.json();
 }
 
-export async function updateOpsConfig(config: Partial<OpsConfig>): Promise<OpsConfig> {
+export async function updateOpsConfig(config: Partial<OpsConfig>): Promise<{ config: OpsConfig }> {
   const res = await fetchWithAuth('/api/ops/config', {
     method: 'PUT',
     headers: {
