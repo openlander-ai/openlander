@@ -20,6 +20,9 @@ export class OpsAgent {
   private readonly llmCallsGlobal: number[] = [];
   private readonly maxConcurrentLLM = 3;
   private readonly maxConcurrentRecovery = 5;
+  private diskCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private lastCleanupAt = 0;
+  private readonly CLEANUP_COOLDOWN_MS = 10 * 60_000; // 10 minutes
 
   constructor(ctx: AppContext, config?: Partial<OpsConfig>) {
     this.ctx = ctx;
@@ -75,6 +78,10 @@ export class OpsAgent {
 
     await this.reconcileOnBoot();
 
+    this.diskCheckTimer = setInterval(() => {
+      void this.checkAndCleanDisk();
+    }, 5 * 60_000);
+
     void this.processQueue();
     await Promise.resolve();
     log.info('OpsAgent started');
@@ -82,6 +89,11 @@ export class OpsAgent {
 
   async stop(): Promise<void> {
     this.running = false;
+
+    if (this.diskCheckTimer) {
+      clearInterval(this.diskCheckTimer);
+      this.diskCheckTimer = null;
+    }
 
     for (const unsubscribe of this.eventUnsubscribers.values()) {
       unsubscribe();
@@ -226,6 +238,38 @@ export class OpsAgent {
   private handleInactiveProject(_event: OpsEvent): Promise<void> {
     void _event;
     return Promise.resolve();
+  }
+
+  private async checkAndCleanDisk(): Promise<void> {
+    if (!this.config.auto_cleanup) {
+      return;
+    }
+
+    if (Date.now() - this.lastCleanupAt < this.CLEANUP_COOLDOWN_MS) {
+      return;
+    }
+
+    try {
+      const { getSystemStats } = await import('./stats.js');
+      const stats = await Promise.resolve(getSystemStats());
+      const diskPercent = stats.disk.usagePercent;
+
+      if (diskPercent >= this.config.thresholds.disk_cleanup_percent) {
+        log.info(
+          { diskPercent, threshold: this.config.thresholds.disk_cleanup_percent },
+          'Disk threshold reached — running cleanup',
+        );
+
+        const { diskThresholdCleanup } = await import('../pipeline/cleanup.js');
+        diskThresholdCleanup();
+
+        this.lastCleanupAt = Date.now();
+
+        log.info({ diskPercent }, 'Disk cleanup completed');
+      }
+    } catch (err) {
+      log.warn({ err }, 'Disk check/cleanup failed');
+    }
   }
 
   generateDigest(): Promise<void> {
