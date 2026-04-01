@@ -7,7 +7,7 @@
 Paste a Git URL. It builds, deploys, and hands you a URL — if something breaks, AI fixes it automatically.
 
 [![npm version](https://img.shields.io/npm/v/openlander.svg)](https://www.npmjs.com/package/openlander)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 </div>
 
@@ -41,7 +41,7 @@ Those are great tools. OpenLander takes a different approach.
 | When containers crash | You get an alert                | AI detects it, diagnoses the cause, and attempts a fix   |
 | Coding agent support  | None                            | MCP protocol — deploy from Cursor, Claude Code, etc.     |
 | Server awareness      | Manual configuration            | Auto-detects ports, proxies, containers before deploying |
-| Install               | `docker compose`                | `npm i -g`                                               |
+| Install               | `docker compose`                | `npx openlander`                                         |
 
 **Positioning**: Coolify's Docker foundation + Vercel's clean UX + AI auto-recovery.
 
@@ -101,24 +101,24 @@ openlander
 - **Server awareness** — Auto-detects all containers, ports, and proxies before deploying
 - **Preflight check** — Validates port availability, container names, resources before build starts
 - **Auto-redeploy** — Git push webhook triggers automatic redeployment
-- **Rollback & blue-green** — One-click rollback, zero-downtime deploys
+- **Rollback & blue-green** — One-click rollback, zero-downtime redeploy with health check (`strategy: 'blue-green' | 'force'`)
 - **Public sharing** — Instant public URL via TryCloudflare. No domain needed.
 - **Production domains** — Permanent URLs via Cloudflare Tunnel. Multi-domain mapping.
 
 ### Infrastructure
 
-- **Auto-Dockerfile** — No Dockerfile? Auto-generates one for Next.js, FastAPI, Gradio, Streamlit, Rails, Spring Boot, Laravel, ASP.NET
+- **Auto-Dockerfile** — No Dockerfile? Auto-generates one for 27+ frameworks including Next.js, Express, NestJS, Vite, Nuxt, SvelteKit, Astro, FastAPI, Django, Flask, Gradio, Streamlit, Rails, Spring Boot, Laravel, ASP.NET, Go, Rust
 - **Monorepo support** — Scan Dockerfiles, parallel builds, parent-child project model
 - **Logs & monitoring** — Container logs, health checks, system resource tracking
-- **Environment variables** — Global encrypted secrets shared across projects
-- **DB provisioning** — PostgreSQL, MySQL, Redis containers on demand
+- **Environment variables** — Project-scoped and global encrypted secrets
+- **DB provisioning** — PostgreSQL, MySQL, Redis, MongoDB, MinIO containers on demand
 
 ### Integration
 
 - **MCP server** — Deploy from Claude Code, Cursor, or any MCP client
 - **Multi-channel** — Slack, Discord, Telegram bots for remote management
 - **BYOK (Bring Your Own Key)** — Gemini Flash (free), Claude, OpenAI, OpenRouter, or Ollama (local)
-- **OAuth login** — Sign in with OpenAI or OpenRouter account (no API key needed)
+- **OAuth connect** — Link OpenRouter or OpenAI accounts for LLM access (no manual API key needed)
 - **Private repos** — SSH key auth. Works with GitHub, GitLab, Bitbucket, Gitea.
 
 ## How It Works
@@ -183,7 +183,7 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v0.3.0**      | Developer Experience         | Done   | Real-time Docker build log streaming, ANSI color rendering, xterm.js web terminal, WebSocket infrastructure                                                                   |
 | **v0.3.1**      | UI Polish & Stability        | Done   | Terminal shell probing for Alpine/slim images, log-first console layout, overview summary dashboard                                                                           |
 | **v0.4.0**      | Deployments UX               | Done   | Deployments filters, richer history rows, detail metadata cards, API UTC normalization                                                                                        |
-| **v0.5.1**      | Multi-Environment            | Done   | Environment schema, multi-branch deploys, environment-aware orchestration                                                                                                     |
+| **v0.5.1**      | Multi-Environment            | Done   | Environment schema (frozen in rc.6 — simplified to production-only)                                                                                                           |
 | **v0.6.0**      | Architecture Rebuild         | Done   | Deterministic deploy pipeline, unified ToolDef registry (40+ tools), shared infra (PostgreSQL/MySQL/Redis), deploy terminal UI, AI co-pilot (7 features), webhook tools       |
 | **v0.6.1**      | Env Vars Fix                 | Done   | Env vars merge (not replace), list_env_vars tool, health monitor Docker fallback                                                                                              |
 | **v0.6.2**      | Compose & Traefik            | Done   | Compose service filtering, secret file mount, env escaping, Traefik HTTP Provider, build log detail, redeploy port fix                                                        |
@@ -208,7 +208,8 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 | **v1.0.0-rc.1** | Release Candidate            | RC     | E2E quality gate test suite (20 tests), 7 test repositories, event sequence golden path verification, quality gate coverage mapping                                           |
 | **v1.0.0-rc.2** | Authentication               | RC     | Password login + session cookies, Bearer token auth for MCP, Settings security tab, 6-step onboarding with MCP guide, CLI password reset                                      |
 | **v1.0.0-rc.3** | Service Connectivity         | RC     | Shared network with DNS aliases, service connections CRUD, auto env injection, connected services UI, runtime incidents with LLM diagnosis, deploy connectivity check         |
-| **v1.0.0-rc.5** | Environment UI               | RC     | Env segment control, domain URL display, per-env API URLs, Traefik label detection, sidebar status aggregation                                                                |
+| **v1.0.0-rc.5** | UI Polish                    | RC     | Domain URL display, Traefik label detection, sidebar status aggregation                                                                                                       |
+| **v1.0.0-rc.6** | Pre-launch Hardening         | RC     | Environment freeze (production-only), redeploy/blue-green unification, security hardening (CORS, session TTL, fetch timeouts), CLI cleanup, service adapter readiness checks  |
 | **v1.0.0**      | Stable Release               | TBD    | MCP-first platform, quality hardening, web as monitoring dashboard, auto-recovery in background                                                                               |
 
 ## MCP Integration (AI Coding Agents)
@@ -292,17 +293,17 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
 
 ### Available Tools
 
-Once connected, AI agents get 60+ tools including:
+Once connected, AI agents get 90+ tools including:
 
-| Category | Tools                                                                      |
-| -------- | -------------------------------------------------------------------------- |
-| Deploy   | `create_plan`, `execute_plan`, `rollback_project`, `deploy_blue_green`     |
-| Services | `create_service`, `get_service_credentials`, `provision_database`          |
-| Config   | `set_env_vars`, `list_env_vars`, `set_global_secret`, `upload_secret_file` |
-| Monitor  | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`      |
-| Projects | `list_projects`, `stop_project`, `remove_project`, `scan_project`          |
-| Domains  | `map_domain`, `list_domains`, `verify_domain`                              |
-| Webhooks | `configure_webhook`, `enable_webhook`, `disable_webhook`, `list_webhooks`  |
+| Category | Tools                                                                                |
+| -------- | ------------------------------------------------------------------------------------ |
+| Deploy   | `create_deploy_plan`, `execute_deploy_plan`, `rollback_project`, `deploy_blue_green` |
+| Services | `create_service`, `get_service_credentials`, `create_database`                       |
+| Config   | `set_env_vars`, `list_env_vars`, `set_global_secret`, `upload_secret_file`           |
+| Monitor  | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`                |
+| Projects | `list_projects`, `stop_project`, `remove_project`, `scan_project`                    |
+| Domains  | `map_domain`, `list_domains`                                                         |
+| Webhooks | `enable_webhook`, `disable_webhook`, `get_webhook_config`                            |
 
 ## Requirements
 
@@ -373,4 +374,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, 
 
 ## License
 
-[MIT](LICENSE) © OpenLander Contributors
+[AGPL-3.0](LICENSE) © OpenLander Contributors
