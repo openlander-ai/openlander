@@ -60,7 +60,7 @@ function extractEventType(inc: OpsIncident): string {
   if (inc.events && inc.events.length > 0) {
     return inc.events[0].type;
   }
-  return inc.title.toLowerCase().replace(/\s+/g, '_');
+  return (inc.title || inc.severity || 'unknown').toLowerCase().replace(/\s+/g, '_');
 }
 
 function humanizeEventType(type: string): string {
@@ -69,9 +69,9 @@ function humanizeEventType(type: string): string {
 
 function humanizeDescription(inc: OpsIncident): string {
   if (inc.events && inc.events.length > 0) {
-    return inc.events[0].message || inc.title;
+    return inc.events[0].message || inc.title || `${inc.severity} incident`;
   }
-  return inc.title;
+  return inc.title || `${inc.severity} incident`;
 }
 
 function relativeTime(timestamp: number): string {
@@ -443,7 +443,9 @@ export function OperationsTab({ projectId }: OperationsTabProps) {
                     <Badge variant="outline" className="text-[10px] h-5 px-1.5 capitalize">
                       {incident.severity}
                     </Badge>
-                    <span className="text-sm font-medium text-secondary-ol">{incident.title}</span>
+                    <span className="text-sm font-medium text-secondary-ol">
+                      {incident.title || `Incident ${incident.id.slice(0, 16)}`}
+                    </span>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-ol">
                     <span className="capitalize">{incident.status}</span>
