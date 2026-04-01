@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import { updateConfig } from '../../config/index.js';
 
 export function createOpsRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -74,6 +75,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     try {
       const body = await c.req.json<Record<string, unknown>>();
       ctx.opsAgent?.reloadConfig(body);
+      updateConfig({ ops: body });
       return c.json({ config: ctx.opsAgent?.getConfig() ?? {} });
     } catch {
       return c.json({ error: 'Invalid config' }, 400);

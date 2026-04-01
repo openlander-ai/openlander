@@ -8,6 +8,8 @@ import type {
   AIModelFeature,
   ModelRoutingConfig,
 } from '../llm/model-registry.js';
+import type { OpsConfig } from '../monitor/ops-types.js';
+import { DEFAULT_OPS_CONFIG } from '../monitor/ops-types.js';
 
 const log = createModuleLogger('config');
 
@@ -115,6 +117,9 @@ export interface OpenLanderConfig {
 
   /** v1.1: Google OAuth credentials for Gemini API access */
   google: GoogleOAuthConfig;
+
+  /** v1.1: Operations agent settings */
+  ops: OpsConfig;
 }
 
 export interface GoogleOAuthConfig {
@@ -374,6 +379,7 @@ function buildDefaultConfig(): OpenLanderConfig {
       clientId: '',
       clientSecret: '',
     },
+    ops: { ...DEFAULT_OPS_CONFIG },
   };
 }
 
