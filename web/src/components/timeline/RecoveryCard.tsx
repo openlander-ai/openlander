@@ -123,8 +123,7 @@ export function RecoveryCard({ item, isLatest }: RecoveryCardProps) {
                   key={idx}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-agent/10 hover:bg-agent/20 border border-agent/20 text-xs font-medium text-agent transition-colors"
                   onClick={() => {
-                    // Action handling would go here, but we just need to render it for now
-                    console.log('Action clicked:', btn.action);
+                    void btn;
                   }}
                 >
                   <span>{btn.label}</span>

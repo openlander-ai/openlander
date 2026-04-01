@@ -308,6 +308,7 @@ export class CloudflareTunnelManager {
   private async cloudflareRequest<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${CLOUDFLARE_API_BASE}/${path}`, {
       ...init,
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.config.apiToken}`,
         'Content-Type': 'application/json',

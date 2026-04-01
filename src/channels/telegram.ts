@@ -226,6 +226,7 @@ export class TelegramChannel implements Channel {
   ): Promise<TelegramApiResponse> {
     const response = await fetch(`https://api.telegram.org/bot${this.token}/${method}`, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         'Content-Type': 'application/json',
       },

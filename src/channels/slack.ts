@@ -138,6 +138,7 @@ export class SlackChannel implements Channel {
   async sendMessage(channelId: string, text: string): Promise<string> {
     const response = await fetch(SLACK_API_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
@@ -164,6 +165,7 @@ export class SlackChannel implements Channel {
   async editMessage(channelId: string, messageId: string, text: string): Promise<void> {
     const response = await fetch(SLACK_UPDATE_API_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',
@@ -219,6 +221,7 @@ export class SlackChannel implements Channel {
 
     const response = await fetch(SLACK_API_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${this.token}`,
         'Content-Type': 'application/json',

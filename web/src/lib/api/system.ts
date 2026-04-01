@@ -22,6 +22,7 @@ export async function getAllIps(): Promise<NetworkIp[]> {
 
 export async function getSystemStats(): Promise<SystemStats> {
   const res = await fetch('/api/system/stats');
+  if (!res.ok) throw new Error('Failed to fetch system stats');
   return res.json();
 }
 

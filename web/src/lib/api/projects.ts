@@ -459,6 +459,7 @@ export async function deleteProject(id: string): Promise<void> {
 
 export async function getProjectLogs(id: string): Promise<string> {
   const res = await fetch(`/api/projects/${id}/logs`);
+  if (!res.ok) return '';
   return res.text();
 }
 

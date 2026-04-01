@@ -92,7 +92,7 @@ function createApp(
   app.use(
     '/api/*',
     cors({
-      origin: '*',
+      origin: ctx.config.server.corsOrigin ?? '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     }),
   );
@@ -347,7 +347,7 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
 
   const ready = new Promise<void>((resolve) => {
     server.listen(options.socketPath, () => {
-      chmodSync(options.socketPath, 0o666);
+      chmodSync(options.socketPath, 0o660);
       log.debug({ socketPath: options.socketPath }, 'Daemon listening');
       resolve();
     });

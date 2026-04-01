@@ -441,6 +441,10 @@ export class Docker {
     const binds = [...secretBinds, ...volumeBinds];
     const networkMode = opts.network ?? opts.networks?.[0] ?? this.networkName;
 
+    if (typeof opts.command === 'string' && /[;&|`$(){}]/.test(opts.command)) {
+      throw new Error('Command contains disallowed shell metacharacters');
+    }
+
     const command = typeof opts.command === 'string' ? ['sh', '-c', opts.command] : opts.command;
     const restartPolicyName =
       opts.restart === 'no' ||

@@ -268,7 +268,7 @@ Example pasted .env input:
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/app
 REDIS_URL=redis://192.168.0.15:6379
 NODE_ENV=production
-JWT_SECRET=super-secret-value
+JWT_SECRET=CHANGE_ME_IN_PRODUCTION
 
 Example transformed result (after list_services shows postgres-main, redis-cache):
 DATABASE_URL=postgresql://postgres:postgres@postgres-main:5432/app

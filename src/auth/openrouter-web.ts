@@ -49,6 +49,7 @@ interface OpenRouterTokenResponse {
 export async function exchangeOpenRouterCode(code: string, verifier: string): Promise<string> {
   const response = await fetch(OPENROUTER_TOKEN_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(30_000),
     headers: {
       'Content-Type': 'application/json',
     },

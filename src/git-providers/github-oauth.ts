@@ -76,6 +76,7 @@ export async function requestDeviceCode(
 ): Promise<DeviceCodeResponse> {
   const response = await fetch(GITHUB_DEVICE_CODE_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(30_000),
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
@@ -136,6 +137,7 @@ export async function pollForAccessToken(
 
     const response = await fetch(GITHUB_ACCESS_TOKEN_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',

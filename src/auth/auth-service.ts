@@ -4,7 +4,7 @@ import { decrypt, encrypt } from '../env/crypto.js';
 import type { AuthRow } from '../db/index.js';
 
 const AUTH_SALT_ROUNDS = 10;
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = Number(process.env['OPENLANDER_SESSION_TTL_HOURS'] || 168) * 60 * 60 * 1000;
 
 export interface AuthDatabase {
   isPasswordSet(): boolean;

@@ -146,6 +146,7 @@ export class DiscordChannel implements Channel {
   async sendMessage(channelId: string, text: string): Promise<string> {
     const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bot ${this.token}`,
         'Content-Type': 'application/json',
@@ -173,6 +174,7 @@ export class DiscordChannel implements Channel {
       `${DISCORD_API_BASE}/channels/${channelId}/messages/${messageId}`,
       {
         method: 'PATCH',
+        signal: AbortSignal.timeout(30_000),
         headers: {
           Authorization: `Bot ${this.token}`,
           'Content-Type': 'application/json',
@@ -232,6 +234,7 @@ export class DiscordChannel implements Channel {
 
     const response = await fetch(`${DISCORD_API_BASE}/channels/${channelId}/messages`, {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bot ${this.token}`,
         'Content-Type': 'application/json',
@@ -265,6 +268,7 @@ export class DiscordChannel implements Channel {
       `${DISCORD_API_BASE}/webhooks/${this.applicationId}/${interactionToken}`,
       {
         method: 'POST',
+        signal: AbortSignal.timeout(30_000),
         headers: {
           'Content-Type': 'application/json',
         },

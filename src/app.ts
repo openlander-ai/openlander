@@ -262,13 +262,25 @@ export async function createAppContext(
 
   // Track active project for question events
   eventBus.on('deploy:start', (payload) => {
-    questionBridge.setActiveProject(payload.projectId);
+    try {
+      questionBridge.setActiveProject(payload.projectId);
+    } catch (error) {
+      log.error({ error }, 'Unhandled error in deploy:start event handler');
+    }
   });
   eventBus.on('deploy:success', () => {
-    questionBridge.setActiveProject(null);
+    try {
+      questionBridge.setActiveProject(null);
+    } catch (error) {
+      log.error({ error }, 'Unhandled error in deploy:success event handler');
+    }
   });
   eventBus.on('deploy:failed', () => {
-    questionBridge.setActiveProject(null);
+    try {
+      questionBridge.setActiveProject(null);
+    } catch (error) {
+      log.error({ error }, 'Unhandled error in deploy:failed event handler');
+    }
   });
 
   setupAutoRecovery({
@@ -328,80 +340,92 @@ export async function createAppContext(
   const containerRestartCounts = new Map<string, { count: number; windowStart: number }>();
 
   eventBus.on('alert:new', ({ alert }) => {
-    if (alert.type === 'container-crash') {
-      const projectId = alert.details['projectId'];
-      const containerId = alert.details['containerId'];
+    try {
+      if (alert.type === 'container-crash') {
+        const projectId = alert.details['projectId'];
+        const containerId = alert.details['containerId'];
 
-      if (typeof projectId === 'string') {
-        const project = db.getProject(projectId);
-        if (project && project.status === 'running') {
-          db.updateProject(projectId, { status: 'error' });
-          log.info({ projectId }, 'Project status set to error (container crash detected)');
+        if (typeof projectId === 'string') {
+          const project = db.getProject(projectId);
+          if (project && project.status === 'running') {
+            db.updateProject(projectId, { status: 'error' });
+            log.info({ projectId }, 'Project status set to error (container crash detected)');
+          }
+        }
+
+        // Auto-restart logic (gated by operationalMonitoring config)
+        if (config.ai.operationalMonitoring.enabled && typeof containerId === 'string') {
+          const now = Date.now();
+          const existing = containerRestartCounts.get(containerId);
+
+          // Reset window if expired
+          const isWindowActive = existing && now - existing.windowStart < RESTART_WINDOW_MS;
+          const restartCount = isWindowActive ? existing.count : 0;
+          const windowStart = isWindowActive ? existing.windowStart : now;
+
+          if (restartCount < MAX_AUTO_RESTARTS) {
+            containerRestartCounts.set(containerId, { count: restartCount + 1, windowStart });
+
+            // Attempt container restart (fire-and-forget)
+            const dockerClient = docker.getClient();
+            dockerClient
+              .getContainer(containerId)
+              .restart()
+              .then(() => {
+                log.info(
+                  { containerId, projectId, attempt: restartCount + 1 },
+                  'Auto-restarted crashed container',
+                );
+              })
+              .catch((err: unknown) => {
+                log.warn({ err, containerId }, 'Container auto-restart failed');
+              });
+          } else {
+            log.info(
+              { containerId, restartCount },
+              'Max auto-restarts exceeded for container, skipping restart',
+            );
+          }
         }
       }
-
-      // Auto-restart logic (gated by operationalMonitoring config)
-      if (config.ai.operationalMonitoring.enabled && typeof containerId === 'string') {
-        const now = Date.now();
-        const existing = containerRestartCounts.get(containerId);
-
-        // Reset window if expired
-        const isWindowActive = existing && now - existing.windowStart < RESTART_WINDOW_MS;
-        const restartCount = isWindowActive ? existing.count : 0;
-        const windowStart = isWindowActive ? existing.windowStart : now;
-
-        if (restartCount < MAX_AUTO_RESTARTS) {
-          containerRestartCounts.set(containerId, { count: restartCount + 1, windowStart });
-
-          // Attempt container restart (fire-and-forget)
-          const dockerClient = docker.getClient();
-          dockerClient
-            .getContainer(containerId)
-            .restart()
-            .then(() => {
-              log.info(
-                { containerId, projectId, attempt: restartCount + 1 },
-                'Auto-restarted crashed container',
-              );
-            })
-            .catch((err: unknown) => {
-              log.warn({ err, containerId }, 'Container auto-restart failed');
-            });
-        } else {
-          log.info(
-            { containerId, restartCount },
-            'Max auto-restarts exceeded for container, skipping restart',
-          );
-        }
-      }
+    } catch (error) {
+      log.error({ error }, 'Unhandled error in alert:new event handler');
     }
   });
 
   eventBus.on('monitor:healthcheck', ({ projectId, healthy }) => {
-    const project = db.getProject(projectId);
-    if (!project || project.status === 'stopped') return;
+    try {
+      const project = db.getProject(projectId);
+      if (!project || project.status === 'stopped') return;
 
-    if (healthy) {
-      crashFailureCounts.delete(projectId);
-      return;
-    }
-    const count = (crashFailureCounts.get(projectId) ?? 0) + 1;
-    crashFailureCounts.set(projectId, count);
-    if (count >= HEALTH_FAILURE_THRESHOLD) {
-      if (project.status === 'running') {
-        db.updateProject(projectId, { status: 'error' });
-        log.info(
-          { projectId, failures: count },
-          'Project status set to error (health check failures)',
-        );
+      if (healthy) {
+        crashFailureCounts.delete(projectId);
+        return;
       }
-      crashFailureCounts.delete(projectId);
+      const count = (crashFailureCounts.get(projectId) ?? 0) + 1;
+      crashFailureCounts.set(projectId, count);
+      if (count >= HEALTH_FAILURE_THRESHOLD) {
+        if (project.status === 'running') {
+          db.updateProject(projectId, { status: 'error' });
+          log.info(
+            { projectId, failures: count },
+            'Project status set to error (health check failures)',
+          );
+        }
+        crashFailureCounts.delete(projectId);
+      }
+    } catch (error) {
+      log.error({ error }, 'Unhandled error in monitor:healthcheck event handler');
     }
   });
 
   // Reset failure counts on successful deploy
   eventBus.on('deploy:success', (payload) => {
-    crashFailureCounts.delete(payload.projectId);
+    try {
+      crashFailureCounts.delete(payload.projectId);
+    } catch (error) {
+      log.error({ error }, 'Unhandled error in deploy:success event handler');
+    }
   });
 
   // Wire platform event capture (captures all eventBus emissions for platform_event_log tool)

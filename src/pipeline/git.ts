@@ -97,9 +97,11 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
   }
   args.push(normalizedUrl, cloneDir);
 
-  const env: Record<string, string> = { ...process.env } as Record<string, string>;
-  // Prevent git from trying to prompt for credentials (fails in non-interactive environments)
-  env['GIT_TERMINAL_PROMPT'] = '0';
+  const env: Record<string, string> = { GIT_TERMINAL_PROMPT: '0' };
+  for (const key of ['PATH', 'HOME', 'USER', 'LANG', 'SSH_AUTH_SOCK', 'GIT_SSH_COMMAND']) {
+    const val = process.env[key];
+    if (val) env[key] = val;
+  }
   if (sshKeyPath) {
     env['GIT_SSH_COMMAND'] = `ssh -i ${sshKeyPath} -o StrictHostKeyChecking=no`;
   }

@@ -127,6 +127,7 @@ export interface ServerConfig {
   host: string;
   /** Base URL for internal access */
   baseUrl: string;
+  corsOrigin?: string;
 }
 
 export interface DockerConfig {
