@@ -226,13 +226,15 @@ export class Database implements AuthDatabase {
      updateOpsIncident(id: string, data: Parameters<OpsIncidentRepo['update']>[1]) { this.opsIncidentRepo.update(id, data); }
      addOpsIncidentEvent(data: Parameters<OpsIncidentEventRepo['addEvent']>[0]) { return this.opsIncidentEventRepo.addEvent(data); }
      listOpsIncidentEvents(incidentId: string) { return this.opsIncidentEventRepo.findByIncidentId(incidentId); }
-     getCircuitBreakerState(projectId: string) { return this.circuitBreakerRepo.getState(projectId); }
+      listOpsIncidentsByDateRange(from: number, to: number) { return this.opsIncidentRepo.findByDateRange(from, to); }
+      getCircuitBreakerState(projectId: string) { return this.circuitBreakerRepo.getState(projectId); }
      upsertCircuitBreakerState(projectId: string, data: Parameters<CircuitBreakerRepo['upsert']>[1]) { this.circuitBreakerRepo.upsert(projectId, data); }
      incrementCircuitBreakerFailure(projectId: string) { return this.circuitBreakerRepo.incrementFailure(projectId); }
      openCircuitBreaker(projectId: string) { this.circuitBreakerRepo.openBreaker(projectId); }
      halfOpenCircuitBreaker(projectId: string) { this.circuitBreakerRepo.halfOpen(projectId); }
      resetCircuitBreaker(projectId: string) { this.circuitBreakerRepo.reset(projectId); }
-     isCircuitBreakerOpen(projectId: string) { return this.circuitBreakerRepo.isOpen(projectId); }
+      findAllOpenCircuitBreakers() { return this.circuitBreakerRepo.findAllOpen(); }
+      isCircuitBreakerOpen(projectId: string) { return this.circuitBreakerRepo.isOpen(projectId); }
      transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
      close() { this.sqlite.close(); }
 }

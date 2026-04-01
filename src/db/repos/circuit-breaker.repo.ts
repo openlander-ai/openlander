@@ -56,7 +56,7 @@ export class CircuitBreakerRepo {
           failure_count: data.failure_count ?? 0,
           last_failure_at: data.last_failure_at ?? null,
           opened_at: data.opened_at ?? null,
-          state: (data.state ?? 'closed'),
+          state: data.state ?? 'closed',
           reset_at: data.reset_at ?? null,
         })
         .run();
@@ -162,6 +162,15 @@ export class CircuitBreakerRepo {
         })
         .run();
     }
+  }
+
+  findAllOpen(): string[] {
+    const rows = this.db
+      .select({ project_id: circuitBreakerState.project_id })
+      .from(circuitBreakerState)
+      .where(eq(circuitBreakerState.state, 'open'))
+      .all();
+    return rows.map((r) => r.project_id);
   }
 
   isOpen(projectId: string): boolean {

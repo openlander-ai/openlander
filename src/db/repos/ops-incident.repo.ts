@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { opsIncidents } from '../schema.drizzle.js';
 import type { OpsIncidentRow } from '../types.js';
@@ -65,6 +65,15 @@ export class OpsIncidentRepo {
       )
       .orderBy(desc(opsIncidents.created_at))
       .get() as OpsIncidentRow | undefined;
+  }
+
+  findByDateRange(from: number, to: number): OpsIncidentRow[] {
+    return this.db
+      .select()
+      .from(opsIncidents)
+      .where(and(gte(opsIncidents.created_at, from), lte(opsIncidents.created_at, to)))
+      .orderBy(desc(opsIncidents.created_at))
+      .all() as OpsIncidentRow[];
   }
 
   updateStatus(
