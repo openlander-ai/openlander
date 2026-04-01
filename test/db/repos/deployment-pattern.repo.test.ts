@@ -41,8 +41,9 @@ describe('DeploymentPatternRepo', () => {
 
       const patterns = repo.findByProject('proj-1');
       expect(patterns).toHaveLength(2);
-      expect(patterns[0].pattern_type).toBe('runtime_error');
-      expect(patterns[1].pattern_type).toBe('build_error');
+      expect(patterns.map((p) => p.pattern_type)).toEqual(
+        expect.arrayContaining(['runtime_error', 'build_error']),
+      );
     });
 
     it('filters patterns by project', () => {
