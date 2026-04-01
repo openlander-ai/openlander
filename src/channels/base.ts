@@ -5,7 +5,7 @@ import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { QuestionRequest } from '../lib/question-bridge.js';
 
 const log = createModuleLogger('channels');
-export type ChannelType = 'slack' | 'discord' | 'telegram';
+export type ChannelType = 'slack' | 'discord' | 'telegram' | 'email';
 
 export type ChannelComponent =
   | {
@@ -160,7 +160,11 @@ export class ChannelManager {
         ? this.ctx.config.channels.slack.recoveryChannelId
         : type === 'discord'
           ? this.ctx.config.channels.discord.recoveryChannelId
-          : this.ctx.config.channels.telegram.recoveryChannelId;
+          : type === 'telegram'
+            ? this.ctx.config.channels.telegram.recoveryChannelId
+            : type === 'email'
+              ? 'email-broadcast'
+              : undefined;
 
     if (!configuredId) {
       return null;

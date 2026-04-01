@@ -23,6 +23,9 @@ import { AuthRepo } from './repos/auth.repo.js';
 import { AiUsageLogRepo } from './repos/ai-usage-log.repo.js';
 import { ActionRunRepo } from './repos/action-run.repo.js';
 import { DeploymentPatternRepo } from './repos/deployment-pattern.repo.js';
+import { OpsIncidentRepo } from './repos/ops-incident.repo.js';
+import { OpsIncidentEventRepo } from './repos/ops-incident-event.repo.js';
+import { CircuitBreakerRepo } from './repos/circuit-breaker.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 
@@ -41,6 +44,9 @@ export type {
   PendingFixRow,
   DeployPlanRow,
   AuthRow,
+  OpsIncidentRow,
+  OpsIncidentEventRow,
+  CircuitBreakerRow,
 } from './types.js';
 
 // prettier-ignore
@@ -66,6 +72,9 @@ export class Database implements AuthDatabase {
    private readonly aiUsageLogRepo: AiUsageLogRepo;
    private readonly actionRunRepo: ActionRunRepo;
    private readonly deploymentPatternRepo: DeploymentPatternRepo;
+   private readonly opsIncidentRepo: OpsIncidentRepo;
+   private readonly opsIncidentEventRepo: OpsIncidentEventRepo;
+   private readonly circuitBreakerRepo: CircuitBreakerRepo;
 
    constructor(dbPath: string) {
       mkdirSync(dirname(dbPath), { recursive: true });
@@ -92,6 +101,9 @@ export class Database implements AuthDatabase {
        this.aiUsageLogRepo = new AiUsageLogRepo(this.db, this.sqlite);
        this.actionRunRepo = new ActionRunRepo(this.db, this.sqlite);
        this.deploymentPatternRepo = new DeploymentPatternRepo(this.db, this.sqlite);
+       this.opsIncidentRepo = new OpsIncidentRepo(this.db, this.sqlite);
+       this.opsIncidentEventRepo = new OpsIncidentEventRepo(this.db, this.sqlite);
+       this.circuitBreakerRepo = new CircuitBreakerRepo(this.db, this.sqlite);
        this.actionRunRepo.markStaleAsFailedOnStartup();
      }
 
@@ -206,6 +218,21 @@ export class Database implements AuthDatabase {
      recordDeploymentPatternSuccess(id: string) { this.deploymentPatternRepo.recordSuccess(id); }
      recordDeploymentPatternFailure(id: string) { this.deploymentPatternRepo.recordFailure(id); }
      getTopDeploymentPatterns(projectId: string, limit?: number) { return this.deploymentPatternRepo.getTopPatterns(projectId, limit); }
+     createOpsIncident(data: Parameters<OpsIncidentRepo['create']>[0]) { return this.opsIncidentRepo.create(data); }
+     getOpsIncident(id: string) { return this.opsIncidentRepo.findById(id); }
+     listOpsIncidentsByProject(projectId: string, limit?: number) { return this.opsIncidentRepo.findByProjectId(projectId, limit); }
+     getActiveOpsIncident(projectId: string) { return this.opsIncidentRepo.findActive(projectId); }
+     updateOpsIncidentStatus(id: string, status: string, extra?: { resolved_at?: number; escalated_at?: number }) { this.opsIncidentRepo.updateStatus(id, status, extra); }
+     updateOpsIncident(id: string, data: Parameters<OpsIncidentRepo['update']>[1]) { this.opsIncidentRepo.update(id, data); }
+     addOpsIncidentEvent(data: Parameters<OpsIncidentEventRepo['addEvent']>[0]) { return this.opsIncidentEventRepo.addEvent(data); }
+     listOpsIncidentEvents(incidentId: string) { return this.opsIncidentEventRepo.findByIncidentId(incidentId); }
+     getCircuitBreakerState(projectId: string) { return this.circuitBreakerRepo.getState(projectId); }
+     upsertCircuitBreakerState(projectId: string, data: Parameters<CircuitBreakerRepo['upsert']>[1]) { this.circuitBreakerRepo.upsert(projectId, data); }
+     incrementCircuitBreakerFailure(projectId: string) { return this.circuitBreakerRepo.incrementFailure(projectId); }
+     openCircuitBreaker(projectId: string) { this.circuitBreakerRepo.openBreaker(projectId); }
+     halfOpenCircuitBreaker(projectId: string) { this.circuitBreakerRepo.halfOpen(projectId); }
+     resetCircuitBreaker(projectId: string) { this.circuitBreakerRepo.reset(projectId); }
+     isCircuitBreakerOpen(projectId: string) { return this.circuitBreakerRepo.isOpen(projectId); }
      transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
      close() { this.sqlite.close(); }
 }

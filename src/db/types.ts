@@ -240,3 +240,41 @@ export interface ActionRunRow {
   approval_resolved_at: string | null;
   created_at: string;
 }
+
+export interface OpsIncidentRow {
+  id: string;
+  project_id: string;
+  severity: 'critical' | 'warning' | 'info';
+  status: 'open' | 'active' | 'resolved' | 'escalated';
+  root_cause: string | null;
+  diagnosis: string | null;
+  actions_taken: string | null;
+  created_at: number;
+  resolved_at: number | null;
+  escalated_at: number | null;
+}
+
+export interface OpsIncidentEventRow {
+  id: string;
+  incident_id: string;
+  event_type:
+    | 'detected'
+    | 'diagnosed'
+    | 'action_taken'
+    | 'recovered'
+    | 'escalated'
+    | 'alert_sent'
+    | 'interrupted';
+  description: string;
+  metadata: string | null;
+  created_at: number;
+}
+
+export interface CircuitBreakerRow {
+  project_id: string;
+  failure_count: number;
+  last_failure_at: number | null;
+  opened_at: number | null;
+  state: 'closed' | 'open' | 'half_open';
+  reset_at: number | null;
+}

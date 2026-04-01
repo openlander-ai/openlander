@@ -470,12 +470,94 @@ export const deploymentPatterns = sqliteTable(
   ],
 );
 
+export const opsIncidents = sqliteTable(
+  'ops_incidents',
+  {
+    id: text('id').primaryKey(),
+    project_id: text('project_id').notNull(),
+    severity: text('severity', { enum: ['critical', 'warning', 'info'] }).notNull(),
+    status: text('status', { enum: ['open', 'active', 'resolved', 'escalated'] })
+      .notNull()
+      .default('open'),
+    root_cause: text('root_cause'),
+    diagnosis: text('diagnosis'),
+    actions_taken: text('actions_taken'),
+    created_at: integer('created_at').notNull(),
+    resolved_at: integer('resolved_at'),
+    escalated_at: integer('escalated_at'),
+  },
+  (table) => [
+    check(
+      'ops_incidents_severity_check',
+      sql`${table.severity} IN ('critical', 'warning', 'info')`,
+    ),
+    check(
+      'ops_incidents_status_check',
+      sql`${table.status} IN ('open', 'active', 'resolved', 'escalated')`,
+    ),
+    index('idx_ops_incidents_project').on(table.project_id),
+    index('idx_ops_incidents_status').on(table.status),
+  ],
+);
+
+export const opsIncidentEvents = sqliteTable(
+  'ops_incident_events',
+  {
+    id: text('id').primaryKey(),
+    incident_id: text('incident_id').notNull(),
+    event_type: text('event_type', {
+      enum: [
+        'detected',
+        'diagnosed',
+        'action_taken',
+        'recovered',
+        'escalated',
+        'alert_sent',
+        'interrupted',
+      ],
+    }).notNull(),
+    description: text('description').notNull(),
+    metadata: text('metadata'),
+    created_at: integer('created_at').notNull(),
+  },
+  (table) => [
+    check(
+      'ops_incident_events_type_check',
+      sql`${table.event_type} IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted')`,
+    ),
+    index('idx_ops_incident_events_incident').on(table.incident_id),
+  ],
+);
+
+export const circuitBreakerState = sqliteTable(
+  'circuit_breaker_state',
+  {
+    project_id: text('project_id').primaryKey(),
+    failure_count: integer('failure_count').notNull().default(0),
+    last_failure_at: integer('last_failure_at'),
+    opened_at: integer('opened_at'),
+    state: text('state', { enum: ['closed', 'open', 'half_open'] })
+      .notNull()
+      .default('closed'),
+    reset_at: integer('reset_at'),
+  },
+  (table) => [
+    check('circuit_breaker_state_check', sql`${table.state} IN ('closed', 'open', 'half_open')`),
+  ],
+);
+
 export type AiUsageLogRow = typeof aiUsageLog.$inferSelect;
 export type NewAiUsageLog = typeof aiUsageLog.$inferInsert;
 export type ActionRunRow = typeof actionRuns.$inferSelect;
 export type NewActionRun = typeof actionRuns.$inferInsert;
 export type DeploymentPatternRow = typeof deploymentPatterns.$inferSelect;
 export type NewDeploymentPattern = typeof deploymentPatterns.$inferInsert;
+export type OpsIncidentRow = typeof opsIncidents.$inferSelect;
+export type NewOpsIncident = typeof opsIncidents.$inferInsert;
+export type OpsIncidentEventRow = typeof opsIncidentEvents.$inferSelect;
+export type NewOpsIncidentEvent = typeof opsIncidentEvents.$inferInsert;
+export type CircuitBreakerRow = typeof circuitBreakerState.$inferSelect;
+export type NewCircuitBreaker = typeof circuitBreakerState.$inferInsert;
 
 export const drizzleSchema = {
   projects,
@@ -497,4 +579,7 @@ export const drizzleSchema = {
   aiUsageLog,
   actionRuns,
   deploymentPatterns,
+  opsIncidents,
+  opsIncidentEvents,
+  circuitBreakerState,
 };

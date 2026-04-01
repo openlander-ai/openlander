@@ -525,4 +525,43 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_deployment_patterns_signature ON deployment_patterns(project_id, error_signature)',
   );
+
+  // ops_incidents table (v1.0.0-ops)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ops_incidents (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK(severity IN ('critical', 'warning', 'info')),
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'active', 'resolved', 'escalated')),
+    root_cause TEXT,
+    diagnosis TEXT,
+    actions_taken TEXT,
+    created_at INTEGER NOT NULL,
+    resolved_at INTEGER,
+    escalated_at INTEGER
+  )`);
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_ops_incidents_project ON ops_incidents(project_id)');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_ops_incidents_status ON ops_incidents(status)');
+
+  // ops_incident_events table (v1.0.0-ops)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ops_incident_events (
+    id TEXT PRIMARY KEY,
+    incident_id TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK(event_type IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted')),
+    description TEXT NOT NULL,
+    metadata TEXT,
+    created_at INTEGER NOT NULL
+  )`);
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_ops_incident_events_incident ON ops_incident_events(incident_id)',
+  );
+
+  // circuit_breaker_state table (v1.0.0-ops)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS circuit_breaker_state (
+    project_id TEXT PRIMARY KEY,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    last_failure_at INTEGER,
+    opened_at INTEGER,
+    state TEXT NOT NULL DEFAULT 'closed' CHECK(state IN ('closed', 'open', 'half_open')),
+    reset_at INTEGER
+  )`);
 }
