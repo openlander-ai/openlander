@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 import { createModuleLogger } from '../../lib/logger.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
 import { scanDockerfileArgs, scanEnvFile, scanEnvTemplate } from '../../lib/env-parser.js';
+import { scanForEnvUsage } from '../env-scan.js';
 import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
@@ -286,6 +287,19 @@ export class PlanEngine {
       detectedEnv.push(...scanEnvFile(envPath, envFileName, detectedEnv));
     }
     detectedEnv.push(...scanDockerfileArgs(clonePath, userDockerfile, detectedEnv));
+
+    const sourceResult = scanForEnvUsage(clonePath);
+    for (const variable of sourceResult.vars) {
+      if (detectedEnv.some((entry) => entry.key === variable.key)) {
+        continue;
+      }
+
+      detectedEnv.push({
+        key: variable.key,
+        source: variable.files[0]?.path ?? 'source',
+        required: !variable.optional,
+      });
+    }
   }
 
   private buildExecutionContext(opts: CreatePlanOptions): PlanExecutionContext | undefined {

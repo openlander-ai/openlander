@@ -19,6 +19,13 @@ vi.mock('../src/pipeline/env-scan.js', () => ({
     vars: [{ key: 'DATABASE_URL', files: [{ path: 'app.ts', line: 1 }] }],
     hasEnvExample: false,
     language: 'node',
+    serviceHints: [],
+  }),
+  scanRepoEnvVars: vi.fn().mockReturnValue({
+    vars: [],
+    hasEnvExample: false,
+    language: 'unknown',
+    serviceHints: [],
   }),
 }));
 vi.mock('../src/pipeline/preflight.js', () => ({

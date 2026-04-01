@@ -646,6 +646,7 @@ export interface EnvScanResult {
   vars: EnvVarInfo[];
   hasEnvExample: boolean;
   language: string;
+  serviceHints?: string[];
 }
 
 export interface ProjectEnvScanResult {
