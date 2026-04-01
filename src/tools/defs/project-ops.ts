@@ -1,5 +1,6 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import {
@@ -122,7 +123,7 @@ export const projectOpsToolDefs: ToolDef[] = [
             repoUrl: project.repo_url,
             branch: project.branch,
             port: project.assigned_port,
-            containerName: project.container_id ? `ol-${project.name}` : null,
+            containerName: project.container_id ? projectContainerName(project.name) : null,
             network: SHARED_NETWORK_NAME,
             url: project.assigned_port ? getProjectUrl(project.name) : null,
             urls: project.assigned_port ? getProjectUrls(project.name) : [],
@@ -147,7 +148,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           status: project.status,
           visibility: project.visibility,
           port: project.assigned_port,
-          containerName: project.container_id ? `ol-${project.name}` : null,
+          containerName: project.container_id ? projectContainerName(project.name) : null,
           url: project.assigned_port ? getProjectUrl(project.name) : null,
           publicUrl: project.public_url,
           repoUrl: project.repo_url,

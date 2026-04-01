@@ -11,6 +11,7 @@ import type { CloudflareTunnelManager } from '../../pipeline/cloudflare.js';
 import type { EnvManager } from '../../pipeline/env.js';
 import type { TraefikManager } from '../../pipeline/traefik.js';
 import type { ChatStreamEvent } from '../../types/agent-events.js';
+import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('domain-routes');
 
@@ -28,11 +29,7 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
   const routes = new Hono();
 
   routes.post('/projects/:id/domains', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) {
-      return c.json({ error: 'NOT_FOUND', message: `Project not found: ${id}` }, 404);
-    }
+    const project = getProjectOrThrow(c, ctx);
 
     const body = await c.req.json<{ domain?: string }>();
     if (!body.domain) {
@@ -73,11 +70,7 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
   });
 
   routes.delete('/projects/:id/domains/:domain', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) {
-      return c.json({ error: 'NOT_FOUND', message: `Project not found: ${id}` }, 404);
-    }
+    const project = getProjectOrThrow(c, ctx);
 
     const domainParam = decodeURIComponent(c.req.param('domain'));
     const domain = normalizeDomainParam(domainParam);
@@ -98,11 +91,7 @@ export function createDomainRoutes(ctx: DomainRouteContext): Hono {
   });
 
   routes.get('/projects/:id/domains', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) {
-      return c.json({ error: 'NOT_FOUND', message: `Project not found: ${id}` }, 404);
-    }
+    const project = getProjectOrThrow(c, ctx);
 
     const domains = ctx.cloudflare.listDomains(project.id);
     return c.json({

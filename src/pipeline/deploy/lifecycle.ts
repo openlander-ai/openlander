@@ -1,5 +1,6 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getRouteName } from './helpers.js';
+import { containerName as projectContainerName } from '../helpers.js';
 
 import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
@@ -123,17 +124,17 @@ export class ContainerLifecycle {
     const names = new Set<string>();
 
     if (project.container_id) ids.add(project.container_id);
-    names.add(`ol-${project.name}`);
+    names.add(projectContainerName(project.name));
 
     const children = this.db.getChildProjects(projectId);
     for (const child of children) {
       if (child.container_id) ids.add(child.container_id);
-      names.add(`ol-${child.name}`);
+      names.add(projectContainerName(child.name));
     }
 
     for (const environment of environments) {
       if (environment.container_id) ids.add(environment.container_id);
-      names.add(`ol-${getRouteName(project.name, environment.type)}`);
+      names.add(projectContainerName(getRouteName(project.name, environment.type)));
     }
 
     const managed =

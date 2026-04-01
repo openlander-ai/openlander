@@ -4,10 +4,10 @@ import { stream } from 'hono/streaming';
 import { nanoid } from 'nanoid';
 
 import type { AppContext } from '../../app.js';
-import { ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { scanRepoEnvVars } from '../../pipeline/env-scan.js';
 import { cloneRepo } from '../../pipeline/git.js';
+import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 type TerminalFailureInput = {
   step: 'deploy-start' | 'monorepo' | 'orchestrate';
@@ -304,9 +304,7 @@ export async function emitTerminalMessage(
 
 export function registerBuildProgressRoute(api: Hono, ctx: AppContext): void {
   api.get('/builds/:id/progress', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const unsubscribers: Array<() => void> = [];
     const progressHandlers: Array<{ event: string; payload: Record<string, unknown> }> = [
@@ -400,9 +398,7 @@ export function registerEnvScanRoutes(api: Hono, ctx: AppContext): void {
   });
 
   api.post('/projects/:id/env/scan', async (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
+    const project = getProjectOrThrow(c, ctx);
     if (!project.repo_url) return c.json({ error: 'Project has no repo URL' }, 400);
 
     let clonePath: string | null = null;

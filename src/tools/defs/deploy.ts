@@ -1,6 +1,7 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
+import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
 import type { ToolDef } from './types.js';
 import {
@@ -157,7 +158,7 @@ export const deployToolDefs: ToolDef[] = [
         ...(job.phase === 'done'
           ? {
               urls: getProjectUrls(job.projectName),
-              internal_host: `ol-${job.projectName}`,
+              internal_host: projectContainerName(job.projectName),
               docker_host: getDockerHostType(),
               completed_at: job.completedAt?.toISOString(),
               health: (() => {

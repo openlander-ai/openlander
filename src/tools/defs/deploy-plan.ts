@@ -3,6 +3,7 @@ import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
 import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
+import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
 import { markMcpDeploy } from '../../pipeline/auto-recovery.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
@@ -286,7 +287,7 @@ export const deployPlanToolDefs: ToolDef[] = [
             project_name: result.project_name,
             project_id: projectId,
             urls: payload.url ? [payload.url] : getProjectUrls(result.project_name),
-            internal_host: `ol-${result.project_name}`,
+            internal_host: projectContainerName(result.project_name),
             docker_host: getDockerHostType(),
             ...(payload.totalDurationMs
               ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }

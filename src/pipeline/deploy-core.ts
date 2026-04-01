@@ -1,4 +1,5 @@
 import { createModuleLogger } from '../lib/logger.js';
+import { sleep } from '../lib/sleep.js';
 const log = createModuleLogger('deploy');
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -27,7 +28,11 @@ import type { AutoDetector } from './auto-detect.js';
 import type { EnvManager } from './env.js';
 import { getPolicy, type OpenLanderConfig } from '../config/index.js';
 
-import { extractProjectName } from './helpers.js';
+import {
+  extractProjectName,
+  containerName as projectContainerName,
+  collectKnownContainerNames,
+} from './helpers.js';
 import {
   getRouteName,
   deriveServiceName,
@@ -244,23 +249,12 @@ export class DeployPipeline {
   private async cleanupOrphanContainers(): Promise<void> {
     try {
       const managed = await this.docker.listManagedContainers();
-      const knownIds = new Set<string>();
-      const knownNames = new Set<string>();
-
-      for (const project of this.db.listProjects()) {
-        if (project.container_id) knownIds.add(project.container_id);
-        knownNames.add(`ol-${project.name}`);
-
-        for (const env of this.db.getEnvironmentsByProject(project.id)) {
-          if (env.container_id) knownIds.add(env.container_id);
-          knownNames.add(`ol-${getRouteName(project.name, env.type)}`);
-        }
-      }
-
-      for (const service of this.db.listServices()) {
-        if (service.container_id) knownIds.add(service.container_id);
-        if (service.container_name) knownNames.add(service.container_name);
-      }
+      const { knownIds, knownNames } = collectKnownContainerNames(
+        this.db.listProjects(),
+        (projectId) => this.db.getEnvironmentsByProject(projectId),
+        (projectName, env) => projectContainerName(getRouteName(projectName, env.type)),
+        this.db.listServices(),
+      );
 
       for (const container of managed) {
         if (knownIds.has(container.id)) continue;
@@ -816,7 +810,7 @@ export class DeployPipeline {
       this.jobManager?.updatePhase(projectId, 'failed', errorMsg);
 
       try {
-        const containerName = `ol-${routeName}`;
+        const containerName = projectContainerName(routeName);
         await this.docker.removeContainer(containerName);
         log.info({ projectId, containerName }, 'Cleaned up orphan container after failed deploy');
       } catch {
@@ -1315,7 +1309,7 @@ export class DeployPipeline {
 
       greenContainerId = await this.docker.runContainer({
         imageTag,
-        name: `ol-${projectName}-green`,
+        name: projectContainerName(`${projectName}-green`),
         port: newPort,
         containerPort,
         envVars,
@@ -1353,7 +1347,7 @@ export class DeployPipeline {
       const traefikLabels = buildTraefikLabels(projectName, containerPort, undefined, 'production');
       const promotedContainerId = await this.docker.runContainer({
         imageTag,
-        name: `ol-${projectName}`,
+        name: projectContainerName(projectName),
         port: newPort,
         containerPort,
         envVars,
@@ -1501,7 +1495,7 @@ export class DeployPipeline {
         log.debug({ err }, 'Health check probe failed — container not ready yet');
       }
       if (i < retries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        await sleep(intervalMs);
       }
     }
     return false;
@@ -1589,7 +1583,7 @@ export class DeployPipeline {
     projectName: string,
     error: PreflightCheckError,
   ): Promise<void> {
-    const containerName = `ol-${projectName}`;
+    const containerName = projectContainerName(projectName);
 
     if (!error.result.checks.nameAvailable.pass) {
       log.info({ containerName }, 'Force mode: removing conflicting container');

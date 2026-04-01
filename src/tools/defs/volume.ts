@@ -1,4 +1,5 @@
 import { createModuleLogger } from '../../lib/logger.js';
+import { DOCKER_LABELS } from '../../config/index.js';
 import {
   addVolumeSchema,
   cleanupDockerSchema,
@@ -84,7 +85,7 @@ export const volumeToolDefs: ToolDef[] = [
       try {
         const existing = await client.getVolume(dockerVolumeName).inspect();
         const existingLabels = getLabels(existing);
-        if (existingLabels['openlander.managed'] === 'true') {
+        if (existingLabels[DOCKER_LABELS.MANAGED] === 'true') {
           throw new Error(
             `Volume "${dockerVolumeName}" already exists for project "${projectName}". Use a different volume_name or remove the existing volume first.`,
           );
@@ -104,11 +105,11 @@ export const volumeToolDefs: ToolDef[] = [
         await client.createVolume({
           Name: dockerVolumeName,
           Labels: {
-            'openlander.managed': 'true',
-            'openlander.role': 'volume',
-            'openlander.project': projectName,
-            'openlander.volume': volumeName,
-            'openlander.mount_path': mountPath,
+            [DOCKER_LABELS.MANAGED]: 'true',
+            [DOCKER_LABELS.ROLE]: 'volume',
+            [DOCKER_LABELS.PROJECT]: projectName,
+            [DOCKER_LABELS.VOLUME]: volumeName,
+            [DOCKER_LABELS.MOUNT_PATH]: mountPath,
           },
         });
       } catch (error) {
@@ -135,8 +136,12 @@ export const volumeToolDefs: ToolDef[] = [
       const client = appCtx.docker.getClient();
 
       const labels = projectName
-        ? ['openlander.managed=true', 'openlander.role=volume', `openlander.project=${projectName}`]
-        : ['openlander.managed=true', 'openlander.role=volume'];
+        ? [
+            `${DOCKER_LABELS.MANAGED}=true`,
+            `${DOCKER_LABELS.ROLE}=volume`,
+            `${DOCKER_LABELS.PROJECT}=${projectName}`,
+          ]
+        : [`${DOCKER_LABELS.MANAGED}=true`, `${DOCKER_LABELS.ROLE}=volume`];
 
       const result = await client.listVolumes({ filters: { label: labels } });
       const listedVolumes = Array.isArray(result.Volumes) ? result.Volumes : [];
@@ -167,9 +172,9 @@ export const volumeToolDefs: ToolDef[] = [
 
           return {
             name,
-            project: labelsFromInspect['openlander.project'] ?? null,
-            volumeName: labelsFromInspect['openlander.volume'] ?? null,
-            mountPath: labelsFromInspect['openlander.mount_path'] ?? null,
+            project: labelsFromInspect[DOCKER_LABELS.PROJECT] ?? null,
+            volumeName: labelsFromInspect[DOCKER_LABELS.VOLUME] ?? null,
+            mountPath: labelsFromInspect[DOCKER_LABELS.MOUNT_PATH] ?? null,
             ...(sizeBytes !== undefined ? { sizeBytes } : {}),
           };
         }),
@@ -210,7 +215,7 @@ export const volumeToolDefs: ToolDef[] = [
       }
 
       const labels = getLabels(inspected);
-      if (labels['openlander.managed'] !== 'true' || labels['openlander.role'] !== 'volume') {
+      if (labels[DOCKER_LABELS.MANAGED] !== 'true' || labels[DOCKER_LABELS.ROLE] !== 'volume') {
         throw new Error(
           `Volume "${dockerVolumeName}" exists but is not an OpenLander-managed volume. Refusing to delete.`,
         );
@@ -283,7 +288,7 @@ export const volumeToolDefs: ToolDef[] = [
       const managedVolumes = volumesRaw
         .filter((volume) => {
           const labels = getLabels(volume);
-          return labels['openlander.managed'] === 'true';
+          return labels[DOCKER_LABELS.MANAGED] === 'true';
         })
         .map((volume) => {
           const labels = getLabels(volume);
@@ -291,7 +296,7 @@ export const volumeToolDefs: ToolDef[] = [
           const sizeBytes = getVolumeUsageSizeBytes(volume) ?? 0;
           return {
             name,
-            ...(labels['openlander.project'] ? { project: labels['openlander.project'] } : {}),
+            ...(labels[DOCKER_LABELS.PROJECT] ? { project: labels[DOCKER_LABELS.PROJECT] } : {}),
             sizeBytes,
           };
         });

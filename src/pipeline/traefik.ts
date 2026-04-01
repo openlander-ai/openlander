@@ -4,7 +4,8 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('traefik');
 
 import type { Docker } from './docker.js';
-import { getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
+import { DOCKER_LABELS, getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
+import { containerName as projectContainerName } from './helpers.js';
 import { join } from 'node:path';
 
 const TRAEFIK_IMAGE = 'traefik:v3.6';
@@ -52,7 +53,7 @@ export class TraefikManager {
     try {
       const client = this.docker.getClient();
       const containers = await client.listContainers({
-        filters: { label: ['openlander.role=traefik'] },
+        filters: { label: [`${DOCKER_LABELS.ROLE}=traefik`] },
       });
       return containers.length > 0;
     } catch (err) {
@@ -115,7 +116,7 @@ export class TraefikManager {
   private async tryAdoptExistingTraefik(): Promise<boolean> {
     const client = this.docker.getClient();
     const containers = await client.listContainers({
-      filters: { label: ['openlander.role=traefik'], status: ['running'] },
+      filters: { label: [`${DOCKER_LABELS.ROLE}=traefik`], status: ['running'] },
     });
 
     const candidate = containers.find((c) => {
@@ -202,7 +203,7 @@ export class TraefikManager {
     try {
       const existing = await client.listContainers({
         all: true,
-        filters: { label: ['openlander.role=traefik'] },
+        filters: { label: [`${DOCKER_LABELS.ROLE}=traefik`] },
       });
       for (const c of existing) {
         await client.getContainer(c.Id).remove({ force: true });
@@ -262,8 +263,8 @@ export class TraefikManager {
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
       },
       Labels: {
-        'openlander.managed': 'true',
-        'openlander.role': 'traefik',
+        [DOCKER_LABELS.MANAGED]: 'true',
+        [DOCKER_LABELS.ROLE]: 'traefik',
       },
     });
     await container.start();
@@ -418,7 +419,7 @@ export function buildTraefikLabels(
   hostname?: string,
   _environment: TraefikEnvironment = 'production',
 ): Record<string, string> {
-  const routerName = `ol-${projectName}`;
+  const routerName = projectContainerName(projectName);
   const host = hostname ?? getEnvironmentProjectHostname(projectName, 'production');
   const networkName = getPolicy('production').networkName;
 
@@ -560,7 +561,7 @@ function extractVersion(image: string): string | undefined {
  */
 function checkTraefikDockerProvider(labels: Record<string, string>): boolean {
   // OpenLander-managed Traefik always has this label
-  if (labels['openlander.role'] === 'traefik') {
+  if (labels[DOCKER_LABELS.ROLE] === 'traefik') {
     return true;
   }
 

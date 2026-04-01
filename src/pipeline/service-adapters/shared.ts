@@ -109,8 +109,4 @@ export function quoteSqlLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
 }
 
-export async function sleep(ms: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
+export { sleep } from '../../lib/sleep.js';

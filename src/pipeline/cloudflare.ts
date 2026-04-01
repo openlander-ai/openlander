@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid';
 import type { CloudflareConfig } from '../config/index.js';
 import type { Database, DomainMappingRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import { containerName as projectContainerName } from './helpers.js';
 import { buildTraefikLabels } from './traefik.js';
 
 interface CloudflareApiError {
@@ -172,7 +173,7 @@ export class CloudflareTunnelManager {
       return labels;
     }
 
-    const routerName = `ol-${projectName}`;
+    const routerName = projectContainerName(projectName);
     labels[`traefik.http.routers.${routerName}.rule`] = domains
       .map((domain) => `Host(\`${domain}\`)`)
       .join(' || ');

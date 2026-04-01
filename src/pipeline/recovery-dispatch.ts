@@ -1,8 +1,9 @@
 import { createModuleLogger } from '../lib/logger.js';
+import { pickLocale, type Locale } from '../lib/locale.js';
 
 const log = createModuleLogger('recovery-dispatch');
 
-export type Locale = 'en' | 'ko';
+export type { Locale };
 
 export type Fixability = 'agent' | 'user' | 'report';
 
@@ -583,8 +584,4 @@ function combineErrorAndLog(error: string, buildLog?: string): string {
 
 function matchesAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
-}
-
-function pickLocale(locale: Locale, text: LocalizedText): string {
-  return locale === 'ko' ? text.ko : text.en;
 }

@@ -24,6 +24,14 @@ const log = createModuleLogger('config');
 /** Supported deployment environment types. */
 export type OpenLanderEnv = 'production' | 'development';
 export const SHARED_NETWORK_NAME = 'openlander';
+export const DOCKER_LABELS = {
+  MANAGED: 'openlander.managed',
+  ROLE: 'openlander.role',
+  PROJECT: 'openlander.project',
+  SERVICE: 'openlander.service',
+  VOLUME: 'openlander.volume',
+  MOUNT_PATH: 'openlander.mount_path',
+} as const;
 
 /** Valid environment names for input validation. */
 const VALID_ENVIRONMENTS: ReadonlySet<string> = new Set<string>(['production', 'development']);

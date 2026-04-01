@@ -4,11 +4,11 @@ import type { Context, Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import type { ProjectRow } from '../../db/types.js';
-import { ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { postDeployCleanup } from '../../pipeline/cleanup.js';
 import { generatePostDeployInsights } from '../../pipeline/post-deploy-insight.js';
+import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('api');
 
@@ -735,9 +735,7 @@ function parseActionButtons(raw: string | null | undefined): ParsedActionButtons
 
 export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): void {
   api.get('/projects/:id/timeline', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     const events = ctx.db.getTimelineEvents(project.id).reverse();
 
@@ -763,9 +761,7 @@ export function registerDeployTimelineStreamRoutes(api: Hono, ctx: AppContext): 
   });
 
   api.get('/projects/:id/build/stream', (c) => {
-    const id = c.req.param('id');
-    const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-    if (!project) throw new ProjectNotFoundError(id);
+    const project = getProjectOrThrow(c, ctx);
 
     return handleBuildStreamRoute(c, ctx, project);
   });

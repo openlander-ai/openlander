@@ -8,7 +8,7 @@ function environmentNotFoundResponse(c: Context, message: string): Response {
   return c.json({ error: 'ENVIRONMENT_NOT_FOUND', message }, 404);
 }
 
-export function getProjectOrThrow(c: Context, ctx: AppContext): ProjectRow {
+export function getProjectOrThrow(c: Context, ctx: Pick<AppContext, 'db'>): ProjectRow {
   const id = c.req.param('id') ?? '';
   const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
   if (!project) throw new ProjectNotFoundError(id);

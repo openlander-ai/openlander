@@ -2,6 +2,7 @@ import type { Database } from '../../db/index.js';
 import { getPolicy } from '../../config/index.js';
 import type { OpenLanderEnv } from '../../config/index.js';
 import type { Docker } from '../docker.js';
+import { containerName as projectContainerName } from '../helpers.js';
 import { allocatePort, clearPortScanCache, releasePortReservation } from '../port.js';
 import { buildTraefikLabels, getEnvironmentProjectHostname } from '../traefik.js';
 
@@ -36,7 +37,7 @@ export class ContainerRunner {
       envType,
     );
 
-    const containerName = `ol-${config.containerName ?? config.projectName}`;
+    const containerName = projectContainerName(config.containerName ?? config.projectName);
     await this.docker.removeContainer(containerName);
 
     for (let attempt = 0; attempt < 2; attempt++) {

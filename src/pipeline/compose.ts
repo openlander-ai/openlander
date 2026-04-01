@@ -16,6 +16,7 @@ import { buildTraefikLabels } from './traefik.js';
 import { getCommitSubject } from './git.js';
 import { getPolicy } from '../config/index.js';
 import type { OpenLanderEnv } from '../config/index.js';
+import { extractProjectName, composeContainerName } from './helpers.js';
 import type { Docker } from './docker.js';
 import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
@@ -663,7 +664,7 @@ export class ComposePipeline {
       }
 
       for (const service of filteredComposeProject.services) {
-        const staleContainerName = `ol-${parentName}-${service.name}`;
+        const staleContainerName = composeContainerName(parentName, service.name);
         try {
           const existing = this.docker.getClient().getContainer(staleContainerName);
           await existing.remove({ force: true });
@@ -691,7 +692,7 @@ export class ComposePipeline {
             };
           }
 
-          const containerName = `ol-${parentName}-${service.name}`;
+          const containerName = composeContainerName(parentName, service.name);
           containerNameByService.set(service.name, containerName);
 
           let allocatedHostPort: number | null = null;
@@ -1223,7 +1224,7 @@ export class ComposePipeline {
     }
 
     if (service.build) {
-      return `ol-${projectName}-${service.name}:latest`;
+      return `${composeContainerName(projectName, service.name)}:latest`;
     }
 
     throw new Error(`Service ${service.name} must define either build or image`);
@@ -1357,15 +1358,6 @@ function parseComposeDurationSeconds(value?: string): number | undefined {
   }
 
   return Number.isFinite(seconds) ? seconds : undefined;
-}
-
-function extractProjectName(repoUrl: string): string {
-  const cleaned = repoUrl
-    .replace(/\.git$/, '')
-    .replace(/^(https?:\/\/|git@)/, '')
-    .replace(/:/g, '/');
-  const parts = cleaned.split('/');
-  return parts[parts.length - 1] ?? 'project';
 }
 
 function parseHostPort(portMapping: string): number | null {

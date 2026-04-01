@@ -6,7 +6,9 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
+import { getDataDir, getPolicy, SHARED_NETWORK_NAME, DOCKER_LABELS } from '../config/index.js';
+import { sleep } from '../lib/sleep.js';
+import { containerName, stripContainerPrefix } from './helpers.js';
 import type Dockerode from 'dockerode';
 
 import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
@@ -396,7 +398,7 @@ export class Docker {
     const cPort = options.containerPort ?? options.port;
     const extraHosts = await this.resolveExtraHosts();
     const secretBinds = this.writeSecretFiles(options.name, options.secretFiles ?? []);
-    const projectName = options.name.replace(/^ol-/, '');
+    const projectName = stripContainerPrefix(options.name);
     const volumeBinds = await this.getProjectVolumeBinds(projectName);
     const binds = [...secretBinds, ...volumeBinds];
 
@@ -405,8 +407,8 @@ export class Docker {
       name: options.name,
       Env: envArray,
       Labels: {
-        'openlander.managed': 'true',
-        'openlander.project': options.name.replace(/^ol-/, ''),
+        [DOCKER_LABELS.MANAGED]: 'true',
+        [DOCKER_LABELS.PROJECT]: stripContainerPrefix(options.name),
         ...options.traefikLabels,
       },
       ExposedPorts: {
@@ -436,7 +438,7 @@ export class Docker {
     const cPort = opts.containerPort ?? opts.port;
     const extraHosts = await this.resolveExtraHosts();
     const secretBinds = this.writeSecretFiles(opts.name, opts.secretFiles ?? []);
-    const projectName = opts.name.replace(/^ol-/, '');
+    const projectName = stripContainerPrefix(opts.name);
     const volumeBinds = await this.getProjectVolumeBinds(projectName);
     const binds = [...secretBinds, ...volumeBinds];
     const networkMode = opts.network ?? opts.networks?.[0] ?? this.networkName;
@@ -477,8 +479,8 @@ export class Docker {
       name: opts.name,
       Env: envArray,
       Labels: {
-        'openlander.managed': 'true',
-        'openlander.project': opts.name.replace(/^ol-/, ''),
+        [DOCKER_LABELS.MANAGED]: 'true',
+        [DOCKER_LABELS.PROJECT]: stripContainerPrefix(opts.name),
         ...opts.traefikLabels,
       },
       ExposedPorts: {
@@ -565,9 +567,9 @@ export class Docker {
       const result = await this.client.listVolumes({
         filters: {
           label: [
-            'openlander.managed=true',
-            'openlander.role=volume',
-            `openlander.project=${projectName}`,
+            `${DOCKER_LABELS.MANAGED}=true`,
+            `${DOCKER_LABELS.ROLE}=volume`,
+            `${DOCKER_LABELS.PROJECT}=${projectName}`,
           ],
         },
       });
@@ -577,7 +579,7 @@ export class Docker {
         const name = vol.Name;
         const labels = vol.Labels as Record<string, string> | undefined;
         if (!labels) continue;
-        const mountPath = labels['openlander.mount_path'];
+        const mountPath = labels[DOCKER_LABELS.MOUNT_PATH];
         if (typeof mountPath === 'string' && mountPath.startsWith('/')) {
           volumeBinds.push(`${name}:${mountPath}:rw`);
         }
@@ -694,7 +696,7 @@ export class Docker {
   }
 
   async ensureProjectNetwork(projectName: string): Promise<string> {
-    const networkName = `ol-${projectName}`;
+    const networkName = containerName(projectName);
 
     try {
       await this.client.getNetwork(networkName).inspect();
@@ -719,7 +721,7 @@ export class Docker {
   }
 
   async removeProjectNetwork(projectName: string): Promise<void> {
-    const networkName = `ol-${projectName}`;
+    const networkName = containerName(projectName);
 
     try {
       await this.client.getNetwork(networkName).remove();
@@ -808,7 +810,7 @@ export class Docker {
         }
       }
 
-      await new Promise((resolve) => setTimeout(resolve, checkInterval));
+      await sleep(checkInterval);
     }
 
     // Timeout — do a final check
@@ -836,7 +838,7 @@ export class Docker {
   async listManagedContainers(): Promise<ContainerInfo[]> {
     const containers = await this.client.listContainers({
       all: true,
-      filters: { label: ['openlander.managed=true'] },
+      filters: { label: [`${DOCKER_LABELS.MANAGED}=true`] },
     });
 
     return containers.map((c) => ({
@@ -870,7 +872,7 @@ export class Docker {
             Type: p.Type,
           })),
           labels,
-          managedByOpenLander: labels['openlander.managed'] === 'true',
+          managedByOpenLander: labels[DOCKER_LABELS.MANAGED] === 'true',
           composeProject: labels['com.docker.compose.project'] ?? null,
           created: c.Created,
         };

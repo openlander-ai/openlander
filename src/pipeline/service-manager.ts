@@ -4,9 +4,10 @@ import { join } from 'node:path';
 
 import { nanoid } from 'nanoid';
 
-import { getDataDir, SHARED_NETWORK_NAME } from '../config/index.js';
+import { DOCKER_LABELS, getDataDir, SHARED_NETWORK_NAME } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { serviceContainerName, serviceVolumeName } from './helpers.js';
 import {
   getServiceAdapter,
   type BuiltInServiceType,
@@ -454,9 +455,9 @@ export class ServiceManager {
     await client.createVolume({
       Name: volumeName,
       Labels: {
-        'openlander.managed': 'true',
-        'openlander.role': 'service',
-        'openlander.service': opts.name,
+        [DOCKER_LABELS.MANAGED]: 'true',
+        [DOCKER_LABELS.ROLE]: 'service',
+        [DOCKER_LABELS.SERVICE]: opts.name,
       },
     });
 
@@ -477,9 +478,9 @@ export class ServiceManager {
           }
         : {}),
       Labels: {
-        'openlander.managed': 'true',
-        'openlander.role': 'service',
-        'openlander.service': opts.name,
+        [DOCKER_LABELS.MANAGED]: 'true',
+        [DOCKER_LABELS.ROLE]: 'service',
+        [DOCKER_LABELS.SERVICE]: opts.name,
       },
       ExposedPorts: {
         [`${String(containerPort)}/tcp`]: {},
@@ -1119,11 +1120,11 @@ export class ServiceManager {
   }
 
   private getContainerName(name: string): string {
-    return `ol-svc-${name}`;
+    return serviceContainerName(name);
   }
 
   private getVolumeName(name: string): string {
-    return `ol-svc-data-${name}`;
+    return serviceVolumeName(name);
   }
 
   private getBackupDir(): string {

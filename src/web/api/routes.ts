@@ -10,6 +10,7 @@ import { createProjectRoutes } from './project-routes.js';
 import { createSystemRoutes } from './system-routes.js';
 import { createAiUsageRoutes } from './ai-usage-routes.js';
 import { createApprovalRoutes } from './approval-routes.js';
+import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getEnvironmentProjectHostname, getAllIps } from '../../pipeline/traefik.js';
 
 const log = createModuleLogger('api');
@@ -304,7 +305,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       routers[`prod-${projectName}`] = {
         rule: routeRule,
         entryPoints: ['web'],
-        service: `ol-${projectName}@docker`,
+        service: `${projectContainerName(projectName)}@docker`,
       };
     }
 
@@ -317,7 +318,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
           routers[`sslip-${project.name}-${ip.type}`] = {
             rule: `Host(\`${sslipHost}\`)`,
             entryPoints: ['web'],
-            service: `ol-${project.name}@docker`,
+            service: `${projectContainerName(project.name)}@docker`,
           };
         }
       }
@@ -331,7 +332,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
           routers[`qs-${project.name}`] = {
             rule: `Host(\`${host}\`)`,
             entryPoints: ['web'],
-            service: `ol-${project.name}@docker`,
+            service: `${projectContainerName(project.name)}@docker`,
           };
         } catch {
           // skip invalid URL

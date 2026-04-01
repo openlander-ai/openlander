@@ -293,14 +293,18 @@ describe('context-assembler', () => {
       const withGlobalScope = await buildContextSnapshot(scopedDb as Database, undefined, {
         type: 'global',
       });
-      expect(withoutScope).toBe(withGlobalScope);
+      const normalize = (snapshot: string): string =>
+        snapshot.replace(/Resources:.*$/m, 'Resources: <dynamic>');
+      expect(normalize(withoutScope)).toBe(normalize(withGlobalScope));
     });
 
     it('should behave identically with explicit global scope', async () => {
       const noScope = await buildContextSnapshot(scopedDb as Database);
       const globalScope: ContextScope = { type: 'global' };
       const withScope = await buildContextSnapshot(scopedDb as Database, undefined, globalScope);
-      expect(noScope).toBe(withScope);
+      const normalize = (snapshot: string): string =>
+        snapshot.replace(/Resources:.*$/m, 'Resources: <dynamic>');
+      expect(normalize(noScope)).toBe(normalize(withScope));
     });
 
     it('should show full details for focal project in project scope', async () => {

@@ -1,4 +1,5 @@
 import type { ServiceRow } from '../../db/index.js';
+import { sleep } from '../../lib/sleep.js';
 import type { Docker } from '../docker.js';
 import { execInServiceContainer } from './shared.js';
 import type {
@@ -38,7 +39,7 @@ export class RabbitMqAdapter implements ServiceAdapter {
       } catch {
         // Not ready yet
       }
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await sleep(2000);
     }
     throw new Error('RabbitMQ failed to become ready within timeout');
   }

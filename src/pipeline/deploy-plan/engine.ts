@@ -7,7 +7,11 @@ import { scanForEnvUsage } from '../env-scan.js';
 import { cloneRepo } from '../git.js';
 import { resolveEnvVars } from '../resolve-env.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
-import { extractProjectName } from '../helpers.js';
+import {
+  extractProjectName,
+  composeContainerName,
+  containerName as projectContainerName,
+} from '../helpers.js';
 import { parseImageUrl } from '../image-utils.js';
 import type {
   DeployPlan,
@@ -397,11 +401,11 @@ export class PlanEngine {
       restart: service.restart,
       healthcheck: service.healthcheck,
       internal_url: service.port
-        ? `http://ol-${params.projectName}-${service.name}:${String(service.port)}`
-        : `http://ol-${params.projectName}-${service.name}`,
+        ? `http://${composeContainerName(params.projectName, service.name)}:${String(service.port)}`
+        : `http://${composeContainerName(params.projectName, service.name)}`,
     }));
 
-    const internalUrl = `http://ol-${params.projectName}`;
+    const internalUrl = `http://${projectContainerName(params.projectName)}`;
     const internalUrlNote = 'Port determined after build. Set EXPOSE in Dockerfile.';
 
     return {

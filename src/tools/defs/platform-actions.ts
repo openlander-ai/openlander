@@ -1,15 +1,14 @@
 import { getRouteName } from '../../pipeline/deploy/helpers.js';
 import {
+  collectKnownContainerNames,
+  containerName as projectContainerName,
+} from '../../pipeline/helpers.js';
+import {
   platformCleanupOrphansSchema,
   platformForceRemoveSchema,
   platformReconcileSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
-
-interface KnownContainerRefs {
-  knownIds: Set<string>;
-  knownNames: Set<string>;
-}
 
 function ensureConfirmed(confirm: boolean, toolName: string): void {
   if (!confirm) {
@@ -29,30 +28,6 @@ function stripDockerName(name: string | undefined): string {
   return name.replace(/^\//, '');
 }
 
-function collectKnownContainerRefs(
-  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
-): KnownContainerRefs {
-  const knownIds = new Set<string>();
-  const knownNames = new Set<string>();
-
-  for (const project of appCtx.db.listProjects()) {
-    if (project.container_id) knownIds.add(project.container_id);
-    knownNames.add(`ol-${project.name}`);
-
-    for (const env of appCtx.db.getEnvironmentsByProject(project.id)) {
-      if (env.container_id) knownIds.add(env.container_id);
-      knownNames.add(`ol-${getRouteName(project.name, env.type)}`);
-    }
-  }
-
-  for (const service of appCtx.db.listServices()) {
-    if (service.container_id) knownIds.add(service.container_id);
-    if (service.container_name) knownNames.add(service.container_name);
-  }
-
-  return { knownIds, knownNames };
-}
-
 export const platformActionToolDefs: ToolDef[] = [
   {
     name: 'platform_cleanup_orphans',
@@ -67,7 +42,12 @@ export const platformActionToolDefs: ToolDef[] = [
       ensureConfirmed(confirm, 'platform_cleanup_orphans');
 
       const managedContainers = await context.appCtx.docker.listManagedContainers();
-      const { knownIds, knownNames } = collectKnownContainerRefs(context.appCtx);
+      const { knownIds, knownNames } = collectKnownContainerNames(
+        context.appCtx.db.listProjects(),
+        (projectId) => context.appCtx.db.getEnvironmentsByProject(projectId),
+        (projectName, env) => projectContainerName(getRouteName(projectName, env.type)),
+        context.appCtx.db.listServices(),
+      );
 
       const removed: Array<{ id: string; name: string }> = [];
       const skipped: Array<{ id: string; name: string; reason: string }> = [];
@@ -123,7 +103,12 @@ export const platformActionToolDefs: ToolDef[] = [
       ensureConfirmed(confirm, 'platform_reconcile');
 
       const managedContainers = await context.appCtx.docker.listManagedContainers();
-      const { knownIds, knownNames } = collectKnownContainerRefs(context.appCtx);
+      const { knownIds, knownNames } = collectKnownContainerNames(
+        context.appCtx.db.listProjects(),
+        (projectId) => context.appCtx.db.getEnvironmentsByProject(projectId),
+        (projectName, env) => projectContainerName(getRouteName(projectName, env.type)),
+        context.appCtx.db.listServices(),
+      );
       const dockerClient = context.appCtx.docker.getClient();
 
       const actions: Array<{ type: 'mark_error' | 'stop_orphan'; target: string; detail: string }> =

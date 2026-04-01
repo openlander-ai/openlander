@@ -3,6 +3,7 @@ import pc from 'picocolors';
 import { join } from 'node:path';
 import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { createModuleLogger } from '../lib/logger.js';
+import { sleep } from '../lib/sleep.js';
 import { VERSION } from '../version.js';
 import { getLanIp } from '../pipeline/traefik.js';
 import type { ToolSet } from 'ai';
@@ -233,7 +234,7 @@ program
     }
 
     // Wait briefly for cleanup
-    await new Promise((r) => setTimeout(r, 500));
+    await sleep(500);
 
     // Start
     const { loadConfig, getDbPath } = await import('../config/index.js');

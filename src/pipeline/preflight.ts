@@ -7,6 +7,7 @@ import { detectReverseProxy, getProxyStatus } from './traefik.js';
 import { getSystemStats } from '../monitor/stats.js';
 import { PreflightCheckError } from '../errors.js';
 import { getPolicy } from '../config/index.js';
+import { containerName as projectContainerName } from './helpers.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -148,7 +149,7 @@ export async function preflightCheck(
   log.info({ projectName, targetPort }, 'Running preflight check');
 
   const warnings: string[] = [];
-  const containerName = `ol-${projectName}`;
+  const containerName = projectContainerName(projectName);
 
   try {
     clearPortScanCache();

@@ -128,7 +128,7 @@ export async function pollForAccessToken(
     }
 
     // Wait for the interval
-    await sleep(currentInterval * 1000, signal);
+    await sleepWithSignal(currentInterval * 1000, signal);
 
     // Check again after sleep
     if (signal?.aborted) {
@@ -228,7 +228,7 @@ export function openInBrowser(url: string): void {
  * Sleep for a specified duration.
  * Supports cancellation via AbortSignal.
  */
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new Error('Polling cancelled'));

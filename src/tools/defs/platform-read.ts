@@ -1,6 +1,10 @@
 import type { EventBus } from '../../events/index.js';
 import { RingBuffer } from '../../lib/ring-buffer.js';
 import { getLogBuffer } from '../../lib/log-buffer.js';
+import {
+  collectKnownContainerNames,
+  containerName as projectContainerName,
+} from '../../pipeline/helpers.js';
 import { VERSION } from '../../version.js';
 import {
   platformConfigSchema,
@@ -187,18 +191,12 @@ export const platformReadToolDefs: ToolDef[] = [
           ? allProjects.filter((project) => project.name === projectName)
           : allProjects;
 
-      const knownIds = new Set<string>();
-      const knownNames = new Set<string>();
-
-      for (const project of projects) {
-        if (project.container_id) knownIds.add(project.container_id);
-        knownNames.add(`ol-${project.name}`);
-      }
-
-      for (const service of services) {
-        if (service.container_id) knownIds.add(service.container_id);
-        knownNames.add(service.container_name);
-      }
+      const { knownIds, knownNames } = collectKnownContainerNames(
+        projects,
+        () => [],
+        (projectName) => projectContainerName(projectName),
+        services,
+      );
 
       const dockerIds = new Set(managedContainers.map((container) => container.id));
       const dockerNames = new Set(managedContainers.map((container) => container.name));
@@ -235,7 +233,7 @@ export const platformReadToolDefs: ToolDef[] = [
           if (project.container_id && dockerIds.has(project.container_id)) {
             return true;
           }
-          return dockerNames.has(`ol-${project.name}`);
+          return dockerNames.has(projectContainerName(project.name));
         })
         .map((project) => ({
           project_id: project.id,

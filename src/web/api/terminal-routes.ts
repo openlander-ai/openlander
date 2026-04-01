@@ -5,6 +5,7 @@ import type { Duplex } from 'node:stream';
 import type { AppContext } from '../../app.js';
 import { AuthService } from '../../auth/auth-service.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('terminal');
 
@@ -108,11 +109,7 @@ export function createTerminalRoutes(
                 }
               }
 
-              const project = ctx.db.getProject(id) ?? ctx.db.getProjectByName(id);
-              if (!project) {
-                closeWithError(ws, 'Project not found');
-                return;
-              }
+              const project = getProjectOrThrow(c, ctx);
 
               if (!project.container_id || project.status !== 'running') {
                 closeWithError(ws, 'Container is not running');
