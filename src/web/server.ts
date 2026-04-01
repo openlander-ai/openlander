@@ -23,6 +23,7 @@ import { DiscordChannel, createDiscordInteractionHandler } from '../channels/dis
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
 import { EmailChannel } from '../channels/email.js';
 import type { AppContext } from '../app.js';
+import { OpsAgent } from '../monitor/ops-agent.js';
 import type { NodeWebSocket } from '@hono/node-ws';
 import { getLlmRuntimeStatus } from './api/setup/shared.js';
 const log = createModuleLogger('web');
@@ -306,12 +307,24 @@ export function createServer(options: ServerOptions, ctx: AppContext): void {
   if (ctx.config.ai.operationalMonitoring.enabled) {
     ctx.healthMonitor.start();
     ctx.alertMonitor.start();
+    void startOpsAgent(ctx);
   }
 
   // v0.4: Start channel connections
   void ctx.channelManager.start();
 
   void verifyLlmOnStartup(ctx);
+}
+
+async function startOpsAgent(ctx: AppContext): Promise<void> {
+  if (ctx.opsAgent) {
+    return;
+  }
+
+  const opsAgent = new OpsAgent(ctx);
+  ctx.opsAgent = opsAgent;
+  await opsAgent.start();
+  log.info('OpsAgent started');
 }
 
 async function verifyLlmOnStartup(ctx: AppContext): Promise<void> {
@@ -370,6 +383,7 @@ export function startDaemon(options: DaemonOptions, ctx: AppContext): Promise<vo
   if (ctx.config.ai.operationalMonitoring.enabled) {
     ctx.healthMonitor.start();
     ctx.alertMonitor.start();
+    void startOpsAgent(ctx);
   }
 
   // v0.4: Start channel connections

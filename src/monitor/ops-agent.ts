@@ -1,4 +1,6 @@
 import type { AppContext } from '../app.js';
+import { randomUUID } from 'node:crypto';
+import type { OpsIncidentRow } from '../db/types.js';
 import { eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { OpsConfig, OpsEvent } from './ops-types.js';
@@ -70,6 +72,8 @@ export class OpsAgent {
       );
       this.eventUnsubscribers.set(eventName, unsubscribe);
     }
+
+    await this.reconcileOnBoot();
 
     void this.processQueue();
     await Promise.resolve();
@@ -151,6 +155,51 @@ export class OpsAgent {
         break;
       default:
         log.debug({ eventType: event.type }, 'OpsAgent received unknown event type');
+    }
+  }
+
+  private async reconcileOnBoot(): Promise<void> {
+    try {
+      const activeIncidents = new Map<string, OpsIncidentRow>();
+      for (const project of this.ctx.db.listProjects()) {
+        const incident = this.ctx.db.getActiveOpsIncident(project.id);
+        if (incident) {
+          activeIncidents.set(incident.id, incident);
+        }
+      }
+
+      for (const incident of activeIncidents.values()) {
+        this.ctx.db.addOpsIncidentEvent({
+          id: `evt-${randomUUID()}`,
+          incident_id: incident.id,
+          event_type: 'interrupted',
+          description: 'Incident interrupted by server restart',
+        });
+      }
+
+      const now = Date.now();
+      const staleCircuitBreakers = this.ctx.db.findAllOpenCircuitBreakers().filter((projectId) => {
+        const state = this.ctx.db.getCircuitBreakerState(projectId);
+        return typeof state?.opened_at === 'number' && now - state.opened_at > 86_400_000;
+      });
+
+      for (const projectId of staleCircuitBreakers) {
+        this.ctx.db.resetCircuitBreaker(projectId);
+      }
+
+      if (activeIncidents.size > 0 || staleCircuitBreakers.length > 0) {
+        log.info(
+          {
+            interruptedIncidents: activeIncidents.size,
+            resetBreakers: staleCircuitBreakers.length,
+          },
+          'Boot reconciliation completed',
+        );
+      }
+
+      await Promise.resolve();
+    } catch (err) {
+      log.warn({ err }, 'Boot reconciliation failed — continuing startup');
     }
   }
 

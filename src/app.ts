@@ -39,6 +39,7 @@ import { setupAutoRecovery } from './pipeline/auto-recovery.js';
 import { AgentPool } from './llm/agent-pool.js';
 import { createTools } from './tools/index.js';
 import { ApprovalGate } from './pipeline/approval-gate.js';
+import type { OpsAgent } from './monitor/ops-agent.js';
 
 const log = createModuleLogger('app');
 
@@ -66,6 +67,7 @@ export interface AppContext {
   deployQueue: DeployQueue;
   // v0.2 modules
   healthMonitor: HealthMonitor;
+  opsAgent?: OpsAgent;
   webhookManager: WebhookManager;
   cloudflare: CloudflareTunnelManager;
   // v0.3 modules
@@ -531,6 +533,7 @@ export function shutdownAppContext(ctx: AppContext): void {
   activeIncidentReporter = null;
   activeRollbackWatcher = null;
   getPostmortemInstance()?.stop();
+  void ctx.opsAgent?.stop();
   ctx.healthMonitor.stop();
   ctx.alertMonitor.stop();
   void ctx.channelManager.stop();
