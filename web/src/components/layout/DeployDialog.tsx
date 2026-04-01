@@ -126,21 +126,13 @@ export function DeployDialog({ open, onOpenChange, onDeploySuccess }: DeployDial
 
     try {
       if (source === 'git') {
-        await deployProject(
-          repoUrl,
-          branch || undefined,
-          name || undefined,
-          filtered,
-          'production',
-          'git',
-        );
+        await deployProject(repoUrl, branch || undefined, name || undefined, filtered, 'git');
       } else {
         await deployProject(
           undefined,
           undefined,
           name || undefined,
           filtered,
-          'production',
           'image',
           imageUrl,
           imageCmd || undefined,

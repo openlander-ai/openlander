@@ -1,7 +1,8 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Activity, History, SquareTerminal, Settings } from 'lucide-react';
+import { Activity, History, SquareTerminal, Settings, ShieldAlert } from 'lucide-react';
 import { OverviewTab } from '@/components/project/OverviewTab';
 import { DeploymentsTab } from '@/components/project/DeploymentsTab';
+import { OperationsTab } from '@/components/project/OperationsTab';
 import { ConsoleTab } from '@/components/project/ConsoleTab';
 import { SettingsTab } from '@/components/project/SettingsTab';
 import type { ProjectWithOptionalEnvironments } from '@/lib/api';
@@ -54,6 +55,13 @@ export function ProjectDetailTabs({
           Deployments
         </TabsTrigger>
         <TabsTrigger
+          value="operations"
+          className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
+        >
+          <ShieldAlert className="h-3.5 w-3.5" />
+          Operations
+        </TabsTrigger>
+        <TabsTrigger
           value="console"
           className="gap-1.5 text-xs font-body data-[state=active]:text-agent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-agent rounded-none"
         >
@@ -96,6 +104,10 @@ export function ProjectDetailTabs({
             projectBranch={displayProject.branch}
           />
         )}
+      </TabsContent>
+
+      <TabsContent value="operations" className="flex-1 min-h-0 mt-0">
+        {id && displayProject && <OperationsTab projectId={id} />}
       </TabsContent>
 
       <TabsContent value="console" className="flex-1 min-h-0 mt-0">

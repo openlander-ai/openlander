@@ -122,7 +122,7 @@ export function NewProjectFlow() {
         branch,
         selectedRepo.name,
         Object.keys(filtered).length > 0 ? filtered : undefined,
-        'production',
+        'git',
       );
       if (result.success && result.projectId) {
         navigate(`/projects/${result.projectId}`);
@@ -150,7 +150,6 @@ export function NewProjectFlow() {
         undefined,
         imageName || undefined,
         undefined,
-        'production',
         'image',
         imageUrl,
         imageCmd || undefined,
