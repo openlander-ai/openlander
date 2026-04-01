@@ -247,7 +247,7 @@ Diagnose this build failure. Respond ONLY with the JSON format specified.`;
     if (this.db) {
       try {
         const usage = extractUsageFromResult(response.usage);
-        await logAiUsage(this.db, {
+        logAiUsage(this.db, {
           actionType: 'build_debugger',
           modelName: this.getModelName(),
           provider: this.provider,

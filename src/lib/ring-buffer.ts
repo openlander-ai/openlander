@@ -32,7 +32,7 @@ export class RingBuffer<T> {
     if (capacity <= 0) {
       throw new Error('Capacity must be greater than 0');
     }
-    this.entries = new Array(capacity);
+    this.entries = new Array<RingBufferEntry<T>>(capacity);
   }
 
   /**
@@ -60,7 +60,8 @@ export class RingBuffer<T> {
     let result = all.slice(-n);
 
     if (options?.since !== undefined) {
-      result = result.filter((entry) => entry.timestamp >= options.since!);
+      const since = options.since;
+      result = result.filter((entry) => entry.timestamp >= since);
     }
 
     return result;
@@ -99,7 +100,7 @@ export class RingBuffer<T> {
    * Clear all entries from the buffer.
    */
   clear(): void {
-    this.entries = new Array(this.capacity);
+    this.entries = new Array<RingBufferEntry<T>>(this.capacity);
     this.writeIndex = 0;
     this.isFull = false;
   }
