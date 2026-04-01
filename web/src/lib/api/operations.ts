@@ -108,3 +108,19 @@ export async function fetchCircuitBreakerState(projectId: string): Promise<Circu
   };
   return data.state ?? { state: 'closed' };
 }
+
+export async function resetCircuitBreaker(projectId: string): Promise<{ reset: boolean }> {
+  const response = await fetchWithAuth(`/api/ops/circuit-breaker/${projectId}/reset`, {
+    method: 'POST',
+  });
+  if (!response.ok) throw new Error('Failed to reset circuit breaker');
+  return response.json() as Promise<{ reset: boolean }>;
+}
+
+export async function fetchIncidentEvents(
+  incidentId: string,
+): Promise<{ events: OpsIncidentEvent[] }> {
+  const response = await fetchWithAuth(`/api/ops/incidents/${incidentId}/events`);
+  if (!response.ok) return { events: [] };
+  return response.json() as Promise<{ events: OpsIncidentEvent[] }>;
+}
