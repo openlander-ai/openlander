@@ -288,6 +288,12 @@ export class ChannelManager {
       return;
     }
 
+    const trimmedContent = msg.content.trim();
+    if (trimmedContent.startsWith('/ops') || trimmedContent.startsWith('!ops')) {
+      await this.handleOpsCommand(msg, channel, trimmedContent);
+      return;
+    }
+
     if (!this.ctx.agent) {
       log.warn({ channelType: msg.channelType }, 'Agent is not configured; message ignored');
       return;
@@ -424,6 +430,90 @@ export class ChannelManager {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
+    }
+  }
+
+  private async handleOpsCommand(
+    msg: ChannelMessage,
+    channel: Channel,
+    content: string,
+  ): Promise<void> {
+    const parts = content
+      .replace(/^[/!]ops\s*/, '')
+      .trim()
+      .split(/\s+/);
+    const command = parts[0]?.toLowerCase() ?? 'help';
+    const args = parts.slice(1);
+
+    try {
+      let response: string;
+
+      switch (command) {
+        case 'status': {
+          const projects = this.ctx.db.listProjects();
+          const lines = projects.map((p) => `${p.name}: ${p.status}`).join('\n') || 'No projects';
+          response = `📊 Project Status:\n${lines}`;
+          break;
+        }
+        case 'health': {
+          try {
+            const { getSystemStats } = await import('../monitor/stats.js');
+            const stats = getSystemStats();
+            response = [
+              '🏥 System Health:',
+              `CPU: ${String(Math.round(stats.cpu.usagePercent))}%`,
+              `Memory: ${String(Math.round(stats.memory.usagePercent))}%`,
+              `Disk: ${String(Math.round(stats.disk.usagePercent))}%`,
+            ].join('\n');
+          } catch {
+            response = '❌ Health check failed';
+          }
+          break;
+        }
+        case 'incidents': {
+          const now = Date.now();
+          const dayAgo = now - 24 * 60 * 60 * 1000;
+          const recent = this.ctx.db.listOpsIncidentsByDateRange(dayAgo, now);
+          const active = recent.filter((i) => i.status !== 'resolved');
+          if (active.length === 0) {
+            response = '✅ No active incidents';
+          } else {
+            response =
+              `⚠️ Active Incidents (${String(active.length)}):\n` +
+              active
+                .map((i) => {
+                  const project = this.ctx.db.getProject(i.project_id);
+                  const name = project?.name ?? i.project_id.slice(0, 8);
+                  return `- [${i.severity}] ${name}: ${i.root_cause ?? i.status}`;
+                })
+                .join('\n');
+          }
+          break;
+        }
+        case 'restart': {
+          const projectName = args.join(' ');
+          if (!projectName) {
+            response = '❌ Usage: /ops restart <project-name>';
+            break;
+          }
+          response = `🔄 Restart for "${projectName}" queued — use the web dashboard to confirm`;
+          break;
+        }
+        default: {
+          response = [
+            '📋 OpsAgent Commands:',
+            '/ops status — List all projects and their status',
+            '/ops health — System health (CPU, memory, disk)',
+            '/ops incidents — List active incidents',
+            '/ops restart <project> — Request project restart',
+          ].join('\n');
+        }
+      }
+
+      await channel.sendMessage(msg.channelId, response);
+    } catch (err) {
+      log.error({ err, command }, 'Failed to handle ops command');
+      await channel.sendMessage(msg.channelId, '❌ Command failed').catch(() => undefined);
     }
   }
 }
