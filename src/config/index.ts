@@ -201,6 +201,16 @@ export interface MCPConfig {
   platformTools?: boolean;
 }
 
+export interface EmailChannelConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  auth: { user: string; pass: string };
+  from: string;
+  to: string[];
+}
+
 export interface ChannelConfig {
   slack: { enabled: boolean; token: string; signingSecret: string; recoveryChannelId?: string };
   discord: {
@@ -211,6 +221,7 @@ export interface ChannelConfig {
     recoveryChannelId?: string;
   };
   telegram: { enabled: boolean; token: string; webhookSecret: string; recoveryChannelId?: string };
+  email: EmailChannelConfig;
 }
 
 export interface LocalModelConfig {
@@ -320,6 +331,15 @@ function buildDefaultConfig(): OpenLanderConfig {
         recoveryChannelId: '',
       },
       telegram: { enabled: false, token: '', webhookSecret: '', recoveryChannelId: '' },
+      email: {
+        enabled: false,
+        host: '',
+        port: 587,
+        secure: false,
+        auth: { user: '', pass: '' },
+        from: '',
+        to: [],
+      },
     },
     gitProviders: {
       github: { token: '', username: '' },

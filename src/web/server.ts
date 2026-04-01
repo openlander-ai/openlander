@@ -21,6 +21,7 @@ import { createMcpHttpRoutes } from '../mcp/server.js';
 import { SlackChannel, createSlackWebhookHandler } from '../channels/slack.js';
 import { DiscordChannel, createDiscordInteractionHandler } from '../channels/discord.js';
 import { TelegramChannel, createTelegramWebhookHandler } from '../channels/telegram.js';
+import { EmailChannel } from '../channels/email.js';
 import type { AppContext } from '../app.js';
 import type { NodeWebSocket } from '@hono/node-ws';
 import { getLlmRuntimeStatus } from './api/setup/shared.js';
@@ -193,6 +194,18 @@ function createApp(
     });
     ctx.channelManager.register('telegram', telegramChannel);
     app.post('/webhooks/telegram', createTelegramWebhookHandler(telegramChannel));
+  }
+
+  if (ctx.config.channels.email.enabled && ctx.config.channels.email.host) {
+    const emailChannel = new EmailChannel({
+      host: ctx.config.channels.email.host,
+      port: ctx.config.channels.email.port,
+      secure: ctx.config.channels.email.secure,
+      auth: ctx.config.channels.email.auth,
+      from: ctx.config.channels.email.from,
+      to: ctx.config.channels.email.to,
+    });
+    ctx.channelManager.register('email', emailChannel);
   }
 
   app.get('/api/info', (c) =>
