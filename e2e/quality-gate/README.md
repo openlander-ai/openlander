@@ -73,6 +73,13 @@ e2e/quality-gate/
 | 18  | recovery.spec.ts        | R5 build fail -> error/stopped              | ~9s      | pass      |
 | 19  | recovery.spec.ts        | R6 runtime crash detected                   | ~55s     | pass      |
 | 20  | webhook.spec.ts         | Signed webhook triggers redeploy            | ~11s     | pass      |
+| 21  | ops-agent.spec.ts       | OpsAgent health endpoint                    | <1s      | pass      |
+| 22  | ops-agent.spec.ts       | Incidents list returns array                | <1s      | pass      |
+| 23  | ops-agent.spec.ts       | Config endpoint returns enabled flag        | <1s      | pass      |
+| 24  | ops-agent.spec.ts       | Circuit breaker endpoint graceful           | <1s      | pass      |
+| 25  | ops-agent.spec.ts       | Digest trigger returns triggered:true       | <1s      | pass      |
+| 26  | ops-agent.spec.ts       | Crash creates ops_incident (Docker)         | ~2min    | pass      |
+| 27  | ops-agent.spec.ts       | Circuit breaker reset works (Docker)        | ~3min    | pass      |
 
 Auth tests (10 tests in `auth.spec.ts`) require a separate run without `OPENLANDER_NO_AUTH`.
 

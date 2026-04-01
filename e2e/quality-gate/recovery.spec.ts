@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 
-import { deleteProject, deployGitProject, getProject, waitForStatus } from './fixtures/api.js';
+import {
+  deleteProject,
+  deployGitProject,
+  getOpsIncidents,
+  getProject,
+  waitForStatus,
+} from './fixtures/api.js';
 
 const SCENARIO_TIMEOUT_MS = 180_000;
 const PROJECT_STATUS_TIMEOUT_MS = 120_000;
@@ -80,5 +86,11 @@ test.describe('Quality Gate Recovery (R5/R6)', () => {
       PROJECT_STATUS_TIMEOUT_MS,
     );
     expect(['error', 'stopped']).toContain(crashedProject.status);
+
+    await sleep(8000);
+    const incidents = await getOpsIncidents(deploy.projectId);
+    expect(incidents.incidents.length).toBeGreaterThanOrEqual(1);
+    const incident = incidents.incidents[0] as Record<string, unknown>;
+    expect(incident['project_id']).toBe(deploy.projectId);
   });
 });

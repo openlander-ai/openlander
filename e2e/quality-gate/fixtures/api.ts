@@ -367,3 +367,50 @@ export async function getDeployments(projectId: string): Promise<any[]> {
   const data = (await res.json()) as { deployments?: any[] };
   return data.deployments || [];
 }
+
+// ============================================================================
+// OpsAgent
+// ============================================================================
+
+export async function getOpsHealth(): Promise<{
+  status: string;
+  queue: number;
+  running: boolean;
+}> {
+  const res = await apiFetch('/api/ops/health');
+  if (!res.ok) throw new Error(`getOpsHealth failed: ${res.status}`);
+  return res.json() as Promise<{ status: string; queue: number; running: boolean }>;
+}
+
+export async function getOpsIncidents(projectId?: string): Promise<{ incidents: unknown[] }> {
+  const params = projectId ? `?projectId=${projectId}` : '';
+  const res = await apiFetch(`/api/ops/incidents${params}`);
+  if (!res.ok) throw new Error(`getOpsIncidents failed: ${res.status}`);
+  return res.json() as Promise<{ incidents: unknown[] }>;
+}
+
+export async function getOpsConfig(): Promise<{ config: Record<string, unknown> }> {
+  const res = await apiFetch('/api/ops/config');
+  if (!res.ok) throw new Error(`getOpsConfig failed: ${res.status}`);
+  return res.json() as Promise<{ config: Record<string, unknown> }>;
+}
+
+export async function getCircuitBreakerState(
+  projectId: string,
+): Promise<{ state: Record<string, unknown> | null }> {
+  const res = await apiFetch(`/api/ops/circuit-breaker/${projectId}`);
+  if (!res.ok) throw new Error(`getCircuitBreakerState failed: ${res.status}`);
+  return res.json() as Promise<{ state: Record<string, unknown> | null }>;
+}
+
+export async function resetCircuitBreaker(projectId: string): Promise<{ reset: boolean }> {
+  const res = await apiFetch(`/api/ops/circuit-breaker/${projectId}/reset`, { method: 'POST' });
+  if (!res.ok) throw new Error(`resetCircuitBreaker failed: ${res.status}`);
+  return res.json() as Promise<{ reset: boolean }>;
+}
+
+export async function triggerDigest(): Promise<{ triggered: boolean }> {
+  const res = await apiFetch('/api/ops/digest/trigger', { method: 'POST' });
+  if (!res.ok) throw new Error(`triggerDigest failed: ${res.status}`);
+  return res.json() as Promise<{ triggered: boolean }>;
+}
