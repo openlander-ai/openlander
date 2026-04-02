@@ -334,7 +334,6 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'archive_project',
-    riskLevel: 'medium',
     description:
       'Archive a project (soft delete). Stops and removes containers, frees port, but preserves all configuration, environment variables, and deployment history. Use unarchive_project to restore.',
     mcpDescription:
@@ -362,7 +361,6 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'unarchive_project',
-    riskLevel: 'medium',
     description:
       'Restore an archived project. Re-enables the project for deployment (assigns a new port). Does not automatically redeploy — use redeploy_project or execute_deploy_plan to start the container.',
     mcpDescription:
