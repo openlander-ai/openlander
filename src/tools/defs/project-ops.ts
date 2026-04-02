@@ -6,6 +6,8 @@ import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import {
   emptySchema,
   removeProjectSchema,
+  archiveProjectSchema,
+  unarchiveProjectSchema,
   restartProjectSchema,
   stopProjectSchema,
   startProjectSchema,
@@ -80,8 +82,9 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'remove_project',
     riskLevel: 'high',
     description:
-      'Permanently remove a project — deletes the container, image, and database record. DESTRUCTIVE — cannot be undone. WARNING: Port assignment is lost; re-deploying the same project name will get a DIFFERENT port, breaking any hardcoded port references (env vars, URLs). To update code and redeploy without losing the port, use restart_project instead. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription: 'Remove a project and its container entirely.',
+      'Archive a project (soft delete). Deprecated — use archive_project instead. Stops and removes containers, frees port, but preserves configuration and history. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
+    mcpDescription:
+      'Remove a project (now archives instead of permanent deletion). Use archive_project for new integrations.',
     inputSchema: removeProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
@@ -90,12 +93,14 @@ export const projectOpsToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
-      await context.appCtx.pipeline.remove(project.id, context.appCtx.cloudflare);
+      await context.appCtx.pipeline.archive(project.id);
       return {
-        status: 'removed',
+        status: 'archived',
         project: projectName,
         _agent_guidance: {
-          next_steps: ['Project removed. Use create_deploy_plan to redeploy if needed.'],
+          message:
+            'Project has been archived (not permanently deleted). Use archive_project in future. Use purge via web dashboard for permanent deletion.',
+          next_steps: ['Use archive_project instead of remove_project in future interactions.'],
         },
       };
     },
@@ -334,5 +339,66 @@ export const projectOpsToolDefs: ToolDef[] = [
         },
       };
     },
+  },
+  {
+    name: 'archive_project',
+    riskLevel: 'medium',
+    description:
+      'Archive a project (soft delete). Stops and removes containers, frees port, but preserves all configuration, environment variables, and deployment history. Use unarchive_project to restore.',
+    mcpDescription:
+      'Archive a project to stop its containers and free resources while preserving all configuration and history. Preferred over remove_project.',
+    inputSchema: archiveProjectSchema,
+    execute: async (args, context) => {
+      const projectName = args['project_name'] as string;
+      const project = context.appCtx.db.getProjectByName(projectName);
+      if (!project) {
+        throw new ProjectNotFoundError(projectName);
+      }
+
+      await context.appCtx.pipeline.archive(project.id);
+      return {
+        status: 'archived',
+        project: project.name,
+        _agent_guidance: {
+          message:
+            'Project archived successfully. All environment variables and history preserved.',
+          next_steps: ['Use unarchive_project to restore this project when needed.'],
+        },
+      };
+    },
+    targets: ['agent', 'mcp'],
+  },
+  {
+    name: 'unarchive_project',
+    riskLevel: 'medium',
+    description:
+      'Restore an archived project. Re-enables the project for deployment (assigns a new port). Does not automatically redeploy — use redeploy_project or execute_deploy_plan to start the container.',
+    mcpDescription:
+      'Restore an archived project to an active state with a new port assignment. After unarchiving, use redeploy_project to start the container.',
+    inputSchema: unarchiveProjectSchema,
+    execute: async (args, context) => {
+      const projectName = args['project_name'] as string;
+      const allProjects = context.appCtx.db.listProjects(undefined, { includeArchived: true });
+      const project = allProjects.find((p) => p.name === projectName);
+      if (!project) {
+        throw new ProjectNotFoundError(projectName);
+      }
+
+      await context.appCtx.pipeline.unarchive(project.id);
+      const updated = context.appCtx.db.getProject(project.id);
+      const newPort = updated?.assigned_port ?? 'unknown';
+      return {
+        status: 'unarchived',
+        project: project.name,
+        port: updated?.assigned_port,
+        _agent_guidance: {
+          message: `Project unarchived. Assigned new port ${String(newPort)}. Use redeploy_project to start the container.`,
+          next_steps: [
+            'Use redeploy_project to restart the container with existing configuration.',
+          ],
+        },
+      };
+    },
+    targets: ['agent', 'mcp'],
   },
 ];

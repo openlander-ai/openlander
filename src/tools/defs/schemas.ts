@@ -351,6 +351,15 @@ export const removeProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
+// Archive/unarchive project schemas
+export const archiveProjectSchema = z.object({
+  project_name: z.string().min(1).describe('Project name to archive'),
+});
+
+export const unarchiveProjectSchema = z.object({
+  project_name: z.string().min(1).describe('Project name to unarchive and restore'),
+});
+
 // Expose/unexpose public schemas
 export const exposePublicSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
