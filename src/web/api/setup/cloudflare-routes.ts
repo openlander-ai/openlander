@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../../app.js';
 import { loadConfig, updateConfig } from '../../../config/index.js';
 
-export function createCloudflareSetupRoutes(_ctx: AppContext): Hono {
+export function createCloudflareSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
   api.get('/setup/cloudflare', (c) => {
@@ -127,13 +127,9 @@ export function createCloudflareSetupRoutes(_ctx: AppContext): Hono {
       );
     }
 
-    updateConfig({
-      cloudflare: {
-        apiToken,
-        accountId,
-        tunnelId,
-      },
-    });
+    const cloudflareConfig = { apiToken, accountId, tunnelId };
+    updateConfig({ cloudflare: cloudflareConfig });
+    ctx.cloudflare.reloadConfig(cloudflareConfig);
 
     return c.json({ status: 'configured' });
   });

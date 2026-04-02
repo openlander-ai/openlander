@@ -47,10 +47,14 @@ export class CloudflareTunnelManager {
   private readonly traefikLabels = new Map<string, Record<string, string>>();
 
   constructor(
-    private readonly config: CloudflareConfig,
+    private config: CloudflareConfig,
     private readonly db: Database,
     private readonly events: EventBus,
   ) {}
+
+  reloadConfig(config: CloudflareConfig): void {
+    this.config = config;
+  }
 
   async createTunnel(projectId: string, domain: string): Promise<void> {
     const normalizedDomain = normalizeDomain(domain);
