@@ -163,7 +163,7 @@ export async function deployMonorepoService(
       containerPort: childContainerPort,
       envVars,
       secretFiles: deps.env.getSecretFilesForDeploy(childId),
-      restartPolicy: { Name: 'on-failure', MaximumRetryCount: 15 },
+      restartPolicy: { Name: 'unless-stopped' },
     });
     const { containerId, port, url: internalUrl } = runResult;
 
