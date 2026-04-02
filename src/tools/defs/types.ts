@@ -2,7 +2,6 @@ import type { z } from 'zod';
 import type { AppContext } from '../../app.js';
 import type { RiskLevel } from '../../llm/decision.js';
 import type { RequestIdentity } from '../../types/identity.js';
-import type { RiskLevel } from '../../llm/decision.js';
 
 /**
  * Target platform for tool execution.
@@ -52,5 +51,4 @@ export interface ToolDef {
   riskLevel?: RiskLevel;
   targets?: ToolTarget[];
   mcp?: McpResultTransform;
-  riskLevel?: RiskLevel;
 }
