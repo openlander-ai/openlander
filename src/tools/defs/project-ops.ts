@@ -223,6 +223,7 @@ export const projectOpsToolDefs: ToolDef[] = [
       const noCache = (args['no_cache'] as boolean | undefined) === true;
       const strategy = args['strategy'] as 'blue-green' | 'force' | undefined;
       const healthCheckPath = args['health_check_path'] as string | undefined;
+      const cmd = args['cmd'] as string[] | undefined;
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
@@ -233,6 +234,7 @@ export const projectOpsToolDefs: ToolDef[] = [
           noCache,
           strategy,
           healthCheckPath: healthCheckPath?.trim() || undefined,
+          cmd,
         })
         .catch((err: unknown) => {
           log.error({ err, projectId: project.id }, 'Redeploy failed');

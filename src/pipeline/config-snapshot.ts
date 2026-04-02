@@ -19,6 +19,7 @@ export const PERSISTED_FIELDS = [
   'dockerfilePath',
   'dockerTarget',
   'buildContext',
+  'imageCmd',
 ] as const;
 
 /**
@@ -41,6 +42,8 @@ export interface DeployConfigSnapshot {
   dockerTarget?: string;
   /** Docker build context directory */
   buildContext?: string;
+  /** Command override array for container entrypoint */
+  imageCmd?: string[];
 }
 
 /**
@@ -84,6 +87,9 @@ export function createSnapshot(config: ProjectConfig): DeployConfigSnapshot {
   }
   if (config.buildContext !== undefined) {
     snapshot.buildContext = config.buildContext;
+  }
+  if (config.imageCmd !== undefined) {
+    snapshot.imageCmd = config.imageCmd;
   }
 
   return snapshot;

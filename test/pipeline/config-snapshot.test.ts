@@ -25,6 +25,7 @@ describe('config-snapshot', () => {
       expect(PERSISTED_FIELDS).toContain('dockerfilePath');
       expect(PERSISTED_FIELDS).toContain('dockerTarget');
       expect(PERSISTED_FIELDS).toContain('buildContext');
+      expect(PERSISTED_FIELDS).toContain('imageCmd');
     });
 
     it('does not contain runtime fields', () => {
@@ -60,6 +61,7 @@ describe('config-snapshot', () => {
         dockerfilePath: 'docker/Dockerfile.prod',
         dockerTarget: 'production',
         buildContext: './app',
+        imageCmd: ['node', 'server.js'],
       };
 
       const snapshot = createSnapshot(config);
@@ -71,6 +73,7 @@ describe('config-snapshot', () => {
       expect(snapshot.dockerfilePath).toBe('docker/Dockerfile.prod');
       expect(snapshot.dockerTarget).toBe('production');
       expect(snapshot.buildContext).toBe('./app');
+      expect(snapshot.imageCmd).toEqual(['node', 'server.js']);
     });
 
     it('excludes runtime fields', () => {
@@ -145,6 +148,27 @@ describe('config-snapshot', () => {
       expect(Object.keys(snapshot)).toEqual(['sshKeyPath', 'environment']);
       expect(snapshot.sshKeyPath).toBe('/home/user/.ssh/id_rsa');
       expect(snapshot.environment).toBe('staging');
+    });
+
+    it('preserves imageCmd in snapshot', () => {
+      const config: ProjectConfig = {
+        repoUrl: 'https://github.com/user/repo',
+        imageCmd: ['python', 'app.py', '--port', '8000'],
+      };
+
+      const snapshot = createSnapshot(config);
+
+      expect(snapshot.imageCmd).toEqual(['python', 'app.py', '--port', '8000']);
+    });
+
+    it('excludes imageCmd when undefined', () => {
+      const config: ProjectConfig = {
+        repoUrl: 'https://github.com/user/repo',
+      };
+
+      const snapshot = createSnapshot(config);
+
+      expect(snapshot).not.toHaveProperty('imageCmd');
     });
   });
 

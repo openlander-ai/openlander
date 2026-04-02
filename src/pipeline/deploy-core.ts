@@ -130,6 +130,7 @@ export interface RedeployOptions {
   healthCheckPath?: string;
   healthCheckRetries?: number;
   healthCheckIntervalMs?: number;
+  cmd?: string[];
 }
 
 export interface MonorepoConfig {
@@ -1248,6 +1249,7 @@ export class DeployPipeline {
         _preferredPort: previousPort,
         _noCacheBuild: project.source === 'image' ? true : options?.noCache,
         environment: 'production',
+        ...(options?.cmd && { imageCmd: options.cmd }),
       },
       db: this.db,
     });

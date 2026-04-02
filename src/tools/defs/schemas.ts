@@ -313,6 +313,10 @@ export const redeployProjectSchema = z.object({
     .string()
     .optional()
     .describe('Health check endpoint path (default: /, for blue-green strategy)'),
+  cmd: z
+    .array(z.string())
+    .optional()
+    .describe('Override the container start command. Preserves existing cmd if not provided.'),
 });
 
 // Rollback schema
