@@ -2,11 +2,13 @@ import type { DeployPlanComplexity, PlanEnvEntry } from './types.js';
 
 /**
  * Computes required environment variables that are still missing.
+ * Checks provided, auto-detected, and existing (database) env vars.
  */
 export function computeMissingEnvVars(
   entries: PlanEnvEntry[],
   provided: Record<string, string>,
   autoDetected: Record<string, string>,
+  existingEnvVars: Record<string, string> = {},
 ): PlanEnvEntry[] {
   const missing: PlanEnvEntry[] = [];
   const seen = new Set<string>();
@@ -20,8 +22,9 @@ export function computeMissingEnvVars(
 
     const isProvided = entry.key in provided;
     const isAutoDetected = entry.key in autoDetected;
+    const isInDb = entry.key in existingEnvVars;
 
-    if (!isProvided && !isAutoDetected) {
+    if (!isProvided && !isAutoDetected && !isInDb) {
       missing.push(entry);
     }
   }

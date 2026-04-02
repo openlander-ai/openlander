@@ -49,6 +49,7 @@ export interface CreatePlanOptions {
   preferDockerfile?: boolean;
   dockerfilePath?: string;
   dockerTarget?: string;
+  projectId?: string;
 }
 
 interface PlanExecutionContext {
@@ -507,7 +508,7 @@ export class PlanEngine {
   }
 
   async createPlan(opts: CreatePlanOptions): Promise<DeployPlan> {
-    const { repoUrl, branch, name, envVars = {}, sshKeyPath, source, imageUrl } = opts;
+    const { repoUrl, branch, name, envVars = {}, sshKeyPath, source, imageUrl, projectId } = opts;
     const { nanoid } = await import('nanoid');
     const planId = `plan_${nanoid(12)}`;
 
@@ -600,7 +601,15 @@ export class PlanEngine {
     );
     const autoEnvVars = this.buildAutoEnvVars(services);
 
-    const missingEntries = computeMissingEnvVars(detectedEnv, envVars, autoEnvVars);
+    // Fetch existing env vars from database if projectId is provided
+    const existingEnvVars = projectId ? this.env.getAll(projectId) : {};
+
+    const missingEntries = computeMissingEnvVars(
+      detectedEnv,
+      envVars,
+      autoEnvVars,
+      existingEnvVars,
+    );
     const missing = missingEntries.map((entry) => entry.key);
 
     const isCompose = buildMethod === 'compose';

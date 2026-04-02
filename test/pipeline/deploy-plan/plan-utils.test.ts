@@ -34,6 +34,61 @@ describe('plan-utils', () => {
 
       expect(computeMissingEnvVars(entries, provided, autoDetected)).toEqual([]);
     });
+
+    it('does not flag env vars that exist in the database', () => {
+      const entries: PlanEnvEntry[] = [
+        { key: 'DATABASE_URL', source: 'Dockerfile', required: true },
+        { key: 'API_KEY', source: '.env.example', required: true },
+      ];
+
+      const provided = {};
+      const autoDetected = {};
+      const existingEnvVars = { DATABASE_URL: 'postgres://...' };
+
+      expect(computeMissingEnvVars(entries, provided, autoDetected, existingEnvVars)).toEqual([
+        { key: 'API_KEY', source: '.env.example', required: true },
+      ]);
+    });
+
+    it('flags env vars as missing when existingEnvVars is empty (new project)', () => {
+      const entries: PlanEnvEntry[] = [
+        { key: 'DATABASE_URL', source: 'Dockerfile', required: true },
+        { key: 'API_KEY', source: '.env.example', required: true },
+      ];
+
+      const provided = {};
+      const autoDetected = {};
+      const existingEnvVars = {};
+
+      expect(computeMissingEnvVars(entries, provided, autoDetected, existingEnvVars)).toEqual([
+        { key: 'DATABASE_URL', source: 'Dockerfile', required: true },
+        { key: 'API_KEY', source: '.env.example', required: true },
+      ]);
+    });
+
+    it('prioritizes provided vars over existing database vars', () => {
+      const entries: PlanEnvEntry[] = [
+        { key: 'DATABASE_URL', source: 'Dockerfile', required: true },
+      ];
+
+      const provided = { DATABASE_URL: 'new-value' };
+      const autoDetected = {};
+      const existingEnvVars = { DATABASE_URL: 'old-value' };
+
+      expect(computeMissingEnvVars(entries, provided, autoDetected, existingEnvVars)).toEqual([]);
+    });
+
+    it('prioritizes auto-detected vars over existing database vars', () => {
+      const entries: PlanEnvEntry[] = [
+        { key: 'DATABASE_URL', source: 'Dockerfile', required: true },
+      ];
+
+      const provided = {};
+      const autoDetected = { DATABASE_URL: 'auto-value' };
+      const existingEnvVars = { DATABASE_URL: 'old-value' };
+
+      expect(computeMissingEnvVars(entries, provided, autoDetected, existingEnvVars)).toEqual([]);
+    });
   });
 
   describe('computeComplexity', () => {
