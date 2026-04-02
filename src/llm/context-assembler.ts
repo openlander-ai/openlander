@@ -14,6 +14,7 @@ import { scanUsedPorts } from '../pipeline/port.js';
 import { detectReverseProxy } from '../pipeline/traefik.js';
 import { getPolicy } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { BUILD_RECIPES } from '../pipeline/recipes.js';
 
 const log = createModuleLogger('context-assembler');
 const MAX_PATTERN_CONTEXT_CHARS = 800;
@@ -315,7 +316,30 @@ function buildPatternSection(db: Database, projectId: string): string | null {
 }
 
 function buildGlobalRecipeSummary(): string {
-  return 'Known fix categories: dependencies, memory, ports, runtime start commands';
+  const counts = new Map<string, number>();
+  for (const recipe of BUILD_RECIPES) {
+    const cat = recipeCategory(recipe.title);
+    counts.set(cat, (counts.get(cat) ?? 0) + 1);
+  }
+  const summary = [...counts.entries()].map(([cat, n]) => `${cat} (${String(n)})`).join(', ');
+  return `Known fix categories: ${summary}`;
+}
+
+function recipeCategory(title: string): string {
+  if (/Docker Compose/i.test(title)) return 'compose';
+  if (/Docker|Dockerfile/i.test(title)) return 'docker';
+  if (/\.NET/i.test(title)) return 'dotnet';
+  if (/Maven|Gradle/i.test(title)) return 'java';
+  if (/Ruby|Bundler|Rails/i.test(title)) return 'ruby';
+  if (/PHP|Composer/i.test(title)) return 'php';
+  if (/Python/i.test(title)) return 'python';
+  if (/node-gyp|Sharp|native/i.test(title)) return 'native-modules';
+  if (/memory/i.test(title)) return 'memory';
+  if (/[Pp]ort/i.test(title)) return 'ports';
+  if (/[Nn]etwork/i.test(title)) return 'network';
+  if (/[Pp]ermission/i.test(title)) return 'permissions';
+  if (/module|dependency|Prisma/i.test(title)) return 'dependencies';
+  return 'other';
 }
 
 function buildRecoverySection(db: Database, projectId: string): string | null {
