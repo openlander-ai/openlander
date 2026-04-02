@@ -216,6 +216,7 @@ function buildPendingFixFromAction(
       };
     }
     case 'set_env':
+    case 'retry_no_cache':
     case 'skip':
       return null;
   }
@@ -593,11 +594,23 @@ ${plan.agentGuidance}
         await emitTimelineMessage(eventBus, projectId, `Debug summary: ${diagnosis.summary}`);
       }
 
+      const useNoCache = recipe?.action?.type === 'retry_no_cache';
+      if (useNoCache) {
+        await emitTimelineMessage(
+          eventBus,
+          projectId,
+          'Retrying build with --no-cache to bypass corrupted cache.',
+        );
+      }
+
       const release = await deployQueue.acquire();
       let redeploySuccess = false;
       let redeployError = error;
       try {
-        const retryResult = await pipeline.redeploy(projectId);
+        const retryResult = await pipeline.redeploy(
+          projectId,
+          useNoCache ? { noCache: true } : undefined,
+        );
         redeploySuccess = retryResult.success;
         redeployError = retryResult.error ?? error;
       } finally {

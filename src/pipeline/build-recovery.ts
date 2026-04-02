@@ -44,7 +44,14 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
     autoFixable: true,
     suggestible: false,
     message: 'Docker cache issue detected during build.',
-    patterns: [/failed to compute cache key/i, /error getting credentials/i, /COPY failed/i],
+    patterns: [
+      /failed to compute cache key/i,
+      /error getting credentials/i,
+      /COPY failed/i,
+      /lease.*does not exist/i,
+      /failed.*commit.*on ref.*lease/i,
+      /buildkit.*lease/i,
+    ],
   },
   {
     category: 'disk-full',

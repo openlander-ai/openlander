@@ -63,7 +63,6 @@ export const monitoringToolDefs: ToolDef[] = [
         })),
       });
     },
-    targets: ['agent'],
   },
   {
     name: 'dismiss_alert',
@@ -76,7 +75,6 @@ export const monitoringToolDefs: ToolDef[] = [
       context.appCtx.alertMonitor.dismissAlert(alertId);
       return Promise.resolve({ status: 'dismissed', alertId });
     },
-    targets: ['agent'],
   },
   {
     name: 'get_project_stats',

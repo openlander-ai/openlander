@@ -293,17 +293,17 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
 
 ### Available Tools
 
-Once connected, AI agents get 90+ tools including:
+Once connected, AI agents get 70+ tools including:
 
-| Category | Tools                                                                                |
-| -------- | ------------------------------------------------------------------------------------ |
-| Deploy   | `create_deploy_plan`, `execute_deploy_plan`, `rollback_project`, `deploy_blue_green` |
-| Services | `create_service`, `get_service_credentials`, `create_database`                       |
-| Config   | `set_env_vars`, `list_env_vars`, `set_global_secret`, `upload_secret_file`           |
-| Monitor  | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`                |
-| Projects | `list_projects`, `stop_project`, `remove_project`, `scan_project`                    |
-| Domains  | `map_domain`, `list_domains`                                                         |
-| Webhooks | `enable_webhook`, `disable_webhook`, `get_webhook_config`                            |
+| Category       | Tools                                                                                |
+| -------------- | ------------------------------------------------------------------------------------ |
+| Deploy         | `create_deploy_plan`, `execute_deploy_plan`, `rollback_project`, `deploy_blue_green` |
+| Services       | `create_service`, `get_service_credentials`, `create_service_database`               |
+| Config         | `set_env_vars`, `list_env_vars`, `set_global_secret`, `upload_secret_file`           |
+| Monitor        | `get_deploy_status`, `get_build_log`, `debug_build_error`, `get_logs`, `get_alerts`  |
+| Projects       | `list_projects`, `stop_project`, `remove_project`, `restart_project`                 |
+| Infrastructure | `analyze_infrastructure`, `map_domain`, `list_domains`                               |
+| Webhooks       | `enable_webhook`, `disable_webhook`, `get_webhook_config`                            |
 
 ## Requirements
 

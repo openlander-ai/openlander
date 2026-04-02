@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createModuleLogger } from '../../lib/logger.js';
 import { findDockerfiles } from '../../lib/repo-scanner.js';
@@ -454,6 +454,39 @@ export class PlanEngine {
     };
   }
 
+  private detectPersistenceWarnings(clonePath: string, warnings: string[]): void {
+    const depFiles: { name: string; pattern: RegExp }[] = [
+      {
+        name: 'package.json',
+        pattern: /better-sqlite3|"sqlite3"|sql\.js|drizzle.*sqlite|prisma.*sqlite/i,
+      },
+      { name: 'requirements.txt', pattern: /sqlite|peewee|sqlalchemy/i },
+      { name: 'pyproject.toml', pattern: /sqlite|peewee|sqlalchemy/i },
+      { name: 'Gemfile', pattern: /sqlite3/i },
+      { name: 'go.mod', pattern: /go-sqlite3|modernc\.org\/sqlite/i },
+      { name: 'Cargo.toml', pattern: /rusqlite|diesel.*sqlite/i },
+    ];
+
+    for (const { name, pattern } of depFiles) {
+      const filePath = join(clonePath, name);
+      if (!existsSync(filePath)) continue;
+
+      try {
+        const content = readFileSync(filePath, 'utf-8');
+        if (pattern.test(content)) {
+          warnings.push(
+            'SQLite dependency detected. Data stored in SQLite will be lost on container restart ' +
+              'unless a persistent volume is mounted. Use add_volume to attach storage at the ' +
+              'database path (e.g., /app/data).',
+          );
+          return;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
   async createPlan(opts: CreatePlanOptions): Promise<DeployPlan> {
     const { repoUrl, branch, name, envVars = {}, sshKeyPath, source, imageUrl } = opts;
     const { nanoid } = await import('nanoid');
@@ -540,6 +573,7 @@ export class PlanEngine {
 
     const services = this.detectPlanServices(clonePath);
     this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
+    this.detectPersistenceWarnings(clonePath, warnings);
 
     const requiredEnvVars = Array.from(
       new Set(detectedEnv.filter((e) => e.required).map((e) => e.key)),

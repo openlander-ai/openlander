@@ -246,8 +246,8 @@ describe('matchAllRecipes', () => {
 });
 
 describe('BUILD_RECIPES', () => {
-  it('has 25 recipes', () => {
-    expect(BUILD_RECIPES).toHaveLength(25);
+  it('has 26 recipes', () => {
+    expect(BUILD_RECIPES).toHaveLength(26);
   });
 
   it('all recipes have required fields', () => {

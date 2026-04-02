@@ -16,7 +16,8 @@ export interface Alert {
     | 'dangling-images'
     | 'port-conflict'
     | 'container-crash'
-    | 'resource-saturation';
+    | 'resource-saturation'
+    | 'orphan-container';
   severity: 'warning' | 'critical';
   message: string;
   details: Record<string, unknown>;
@@ -120,7 +121,8 @@ export class AlertMonitor {
         return typeof port === 'number' ? String(port) : 'unknown';
       }
       case 'container-crash':
-      case 'resource-saturation': {
+      case 'resource-saturation':
+      case 'orphan-container': {
         const containerId = alert.details['containerId'];
         return typeof containerId === 'string' ? containerId : 'unknown';
       }
@@ -144,6 +146,7 @@ export class AlertMonitor {
         this.checkContainerMemory(),
         this.checkDanglingImages(),
         this.checkPortConflicts(),
+        this.checkOrphanContainers(),
       ]);
     } catch (err) {
       log.error({ err }, 'Error during alert checks');
@@ -532,6 +535,65 @@ export class AlertMonitor {
       } catch (err) {
         log.debug({ err, containerId: project.container_id }, 'Failed to check container memory');
       }
+    }
+  }
+
+  private async checkOrphanContainers(): Promise<void> {
+    try {
+      const dockerClient = this.docker.getClient();
+      const containers = await dockerClient.listContainers({ all: true });
+
+      const projects = this.db.listProjects();
+      const services = this.db.listServices();
+
+      const knownContainerIds = new Set<string>();
+      for (const project of projects) {
+        if (project.container_id) knownContainerIds.add(project.container_id);
+      }
+      for (const service of services) {
+        if (service.container_id) knownContainerIds.add(service.container_id);
+      }
+
+      const orphans: { id: string; name: string; state: string }[] = [];
+      for (const container of containers) {
+        const names = container.Names.map((n: string) => n.replace(/^\//, ''));
+        const isOpenLanderContainer = names.some(
+          (n: string) => n.startsWith('ol-') || n.startsWith('openlander'),
+        );
+        if (!isOpenLanderContainer) continue;
+        if (knownContainerIds.has(container.Id)) continue;
+
+        orphans.push({
+          id: container.Id.slice(0, 12),
+          name: names[0] || container.Id.slice(0, 12),
+          state: container.State,
+        });
+      }
+
+      const key = 'orphan-container:system';
+      if (orphans.length === 0) {
+        this.resolveAlert(key, 'orphan-container');
+        return;
+      }
+
+      const nameList = orphans.map((o) => `${o.name} (${o.state})`).join(', ');
+      const message = `${String(orphans.length)} orphan OpenLander container(s) detected: ${nameList}`;
+      const suggestion =
+        'These containers have no matching project in the database. ' +
+        'Remove them with platform_cleanup_orphans or docker rm.';
+
+      await this.upsertAlert(key, {
+        type: 'orphan-container',
+        severity: 'warning',
+        message,
+        details: {
+          count: orphans.length,
+          containers: orphans,
+        },
+        suggestion,
+      });
+    } catch (err) {
+      log.debug({ err }, 'Failed to check orphan containers');
     }
   }
 }

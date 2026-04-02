@@ -37,6 +37,9 @@ export type RecipeAction =
       position: 'before' | 'after';
     }
   | {
+      type: 'retry_no_cache';
+    }
+  | {
       type: 'skip';
     };
 
@@ -45,6 +48,16 @@ export type RecipeAction =
  * Sources: common Docker build failures from Node.js, Python, Java, .NET, Go, Ruby/Rails, and PHP/Laravel projects.
  */
 export const BUILD_RECIPES: Recipe[] = [
+  {
+    pattern: /lease.*does not exist|failed.*commit.*on ref.*lease|buildkit.*lease/i,
+    title: 'Docker BuildKit cache corruption (lease)',
+    diagnosis:
+      'The Docker BuildKit cache lease expired or was invalidated. This is a transient issue caused by build cache corruption — not a problem with the application code.',
+    fix: 'Retry the build with `--no-cache` to bypass the corrupted cache layer. This usually resolves the issue on the first retry.',
+    action: {
+      type: 'retry_no_cache',
+    },
+  },
   {
     pattern: /node-gyp|gyp ERR|make.*Error.*1/i,
     title: 'Native module compilation failure (node-gyp)',
