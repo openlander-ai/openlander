@@ -13,6 +13,7 @@ const EXEMPT_PREFIXES = [
   '/api/auth/',
   '/assets/',
   '/mcp',
+  '/api/traefik/',
 ];
 
 const EXEMPT_EXTENSIONS = [
