@@ -42,6 +42,7 @@ export const projects = sqliteTable(
     pending_fix: text('pending_fix'),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+    archived_at: text('archived_at'),
     deploy_lock_session: text('deploy_lock_session'),
     deploy_lock_at: text('deploy_lock_at'),
     access_code: text('access_code'),

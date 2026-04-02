@@ -72,6 +72,9 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   if (!colNames.has('container_port')) {
     sqlite.exec('ALTER TABLE projects ADD COLUMN container_port INTEGER DEFAULT NULL');
   }
+  if (!colNames.has('archived_at')) {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN archived_at TEXT');
+  }
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_projects_parent ON projects(parent_project_id)');
 
   sqlite.exec(`CREATE TABLE IF NOT EXISTS environments (
