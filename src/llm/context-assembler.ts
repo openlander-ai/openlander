@@ -16,6 +16,7 @@ import { getPolicy } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('context-assembler');
+const MAX_PATTERN_CONTEXT_CHARS = 800;
 
 /**
  * Scope for context assembly — controls what level of detail is included.
@@ -98,6 +99,17 @@ ${projectLines}${projectGroups ? `\n\n${projectGroups}` : ''}`,
     if (recoverySection) {
       parts.push(recoverySection);
     }
+  }
+
+  if ((effectiveType === 'project' || effectiveType === 'recovery') && scope?.projectId) {
+    const patternSection = buildPatternSection(db, scope.projectId);
+    if (patternSection) {
+      parts.push(patternSection);
+    }
+  }
+
+  if (effectiveType === 'global') {
+    parts.push(buildGlobalRecipeSummary());
   }
 
   return parts.join('\n\n');
@@ -271,6 +283,39 @@ function buildScopedProjectLines(projects: ProjectRow[], focalProjectId?: string
   }
 
   return lines.join('\n');
+}
+
+function buildPatternSection(db: Database, projectId: string): string | null {
+  const patterns = db.getTopDeploymentPatterns(projectId, 5);
+  if (patterns.length === 0) return null;
+
+  const lines: string[] = ['## Known Deployment Patterns'];
+  lines.push('(Patterns may be outdated — verify before applying)');
+
+  let chars = lines.join('\n').length;
+
+  for (const p of patterns) {
+    let fixDesc: string;
+    try {
+      const fixAction = JSON.parse(p.fix_action) as Record<string, unknown>;
+      fixDesc = typeof fixAction.recipe === 'string' ? fixAction.recipe : JSON.stringify(fixAction);
+    } catch {
+      fixDesc = p.fix_action;
+    }
+
+    const line = `- ${p.error_signature} (fixed ${String(p.success_count)}x): ${fixDesc}`;
+    if (chars + line.length + 1 > MAX_PATTERN_CONTEXT_CHARS) break;
+    lines.push(line);
+    chars += line.length + 1;
+  }
+
+  if (lines.length <= 2) return null;
+
+  return lines.join('\n');
+}
+
+function buildGlobalRecipeSummary(): string {
+  return 'Known fix categories: dependencies, memory, ports, runtime start commands';
 }
 
 function buildRecoverySection(db: Database, projectId: string): string | null {
