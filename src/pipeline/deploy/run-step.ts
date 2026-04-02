@@ -18,6 +18,7 @@ export interface RunConfig {
   containerPort?: number;
   preferredPort?: number;
   secretFiles?: Array<{ filename: string; content: string; mountPath: string }>;
+  restartPolicy?: { Name: string; MaximumRetryCount?: number };
 }
 
 export class ContainerRunner {
@@ -66,6 +67,7 @@ export class ContainerRunner {
           traefikLabels,
           network: getPolicy(envType).networkName,
           secretFiles: config.secretFiles,
+          restartPolicy: config.restartPolicy,
         });
 
         releasePortReservation(port);

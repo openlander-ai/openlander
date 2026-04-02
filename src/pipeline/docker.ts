@@ -37,6 +37,8 @@ export interface RunContainerOptions {
   traefikLabels: Record<string, string>;
   network?: string;
   secretFiles?: SecretFileMount[];
+  /** Docker restart policy (default: on-failure with MaximumRetryCount: 5). */
+  restartPolicy?: { Name: string; MaximumRetryCount?: number };
 }
 
 export interface RunComposeServiceOptions {
@@ -433,7 +435,7 @@ export class Docker {
         },
         Binds: binds.length > 0 ? binds : undefined,
         NetworkMode: networkMode,
-        RestartPolicy: { Name: 'on-failure', MaximumRetryCount: 5 },
+        RestartPolicy: options.restartPolicy ?? { Name: 'on-failure', MaximumRetryCount: 5 },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
       },

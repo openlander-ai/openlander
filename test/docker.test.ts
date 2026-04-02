@@ -364,6 +364,58 @@ describeDocker('Docker core operations', () => {
     );
   });
 
+  it('uses custom restartPolicy when provided, defaults to MaximumRetryCount: 5 otherwise', async () => {
+    const container1 = createDockerContainerHandle({ id: 'container-custom-restart' });
+    const container2 = createDockerContainerHandle({ id: 'container-default-restart' });
+    mockCreateContainer.mockResolvedValueOnce(container1).mockResolvedValueOnce(container2);
+
+    const docker = new Docker('/var/run/docker.sock', 'traefik-web');
+
+    // Test with custom restart policy (monorepo case)
+    await docker.runContainer({
+      imageTag: 'mono-api:v1',
+      name: 'ol-mono-api',
+      port: 19090,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production' },
+      traefikLabels: {},
+      restartPolicy: { Name: 'on-failure', MaximumRetryCount: 15 },
+    });
+
+    expect(mockCreateContainer).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        HostConfig: expect.objectContaining({
+          RestartPolicy: { Name: 'on-failure', MaximumRetryCount: 15 },
+        }),
+      }),
+    );
+
+    // Test with default restart policy
+    await docker.runContainer({
+      imageTag: 'app:v1',
+      name: 'ol-app',
+      port: 18080,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production' },
+      traefikLabels: {},
+    });
+
+    expect(mockCreateContainer).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        HostConfig: expect.objectContaining({
+          RestartPolicy: { Name: 'on-failure', MaximumRetryCount: 5 },
+        }),
+      }),
+    );
+
+    writeEvidence(
+      '.sisyphus/evidence/task-2-restart-policy.txt',
+      'Verified runContainer uses custom restartPolicy when provided (MaximumRetryCount: 15 for monorepo), defaults to MaximumRetryCount: 5 otherwise.',
+    );
+  });
+
   it('reads first exposed image port and handles invalid/missing values', async () => {
     const imageA = {
       inspect: vi
