@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { buildContextSnapshot, buildIncidentBriefing } from '../../src/llm/context-assembler.js';
 import type { ContextScope } from '../../src/llm/context-assembler.js';
 import type { Database, ProjectRow, RuntimeIncidentRow } from '../../src/db/index.js';
@@ -420,6 +420,185 @@ describe('context-assembler', () => {
       expect(snapshot).toContain('Projects deployed: 3');
       expect(snapshot).toContain('frontend (running)');
       expect(snapshot).toContain('backend (error)');
+    });
+  });
+
+  describe('buildContextSnapshot — pattern injection', () => {
+    it('injects deployment patterns for project scope', async () => {
+      const mockPatterns = [
+        {
+          id: 'p1',
+          project_id: 'proj1',
+          pattern_type: 'build',
+          error_signature: 'Module not found: react',
+          fix_action: JSON.stringify({ recipe: 'npm install react' }),
+          success_count: 5,
+          failure_count: 1,
+          last_seen_at: '2026-01-01',
+          created_at: '2026-01-01',
+          updated_at: '2026-01-01',
+        } as unknown as import('../../src/db/schema.drizzle.js').DeploymentPatternRow,
+      ];
+      const mockDb = {
+        listProjects: () => [
+          {
+            id: 'proj1',
+            name: 'test-project',
+            status: 'running',
+            assigned_port: 10001,
+            public_url: null,
+          } as ProjectRow,
+        ],
+        getGlobalSecrets: () => [],
+        getProject: (id: string) => {
+          if (id === 'proj1') {
+            return {
+              id: 'proj1',
+              name: 'test-project',
+              status: 'running',
+              assigned_port: 10001,
+              public_url: null,
+            } as ProjectRow;
+          }
+          return null;
+        },
+        getDeployLogs: () => [],
+        getEnvVars: () => ({}),
+        getTopDeploymentPatterns: vi.fn().mockReturnValue(mockPatterns),
+      };
+      const result = await buildContextSnapshot(mockDb as any, undefined, {
+        type: 'project',
+        projectId: 'proj1',
+      });
+      expect(result).toContain('## Known Deployment Patterns');
+      expect(result).toContain('Module not found: react');
+    });
+
+    it('omits pattern section when no patterns exist', async () => {
+      const mockDb = {
+        listProjects: () => [
+          {
+            id: 'proj1',
+            name: 'test-project',
+            status: 'running',
+            assigned_port: 10001,
+            public_url: null,
+          } as ProjectRow,
+        ],
+        getGlobalSecrets: () => [],
+        getProject: (id: string) => {
+          if (id === 'proj1') {
+            return {
+              id: 'proj1',
+              name: 'test-project',
+              status: 'running',
+              assigned_port: 10001,
+              public_url: null,
+            } as ProjectRow;
+          }
+          return null;
+        },
+        getDeployLogs: () => [],
+        getEnvVars: () => ({}),
+        getTopDeploymentPatterns: vi.fn().mockReturnValue([]),
+      };
+      const result = await buildContextSnapshot(mockDb as any, undefined, {
+        type: 'project',
+        projectId: 'proj1',
+      });
+      expect(result).not.toContain('## Known Deployment Patterns');
+    });
+
+    it('does NOT load patterns for global scope', async () => {
+      const getTopDeploymentPatterns = vi.fn().mockReturnValue([]);
+      const mockDb = {
+        listProjects: () => [
+          {
+            id: 'proj1',
+            name: 'test-project',
+            status: 'running',
+            assigned_port: 10001,
+            public_url: null,
+          } as ProjectRow,
+        ],
+        getGlobalSecrets: () => [],
+        getProject: () => null,
+        getDeployLogs: () => [],
+        getEnvVars: () => ({}),
+        getTopDeploymentPatterns,
+      };
+      await buildContextSnapshot(mockDb as any, undefined, undefined);
+      expect(getTopDeploymentPatterns).not.toHaveBeenCalled();
+    });
+
+    it('injects recipe summary in global scope', async () => {
+      const mockDb = {
+        listProjects: () => [
+          {
+            id: 'proj1',
+            name: 'test-project',
+            status: 'running',
+            assigned_port: 10001,
+            public_url: null,
+          } as ProjectRow,
+        ],
+        getGlobalSecrets: () => [],
+        getProject: () => null,
+        getDeployLogs: () => [],
+        getEnvVars: () => ({}),
+        getTopDeploymentPatterns: vi.fn().mockReturnValue([]),
+      };
+      const result = await buildContextSnapshot(mockDb as any);
+      expect(result).toContain('Known fix categories');
+    });
+
+    it('enforces 800 char limit on pattern section', async () => {
+      const longPatterns = Array.from({ length: 10 }, (_, i) => ({
+        id: `p${i}`,
+        project_id: 'proj1',
+        pattern_type: 'build',
+        error_signature: `Error ${'x'.repeat(100)} ${i}`,
+        fix_action: JSON.stringify({ recipe: `fix ${'y'.repeat(100)} ${i}` }),
+        success_count: i,
+        failure_count: 1,
+        last_seen_at: '2026-01-01',
+        created_at: '2026-01-01',
+        updated_at: '2026-01-01',
+      })) as unknown as import('../../src/db/schema.drizzle.js').DeploymentPatternRow[];
+      const mockDb = {
+        listProjects: () => [
+          {
+            id: 'proj1',
+            name: 'test-project',
+            status: 'running',
+            assigned_port: 10001,
+            public_url: null,
+          } as ProjectRow,
+        ],
+        getGlobalSecrets: () => [],
+        getProject: (id: string) => {
+          if (id === 'proj1') {
+            return {
+              id: 'proj1',
+              name: 'test-project',
+              status: 'running',
+              assigned_port: 10001,
+              public_url: null,
+            } as ProjectRow;
+          }
+          return null;
+        },
+        getDeployLogs: () => [],
+        getEnvVars: () => ({}),
+        getTopDeploymentPatterns: vi.fn().mockReturnValue(longPatterns),
+      };
+      const result = await buildContextSnapshot(mockDb as any, undefined, {
+        type: 'project',
+        projectId: 'proj1',
+      });
+      const patternSection =
+        result.split('\n\n').find((s) => s.includes('## Known Deployment Patterns')) ?? '';
+      expect(patternSection.length).toBeLessThanOrEqual(820);
     });
   });
 });
