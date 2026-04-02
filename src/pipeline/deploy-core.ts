@@ -59,6 +59,7 @@ import {
   rollbackMonorepoService,
   type MonorepoOrchestrationDeps,
 } from './deploy/monorepo-orchestrator.js';
+import { detectMonorepoDependencies } from './deploy/monorepo-deps.js';
 
 /**
  * Project configuration for a deployment.
@@ -968,6 +969,23 @@ export class DeployPipeline {
         dockerfile: dockerfilePath,
         dependsOn: [],
       };
+    });
+
+    const existingChildren = this.db.getChildProjects(parentId);
+    detectMonorepoDependencies(services, parentName, (serviceName) => {
+      const envVarsToScan: Record<string, string> = {};
+      const childName = `${parentName}/${serviceName}`;
+      const existingChild = existingChildren.find((child) => child.name === childName);
+
+      if (existingChild) {
+        Object.assign(envVarsToScan, this.env.getAll(existingChild.id));
+      }
+
+      if (config.envVars) {
+        Object.assign(envVarsToScan, config.envVars);
+      }
+
+      return envVarsToScan;
     });
 
     const serviceNames = new Set(services.map((s) => s.name));
