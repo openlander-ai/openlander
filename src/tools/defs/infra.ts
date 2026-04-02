@@ -33,10 +33,12 @@ export const infraToolDefs: ToolDef[] = [
         url: `https://${domain}`,
         _agent_guidance: {
           next_steps: [
-            'Update env vars (e.g., NEXT_PUBLIC_API_URL) in other projects that reference this project, then redeploy them',
-            'Call restart_project for any project that needs to pick up the new domain configuration',
-            'Call list_domains to see all current domain mappings.',
+            'Routing is live immediately — no redeploy needed for this project.',
+            'If OTHER projects reference this project in NEXT_PUBLIC_* env vars (client-side/browser), update those vars to the new public URL and redeploy those projects.',
+            'Do NOT change server-side env vars like API_URL, DATABASE_URL, etc. — these use internal Docker DNS (http://ol-{name}:{port}) which is faster and must stay internal.',
           ],
+          warning:
+            'NEVER replace internal Docker URLs (http://ol-*) with public URLs in server-side env vars. Internal DNS is for container-to-container communication. Only NEXT_PUBLIC_* or browser-facing vars should use the public domain.',
         },
       };
     },

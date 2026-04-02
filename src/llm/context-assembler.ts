@@ -53,10 +53,12 @@ export async function buildContextSnapshot(
       ? buildScopedProjectLines(projects, scope?.projectId)
       : buildGlobalProjectLines(projects);
 
+  const projectGroups = buildProjectGroups(projects);
+
   const parts: string[] = [
     `## Current Server State (auto-injected)
 Projects deployed: ${String(projects.length)}
-${projectLines}`,
+${projectLines}${projectGroups ? `\n\n${projectGroups}` : ''}`,
     `Resources: CPU ${String(stats.cpu.usagePercent)}% · Memory ${String(stats.memory.usedMB)}/${String(stats.memory.totalMB)}MB (${String(stats.memory.usagePercent)}%) · Disk ${String(stats.disk.usagePercent)}%${stats.memory.usagePercent > 85 ? '\n⚠️ Memory usage is high — suggest cleaning up unused projects.' : ''}${stats.disk.usagePercent > 90 ? '\n⚠️ Disk usage is critical.' : ''}`,
   ];
 
@@ -143,6 +145,59 @@ export function buildIncidentBriefing(incidents: RuntimeIncidentRow[], db: Datab
   }
 
   return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Project relationship grouping
+// ---------------------------------------------------------------------------
+
+function buildProjectGroups(projects: ProjectRow[]): string {
+  if (projects.length < 2) return '';
+
+  const repoGroups = new Map<string, ProjectRow[]>();
+  const parentGroups = new Map<string, ProjectRow[]>();
+
+  for (const p of projects) {
+    if (p.parent_project_id) {
+      const siblings = parentGroups.get(p.parent_project_id);
+      if (siblings) {
+        siblings.push(p);
+      } else {
+        parentGroups.set(p.parent_project_id, [p]);
+      }
+    }
+
+    if (p.repo_url) {
+      const normalized = p.repo_url.replace(/\.git$/, '').toLowerCase();
+      const group = repoGroups.get(normalized);
+      if (group) {
+        group.push(p);
+      } else {
+        repoGroups.set(normalized, [p]);
+      }
+    }
+  }
+
+  const lines: string[] = [];
+
+  for (const [parentId, children] of parentGroups) {
+    const parent = projects.find((p) => p.id === parentId);
+    if (!parent) continue;
+    const childNames = children.map((c) => c.name).join(', ');
+    lines.push(`  📦 ${parent.name} (monorepo) → children: ${childNames}`);
+  }
+
+  for (const [repoUrl, group] of repoGroups) {
+    if (group.length < 2) continue;
+    const alreadyGrouped = group.every((p) => p.parent_project_id);
+    if (alreadyGrouped) continue;
+    const repoShort = repoUrl.split('/').slice(-2).join('/');
+    const names = group.map((p) => p.name).join(', ');
+    lines.push(`  🔗 ${repoShort} → ${names}`);
+  }
+
+  if (lines.length === 0) return '';
+  return `Project groups (same repo or monorepo):\n${lines.join('\n')}`;
 }
 
 // ---------------------------------------------------------------------------
