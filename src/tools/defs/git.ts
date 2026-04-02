@@ -79,6 +79,7 @@ function findComposeFiles(clonePath: string): string[] {
 export const gitToolDefs: ToolDef[] = [
   {
     name: 'scan_dockerfiles',
+    riskLevel: 'low',
     description:
       'Clone a repo and scan for all Dockerfiles. Use BEFORE deploying when you suspect a monorepo (multiple services). Returns paths like ["Dockerfile", "frontend/Dockerfile", "backend/Dockerfile"]. If only one Dockerfile is found, use create_deploy_plan normally. If multiple are found, use orchestrate_deploy to deploy all services at once with dependency ordering and atomic rollback. Do NOT call create_deploy_plan multiple times for each Dockerfile. Errors: CLONE_FAILED.',
     mcpDescription: 'Scan a repository for Dockerfiles. Use with orchestrate_deploy for monorepos.',
@@ -105,6 +106,7 @@ export const gitToolDefs: ToolDef[] = [
   },
   {
     name: 'scan_project',
+    riskLevel: 'low',
     description:
       'Scan a repository for deployment-relevant files before deploying. Reuses an existing clone when clone_path is provided; otherwise clones from repo_url. Detects Dockerfiles and known Docker Compose filenames to identify monorepo signals. Returns { isMonorepo, dockerfiles, composeFiles, clonePath }.',
     mcpDescription: 'Detect Dockerfiles, compose files, and monorepo deployment signals.',
@@ -139,6 +141,7 @@ export const gitToolDefs: ToolDef[] = [
   },
   {
     name: 'list_github_repos',
+    riskLevel: 'low',
     description:
       'List repositories from the user\'s connected GitHub account, sorted by most recently pushed. Use when user asks "show my repos", "what can I deploy?", or needs to find a project by name. Returns { count, repos[] } with name, description, language, private flag, and clone URL. Errors: GITHUB_NOT_CONFIGURED if no GitHub token is set — tell user to add one in settings. Supports pagination with page parameter.',
     mcpDescription: 'List repositories from the connected GitHub account by recent activity.',
@@ -199,6 +202,7 @@ export const gitToolDefs: ToolDef[] = [
   },
   {
     name: 'search_github_repos',
+    riskLevel: 'low',
     description:
       'Search the user\'s GitHub repositories by name or keyword. Use when user says "deploy my-project" or "find repo X" — this resolves a project name to a deployable repo URL. Returns { total, repos[] } with clone URLs ready for create_deploy_plan. Errors: GITHUB_NOT_CONFIGURED. Tip: after finding the repo, call create_deploy_plan with the clone URL.',
     mcpDescription: 'Search connected GitHub repositories by name or keyword.',

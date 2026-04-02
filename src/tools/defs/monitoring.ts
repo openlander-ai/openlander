@@ -12,6 +12,7 @@ import type { ToolDef } from './types.js';
 export const monitoringToolDefs: ToolDef[] = [
   {
     name: 'get_logs',
+    riskLevel: 'low',
     description:
       'Get recent container stdout/stderr logs for a project. Use when user asks about errors, crashes, or app behavior. Returns { project, logs } where logs is a string of the most recent 20 lines. Errors: PROJECT_NOT_FOUND. If logs show a build error, suggest debug_build_error for diagnosis. For deployment history (past deploys, triggers, durations), use get_deploy_history instead.',
     mcpDescription: 'Get recent container logs for a project.',
@@ -31,6 +32,7 @@ export const monitoringToolDefs: ToolDef[] = [
   },
   {
     name: 'get_system_stats',
+    riskLevel: 'low',
     description:
       'Get host system resource usage — CPU load, memory, and disk space. Use when user asks about server health, capacity, or before deploying to check if resources are available. Returns { summary, cpu, memory, disk } with percentage usage and warnings. Always available, no errors.',
     mcpDescription: 'Get host system resource usage.',
@@ -45,6 +47,7 @@ export const monitoringToolDefs: ToolDef[] = [
   },
   {
     name: 'get_alerts',
+    riskLevel: 'low',
     description:
       'Get current system alerts for resource issues, inactive projects, and container problems. Returns active alerts with severity, message, and suggested actions. Use when user asks about system health, problems, or "show alerts". Always available.',
     mcpDescription: 'Get active system alerts and notifications.',
@@ -66,6 +69,7 @@ export const monitoringToolDefs: ToolDef[] = [
   },
   {
     name: 'dismiss_alert',
+    riskLevel: 'medium',
     description:
       'Dismiss a specific alert by ID so it no longer appears in active alerts. Use when user acknowledges an alert. Returns { status, alertId }.',
     mcpDescription: 'Dismiss an active alert by ID.',
@@ -78,6 +82,7 @@ export const monitoringToolDefs: ToolDef[] = [
   },
   {
     name: 'get_project_stats',
+    riskLevel: 'low',
     description:
       'Get CPU, memory, restarts, and uptime for a specific project container. Use when user asks about resource usage, container health, or performance metrics. Returns { cpu_percent, memory_usage_mb, memory_limit_mb, restarts, uptime_seconds, status }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Get per-container CPU, memory, restarts, and uptime for a project.',

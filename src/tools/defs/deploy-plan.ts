@@ -19,6 +19,7 @@ import {
 export const deployPlanToolDefs: ToolDef[] = [
   {
     name: 'create_deploy_plan',
+    riskLevel: 'medium',
     description:
       'Analyze a repository and create a deployment plan. Returns a plan with detected services, required env vars, and build config. Use update_deploy_plan to fill missing values before executing.',
     mcpDescription:
@@ -87,6 +88,7 @@ export const deployPlanToolDefs: ToolDef[] = [
   },
   {
     name: 'update_deploy_plan',
+    riskLevel: 'medium',
     description:
       'Update a deployment plan with missing values (env vars, Dockerfile selection, service config). Call after create_deploy_plan when status is "needs_input".',
     mcpDescription:
@@ -120,6 +122,7 @@ export const deployPlanToolDefs: ToolDef[] = [
   },
   {
     name: 'execute_deploy_plan',
+    riskLevel: 'medium',
     description:
       'Execute a deployment plan. Plan must be in "ready" status. Provisions services, injects env vars, and deploys the application.',
     mcpDescription:
@@ -194,6 +197,7 @@ export const deployPlanToolDefs: ToolDef[] = [
   },
   {
     name: 'deploy',
+    riskLevel: 'medium',
     description:
       'One-call deploy: analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
     mcpDescription:
@@ -409,6 +413,7 @@ export const deployPlanToolDefs: ToolDef[] = [
   },
   {
     name: 'validate_deploy_plan',
+    riskLevel: 'low',
     description:
       'Validate a deployment plan before executing. Checks for common mistakes: env vars pointing to localhost, placeholder secrets, missing HEALTHCHECK, port conflicts, and Dockerfile issues. Call after create_deploy_plan (or update_deploy_plan) and before execute_deploy_plan to catch problems early.',
     mcpDescription:

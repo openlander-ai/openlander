@@ -88,6 +88,7 @@ function filterLogsByLevel(logs: LogEntry[], level: string): LogEntry[] {
 export const platformDebugToolDefs: ToolDef[] = [
   {
     name: 'platform_logs',
+    riskLevel: 'low',
     description:
       'Read-only OpenLander process logs from in-memory ring buffer with optional level/module/time filters.',
     mcpDescription: 'Read-only OpenLander process logs.',
@@ -123,6 +124,7 @@ export const platformDebugToolDefs: ToolDef[] = [
   },
   {
     name: 'platform_docker_inspect',
+    riskLevel: 'low',
     description:
       'Read-only raw Docker container inspect output for debugging platform/runtime issues.',
     mcpDescription: 'Read-only Docker container inspect output.',
@@ -145,6 +147,7 @@ export const platformDebugToolDefs: ToolDef[] = [
   },
   {
     name: 'platform_docker_ps',
+    riskLevel: 'low',
     description:
       'Read-only Docker container list for platform debugging. Supports full list or OpenLander-managed filter.',
     mcpDescription: 'Read-only Docker container list for platform debugging.',
@@ -173,6 +176,7 @@ export const platformDebugToolDefs: ToolDef[] = [
   },
   {
     name: 'platform_db_inspect',
+    riskLevel: 'low',
     description:
       'Read-only structured DB table inspection for platform metadata tables with project-aware filtering.',
     mcpDescription: 'Read-only structured DB table inspection for platform metadata.',
