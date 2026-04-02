@@ -15,10 +15,14 @@ export function detectMonorepoDependencies(
 ): void {
   const parentNormalized = parentName.replace(/\//g, '-');
   const containerToService = new Map<string, string>();
+  const olPattern = /ol-[a-z0-9][\w-]*/gi;
 
   for (const service of services) {
     containerToService.set(`ol-${parentNormalized}-${service.name}`, service.name);
   }
+  const siblingContainerNames = new Set(
+    [...containerToService.keys()].map((name) => name.toLowerCase()),
+  );
 
   for (const service of services) {
     const envVars = getEnvVarsForService(service.name);
@@ -36,6 +40,23 @@ export function detectMonorepoDependencies(
     }
 
     service.dependsOn = [...dependencies];
+
+    const externalRefs = new Set<string>();
+    for (const value of Object.values(envVars)) {
+      const matches = [...value.matchAll(olPattern)].map((match) => match[0].toLowerCase());
+      for (const match of matches) {
+        if (!siblingContainerNames.has(match) && !match.startsWith('ol-svc-')) {
+          externalRefs.add(match);
+        }
+      }
+    }
+
+    if (externalRefs.size > 0) {
+      log.warn(
+        { serviceName: service.name, externalRefs: [...externalRefs] },
+        'Monorepo service references containers not in this monorepo — deploy order not tracked',
+      );
+    }
   }
 
   if (hasCircularDependency(services)) {
