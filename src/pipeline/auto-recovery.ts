@@ -13,6 +13,7 @@ import type { DeployQueue } from './deploy-queue.js';
 import type { DeployPipeline } from './deploy.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { ApprovalGate, type ApprovalGate as ApprovalGateType } from './approval-gate.js';
+import { decisionEngine } from '../llm/decision.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
 import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
 
@@ -22,7 +23,6 @@ const MAX_RECOVERY_ATTEMPTS = 3;
 const RECOVERY_OUTCOME_FALLBACK_TIMEOUT_MS = 300_000;
 const RECOVERY_OUTCOME_MAX_TIMEOUT_MS = 600_000;
 const RECOVERY_WINDOW_MS = 60 * 60 * 1000;
-const HIGH_RISK_TOOLS = ['rollback_project', 'remove_project', 'remove_service', 'create_database'];
 
 type RecoveryStrategy = 'recipe' | 'llm';
 
@@ -417,7 +417,10 @@ ${plan.agentGuidance}
         await agent.chatStream(
           recoveryMessage,
           async (event) => {
-            if (event.type === 'tool_call' && HIGH_RISK_TOOLS.includes(event.toolName)) {
+            if (
+              event.type === 'tool_call' &&
+              decisionEngine.classify(event.toolName) === 'REQUIRE_APPROVAL'
+            ) {
               const approvalMetadata = {
                 projectId,
                 projectName,
