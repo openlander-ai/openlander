@@ -183,7 +183,17 @@ export class Agent {
         await this.refreshSystemPrompt();
       }
 
-      await onEvent({ type: 'session', sessionId: resolvedSessionId });
+      let actionRunId: string | undefined;
+
+      if (this.actionType === 'web_agent') {
+        actionRunId = this.db.createActionRun({
+          projectId: sessionId ?? 'web_agent',
+          triggerSource: 'web_agent',
+          triggerSessionId: sessionId,
+        });
+      }
+
+      await onEvent({ type: 'session', sessionId: resolvedSessionId, actionRunId });
 
       this.history.push({ role: 'user', content: userMessage });
 
@@ -203,15 +213,6 @@ export class Agent {
       let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
       let currentStepIndex = 0;
       let lastToolName: string | undefined;
-      let actionRunId: string | undefined;
-
-      if (this.actionType === 'web_agent') {
-        actionRunId = this.db.createActionRun({
-          projectId: sessionId ?? 'web_agent',
-          triggerSource: 'web_agent',
-          triggerSessionId: sessionId,
-        });
-      }
 
       const guardedTools = this.buildGuardedTools(onEvent, actionRunId);
 
@@ -269,6 +270,9 @@ export class Agent {
             }
             case 'finish-step': {
               currentStepIndex++;
+              if (actionRunId) {
+                this.db.updateActionRunStep(actionRunId, currentStepIndex);
+              }
               await onEvent({
                 type: 'step_progress',
                 step: currentStepIndex,

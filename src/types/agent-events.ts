@@ -20,7 +20,7 @@ export interface UsageSummary {
 }
 
 export type ChatStreamEvent =
-  | { type: 'session'; sessionId: string }
+  | { type: 'session'; sessionId: string; actionRunId?: string }
   | { type: 'thinking' }
   | {
       type: 'approval_required';
