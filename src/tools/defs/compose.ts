@@ -35,6 +35,7 @@ const orchestrateDeployInputSchema = orchestrateDeploySchema.extend({
 export const composeToolDefs: ToolDef[] = [
   {
     name: 'deploy_compose',
+    riskLevel: 'medium',
     description:
       'Deploy a project that uses Docker Compose (multi-service). Auto-detected when compose file exists. Returns parent project with service statuses. Errors: COMPOSE_FILE_NOT_FOUND, BUILD_FAILED.',
     mcpDescription: 'Deploy services from a Docker Compose repository.',
@@ -105,6 +106,7 @@ export const composeToolDefs: ToolDef[] = [
   },
   {
     name: 'list_compose_services',
+    riskLevel: 'low',
     description:
       'List services in a Docker Compose project with per-service status, ports, and container IDs.',
     mcpDescription: 'List compose services with per-service status and ports.',
@@ -127,6 +129,7 @@ export const composeToolDefs: ToolDef[] = [
   },
   {
     name: 'orchestrate_deploy',
+    riskLevel: 'medium',
     description:
       'Deploy multiple services with dependency ordering and atomic rollback. Use for monorepos or multi-service repos. Internally scans Dockerfiles, reads compose depends_on when available, deploys in topological order, and rolls back all deployed services if any step fails.',
     mcpDescription: 'Deploy monorepo services in dependency order with atomic rollback.',

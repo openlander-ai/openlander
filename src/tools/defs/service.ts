@@ -80,6 +80,7 @@ async function getServiceByName(
 export const serviceToolDefs: ToolDef[] = [
   {
     name: 'create_service',
+    riskLevel: 'medium',
     description:
       'Create a new service (database, cache, message broker, object storage, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO (S3-compatible storage), or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb/rabbitmq/minio) or custom image with port. Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, RABBITMQ_URL, S3_ENDPOINT) for connecting a project. For MinIO: returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
@@ -119,6 +120,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'list_services',
+    riskLevel: 'low',
     description:
       'List all services (databases, caches, custom containers) with status, type, and connection details. Use to see what services are available and their current state. Returns { count, services[] } with id, name, type, status, port, and credentials.',
     mcpDescription: 'List infrastructure services with type, status, and exposed port.',
@@ -166,6 +168,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'list_databases',
+    riskLevel: 'low',
     description:
       'List databases for a named PostgreSQL or MySQL service. Use when selecting an existing database during environment setup. Returns { service, count, databases[] }. Errors: SERVICE_NOT_FOUND or unsupported service type.',
     mcpDescription: 'List databases inside a PostgreSQL or MySQL service.',
@@ -197,6 +200,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'create_database',
+    riskLevel: 'high',
     description:
       'Create a database in a named PostgreSQL or MySQL service. Use when provisioning app-specific database credentials. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND or unsupported service type.',
     mcpDescription: 'Create a database inside an existing PostgreSQL or MySQL service.',
@@ -229,6 +233,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'list_buckets',
+    riskLevel: 'low',
     description:
       'List S3 buckets in a MinIO service. Use to see what storage buckets exist. Returns { service, count, buckets[] } where each bucket has name and createdAt. Errors: SERVICE_NOT_FOUND, not a MinIO service.',
     mcpDescription: 'List S3 buckets in a MinIO object storage service.',
@@ -247,6 +252,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'create_bucket',
+    riskLevel: 'medium',
     description:
       'Create an S3 bucket in a MinIO service. Use when setting up storage for a project. Bucket names must be 3-63 chars, lowercase, following S3 naming rules. Returns { status, service, bucket }. Errors: SERVICE_NOT_FOUND, bucket already exists, not a MinIO service.',
     mcpDescription: 'Create an S3 bucket in a MinIO object storage service.',
@@ -266,6 +272,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'delete_bucket',
+    riskLevel: 'medium',
     description:
       'Delete an empty S3 bucket from a MinIO service. The bucket must be empty before deletion. Returns { status, service, bucket, warning }. Errors: SERVICE_NOT_FOUND, bucket not empty, not a MinIO service.',
     mcpDescription: 'Delete an empty S3 bucket from a MinIO object storage service.',
@@ -286,6 +293,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'get_service_status',
+    riskLevel: 'low',
     description:
       'Get the current status of a specific service. Returns { id, name, status, health, type, port, ... } where status is running/stopped and health reflects container health (healthy/unhealthy/unknown/degraded). healthDetail may be included when crash-like log patterns are detected. Errors: SERVICE_NOT_FOUND if the service name is invalid.',
     mcpDescription: 'Get service status, health, container state, and metadata.',
@@ -359,6 +367,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'start_service',
+    riskLevel: 'medium',
     description:
       'Start a stopped service. Use when a service is stopped and needs to be running. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Start a stopped service container.',
@@ -373,6 +382,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'stop_service',
+    riskLevel: 'medium',
     description:
       'Stop a running service gracefully. Use when a service needs to be paused without deletion. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Stop a running service container gracefully.',
@@ -387,6 +397,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'remove_service',
+    riskLevel: 'high',
     description:
       'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. Returns { status, service, warning }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Remove a service container and volume. Data is permanently deleted.',
@@ -406,6 +417,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'backup_service',
+    riskLevel: 'medium',
     description:
       "Create a backup snapshot of a service's persistent data (database files, etc.). Returns { status, backupId, path, sizeBytes }. Use BEFORE remove_service to prevent data loss.",
     mcpDescription: 'Create a backup snapshot of service data before destructive actions.',
@@ -425,6 +437,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'restore_service',
+    riskLevel: 'medium',
     description:
       'Restore a service volume from a backup snapshot. Stops the service container, restores the selected backup into the service volume, then starts the service again. Returns { status, service, backupId }.',
     mcpDescription: 'Restore service data from a selected backup snapshot.',
@@ -443,6 +456,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'list_service_backups',
+    riskLevel: 'low',
     description:
       'List available backup snapshots for a service. Returns { service, count, backups[] } with backupId, createdAt, and sizeBytes for each snapshot.',
     mcpDescription: 'List available backup snapshots for a service.',
@@ -464,6 +478,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'get_service_logs',
+    riskLevel: 'low',
     description:
       'Get recent container logs for a service (database, cache, or custom container). Use when a service is in error state or behaving unexpectedly. Returns { service, logs }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Get recent container logs for an infrastructure service.',
@@ -496,6 +511,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'get_service_credentials',
+    riskLevel: 'low',
     description:
       'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { id, name, credentials } with full connection details. Errors: SERVICE_NOT_FOUND.',
     mcpDescription:
@@ -526,6 +542,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'create_service_database',
+    riskLevel: 'medium',
     description:
       'Create a new database in a PostgreSQL or MySQL service. Use when a project needs a dedicated database. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
     mcpDescription: 'Create an additional database in a PostgreSQL or MySQL service.',
@@ -548,6 +565,7 @@ export const serviceToolDefs: ToolDef[] = [
   },
   {
     name: 'create_service_user',
+    riskLevel: 'medium',
     description:
       'Create a new user in a PostgreSQL or MySQL service with optional database grants. Use when a project needs a dedicated database user. Returns { status, service, user, password, database, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
     mcpDescription: 'Create a database user with optional per-database grants.',

@@ -11,6 +11,7 @@ function getProjectByName(appCtx: AppContext, name: string) {
 
 const listEnvironmentsTool: ToolDef = {
   name: 'list_environments',
+  riskLevel: 'low',
   description:
     'List all environments for a project with type, branch, status, and container info. Every project has at least a production environment. Returns { count, environments[] }. Errors: PROJECT_NOT_FOUND.',
   mcpDescription: 'List project environments with branch and runtime status.',

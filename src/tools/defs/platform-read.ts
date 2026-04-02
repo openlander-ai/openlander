@@ -99,6 +99,7 @@ function sanitizeConfig(config: unknown): unknown {
 export const platformReadToolDefs: ToolDef[] = [
   {
     name: 'platform_health',
+    riskLevel: 'low',
     description:
       'Read-only platform health summary with runtime, Docker/DB availability, event/log buffer sizes, and managed object counts.',
     mcpDescription: 'Read-only OpenLander platform health summary.',
@@ -140,6 +141,7 @@ export const platformReadToolDefs: ToolDef[] = [
   },
   {
     name: 'platform_event_log',
+    riskLevel: 'low',
     description:
       'Read-only event ring buffer query with optional limit, prefix event type filtering, and time-window filtering.',
     mcpDescription: 'Read-only query for captured platform events from in-memory ring buffer.',
@@ -175,6 +177,7 @@ export const platformReadToolDefs: ToolDef[] = [
   },
   {
     name: 'platform_container_audit',
+    riskLevel: 'low',
     description:
       'Read-only Docker/DB consistency audit. Detects orphan containers, ghost DB project records, and healthy project-container matches.',
     mcpDescription: 'Read-only audit comparing managed Docker containers and DB metadata.',
@@ -253,6 +256,7 @@ export const platformReadToolDefs: ToolDef[] = [
   },
   {
     name: 'platform_config',
+    riskLevel: 'low',
     description:
       'Read-only platform config snapshot with sensitive fields redacted. Optional section filter returns only one top-level config section.',
     mcpDescription: 'Read-only redacted platform configuration.',

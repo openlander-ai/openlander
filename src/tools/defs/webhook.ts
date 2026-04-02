@@ -14,6 +14,7 @@ function getProjectByName(appCtx: Parameters<ToolDef['execute']>[1]['appCtx'], n
 
 const enableWebhookTool: ToolDef = {
   name: 'enable_webhook',
+  riskLevel: 'medium',
   description:
     'Enable automatic deploys via webhook for a git provider (GitHub, GitLab, or Bitbucket). When enabled, pushing to the configured branch triggers a redeploy. Returns { id, source, secret, enabled, branchFilter, webhookPath }. The webhookPath is relative - combine with your OpenLander host URL to get the full webhook URL for configuring in your git provider. Errors: PROJECT_NOT_FOUND.',
   mcpDescription: 'Configure an auto-deploy webhook for GitHub, GitLab, or Bitbucket.',
@@ -54,6 +55,7 @@ const enableWebhookTool: ToolDef = {
 
 const disableWebhookTool: ToolDef = {
   name: 'disable_webhook',
+  riskLevel: 'medium',
   description:
     'Disable webhook auto-deploy for a specific git provider on a project. Does not delete the configuration - re-enable with enable_webhook. Returns { status, project, source }. Errors: PROJECT_NOT_FOUND, WEBHOOK_NOT_FOUND.',
   mcpDescription: 'Disable auto-deploy webhook while keeping its configuration.',
@@ -83,6 +85,7 @@ const disableWebhookTool: ToolDef = {
 
 const getWebhookConfigTool: ToolDef = {
   name: 'get_webhook_config',
+  riskLevel: 'low',
   description:
     'Get all webhook configurations for a project. Shows enabled status, git provider, branch filter, and webhook URL path for each configured webhook. Returns { count, webhooks[] }. Errors: PROJECT_NOT_FOUND.',
   mcpDescription: 'Get webhook configuration and enabled status for a project.',

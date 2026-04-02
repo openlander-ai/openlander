@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import type { AppContext } from '../../app.js';
+import type { RiskLevel } from '../../llm/decision.js';
 import type { RequestIdentity } from '../../types/identity.js';
 import type { RiskLevel } from '../../llm/decision.js';
 
@@ -40,6 +41,7 @@ export interface McpResultTransform {
  * - execute: Tool execution function (target-aware via context)
  * - targets: Optional list of targets this tool is exposed to (default: ['agent', 'mcp'])
  * - mcp: Optional MCP-specific metadata (result transformation, etc.)
+ * - riskLevel: Risk classification for Decision Engine (low/medium/high)
  */
 export interface ToolDef {
   name: string;
@@ -50,4 +52,5 @@ export interface ToolDef {
   riskLevel?: RiskLevel;
   targets?: ToolTarget[];
   mcp?: McpResultTransform;
+  riskLevel?: RiskLevel;
 }

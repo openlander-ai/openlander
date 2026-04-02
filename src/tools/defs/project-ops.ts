@@ -54,6 +54,7 @@ async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1
 export const projectOpsToolDefs: ToolDef[] = [
   {
     name: 'stop_project',
+    riskLevel: 'medium',
     description:
       'Stop a running project container gracefully. Use when user wants to pause or shut down a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT remove the project; use remove_project for full cleanup.',
     mcpDescription: 'Stop a running project container.',
@@ -79,6 +80,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'remove_project',
+    riskLevel: 'high',
     description:
       'Archive a project (soft delete). Deprecated — use archive_project instead. Stops and removes containers, frees port, but preserves configuration and history. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription:
@@ -105,6 +107,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'list_projects',
+    riskLevel: 'low',
     description:
       'List all deployed projects with name, status (running/stopped/error), ports, containerName (for inter-project communication via Docker network, e.g. http://ol-myapp:3000), local URLs, and public URLs. Use as the first tool when user asks about their projects, or to verify a project name before other operations. Returns { count, projects[] }. Always available, no errors.',
     mcpDescription:
@@ -163,6 +166,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'restart_project',
+    riskLevel: 'medium',
     description:
       'Restart a running project by stopping and redeploying it with the same configuration. Use when user reports the app is hung, unresponsive, or needs a fresh start after config changes. Returns { status, project } with redeploy result. Errors: PROJECT_NOT_FOUND.',
     mcpDescription:
@@ -193,6 +197,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'start_project',
+    riskLevel: 'medium',
     description:
       'Start a stopped project container. Use when user wants to resume a paused project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT redeploy; use restart_project to redeploy with code changes.',
     mcpDescription: 'Start a stopped project container.',
@@ -218,6 +223,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'redeploy_project',
+    riskLevel: 'medium',
     description:
       'Redeploy a project with the same configuration and code. Use when user wants to rebuild and restart without code changes, or to apply environment variable updates. Returns { status, project }. Errors: PROJECT_NOT_FOUND. Pass no_cache=true to rebuild from scratch (use when dependencies changed but Docker layers stale).',
     mcpDescription:
@@ -256,6 +262,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'share_project',
+    riskLevel: 'medium',
     description:
       'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
     mcpDescription: 'Generate a temporary public URL for a project via TryCloudflare.',
@@ -283,6 +290,7 @@ export const projectOpsToolDefs: ToolDef[] = [
   },
   {
     name: 'update_project_config',
+    riskLevel: 'medium',
     description:
       "Update a project's build configuration (dockerfile_path, docker_target, build_context). Use when the current config points to a wrong Dockerfile or build target. Changes take effect on next redeploy. Returns the updated config values.",
     mcpDescription:
