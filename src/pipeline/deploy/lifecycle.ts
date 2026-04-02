@@ -4,9 +4,9 @@ import { containerName as projectContainerName } from '../helpers.js';
 
 import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
-import { ContainerNotFoundError } from '../../errors.js';
+import { ContainerNotFoundError, OpenLanderError } from '../../errors.js';
 import type { Docker } from '../docker.js';
-import { clearPortScanCache } from '../port.js';
+import { allocatePort, clearPortScanCache } from '../port.js';
 import type { TunnelManager } from './tunnel.js';
 
 const log = createModuleLogger('deploy:lifecycle');
@@ -113,6 +113,64 @@ export class ContainerLifecycle {
     tunnelManager?.close(projectId);
     this.db.deleteProject(projectId);
     await eventBus.emit('container:remove', { projectId, containerId: project.container_id ?? '' });
+  }
+
+  async archive(projectId: string, tunnelManager?: TunnelManager): Promise<void> {
+    const project = this.db.getProject(projectId);
+    if (!project) return;
+
+    if (project.status === 'building') {
+      throw new OpenLanderError(
+        'Cannot archive a building project',
+        'ARCHIVE_BUILDING_PROJECT',
+        400,
+        { projectId },
+      );
+    }
+
+    const children = this.db
+      .listProjects(undefined, { includeArchived: false })
+      .filter((candidate) => candidate.parent_project_id === projectId);
+    for (const child of children) {
+      await this.archive(child.id, tunnelManager);
+    }
+
+    if (project.container_id) {
+      try {
+        await this.docker.stopContainer(project.container_id);
+      } catch (err) {
+        log.debug({ err, projectId }, 'Archive stop skipped');
+      }
+
+      try {
+        await this.docker.removeContainer(project.container_id);
+      } catch (err) {
+        log.debug({ err, projectId }, 'Archive remove container skipped');
+      }
+    }
+
+    if (project.image_tag) {
+      try {
+        await this.docker.getClient().getImage(project.image_tag).remove();
+      } catch (err) {
+        log.debug({ err, projectId, imageTag: project.image_tag }, 'Archive remove image skipped');
+      }
+    }
+
+    tunnelManager?.close(projectId);
+    clearPortScanCache();
+    this.db.archiveProject(projectId);
+    await eventBus.emit('project:archive', { projectId });
+  }
+
+  async unarchive(projectId: string): Promise<void> {
+    const project = this.db.getProject(projectId);
+    if (!project) return;
+
+    this.db.unarchiveProject(projectId);
+    const port = await allocatePort(this.db, this.docker, {}, 'production');
+    this.db.updateProject(projectId, { assignedPort: port });
+    await eventBus.emit('project:unarchive', { projectId, port });
   }
 
   async cleanupProjectContainers(projectId: string): Promise<void> {

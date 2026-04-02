@@ -599,6 +599,7 @@ export class ComposePipeline {
             await this.docker.removeContainer(child.container_id);
           }
 
+          // Hard delete intentional: orphaned compose children are not user-created projects and should not be archived.
           this.db.deleteProject(child.id);
           removed.push(serviceName);
         }

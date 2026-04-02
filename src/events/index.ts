@@ -48,6 +48,8 @@ export type EventType =
   | 'container:start'
   | 'container:stop'
   | 'container:remove'
+  | 'project:archive'
+  | 'project:unarchive'
   | 'container:missing'
   | 'container:health'
   // Tunnel
@@ -219,6 +221,8 @@ export interface EventPayload {
   'container:start': { projectId: string; containerId: string };
   'container:stop': { projectId: string; containerId: string };
   'container:remove': { projectId: string; containerId: string };
+  'project:archive': { projectId: string };
+  'project:unarchive': { projectId: string; port: number };
   'container:missing': {
     projectId: string;
     projectName: string;

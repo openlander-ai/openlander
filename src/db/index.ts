@@ -110,7 +110,11 @@ export class Database implements AuthDatabase {
   createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
   getProject(id: string) { return this.projectRepo.getProject(id); }
   getProjectByName(name: string) { return this.projectRepo.getProjectByName(name); }
-  listProjects(status?: ProjectRow['status']) { return this.projectRepo.listProjects(status); }
+  listProjects(status?: ProjectRow['status'], opts?: { includeArchived?: boolean }) { return this.projectRepo.listProjects(status, opts); }
+  archiveProject(id: string) { this.projectRepo.archiveProject(id); }
+  unarchiveProject(id: string) { this.projectRepo.unarchiveProject(id); }
+  listArchivedProjects() { return this.projectRepo.listArchivedProjects(); }
+  isArchived(id: string) { return this.projectRepo.isArchived(id); }
   updateProject(id: string, updates: Parameters<ProjectRepo['updateProject']>[1]) { this.projectRepo.updateProject(id, updates); }
   setPendingFix(projectId: string, pendingFix: Parameters<ProjectRepo['setPendingFix']>[1]) { this.projectRepo.setPendingFix(projectId, pendingFix); }
   consumePendingFix(projectId: string) { return this.projectRepo.consumePendingFix(projectId); }
