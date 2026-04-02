@@ -31,7 +31,6 @@ function stripDockerName(name: string | undefined): string {
 export const platformActionToolDefs: ToolDef[] = [
   {
     name: 'platform_cleanup_orphans',
-    riskLevel: 'high',
     description:
       'Find and remove OpenLander-managed orphan containers that are no longer referenced in DB records. Requires explicit confirmation.',
     mcpDescription:
@@ -93,7 +92,6 @@ export const platformActionToolDefs: ToolDef[] = [
   },
   {
     name: 'platform_reconcile',
-    riskLevel: 'high',
     description:
       'Reconcile DB state with Docker reality by marking ghost project records as error and removing orphan managed containers. Requires explicit confirmation.',
     mcpDescription:
@@ -189,7 +187,6 @@ export const platformActionToolDefs: ToolDef[] = [
   },
   {
     name: 'platform_force_remove',
-    riskLevel: 'high',
     description:
       'Force remove a specific Docker container by ID after protected-infrastructure checks. Requires explicit confirmation.',
     mcpDescription: 'Corrective action: force-remove a specific non-infrastructure container.',

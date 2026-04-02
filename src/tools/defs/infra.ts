@@ -13,7 +13,6 @@ import {
 export const infraToolDefs: ToolDef[] = [
   {
     name: 'map_domain',
-    riskLevel: 'medium',
     description:
       'Map a custom domain to a project via Cloudflare DNS and Tunnel for a permanent public URL. Use when user wants their own domain (e.g., api.myapp.com) instead of a temporary TryCloudflare URL. Requires Cloudflare configuration. Routing takes effect immediately without redeploy. Only redeploy if the app needs build-time env changes (e.g., NEXT_PUBLIC_API_URL, CORS origins). Returns { status, project, domain, url }. Errors: PROJECT_NOT_FOUND, CLOUDFLARE_NOT_CONFIGURED.',
     mcpDescription: 'Map a custom domain to a project via Cloudflare routing.',
@@ -46,7 +45,6 @@ export const infraToolDefs: ToolDef[] = [
   },
   {
     name: 'list_domains',
-    riskLevel: 'low',
     description:
       'List all custom domain mappings across all projects with domain name, project ID, and status. Use to check existing domain configurations. Returns { count, domains[] }. Always available, no errors.',
     mcpDescription: 'List all custom domain mappings across projects.',
@@ -65,7 +63,6 @@ export const infraToolDefs: ToolDef[] = [
   },
   {
     name: 'analyze_infrastructure',
-    riskLevel: 'low',
     description:
       'Analyze a repository to detect infrastructure needs (databases, caches, etc.) based on dependencies and environment variables. Clones the repo, scans package.json and .env files, and cross-references with existing services. Returns { needs, available, missing } where needs is detected infrastructure, available is already-provisioned services, and missing is what should be created.',
     mcpDescription: 'Analyze repo infrastructure needs against available services.',
@@ -91,7 +88,6 @@ export const infraToolDefs: ToolDef[] = [
   },
   {
     name: 'web_search',
-    riskLevel: 'low',
     description:
       'Search the web using DuckDuckGo. Returns search results with title, URL, and snippet. No API key required. Use when you need to find information online.',
     mcpDescription: 'Search the web for deployment-related information.',

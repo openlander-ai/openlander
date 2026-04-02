@@ -68,7 +68,6 @@ function getVolumeUsageSizeBytes(volume: unknown): number | undefined {
 export const volumeToolDefs: ToolDef[] = [
   {
     name: 'add_volume',
-    riskLevel: 'medium',
     description:
       'Create a Docker named volume managed by OpenLander for a project. Use when an app needs persistent data storage at a specific mount path (for uploads, caches, or generated files). Returns { status, volume, project, mount_path }. Errors if the volume already exists.',
     mcpDescription: 'Create a project-scoped managed Docker volume with metadata labels.',
@@ -128,7 +127,6 @@ export const volumeToolDefs: ToolDef[] = [
   },
   {
     name: 'list_volumes',
-    riskLevel: 'low',
     description:
       'List OpenLander-managed Docker volumes. Optionally filter by project name. Returns { count, volumes[] } where each volume includes Docker name, project, logical volume name, mount path, and sizeBytes when available from Docker usage data.',
     mcpDescription: 'List OpenLander-managed volumes with project metadata and optional sizes.',
@@ -191,7 +189,6 @@ export const volumeToolDefs: ToolDef[] = [
   },
   {
     name: 'remove_volume',
-    riskLevel: 'medium',
     description:
       'Remove a managed project volume and permanently delete all data inside it. Use only when data is no longer needed. Returns { status, volume, warning }. If the volume is in use, stop containers first, then retry.',
     mcpDescription: 'Remove a managed volume. Data deletion is permanent.',
@@ -246,7 +243,6 @@ export const volumeToolDefs: ToolDef[] = [
   },
   {
     name: 'get_disk_usage',
-    riskLevel: 'low',
     description:
       'Get Docker system disk usage breakdown for images, containers, and volumes. Includes a separate list of OpenLander-managed volumes with per-volume size when available. Returns counts and total sizes in bytes.',
     mcpDescription: 'Get Docker disk usage totals and managed volume sizes.',
@@ -325,7 +321,6 @@ export const volumeToolDefs: ToolDef[] = [
   },
   {
     name: 'cleanup_docker',
-    riskLevel: 'medium',
     description:
       'Free Docker disk space by removing dangling images, build cache, and unused images. Host-wide operation — affects all Docker workloads, not just OpenLander projects. Use when disk is running low, Docker builds fail with storage errors, or user asks to clean up. Workflow: get_disk_usage → cleanup_docker → get_disk_usage to show reclaimed space. Three levels: "soft" removes only dangling (untagged) images. "standard" (default) also clears build cache — may slow the next build. "aggressive" additionally removes all unused images older than 24h — frees the most space but removes cached base images and possibly stored rollback images. Does NOT remove running containers, mounted volumes, or images referenced by a container.',
     mcpDescription:

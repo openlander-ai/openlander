@@ -23,7 +23,6 @@ function getProjectByName(appCtx: Parameters<ToolDef['execute']>[1]['appCtx'], n
 export const envToolDefs: ToolDef[] = [
   {
     name: 'list_env_vars',
-    riskLevel: 'low',
     description:
       'List all environment variables for a project (values are masked for security). Use to check what variables are currently set before adding or modifying. Returns { variables: { KEY: "sk-****7890" }, count }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'List project-scoped environment variables with masked values.',
@@ -37,7 +36,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'get_env_var',
-    riskLevel: 'low',
     description:
       'Get the unmasked value of a single environment variable for debugging. Use when you need to verify the exact value was set correctly (e.g., connection strings with special characters). Returns { key, value } or { error: "NOT_FOUND" }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Get a single environment variable value for a project.',
@@ -55,7 +53,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'set_env_vars',
-    riskLevel: 'medium',
     description:
       'Set environment variables for a project and trigger a redeploy if running. Use when user needs to configure DATABASE_URL, API keys, or other env vars. The variables parameter must be a JSON string of key-value pairs, e.g. {"DATABASE_URL": "postgresql://user:pass@ol-svc-pg:5432/db", "REDIS_URL": "redis://ol-svc-redis:6379"}. For host services use host.docker.internal as hostname. For OpenLander services use the container name (ol-svc-*). Returns { status, project, keys[] }. Errors: PROJECT_NOT_FOUND, JSON parse error if variables is malformed.',
     mcpDescription:
@@ -101,7 +98,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'set_global_secret',
-    riskLevel: 'medium',
     description:
       'Set a global secret that is available to all projects (stored encrypted). Use for shared API keys, database credentials, etc. that multiple projects need. Returns { status, key }.',
     mcpDescription: 'Set an encrypted global secret shared across all projects.',
@@ -121,7 +117,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'list_global_secrets',
-    riskLevel: 'low',
     description:
       'List all global secrets (values are masked for security). Returns { secrets: [{ key, maskedValue, description }], count }.',
     mcpDescription: 'List all global secrets with masked values and descriptions.',
@@ -133,7 +128,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'expose_public',
-    riskLevel: 'medium',
     description:
       'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
     mcpDescription: 'Generate a temporary public URL for a project via TryCloudflare.',
@@ -158,7 +152,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'unexpose_public',
-    riskLevel: 'medium',
     description:
       'Remove the public TryCloudflare tunnel URL for a project. Use when user wants to make a project private again. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Remove a public URL and stop the TryCloudflare tunnel.',
@@ -172,7 +165,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'upload_secret_file',
-    riskLevel: 'medium',
     description:
       'Upload a secret file that will be mounted into containers at /run/secrets/filename. Use for credential files like Firebase service account JSON, TLS certificates, or any file the app reads from disk. Content is encrypted at rest. Omit project_name to make it global (available to all projects). Requires redeploy to take effect. Returns { status, mountPath }.',
     mcpDescription: 'Upload an encrypted secret file mounted at /run/secrets/filename.',
@@ -207,7 +199,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'list_secret_files',
-    riskLevel: 'low',
     description:
       'List secret files uploaded for a project or globally. Shows filenames, mount paths, and scope (project/global) — file content is never returned for security. Omit project_name to list global secret files. Returns { files[], count }.',
     mcpDescription: 'List uploaded secret files; file content is never returned.',
@@ -227,7 +218,6 @@ export const envToolDefs: ToolDef[] = [
   },
   {
     name: 'remove_secret_file',
-    riskLevel: 'medium',
     description:
       'Remove a previously uploaded secret file from a project or global scope. The file will no longer be mounted after the next redeploy. Omit project_name for global secret files. Returns { status: "removed"|"not_found", filename }. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Remove a secret file. Redeploy to stop mounting it in containers.',
