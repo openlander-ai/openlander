@@ -283,17 +283,27 @@ export class PlanEngine {
     userDockerfile: string,
     detectedEnv: PlanEnvEntry[],
   ): void {
+    // Scope env scanning to the build context directory (derived from dockerfile path).
+    // e.g., 'services/api/Dockerfile' → scopeDir='services/api'
+    // Falls back to full repo scan when Dockerfile is at root.
+    const scopeDir = userDockerfile.includes('/')
+      ? userDockerfile.substring(0, userDockerfile.lastIndexOf('/'))
+      : undefined;
+
     const ENV_TEMPLATE_FILES = ['.env.example', '.env.sample', '.env.template'];
     for (const envFileName of ENV_TEMPLATE_FILES) {
-      const envPath = join(clonePath, envFileName);
+      const envPath = scopeDir
+        ? join(clonePath, scopeDir, envFileName)
+        : join(clonePath, envFileName);
       if (!existsSync(envPath)) {
         continue;
       }
-      detectedEnv.push(...scanEnvFile(envPath, envFileName, detectedEnv));
+      const envSource = scopeDir ? join(scopeDir, envFileName) : envFileName;
+      detectedEnv.push(...scanEnvFile(envPath, envSource, detectedEnv));
     }
     detectedEnv.push(...scanDockerfileArgs(clonePath, userDockerfile, detectedEnv));
 
-    const sourceResult = scanForEnvUsage(clonePath);
+    const sourceResult = scanForEnvUsage(clonePath, scopeDir);
     for (const variable of sourceResult.vars) {
       if (detectedEnv.some((entry) => entry.key === variable.key)) {
         continue;

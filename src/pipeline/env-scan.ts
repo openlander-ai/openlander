@@ -235,7 +235,7 @@ function detectPythonFallback(content: string, key: string, matchIndex: number):
   return fallbackRegex.test(context);
 }
 
-export function scanForEnvUsage(projectPath: string): EnvScanResult {
+export function scanForEnvUsage(projectPath: string, scopeDir?: string): EnvScanResult {
   const findings: Finding[] = [];
   let hasNode = false;
   let hasPython = false;
@@ -318,8 +318,9 @@ export function scanForEnvUsage(projectPath: string): EnvScanResult {
     }
   }
 
+  const scanRoot = scopeDir ? join(projectPath, scopeDir) : projectPath;
   try {
-    scanDir(projectPath);
+    scanDir(scanRoot);
   } catch (err) {
     log.warn({ err }, 'Error during env scan');
   }
