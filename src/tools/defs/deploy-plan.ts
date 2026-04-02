@@ -138,7 +138,28 @@ export const deployPlanToolDefs: ToolDef[] = [
           markMcpDeploy(planData.project_id);
         }
       }
-      const result: ExecutePlanResult = await appCtx.planEngine.executePlan(planId, deployOnly);
+      let result: ExecutePlanResult;
+      try {
+        result = await appCtx.planEngine.executePlan(planId, deployOnly);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('missing environment variables')) {
+          const planData = planRow ? (JSON.parse(planRow.plan_json) as DeployPlan) : undefined;
+          return {
+            plan_id: planId,
+            status: 'needs_input',
+            error: msg,
+            missing: planData?.missing ?? [],
+            _agent_guidance: {
+              next_steps: [
+                'Call update_deploy_plan with the missing env vars',
+                'Then call execute_deploy_plan again',
+              ],
+            },
+          };
+        }
+        throw err;
+      }
 
       if (result.project_id) {
         markMcpDeploy(result.project_id);

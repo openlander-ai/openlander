@@ -29,6 +29,7 @@ export interface CloneOptions {
 export interface CloneResult {
   path: string;
   commitSha: string;
+  branch: string;
 }
 
 export async function getCommitSubject(
@@ -151,12 +152,15 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
     }
   }
 
-  // Get commit SHA
   const { stdout: sha } = await exec('git', ['rev-parse', 'HEAD'], { cwd: cloneDir });
+  const { stdout: resolvedBranch } = await exec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: cloneDir,
+  });
 
   return {
     path: cloneDir,
     commitSha: sha.trim(),
+    branch: resolvedBranch.trim() || branch || 'main',
   };
 }
 

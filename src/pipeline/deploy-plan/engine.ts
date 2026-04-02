@@ -454,6 +454,25 @@ export class PlanEngine {
     };
   }
 
+  private detectServiceDependencies(envVars: Record<string, string>, warnings: string[]): void {
+    const olHostPattern = /ol-[a-z0-9][\w-]*/gi;
+    const referencedServices: string[] = [];
+    for (const [key, value] of Object.entries(envVars)) {
+      const matches = value.match(olHostPattern);
+      if (matches) {
+        for (const match of matches) {
+          referencedServices.push(`${key} → ${match}`);
+        }
+      }
+    }
+    if (referencedServices.length > 0) {
+      warnings.push(
+        `Env vars reference other OpenLander containers: ${referencedServices.join(', ')}. ` +
+          'Ensure those projects are deployed and running first, or the app may fail to connect at startup.',
+      );
+    }
+  }
+
   private detectPersistenceWarnings(clonePath: string, warnings: string[]): void {
     const depFiles: { name: string; pattern: RegExp }[] = [
       {
@@ -574,6 +593,7 @@ export class PlanEngine {
     const services = this.detectPlanServices(clonePath);
     this.detectEnvVars(clonePath, userDockerfile, detectedEnv);
     this.detectPersistenceWarnings(clonePath, warnings);
+    this.detectServiceDependencies(envVars, warnings);
 
     const requiredEnvVars = Array.from(
       new Set(detectedEnv.filter((e) => e.required).map((e) => e.key)),
@@ -593,7 +613,7 @@ export class PlanEngine {
 
     const initialStatus = missing.length > 0 ? 'needs_input' : 'ready';
 
-    const planBranch = branch || 'default';
+    const planBranch = cloneResult.branch;
     const plan = this.assemblePlan({
       planId,
       status: initialStatus,
@@ -714,8 +734,15 @@ export class PlanEngine {
       throw new Error(`Plan not found: ${planId}`);
     }
     const freshPlan = JSON.parse(freshRow.plan_json) as DeployPlan;
+    if (freshPlan.status === 'needs_input') {
+      const missingKeys = freshPlan.missing.join(', ') || 'unknown';
+      throw new Error(
+        `Plan requires missing environment variables: ${missingKeys}. ` +
+          `Call update_deploy_plan to provide them, then execute again.`,
+      );
+    }
     if (freshPlan.status !== 'ready') {
-      throw new Error(`Plan is already ${freshPlan.status}. Cannot execute concurrently.`);
+      throw new Error(`Plan status is "${freshPlan.status}" — only "ready" plans can be executed.`);
     }
 
     const plan = freshPlan;

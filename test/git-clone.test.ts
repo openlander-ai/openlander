@@ -164,6 +164,16 @@ describeGitClone('cloneRepo — HTTPS auth failure and SSH retry', () => {
         ) => {
           cb?.(null, { stdout: 'retry-success-sha\n', stderr: '' });
         },
+      )
+      .mockImplementationOnce(
+        (
+          _cmd: string,
+          _args: string[],
+          _opts: Record<string, unknown>,
+          cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+        ) => {
+          cb?.(null, { stdout: 'main\n', stderr: '' });
+        },
       );
 
     const result = await cloneRepo({ repoUrl: 'https://github.com/user/private-repo' });
@@ -176,7 +186,8 @@ describeGitClone('cloneRepo — HTTPS auth failure and SSH retry', () => {
     );
     expect(retryCloneArgs).toContain('git@github.com:user/private-repo');
     expect(result.commitSha).toBe('retry-success-sha');
-    expect(mockExecFile).toHaveBeenCalledTimes(3);
+    expect(result.branch).toBe('main');
+    expect(mockExecFile).toHaveBeenCalledTimes(4);
   });
 
   it('throws GitCloneError when both HTTPS and SSH attempts fail', async () => {

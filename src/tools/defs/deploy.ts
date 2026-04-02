@@ -232,6 +232,23 @@ export const deployToolDefs: ToolDef[] = [
       if (projectName) {
         const project = appCtx.db.getProjectByName(projectName);
         if (!project) {
+          const plans = appCtx.db.listDeployPlans(projectName);
+          const activePlan = plans.find((p) => {
+            return p.status === 'executing' || p.status === 'ready' || p.status === 'draft';
+          });
+          if (activePlan) {
+            return {
+              active: 1,
+              jobs: [
+                {
+                  project: projectName,
+                  phase: 'initializing',
+                  status: activePlan.status,
+                  plan_id: activePlan.id,
+                },
+              ],
+            };
+          }
           throw new ProjectNotFoundError(projectName);
         }
 

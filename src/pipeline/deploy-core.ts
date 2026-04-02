@@ -370,6 +370,17 @@ export class DeployPipeline {
     // Check if project with this name already exists
     const existing = this.db.getProjectByName(projectName);
     if (existing) {
+      const isStale = existing.status === 'error';
+      if (isStale) {
+        this.db.updateProject(existing.id, {
+          containerId: null,
+          imageTag: null,
+          assignedPort: null,
+          previousImageTag: null,
+          buildContext: config.buildContext ?? null,
+          dockerTarget: config.dockerTarget ?? null,
+        });
+      }
       this.db.updateProject(existing.id, {
         status: 'building',
         ...(config.buildContext ? { buildContext: config.buildContext } : {}),

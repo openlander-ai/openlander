@@ -601,7 +601,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan is already executing. Cannot execute concurrently.',
+      'Plan status is "executing" — only "ready" plans can be executed.',
     );
   });
 
@@ -615,7 +615,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan is already needs_input. Cannot execute concurrently.',
+      'Plan requires missing environment variables',
     );
   });
 
@@ -944,7 +944,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan is already completed. Cannot execute concurrently.',
+      'Plan status is "completed" — only "ready" plans can be executed.',
     );
   });
 
@@ -958,7 +958,7 @@ describe('PlanEngine.executePlan', () => {
     });
 
     await expect(engine.executePlan(plan.plan_id)).rejects.toThrow(
-      'Plan is already failed. Cannot execute concurrently.',
+      'Plan status is "failed" — only "ready" plans can be executed.',
     );
   });
 
