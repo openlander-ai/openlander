@@ -90,7 +90,7 @@ export interface AppContext {
 
 /** Reset projects and environments stuck in 'building' status from a previous server run. */
 async function cleanupStaleBuilds(db: Database, docker: Docker): Promise<void> {
-  const staleProjects = db.listProjects('building');
+  const staleProjects = db.listProjects('building', { includeArchived: true });
   if (staleProjects.length === 0) return;
 
   log.info({ count: staleProjects.length }, 'Found stale building projects — cleaning up');

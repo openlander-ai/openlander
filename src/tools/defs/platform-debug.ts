@@ -193,7 +193,7 @@ export const platformDebugToolDefs: ToolDef[] = [
 
       switch (table) {
         case 'projects': {
-          const rows = applyLimit(db.listProjects(), limit);
+          const rows = applyLimit(db.listProjects(undefined, { includeArchived: true }), limit);
           return { table, count: rows.length, rows };
         }
         case 'environments': {
@@ -201,7 +201,9 @@ export const platformDebugToolDefs: ToolDef[] = [
             projectId !== undefined
               ? db.getEnvironmentsByProject(projectId)
               : applyLimit(
-                  db.listProjects().flatMap((project) => db.getEnvironmentsByProject(project.id)),
+                  db
+                    .listProjects(undefined, { includeArchived: true })
+                    .flatMap((project) => db.getEnvironmentsByProject(project.id)),
                   limit,
                 );
           const selected = projectId !== undefined ? applyLimit(rows, limit) : rows;
@@ -217,7 +219,7 @@ export const platformDebugToolDefs: ToolDef[] = [
               ? db.getDeployLogs(projectId, limit)
               : applyLimit(
                   db
-                    .listProjects()
+                    .listProjects(undefined, { includeArchived: true })
                     .flatMap((project) =>
                       db
                         .getDeployLogs(project.id, limit)
@@ -233,7 +235,7 @@ export const platformDebugToolDefs: ToolDef[] = [
               ? db.getTimelineEvents(projectId, limit)
               : applyLimit(
                   db
-                    .listProjects()
+                    .listProjects(undefined, { includeArchived: true })
                     .flatMap((project) =>
                       db
                         .getTimelineEvents(project.id, limit)
@@ -255,7 +257,7 @@ export const platformDebugToolDefs: ToolDef[] = [
               ? db.getWebhookConfigs(projectId)
               : applyLimit(
                   db
-                    .listProjects()
+                    .listProjects(undefined, { includeArchived: true })
                     .flatMap((project) =>
                       db
                         .getWebhookConfigs(project.id)
@@ -275,7 +277,7 @@ export const platformDebugToolDefs: ToolDef[] = [
 
           const rows = applyLimit(
             db
-              .listProjects()
+              .listProjects(undefined, { includeArchived: true })
               .map((project) => ({
                 project_id: project.id,
                 config: db.loadDeployConfig(project.id),
