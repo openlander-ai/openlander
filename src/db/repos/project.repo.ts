@@ -1,5 +1,5 @@
-import { and, asc, count, desc, eq, sql } from 'drizzle-orm';
-import { ProjectAlreadyExistsError } from '../../errors.js';
+import { and, asc, count, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { OpenLanderError, ProjectAlreadyExistsError, ProjectNotFoundError } from '../../errors.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { projects } from '../schema.drizzle.js';
 import type { PendingFixRow, ProjectRow } from '../types.js';
@@ -67,12 +67,19 @@ export class ProjectRepo {
       | undefined;
   }
 
-  listProjects(status?: ProjectRow['status']): ProjectRow[] {
+  listProjects(status?: ProjectRow['status'], opts?: { includeArchived?: boolean }): ProjectRow[] {
+    const conditions = [];
     if (status) {
+      conditions.push(eq(projects.status, status));
+    }
+    if (!opts?.includeArchived) {
+      conditions.push(isNull(projects.archived_at));
+    }
+    if (conditions.length > 0) {
       return this.db
         .select()
         .from(projects)
-        .where(eq(projects.status, status))
+        .where(and(...conditions))
         .orderBy(desc(projects.updated_at))
         .all() as ProjectRow[];
     }
@@ -199,6 +206,60 @@ export class ProjectRepo {
       this.updateProject(projectId, { pendingFix: null });
       return rawPendingFix;
     })();
+  }
+
+  archiveProject(id: string): void {
+    const project = this.getProject(id);
+    if (!project) {
+      throw new ProjectNotFoundError(id);
+    }
+    if (project.status === 'building') {
+      throw new OpenLanderError(
+        'Cannot archive a project that is currently building',
+        'ARCHIVE_BUILDING_PROJECT',
+        400,
+        { projectId: id },
+      );
+    }
+    this.db
+      .update(projects)
+      .set({
+        archived_at: new Date().toISOString(),
+        assigned_port: null,
+        container_id: null,
+        image_tag: null,
+        status: 'stopped',
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(projects.id, id))
+      .run();
+  }
+
+  unarchiveProject(id: string): void {
+    this.db
+      .update(projects)
+      .set({
+        archived_at: null,
+        status: 'stopped',
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(projects.id, id))
+      .run();
+  }
+
+  listArchivedProjects(): ProjectRow[] {
+    return this.db
+      .select()
+      .from(projects)
+      .where(isNotNull(projects.archived_at))
+      .orderBy(desc(projects.updated_at))
+      .all() as ProjectRow[];
+  }
+
+  isArchived(id: string): boolean {
+    const project = this.getProject(id);
+    if (!project) return false;
+    return project.archived_at !== null;
   }
 
   deleteProject(id: string): void {

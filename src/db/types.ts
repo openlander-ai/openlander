@@ -26,6 +26,7 @@ export interface ProjectRow {
   pending_fix: string | null;
   created_at: string;
   updated_at: string;
+  archived_at: string | null;
   deploy_lock_session: string | null;
   deploy_lock_at: string | null;
   access_code: string | null;
