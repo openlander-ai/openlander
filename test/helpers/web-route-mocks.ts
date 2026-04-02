@@ -45,6 +45,8 @@ export function createMockPipeline() {
     stop: vi.fn().mockResolvedValue(undefined),
     redeploy: vi.fn().mockResolvedValue({ success: true }),
     remove: vi.fn().mockResolvedValue(undefined),
+    archive: vi.fn().mockResolvedValue(undefined),
+    unarchive: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue('log output'),
     exposeTunnel: vi.fn().mockResolvedValue('https://abc.trycloudflare.com'),
     closeTunnel: vi.fn(),

@@ -1394,15 +1394,15 @@ describe('Web API Routes', () => {
   // DELETE /api/projects/:id
   // ---------------------------------------------------------------------------
 
-  it('DELETE /api/projects/:id removes a project', async () => {
+  it('DELETE /api/projects/:id archives a project', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/user/app' });
 
     const res = await app.request('/api/projects/p1', { method: 'DELETE' });
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.status).toBe('removed');
-    expect(ctx.pipeline.remove).toHaveBeenCalledWith('p1', ctx.cloudflare);
+    expect(body.status).toBe('archived');
+    expect(ctx.pipeline.archive).toHaveBeenCalledWith('p1');
   });
 
   // ---------------------------------------------------------------------------
@@ -1679,5 +1679,105 @@ describe('Web API Routes', () => {
     expect(body).toHaveProperty('newVars');
     expect(body.newVars).toEqual([]);
     expect(body.existingVars).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Archive / Unarchive / Purge
+  // ---------------------------------------------------------------------------
+
+  it('GET /api/projects excludes archived projects by default', async () => {
+    db.createProject({ id: 'active-1', name: 'active-app', repoUrl: 'https://github.com/u/a' });
+    db.createProject({ id: 'arch-1', name: 'archived-app', repoUrl: 'https://github.com/u/b' });
+    db.archiveProject('arch-1');
+
+    const res = await app.request('/api/projects');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(1);
+    expect(body.projects[0].name).toBe('active-app');
+  });
+
+  it('GET /api/projects?include_archived=true includes archived projects', async () => {
+    db.createProject({ id: 'active-2', name: 'active-app2', repoUrl: 'https://github.com/u/a2' });
+    db.createProject({ id: 'arch-2', name: 'archived-app2', repoUrl: 'https://github.com/u/b2' });
+    db.archiveProject('arch-2');
+
+    const res = await app.request('/api/projects?include_archived=true');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(2);
+    const names = body.projects.map((p: { name: string }) => p.name).sort();
+    expect(names).toEqual(['active-app2', 'archived-app2']);
+  });
+
+  it('POST /api/projects/:id/archive archives project and returns updated data', async () => {
+    db.createProject({ id: 'arch-3', name: 'to-archive', repoUrl: 'https://github.com/u/c' });
+
+    const res = await app.request('/api/projects/arch-3/archive', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('project');
+    expect(ctx.pipeline.archive as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('arch-3');
+  });
+
+  it('POST /api/projects/:id/archive returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/archive', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /api/projects/:id/unarchive unarchives project and returns updated data', async () => {
+    db.createProject({ id: 'unarch-1', name: 'to-unarchive', repoUrl: 'https://github.com/u/d' });
+    db.archiveProject('unarch-1');
+
+    const res = await app.request('/api/projects/unarch-1/unarchive', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('project');
+    expect(ctx.pipeline.unarchive as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('unarch-1');
+  });
+
+  it('POST /api/projects/:id/unarchive returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/unarchive', { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('DELETE /api/projects/:id/purge without confirm returns 400', async () => {
+    db.createProject({ id: 'purge-1', name: 'purge-app', repoUrl: 'https://github.com/u/e' });
+
+    const res = await app.request('/api/projects/purge-1/purge', { method: 'DELETE' });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('Confirmation required');
+  });
+
+  it('DELETE /api/projects/:id/purge?confirm=true permanently deletes project', async () => {
+    db.createProject({ id: 'purge-2', name: 'purge-app2', repoUrl: 'https://github.com/u/f' });
+
+    const res = await app.request('/api/projects/purge-2/purge?confirm=true', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.message).toBe('Project permanently deleted');
+    expect(ctx.pipeline.remove as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'purge-2',
+      ctx.cloudflare,
+    );
+  });
+
+  it('DELETE /api/projects/:id/purge?confirm=true returns 404 for unknown project', async () => {
+    const res = await app.request('/api/projects/nonexistent/purge?confirm=true', {
+      method: 'DELETE',
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('DELETE /api/projects/:id calls archive instead of remove', async () => {
+    db.createProject({ id: 'del-1', name: 'del-app', repoUrl: 'https://github.com/u/g' });
+
+    const res = await app.request('/api/projects/del-1', { method: 'DELETE' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('archived');
+    expect(ctx.pipeline.archive as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('del-1');
   });
 });

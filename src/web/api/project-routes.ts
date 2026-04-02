@@ -266,7 +266,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       | 'building'
       | 'error'
       | undefined;
-    const projects = ctx.db.listProjects(status);
+    const includeArchived = c.req.query('include_archived') === 'true';
+    const projects = ctx.db.listProjects(status, { includeArchived });
     const ips = getAllIps();
 
     return c.json({
@@ -922,11 +923,40 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     }
   });
 
+  // --- Archive / Unarchive / Purge ---
+
+  api.post('/projects/:id/archive', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    await ctx.pipeline.archive(project.id);
+    const updated = ctx.db.getProject(project.id);
+    return c.json({ project: updated });
+  });
+
+  api.post('/projects/:id/unarchive', async (c) => {
+    const project = getProjectOrThrow(c, ctx);
+    await ctx.pipeline.unarchive(project.id);
+    const updated = ctx.db.getProject(project.id);
+    return c.json({ project: updated });
+  });
+
+  api.delete('/projects/:id/purge', async (c) => {
+    const confirm = c.req.query('confirm');
+    if (confirm !== 'true') {
+      return c.json(
+        { error: 'Confirmation required. Add ?confirm=true to permanently delete.' },
+        400,
+      );
+    }
+    const project = getProjectOrThrow(c, ctx);
+    await ctx.pipeline.remove(project.id, ctx.cloudflare);
+    return c.json({ success: true, message: 'Project permanently deleted' });
+  });
+
   api.delete('/projects/:id', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    await ctx.pipeline.remove(project.id, ctx.cloudflare);
-    return c.json({ status: 'removed', project: project.name });
+    await ctx.pipeline.archive(project.id);
+    return c.json({ status: 'archived', project: project.name });
   });
 
   api.get('/projects/:id/logs', async (c) => {
