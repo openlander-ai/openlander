@@ -665,10 +665,12 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       }
     }
 
+    if (project.source === 'git' && !project.repo_url) {
+      return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
+    }
+
+    const release = await ctx.deployQueue.acquire();
     try {
-      if (project.source === 'git' && !project.repo_url) {
-        return c.json({ success: false, error: 'Missing repo URL for git redeploy' }, 400);
-      }
       ctx.db.updateProject(project.id, { status: 'building' });
       const result = await ctx.pipeline.redeploy(project.id, {
         noCache: body.no_cache,
@@ -680,6 +682,8 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       ctx.db.updateProject(project.id, { status: 'error' });
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
+    } finally {
+      release();
     }
   });
 
@@ -754,11 +758,16 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     const body = await c.req
       .json<{ health_check_path?: string }>()
       .catch((): { health_check_path?: string } => ({}));
-    const result = await ctx.pipeline.redeploy(project.id, {
-      strategy: 'blue-green',
-      healthCheckPath: body.health_check_path,
-    });
-    return c.json(result, result.success ? 200 : 500);
+    const release = await ctx.deployQueue.acquire();
+    try {
+      const result = await ctx.pipeline.redeploy(project.id, {
+        strategy: 'blue-green',
+        healthCheckPath: body.health_check_path,
+      });
+      return c.json(result, result.success ? 200 : 500);
+    } finally {
+      release();
+    }
   });
 
   // v0.2.3: Webhook settings API
