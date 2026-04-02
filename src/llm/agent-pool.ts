@@ -1,6 +1,7 @@
 import type { LanguageModel, ToolSet } from 'ai';
 import type { Database } from '../db/index.js';
 import type { QuestionBridge } from '../lib/question-bridge.js';
+import type { ApprovalGate } from '../pipeline/approval-gate.js';
 import { Agent } from './agent.js';
 import type { ContextProvider, LLMProvider } from './prompts.js';
 
@@ -49,6 +50,7 @@ export class AgentPool {
     private readonly contextProvider?: ContextProvider,
     private readonly provider?: LLMProvider,
     private readonly locale?: string,
+    private readonly approvalGate?: ApprovalGate,
   ) {}
 
   getOrCreate(sessionId: string): Agent {
@@ -145,7 +147,15 @@ export class AgentPool {
   }
 
   private createAgent(): Agent {
-    const agent = new Agent(this.model, this.db, this.contextProvider, this.provider, this.locale);
+    const agent = new Agent(
+      this.model,
+      this.db,
+      this.contextProvider,
+      this.provider,
+      this.locale,
+      'web_agent',
+      this.approvalGate,
+    );
     agent.setTools(this.tools);
     if (this.questionBridge) {
       agent.setQuestionBridge(this.questionBridge);

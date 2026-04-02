@@ -164,6 +164,7 @@ export async function syncLlmRuntime(ctx: AppContext): Promise<void> {
       contextProvider,
       activeProvider.provider,
       ctx.config.language,
+      ctx.approvalGate,
     );
     pool.setTools(tools);
     pool.setQuestionBridge(ctx.questionBridge);
