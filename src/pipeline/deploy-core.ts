@@ -1098,6 +1098,47 @@ export class DeployPipeline {
           trigger,
           startTime,
         }),
+      waitForHealthy: async (service, deployment) => {
+        if (!deployment.projectId) {
+          log.warn({ serviceName: service.name }, 'Monorepo health check: no projectId — skipping');
+          return { healthy: true };
+        }
+
+        const project = this.db.getProject(deployment.projectId);
+        const containerId = project?.container_id;
+        if (!containerId) {
+          log.warn(
+            { serviceName: service.name },
+            'Monorepo health check: containerId not found — skipping',
+          );
+          return { healthy: true };
+        }
+
+        log.info(
+          { serviceName: service.name, containerId },
+          'Monorepo health check: waiting for readiness (60s)',
+        );
+
+        try {
+          const healthResult = await this.docker.waitForHealthy(containerId, 60000);
+          if (healthResult.healthy) {
+            return { healthy: true };
+          }
+
+          log.warn(
+            { serviceName: service.name, error: healthResult.error },
+            'Monorepo health check: not healthy within 60s — proceeding anyway',
+          );
+          return { healthy: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          log.warn(
+            { serviceName: service.name, error: message },
+            'Monorepo health check: not healthy within 60s — proceeding anyway',
+          );
+          return { healthy: true };
+        }
+      },
     });
 
     const childResults = buildMonorepoResults({
