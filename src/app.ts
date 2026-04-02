@@ -212,6 +212,7 @@ export async function createAppContext(
     composePipeline,
     autoDetector,
   );
+  const approvalGate = new ApprovalGate();
 
   let agentPool: AgentPool | null = null;
   let agent: Agent | null = null;
@@ -223,6 +224,7 @@ export async function createAppContext(
         async (scope) => buildContextSnapshot(db, docker, scope),
         config.llm.provider,
         config.language,
+        approvalGate,
       );
     } catch (err) {
       log.debug({ err }, 'AgentPool creation failed — web agent disabled');
@@ -260,7 +262,6 @@ export async function createAppContext(
   }
 
   const deployQueue = new DeployQueue();
-  const approvalGate = new ApprovalGate();
 
   // Track active project for question events
   eventBus.on('deploy:start', (payload) => {

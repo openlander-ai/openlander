@@ -9,6 +9,8 @@ import { createModuleLogger } from '../lib/logger.js';
 import { calculateCost, extractUsageFromResult, logAiUsage } from './transparency.js';
 import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-events.js';
 import { compactHistory } from './compaction.js';
+import { decisionEngine } from './decision.js';
+import type { ApprovalGate } from '../pipeline/approval-gate.js';
 
 /**
  * OpenLander AI Agent.
@@ -57,6 +59,7 @@ export class Agent {
     private readonly provider: LLMProvider = 'gemini',
     private readonly locale: string = 'en',
     private readonly actionType: 'web_agent' | 'auto_recovery' = 'web_agent',
+    private readonly approvalGate?: ApprovalGate,
   ) {}
 
   /** Set the question bridge for ask_user_question tool support. */
@@ -99,7 +102,7 @@ export class Agent {
           role: m.role,
           content: m.content,
         })),
-        tools: this.tools,
+        tools: this.buildGuardedTools(() => Promise.resolve()),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
       });
 
@@ -200,6 +203,17 @@ export class Agent {
       let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
       let currentStepIndex = 0;
       let lastToolName: string | undefined;
+      let actionRunId: string | undefined;
+
+      if (this.actionType === 'web_agent') {
+        actionRunId = this.db.createActionRun({
+          projectId: sessionId ?? 'web_agent',
+          triggerSource: 'web_agent',
+          triggerSessionId: sessionId,
+        });
+      }
+
+      const guardedTools = this.buildGuardedTools(onEvent, actionRunId);
 
       try {
         const result = streamText({
@@ -208,7 +222,7 @@ export class Agent {
             role: m.role,
             content: m.content,
           })),
-          tools: this.tools,
+          tools: guardedTools,
           maxRetries: 1,
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
         });
@@ -290,6 +304,9 @@ export class Agent {
       }
 
       if (didStreamFail) {
+        if (actionRunId) {
+          this.db.updateActionRunStatus(actionRunId, 'failed', 'Agent stream execution failed');
+        }
         this.logUsageSafe({
           sessionId: resolvedSessionId,
           actionType: this.actionType,
@@ -315,6 +332,10 @@ export class Agent {
       await this.compactAndTrim();
 
       await onEvent({ type: 'message', content: finalText });
+
+      if (actionRunId) {
+        this.db.updateActionRunStatus(actionRunId, 'succeeded');
+      }
 
       this.logUsageSafe({
         sessionId: resolvedSessionId,
@@ -422,6 +443,89 @@ export class Agent {
 
   private resolveSessionId(sessionId?: string): string {
     return sessionId ?? DEFAULT_CHANNEL_SESSION_ID;
+  }
+
+  private buildGuardedTools(
+    onEvent: (event: ChatStreamEvent) => Promise<void>,
+    actionRunId?: string,
+  ): ToolSet {
+    const guardedTools: ToolSet = {};
+
+    const toText = (value: unknown): string => {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return String(value);
+      }
+      return 'unknown';
+    };
+
+    for (const [name, toolDef] of Object.entries(this.tools)) {
+      type ExecuteFn = (args: Record<string, unknown>, options: unknown) => unknown;
+
+      const originalExecute = (toolDef as { execute?: ExecuteFn }).execute;
+
+      guardedTools[name] = {
+        ...toolDef,
+        execute: async (args: Record<string, unknown>, options: unknown) => {
+          const decision = decisionEngine.classify(name);
+
+          if (
+            decision === 'REQUIRE_APPROVAL' &&
+            this.actionType === 'web_agent' &&
+            this.approvalGate &&
+            actionRunId
+          ) {
+            await onEvent({
+              type: 'approval_required',
+              actionRunId,
+              toolName: name,
+              toolArgs: args,
+            });
+
+            this.db.updateActionRunStatus(actionRunId, 'pending_approval');
+            this.db.updateActionRunApproval(actionRunId, 'pending', name);
+
+            const approvalResult = await this.approvalGate.waitForApproval(actionRunId, {
+              projectId: toText(args['project_id'] ?? args['projectId']),
+              projectName: toText(args['project_name'] ?? args['projectName']),
+              toolName: name,
+              attempt: 1,
+              actionRunId,
+              createdAt: new Date(),
+            });
+
+            if (approvalResult !== 'approved') {
+              const reason =
+                approvalResult === 'timed_out'
+                  ? 'Approval timed out for this action'
+                  : 'User rejected the action';
+              this.db.updateActionRunStatus(actionRunId, 'failed', reason);
+              this.db.updateActionRunApproval(actionRunId, 'rejected', name);
+              return {
+                error: approvalResult === 'timed_out' ? 'ACTION_TIMED_OUT' : 'ACTION_REJECTED',
+                message: reason,
+              };
+            }
+
+            this.db.updateActionRunStatus(actionRunId, 'running');
+            this.db.updateActionRunApproval(actionRunId, 'approved', name);
+          } else if (decision === 'NOTIFY_THEN_ALLOW') {
+            await onEvent({
+              type: 'notification',
+              toolName: name,
+              message: `Executing ${name}...`,
+            });
+          }
+
+          if (!originalExecute) {
+            return null;
+          }
+
+          return originalExecute(args, options);
+        },
+      };
+    }
+
+    return guardedTools;
   }
 
   private getModelName(): string {

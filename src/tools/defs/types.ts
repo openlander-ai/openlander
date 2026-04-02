@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { AppContext } from '../../app.js';
 import type { RequestIdentity } from '../../types/identity.js';
+import type { RiskLevel } from '../../llm/decision.js';
 
 /**
  * Target platform for tool execution.
@@ -46,6 +47,7 @@ export interface ToolDef {
   mcpDescription?: string;
   inputSchema: z.ZodType<Record<string, unknown>>;
   execute: (args: Record<string, unknown>, context: ToolContext) => unknown;
+  riskLevel?: RiskLevel;
   targets?: ToolTarget[];
   mcp?: McpResultTransform;
 }
