@@ -21,9 +21,12 @@ import {
   MoreHorizontal,
   Trash2,
   Download,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSetup } from '@/hooks/use-setup.js';
+import { useLanguage } from '@/i18n/context';
 import { AISparkle } from '@/components/ui/AISparkle';
 import { DomainUrlDisplay } from './DomainUrlDisplay';
 import type { Project } from '@/types';
@@ -37,7 +40,9 @@ interface ProjectHeaderProps {
   onRollback: () => void;
   onOpenBlueGreenDialog: () => void;
   onShare: () => void;
-  onDelete: () => void;
+  onArchive: () => void;
+  onUnarchive: () => void;
+  onPurge: () => void;
 }
 
 type StatusConfig = { label: string; color: string; dot: string };
@@ -65,9 +70,12 @@ export function ProjectHeader({
   onRollback,
   onOpenBlueGreenDialog,
   onShare,
-  onDelete,
+  onArchive,
+  onUnarchive,
+  onPurge,
 }: ProjectHeaderProps) {
   const { status: setupStatus } = useSetup();
+  const { t } = useLanguage();
   const isImageSource = project.source === 'image';
   const statusConfig = getStatusConfig(isImageSource);
   const isLlmConfigured = setupStatus?.llm.ok === true;
@@ -301,15 +309,31 @@ export function ProjectHeader({
 
               <DropdownMenuSeparator />
 
-              {/* Delete */}
-              <DropdownMenuItem
-                onClick={onDelete}
-                disabled={!!actionLoading}
-                className="text-error focus:text-error"
-              >
-                <Trash2 className="h-3.5 w-3.5 mr-2" />
-                Delete Project
-              </DropdownMenuItem>
+              {!project.archived_at ? (
+                <DropdownMenuItem
+                  onClick={onArchive}
+                  disabled={!!actionLoading}
+                  className="text-warning focus:text-warning"
+                >
+                  <Archive className="h-3.5 w-3.5 mr-2" />
+                  {t('projects.archive.button')}
+                </DropdownMenuItem>
+              ) : (
+                <>
+                  <DropdownMenuItem onClick={onUnarchive} disabled={!!actionLoading}>
+                    <ArchiveRestore className="h-3.5 w-3.5 mr-2" />
+                    {t('projects.unarchive.button')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={onPurge}
+                    disabled={!!actionLoading}
+                    className="text-error focus:text-error"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                    {t('projects.purge.button')}
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

@@ -49,6 +49,7 @@ export function ProjectCard({
       className={cn(
         'group relative flex flex-col rounded-lg border bg-bg-panel hover:bg-bg-panel/80 hover:shadow-md hover:border-agent/20 transition-all duration-200 cursor-pointer overflow-hidden card-hover',
         status.border,
+        project.archived_at && 'opacity-60 grayscale-[0.5]',
       )}
     >
       <div className="flex items-center justify-between p-4 pb-3 border-b border-[hsl(var(--border))]/50">
@@ -66,9 +67,16 @@ export function ProjectCard({
             {project.name}
           </h3>
         </div>
-        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium shrink-0', status.badge)}>
-          {statusConfig[project.status]?.label ?? 'Unknown'}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {project.archived_at && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-bg-subtle text-muted-ol border border-border">
+              {t('projects.card.archivedBadge')}
+            </span>
+          )}
+          <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', status.badge)}>
+            {statusConfig[project.status]?.label ?? 'Unknown'}
+          </span>
+        </div>
       </div>
 
       <div className="p-4 space-y-4">

@@ -12,14 +12,14 @@ export interface UseProjectsReturn {
   refetch: () => void;
 }
 
-export function useProjects(): UseProjectsReturn {
+export function useProjects(includeArchived = false): UseProjectsReturn {
   const [projects, setProjects] = useState<ProjectWithOptionalEnvironments[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async () => {
     try {
-      const data = await listProjects();
+      const data = await listProjects(includeArchived);
       setProjects(data);
       setError(null);
     } catch (err) {
@@ -27,7 +27,7 @@ export function useProjects(): UseProjectsReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [includeArchived]);
 
   const hasBuilding = useMemo(() => projects.some((p) => p.status === 'building'), [projects]);
   const pollMs = hasBuilding ? ACTIVE_POLL_MS : IDLE_POLL_MS;

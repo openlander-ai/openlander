@@ -47,7 +47,8 @@ function getStatusConfig(): Record<
 export function ProjectsGrid() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { projects, loading: projectsLoading, refetch } = useProjects();
+  const [showArchived, setShowArchived] = useState(false);
+  const { projects, loading: projectsLoading, refetch } = useProjects(showArchived);
   const { serverStatus, setupStatus, loading: systemLoading } = useSystemStatus();
   const { t } = useLanguage();
   const statusConfig = getStatusConfig();
@@ -124,6 +125,15 @@ export function ProjectsGrid() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-body text-secondary-ol cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="rounded border-border bg-bg-subtle text-agent focus:ring-agent"
+            />
+            {t('projects.filter.showArchived')}
+          </label>
           <div className="flex items-center gap-1 bg-bg-subtle rounded-lg p-0.5">
             <button
               onClick={() => toggleView('grid')}

@@ -83,6 +83,29 @@ export const translations = {
     noProjects: 'No projects found',
     deployFirstApp: 'Deploy your first app',
     connectGithub: 'Connect a GitHub repo and let the agent handle the rest.',
+    filter: {
+      showArchived: 'Show archived',
+    },
+    card: {
+      archivedBadge: 'Archived',
+    },
+    archive: {
+      button: 'Archive',
+      success: 'Project archived',
+      description:
+        'Archive this project? The container will be stopped, but all configuration and history will be preserved.',
+    },
+    unarchive: {
+      button: 'Restore',
+      success: 'Project restored',
+    },
+    purge: {
+      button: 'Permanently delete',
+      title: 'Permanently delete project',
+      description: 'This action cannot be undone. Type the project name to confirm.',
+      inputPlaceholder: 'Enter project name',
+      confirm: 'Delete permanently',
+    },
   },
   projectDetail: {
     notFound: 'Project not found',

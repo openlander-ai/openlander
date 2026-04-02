@@ -39,6 +39,7 @@ export interface Project {
   parentProjectId?: string | null;
   isCompose?: boolean;
   serviceCount?: number;
+  archived_at?: string | null;
 }
 
 export interface ProjectWithEnvironments extends Project {

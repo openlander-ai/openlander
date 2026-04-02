@@ -10,7 +10,9 @@ import {
   rollbackProject,
   blueGreenProject,
   scanProjectEnvVars,
-  deleteProject,
+  archiveProject,
+  unarchiveProject,
+  purgeProject,
   type EnvVarInfo,
   type ProjectWithOptionalEnvironments,
 } from '@/lib/api';
@@ -19,6 +21,17 @@ import { useTimeline } from '@/hooks/use-timeline';
 import { ShareDialog } from '@/components/layout/ShareDialog';
 import { parseEnvContent } from '@/lib/parse-env';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 import { ProjectHeader } from '@/components/project/ProjectHeader';
 import { ProjectDetailLoading } from '@/components/project/ProjectDetailLoading';
@@ -43,9 +56,11 @@ export function ProjectDetail() {
   const [redeployVars, setRedeployVars] = useState<EnvVarInfo[]>([]);
   const [redeployPasteText, setRedeployPasteText] = useState('');
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'stop' | 'delete';
+    type: 'stop' | 'archive';
     handler: () => void;
   } | null>(null);
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+  const [purgeInput, setPurgeInput] = useState('');
 
   // Fetch project details
   const fetchProject = useCallback(async () => {
@@ -271,22 +286,57 @@ export function ProjectDetail() {
     }
   };
 
-  const handleDelete = async () => {
+  const handleArchive = async () => {
     if (!id || actionLoading) return;
     setConfirmAction({
-      type: 'delete',
+      type: 'archive',
       handler: async () => {
-        setActionLoading('delete');
+        setActionLoading('archive');
         try {
-          await deleteProject(id);
+          await archiveProject(id);
+          toast.success(t('projects.archive.success'));
           window.location.href = '/projects';
         } catch (err) {
-          toast.error('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
+          toast.error('Archive failed: ' + (err instanceof Error ? err.message : String(err)));
         } finally {
           setActionLoading(null);
         }
       },
     });
+  };
+
+  const handleUnarchive = async () => {
+    if (!id || actionLoading) return;
+    setActionLoading('unarchive');
+    try {
+      await unarchiveProject(id);
+      toast.success(t('projects.unarchive.success'));
+      await fetchProject();
+    } catch (err) {
+      toast.error('Unarchive failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handlePurge = () => {
+    if (!id || actionLoading) return;
+    setPurgeInput('');
+    setPurgeDialogOpen(true);
+  };
+
+  const handlePurgeConfirm = async () => {
+    if (!id || actionLoading) return;
+    setActionLoading('purge');
+    try {
+      await purgeProject(id);
+      window.location.href = '/projects';
+    } catch (err) {
+      toast.error('Purge failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setActionLoading(null);
+      setPurgeDialogOpen(false);
+    }
   };
 
   if (loading) return <ProjectDetailLoading />;
@@ -311,7 +361,9 @@ export function ProjectDetail() {
           onRollback={handleRollback}
           onOpenBlueGreenDialog={handleBlueGreen}
           onShare={() => setShareOpen(true)}
-          onDelete={handleDelete}
+          onArchive={handleArchive}
+          onUnarchive={handleUnarchive}
+          onPurge={handlePurge}
         />
 
         <ProjectDetailTabs
@@ -372,23 +424,53 @@ export function ProjectDetail() {
           if (!open) setConfirmAction(null);
         }}
         title={
-          confirmAction?.type === 'delete'
-            ? t('project.confirm.deleteTitle')
+          confirmAction?.type === 'archive'
+            ? t('projects.archive.button')
             : t('project.confirm.stopTitle')
         }
         description={
-          confirmAction?.type === 'delete'
-            ? t('project.confirm.deleteDescription')
+          confirmAction?.type === 'archive'
+            ? t('projects.archive.description')
             : t('project.confirm.stopDescription').replace('{env}', 'production')
         }
         confirmLabel={t('project.confirm.confirm')}
         cancelLabel={t('project.confirm.cancel')}
-        variant={confirmAction?.type === 'delete' ? 'destructive' : 'default'}
+        variant={confirmAction?.type === 'archive' ? 'destructive' : 'default'}
         onConfirm={() => {
           confirmAction?.handler();
           setConfirmAction(null);
         }}
       />
+
+      <Dialog open={purgeDialogOpen} onOpenChange={setPurgeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-error">{t('projects.purge.title')}</DialogTitle>
+            <DialogDescription>{t('projects.purge.description')}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={purgeInput}
+              onChange={(e) => setPurgeInput(e.target.value)}
+              placeholder={t('projects.purge.inputPlaceholder')}
+              className="w-full"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPurgeDialogOpen(false)}>
+              {t('project.confirm.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handlePurgeConfirm}
+              disabled={purgeInput !== project.name || actionLoading === 'purge'}
+            >
+              {actionLoading === 'purge' ? <Spinner className="mr-2 h-4 w-4" /> : null}
+              {t('projects.purge.confirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

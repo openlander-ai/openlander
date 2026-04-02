@@ -129,8 +129,11 @@ export async function createProject(
   return res.json();
 }
 
-export async function listProjects(): Promise<ProjectWithOptionalEnvironments[]> {
-  const res = await fetch('/api/projects');
+export async function listProjects(
+  includeArchived = false,
+): Promise<ProjectWithOptionalEnvironments[]> {
+  const query = includeArchived ? '?include_archived=true' : '';
+  const res = await fetch(`/api/projects${query}`);
   if (!res.ok) {
     throw new Error('Failed to fetch projects');
   }
@@ -455,6 +458,30 @@ export async function blueGreenProject(
 
 export async function deleteProject(id: string): Promise<void> {
   await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+}
+
+export async function archiveProject(id: string): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/archive`, { method: 'POST' });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to archive project');
+  }
+}
+
+export async function unarchiveProject(id: string): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/unarchive`, { method: 'POST' });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to unarchive project');
+  }
+}
+
+export async function purgeProject(id: string): Promise<void> {
+  const res = await fetch(`/api/projects/${id}/purge?confirm=true`, { method: 'DELETE' });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(error || 'Failed to purge project');
+  }
 }
 
 export async function getProjectLogs(id: string): Promise<string> {

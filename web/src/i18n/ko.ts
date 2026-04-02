@@ -83,6 +83,29 @@ export const translations = {
     noProjects: '프로젝트가 없습니다',
     deployFirstApp: '첫 번째 앱 배포하기',
     connectGithub: 'GitHub 레포지토리를 연결하면 에이전트가 나머지를 처리합니다.',
+    filter: {
+      showArchived: '보관된 항목 표시',
+    },
+    card: {
+      archivedBadge: '보관됨',
+    },
+    archive: {
+      button: '보관',
+      success: '프로젝트가 보관되었습니다',
+      description:
+        '이 프로젝트를 보관하시겠습니까? 컨테이너는 중지되지만 모든 구성과 기록은 보존됩니다.',
+    },
+    unarchive: {
+      button: '복원',
+      success: '프로젝트가 복원되었습니다',
+    },
+    purge: {
+      button: '영구 삭제',
+      title: '프로젝트 영구 삭제',
+      description: '이 작업은 되돌릴 수 없습니다. 확인을 위해 프로젝트 이름을 입력하세요.',
+      inputPlaceholder: '프로젝트 이름 입력',
+      confirm: '영구 삭제',
+    },
   },
   projectDetail: {
     notFound: '프로젝트를 찾을 수 없습니다',
