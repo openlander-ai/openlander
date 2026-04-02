@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
+import { mkdirSync, writeFileSync } from 'node:fs';
 
 import { Docker, type AllContainerInfo } from '../src/pipeline/docker.js';
 
@@ -74,7 +75,14 @@ const resetDockerodeMocks = () => {
   mockFollowProgress.mockReset();
   mockGetNetwork.mockReset().mockReturnValue({
     connect: vi.fn().mockResolvedValue(undefined),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    inspect: vi.fn().mockResolvedValue({}),
   });
+};
+
+const writeEvidence = (relativePath: string, content: string): void => {
+  mkdirSync('.sisyphus/evidence', { recursive: true });
+  writeFileSync(relativePath, content, 'utf8');
 };
 
 type MockContainerHandleOptions = {
@@ -261,6 +269,98 @@ describeDocker('Docker core operations', () => {
           NetworkMode: 'traefik-web',
         }),
       }),
+    );
+  });
+
+  it('Alias set at creation time when NetworkMode = shared network', async () => {
+    const container = createDockerContainerHandle({ id: 'container-shared-id' });
+    mockCreateContainer.mockResolvedValueOnce(container);
+
+    const docker = new Docker('/var/run/docker.sock', 'openlander');
+    await docker.runContainer({
+      imageTag: 'mono-api:v1',
+      name: 'ol-mono-api',
+      port: 19090,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production' },
+      traefikLabels: {},
+    });
+
+    expect(mockCreateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        HostConfig: expect.objectContaining({
+          NetworkMode: 'openlander',
+        }),
+        NetworkingConfig: {
+          EndpointsConfig: {
+            openlander: {
+              Aliases: ['mono-api'],
+            },
+          },
+        },
+      }),
+    );
+
+    writeEvidence(
+      '.sisyphus/evidence/task-1-alias-creation.txt',
+      'Verified runContainer passes NetworkingConfig.EndpointsConfig.openlander.Aliases=["mono-api"] when NetworkMode is openlander.',
+    );
+  });
+
+  it('Alias reconciled when connectContainerToSharedNetwork hits already connected', async () => {
+    const container = createDockerContainerHandle({ id: 'container-reconcile-id' });
+    mockCreateContainer.mockResolvedValueOnce(container);
+
+    const connect = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('endpoint with name already exists in network openlander'))
+      .mockResolvedValueOnce(undefined);
+    const disconnect = vi.fn().mockResolvedValue(undefined);
+    const inspect = vi.fn().mockResolvedValue({
+      Containers: {
+        'container-reconcile-id': {
+          Aliases: ['stale-alias'],
+        },
+      },
+    });
+
+    mockGetNetwork.mockImplementation((networkName: string) => {
+      if (networkName === 'openlander') {
+        return { connect, disconnect, inspect };
+      }
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        disconnect: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn().mockRejectedValue(new Error('no such network')),
+      };
+    });
+
+    const docker = new Docker('/var/run/docker.sock', 'traefik-web');
+    await docker.runContainer({
+      imageTag: 'mono-worker:v1',
+      name: 'ol-mono-worker',
+      port: 19191,
+      containerPort: 3000,
+      envVars: { NODE_ENV: 'production' },
+      traefikLabels: {},
+    });
+
+    expect(connect).toHaveBeenNthCalledWith(1, {
+      Container: 'container-reconcile-id',
+      EndpointConfig: { Aliases: ['mono-worker'] },
+    });
+    expect(disconnect).toHaveBeenCalledWith({
+      Container: 'container-reconcile-id',
+      Force: false,
+    });
+    expect(connect).toHaveBeenNthCalledWith(2, {
+      Container: 'container-reconcile-id',
+      EndpointConfig: { Aliases: ['mono-worker'] },
+    });
+
+    writeEvidence(
+      '.sisyphus/evidence/task-1-alias-reconcile.txt',
+      'Verified already-connected path inspects aliases, disconnects when alias missing, and reconnects with Aliases=["mono-worker"].',
     );
   });
 

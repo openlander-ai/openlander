@@ -399,6 +399,17 @@ export class Docker {
     const extraHosts = await this.resolveExtraHosts();
     const secretBinds = this.writeSecretFiles(options.name, options.secretFiles ?? []);
     const projectName = stripContainerPrefix(options.name);
+    const networkMode = options.network ?? this.networkName;
+    const networkingConfig =
+      networkMode === SHARED_NETWORK_NAME
+        ? {
+            EndpointsConfig: {
+              [SHARED_NETWORK_NAME]: {
+                Aliases: [projectName],
+              },
+            },
+          }
+        : undefined;
     const volumeBinds = await this.getProjectVolumeBinds(projectName);
     const binds = [...secretBinds, ...volumeBinds];
 
@@ -415,12 +426,13 @@ export class Docker {
         [`${String(cPort)}/tcp`]: {},
       },
       Cmd: options.cmd,
+      NetworkingConfig: networkingConfig,
       HostConfig: {
         PortBindings: {
           [`${String(cPort)}/tcp`]: [{ HostPort: String(options.port) }],
         },
         Binds: binds.length > 0 ? binds : undefined,
-        NetworkMode: options.network ?? this.networkName,
+        NetworkMode: networkMode,
         RestartPolicy: { Name: 'on-failure', MaximumRetryCount: 5 },
         LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         ...(extraHosts.length > 0 ? { ExtraHosts: extraHosts } : {}),
@@ -533,17 +545,45 @@ export class Docker {
   }
 
   private async connectContainerToSharedNetwork(containerId: string, alias: string): Promise<void> {
+    const network = this.client.getNetwork(SHARED_NETWORK_NAME);
+
     try {
-      await this.client.getNetwork(SHARED_NETWORK_NAME).connect({
+      await network.connect({
         Container: containerId,
         EndpointConfig: { Aliases: [alias] },
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('already exists') || msg.includes('already connected')) {
+      if (!msg.includes('already exists') && !msg.includes('already connected')) {
+        throw error;
+      }
+
+      const networkInfo = (await network.inspect()) as {
+        Containers?: Record<string, { Aliases?: string[] | null }>;
+      };
+      const containerEndpoint = networkInfo.Containers?.[containerId];
+      const currentAliases: string[] = containerEndpoint?.Aliases ?? [];
+      if (currentAliases.includes(alias)) {
         return;
       }
-      throw error;
+
+      try {
+        await network.disconnect({ Container: containerId, Force: false });
+      } catch (disconnectError) {
+        const disconnectMsg =
+          disconnectError instanceof Error ? disconnectError.message : String(disconnectError);
+        if (
+          !disconnectMsg.includes('is not connected') &&
+          !disconnectMsg.includes('No such container')
+        ) {
+          throw disconnectError;
+        }
+      }
+
+      await network.connect({
+        Container: containerId,
+        EndpointConfig: { Aliases: [alias] },
+      });
     }
   }
 
