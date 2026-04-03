@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Bot,
   Search,
+  ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
@@ -384,6 +385,21 @@ export function Sidebar({ projects, loading }: SidebarProps) {
         >
           <Database className="h-4 w-4 shrink-0" />
           <span className="hidden lg:inline text-sm font-body">Services</span>
+        </button>
+
+        {/* Operations Center */}
+        <button
+          onClick={() => navigate('/operations')}
+          title="Operations Center"
+          className={cn(
+            'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
+            'lg:justify-start justify-center',
+            'hover:bg-bg-subtle',
+            isActive('/operations') ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',
+          )}
+        >
+          <ShieldAlert className="h-4 w-4 shrink-0" />
+          <span className="hidden lg:inline text-sm font-body">Operations</span>
         </button>
 
         {/* Settings Link */}
