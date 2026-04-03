@@ -10,6 +10,10 @@ import { RollbackExecutor } from '../../../src/pipeline/deploy/rollback.js';
 import type { Docker } from '../../../src/pipeline/docker.js';
 
 function createMockDocker(): Docker {
+  const inspectImage = vi.fn().mockResolvedValue({});
+  const getImage = vi.fn().mockReturnValue({ inspect: inspectImage });
+  const getClient = vi.fn().mockReturnValue({ getImage });
+
   return {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
@@ -17,6 +21,7 @@ function createMockDocker(): Docker {
     runContainer: vi.fn().mockResolvedValue('container-rollback-new'),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     listAllContainers: vi.fn().mockResolvedValue([]),
+    getClient,
   } as unknown as Docker;
 }
 
@@ -139,6 +144,65 @@ describe('RollbackExecutor', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('No previous image available for rollback');
+  });
+
+  it('BUG-004: rollback succeeds after two timestamp-tagged deployments', async () => {
+    db.createProject({
+      id: 'p-bug-004',
+      name: 'rollback-app',
+      repoUrl: 'https://github.com/openlander/rollback-app',
+      branch: 'main',
+    });
+    db.updateProject('p-bug-004', {
+      status: 'running',
+      containerId: 'container-current',
+      imageTag: 'openlander/rollback-app:1712345679000',
+      previousImageTag: 'openlander/rollback-app:1712345600000',
+    });
+
+    const result = await rollbackExecutor.rollbackToImage('p-bug-004');
+
+    expect(result.success).toBe(true);
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageTag: 'openlander/rollback-app:1712345600000',
+      }),
+    );
+    expect(db.getProject('p-bug-004')?.image_tag).toBe('openlander/rollback-app:1712345600000');
+    expect(db.getProject('p-bug-004')?.previous_image_tag).toBe(
+      'openlander/rollback-app:1712345679000',
+    );
+  });
+
+  it('BUG-004: returns clear error when rollback image was pruned', async () => {
+    db.createProject({
+      id: 'p-pruned',
+      name: 'pruned-app',
+      repoUrl: 'https://github.com/openlander/pruned-app',
+      branch: 'main',
+    });
+    db.updateProject('p-pruned', {
+      status: 'running',
+      containerId: 'container-pruned',
+      imageTag: 'openlander/pruned-app:1712345679000',
+      previousImageTag: 'openlander/pruned-app:1712345600000',
+    });
+
+    const getClientMock = docker.getClient as ReturnType<typeof vi.fn>;
+    const getImageMock = vi.fn().mockReturnValue({
+      inspect: vi
+        .fn()
+        .mockRejectedValue(new Error('No such image: openlander/pruned-app:1712345600000')),
+    });
+    getClientMock.mockReturnValueOnce({ getImage: getImageMock });
+
+    const result = await rollbackExecutor.rollbackToImage('p-pruned');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(
+      'No previous image available for rollback — the image may have been pruned',
+    );
+    expect(docker.runContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
   it('returns an error and marks status when container start fails', async () => {

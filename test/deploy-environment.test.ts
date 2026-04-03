@@ -23,6 +23,7 @@ type EnvLike = {
 function createMockDocker(): Docker {
   return {
     buildImage: vi.fn().mockResolvedValue(undefined),
+    tagImage: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-abc123456789'),
     waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
     getLogs: vi.fn().mockResolvedValue(''),
@@ -125,13 +126,18 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(developmentEnvironment?.status).toBe('running');
     expect(developmentEnvironment?.container_id).toBe('container-abc123456789');
     expect(developmentEnvironment?.assigned_port).toBeGreaterThanOrEqual(10001);
-    expect(developmentEnvironment?.image_tag).toBe('openlander/demo-app:latest');
+    expect(developmentEnvironment?.image_tag).toMatch(/^openlander\/demo-app:\d+$/);
 
     // Verify passive Docker mocks were called
     expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       clonePath,
-      'openlander/demo-app:latest',
+      expect.stringMatching(/^openlander\/demo-app:\d+$/),
       expect.any(Object),
+    );
+    expect(docker.tagImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.stringMatching(/^openlander\/demo-app:\d+$/),
+      'openlander/demo-app',
+      'latest',
     );
     expect(docker.waitForHealthy as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-abc123456789',
@@ -235,7 +241,32 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(result.url).toContain('dev-app.');
 
     const developmentEnvironment = db.getEnvironment('p3-development');
-    expect(developmentEnvironment?.image_tag).toBe('openlander/dev-app:latest');
+    expect(developmentEnvironment?.image_tag).toMatch(/^openlander\/dev-app:\d+$/);
+  });
+
+  it('BUG-004: stores timestamp image tag in DB and updates latest alias', async () => {
+    db.createProject({
+      id: 'p-bug-004-tag',
+      name: 'rollback-tag-app',
+      repoUrl: 'https://github.com/openlander/rollback-tag-app',
+      branch: 'main',
+    });
+
+    const result = await pipeline.deploy({
+      _projectId: 'p-bug-004-tag',
+      name: 'rollback-tag-app',
+      repoUrl: 'https://github.com/openlander/rollback-tag-app',
+      trigger: 'api',
+    });
+
+    expect(result.success).toBe(true);
+    const project = db.getProject('p-bug-004-tag');
+    expect(project?.image_tag).toMatch(/^openlander\/rollback-tag-app:\d+$/);
+    expect(docker.tagImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      expect.stringMatching(/^openlander\/rollback-tag-app:\d+$/),
+      'openlander/rollback-tag-app',
+      'latest',
+    );
   });
 
   it('delegates to compose pipeline when compose file is detected', async () => {
@@ -563,7 +594,7 @@ describe('DeployPipeline deployEnvironment', () => {
     expect(result.success).toBe(true);
     expect(docker.buildImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       clonePath,
-      'openlander/build-args-app:latest',
+      expect.stringMatching(/^openlander\/build-args-app:\d+$/),
       expect.objectContaining({
         buildArgs: {
           NEXT_PUBLIC_API_URL: 'https://api.example.com',

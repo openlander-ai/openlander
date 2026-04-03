@@ -19,7 +19,7 @@ import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
-import { ContainerNotFoundError, PreflightCheckError } from '../errors.js';
+import { ContainerNotFoundError, DeployLockedError, PreflightCheckError } from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { buildDeployConfig } from './build-deploy-config.js';
 import type { JobManager } from './job-manager.js';
@@ -700,7 +700,7 @@ export class DeployPipeline {
     let diffContext: string | undefined;
     let commitSha: string | undefined;
     let commitMessage: string | undefined;
-    let imageTag = `openlander/${routeName}:latest`;
+    let imageTag = `openlander/${routeName}:${String(Date.now())}`;
     const previousTag = `openlander/${routeName}:previous`;
     let preservedPreviousTag: string | null = null;
     if (source !== 'image') {
@@ -708,7 +708,8 @@ export class DeployPipeline {
       if (currentRunningTag && currentRunningTag !== previousTag) {
         try {
           await this.docker.tagImage(currentRunningTag, `openlander/${routeName}`, 'previous');
-          preservedPreviousTag = previousTag;
+          await this.markRollbackImage(previousTag);
+          preservedPreviousTag = currentRunningTag;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           if (!msg.includes('No such image') && !msg.includes('not found')) {
@@ -716,7 +717,7 @@ export class DeployPipeline {
           }
         }
       } else if (currentRunningTag === previousTag) {
-        preservedPreviousTag = previousTag;
+        preservedPreviousTag = currentRunningTag;
       }
     }
     let dockerfilePath: string | undefined;
@@ -909,6 +910,52 @@ export class DeployPipeline {
         } catch {
           // best-effort cleanup
         }
+      }
+    }
+  }
+
+  private async markRollbackImage(imageTag: string): Promise<void> {
+    const dockerWithClient = this.docker as unknown as {
+      getClient?: () => {
+        createContainer: (opts: {
+          Image: string;
+          Labels?: Record<string, string>;
+          Cmd?: string[];
+        }) => Promise<{
+          id: string;
+          commit: (opts: { repo: string; tag: string; changes?: string[] }) => Promise<unknown>;
+          remove: (opts: { force: boolean }) => Promise<void>;
+        }>;
+      };
+    };
+    const getClient = dockerWithClient.getClient;
+    if (typeof getClient !== 'function') {
+      return;
+    }
+    const client = getClient();
+
+    const [repo, tag] = imageTag.split(':');
+    if (!repo || !tag) {
+      return;
+    }
+
+    const temp = await client.createContainer({
+      Image: imageTag,
+      Labels: { 'ol.rollback': 'true' },
+      Cmd: ['true'],
+    });
+
+    try {
+      await temp.commit({
+        repo,
+        tag,
+        changes: ['LABEL ol.rollback=true'],
+      });
+    } finally {
+      try {
+        await temp.remove({ force: true });
+      } catch {
+        // best-effort cleanup
       }
     }
   }
@@ -1222,83 +1269,97 @@ export class DeployPipeline {
       };
     }
 
-    const targetEnvironment = this.db
-      .getEnvironmentsByProject(projectId)
-      .find((environment) => environment.type === 'production');
-    if (!targetEnvironment) {
-      return {
-        success: false,
-        projectId,
-        projectName: project.name,
-        error: 'Production environment not found',
-      };
+    const lockSession = nanoid(12);
+    const locked = this.db.acquireDeployLock(projectId, lockSession);
+    if (!locked) {
+      const lockInfo = this.db.getDeployLockInfo(projectId);
+      throw new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
     }
 
-    const strategy = options?.strategy ?? 'force';
-    if (strategy === 'blue-green') {
-      return this.blueGreenRedeploy(projectId, options);
-    }
-
-    const redeployRouteName = getRouteName(project.name);
-    const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
-    const currentRunningTag = project.image_tag;
-    let redeployPreviousTag: string | null = currentRunningTag;
-    if (project.source !== 'image' && currentRunningTag) {
-      if (currentRunningTag !== redeployPreviousLabel) {
-        try {
-          await this.docker.tagImage(
-            currentRunningTag,
-            `openlander/${redeployRouteName}`,
-            'previous',
-          );
-          redeployPreviousTag = redeployPreviousLabel;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes('No such image') && !msg.includes('not found')) {
-            log.warn({ err, currentRunningTag }, 'Failed to preserve previous image for rollback');
-          }
-        }
-      } else {
-        redeployPreviousTag = redeployPreviousLabel;
+    try {
+      const targetEnvironment = this.db
+        .getEnvironmentsByProject(projectId)
+        .find((environment) => environment.type === 'production');
+      if (!targetEnvironment) {
+        return {
+          success: false,
+          projectId,
+          projectName: project.name,
+          error: 'Production environment not found',
+        };
       }
-    }
 
-    await this.cleanupProjectContainers(projectId, 'remove');
+      const strategy = options?.strategy ?? 'force';
+      if (strategy === 'blue-green') {
+        return await this.blueGreenRedeploy(projectId, options);
+      }
 
-    this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
+      const redeployRouteName = getRouteName(project.name);
+      const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
+      const currentRunningTag = project.image_tag;
+      let redeployPreviousTag: string | null = currentRunningTag;
+      if (project.source !== 'image' && currentRunningTag) {
+        if (currentRunningTag !== redeployPreviousLabel) {
+          try {
+            await this.docker.tagImage(
+              currentRunningTag,
+              `openlander/${redeployRouteName}`,
+              'previous',
+            );
+            redeployPreviousTag = redeployPreviousLabel;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!msg.includes('No such image') && !msg.includes('not found')) {
+              log.warn(
+                { err, currentRunningTag },
+                'Failed to preserve previous image for rollback',
+              );
+            }
+          }
+        } else {
+          redeployPreviousTag = redeployPreviousLabel;
+        }
+      }
 
-    const previousPort = project.assigned_port ?? undefined;
+      await this.cleanupProjectContainers(projectId, 'remove');
 
-    this.db.updateProject(projectId, {
-      status: 'building',
-      containerId: null,
-      imageTag: null,
-      assignedPort: null,
-    });
-    for (const env of this.db.getEnvironmentsByProject(projectId)) {
-      this.db.updateEnvironment(env.id, {
-        assignedPort: null,
+      this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
+
+      const previousPort = project.assigned_port ?? undefined;
+
+      this.db.updateProject(projectId, {
+        status: 'building',
         containerId: null,
         imageTag: null,
-        previousImageTag: redeployPreviousTag,
-        status: 'idle',
+        assignedPort: null,
       });
+      for (const env of this.db.getEnvironmentsByProject(projectId)) {
+        this.db.updateEnvironment(env.id, {
+          assignedPort: null,
+          containerId: null,
+          imageTag: null,
+          previousImageTag: redeployPreviousTag,
+          status: 'idle',
+        });
+      }
+      this.jobManager?.trackJob(projectId, project.name);
+
+      const config = buildDeployConfig({
+        projectId,
+        runtimeOverrides: {
+          _projectId: projectId,
+          _preferredPort: previousPort,
+          _noCacheBuild: project.source === 'image' ? true : options?.noCache,
+          environment: 'production',
+          ...(options?.cmd && { imageCmd: options.cmd }),
+        },
+        db: this.db,
+      });
+
+      return await this.deploy(config);
+    } finally {
+      this.db.releaseDeployLock(projectId);
     }
-    this.jobManager?.trackJob(projectId, project.name);
-
-    const config = buildDeployConfig({
-      projectId,
-      runtimeOverrides: {
-        _projectId: projectId,
-        _preferredPort: previousPort,
-        _noCacheBuild: project.source === 'image' ? true : options?.noCache,
-        environment: 'production',
-        ...(options?.cmd && { imageCmd: options.cmd }),
-      },
-      db: this.db,
-    });
-
-    return this.deploy(config);
   }
 
   private async blueGreenRedeploy(

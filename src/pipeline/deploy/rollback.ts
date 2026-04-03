@@ -74,6 +74,28 @@ export class RollbackExecutor {
     const currentImageTag =
       productionEnvironment?.image_tag ?? target.target.project.image_tag ?? '';
 
+    const dockerWithClient = this.docker as unknown as {
+      getClient?: () => {
+        getImage: (imageTag: string) => {
+          inspect: () => Promise<unknown>;
+        };
+      };
+    };
+    const getClient = dockerWithClient.getClient;
+    if (typeof getClient === 'function') {
+      const dockerClient = getClient();
+      try {
+        await dockerClient.getImage(rollbackImageTag).inspect();
+      } catch {
+        return {
+          success: false,
+          projectId,
+          projectName: project.name,
+          error: 'No previous image available for rollback — the image may have been pruned',
+        };
+      }
+    }
+
     try {
       await this.cleanupRunningContainer(target.target);
 
@@ -140,6 +162,15 @@ export class RollbackExecutor {
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('No such image') || errorMsg.includes('not found')) {
+        return {
+          success: false,
+          projectId,
+          projectName: project.name,
+          error: 'No previous image available for rollback — the image may have been pruned',
+          buildDurationMs: Date.now() - startTime,
+        };
+      }
 
       this.db.updateProject(projectId, { status: 'error' });
       if (productionEnvironment) {

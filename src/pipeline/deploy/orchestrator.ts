@@ -408,6 +408,15 @@ export async function buildProject(
   }
 
   const buildDuration = Date.now() - buildStart;
+  const latestAlias = `openlander/${routeName}:latest`;
+  const dockerWithTag = deps.docker as unknown as {
+    tagImage?: (sourceTag: string, repo: string, newTag: string) => Promise<void>;
+  };
+  if (imageTag !== latestAlias && typeof dockerWithTag.tagImage === 'function') {
+    await dockerWithTag.tagImage(imageTag, `openlander/${routeName}`, 'latest');
+    buildLog += `[tag] ${latestAlias}\n`;
+  }
+
   await eventBus.emit('deploy:build', {
     projectId,
     imageTag,
