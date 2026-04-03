@@ -107,7 +107,9 @@ export function ProjectDetailTabs({
       </TabsContent>
 
       <TabsContent value="operations" className="flex-1 min-h-0 mt-0">
-        {id && displayProject && <OperationsTab projectId={id} />}
+        {id && displayProject && (
+          <OperationsTab projectId={id} projectStatus={displayProject.status} />
+        )}
       </TabsContent>
 
       <TabsContent value="console" className="flex-1 min-h-0 mt-0">

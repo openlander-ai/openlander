@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 
 interface OperationsTabProps {
   projectId: string;
+  projectStatus?: 'running' | 'stopped' | 'building' | 'error' | 'idle';
 }
 
 const EVENT_LABELS: Record<string, string> = {
@@ -114,7 +115,7 @@ function groupIncidents(incidents: OpsIncident[]): IncidentGroup[] {
   }));
 }
 
-export function OperationsTab({ projectId }: OperationsTabProps) {
+export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) {
   const [incidents, setIncidents] = useState<OpsIncident[]>([]);
   const [circuitBreaker, setCircuitBreaker] = useState<CircuitBreakerState | null>(null);
   const [config, setConfig] = useState<OpsConfig | null>(null);
@@ -214,10 +215,13 @@ export function OperationsTab({ projectId }: OperationsTabProps) {
   const cbState = circuitBreaker?.state || 'closed';
   const cbFailures = circuitBreaker?.failure_count || 0;
 
-  let status: 'healthy' | 'degraded' | 'broken' | 'blocked' = 'healthy';
+  const hasDeployFailureWithoutIncident = projectStatus === 'error' && activeIncidents.length === 0;
+
+  let status: 'healthy' | 'degraded' | 'broken' | 'blocked' | 'attention' = 'healthy';
   if (cbState === 'open') status = 'blocked';
   else if (activeIncidents.length > 0 && anyEscalated) status = 'broken';
   else if (activeIncidents.length > 0) status = 'degraded';
+  else if (hasDeployFailureWithoutIncident) status = 'attention';
 
   const statusConfig = {
     healthy: {
@@ -251,6 +255,14 @@ export function OperationsTab({ projectId }: OperationsTabProps) {
       icon: ShieldOff,
       title: 'Recovery Blocked',
       desc: 'Auto-recovery paused after repeated failures. Manual action required.',
+    },
+    attention: {
+      color: 'text-warning',
+      bg: 'bg-warning/5',
+      border: 'border-warning/20',
+      icon: AlertTriangle,
+      title: 'Needs Attention',
+      desc: 'Latest deploy failed. Runtime incidents are clear, but a redeploy/fix is needed.',
     },
   };
 
@@ -378,21 +390,25 @@ export function OperationsTab({ projectId }: OperationsTabProps) {
                 'h-2.5 w-2.5 rounded-full',
                 status === 'blocked'
                   ? 'bg-error'
-                  : status === 'degraded' || status === 'broken'
-                    ? 'bg-warning animate-pulse'
-                    : !(config?.enabled ?? true)
-                      ? 'bg-muted-ol'
-                      : 'bg-success',
+                  : status === 'attention'
+                    ? 'bg-warning'
+                    : status === 'degraded' || status === 'broken'
+                      ? 'bg-warning animate-pulse'
+                      : !(config?.enabled ?? true)
+                        ? 'bg-muted-ol'
+                        : 'bg-success',
               )}
             />
             <span className="text-sm font-medium text-primary-ol">
               {status === 'blocked'
                 ? 'Blocked'
-                : status === 'degraded' || status === 'broken'
-                  ? 'Retrying'
-                  : !(config?.enabled ?? true)
-                    ? 'Disabled'
-                    : 'Idle'}
+                : status === 'attention'
+                  ? 'Waiting for redeploy'
+                  : status === 'degraded' || status === 'broken'
+                    ? 'Retrying'
+                    : !(config?.enabled ?? true)
+                      ? 'Disabled'
+                      : 'Idle'}
             </span>
           </div>
         </Card>
@@ -412,9 +428,21 @@ export function OperationsTab({ projectId }: OperationsTabProps) {
 
         {activeGroups.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-secondary-ol bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm">
-            <CheckCircle2 className="h-8 w-8 mb-3 text-success/50" />
-            <p className="text-sm font-medium text-primary-ol">All clear</p>
-            <p className="text-xs text-muted-ol mt-1">No active issues detected.</p>
+            {status === 'attention' ? (
+              <>
+                <AlertTriangle className="h-8 w-8 mb-3 text-warning/70" />
+                <p className="text-sm font-medium text-primary-ol">No runtime incidents</p>
+                <p className="text-xs text-muted-ol mt-1">
+                  Deployment failed earlier. Check Deployments/Logs and redeploy.
+                </p>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-8 w-8 mb-3 text-success/50" />
+                <p className="text-sm font-medium text-primary-ol">All clear</p>
+                <p className="text-xs text-muted-ol mt-1">No active issues detected.</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
