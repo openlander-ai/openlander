@@ -93,6 +93,10 @@ export const projectOpsToolDefs: ToolDef[] = [
         throw new ProjectNotFoundError(projectName);
       }
 
+      if (project.status === 'building') {
+        context.appCtx.docker.cancelBuild(project.id);
+      }
+
       await context.appCtx.pipeline.stop(project.id);
       return {
         status: 'stopped',
@@ -395,6 +399,10 @@ export const projectOpsToolDefs: ToolDef[] = [
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
+      }
+
+      if (project.status === 'building') {
+        context.appCtx.docker.cancelBuild(project.id);
       }
 
       await context.appCtx.pipeline.archive(project.id);

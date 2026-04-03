@@ -877,12 +877,115 @@ describeDocker('listAllContainers', () => {
 });
 
 // ---------------------------------------------------------------------------
+// cancelBuild Tests (BUG-014)
+// ---------------------------------------------------------------------------
+
+describeDocker('cancelBuild', () => {
+  beforeEach(() => {
+    resetDockerodeMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('BUG-014: cancelBuild destroys stream and removes from activeBuilds', async () => {
+    const destroyFn = vi.fn();
+    const stream = { stream: true, destroy: destroyFn } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+
+    let resolveBuild: (() => void) | undefined;
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => {
+        resolveBuild = () => done(null);
+      },
+    );
+
+    const docker = new Docker();
+    const buildPromise = docker.buildImage('/tmp/app', 'test:latest', {
+      projectId: 'proj-123',
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const cancelled = docker.cancelBuild('proj-123');
+    expect(cancelled).toBe(true);
+    expect(destroyFn).toHaveBeenCalledTimes(1);
+
+    expect(docker.cancelBuild('proj-123')).toBe(false);
+
+    resolveBuild?.();
+    await buildPromise.catch(() => {});
+
+    writeEvidence(
+      '.sisyphus/evidence/task-13-stop-cancels-build.txt',
+      [
+        'BUG-014 regression: cancelBuild destroys the active stream and returns true.',
+        'Second call returns false (stream already removed).',
+        'destroy() called exactly once on the build stream.',
+      ].join('\n'),
+    );
+  });
+
+  it('cancelBuild returns false when no active build exists', () => {
+    const docker = new Docker();
+    expect(docker.cancelBuild('nonexistent')).toBe(false);
+  });
+
+  it('buildImage cleans up activeBuilds on successful completion', async () => {
+    const destroyFn = vi.fn();
+    const stream = { stream: true, destroy: destroyFn } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => {
+        done(null);
+      },
+    );
+
+    const docker = new Docker();
+    await docker.buildImage('/tmp/app', 'test:latest', { projectId: 'proj-cleanup' });
+
+    expect(docker.cancelBuild('proj-cleanup')).toBe(false);
+  });
+
+  it('buildImage cleans up activeBuilds on build failure', async () => {
+    const destroyFn = vi.fn();
+    const stream = { stream: true, destroy: destroyFn } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => {
+        done(new Error('build exploded'));
+      },
+    );
+
+    const docker = new Docker();
+    await docker.buildImage('/tmp/app', 'test:latest', { projectId: 'proj-fail' }).catch(() => {});
+
+    expect(docker.cancelBuild('proj-fail')).toBe(false);
+  });
+
+  it('buildImage without projectId does not track in activeBuilds', async () => {
+    const stream = { stream: true } as unknown as NodeJS.ReadableStream;
+    mockBuildImage.mockResolvedValueOnce(stream);
+    mockFollowProgress.mockImplementationOnce(
+      (_stream: NodeJS.ReadableStream, done: (err: Error | null) => void) => {
+        done(null);
+      },
+    );
+
+    const docker = new Docker();
+    await docker.buildImage('/tmp/app', 'test:latest');
+
+    expect(docker.cancelBuild('any-id')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Type Export Tests
 // ---------------------------------------------------------------------------
 
 describeDocker('AllContainerInfo type', () => {
   it('exports AllContainerInfo interface', () => {
-    // This is a compile-time check - if it compiles, the type is exported
     const containerInfo: AllContainerInfo = {
       id: 'test-id',
       name: 'test-name',

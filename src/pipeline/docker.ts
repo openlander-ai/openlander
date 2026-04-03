@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { Readable } from 'node:stream';
 import { getDataDir, getPolicy, SHARED_NETWORK_NAME, DOCKER_LABELS } from '../config/index.js';
 import { sleep } from '../lib/sleep.js';
 import { containerName, stripContainerPrefix } from './helpers.js';
@@ -164,7 +165,7 @@ function stripDockerStreamHeaders(buffer: Buffer): string {
 export class Docker {
   private readonly client: Dockerode;
   private readonly networkName: string;
-  private readonly activeBuilds = new Map<string, NodeJS.ReadableStream>();
+  private readonly activeBuilds = new Map<string, Readable>();
 
   constructor(socketPath?: string, networkName?: string) {
     const require = createRequire(import.meta.url);
@@ -298,7 +299,7 @@ export class Docker {
     }
 
     if (trackingId) {
-      this.activeBuilds.set(trackingId, stream);
+      this.activeBuilds.set(trackingId, stream as Readable);
     }
 
     let buildLog = '';

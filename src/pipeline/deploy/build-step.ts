@@ -53,6 +53,7 @@ export class BuildExecutor {
       buildArgs: context.buildArgs,
       target: context.dockerTarget,
       dockerfile: relativeDockerfile,
+      projectId: context.projectId,
       onProgress: (event) => {
         const line = event.stream?.trim() ?? event.error ?? '';
         if (!line) {
