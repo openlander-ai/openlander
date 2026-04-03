@@ -124,3 +124,80 @@ export async function fetchIncidentEvents(
   if (!response.ok) return { events: [] };
   return response.json() as Promise<{ events: OpsIncidentEvent[] }>;
 }
+
+// === Operations Center types ===
+
+export interface ActivityItem {
+  id: string;
+  timestamp: string;
+  type: 'incident' | 'recovery' | 'approval' | 'circuit_breaker' | 'cleanup' | 'alert';
+  severity: 'critical' | 'warning' | 'info';
+  projectId: string;
+  projectName: string;
+  title: string;
+  description: string;
+  status: 'active' | 'resolved' | 'pending' | 'failed';
+  incidentId?: string;
+  actionRunId?: string;
+  correlationId?: string;
+  cascadeGroup?: string[];
+}
+
+export interface CircuitBreakerWithProject {
+  projectId: string;
+  projectName: string;
+  state: 'closed' | 'open' | 'half_open';
+  failureCount: number;
+  lastFailureAt: number | null;
+  openedAt: number | null;
+  resetAt: number | null;
+}
+
+export interface DependencyNode {
+  id: string;
+  type: 'project' | 'service';
+  name: string;
+  status: string | null;
+}
+
+export interface DependencyEdge {
+  source: string;
+  target: string;
+  dependencyType: string;
+}
+
+export async function fetchActivityFeed(opts?: {
+  projectId?: string;
+  types?: string[];
+  severity?: string;
+  limit?: number;
+  before?: string;
+}): Promise<{ activities: ActivityItem[]; nextCursor: string | null }> {
+  const params = new URLSearchParams();
+  if (opts?.projectId) params.set('projectId', opts.projectId);
+  if (opts?.types?.length) params.set('types', opts.types.join(','));
+  if (opts?.severity) params.set('severity', opts.severity);
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.before) params.set('before', opts.before);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  const resp = await fetchWithAuth(`/api/ops/activity${query}`);
+  if (!resp.ok) throw new Error(`fetchActivityFeed failed: ${resp.status}`);
+  return resp.json() as Promise<{ activities: ActivityItem[]; nextCursor: string | null }>;
+}
+
+export async function fetchAllCircuitBreakers(): Promise<{
+  breakers: CircuitBreakerWithProject[];
+}> {
+  const resp = await fetchWithAuth('/api/ops/circuit-breakers');
+  if (!resp.ok) throw new Error(`fetchAllCircuitBreakers failed: ${resp.status}`);
+  return resp.json() as Promise<{ breakers: CircuitBreakerWithProject[] }>;
+}
+
+export async function fetchDependencyGraph(): Promise<{
+  nodes: DependencyNode[];
+  edges: DependencyEdge[];
+}> {
+  const resp = await fetchWithAuth('/api/ops/dependencies');
+  if (!resp.ok) throw new Error(`fetchDependencyGraph failed: ${resp.status}`);
+  return resp.json() as Promise<{ nodes: DependencyNode[]; edges: DependencyEdge[] }>;
+}
