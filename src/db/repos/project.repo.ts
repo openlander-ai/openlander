@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { OpenLanderError, ProjectAlreadyExistsError, ProjectNotFoundError } from '../../errors.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { projects } from '../schema.drizzle.js';
@@ -295,11 +295,6 @@ export class ProjectRepo {
 
   acquireDeployLock(projectId: string, sessionId: string): boolean {
     this.cleanExpiredDeployLocks();
-    const project = this.getProject(projectId);
-    if (!project) return false;
-    if (project.deploy_lock_session && project.deploy_lock_session !== sessionId) {
-      return false;
-    }
     this.db
       .update(projects)
       .set({
@@ -307,9 +302,17 @@ export class ProjectRepo {
         deploy_lock_at: sql`CURRENT_TIMESTAMP`,
         updated_at: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(projects.id, projectId))
+      .where(
+        and(
+          eq(projects.id, projectId),
+          or(isNull(projects.deploy_lock_session), eq(projects.deploy_lock_session, sessionId)),
+        ),
+      )
       .run();
-    return true;
+    const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
+      changes: number;
+    } | null;
+    return (row?.changes ?? 0) > 0;
   }
 
   releaseDeployLock(projectId: string): void {
@@ -326,7 +329,7 @@ export class ProjectRepo {
     return { session: project.deploy_lock_session, lockedAt: project.deploy_lock_at };
   }
 
-  cleanExpiredDeployLocks(timeoutMinutes = 10): number {
+  cleanExpiredDeployLocks(timeoutMinutes = 30): number {
     this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null })
