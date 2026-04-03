@@ -381,6 +381,10 @@ program
       ctx.agent.setTools(tools);
     }
 
+    if (ctx.config.ai.operationalMonitoring.enabled) {
+      ctx.alertMonitor.start();
+    }
+
     const { startMcpServer } = await import('../mcp/server.js');
     await startMcpServer(ctx);
   });
