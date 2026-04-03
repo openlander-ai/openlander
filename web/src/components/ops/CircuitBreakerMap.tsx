@@ -1,0 +1,151 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import {
+  fetchAllCircuitBreakers,
+  resetCircuitBreaker,
+  type CircuitBreakerWithProject,
+} from '@/lib/api/operations';
+import { cn } from '@/lib/utils';
+import { useLanguage } from '@/i18n/context';
+import { relativeTime } from '@/components/ops/utils';
+
+interface CircuitBreakerMapProps {
+  projectId?: string;
+  projectNameById: Record<string, string>;
+  refreshToken: number;
+}
+
+const STATE_ORDER: Record<CircuitBreakerWithProject['state'], number> = {
+  open: 0,
+  half_open: 1,
+  closed: 2,
+};
+
+function stateIndicator(state: CircuitBreakerWithProject['state']) {
+  if (state === 'open') return '🔴';
+  if (state === 'half_open') return '🟡';
+  return '🟢';
+}
+
+export function CircuitBreakerMap({
+  projectId,
+  projectNameById,
+  refreshToken,
+}: CircuitBreakerMapProps) {
+  const { t } = useLanguage();
+  const [breakers, setBreakers] = useState<CircuitBreakerWithProject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [resettingProjectId, setResettingProjectId] = useState<string | null>(null);
+
+  const loadBreakers = useCallback(async () => {
+    try {
+      const data = await fetchAllCircuitBreakers();
+      setBreakers(data.breakers ?? []);
+    } catch (err) {
+      console.error('Failed to load circuit breakers', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    void loadBreakers();
+  }, [loadBreakers, refreshToken]);
+
+  const visibleBreakers = useMemo(() => {
+    const filtered = projectId
+      ? breakers.filter((breaker) => breaker.projectId === projectId)
+      : [...breakers];
+
+    filtered.sort((a, b) => {
+      const stateDiff = STATE_ORDER[a.state] - STATE_ORDER[b.state];
+      if (stateDiff !== 0) {
+        return stateDiff;
+      }
+      return b.failureCount - a.failureCount;
+    });
+
+    return filtered;
+  }, [breakers, projectId]);
+
+  const openBreakers = visibleBreakers.filter((breaker) => breaker.state !== 'closed');
+
+  const handleReset = async (breaker: CircuitBreakerWithProject) => {
+    setResettingProjectId(breaker.projectId);
+    try {
+      await resetCircuitBreaker(breaker.projectId);
+      toast.success(`${breaker.projectName} · ${t('operations.circuitBreakers.reset')}`);
+      await loadBreakers();
+    } catch (err) {
+      console.error('Failed to reset circuit breaker', err);
+      toast.error(t('approval.banner.error'));
+    } finally {
+      setResettingProjectId(null);
+    }
+  };
+
+  return (
+    <Card className="border-border bg-panel p-4 lg:p-5">
+      <h2 className="mb-4 font-display text-lg font-semibold text-primary-ol">
+        {t('operations.circuitBreakers.title')}
+      </h2>
+
+      {loading ? (
+        <div className="text-sm font-body text-muted-ol">{t('Loading...')}</div>
+      ) : openBreakers.length === 0 ? (
+        <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-6 text-center text-sm font-body text-success">
+          {t('operations.circuitBreakers.allHealthy')}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {openBreakers.map((breaker) => {
+            const isOpen = breaker.state === 'open';
+            const isHalfOpen = breaker.state === 'half_open';
+            const failureTimestamp = breaker.lastFailureAt;
+
+            return (
+              <div
+                key={breaker.projectId}
+                className={cn(
+                  'rounded-lg border bg-bg-subtle px-4 py-3',
+                  isOpen && 'border-error/60',
+                  isHalfOpen && 'border-warning/60',
+                )}
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="truncate font-body text-sm font-medium text-primary-ol">
+                    {projectNameById[breaker.projectId] ?? breaker.projectName}
+                  </p>
+                  <Badge variant="outline" className="font-body text-xs capitalize">
+                    {stateIndicator(breaker.state)} {breaker.state.replace('_', ' ')}
+                  </Badge>
+                </div>
+
+                <p className="font-body text-xs text-secondary-ol">
+                  {t('operations.circuitBreakers.failures', { count: breaker.failureCount })}
+                </p>
+                <p className="mt-1 font-body text-xs text-muted-ol">
+                  {failureTimestamp ? relativeTime(failureTimestamp) : '-'}
+                </p>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 w-full"
+                  onClick={() => void handleReset(breaker)}
+                  disabled={resettingProjectId === breaker.projectId}
+                >
+                  {t('operations.circuitBreakers.reset')}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
