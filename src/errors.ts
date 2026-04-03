@@ -249,3 +249,17 @@ export class SetupRequiredError extends OpenLanderError {
     this.name = 'SetupRequiredError';
   }
 }
+
+// --- Project validation errors ---
+
+export class InvalidProjectNameError extends OpenLanderError {
+  constructor(name: string) {
+    super(
+      `Invalid project name: "${name}". Project names must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens.`,
+      'INVALID_PROJECT_NAME',
+      400,
+      { name },
+    );
+    this.name = 'InvalidProjectNameError';
+  }
+}
