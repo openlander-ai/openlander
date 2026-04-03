@@ -68,7 +68,11 @@ export class TraefikManager {
       const container = client.getContainer(this.containerName);
       const info = await container.inspect();
       const cmd: string[] = (info.Config.Cmd as string[] | null) ?? [];
-      return cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
+      const hasHttpProvider = cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
+      const hasCorrectNetwork = cmd.some(
+        (arg: string) => arg === `--providers.docker.network=${this.networkName}`,
+      );
+      return hasHttpProvider && hasCorrectNetwork;
     } catch (_err) {
       return false;
     }
