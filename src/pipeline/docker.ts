@@ -730,7 +730,43 @@ export class Docker {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('not found') || msg.includes('No such container')) {
-        // Already removed — not an error
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async safeRemoveContainer(containerId: string): Promise<void> {
+    try {
+      const container = this.client.getContainer(containerId);
+      const info = await container.inspect();
+      const networks = info.NetworkSettings.Networks;
+      for (const net of Object.keys(networks)) {
+        await this.disconnectContainerFromNetwork(containerId, net);
+      }
+    } catch (_) {
+      void _;
+    }
+    await this.removeContainer(containerId);
+  }
+
+  async tagImage(sourceTag: string, repo: string, newTag: string): Promise<void> {
+    const image = this.client.getImage(sourceTag);
+    await image.tag({ repo, tag: newTag });
+  }
+
+  /** Disconnect a container from a network before removal to avoid sandbox cleanup races. */
+  async disconnectContainerFromNetwork(containerId: string, networkName: string): Promise<void> {
+    try {
+      const network = this.client.getNetwork(networkName);
+      await network.disconnect({ Container: containerId, Force: true });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (
+        msg.includes('is not connected') ||
+        msg.includes('not found') ||
+        msg.includes('No such container')
+      ) {
         return;
       }
       throw error;

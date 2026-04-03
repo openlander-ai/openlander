@@ -52,6 +52,7 @@ describe('ComposePipeline dockerode networking', () => {
       pullImage: vi.fn().mockResolvedValue(undefined),
       buildComposeService: vi.fn().mockResolvedValue(undefined),
       removeContainer: vi.fn().mockResolvedValue(undefined),
+      safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
       runComposeService: runComposeServiceMock,
       waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
       stopContainer: vi.fn().mockResolvedValue(undefined),
@@ -89,6 +90,7 @@ describe('ComposePipeline dockerode networking', () => {
       pullImage: vi.fn().mockResolvedValue(undefined),
       buildComposeService: vi.fn().mockResolvedValue(undefined),
       removeContainer: vi.fn().mockResolvedValue(undefined),
+      safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
       runComposeService: runComposeServiceMock,
       waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
       stopContainer: vi.fn().mockResolvedValue(undefined),
@@ -130,6 +132,7 @@ describe('ComposePipeline dockerode networking', () => {
       waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
       stopContainer: stopContainerMock,
       removeContainer: removeContainerMock,
+      safeRemoveContainer: removeContainerMock,
       removeProjectNetwork: removeProjectNetworkMock,
       getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
     } as unknown as Docker;

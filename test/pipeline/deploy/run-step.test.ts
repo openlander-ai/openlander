@@ -9,6 +9,7 @@ import { SHARED_NETWORK_NAME } from '../../../src/config/index.js';
 function createMockDocker(): Docker {
   return {
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-abc123456789'),
   } as unknown as Docker;
 }
@@ -43,9 +44,11 @@ describe('ContainerRunner', () => {
       { preferredPort: 12001 },
       'production',
     );
-    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('ol-demo-app');
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'ol-demo-app',
+    );
     expect(
-      (docker.removeContainer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+      (docker.safeRemoveContainer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
     ).toBeLessThan((docker.runContainer as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]);
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       expect.objectContaining({

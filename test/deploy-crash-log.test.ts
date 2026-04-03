@@ -16,6 +16,7 @@ function createMockDocker(): Docker {
     runContainer: vi.fn().mockResolvedValue('container-crash-log'),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue(''),
     listContainers: vi.fn().mockResolvedValue([]),
     listAllContainers: vi.fn().mockResolvedValue([]),

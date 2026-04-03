@@ -31,6 +31,7 @@ function createMockDocker(): Docker {
     getLogs: vi.fn().mockResolvedValue(''),
     listAllContainers: vi.fn().mockResolvedValue([]),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     stopContainer: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }

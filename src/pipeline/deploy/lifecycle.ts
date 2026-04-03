@@ -7,6 +7,7 @@ import { eventBus } from '../../events/index.js';
 import { ContainerNotFoundError, OpenLanderError } from '../../errors.js';
 import type { Docker } from '../docker.js';
 import { allocatePort, clearPortScanCache } from '../port.js';
+import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import type { TunnelManager } from './tunnel.js';
 
 const log = createModuleLogger('deploy:lifecycle');
@@ -218,6 +219,12 @@ export class ContainerLifecycle {
 
     for (const identifier of identifiers) {
       try {
+        await this.docker.disconnectContainerFromNetwork(identifier, SHARED_NETWORK_NAME);
+      } catch (err) {
+        log.warn({ err, identifier }, 'Network disconnect during cleanup failed');
+      }
+
+      try {
         await this.docker.stopContainer(identifier);
       } catch (err) {
         log.warn({ err, identifier }, 'Container stop during cleanup failed');
@@ -227,6 +234,17 @@ export class ContainerLifecycle {
         await this.docker.removeContainer(identifier);
       } catch (err) {
         log.warn({ err, identifier }, 'Container removal during cleanup failed');
+      }
+    }
+
+    if (identifiers.size > 0 && typeof this.docker.listManagedContainers === 'function') {
+      const maxAttempts = 5;
+      const intervalMs = 200;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const managed = await this.docker.listManagedContainers();
+        const remaining = managed.some((c) => ids.has(c.id) || names.has(c.name));
+        if (!remaining) break;
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
       }
     }
 
@@ -244,6 +262,12 @@ export class ContainerLifecycle {
     if (conflicts.length > 0) {
       for (const conflict of conflicts) {
         try {
+          await this.docker.disconnectContainerFromNetwork(conflict.id, SHARED_NETWORK_NAME);
+        } catch (err) {
+          log.debug({ err, container: conflict.name }, 'Conflict network disconnect failed');
+        }
+
+        try {
           await this.docker.stopContainer(conflict.id);
         } catch (err) {
           log.debug({ err, container: conflict.name }, 'Conflict stop failed');
@@ -256,6 +280,12 @@ export class ContainerLifecycle {
         }
       }
       return;
+    }
+
+    try {
+      await this.docker.disconnectContainerFromNetwork(containerName, SHARED_NETWORK_NAME);
+    } catch (err) {
+      log.debug({ err, container: containerName }, 'Conflict network disconnect by name failed');
     }
 
     try {

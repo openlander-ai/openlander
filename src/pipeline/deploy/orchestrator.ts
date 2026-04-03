@@ -478,6 +478,7 @@ export async function runAndVerify(
     envVars,
     imageCmd: config.imageCmd,
     secretFiles: secretFilesMounts,
+    restartPolicy: { Name: 'unless-stopped' },
   });
   const { containerId, port, url: internalUrl } = runResult;
 

@@ -69,6 +69,7 @@ function createMockDocker(): Docker {
     listManagedContainers: vi.fn().mockResolvedValue([]),
     listAllContainers: vi.fn().mockResolvedValue([]),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     startContainer: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
@@ -144,6 +145,7 @@ describe('pipeline event golden snapshots', () => {
     vi.spyOn(gitPipeline, 'cloneRepo').mockResolvedValue({
       path: clonePath,
       commitSha: 'deadbeefcafebabe',
+      branch: 'main',
     });
     vi.spyOn(dockerfileGen, 'ensureDockerfile').mockReturnValue({
       generated: false,

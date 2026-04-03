@@ -18,6 +18,7 @@ function createMockDocker(): Docker {
     getLogs: vi.fn().mockResolvedValue(''),
     listAllContainers: vi.fn().mockResolvedValue([]),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     cleanupSecretFiles: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
@@ -42,6 +43,7 @@ describe('redeploy build_method persistence', () => {
     vi.spyOn(gitPipeline, 'cloneRepo').mockResolvedValue({
       path: clonePath,
       commitSha: 'deadbeefcafebabe',
+      branch: 'main',
     });
   });
 

@@ -44,6 +44,7 @@ export interface PreviewResult {
  * Runtime information for an active preview deployment.
  */
 export interface PreviewDeploy {
+  previewId: string;
   projectId: string;
   branch: string;
   containerId: string;
@@ -124,6 +125,7 @@ export class PreviewDeployer {
       const ttlMs = options.ttlMs ?? DEFAULT_PREVIEW_TTL_MS;
 
       const preview: PreviewDeploy = {
+        previewId,
         projectId,
         branch: options.branch,
         containerId,
@@ -192,7 +194,7 @@ export class PreviewDeployer {
     }
 
     try {
-      await this.docker.removeContainer(preview.containerId);
+      await this.docker.safeRemoveContainer(preview.containerId);
     } finally {
       this.previews.delete(key);
       this.previewIds.delete(key);

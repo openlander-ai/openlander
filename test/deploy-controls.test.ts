@@ -23,6 +23,7 @@ function createMockDocker(): Docker {
   return {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-new-123456'),
     startContainer: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
@@ -155,7 +156,7 @@ describe('DeployPipeline deploy controls', () => {
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-development-old',
     );
-    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-development-old',
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(

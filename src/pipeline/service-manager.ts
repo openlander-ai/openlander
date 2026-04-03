@@ -586,7 +586,7 @@ export class ServiceManager {
       }
     }
     try {
-      await this.docker.removeContainer(containerId);
+      await this.docker.safeRemoveContainer(containerId);
     } catch (error) {
       if (!this.isNotFoundError(error)) {
         throw error;

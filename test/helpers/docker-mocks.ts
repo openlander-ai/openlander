@@ -210,6 +210,7 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
     docker: {
       listAllContainers: vi.fn().mockResolvedValue(containers),
       removeContainer: vi.fn().mockResolvedValue(undefined),
+      safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
       startContainer: vi.fn(async (containerId: string) => {
         await getContainerControl(containerId).start();
       }),

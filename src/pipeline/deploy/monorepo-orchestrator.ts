@@ -297,7 +297,7 @@ export async function rollbackMonorepoService(
   if (project.container_id) {
     try {
       await deps.docker.stopContainer(project.container_id);
-      await deps.docker.removeContainer(project.container_id);
+      await deps.docker.safeRemoveContainer(project.container_id);
     } catch (error) {
       log.warn({ err: error, service: service.name }, 'Monorepo rollback container cleanup failed');
     }

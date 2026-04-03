@@ -9,7 +9,8 @@ export interface Notification {
     | 'dangling-images'
     | 'port-conflict'
     | 'container-crash'
-    | 'resource-saturation';
+    | 'resource-saturation'
+    | 'orphan-container';
   severity: 'warning' | 'critical';
   message: string;
   details: Record<string, unknown>;

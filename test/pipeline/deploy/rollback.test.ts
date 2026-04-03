@@ -13,6 +13,7 @@ function createMockDocker(): Docker {
   return {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     runContainer: vi.fn().mockResolvedValue('container-rollback-new'),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     listAllContainers: vi.fn().mockResolvedValue([]),
@@ -66,7 +67,7 @@ describe('RollbackExecutor', () => {
     expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-env-old',
     );
-    expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-env-old',
     );
     expect(docker.runContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(

@@ -596,7 +596,7 @@ export class ComposePipeline {
                 throw err;
               }
             }
-            await this.docker.removeContainer(child.container_id);
+            await this.docker.safeRemoveContainer(child.container_id);
           }
 
           // Hard delete intentional: orphaned compose children are not user-created projects and should not be archived.
@@ -720,7 +720,7 @@ export class ComposePipeline {
             }
 
             this.jobManager?.updatePhase(childId, 'starting');
-            await this.docker.removeContainer(containerName);
+            await this.docker.safeRemoveContainer(containerName);
 
             const parsedPort = this.resolveServicePortMapping(composeService);
             let hostPort = await allocatePort(
@@ -856,7 +856,7 @@ export class ComposePipeline {
                 throw error;
               }
             }
-            await this.docker.removeContainer(deployment.containerId);
+            await this.docker.safeRemoveContainer(deployment.containerId);
             releasePortReservation(deployment.port);
           } else if (containerName) {
             try {
@@ -867,7 +867,7 @@ export class ComposePipeline {
                 throw error;
               }
             }
-            await this.docker.removeContainer(containerName);
+            await this.docker.safeRemoveContainer(containerName);
           }
 
           if (childId) {
@@ -1021,7 +1021,7 @@ export class ComposePipeline {
           }
         }
         try {
-          await this.docker.removeContainer(deployment.containerId);
+          await this.docker.safeRemoveContainer(deployment.containerId);
         } catch (removeError) {
           log.debug(
             { err: removeError, serviceName },
@@ -1084,7 +1084,7 @@ export class ComposePipeline {
         }
 
         try {
-          await this.docker.removeContainer(child.container_id);
+          await this.docker.safeRemoveContainer(child.container_id);
         } catch (error) {
           log.debug(
             { err: error, childProjectId: child.id, containerId: child.container_id },

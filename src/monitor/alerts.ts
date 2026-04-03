@@ -50,6 +50,7 @@ export class AlertMonitor {
   private readonly alerts = new Map<string, Alert>();
   private readonly alertKeys = new Map<string, string>();
   private intervalId: ReturnType<typeof setInterval> | undefined;
+  private unsubscribeCrash?: () => void;
   private checking = false;
   private hourlyCounts: number[] = [];
   private lastAlertTime = 0;
@@ -71,6 +72,12 @@ export class AlertMonitor {
       void this.runChecks();
     }, interval);
 
+    this.unsubscribeCrash = this.events.on('deploy:failed', (payload) => {
+      if (payload.step === 'run') {
+        void this.handleRuntimeCrashEvent(payload.projectId, payload.error);
+      }
+    });
+
     void this.runChecks();
   }
 
@@ -81,6 +88,8 @@ export class AlertMonitor {
 
     clearInterval(this.intervalId);
     this.intervalId = undefined;
+    this.unsubscribeCrash?.();
+    this.unsubscribeCrash = undefined;
   }
 
   getActiveAlerts(): Alert[] {
@@ -413,6 +422,26 @@ export class AlertMonitor {
 
     void this.events.emit('alert:resolved', { alertId, type });
     log.info({ alertId, type }, 'Alert resolved');
+  }
+
+  private async handleRuntimeCrashEvent(projectId: string, error: string): Promise<void> {
+    const project = this.db.getProject(projectId);
+    if (!project?.container_id) return;
+
+    const key = `container-crash:${project.container_id}`;
+    const suggestion = `Check the container logs for errors using "get_logs ${project.name}" and investigate the root cause. The application may be crashing on startup.`;
+
+    await this.upsertAlert(key, {
+      type: 'container-crash',
+      severity: 'critical',
+      message: `${project.name} container crashed: ${error}`,
+      details: {
+        projectId: project.id,
+        projectName: project.name,
+        containerId: project.container_id,
+      },
+      suggestion,
+    });
   }
 
   private async checkContainerCrashes(): Promise<void> {

@@ -17,6 +17,8 @@ export interface RollbackResult {
   success: boolean;
   projectId: string;
   projectName: string;
+  previousImageTag?: string;
+  rollbackImageTag?: string;
   containerId?: string;
   url?: string;
   port?: number;
@@ -129,6 +131,8 @@ export class RollbackExecutor {
         success: true,
         projectId,
         projectName: project.name,
+        previousImageTag: currentImageTag,
+        rollbackImageTag,
         containerId,
         url: getProjectUrl(project.name),
         port,
@@ -188,7 +192,7 @@ export class RollbackExecutor {
 
     try {
       await this.docker.stopContainer(containerId);
-      await this.docker.removeContainer(containerId);
+      await this.docker.safeRemoveContainer(containerId);
     } catch (err) {
       log.warn({ err, containerId }, 'Container cleanup during rollback failed');
     }

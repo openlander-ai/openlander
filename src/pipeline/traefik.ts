@@ -278,7 +278,7 @@ export class TraefikManager {
 
   async stop(): Promise<void> {
     try {
-      await this.docker.removeContainer(this.containerName);
+      await this.docker.safeRemoveContainer(this.containerName);
     } catch (err) {
       log.warn({ err }, 'Failed to remove Traefik container — may already be removed');
     }

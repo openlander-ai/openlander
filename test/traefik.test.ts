@@ -270,12 +270,15 @@ describe('detectReverseProxy', () => {
 describe('switchToExternalMode', () => {
   let docker: Docker;
   let mockRemoveContainer: ReturnType<typeof vi.fn>;
+  let mockSafeRemoveContainer: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockRemoveContainer = vi.fn().mockResolvedValue(undefined);
+    mockSafeRemoveContainer = vi.fn().mockResolvedValue(undefined);
     docker = {
       removeContainer: mockRemoveContainer,
+      safeRemoveContainer: mockSafeRemoveContainer,
     } as unknown as Docker;
   });
 
@@ -286,15 +289,15 @@ describe('switchToExternalMode', () => {
   it('calls removeContainer for managed Traefik', async () => {
     await switchToExternalMode(docker, 'external-network');
 
-    expect(mockRemoveContainer).toHaveBeenCalledWith('traefik-ol');
+    expect(mockSafeRemoveContainer).toHaveBeenCalledWith('traefik-ol');
   });
 
   it('does not throw if container does not exist', async () => {
-    mockRemoveContainer.mockRejectedValue(new Error('container not found'));
+    mockSafeRemoveContainer.mockRejectedValue(new Error('container not found'));
 
     // Should complete without throwing (error is caught internally)
     await switchToExternalMode(docker, 'external-network');
-    expect(mockRemoveContainer).toHaveBeenCalledWith('traefik-ol');
+    expect(mockSafeRemoveContainer).toHaveBeenCalledWith('traefik-ol');
   });
 });
 

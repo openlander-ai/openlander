@@ -31,6 +31,7 @@ function createMockDocker(): Docker {
     waitForHealthy: vi.fn().mockResolvedValue({ healthy: true }),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     removeProjectNetwork: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue(''),
     getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
@@ -513,6 +514,7 @@ describe('ComposePipeline', () => {
         ...createMockDocker(),
         stopContainer: stopContainerMock,
         removeContainer: removeContainerMock,
+        safeRemoveContainer: removeContainerMock,
       } as unknown as Docker;
       pipeline = new ComposePipeline(docker, db, events);
 
@@ -586,6 +588,7 @@ describe('ComposePipeline', () => {
         ...createMockDocker(),
         stopContainer: stopContainerMock,
         removeContainer: removeContainerMock,
+        safeRemoveContainer: removeContainerMock,
       } as unknown as Docker;
       pipeline = new ComposePipeline(docker, db, events);
 
@@ -647,6 +650,7 @@ describe('ComposePipeline', () => {
           ...createMockDocker(),
           stopContainer: stopContainerMock,
           removeContainer: removeContainerMock,
+          safeRemoveContainer: removeContainerMock,
         } as unknown as Docker,
         db,
         events,
@@ -730,6 +734,7 @@ describe('ComposePipeline', () => {
       runComposeService: runComposeServiceMock,
       stopContainer: stopContainerMock,
       removeContainer: removeContainerMock,
+      safeRemoveContainer: removeContainerMock,
     } as unknown as Docker;
     pipeline = new ComposePipeline(docker, db, events);
 

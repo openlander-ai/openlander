@@ -111,6 +111,7 @@ export interface DeployResult {
   success: boolean;
   projectId: string;
   projectName: string;
+  previousImageTag?: string;
   containerId?: string;
   url?: string;
   publicUrl?: string;
@@ -265,7 +266,7 @@ export class DeployPipeline {
 
         log.info({ id: container.id, name: container.name }, 'Removing orphan container');
         try {
-          await this.docker.removeContainer(container.id);
+          await this.docker.safeRemoveContainer(container.id);
         } catch (err) {
           log.debug({ err, container: container.name }, 'Orphan container removal failed');
         }
@@ -676,7 +677,7 @@ export class DeployPipeline {
       }
 
       try {
-        await this.docker.removeContainer(environment.container_id);
+        await this.docker.safeRemoveContainer(environment.container_id);
       } catch {
         // container may already be removed
       }
@@ -700,6 +701,24 @@ export class DeployPipeline {
     let commitSha: string | undefined;
     let commitMessage: string | undefined;
     let imageTag = `openlander/${routeName}:latest`;
+    const previousTag = `openlander/${routeName}:previous`;
+    let preservedPreviousTag: string | null = null;
+    if (source !== 'image') {
+      const currentRunningTag = environment.image_tag ?? project.image_tag;
+      if (currentRunningTag && currentRunningTag !== previousTag) {
+        try {
+          await this.docker.tagImage(currentRunningTag, `openlander/${routeName}`, 'previous');
+          preservedPreviousTag = previousTag;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes('No such image') && !msg.includes('not found')) {
+            log.warn({ err, currentRunningTag }, 'Failed to preserve previous image for rollback');
+          }
+        }
+      } else if (currentRunningTag === previousTag) {
+        preservedPreviousTag = previousTag;
+      }
+    }
     let dockerfilePath: string | undefined;
     try {
       if (source === 'image') {
@@ -780,8 +799,8 @@ export class DeployPipeline {
         environmentType: environment.type,
         imageTag,
         dockerfilePath,
-        previousEnvironmentImageTag: environment.image_tag,
-        previousProjectImageTag: project.image_tag,
+        previousEnvironmentImageTag: preservedPreviousTag ?? environment.image_tag,
+        previousProjectImageTag: preservedPreviousTag ?? project.image_tag,
         shouldSyncProjectState: true,
         config: deployConfig,
         buildLog,
@@ -824,7 +843,7 @@ export class DeployPipeline {
 
       try {
         const containerName = projectContainerName(routeName);
-        await this.docker.removeContainer(containerName);
+        await this.docker.safeRemoveContainer(containerName);
         log.info({ projectId, containerName }, 'Cleaned up orphan container after failed deploy');
       } catch {
         // container may not exist — that's fine
@@ -997,7 +1016,7 @@ export class DeployPipeline {
       for (const child of legacyChildren) {
         if (child.container_id) {
           try {
-            await this.docker.removeContainer(child.container_id);
+            await this.docker.safeRemoveContainer(child.container_id);
           } catch {
             /* best effort */
           }
@@ -1220,9 +1239,33 @@ export class DeployPipeline {
       return this.blueGreenRedeploy(projectId, options);
     }
 
+    const redeployRouteName = getRouteName(project.name);
+    const redeployPreviousLabel = `openlander/${redeployRouteName}:previous`;
+    const currentRunningTag = project.image_tag;
+    let redeployPreviousTag: string | null = currentRunningTag;
+    if (project.source !== 'image' && currentRunningTag) {
+      if (currentRunningTag !== redeployPreviousLabel) {
+        try {
+          await this.docker.tagImage(
+            currentRunningTag,
+            `openlander/${redeployRouteName}`,
+            'previous',
+          );
+          redeployPreviousTag = redeployPreviousLabel;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes('No such image') && !msg.includes('not found')) {
+            log.warn({ err, currentRunningTag }, 'Failed to preserve previous image for rollback');
+          }
+        }
+      } else {
+        redeployPreviousTag = redeployPreviousLabel;
+      }
+    }
+
     await this.cleanupProjectContainers(projectId, 'remove');
 
-    this.db.updateProject(projectId, { previousImageTag: project.image_tag });
+    this.db.updateProject(projectId, { previousImageTag: redeployPreviousTag });
 
     const previousPort = project.assigned_port ?? undefined;
 
@@ -1237,6 +1280,7 @@ export class DeployPipeline {
         assignedPort: null,
         containerId: null,
         imageTag: null,
+        previousImageTag: redeployPreviousTag,
         status: 'idle',
       });
     }
@@ -1414,7 +1458,7 @@ export class DeployPipeline {
       buildLog += '[health] Passed\n';
 
       await this.docker.stopContainer(blueContainerId);
-      await this.docker.removeContainer(blueContainerId);
+      await this.docker.safeRemoveContainer(blueContainerId);
 
       const traefikLabels = buildTraefikLabels(projectName, containerPort, undefined, 'production');
       const promotedContainerId = await this.docker.runContainer({
@@ -1473,6 +1517,7 @@ export class DeployPipeline {
         success: true,
         projectId,
         projectName,
+        previousImageTag: project.image_tag ?? undefined,
         containerId: greenContainerId,
         url: projectUrl,
         port: newPort,
@@ -1585,7 +1630,7 @@ export class DeployPipeline {
     }
 
     try {
-      await this.docker.removeContainer(containerId);
+      await this.docker.safeRemoveContainer(containerId);
     } catch (err) {
       log.warn({ err }, 'Failed to remove green container during cleanup');
     }

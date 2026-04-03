@@ -16,11 +16,15 @@ function createMockDocker(): Docker {
     runContainer: vi.fn().mockResolvedValue('container-abc123'),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue('mock logs'),
     listContainers: vi.fn().mockResolvedValue([]),
     listAllContainers: vi.fn().mockResolvedValue([]),
+    listManagedContainers: vi.fn().mockResolvedValue([]),
     inspectContainer: vi.fn().mockResolvedValue(null),
     cleanupSecretFiles: vi.fn().mockResolvedValue(undefined),
+    tagImage: vi.fn().mockResolvedValue(undefined),
+    disconnectContainerFromNetwork: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }
 
@@ -56,6 +60,20 @@ describe('DeployPipeline — dockerfilePath persistence', () => {
   });
 
   describe('startDeploy() → createProject()', () => {
+    let deploySpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      deploySpy = vi.spyOn(pipeline, 'deploy').mockResolvedValue({
+        projectId: 'mock',
+        success: true,
+        projectName: 'mock',
+      });
+    });
+
+    afterEach(() => {
+      deploySpy.mockRestore();
+    });
+
     it('passes dockerfilePath to createProject when provided', async () => {
       const createProjectSpy = vi.spyOn(db, 'createProject');
 

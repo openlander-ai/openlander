@@ -39,7 +39,7 @@ export class ContainerRunner {
     );
 
     const containerName = projectContainerName(config.containerName ?? config.projectName);
-    await this.docker.removeContainer(containerName);
+    await this.docker.safeRemoveContainer(containerName);
 
     for (let attempt = 0; attempt < 2; attempt++) {
       const configuredContainerPort = config.containerPort;

@@ -17,6 +17,7 @@ function createMockDocker(): Docker {
     runContainer: vi.fn().mockResolvedValue('container-abc123'),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
+    safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     getLogs: vi.fn().mockResolvedValue('mock logs'),
     listContainers: vi.fn().mockResolvedValue([]),
     listAllContainers: vi.fn().mockResolvedValue([]),
@@ -282,7 +283,7 @@ describe('DeployPipeline — non-blocking deploy', () => {
       expect(result.children).toHaveLength(2);
       expect(result.children.some((child) => child.error?.includes('Rolled back'))).toBe(true);
       expect(docker.stopContainer).toHaveBeenCalled();
-      expect(docker.removeContainer).toHaveBeenCalled();
+      expect(docker.safeRemoveContainer).toHaveBeenCalled();
     });
   });
 });

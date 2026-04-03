@@ -36,6 +36,7 @@ function createMockPlatformActionContext(overrides?: {
   const listManagedContainers = vi.fn(async () => containers);
   const stopContainer = vi.fn(async (_id: string) => undefined);
   const removeContainer = vi.fn(async (_id: string) => undefined);
+  const safeRemoveContainer = vi.fn(async (_id: string) => undefined);
 
   const listProjects = vi.fn(() => projects);
   const getEnvironmentsByProject = vi.fn((projectId: string) => envMap[projectId] ?? []);
@@ -47,6 +48,7 @@ function createMockPlatformActionContext(overrides?: {
       listManagedContainers,
       stopContainer,
       removeContainer,
+      safeRemoveContainer,
       getClient: vi.fn(() => ({ getContainer })),
     },
     db: {
@@ -63,6 +65,7 @@ function createMockPlatformActionContext(overrides?: {
       listManagedContainers,
       stopContainer,
       removeContainer,
+      safeRemoveContainer,
       getContainer,
       inspect,
     },

@@ -48,6 +48,7 @@ const typeIcons: Record<Notification['type'], typeof AlertCircle> = {
   'inactive-project': Archive,
   'dangling-images': Container,
   'port-conflict': Network,
+  'orphan-container': Container,
 };
 
 const typeLabels: Record<Notification['type'], string> = {
@@ -58,6 +59,7 @@ const typeLabels: Record<Notification['type'], string> = {
   'inactive-project': 'Inactive Project',
   'dangling-images': 'Unused Images',
   'port-conflict': 'Port Conflict',
+  'orphan-container': 'Orphan Container',
 };
 
 /** Action suggestions by alert type */
@@ -73,6 +75,8 @@ function getActions(type: Notification['type']): Array<{ label: string; action: 
       return [{ label: 'Clean Up', action: 'cleanup_disk' }];
     case 'dangling-images':
       return [{ label: 'Clean Up', action: 'cleanup_images' }];
+    case 'orphan-container':
+      return [{ label: 'View Details', action: 'view_details' }];
     default:
       return [];
   }
@@ -120,8 +124,8 @@ export function NotificationCenter({
       {/* Notification list */}
       <div className="overflow-y-auto flex-1">
         {notifications.map((notification) => {
-          const config = severityConfig[notification.severity];
-          const TypeIcon = typeIcons[notification.type];
+          const config = severityConfig[notification.severity] ?? severityConfig.warning;
+          const TypeIcon = typeIcons[notification.type] ?? AlertCircle;
           const actions = getActions(notification.type);
 
           return (
