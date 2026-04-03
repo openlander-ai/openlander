@@ -226,4 +226,17 @@ CREATE TABLE IF NOT EXISTS auth (
   session_expires_at INTEGER,
   CHECK(id = 1)
 );
+
+CREATE TABLE IF NOT EXISTS project_dependencies (
+  id TEXT PRIMARY KEY NOT NULL,
+  source_project_id TEXT NOT NULL,
+  target_project_id TEXT,
+  target_service_id TEXT,
+  dependency_type TEXT NOT NULL DEFAULT 'custom' CHECK(dependency_type IN ('database', 'api', 'cache', 'queue', 'storage', 'custom')),
+  source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('auto', 'manual')),
+  created_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_project_dependencies_source ON project_dependencies(source_project_id);
+CREATE INDEX IF NOT EXISTS idx_project_dependencies_target_project ON project_dependencies(target_project_id);
+CREATE INDEX IF NOT EXISTS idx_project_dependencies_target_service ON project_dependencies(target_service_id);
 `;

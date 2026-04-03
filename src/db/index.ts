@@ -26,6 +26,7 @@ import { DeploymentPatternRepo } from './repos/deployment-pattern.repo.js';
 import { OpsIncidentRepo } from './repos/ops-incident.repo.js';
 import { OpsIncidentEventRepo } from './repos/ops-incident-event.repo.js';
 import { CircuitBreakerRepo } from './repos/circuit-breaker.repo.js';
+import { ProjectDependencyRepo } from './repos/project-dependency.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 
@@ -75,6 +76,7 @@ export class Database implements AuthDatabase {
    private readonly opsIncidentRepo: OpsIncidentRepo;
    private readonly opsIncidentEventRepo: OpsIncidentEventRepo;
    private readonly circuitBreakerRepo: CircuitBreakerRepo;
+   private readonly projectDependencyRepo: ProjectDependencyRepo;
 
    constructor(dbPath: string) {
       mkdirSync(dirname(dbPath), { recursive: true });
@@ -104,6 +106,7 @@ export class Database implements AuthDatabase {
        this.opsIncidentRepo = new OpsIncidentRepo(this.db, this.sqlite);
        this.opsIncidentEventRepo = new OpsIncidentEventRepo(this.db, this.sqlite);
        this.circuitBreakerRepo = new CircuitBreakerRepo(this.db, this.sqlite);
+       this.projectDependencyRepo = new ProjectDependencyRepo(this.db, this.sqlite);
        this.actionRunRepo.markStaleAsFailedOnStartup();
      }
 
@@ -239,7 +242,15 @@ export class Database implements AuthDatabase {
      halfOpenCircuitBreaker(projectId: string) { this.circuitBreakerRepo.halfOpen(projectId); }
      resetCircuitBreaker(projectId: string) { this.circuitBreakerRepo.reset(projectId); }
       findAllOpenCircuitBreakers() { return this.circuitBreakerRepo.findAllOpen(); }
-      isCircuitBreakerOpen(projectId: string) { return this.circuitBreakerRepo.isOpen(projectId); }
+      listAllCircuitBreakers() { return this.circuitBreakerRepo.findAll(); }
+       isCircuitBreakerOpen(projectId: string) { return this.circuitBreakerRepo.isOpen(projectId); }
+       createProjectDependency(data: Parameters<ProjectDependencyRepo['create']>[0]) { return this.projectDependencyRepo.create(data); }
+       findDependenciesByProject(projectId: string) { return this.projectDependencyRepo.findByProject(projectId); }
+       findProjectDependents(targetProjectId?: string, targetServiceId?: string) { return this.projectDependencyRepo.findDependents(targetProjectId, targetServiceId); }
+       findAllProjectDependencies() { return this.projectDependencyRepo.findAll(); }
+       deleteProjectDependency(id: string) { this.projectDependencyRepo.delete(id); }
+       deleteProjectDependenciesByProject(projectId: string) { this.projectDependencyRepo.deleteByProject(projectId); }
+       syncDependenciesFromServiceConnections(serviceConnections: Parameters<ProjectDependencyRepo['syncFromServiceConnections']>[0]) { this.projectDependencyRepo.syncFromServiceConnections(serviceConnections); }
      transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
      close() { this.sqlite.close(); }
 }
