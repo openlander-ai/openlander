@@ -102,6 +102,39 @@ export const volumeToolDefs: ToolDef[] = [
         }
       }
 
+      // Check for duplicate mount_path within the same project
+      try {
+        const labels = [
+          `${DOCKER_LABELS.MANAGED}=true`,
+          `${DOCKER_LABELS.ROLE}=volume`,
+          `${DOCKER_LABELS.PROJECT}=${projectName}`,
+        ];
+        const result = await client.listVolumes({ filters: { label: labels } });
+        const existingVolumes = Array.isArray(result.Volumes) ? result.Volumes : [];
+
+        for (const volumeInfo of existingVolumes) {
+          const volumeLabels = getLabels(volumeInfo);
+          const existingMountPath = volumeLabels[DOCKER_LABELS.MOUNT_PATH];
+          if (existingMountPath === mountPath) {
+            const existingVolumeName = volumeLabels[DOCKER_LABELS.VOLUME] ?? 'unknown';
+            throw new Error(
+              `Mount path "${mountPath}" is already in use by volume "${existingVolumeName}" in project "${projectName}". Each volume must have a unique mount path.`,
+            );
+          }
+        }
+      } catch (error) {
+        const message = getErrorMessage(error);
+        // Re-throw our validation error or Docker errors
+        if (message.includes('Mount path') || message.includes('already in use')) {
+          throw error;
+        }
+        // Log Docker list errors but don't block creation
+        log.warn(
+          { err: error, project: projectName },
+          'Failed to check existing volumes for mount_path duplicates',
+        );
+      }
+
       try {
         await client.createVolume({
           Name: dockerVolumeName,

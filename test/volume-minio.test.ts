@@ -374,6 +374,34 @@ describe('MCP volume and bucket tools', () => {
     ).rejects.toThrow('already exists for project "myapp"');
   });
 
+  it('add_volume rejects duplicate mount_path within same project', async () => {
+    const { ctx, dockerClient } = createMockContext();
+    const addVolumeTool = getMcpTool(ctx, 'add_volume');
+
+    dockerClient.listVolumes.mockResolvedValueOnce({
+      Volumes: [
+        {
+          Name: 'ol-vol-myapp-data-a',
+          Labels: {
+            'openlander.managed': 'true',
+            'openlander.role': 'volume',
+            'openlander.project': 'myapp',
+            'openlander.volume': 'data-a',
+            'openlander.mount_path': '/app/data',
+          },
+        },
+      ],
+    });
+
+    await expect(
+      addVolumeTool.execute({
+        project_name: 'myapp',
+        volume_name: 'data-b',
+        mount_path: '/app/data',
+      }),
+    ).rejects.toThrow('Mount path "/app/data" is already in use by volume "data-a"');
+  });
+
   it('list_volumes maps labels and remove_volume rejects unmanaged then succeeds for managed volume', async () => {
     const { ctx, dockerClient } = createMockContext();
     const listVolumesTool = getMcpTool(ctx, 'list_volumes');
