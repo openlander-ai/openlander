@@ -164,7 +164,7 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     expect(safeRemoveContainerMock.mock.invocationCallOrder[removeGreenCallIndex]).toBeLessThan(
       promotedRunOrder,
     );
-    expect(healthCheckSpy).toHaveBeenNthCalledWith(2, 12001, '/', 3, 1000);
+    expect(healthCheckSpy).toHaveBeenNthCalledWith(2, 12001, '/', 10, 2000);
     expect(runContainerMock).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ name: 'ol-demo-app-promoted' }),

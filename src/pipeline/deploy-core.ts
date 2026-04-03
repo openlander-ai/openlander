@@ -1534,7 +1534,7 @@ export class DeployPipeline {
         secretFiles,
       });
 
-      const promotedHealthy = await this.healthCheck(newPort, healthCheckPath, 3, 1_000);
+      const promotedHealthy = await this.healthCheck(newPort, healthCheckPath, 10, 2_000);
       if (!promotedHealthy) {
         await this.docker.safeRemoveContainer(promotedContainerId);
         throw new Error('Promoted container failed health check after blue-green promotion');
