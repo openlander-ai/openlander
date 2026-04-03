@@ -20,8 +20,32 @@ type EnvLike = {
   ) => Array<{ filename: string; content: string; mountPath: string }>;
 };
 
-function createMockDocker(): Docker {
-  return {
+type DockerMockControls = {
+  promotedRenameMock: ReturnType<typeof vi.fn>;
+  blueInspectMock: ReturnType<typeof vi.fn>;
+  blueRestartMock: ReturnType<typeof vi.fn>;
+};
+
+function createMockDocker(options?: { blueRunning?: boolean }): {
+  docker: Docker;
+  controls: DockerMockControls;
+} {
+  const promotedRenameMock = vi.fn().mockResolvedValue(undefined);
+  const blueInspectMock = vi
+    .fn()
+    .mockResolvedValue({ State: { Running: options?.blueRunning ?? true } });
+  const blueRestartMock = vi.fn().mockResolvedValue(undefined);
+
+  const promotedContainer = {
+    rename: promotedRenameMock,
+  };
+
+  const blueContainer = {
+    inspect: blueInspectMock,
+    restart: blueRestartMock,
+  };
+
+  const docker = {
     buildImage: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     runContainer: vi
@@ -31,11 +55,28 @@ function createMockDocker(): Docker {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
     getClient: vi.fn().mockReturnValue({
-      getContainer: vi.fn().mockReturnValue({
-        inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
+      getContainer: vi.fn().mockImplementation((containerId: string) => {
+        if (containerId === 'container-blue') {
+          return blueContainer;
+        }
+        if (containerId === 'container-promoted') {
+          return promotedContainer;
+        }
+        return {
+          inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
+        };
       }),
     }),
   } as unknown as Docker;
+
+  return {
+    docker,
+    controls: {
+      promotedRenameMock,
+      blueInspectMock,
+      blueRestartMock,
+    },
+  };
 }
 
 describe('BUG-003: blue-green promotion avoids port conflicts', () => {
@@ -43,6 +84,7 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
   let clonePath: string;
   let db: Database;
   let docker: Docker;
+  let dockerControls: DockerMockControls;
   let env: EnvLike;
   let pipeline: DeployPipeline;
   const testConfig = { ai: { secretScan: { enabled: false } } } as OpenLanderConfig;
@@ -55,7 +97,9 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     writeFileSync(join(clonePath, 'Dockerfile'), 'FROM node:20\nEXPOSE 3000\n', 'utf8');
 
     db = new Database(join(tmpDir, 'test.db'));
-    docker = createMockDocker();
+    const mockDocker = createMockDocker();
+    docker = mockDocker.docker;
+    dockerControls = mockDocker.controls;
     env = {
       getGlobalSecrets: vi.fn().mockReturnValue({}),
       getAll: vi.fn().mockReturnValue({}),
@@ -121,6 +165,11 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
       promotedRunOrder,
     );
     expect(healthCheckSpy).toHaveBeenNthCalledWith(2, 12001, '/', 3, 1000);
+    expect(runContainerMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ name: 'ol-demo-app-promoted' }),
+    );
+    expect(dockerControls.promotedRenameMock).toHaveBeenCalledWith({ name: 'ol-demo-app' });
   });
 
   it('keeps blue running when promoted container fails post-promotion health check', async () => {
@@ -144,5 +193,25 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-promoted',
     );
+    expect(dockerControls.promotedRenameMock).not.toHaveBeenCalled();
+  });
+
+  it('tries to restart blue when promoted container fails and blue is not running', async () => {
+    const mockDocker = createMockDocker({ blueRunning: false });
+    docker = mockDocker.docker;
+    dockerControls = mockDocker.controls;
+    pipeline = new DeployPipeline(docker, db, env as never, testConfig);
+
+    vi.spyOn(pipeline as unknown as { healthCheck: () => Promise<boolean> }, 'healthCheck')
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const result = await pipeline.redeploy('p1', { strategy: 'blue-green' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('previous version still serving');
+    expect(dockerControls.blueInspectMock).toHaveBeenCalled();
+    expect(dockerControls.blueRestartMock).toHaveBeenCalledTimes(1);
+    expect(dockerControls.promotedRenameMock).not.toHaveBeenCalled();
   });
 });

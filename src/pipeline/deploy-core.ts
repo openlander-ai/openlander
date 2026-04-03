@@ -1525,7 +1525,7 @@ export class DeployPipeline {
       const traefikLabels = buildTraefikLabels(projectName, containerPort, undefined, 'production');
       const promotedContainerId = await this.docker.runContainer({
         imageTag,
-        name: projectContainerName(projectName),
+        name: projectContainerName(`${projectName}-promoted`),
         port: newPort,
         containerPort,
         envVars,
@@ -1542,6 +1542,10 @@ export class DeployPipeline {
 
       await this.docker.stopContainer(blueContainerId);
       await this.docker.safeRemoveContainer(blueContainerId);
+
+      const promotedContainer = this.docker.getClient().getContainer(promotedContainerId);
+      await promotedContainer.rename({ name: projectContainerName(projectName) });
+
       greenContainerId = promotedContainerId;
 
       this.db.updateProject(projectId, {
@@ -1605,6 +1609,17 @@ export class DeployPipeline {
           blueStillServing = info.State.Running;
         } catch {
           blueStillServing = false;
+        }
+      }
+
+      if (!blueStillServing && blueContainerId) {
+        try {
+          const blueContainer = this.docker.getClient().getContainer(blueContainerId);
+          await blueContainer.restart();
+          blueStillServing = true;
+          buildLog += '[recovery] Restarted blue container after failed promotion\n';
+        } catch (restartErr) {
+          buildLog += `[recovery] Failed to restart blue: ${String(restartErr)}\n`;
         }
       }
 
