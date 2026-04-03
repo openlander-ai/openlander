@@ -1518,8 +1518,8 @@ export class DeployPipeline {
       }
       buildLog += '[health] Passed\n';
 
-      await this.docker.stopContainer(blueContainerId);
-      await this.docker.safeRemoveContainer(blueContainerId);
+      await this.cleanupGreenContainer(greenContainerId);
+      shouldCleanupGreen = false;
 
       const traefikLabels = buildTraefikLabels(projectName, containerPort, undefined, 'production');
       const promotedContainerId = await this.docker.runContainer({
@@ -1532,8 +1532,15 @@ export class DeployPipeline {
         network: networkName,
         secretFiles,
       });
-      await this.cleanupGreenContainer(greenContainerId);
-      shouldCleanupGreen = false;
+
+      const promotedHealthy = await this.healthCheck(newPort, healthCheckPath, 3, 1_000);
+      if (!promotedHealthy) {
+        await this.docker.safeRemoveContainer(promotedContainerId);
+        throw new Error('Promoted container failed health check after blue-green promotion');
+      }
+
+      await this.docker.stopContainer(blueContainerId);
+      await this.docker.safeRemoveContainer(blueContainerId);
       greenContainerId = promotedContainerId;
 
       this.db.updateProject(projectId, {
