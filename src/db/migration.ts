@@ -549,7 +549,7 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   sqlite.exec(`CREATE TABLE IF NOT EXISTS ops_incident_events (
     id TEXT PRIMARY KEY,
     incident_id TEXT NOT NULL,
-    event_type TEXT NOT NULL CHECK(event_type IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted')),
+    event_type TEXT NOT NULL CHECK(event_type IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted', 'cascade_detected')),
     description TEXT NOT NULL,
     metadata TEXT,
     created_at INTEGER NOT NULL
@@ -557,6 +557,34 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_ops_incident_events_incident ON ops_incident_events(incident_id)',
   );
+
+  // Migrate ops_incident_events to add cascade_detected event type (for existing DBs)
+  const opsIncidentEventsTableInfo = sqlite
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ops_incident_events'")
+    .get() as { sql: string | null } | undefined;
+  const needsCascadeDetectedMigration =
+    typeof opsIncidentEventsTableInfo?.sql === 'string' &&
+    opsIncidentEventsTableInfo.sql.includes("'interrupted'") &&
+    !opsIncidentEventsTableInfo.sql.includes("'cascade_detected'");
+
+  if (needsCascadeDetectedMigration) {
+    sqlite.exec(`CREATE TABLE ops_incident_events_migrated (
+      id TEXT PRIMARY KEY,
+      incident_id TEXT NOT NULL,
+      event_type TEXT NOT NULL CHECK(event_type IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted', 'cascade_detected')),
+      description TEXT NOT NULL,
+      metadata TEXT,
+      created_at INTEGER NOT NULL
+    )`);
+    sqlite.exec(
+      'INSERT INTO ops_incident_events_migrated SELECT id, incident_id, event_type, description, metadata, created_at FROM ops_incident_events',
+    );
+    sqlite.exec('DROP TABLE ops_incident_events');
+    sqlite.exec('ALTER TABLE ops_incident_events_migrated RENAME TO ops_incident_events');
+    sqlite.exec(
+      'CREATE INDEX IF NOT EXISTS idx_ops_incident_events_incident ON ops_incident_events(incident_id)',
+    );
+  }
 
   // circuit_breaker_state table (v1.0.0-ops)
   sqlite.exec(`CREATE TABLE IF NOT EXISTS circuit_breaker_state (
