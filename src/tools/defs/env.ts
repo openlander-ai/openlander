@@ -40,8 +40,8 @@ export const envToolDefs: ToolDef[] = [
       const project = getProjectByName(appCtx, projectName);
       const prodEnvId = getProductionEnvironmentId(appCtx, project.id);
       const vars = prodEnvId
-        ? appCtx.env.getAllWithInheritance(project.id, prodEnvId)
-        : appCtx.env.getAll(project.id);
+        ? appCtx.env.getAllMasked(project.id, prodEnvId)
+        : appCtx.env.getAllMasked(project.id);
       return Promise.resolve({ variables: vars, count: Object.keys(vars).length });
     },
   },
