@@ -30,7 +30,8 @@ export class OpsIncidentEventRepo {
           | 'recovered'
           | 'escalated'
           | 'alert_sent'
-          | 'interrupted',
+          | 'interrupted'
+          | 'cascade_detected',
         description: data.description,
         metadata: data.metadata ?? null,
         created_at: Date.now(),

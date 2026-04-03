@@ -265,7 +265,8 @@ export interface OpsIncidentEventRow {
     | 'recovered'
     | 'escalated'
     | 'alert_sent'
-    | 'interrupted';
+    | 'interrupted'
+    | 'cascade_detected';
   description: string;
   metadata: string | null;
   created_at: number;

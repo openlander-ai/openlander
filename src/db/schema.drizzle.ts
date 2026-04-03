@@ -515,6 +515,7 @@ export const opsIncidentEvents = sqliteTable(
         'escalated',
         'alert_sent',
         'interrupted',
+        'cascade_detected',
       ],
     }).notNull(),
     description: text('description').notNull(),
@@ -524,7 +525,7 @@ export const opsIncidentEvents = sqliteTable(
   (table) => [
     check(
       'ops_incident_events_type_check',
-      sql`${table.event_type} IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted')`,
+      sql`${table.event_type} IN ('detected', 'diagnosed', 'action_taken', 'recovered', 'escalated', 'alert_sent', 'interrupted', 'cascade_detected')`,
     ),
     index('idx_ops_incident_events_incident').on(table.incident_id),
   ],

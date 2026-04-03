@@ -43,6 +43,22 @@ export class IncidentManager {
       `Incident detected: ${trigger.type}${trigger.details ? ` — ${trigger.details}` : ''}`,
     );
 
+    // Cascade detection: find dependent projects
+    try {
+      const dependents = this.ctx.db.findProjectDependents(projectId, undefined);
+      if (dependents.length > 0) {
+        const affectedProjectIds = dependents.map((d) => d.source_project_id);
+        this.addEvent(
+          incident.id,
+          'cascade_detected',
+          `${String(dependents.length)} dependent project(s) may be affected`,
+          { affected_project_ids: affectedProjectIds },
+        );
+      }
+    } catch {
+      // cascade detection is best-effort
+    }
+
     log.info({ incidentId: incident.id, projectId, triggerType: trigger.type }, 'Incident opened');
     return incident;
   }
