@@ -769,6 +769,13 @@ export class PlanEngine {
       throw new Error(`Plan status is "${freshPlan.status}" — only "ready" plans can be executed.`);
     }
 
+    const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+    if (!PROJECT_NAME_REGEX.test(freshPlan.app.name)) {
+      throw new Error(
+        `Invalid project name "${freshPlan.app.name}": must contain only lowercase letters, numbers, and hyphens, starting with a letter or number`,
+      );
+    }
+
     const plan = freshPlan;
 
     const existingProject = this.db.getProjectByName(plan.app.name);

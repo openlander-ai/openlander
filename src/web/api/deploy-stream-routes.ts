@@ -107,6 +107,18 @@ export function createDeployStreamRoutes(ctx: AppContext): Hono {
           ? extractProjectName(repoUrl)
           : 'unknown');
 
+    const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+    if (projectName && !PROJECT_NAME_REGEX.test(projectName)) {
+      return c.json(
+        {
+          error: 'INVALID_PROJECT_NAME',
+          message:
+            'Project name must contain only lowercase letters, numbers, and hyphens, starting with a letter or number',
+        },
+        400,
+      );
+    }
+
     try {
       await preflightCheckOrThrow(ctx.db, ctx.docker, projectName);
     } catch (err) {
