@@ -551,6 +551,23 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       autoInjectedEnvKeys: JSON.stringify(injectedKeys),
     });
 
+    // Auto-sync dependency
+    try {
+      ctx.db.createProjectDependency({
+        source_project_id: project.id,
+        target_service_id: serviceId,
+        dependency_type:
+          service.type === 'postgres' || service.type === 'mysql'
+            ? 'database'
+            : service.type === 'redis'
+              ? 'cache'
+              : 'custom',
+        source: 'auto',
+      });
+    } catch {
+      // dependency sync is best-effort, don't fail the connection creation
+    }
+
     return c.json(
       {
         id: connection.id,
@@ -593,6 +610,17 @@ export function createProjectRoutes(ctx: AppContext): Hono {
     });
 
     ctx.db.deleteServiceConnectionByProjectAndService(project.id, serviceId);
+
+    // Auto-remove dependency
+    try {
+      const deps = ctx.db.findDependenciesByProject(project.id);
+      const matchingDep = deps.find(
+        (d) => d.target_service_id === serviceId && d.source === 'auto',
+      );
+      if (matchingDep) ctx.db.deleteProjectDependency(matchingDep.id);
+    } catch {
+      // dependency cleanup is best-effort
+    }
 
     return c.json({ message: 'Service disconnected', serviceId });
   });
