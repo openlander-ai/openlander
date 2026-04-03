@@ -16,7 +16,7 @@ const enableWebhookTool: ToolDef = {
   name: 'enable_webhook',
   riskLevel: 'medium',
   description:
-    'Enable automatic deploys via webhook for a git provider (GitHub, GitLab, or Bitbucket). When enabled, pushing to the configured branch triggers a redeploy. Returns { id, source, secret, enabled, branchFilter, webhookPath }. The webhookPath is relative - combine with your OpenLander host URL to get the full webhook URL for configuring in your git provider. Errors: PROJECT_NOT_FOUND.',
+    'Enable automatic deploys via webhook for a git provider (GitHub, GitLab, or Bitbucket). When enabled, pushing to the configured branch triggers a redeploy. Returns { id, source, secret, enabled, branchFilter, webhookPath, reused }. The webhookPath is relative - combine with your OpenLander host URL to get the full webhook URL for configuring in your git provider. Errors: PROJECT_NOT_FOUND.',
   mcpDescription: 'Configure an auto-deploy webhook for GitHub, GitLab, or Bitbucket.',
   inputSchema: enableWebhookSchema,
   execute: (args, { appCtx }) => {
@@ -24,17 +24,34 @@ const enableWebhookTool: ToolDef = {
     const source = args['source'] as 'github' | 'gitlab' | 'bitbucket';
     const branchFilter = args['branch_filter'] as string | undefined;
     const project = getProjectByName(appCtx, projectName);
-    const id = nanoid(12);
-    const secret = appCtx.webhookManager.generateSecret(project.id);
 
-    appCtx.db.setWebhookConfig({
-      id,
-      projectId: project.id,
-      source,
-      secret,
-      branchFilter,
-      enabled: true,
-    });
+    // Check if webhook config already exists for this project and source
+    const existingConfigs = appCtx.db.getWebhookConfigs(project.id);
+    const existingConfig = existingConfigs.find((config) => config.source === source);
+
+    let id: string;
+    let secret: string;
+    let reused = false;
+
+    if (existingConfig && existingConfig.enabled === 0) {
+      // Reuse existing disabled webhook
+      id = existingConfig.id;
+      secret = existingConfig.secret;
+      reused = true;
+      appCtx.db.setWebhookEnabled(id, true);
+    } else {
+      // Generate new webhook credentials
+      id = nanoid(12);
+      secret = appCtx.webhookManager.generateSecret(project.id);
+      appCtx.db.setWebhookConfig({
+        id,
+        projectId: project.id,
+        source,
+        secret,
+        branchFilter,
+        enabled: true,
+      });
+    }
 
     return {
       id,
@@ -43,11 +60,17 @@ const enableWebhookTool: ToolDef = {
       enabled: true,
       branchFilter: branchFilter ?? 'main',
       webhookPath: `/api/webhooks/${project.id}/${source}`,
+      reused,
       _agent_guidance: {
-        next_steps: [
-          'Configure this webhook URL and secret in git provider settings (GitHub → Settings → Webhooks)',
-          'Call get_webhook_config to verify webhook setup is correct.',
-        ],
+        next_steps: reused
+          ? [
+              'Your existing GitHub webhook settings are still valid - no need to reconfigure in git provider',
+              'Call get_webhook_config to verify webhook setup is correct.',
+            ]
+          : [
+              'Configure this webhook URL and secret in git provider settings (GitHub → Settings → Webhooks)',
+              'Call get_webhook_config to verify webhook setup is correct.',
+            ],
       },
     };
   },

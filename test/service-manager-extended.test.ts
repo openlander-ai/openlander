@@ -40,11 +40,16 @@ function createService(partial: Partial<ServiceRow>): ServiceRow {
   };
 }
 
-function createDbMock(services: ServiceRow[]): Database {
+function createDbMock(
+  services: ServiceRow[],
+  projects: Array<{ id: string; name: string }> = [],
+): Database {
   const byId = new Map(services.map((svc) => [svc.id, svc]));
   return {
     getService: vi.fn((id: string) => byId.get(id) ?? null),
     listServices: vi.fn(() => Array.from(byId.values())),
+    listProjects: vi.fn(() => projects),
+    getEnvVars: vi.fn(() => ({})),
     updateService: vi.fn(
       (id: string, updates: { status?: ServiceRow['status']; containerId?: string | null }) => {
         const current = byId.get(id);
@@ -59,6 +64,9 @@ function createDbMock(services: ServiceRow[]): Database {
         });
       },
     ),
+    deleteService: vi.fn((id: string) => {
+      byId.delete(id);
+    }),
   } as unknown as Database;
 }
 
@@ -497,5 +505,59 @@ describe('ServiceManager reconciliation behavior', () => {
       containerId: 'svc-daemon-2-container',
     });
     expect(list.map((service) => service.status)).toEqual(['error', 'error']);
+  });
+});
+
+describe('ServiceManager remove with connected projects warning', () => {
+  it('remove() returns warning when service has connected projects', async () => {
+    const service = createService({
+      id: 'svc-pg',
+      name: 'shared-pg',
+      container_name: 'ol-svc-shared-pg',
+    });
+    const projects = [
+      { id: 'proj-1', name: 'my-app' },
+      { id: 'proj-2', name: 'api-server' },
+    ];
+    const db = createDbMock([service], projects);
+    vi.mocked(db.getEnvVars).mockImplementation((projectId: string) => {
+      if (projectId === 'proj-1') {
+        return { DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' };
+      }
+      if (projectId === 'proj-2') {
+        return { DB_HOST: 'ol-svc-shared-pg' };
+      }
+      return {};
+    });
+
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    const result = await manager.remove('svc-pg');
+
+    expect(result.warning).toBeDefined();
+    expect(result.warning).toContain('shared-pg');
+    expect(result.warning).toContain('2');
+    expect(result.warning).toContain('my-app');
+    expect(result.warning).toContain('api-server');
+    expect(result.connected_projects).toEqual(projects);
+    expect(db.deleteService).toHaveBeenCalledWith('svc-pg');
+  });
+
+  it('remove() returns no warning when service has no connected projects', async () => {
+    const service = createService({
+      id: 'svc-redis',
+      name: 'shared-redis',
+      container_name: 'ol-svc-shared-redis',
+    });
+    const db = createDbMock([service], []);
+    const dockerHarness = createMockDockerHarness();
+    const manager = new ServiceManager(dockerHarness.docker, db);
+
+    const result = await manager.remove('svc-redis');
+
+    expect(result.warning).toBeUndefined();
+    expect(result.connected_projects).toBeUndefined();
+    expect(db.deleteService).toHaveBeenCalledWith('svc-redis');
   });
 });

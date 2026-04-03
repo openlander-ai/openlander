@@ -400,18 +400,19 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'remove_service',
     riskLevel: 'high',
     description:
-      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. Returns { status, service, warning }. Errors: SERVICE_NOT_FOUND.',
+      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. Returns { status, service, warning, connected_projects }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Remove a service container and volume. Data is permanently deleted.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
       const service = await getServiceByName(appCtx, serviceName);
       const serviceType = service.type;
-      await appCtx.serviceManager.remove(service.id);
+      const result = await appCtx.serviceManager.remove(service.id);
       return {
         status: 'removed',
         service: serviceName,
         warning: `All persistent data for ${serviceType} service "${serviceName}" has been permanently deleted. This cannot be undone. If you needed the data, it is now lost. Use backup_service before remove_service in the future.`,
+        ...(result.connected_projects && { connected_projects: result.connected_projects }),
       };
     },
     targets: ['mcp'],

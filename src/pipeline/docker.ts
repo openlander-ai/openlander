@@ -99,6 +99,8 @@ export interface BuildImageOptions {
   target?: string;
   dockerfile?: string;
   onProgress?: (event: { stream?: string; error?: string }) => void;
+  /** When provided, the build stream is tracked in activeBuilds so it can be cancelled via cancelBuild(). */
+  projectId?: string;
 }
 
 export interface BuildComposeServiceOptions {

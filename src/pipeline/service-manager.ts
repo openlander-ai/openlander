@@ -575,10 +575,21 @@ export class ServiceManager {
     this.invalidateServiceCardSummaryCache();
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(
+    id: string,
+  ): Promise<{ warning?: string; connected_projects?: Array<{ id: string; name: string }> }> {
     const service = this.db.getService(id);
     if (!service) {
       throw new Error(`Service not found: ${id}`);
+    }
+
+    // Check for connected projects before deletion
+    const connectedProjects = this.getConnectedProjects(id);
+    let warning: string | undefined;
+    if (connectedProjects.length > 0) {
+      const projectNames = connectedProjects.map((p) => p.name).join(', ');
+      const count = String(connectedProjects.length);
+      warning = `Service "${service.name}" is connected to ${count} project(s): ${projectNames}. These projects may fail to start if they depend on this service.`;
     }
 
     const containerId = service.container_id ?? service.container_name;
@@ -609,6 +620,11 @@ export class ServiceManager {
 
     this.db.deleteService(id);
     this.invalidateServiceCardSummaryCache();
+
+    return {
+      ...(warning && { warning }),
+      ...(connectedProjects.length > 0 && { connected_projects: connectedProjects }),
+    };
   }
 
   async backup(id: string): Promise<{ backupId: string; path: string; size: number }> {

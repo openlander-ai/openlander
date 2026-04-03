@@ -35,7 +35,7 @@ function createMockContext(services: ServiceRow[] = []) {
     list: vi.fn(async () => services),
     start: vi.fn(async () => undefined),
     stop: vi.fn(async () => undefined),
-    remove: vi.fn(async () => undefined),
+    remove: vi.fn(async () => ({})),
     createDatabase: vi.fn(),
     createUser: vi.fn(),
     getSuggestedEnv: vi.fn(() => []),
