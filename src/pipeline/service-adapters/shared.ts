@@ -4,11 +4,20 @@ import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
 import type { ContainerExecResult, ServiceCredentials } from './types.js';
 
+const DEFAULT_EXEC_TIMEOUT_MS = 60_000;
+const DEFAULT_MAX_OUTPUT_BYTES = 1_024 * 1_024; // 1 MB
+
+export interface ExecOptions {
+  throwOnNonZeroExit?: boolean;
+  timeoutMs?: number;
+  maxOutputBytes?: number;
+}
+
 export async function execInServiceContainer(
   docker: Docker,
   service: ServiceRow,
   command: string[],
-  options?: { throwOnNonZeroExit?: boolean },
+  options?: ExecOptions,
 ): Promise<ContainerExecResult> {
   const client = docker.getClient();
   const containerId = service.container_id ?? service.container_name;
@@ -21,25 +30,60 @@ export async function execInServiceContainer(
     Tty: false,
   });
 
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS;
+  const maxBytes = options?.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+
   const stream = await exec.start({ hijack: false, stdin: false });
   const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
+  const state = { stdoutSize: 0, stderrSize: 0, truncated: false, timedOut: false };
   const stdoutStream = new PassThrough();
   const stderrStream = new PassThrough();
 
   stdoutStream.on('data', (chunk: Buffer) => {
-    stdoutChunks.push(chunk);
+    if (state.stdoutSize < maxBytes) {
+      const remaining = maxBytes - state.stdoutSize;
+      stdoutChunks.push(remaining >= chunk.length ? chunk : chunk.subarray(0, remaining));
+    } else {
+      state.truncated = true;
+    }
+    state.stdoutSize += chunk.length;
   });
   stderrStream.on('data', (chunk: Buffer) => {
-    stderrChunks.push(chunk);
+    if (state.stderrSize < maxBytes) {
+      const remaining = maxBytes - state.stderrSize;
+      stderrChunks.push(remaining >= chunk.length ? chunk : chunk.subarray(0, remaining));
+    } else {
+      state.truncated = true;
+    }
+    state.stderrSize += chunk.length;
   });
 
   client.modem.demuxStream(stream, stdoutStream, stderrStream);
 
-  await new Promise<void>((resolve, reject) => {
+  const streamDone = new Promise<void>((resolve, reject) => {
     stream.on('error', reject);
     stream.on('end', resolve);
   });
+
+  const timer = setTimeout(() => {
+    state.timedOut = true;
+    stream.destroy();
+  }, timeoutMs);
+
+  try {
+    await streamDone;
+  } catch {
+    if (!state.timedOut) throw new Error(`Exec stream error for service: ${service.id}`);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (state.timedOut) {
+    const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+    const stderr = Buffer.concat(stderrChunks).toString('utf8');
+    return { stdout, stderr, exitCode: -1, truncated: true };
+  }
 
   const info = await exec.inspect();
   const exitCode = info.ExitCode;
@@ -58,7 +102,7 @@ export async function execInServiceContainer(
     );
   }
 
-  return { stdout, stderr, exitCode };
+  return { stdout, stderr, exitCode, ...(state.truncated ? { truncated: true } : {}) };
 }
 
 export function parseServiceCredentials(service: ServiceRow): ServiceCredentials {

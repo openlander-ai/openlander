@@ -21,7 +21,9 @@ import {
   assertSafeDatabaseName,
   assertSafeUserName,
   execInServiceContainer,
+  type ExecOptions,
 } from './service-adapters/shared.js';
+import type { ContainerExecResult } from './service-adapters/types.js';
 import type { Docker } from './docker.js';
 import { allocatePort } from './port.js';
 
@@ -354,8 +356,8 @@ export class ServiceManager {
     const hasTemplate = typeof opts.template === 'string';
     const hasImage = typeof opts.image === 'string';
 
-    if (hasTemplate === hasImage) {
-      throw new Error('Provide exactly one of template or image');
+    if (!hasTemplate && !hasImage) {
+      throw new Error('Provide at least one of template or image');
     }
 
     const userEnv = this.toEnvPairs(opts.envVars);
@@ -380,7 +382,8 @@ export class ServiceManager {
       type = template.type;
       // Use provided version or default to first available version
       const version = opts.version ?? AVAILABLE_VERSIONS[templateId]?.[0] ?? 'latest';
-      image = template.image.replace(/:[^:]+$/, `:${version}`);
+      // If custom image is also provided, use it instead of the template default
+      image = hasImage ? (opts.image as string) : template.image.replace(/:[^:]+$/, `:${version}`);
       port = template.port;
       dataMountPath = this.getDataMountPath(template.type);
       containerCmd = template.cmd;
@@ -769,6 +772,15 @@ export class ServiceManager {
     const tail = Number.isInteger(lines) && lines > 0 ? lines : 100;
     const containerId = service.container_id ?? service.container_name;
     return this.docker.getLogs(containerId, tail);
+  }
+
+  async exec(id: string, command: string[], options?: ExecOptions): Promise<ContainerExecResult> {
+    const service = this.getRequiredService(id);
+    await this.ensureServiceContainerRunning(service);
+    return execInServiceContainer(this.docker, service, command, {
+      throwOnNonZeroExit: false,
+      ...options,
+    });
   }
 
   async getStats(id: string): Promise<{

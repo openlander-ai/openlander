@@ -53,6 +53,7 @@ export interface ContainerExecResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+  truncated?: boolean;
 }
 
 export interface ServiceAdapter {

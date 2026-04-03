@@ -10,6 +10,7 @@ import {
   createServiceSchema,
   createServiceUserSchema,
   deleteBucketSchema,
+  execServiceContainerSchema,
   getServiceLogsSchema,
   listBucketsSchema,
   listDatabasesSchema,
@@ -82,9 +83,9 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'create_service',
     riskLevel: 'medium',
     description:
-      'Create a new service (database, cache, message broker, object storage, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO (S3-compatible storage), or custom Docker image service. Provide either template (postgresql/mysql/redis/mongodb/rabbitmq/minio) or custom image with port. Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, RABBITMQ_URL, S3_ENDPOINT) for connecting a project. For MinIO: returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
+      'Create a new service (database, cache, message broker, object storage, or custom container). Use when user needs a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO (S3-compatible storage), or custom Docker image service. Provide template (postgresql/mysql/redis/mongodb/rabbitmq/minio), custom image with port, or BOTH template + image to get auto-credentials with a custom image (e.g., template="postgresql" + image="pgvector/pgvector:pg17" gives you PostgreSQL credential generation with the pgvector image). Returns { service, suggested_env } — suggested_env contains the recommended env var key/value (e.g. DATABASE_URL, RABBITMQ_URL, S3_ENDPOINT) for connecting a project. For MinIO: returns S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY. Call set_env_vars with the suggested key/value to auto-link. Errors: INVALID_TEMPLATE, MISSING_PORT_FOR_CUSTOM_IMAGE.',
     mcpDescription:
-      'Create a PostgreSQL, MySQL, Redis, MongoDB, RabbitMQ, MinIO, or custom image service.',
+      'Create a service. Supports template, custom image, or template + custom image combo (auto-credentials with custom image).',
     inputSchema: createServiceSchema,
     execute: async (args, { appCtx }) => {
       const result = await appCtx.serviceManager.create({
@@ -506,6 +507,45 @@ export const serviceToolDefs: ToolDef[] = [
         }
         throw error;
       }
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'exec_service_container',
+    riskLevel: 'high',
+    description:
+      'Execute a command inside a running service container (like docker exec). Use for installing extensions (e.g., pgvector), running SQL, debugging, or any ad-hoc command. Returns { service, command, exitCode, stdout, stderr }. Non-zero exit codes are returned (not thrown) so you can inspect the output. Errors: SERVICE_NOT_FOUND, container not running.',
+    mcpDescription:
+      'Run a command inside a service container. Returns stdout, stderr, and exit code.',
+    inputSchema: execServiceContainerSchema,
+    execute: async (args, { appCtx }) => {
+      const serviceName = args['service_name'] as string;
+      const command = args['command'] as string[];
+      const service = await getServiceByName(appCtx, serviceName);
+      const timeoutMs =
+        typeof args['timeout_seconds'] === 'number' ? args['timeout_seconds'] * 1000 : undefined;
+      const result = await appCtx.serviceManager.exec(service.id, command, { timeoutMs });
+      return {
+        service: serviceName,
+        command,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        ...(result.truncated ? { truncated: true } : {}),
+        ...(result.exitCode === -1
+          ? {
+              error:
+                'Command timed out. Output may be partial. The command may still be running inside the container.',
+            }
+          : {}),
+        _agent_guidance: {
+          notes: [
+            'Exit code 0 means success. Non-zero means the command failed — check stderr for details.',
+            'Exit code -1 means the command timed out. Use timeout_seconds to extend the limit.',
+            'For database extensions: after installing, verify with a query (e.g., SELECT * FROM pg_extension).',
+          ],
+        },
+      };
     },
     targets: ['mcp'],
   },

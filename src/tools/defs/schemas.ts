@@ -207,9 +207,24 @@ export const listComposeServicesSchema = z.object({
 // Service management schemas
 export const createServiceSchema = z.object({
   name: z.string().min(1).describe('Service name'),
-  template: z.string().optional().describe('Service template (postgres, mysql, redis, etc.)'),
-  image: z.string().optional().describe('Docker image'),
-  port: z.number().int().positive().optional().describe('Port number'),
+  template: z
+    .string()
+    .optional()
+    .describe(
+      'Service template (postgresql, mysql, redis, mongodb, rabbitmq, minio). Provides auto-credentials, healthcheck, and default config. Can be combined with image to override the default Docker image while keeping template benefits.',
+    ),
+  image: z
+    .string()
+    .optional()
+    .describe(
+      'Docker image (e.g., pgvector/pgvector:pg17). When used with template, overrides the template default image. When used alone, port is required.',
+    ),
+  port: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Port number (required when using image without template)'),
 });
 
 export const serviceNameSchema = z.object({
@@ -253,6 +268,25 @@ export const createServiceUserSchema = z.object({
   username: z.string().min(1).describe('Username'),
   password: z.string().optional().describe('Password (auto-generated if omitted)'),
   database: z.string().optional().describe('Database name'),
+});
+
+export const execServiceContainerSchema = z.object({
+  service_name: z.string().min(1).describe('Service name'),
+  command: z
+    .array(z.string())
+    .min(1)
+    .describe(
+      'Command to execute as an array (e.g., ["psql", "-U", "openlander", "-c", "CREATE EXTENSION vector"])',
+    ),
+  timeout_seconds: z
+    .number()
+    .int()
+    .positive()
+    .max(600)
+    .optional()
+    .describe(
+      'Max execution time in seconds (default: 60, max: 600). Command may continue running after timeout.',
+    ),
 });
 
 export const listServicesSchema = z.object({}).strict();
