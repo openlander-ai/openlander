@@ -223,6 +223,7 @@ export const createServiceSchema = z.object({
     .number()
     .int()
     .positive()
+    .max(65535)
     .optional()
     .describe('Port number (required when using image without template)'),
 });
@@ -510,11 +511,18 @@ export const createDeployPlanSchema = z
       .optional()
       .describe('Git repository URL (e.g., github.com/user/repo)'),
     branch: z.string().optional().describe('Branch to deploy (default: repo default branch)'),
-    name: z.string().optional().describe('Project name (auto-generated from repo if not provided)'),
+    name: z
+      .string()
+      .regex(
+        /^[a-z0-9][a-z0-9-]*$/,
+        'Project name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
+      )
+      .optional()
+      .describe('Project name (auto-generated from repo if not provided)'),
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
-    port: z.number().int().positive().optional().describe('Container port'),
+    port: z.number().int().positive().max(65535).optional().describe('Container port'),
     env_vars: z
       .string()
       .optional()
@@ -580,7 +588,7 @@ export const deploySchema = z
     source: z.enum(['git', 'image']).optional().describe('Deployment source type'),
     image: z.string().optional().describe('Docker image to deploy (e.g., nginx:latest)'),
     cmd: z.array(z.string()).optional().describe('Container command override'),
-    port: z.number().int().positive().optional().describe('Container port'),
+    port: z.number().int().positive().max(65535).optional().describe('Container port'),
     env_vars: z
       .string()
       .optional()

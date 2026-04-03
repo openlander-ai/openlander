@@ -384,6 +384,13 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
+    if (containerPort !== undefined && (containerPort < 1 || containerPort > 65535)) {
+      return c.json(
+        { error: 'INVALID_FIELD', message: 'containerPort must be between 1 and 65535' },
+        400,
+      );
+    }
+
     ctx.db.updateProject(project.id, {
       imageUrl,
       imageCmd,
