@@ -190,6 +190,18 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
 
+    const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+    if (!PROJECT_NAME_REGEX.test(projectName)) {
+      return c.json(
+        {
+          error: 'INVALID_PROJECT_NAME',
+          message:
+            'Project name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
+        },
+        400,
+      );
+    }
+
     const existing = ctx.db.getProjectByName(projectName);
     if (existing) {
       return c.json(

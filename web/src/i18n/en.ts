@@ -83,6 +83,10 @@ export const translations = {
     noProjects: 'No projects found',
     deployFirstApp: 'Deploy your first app',
     connectGithub: 'Connect a GitHub repo and let the agent handle the rest.',
+    error: {
+      invalidName:
+        'Project name must start with a lowercase letter or number, and contain only lowercase letters, numbers, and hyphens',
+    },
     filter: {
       showArchived: 'Show archived',
     },

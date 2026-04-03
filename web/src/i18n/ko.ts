@@ -83,6 +83,10 @@ export const translations = {
     noProjects: '프로젝트가 없습니다',
     deployFirstApp: '첫 번째 앱 배포하기',
     connectGithub: 'GitHub 레포지토리를 연결하면 에이전트가 나머지를 처리합니다.',
+    error: {
+      invalidName:
+        '프로젝트 이름은 소문자 또는 숫자로 시작해야 하며, 소문자, 숫자, 하이픈만 포함할 수 있습니다',
+    },
     filter: {
       showArchived: '보관된 항목 표시',
     },
