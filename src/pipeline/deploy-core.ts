@@ -19,7 +19,12 @@ import type { Database } from '../db/index.js';
 import { eventBus } from '../events/index.js';
 import { resolveEnvVars } from './resolve-env.js';
 
-import { ContainerNotFoundError, DeployLockedError, PreflightCheckError } from '../errors.js';
+import {
+  ContainerNotFoundError,
+  DeployLockedError,
+  InvalidProjectNameError,
+  PreflightCheckError,
+} from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { buildDeployConfig } from './build-deploy-config.js';
 import type { JobManager } from './job-manager.js';
@@ -277,6 +282,13 @@ export class DeployPipeline {
     }
   }
 
+  private validateProjectName(name: string): void {
+    const PROJECT_NAME_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+    if (!PROJECT_NAME_REGEX.test(name)) {
+      throw new InvalidProjectNameError(name);
+    }
+  }
+
   /**
    * Start a deployment in the background (non-blocking).
    * Runs preflight check first and returns immediately if it fails.
@@ -286,6 +298,7 @@ export class DeployPipeline {
     const projectName =
       config.name ??
       extractProjectName(source === 'image' ? (config.imageUrl ?? 'image') : config.repoUrl);
+    this.validateProjectName(projectName);
     const projectId = nanoid(12);
 
     try {
@@ -1270,6 +1283,8 @@ export class DeployPipeline {
       };
     }
 
+    this.validateProjectName(project.name);
+
     const lockSession = options?.lockSessionId ?? nanoid(12);
     const locked = this.db.acquireDeployLock(projectId, lockSession);
     if (!locked) {
@@ -1396,6 +1411,7 @@ export class DeployPipeline {
       }
 
       projectName = project.name;
+      this.validateProjectName(projectName);
       blueContainerId = project.container_id ?? undefined;
 
       if (project.status !== 'running' || !blueContainerId) {
