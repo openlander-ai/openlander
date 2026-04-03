@@ -91,6 +91,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'tunnel:url': 'tunnel-active',
     'env:set': 'env-updated',
     'env:delete': 'env-deleted',
+    'recovery:start': 'recovering',
+    'recovery:success': 'recovered',
+    'recovery:failed': 'recovery-failed',
+    'recovery:exhausted': 'recovery-exhausted',
+    'recovery:approval-needed': 'approval-pending',
+    'recovery:approval-resolved': 'approval-resolved',
+    'alert:new': 'alert-new',
+    'alert:resolved': 'alert-resolved',
   };
 
   const eventTypes: EventType[] = [
@@ -113,11 +121,26 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'compose:start',
     'compose:up',
     'compose:failed',
+    'recovery:start',
+    'recovery:success',
+    'recovery:failed',
+    'recovery:exhausted',
+    'recovery:approval-needed',
+    'recovery:approval-resolved',
+    'alert:new',
+    'alert:resolved',
   ];
 
   for (const eventType of eventTypes) {
     eventBus.on(eventType, (payload: EventPayload[typeof eventType]) => {
-      const projectId = (payload as { projectId?: string }).projectId;
+      let projectId = (payload as { projectId?: string }).projectId;
+
+      if (eventType === 'alert:new') {
+        projectId = (payload as EventPayload['alert:new']).alert.details.projectId as
+          | string
+          | undefined;
+      }
+
       if (!projectId) return;
 
       const project = ctx.db.getProject(projectId);
@@ -138,6 +161,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
         activityEvent.detail = (payload as EventPayload['tunnel:url']).url;
       } else if (eventType === 'compose:failed') {
         activityEvent.detail = (payload as EventPayload['compose:failed']).error;
+      } else if (eventType === 'recovery:start') {
+        activityEvent.detail = (payload as EventPayload['recovery:start']).error;
+      } else if (eventType === 'recovery:failed') {
+        activityEvent.detail = (payload as EventPayload['recovery:failed']).error;
+      } else if (eventType === 'recovery:exhausted') {
+        activityEvent.detail = (payload as EventPayload['recovery:exhausted']).lastError;
+      } else if (eventType === 'alert:new') {
+        activityEvent.detail = (payload as EventPayload['alert:new']).alert.message;
       }
 
       activityBuffer.push(activityEvent);
@@ -174,7 +205,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
         for (const eventType of eventTypes) {
           unsubscribers.push(
             eventBus.on(eventType, (payload: EventPayload[typeof eventType]) => {
-              const projectId = (payload as { projectId?: string }).projectId;
+              let projectId = (payload as { projectId?: string }).projectId;
+
+              if (eventType === 'alert:new') {
+                projectId = (payload as EventPayload['alert:new']).alert.details.projectId as
+                  | string
+                  | undefined;
+              }
+
               if (!projectId) return;
 
               const project = ctx.db.getProject(projectId);
@@ -193,6 +231,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
                 activityEvent.detail = (payload as EventPayload['deploy:failed']).error;
               } else if (eventType === 'tunnel:url') {
                 activityEvent.detail = (payload as EventPayload['tunnel:url']).url;
+              } else if (eventType === 'recovery:start') {
+                activityEvent.detail = (payload as EventPayload['recovery:start']).error;
+              } else if (eventType === 'recovery:failed') {
+                activityEvent.detail = (payload as EventPayload['recovery:failed']).error;
+              } else if (eventType === 'recovery:exhausted') {
+                activityEvent.detail = (payload as EventPayload['recovery:exhausted']).lastError;
+              } else if (eventType === 'alert:new') {
+                activityEvent.detail = (payload as EventPayload['alert:new']).alert.message;
               }
 
               void s.write(JSON.stringify(activityEvent) + '\n');
