@@ -20,6 +20,13 @@ function getProjectByName(appCtx: Parameters<ToolDef['execute']>[1]['appCtx'], n
   return project;
 }
 
+function getProductionEnvironmentId(
+  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
+  projectId: string,
+): string | undefined {
+  return appCtx.db.getEnvironmentsByProject(projectId).find((e) => e.type === 'production')?.id;
+}
+
 export const envToolDefs: ToolDef[] = [
   {
     name: 'list_env_vars',
@@ -31,8 +38,11 @@ export const envToolDefs: ToolDef[] = [
     execute: (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
       const project = getProjectByName(appCtx, projectName);
-      const masked = appCtx.env.getAll(project.id);
-      return Promise.resolve({ variables: masked, count: Object.keys(masked).length });
+      const prodEnvId = getProductionEnvironmentId(appCtx, project.id);
+      const vars = prodEnvId
+        ? appCtx.env.getAllWithInheritance(project.id, prodEnvId)
+        : appCtx.env.getAll(project.id);
+      return Promise.resolve({ variables: vars, count: Object.keys(vars).length });
     },
   },
   {
@@ -46,7 +56,10 @@ export const envToolDefs: ToolDef[] = [
       const projectName = _args['project_name'] as string;
       const key = _args['key'] as string;
       const project = getProjectByName(appCtx, projectName);
-      const vars = appCtx.env.getAll(project.id);
+      const prodEnvId = getProductionEnvironmentId(appCtx, project.id);
+      const vars = prodEnvId
+        ? appCtx.env.getAllWithInheritance(project.id, prodEnvId)
+        : appCtx.env.getAll(project.id);
       if (key in vars) {
         return Promise.resolve({ key, value: vars[key] });
       }
@@ -65,9 +78,10 @@ export const envToolDefs: ToolDef[] = [
       const projectName = args['project_name'] as string;
       const project = getProjectByName(appCtx, projectName);
       const vars = JSON.parse(args['variables'] as string) as Record<string, string>;
+      const prodEnvId = getProductionEnvironmentId(appCtx, project.id);
 
-      const changed = appCtx.env.setBulk(project.id, vars);
-      const mismatches = appCtx.env.verifyRoundTrip(project.id, vars);
+      const changed = appCtx.env.setBulk(project.id, vars, prodEnvId);
+      const mismatches = appCtx.env.verifyRoundTrip(project.id, vars, prodEnvId);
 
       if (mismatches.length > 0) {
         return {

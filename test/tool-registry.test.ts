@@ -75,6 +75,7 @@ function createMockContext(opts?: {
   const db = {
     listProjects: vi.fn().mockReturnValue(opts?.projects ?? []),
     getProjectByName: vi.fn().mockImplementation((name: string) => opts?.getProjectByName?.(name)),
+    getEnvironmentsByProject: vi.fn().mockReturnValue([{ id: 'env-prod', type: 'production' }]),
   };
 
   const pipeline = {
@@ -90,6 +91,7 @@ function createMockContext(opts?: {
   const env = {
     setBulk: vi.fn().mockReturnValue(false),
     getAll: vi.fn().mockReturnValue({}),
+    getAllWithInheritance: vi.fn().mockReturnValue({}),
     verifyRoundTrip: vi.fn().mockReturnValue([]),
   };
 
@@ -358,12 +360,12 @@ describe('Tool Registry', () => {
     });
     const listEnvVars = getTool(ctx, 'list_env_vars');
 
-    env.getAll.mockReturnValueOnce({
+    env.getAllWithInheritance.mockReturnValueOnce({
       DATABASE_URL: 'postgresql://user:pass@localhost:5432',
       API_KEY: 'sk-1234567890abcdef',
     });
     const result = await listEnvVars.execute({ project_name: 'my-app' }, { target: 'mcp' });
-    expect(env.getAll).toHaveBeenCalledWith('p1');
+    expect(env.getAllWithInheritance).toHaveBeenCalledWith('p1', 'env-prod');
     expect(result).toEqual({
       variables: {
         DATABASE_URL: 'postgresql://user:pass@localhost:5432',
