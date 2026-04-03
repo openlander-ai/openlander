@@ -458,14 +458,40 @@ export class AlertMonitor {
         const container = dockerClient.getContainer(project.container_id);
         const info = await container.inspect();
         const state = info.State;
+        const restartCount: number = (info.RestartCount as number | undefined) ?? 0;
 
-        if (state.Running || state.ExitCode === 0) {
+        // Container is actively restarting after crash
+        if (state.Restarting && restartCount > 0) {
+          const message = `Container crashed: ${project.name} (restarting, count: ${String(restartCount)}, exit code ${String(state.ExitCode)})`;
+          const suggestion = `Check the container logs for errors using "get_logs ${project.name}" and investigate the root cause. The application may be crashing on startup.`;
+
+          await this.upsertAlert(key, {
+            type: 'container-crash',
+            severity: 'critical',
+            message,
+            details: {
+              projectId: project.id,
+              projectName: project.name,
+              containerId: project.container_id,
+              exitCode: state.ExitCode,
+              restartCount,
+              restarting: true,
+              finishedAt: state.FinishedAt,
+            },
+            suggestion,
+          });
+          continue;
+        }
+
+        // Container running normally or exited cleanly — no crash
+        if ((state.Running && !state.Restarting) || state.ExitCode === 0) {
           this.resolveAlert(key, 'container-crash');
           continue;
         }
 
-        const message = `${project.name} 컨테이너가 크래시했어 (exit code ${String(state.ExitCode)})`;
-        const suggestion = `"get_logs ${project.name}"으로 로그를 확인하고 원인을 파악하세요.`;
+        // Container stopped with non-zero exit code — single crash
+        const message = `Container crashed: ${project.name} (exit code ${String(state.ExitCode)})`;
+        const suggestion = `Check the container logs for errors using "get_logs ${project.name}" and investigate the root cause.`;
 
         await this.upsertAlert(key, {
           type: 'container-crash',

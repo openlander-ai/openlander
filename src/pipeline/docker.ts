@@ -164,6 +164,7 @@ function stripDockerStreamHeaders(buffer: Buffer): string {
 export class Docker {
   private readonly client: Dockerode;
   private readonly networkName: string;
+  private readonly activeBuilds = new Map<string, NodeJS.ReadableStream>();
 
   constructor(socketPath?: string, networkName?: string) {
     const require = createRequire(import.meta.url);
@@ -274,6 +275,8 @@ export class Docker {
 
   /** Build a Docker image from a directory containing a Dockerfile. */
   async buildImage(contextPath: string, tag: string, options?: BuildImageOptions): Promise<void> {
+    const trackingId = options?.projectId;
+
     let stream: NodeJS.ReadableStream;
     try {
       stream = await this.client.buildImage(
@@ -294,43 +297,63 @@ export class Docker {
       );
     }
 
-    // Collect build log and wait for completion
+    if (trackingId) {
+      this.activeBuilds.set(trackingId, stream);
+    }
+
     let buildLog = '';
     let buildError = '';
-    await new Promise<void>((resolve, reject) => {
-      this.client.modem.followProgress(
-        stream,
-        (err: Error | null) => {
-          if (err) {
-            const reason = [buildLog, buildError, err.message].filter(Boolean).join('\n');
-            reject(
-              new DockerBuildError(
-                tag,
-                `Build failed for ${tag} (context: ${contextPath}): ${reason}`,
-              ),
-            );
-          } else if (buildError) {
-            const reason = [buildLog, buildError].filter(Boolean).join('\n');
-            reject(
-              new DockerBuildError(
-                tag,
-                `Build failed for ${tag} (context: ${contextPath}): ${reason}`,
-              ),
-            );
-          } else {
-            resolve();
-          }
-        },
-        (event: { stream?: string; error?: string }) => {
-          if (event.stream) buildLog += event.stream;
-          if (event.error) {
-            buildError += event.error + '\n';
-            buildLog += `ERROR: ${event.error}\n`;
-          }
-          options?.onProgress?.(event);
-        },
-      );
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this.client.modem.followProgress(
+          stream,
+          (err: Error | null) => {
+            if (err) {
+              const reason = [buildLog, buildError, err.message].filter(Boolean).join('\n');
+              reject(
+                new DockerBuildError(
+                  tag,
+                  `Build failed for ${tag} (context: ${contextPath}): ${reason}`,
+                ),
+              );
+            } else if (buildError) {
+              const reason = [buildLog, buildError].filter(Boolean).join('\n');
+              reject(
+                new DockerBuildError(
+                  tag,
+                  `Build failed for ${tag} (context: ${contextPath}): ${reason}`,
+                ),
+              );
+            } else {
+              resolve();
+            }
+          },
+          (event: { stream?: string; error?: string }) => {
+            if (event.stream) buildLog += event.stream;
+            if (event.error) {
+              buildError += event.error + '\n';
+              buildLog += `ERROR: ${event.error}\n`;
+            }
+            options?.onProgress?.(event);
+          },
+        );
+      });
+    } finally {
+      if (trackingId) {
+        this.activeBuilds.delete(trackingId);
+      }
+    }
+  }
+
+  cancelBuild(projectId: string): boolean {
+    const stream = this.activeBuilds.get(projectId);
+    if (!stream) {
+      return false;
+    }
+    stream.destroy();
+    this.activeBuilds.delete(projectId);
+    log.info({ projectId }, 'Build cancelled');
+    return true;
   }
 
   async buildComposeService(opts: BuildComposeServiceOptions): Promise<void> {

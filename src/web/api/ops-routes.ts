@@ -246,9 +246,13 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           ? ctx.db.getActionRunsByProject(projectId, 100)
           : ctx.db.getActionRunsByApprovalStatus('pending', 50);
         for (const run of runs) {
-          if (run.trigger_source !== 'auto_recovery' && run.status !== 'pending_approval') continue;
+          if (
+            run.trigger_source !== 'auto_recovery' &&
+            (run.status as string) !== 'pending_approval'
+          )
+            continue;
           const itemType: ActivityItem['type'] =
-            run.status === 'pending_approval' ? 'approval' : 'recovery';
+            (run.status as string) === 'pending_approval' ? 'approval' : 'recovery';
           if (types.length > 0 && !types.includes(itemType)) continue;
           activities.push({
             id: run.id,

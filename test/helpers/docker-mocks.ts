@@ -173,6 +173,9 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
       createdVolumes.push(opts);
       return { name: opts['Name'] };
     }),
+    getVolume: vi.fn((volumeName: string) => ({
+      remove: vi.fn().mockResolvedValue(undefined),
+    })),
     createContainer: vi.fn(async (opts: Record<string, unknown>) => {
       createdContainers.push(opts);
       const name =
