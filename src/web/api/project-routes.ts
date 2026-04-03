@@ -241,10 +241,11 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         const cpuDelta =
           stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
         const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
-        const cpuPercent =
-          systemDelta > 0
-            ? (cpuDelta / systemDelta) * stats.cpu_stats.cpu_usage.percpu_usage.length * 100
-            : 0;
+        const cpuCountRaw = (stats.cpu_stats.cpu_usage as unknown as { percpu_usage?: number[] })
+          .percpu_usage?.length;
+        const cpuCount =
+          cpuCountRaw && cpuCountRaw > 0 ? cpuCountRaw : stats.cpu_stats.online_cpus || 1;
+        const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
 
         return c.json({
           cpu: Math.round(cpuPercent * 10) / 10,
