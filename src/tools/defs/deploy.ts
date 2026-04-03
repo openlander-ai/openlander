@@ -1,4 +1,5 @@
-import { ProjectNotFoundError } from '../../errors.js';
+import { nanoid } from 'nanoid';
+import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
@@ -13,6 +14,32 @@ import {
   previewDeploySchema,
   rollbackProjectSchema,
 } from './schemas.js';
+
+function buildDeployLockedResponse(error: DeployLockedError) {
+  return {
+    success: false,
+    error: 'DEPLOY_LOCKED',
+    message: error.message,
+    _agent_guidance: {
+      message: 'Another deploy is in progress for this project.',
+      next_steps: ['Wait 30 seconds and try again', 'Check deploy status with get_deploy_status'],
+    },
+  };
+}
+
+function tryAcquireDeployLockOrResponse(
+  projectId: string,
+  sessionId: string,
+  context: Parameters<ToolDef['execute']>[1],
+) {
+  const locked = context.appCtx.db.acquireDeployLock(projectId, sessionId);
+  if (locked) {
+    return null;
+  }
+  const lockInfo = context.appCtx.db.getDeployLockInfo(projectId);
+  const error = new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
+  return buildDeployLockedResponse(error);
+}
 
 export const deployToolDefs: ToolDef[] = [
   {
@@ -49,14 +76,24 @@ export const deployToolDefs: ToolDef[] = [
     inputSchema: rollbackProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
+      const toolSessionId = `mcp-rollback-${nanoid(12)}`;
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+      if (lockResult) {
+        return lockResult;
+      }
       const release = await context.appCtx.deployQueue.acquire();
       let result;
       try {
-        result = await context.appCtx.pipeline.rollback(project.id);
+        result = await context.appCtx.pipeline.rollback(project.id, undefined, toolSessionId);
+      } catch (err) {
+        if (err instanceof DeployLockedError) {
+          return buildDeployLockedResponse(err);
+        }
+        throw err;
       } finally {
         release();
       }
@@ -88,10 +125,15 @@ export const deployToolDefs: ToolDef[] = [
     inputSchema: deployBlueGreenSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;
+      const toolSessionId = `mcp-blue-green-${nanoid(12)}`;
       const healthCheckPath = args['health_check_path'] as string | undefined;
       const project = context.appCtx.db.getProjectByName(projectName);
       if (!project) {
         throw new ProjectNotFoundError(projectName);
+      }
+      const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+      if (lockResult) {
+        return lockResult;
       }
       const release = await context.appCtx.deployQueue.acquire();
       let result;
@@ -99,7 +141,13 @@ export const deployToolDefs: ToolDef[] = [
         result = await context.appCtx.pipeline.redeploy(project.id, {
           strategy: 'blue-green',
           healthCheckPath: healthCheckPath?.trim() || undefined,
+          lockSessionId: toolSessionId,
         });
+      } catch (err) {
+        if (err instanceof DeployLockedError) {
+          return buildDeployLockedResponse(err);
+        }
+        throw err;
       } finally {
         release();
       }

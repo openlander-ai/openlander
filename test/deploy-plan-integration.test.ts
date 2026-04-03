@@ -152,7 +152,11 @@ describe('deploy-plan integration', () => {
 
     const result = await tool!.execute({ plan_id: 'plan_123' }, { target: 'mcp' });
 
-    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith('plan_123', undefined);
+    expect(ctx.planEngine.executePlan).toHaveBeenCalledWith(
+      'plan_123',
+      undefined,
+      expect.any(String),
+    );
 
     expect(result).toEqual({
       plan_id: 'plan_123',

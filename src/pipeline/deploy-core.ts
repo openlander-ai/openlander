@@ -132,6 +132,7 @@ export interface RedeployOptions {
   healthCheckRetries?: number;
   healthCheckIntervalMs?: number;
   cmd?: string[];
+  lockSessionId?: string;
 }
 
 export interface MonorepoConfig {
@@ -1269,7 +1270,7 @@ export class DeployPipeline {
       };
     }
 
-    const lockSession = nanoid(12);
+    const lockSession = options?.lockSessionId ?? nanoid(12);
     const locked = this.db.acquireDeployLock(projectId, lockSession);
     if (!locked) {
       const lockInfo = this.db.getDeployLockInfo(projectId);
@@ -1748,8 +1749,28 @@ export class DeployPipeline {
   }
 
   /** Rollback a project to its previous image tag. */
-  async rollback(projectId: string, environmentId?: string): Promise<DeployResult> {
-    return this.rollbackExecutor.rollbackToImage(projectId, environmentId);
+  async rollback(
+    projectId: string,
+    environmentId?: string,
+    lockSessionId?: string,
+  ): Promise<DeployResult> {
+    const project = this.db.getProject(projectId);
+    if (!project) {
+      return this.rollbackExecutor.rollbackToImage(projectId, environmentId);
+    }
+
+    const lockSession = lockSessionId ?? nanoid(12);
+    const locked = this.db.acquireDeployLock(projectId, lockSession);
+    if (!locked) {
+      const lockInfo = this.db.getDeployLockInfo(projectId);
+      throw new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
+    }
+
+    try {
+      return await this.rollbackExecutor.rollbackToImage(projectId, environmentId);
+    } finally {
+      this.db.releaseDeployLock(projectId);
+    }
   }
 
   private async cleanupProjectContainers(

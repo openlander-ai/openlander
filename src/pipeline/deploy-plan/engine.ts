@@ -747,7 +747,11 @@ export class PlanEngine {
     return merged;
   }
 
-  async executePlan(planId: string, deployOnly?: string[]): Promise<ExecutePlanResult> {
+  async executePlan(
+    planId: string,
+    deployOnly?: string[],
+    lockSessionId?: string,
+  ): Promise<ExecutePlanResult> {
     // Re-read from DB to prevent race condition
     const freshRow = this.db.getDeployPlan(planId);
     if (!freshRow) {
@@ -770,7 +774,7 @@ export class PlanEngine {
     const existingProject = this.db.getProjectByName(plan.app.name);
     let lockProjectId: string | null = null;
     if (existingProject) {
-      const lockSession = `plan-${planId}`;
+      const lockSession = lockSessionId ?? `plan-${planId}`;
       const locked = this.db.acquireDeployLock(existingProject.id, lockSession);
       if (!locked) {
         const lockInfo = this.db.getDeployLockInfo(existingProject.id);

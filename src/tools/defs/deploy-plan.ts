@@ -1,3 +1,5 @@
+import { nanoid } from 'nanoid';
+import { DeployLockedError } from '../../errors.js';
 import type { ToolDef } from './types.js';
 import type { DeployPlan } from '../../pipeline/deploy-plan/types.js';
 import type { PlanUpdates, ExecutePlanResult } from '../../pipeline/deploy-plan/engine.js';
@@ -15,6 +17,32 @@ import {
   deploySchema,
   validateDeployPlanSchema,
 } from './schemas.js';
+
+function buildDeployLockedResponse(error: DeployLockedError) {
+  return {
+    success: false,
+    error: 'DEPLOY_LOCKED',
+    message: error.message,
+    _agent_guidance: {
+      message: 'Another deploy is in progress for this project.',
+      next_steps: ['Wait 30 seconds and try again', 'Check deploy status with get_deploy_status'],
+    },
+  };
+}
+
+function tryAcquireDeployLockOrResponse(
+  projectId: string,
+  sessionId: string,
+  context: Parameters<ToolDef['execute']>[1],
+) {
+  const locked = context.appCtx.db.acquireDeployLock(projectId, sessionId);
+  if (locked) {
+    return null;
+  }
+  const lockInfo = context.appCtx.db.getDeployLockInfo(projectId);
+  const error = new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
+  return buildDeployLockedResponse(error);
+}
 
 export const deployPlanToolDefs: ToolDef[] = [
   {
@@ -131,20 +159,32 @@ export const deployPlanToolDefs: ToolDef[] = [
     execute: async (args, context) => {
       const appCtx = context.appCtx;
       const planId = args['plan_id'] as string;
+      const toolSessionId = `mcp-execute-plan-${nanoid(12)}`;
 
       const deployOnly = (args['deploy_only'] as string[] | undefined) ?? undefined;
       const planRow =
         typeof appCtx.db.getDeployPlan === 'function' ? appCtx.db.getDeployPlan(planId) : undefined;
       if (planRow) {
         const planData = JSON.parse(planRow.plan_json) as DeployPlan;
+        const lockProjectId =
+          planData.project_id ?? appCtx.db.getProjectByName(planData.app.name)?.id ?? null;
+        if (lockProjectId) {
+          const lockResult = tryAcquireDeployLockOrResponse(lockProjectId, toolSessionId, context);
+          if (lockResult) {
+            return lockResult;
+          }
+        }
         if (planData.project_id) {
           markMcpDeploy(planData.project_id);
         }
       }
       let result: ExecutePlanResult;
       try {
-        result = await appCtx.planEngine.executePlan(planId, deployOnly);
+        result = await appCtx.planEngine.executePlan(planId, deployOnly, toolSessionId);
       } catch (err) {
+        if (err instanceof DeployLockedError) {
+          return buildDeployLockedResponse(err);
+        }
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('missing environment variables')) {
           const planData = planRow ? (JSON.parse(planRow.plan_json) as DeployPlan) : undefined;
@@ -205,6 +245,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     inputSchema: deploySchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;
+      const toolSessionId = `mcp-deploy-${nanoid(12)}`;
       const envVarsRaw = (args['env_vars'] as string | undefined) ?? undefined;
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
       const wait = (args['wait'] as boolean | undefined) ?? true;
@@ -243,7 +284,24 @@ export const deployPlanToolDefs: ToolDef[] = [
       if (plan.project_id) {
         markMcpDeploy(plan.project_id);
       }
-      const result: ExecutePlanResult = await appCtx.planEngine.executePlan(plan.plan_id);
+      const lockProjectId =
+        plan.project_id ?? appCtx.db.getProjectByName(plan.app.name)?.id ?? null;
+      if (lockProjectId) {
+        const lockResult = tryAcquireDeployLockOrResponse(lockProjectId, toolSessionId, context);
+        if (lockResult) {
+          return lockResult;
+        }
+      }
+
+      let result: ExecutePlanResult;
+      try {
+        result = await appCtx.planEngine.executePlan(plan.plan_id, undefined, toolSessionId);
+      } catch (err) {
+        if (err instanceof DeployLockedError) {
+          return buildDeployLockedResponse(err);
+        }
+        throw err;
+      }
 
       if (result.project_id) {
         markMcpDeploy(result.project_id);

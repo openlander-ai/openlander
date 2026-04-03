@@ -1,4 +1,5 @@
-import { ProjectNotFoundError } from '../../errors.js';
+import { nanoid } from 'nanoid';
+import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
@@ -18,6 +19,32 @@ import {
 import type { ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-project-ops');
+
+function buildDeployLockedResponse(error: DeployLockedError) {
+  return {
+    success: false,
+    error: 'DEPLOY_LOCKED',
+    message: error.message,
+    _agent_guidance: {
+      message: 'Another deploy is in progress for this project.',
+      next_steps: ['Wait 30 seconds and try again', 'Check deploy status with get_deploy_status'],
+    },
+  };
+}
+
+function tryAcquireDeployLockOrResponse(
+  projectId: string,
+  sessionId: string,
+  context: Parameters<ToolDef['execute']>[1],
+) {
+  const locked = context.appCtx.db.acquireDeployLock(projectId, sessionId);
+  if (locked) {
+    return null;
+  }
+  const lockInfo = context.appCtx.db.getDeployLockInfo(projectId);
+  const error = new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
+  return buildDeployLockedResponse(error);
+}
 
 async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
   let client: ReturnType<typeof appCtx.docker.getClient>;
@@ -237,6 +264,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     inputSchema: redeployProjectSchema,
     execute: (args, context) => {
       const projectName = args['project_name'] as string;
+      const toolSessionId = `mcp-redeploy-${nanoid(12)}`;
       const noCache = (args['no_cache'] as boolean | undefined) === true;
       const strategy = args['strategy'] as 'blue-green' | 'force' | undefined;
       const healthCheckPath = args['health_check_path'] as string | undefined;
@@ -245,6 +273,10 @@ export const projectOpsToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
+      const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+      if (lockResult) {
+        return lockResult;
+      }
 
       void context.appCtx.pipeline
         .redeploy(project.id, {
@@ -252,8 +284,13 @@ export const projectOpsToolDefs: ToolDef[] = [
           strategy,
           healthCheckPath: healthCheckPath?.trim() || undefined,
           cmd,
+          lockSessionId: toolSessionId,
         })
         .catch((err: unknown) => {
+          if (err instanceof DeployLockedError) {
+            log.warn({ err, projectId: project.id }, 'Redeploy skipped: project lock is held');
+            return;
+          }
           log.error({ err, projectId: project.id }, 'Redeploy failed');
         });
 
