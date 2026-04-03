@@ -7,6 +7,7 @@ import { nanoid } from 'nanoid';
 import { DOCKER_LABELS, getDataDir, SHARED_NETWORK_NAME } from '../config/index.js';
 import type { Database, ServiceRow } from '../db/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { sleep } from '../lib/sleep.js';
 import { serviceContainerName, serviceVolumeName } from './helpers.js';
 import {
   getServiceAdapter,
@@ -618,6 +619,44 @@ export class ServiceManager {
     const backupPath = join(backupDir, `${backupId}.tar.gz`);
 
     mkdirSync(backupDir, { recursive: true });
+
+    // Redis: flush in-memory data to disk (BGSAVE) before volume backup.
+    // Without this, the RDB dump file may not exist or be stale, leading to empty backups.
+    const isRedis = service.type === 'redis' || service.image.includes('redis');
+    if (isRedis) {
+      try {
+        const initialResult = await execInServiceContainer(this.docker, service, [
+          'redis-cli',
+          'LASTSAVE',
+        ]);
+        const initialTimestamp = initialResult.stdout.trim();
+
+        await execInServiceContainer(this.docker, service, ['redis-cli', 'BGSAVE']);
+
+        // Poll LASTSAVE until timestamp changes (max 30s, 1s interval)
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          await sleep(1000);
+          const currentResult = await execInServiceContainer(this.docker, service, [
+            'redis-cli',
+            'LASTSAVE',
+          ]);
+          if (currentResult.stdout.trim() !== initialTimestamp) {
+            log.info(`Redis BGSAVE completed for service ${service.id}`);
+            break;
+          }
+          if (attempt === 29) {
+            log.warn(
+              `Redis BGSAVE did not complete within 30s for service ${service.id}, proceeding with backup`,
+            );
+          }
+        }
+      } catch (error) {
+        log.warn(
+          `Redis BGSAVE failed for service ${service.id}, proceeding with backup: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     await this.docker.pullImage('alpine');
 
     const client = this.docker.getClient();
