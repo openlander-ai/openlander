@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   fetchOpsIncidents,
   fetchCircuitBreakerState,
@@ -13,7 +14,14 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, CheckCircle2, AlertTriangle, BellOff, RefreshCw } from 'lucide-react';
+import {
+  ChevronDown,
+  CheckCircle2,
+  AlertTriangle,
+  BellOff,
+  RefreshCw,
+  ArrowLeft,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StatusHeroCard, type StatusType } from '../ops/StatusHeroCard.js';
 import { SeverityBadge } from '../ops/SeverityBadge.js';
@@ -76,6 +84,9 @@ function groupIncidents(incidents: OpsIncident[]): IncidentGroup[] {
 
 export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) {
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const fromOpsCenter = searchParams.get('from') === 'ops-center';
   const [incidents, setIncidents] = useState<OpsIncident[]>([]);
   const [circuitBreaker, setCircuitBreaker] = useState<CircuitBreakerState | null>(null);
   const [config, setConfig] = useState<OpsConfig | null>(null);
@@ -191,6 +202,16 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
 
   return (
     <div className="flex flex-col h-full p-6 bg-bg-app overflow-auto space-y-6">
+      {fromOpsCenter && (
+        <button
+          onClick={() => navigate('/operations')}
+          className="flex items-center gap-1.5 text-sm text-muted-ol hover:text-primary-ol transition-colors mb-4 font-body"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          <span>{t('operations.backToCenter') ?? 'Back to Operations Center'}</span>
+        </button>
+      )}
+
       {/* SECTION 1: Status Hero */}
       <StatusHeroCard
         status={status}
