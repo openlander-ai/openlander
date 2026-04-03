@@ -1,3 +1,4 @@
+import { createModuleLogger } from '../../lib/logger.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
 import {
@@ -8,6 +9,8 @@ import {
   getSystemStatsSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
+
+const log = createModuleLogger('monitoring-tools');
 
 export const monitoringToolDefs: ToolDef[] = [
   {
@@ -141,8 +144,12 @@ export const monitoringToolDefs: ToolDef[] = [
           restarts,
           uptime_seconds: uptimeSeconds,
         };
-      } catch (_err) {
-        // Return zeros if stats fetch fails
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        log.warn(
+          { err, projectName, containerId: project.container_id },
+          'Failed to fetch container stats',
+        );
         return {
           project: projectName,
           status: project.status,
@@ -151,6 +158,14 @@ export const monitoringToolDefs: ToolDef[] = [
           memory_limit_mb: 0,
           restarts: 0,
           uptime_seconds: 0,
+          error: `Stats unavailable: ${errMsg}`,
+          _agent_guidance: {
+            message: 'Container stats could not be retrieved.',
+            next_steps: [
+              'Verify the container is running with get_logs',
+              'Try redeploying if the container crashed',
+            ],
+          },
         };
       }
     },
