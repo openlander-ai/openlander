@@ -202,7 +202,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
               id: inc.id,
               timestamp: new Date(inc.created_at).toISOString(),
               type: 'incident',
-              severity: inc.severity as ActivityItem['severity'],
+              severity: inc.severity,
               projectId: inc.project_id,
               projectName: projectMap.get(inc.project_id) ?? inc.project_id,
               title: inc.root_cause ?? 'Incident detected',
@@ -213,7 +213,9 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           }
           if (types.length === 0 || types.includes('alert')) {
             const events = ctx.db.listOpsIncidentEvents(inc.id);
-            for (const ev of events.filter((e) => e.event_type === 'cascade_detected')) {
+            for (const ev of events.filter(
+              (e) => (e.event_type as string) === 'cascade_detected',
+            )) {
               let cascadeGroup: string[] = [];
               try {
                 cascadeGroup =
@@ -271,7 +273,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
                 ? 'resolved'
                 : run.status === 'failed'
                   ? 'failed'
-                  : run.status === 'pending_approval'
+                  : (run.status as string) === 'pending_approval'
                     ? 'pending'
                     : 'active',
             actionRunId: run.id,
@@ -311,13 +313,13 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           id: p.id,
           type: 'project' as const,
           name: p.name,
-          status: p.status ?? 'unknown',
+          status: p.status,
         })),
         ...services.map((s) => ({
           id: s.id,
           type: 'service' as const,
           name: s.name,
-          status: s.status ?? 'unknown',
+          status: s.status,
         })),
       ];
 
