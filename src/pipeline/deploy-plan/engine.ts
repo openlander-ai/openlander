@@ -30,6 +30,7 @@ import type { AutoDetector } from '../auto-detect.js';
 import type { OpenLanderConfig } from '../../config/index.js';
 import type { EventBus } from '../../events/index.js';
 import type { ComposePipeline } from '../compose.js';
+import { DeployLockedError } from '../../errors.js';
 
 const log = createModuleLogger('plan-engine');
 
@@ -766,6 +767,18 @@ export class PlanEngine {
 
     const plan = freshPlan;
 
+    const existingProject = this.db.getProjectByName(plan.app.name);
+    let lockProjectId: string | null = null;
+    if (existingProject) {
+      const lockSession = `plan-${planId}`;
+      const locked = this.db.acquireDeployLock(existingProject.id, lockSession);
+      if (!locked) {
+        const lockInfo = this.db.getDeployLockInfo(existingProject.id);
+        throw new DeployLockedError(existingProject.id, lockInfo?.session ?? 'unknown');
+      }
+      lockProjectId = existingProject.id;
+    }
+
     const executingPlan = PlanStateMachine.transition(plan, 'executing');
     this.db.updateDeployPlan(planId, {
       status: 'executing',
@@ -976,6 +989,9 @@ export class PlanEngine {
         estimated_seconds: estimatedSeconds,
       };
     } catch (error) {
+      if (lockProjectId) {
+        this.db.releaseDeployLock(lockProjectId);
+      }
       const errorMsg = error instanceof Error ? error.message : String(error);
       const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMsg);
       this.db.updateDeployPlan(planId, {

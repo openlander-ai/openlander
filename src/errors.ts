@@ -250,6 +250,20 @@ export class SetupRequiredError extends OpenLanderError {
   }
 }
 
+// --- Deploy lock errors ---
+
+export class DeployLockedError extends OpenLanderError {
+  constructor(projectId: string, lockedBySession: string) {
+    super(
+      `Project ${projectId} is currently being deployed. Try again after the current deployment completes.`,
+      'DEPLOY_LOCKED',
+      409,
+      { projectId, lockedBySession },
+    );
+    this.name = 'DeployLockedError';
+  }
+}
+
 // --- Project validation errors ---
 
 export class InvalidProjectNameError extends OpenLanderError {

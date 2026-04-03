@@ -3,7 +3,7 @@ import { stream } from 'hono/streaming';
 import { rm } from 'node:fs/promises';
 
 import type { AppContext } from '../../app.js';
-import { TunnelStartError } from '../../errors.js';
+import { DeployLockedError, TunnelStartError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { encrypt } from '../../env/crypto.js';
 import {
@@ -699,6 +699,9 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       });
       return c.json(result, result.success ? 200 : 500);
     } catch (err) {
+      if (err instanceof DeployLockedError) {
+        return c.json(err.toJSON(), 409);
+      }
       ctx.db.updateProject(project.id, { status: 'error' });
       const errMsg = err instanceof Error ? err.message : String(err);
       return c.json({ success: false, error: errMsg }, 500);
