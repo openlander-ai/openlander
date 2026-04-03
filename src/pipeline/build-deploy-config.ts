@@ -69,8 +69,8 @@ export function buildDeployConfig(params: BuildDeployConfigParams): ProjectConfi
   const storedConfig = stored ? validateStoredConfig(stored.config_json) : null;
   const mergedFromStored: ProjectConfig = storedConfig
     ? {
-        ...dbConfig,
         ...storedConfig.snapshot,
+        ...dbConfig,
       }
     : dbConfig;
 
