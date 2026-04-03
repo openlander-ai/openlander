@@ -1077,8 +1077,13 @@ export class ServiceManager {
     const connected: Array<{ id: string; name: string }> = [];
 
     for (const project of projects) {
-      const envVars = this.db.getEnvVars(project.id);
-      const hasConnection = Object.values(envVars).some(
+      const projectEnvVars = this.db.getEnvVars(project.id);
+      const environments = this.db.getEnvironmentsByProject(project.id);
+      const allEnvValues: string[] = Object.values(projectEnvVars);
+      for (const env of environments) {
+        allEnvValues.push(...Object.values(this.db.getEnvVars(project.id, env.id)));
+      }
+      const hasConnection = allEnvValues.some(
         (value) => typeof value === 'string' && value.includes(containerName),
       );
       if (hasConnection) {

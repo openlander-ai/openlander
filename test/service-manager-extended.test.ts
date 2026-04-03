@@ -50,6 +50,7 @@ function createDbMock(
     listServices: vi.fn(() => Array.from(byId.values())),
     listProjects: vi.fn(() => projects),
     getEnvVars: vi.fn(() => ({})),
+    getEnvironmentsByProject: vi.fn(() => []),
     updateService: vi.fn(
       (id: string, updates: { status?: ServiceRow['status']; containerId?: string | null }) => {
         const current = byId.get(id);
