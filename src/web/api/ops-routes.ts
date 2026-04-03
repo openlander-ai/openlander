@@ -100,6 +100,31 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   // --- Circuit Breaker ---
 
+  api.get('/circuit-breakers', (c) => {
+    try {
+      const allBreakers = ctx.db.listAllCircuitBreakers();
+      const projects = ctx.db.listProjects();
+      const projectMap = new Map(projects.map((p) => [p.id, p.name]));
+      const breakers = allBreakers
+        .map((b) => ({
+          projectId: b.project_id,
+          projectName: projectMap.get(b.project_id) ?? b.project_id,
+          state: b.state,
+          failureCount: b.failure_count,
+          lastFailureAt: b.last_failure_at,
+          openedAt: b.opened_at,
+          resetAt: b.reset_at,
+        }))
+        .sort((a, b) => {
+          const order: Record<string, number> = { open: 0, half_open: 1, closed: 2 };
+          return (order[a.state] ?? 2) - (order[b.state] ?? 2);
+        });
+      return c.json({ breakers });
+    } catch (err) {
+      return c.json({ error: String(err) }, 500);
+    }
+  });
+
   api.get('/circuit-breaker/:projectId', (c) => {
     const projectId = c.req.param('projectId');
 

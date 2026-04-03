@@ -239,6 +239,7 @@ export class Database implements AuthDatabase {
      halfOpenCircuitBreaker(projectId: string) { this.circuitBreakerRepo.halfOpen(projectId); }
      resetCircuitBreaker(projectId: string) { this.circuitBreakerRepo.reset(projectId); }
       findAllOpenCircuitBreakers() { return this.circuitBreakerRepo.findAllOpen(); }
+      listAllCircuitBreakers() { return this.circuitBreakerRepo.findAll(); }
       isCircuitBreakerOpen(projectId: string) { return this.circuitBreakerRepo.isOpen(projectId); }
      transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
      close() { this.sqlite.close(); }
