@@ -216,7 +216,19 @@ Default is **Internal** (safe). Switch to public from the dashboard.
 
 OpenLander runs as an MCP server, letting AI coding agents deploy and manage projects directly.
 
-### OpenCode
+### Transport Protocols
+
+| Transport           | Endpoint                              | Use Case                                                    |
+| ------------------- | ------------------------------------- | ----------------------------------------------------------- |
+| **stdio**           | `openlander mcp`                      | Local — agent spawns the process directly                   |
+| **Streamable HTTP** | `POST /mcp`                           | Remote — current MCP standard (2025-11-25)                  |
+| **SSE** (legacy)    | `GET /mcp/sse` + `POST /mcp/messages` | Remote — for clients that don't support Streamable HTTP yet |
+
+**Local**: Use stdio (all clients support it). **Remote**: Use Streamable HTTP if your client supports it, SSE otherwise.
+
+### Client Setup
+
+#### OpenCode
 
 ```jsonc
 // opencode.json (project root or ~/.config/opencode/config.json)
@@ -246,9 +258,11 @@ For remote servers (e.g. via Tailscale/VPN):
 }
 ```
 
+> If remote connection fails, try the SSE endpoint: `http://YOUR_SERVER_IP:10114/mcp/sse`
+
 Verify: `opencode mcp list` / `opencode mcp debug openlander`
 
-### Claude Desktop
+#### Claude Desktop / Claude Code
 
 ```jsonc
 // ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
@@ -263,7 +277,9 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
 }
 ```
 
-### Cursor
+For remote: `claude mcp add openlander -t http http://YOUR_SERVER_IP:10114/mcp`
+
+#### Cursor
 
 ```jsonc
 // .cursor/mcp.json (project root)
@@ -277,7 +293,20 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
 }
 ```
 
-### Windsurf
+For remote:
+
+```jsonc
+{
+  "mcpServers": {
+    "openlander": {
+      "url": "http://YOUR_SERVER_IP:10114/mcp",
+      "type": "http",
+    },
+  },
+}
+```
+
+#### Windsurf
 
 ```jsonc
 // ~/.codeium/windsurf/mcp_config.json
@@ -290,6 +319,38 @@ Verify: `opencode mcp list` / `opencode mcp debug openlander`
   },
 }
 ```
+
+#### Cline
+
+```jsonc
+// .vscode/mcp.json
+{
+  "servers": {
+    "openlander": {
+      "command": "openlander",
+      "args": ["mcp"],
+    },
+  },
+}
+```
+
+For remote, use the SSE endpoint: `http://YOUR_SERVER_IP:10114/mcp/sse`
+
+### Remote Authentication
+
+When a password is set, remote MCP connections require a Bearer token. Generate one from **Settings > Security** in the web dashboard, then pass it as an `Authorization` header:
+
+```
+Authorization: Bearer <your-api-token>
+```
+
+### Troubleshooting
+
+| Symptom                                    | Cause                                                                       | Fix                                                                      |
+| ------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `405 Method Not Allowed` on remote connect | Client is sending `GET` to `/mcp` (SSE handshake) but server expects `POST` | Switch client URL to `/mcp/sse`, or update client to use Streamable HTTP |
+| `401 Unauthorized`                         | Password is set but no token provided                                       | Add Bearer token to client config (see Remote Authentication above)      |
+| Connection hangs / times out               | Firewall blocking port 10114                                                | Open port 10114, or use Tailscale/VPN for direct access                  |
 
 ### Available Tools
 

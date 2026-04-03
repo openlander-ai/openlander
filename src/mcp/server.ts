@@ -1,6 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import type { HttpBindings } from '@hono/node-server';
+import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { AppContext } from '../app.js';
@@ -308,9 +311,16 @@ interface McpSession {
   ttlTimeout?: ReturnType<typeof setTimeout>;
 }
 
+interface McpSseSession {
+  server: Server; // eslint-disable-line @typescript-eslint/no-deprecated
+  transport: SSEServerTransport; // eslint-disable-line @typescript-eslint/no-deprecated
+  lastActivity: number;
+}
+
 export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => void } {
   const app = new Hono();
   const sessions = new Map<string, McpSession>();
+  const sseSessions = new Map<string, McpSseSession>();
   const authService = new AuthService(ctx.db);
 
   app.use(
@@ -404,6 +414,96 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
     return transport.handleRequest(c.req.raw);
   });
 
+  // Legacy SSE transport (protocol 2024-11-05) — needed by OpenCode, Cline for remote connections
+
+  app.get('/sse', async (c) => {
+    if (authService.isPasswordSet()) {
+      const authHeader = c.req.header('authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return c.json(
+          { jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null },
+          401,
+        );
+      }
+      const token = authHeader.slice(7);
+      if (!authService.validateApiToken(token)) {
+        return c.json(
+          { jsonrpc: '2.0', error: { code: -32001, message: 'Invalid token' }, id: null },
+          401,
+        );
+      }
+    }
+
+    const { outgoing } = c.env as HttpBindings;
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- backward compat
+    const transport = new SSEServerTransport('/mcp/messages', outgoing);
+    const server = createMcpServerInstance(ctx);
+
+    sseSessions.set(transport.sessionId, {
+      server,
+      transport,
+      lastActivity: Date.now(),
+    });
+
+    outgoing.on('close', () => {
+      sseSessions.delete(transport.sessionId);
+      log.info({ sessionId: transport.sessionId }, 'MCP SSE session closed');
+    });
+
+    await server.connect(transport);
+    await transport.start();
+
+    log.info({ sessionId: transport.sessionId }, 'MCP SSE session created');
+    return RESPONSE_ALREADY_SENT;
+  });
+
+  app.post('/messages', async (c) => {
+    if (authService.isPasswordSet()) {
+      const authHeader = c.req.header('authorization');
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return c.json(
+          { jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null },
+          401,
+        );
+      }
+      const token = authHeader.slice(7);
+      if (!authService.validateApiToken(token)) {
+        return c.json(
+          { jsonrpc: '2.0', error: { code: -32001, message: 'Invalid token' }, id: null },
+          401,
+        );
+      }
+    }
+
+    const sessionId = c.req.query('sessionId');
+    if (!sessionId) {
+      return c.json(
+        {
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Missing sessionId query parameter' },
+          id: null,
+        },
+        400,
+      );
+    }
+
+    const session = sseSessions.get(sessionId);
+    if (!session) {
+      return c.json(
+        { jsonrpc: '2.0', error: { code: -32001, message: 'SSE session not found' }, id: null },
+        404,
+      );
+    }
+
+    session.lastActivity = Date.now();
+
+    const { incoming, outgoing } = c.env as HttpBindings;
+    const body: unknown = await c.req.json();
+    await session.transport.handlePostMessage(incoming, outgoing, body);
+
+    return RESPONSE_ALREADY_SENT;
+  });
+
   (app as Hono & { cleanup: () => void }).cleanup = () => {
     for (const [sid, session] of sessions.entries()) {
       if (session.heartbeatInterval) {
@@ -413,6 +513,10 @@ export function createMcpHttpRoutes(ctx: AppContext): Hono & { cleanup: () => vo
         clearTimeout(session.ttlTimeout);
       }
       sessions.delete(sid);
+    }
+    for (const [sid, session] of sseSessions.entries()) {
+      void session.transport.close();
+      sseSessions.delete(sid);
     }
     log.info('MCP HTTP sessions cleanup completed');
   };
