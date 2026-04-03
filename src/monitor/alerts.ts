@@ -570,8 +570,8 @@ export class AlertMonitor {
 
         const usageMB = Math.round(memUsage / (1024 * 1024));
         const limitMB = Math.round(memLimit / (1024 * 1024));
-        const message = `${project.name} 메모리 ${usagePercent.toFixed(0)}% 사용 (${String(usageMB)}MB / ${String(limitMB)}MB)`;
-        const suggestion = `컨테이너 메모리 제한에 근접. --memory 옵션을 늘리거나 메모리 누수를 확인하세요.`;
+        const message = `${project.name} memory usage at ${usagePercent.toFixed(0)}% (${String(usageMB)}MB / ${String(limitMB)}MB)`;
+        const suggestion = `Container approaching memory limit. Increase the --memory option or check for memory leaks.`;
 
         await this.upsertAlert(key, {
           type: 'resource-saturation',
