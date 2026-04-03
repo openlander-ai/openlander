@@ -780,6 +780,21 @@ export class PlanEngine {
 
     const existingProject = this.db.getProjectByName(plan.app.name);
     let lockProjectId: string | null = null;
+    let deployLockReleased = false;
+    const safeReleaseDeployLock = () => {
+      if (!lockProjectId || deployLockReleased) {
+        return;
+      }
+
+      try {
+        this.db.releaseDeployLock(lockProjectId);
+      } catch (error) {
+        log.warn({ planId, projectId: lockProjectId, error }, 'Failed to release deploy lock');
+      } finally {
+        deployLockReleased = true;
+      }
+    };
+
     if (existingProject) {
       const lockSession = lockSessionId ?? `plan-${planId}`;
       const locked = this.db.acquireDeployLock(existingProject.id, lockSession);
@@ -908,6 +923,7 @@ export class PlanEngine {
               status: 'completed',
               planJson: JSON.stringify(this.preparePlanForStorage(completed)),
             });
+            safeReleaseDeployLock();
             log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
             cleanup();
           }
@@ -922,6 +938,7 @@ export class PlanEngine {
               planJson: JSON.stringify(this.preparePlanForStorage(failed)),
               errorMessage: errMsg,
             });
+            safeReleaseDeployLock();
             log.info(
               { planId, projectId: payload.projectId, error: errMsg },
               'Plan failed via event',
@@ -937,6 +954,7 @@ export class PlanEngine {
               status: 'completed',
               planJson: JSON.stringify(this.preparePlanForStorage(completed)),
             });
+            safeReleaseDeployLock();
             log.info({ planId, projectId: payload.projectId }, 'Plan completed via event');
             cleanup();
           }
@@ -951,6 +969,7 @@ export class PlanEngine {
               planJson: JSON.stringify(this.preparePlanForStorage(failed)),
               errorMessage: errMsg,
             });
+            safeReleaseDeployLock();
             log.info(
               { planId, projectId: payload.projectId, error: errMsg },
               'Plan failed via event',
@@ -968,13 +987,14 @@ export class PlanEngine {
       }
 
       if (preflightError) {
-        const errMsg = preflightError || 'Preflight check failed';
+        const errMsg = preflightError;
         const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errMsg);
         this.db.updateDeployPlan(planId, {
           status: 'failed',
           planJson: JSON.stringify(this.preparePlanForStorage(failedPlan)),
           errorMessage: errMsg,
         });
+        safeReleaseDeployLock();
         return {
           status: 'failed',
           plan_id: planId,
@@ -1000,9 +1020,7 @@ export class PlanEngine {
         estimated_seconds: estimatedSeconds,
       };
     } catch (error) {
-      if (lockProjectId) {
-        this.db.releaseDeployLock(lockProjectId);
-      }
+      safeReleaseDeployLock();
       const errorMsg = error instanceof Error ? error.message : String(error);
       const failedPlan = PlanStateMachine.transition(executingPlan, 'failed', errorMsg);
       this.db.updateDeployPlan(planId, {
