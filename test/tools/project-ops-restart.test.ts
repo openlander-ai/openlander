@@ -28,6 +28,9 @@ function createContext() {
       stop,
       redeploy,
     },
+    deployQueue: {
+      acquire: vi.fn().mockResolvedValue(() => {}),
+    },
   } as unknown as AppContext;
 
   return { ctx, stop, redeploy };

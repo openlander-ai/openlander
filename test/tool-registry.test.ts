@@ -118,6 +118,9 @@ function createMockContext(opts?: {
     pipeline,
     planEngine,
     buildDebugger: null,
+    deployQueue: {
+      acquire: vi.fn().mockResolvedValue(() => {}),
+    },
   } as unknown as AppContext;
 
   return { ctx, db, env, pipeline, planEngine };

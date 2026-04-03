@@ -39,7 +39,7 @@ export const envToolDefs: ToolDef[] = [
     name: 'get_env_var',
     riskLevel: 'low',
     description:
-      'Get the unmasked value of a single environment variable for debugging. Use when you need to verify the exact value was set correctly (e.g., connection strings with special characters). Returns { key, value } or { error: "NOT_FOUND" }. Errors: PROJECT_NOT_FOUND.',
+      'Get the unmasked value of a single environment variable for debugging. Use when you need to verify the exact value was set correctly (e.g., connection strings with special characters). Returns { key, value }. Throws NOT_FOUND error if key does not exist. Errors: PROJECT_NOT_FOUND.',
     mcpDescription: 'Get a single environment variable value for a project.',
     inputSchema: getEnvVarSchema,
     execute: (_args, { appCtx }) => {
@@ -79,7 +79,12 @@ export const envToolDefs: ToolDef[] = [
       }
 
       if (changed && project.status === 'running') {
-        await appCtx.pipeline.redeploy(project.id);
+        const release = await appCtx.deployQueue.acquire();
+        try {
+          await appCtx.pipeline.redeploy(project.id);
+        } finally {
+          release();
+        }
         return {
           status: 'updated_and_redeployed',
           project: projectName,

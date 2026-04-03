@@ -168,7 +168,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'restart_project',
     riskLevel: 'medium',
     description:
-      'Restart a running project by stopping and redeploying it with the same configuration. Use when user reports the app is hung, unresponsive, or needs a fresh start after config changes. Returns { status, project } with redeploy result. Errors: PROJECT_NOT_FOUND.',
+      'Restart a running project by stopping and redeploying it with the same configuration. Use when user reports the app is hung, unresponsive, or needs a fresh start after config changes. Returns { status, project, message }. Redeploy runs in background — poll get_deploy_status. Errors: PROJECT_NOT_FOUND.',
     mcpDescription:
       'Restart a project by stopping and redeploying. Pass no_cache=true to rebuild from scratch (use when dependencies changed but Docker layers stale).',
     inputSchema: restartProjectSchema,
@@ -182,9 +182,15 @@ export const projectOpsToolDefs: ToolDef[] = [
 
       await context.appCtx.pipeline.stop(project.id);
 
-      void context.appCtx.pipeline.redeploy(project.id, { noCache }).catch((err: unknown) => {
-        log.error({ err, projectId: project.id }, 'Restart redeploy failed');
-      });
+      const release = await context.appCtx.deployQueue.acquire();
+      void context.appCtx.pipeline
+        .redeploy(project.id, { noCache })
+        .catch((err: unknown) => {
+          log.error({ err, projectId: project.id }, 'Restart redeploy failed');
+        })
+        .finally(() => {
+          release();
+        });
 
       return {
         status: 'restarting',

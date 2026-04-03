@@ -7,6 +7,7 @@ import type { Database } from '../../db/index.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { DeployPipeline } from '../../pipeline/deploy.js';
+import type { DeployQueue } from '../../pipeline/deploy-queue.js';
 import type { CloudflareTunnelManager } from '../../pipeline/cloudflare.js';
 import type { EnvManager } from '../../pipeline/env.js';
 import type { TraefikManager } from '../../pipeline/traefik.js';
@@ -22,6 +23,7 @@ interface DomainRouteContext {
   agent: Agent | null;
   env: EnvManager;
   pipeline: DeployPipeline;
+  deployQueue: DeployQueue;
   questionBridge: QuestionBridge;
 }
 
@@ -323,15 +325,26 @@ async function requestEnvUpdateApprovalAndRedeploy(
     message: `Updated ${String(updates.length)} env var(s). Triggering redeploy...`,
   });
 
-  void ctx.pipeline.redeploy(projectId).catch((err: unknown) => {
-    log.error({ err, projectId, domain }, 'Domain env update redeploy failed');
-    createTimelineEvent(ctx.db, {
-      projectId,
-      type: 'error',
-      message: `Redeploy failed after domain env update: ${err instanceof Error ? err.message : String(err)}`,
-      severity: 'error',
+  void ctx.deployQueue
+    .acquire()
+    .then(async (release) => {
+      try {
+        await ctx.pipeline.redeploy(projectId);
+      } catch (err: unknown) {
+        log.error({ err, projectId, domain }, 'Domain env update redeploy failed');
+        createTimelineEvent(ctx.db, {
+          projectId,
+          type: 'error',
+          message: `Redeploy failed after domain env update: ${err instanceof Error ? err.message : String(err)}`,
+          severity: 'error',
+        });
+      } finally {
+        release();
+      }
+    })
+    .catch((err: unknown) => {
+      log.error({ err, projectId }, 'Failed to acquire deploy lock for domain redeploy');
     });
-  });
 }
 
 function createTimelineEvent(

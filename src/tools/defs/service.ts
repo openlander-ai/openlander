@@ -369,7 +369,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'start_service',
     riskLevel: 'medium',
     description:
-      'Start a stopped service. Use when a service is stopped and needs to be running. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+      'Start a stopped service. Use when a service is stopped and needs to be running. Returns { status, service }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Start a stopped service container.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
@@ -384,7 +384,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'stop_service',
     riskLevel: 'medium',
     description:
-      'Stop a running service gracefully. Use when a service needs to be paused without deletion. Returns { status, id, name }. Errors: SERVICE_NOT_FOUND.',
+      'Stop a running service gracefully. Use when a service needs to be paused without deletion. Returns { status, service }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription: 'Stop a running service container gracefully.',
     inputSchema: serviceNameSchema,
     execute: async (args, { appCtx }) => {
@@ -513,7 +513,7 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'get_service_credentials',
     riskLevel: 'low',
     description:
-      'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { id, name, credentials } with full connection details. Errors: SERVICE_NOT_FOUND.',
+      'Get connection credentials for a service (connection string, host, port, user, password). Use when a project needs to connect to a service. Returns { service, type, credentials, connectionString, host, port, user, password, database, externalAccess, externalConnectionStrings }. Errors: SERVICE_NOT_FOUND.',
     mcpDescription:
       'Get service connection credentials. Host is Docker internal DNS (e.g., ol-svc-pg), not localhost. Use for DATABASE_URL, REDIS_URL, etc. in projects.',
     inputSchema: serviceNameSchema,

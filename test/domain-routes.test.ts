@@ -40,6 +40,10 @@ describe('createDomainRoutes', () => {
     redeploy: vi.fn().mockResolvedValue({ success: true }),
   };
 
+  const deployQueue = {
+    acquire: vi.fn().mockResolvedValue(() => {}),
+  };
+
   const questionBridge = {
     setActiveProject: vi.fn(),
     ask: vi.fn(),
@@ -83,6 +87,7 @@ describe('createDomainRoutes', () => {
         env: env as never,
         pipeline: pipeline as never,
         questionBridge: questionBridge as never,
+        deployQueue: deployQueue as never,
       }),
     );
 
@@ -139,6 +144,7 @@ describe('createDomainRoutes', () => {
         env: env as never,
         pipeline: pipeline as never,
         questionBridge: questionBridge as never,
+        deployQueue: deployQueue as never,
       }),
     );
 
@@ -197,6 +203,7 @@ describe('createDomainRoutes', () => {
         env: env as never,
         pipeline: pipeline as never,
         questionBridge: questionBridge as never,
+        deployQueue: deployQueue as never,
       }),
     );
 

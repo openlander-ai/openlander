@@ -87,7 +87,7 @@ const getWebhookConfigTool: ToolDef = {
   name: 'get_webhook_config',
   riskLevel: 'low',
   description:
-    'Get all webhook configurations for a project. Shows enabled status, git provider, branch filter, and webhook URL path for each configured webhook. Returns { count, webhooks[] }. Errors: PROJECT_NOT_FOUND.',
+    'Get all webhook configurations for a project. Shows enabled status, git provider, branch filter, webhook URL path, and partially masked secret (first 8 characters) for each configured webhook. Returns { count, webhooks[] }. Errors: PROJECT_NOT_FOUND.',
   mcpDescription: 'Get webhook configuration and enabled status for a project.',
   inputSchema: getWebhookConfigSchema,
   execute: (args, { appCtx }) => {

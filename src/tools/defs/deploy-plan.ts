@@ -90,9 +90,9 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'update_deploy_plan',
     riskLevel: 'medium',
     description:
-      'Update a deployment plan with missing values (env vars, Dockerfile selection, service config). Call after create_deploy_plan when status is "needs_input".',
+      'Update a deployment plan with missing values (env vars, Dockerfile selection, service config). Call after create_deploy_plan when status is "needs_input". Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     mcpDescription:
-      'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). Returns updated plan_id, status, and remaining missing values.',
+      'Update a deployment plan with missing values. Pass updates as a JSON string with fields like env (environment variables), dockerfile (Dockerfile path), or services (service configuration). Returns the full updated plan with plan_id, status, complexity, app, build, services, env, missing, warnings.',
     inputSchema: updateDeployPlanSchema,
     execute: (args, context) => {
       const appCtx = context.appCtx;
@@ -199,7 +199,7 @@ export const deployPlanToolDefs: ToolDef[] = [
     name: 'deploy',
     riskLevel: 'medium',
     description:
-      'One-call deploy: analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
+      'One-call deploy: analyzes repo, creates plan, executes, and optionally waits for completion. Combines create_deploy_plan + execute_deploy_plan + get_deploy_status into a single call. Returns final deployment result with URL when done, including internal_host, docker_host, elapsed, and on failure auto_diagnosis/build_log_tail; timeout may be returned when wait times out. If the plan needs missing env vars, returns status "needs_input" with the missing list — provide them and call again. Power users can still use the 3-step flow for finer control.',
     mcpDescription:
       'One-call deploy: repo analysis → build → deploy → result. Returns immediately with status. Poll get_deploy_status to track progress. Returns URL on success, error + diagnosis guidance on failure. Use the 3-step flow (create/execute/status) for finer control.',
     inputSchema: deploySchema,
