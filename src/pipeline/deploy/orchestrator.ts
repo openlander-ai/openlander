@@ -580,7 +580,9 @@ export async function runAndVerify(
     assignedPort: port,
     containerId,
     imageTag,
-    previousImageTag: previousEnvironmentImageTag,
+    ...(previousEnvironmentImageTag != null
+      ? { previousImageTag: previousEnvironmentImageTag }
+      : {}),
   });
 
   if (shouldSyncProjectState) {
@@ -589,7 +591,7 @@ export async function runAndVerify(
       assignedPort: port,
       containerId,
       imageTag,
-      previousImageTag: previousProjectImageTag,
+      ...(previousProjectImageTag != null ? { previousImageTag: previousProjectImageTag } : {}),
       visibility: config.visibility ?? 'internal',
     });
   }
