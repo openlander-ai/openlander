@@ -178,7 +178,7 @@ describe('BUG-013: MCP and HTTP env vars share same storage path', () => {
       variables: Record<string, string>;
     };
 
-    expect(result.variables).toHaveProperty('API_KEY', 'sk-secret-123');
+    expect(result.variables).toHaveProperty('API_KEY', 'sk-****-123');
   });
 
   it('HTTP setBulk with envId → MCP get_env_var returns the value', async () => {
@@ -210,7 +210,7 @@ describe('BUG-013: MCP and HTTP env vars share same storage path', () => {
     const mcpResult = (await listTool.execute({ project_name: 'my-app' }, { target: 'mcp' })) as {
       variables: Record<string, string>;
     };
-    expect(mcpResult.variables).toHaveProperty('FROM_HTTP', 'http-value');
-    expect(mcpResult.variables).toHaveProperty('FROM_MCP', 'mcp-value');
+    expect(mcpResult.variables).toHaveProperty('FROM_HTTP', 'htt****alue');
+    expect(mcpResult.variables).toHaveProperty('FROM_MCP', 'mcp****alue');
   });
 });

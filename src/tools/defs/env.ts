@@ -38,10 +38,7 @@ export const envToolDefs: ToolDef[] = [
     execute: (_args, { appCtx }) => {
       const projectName = _args['project_name'] as string;
       const project = getProjectByName(appCtx, projectName);
-      const prodEnvId = getProductionEnvironmentId(appCtx, project.id);
-      const vars = prodEnvId
-        ? appCtx.env.getAllMasked(project.id, prodEnvId)
-        : appCtx.env.getAllMasked(project.id);
+      const vars = appCtx.env.getAllWithInheritanceMasked(project.id);
       return Promise.resolve({ variables: vars, count: Object.keys(vars).length });
     },
   },

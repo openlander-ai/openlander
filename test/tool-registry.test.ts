@@ -92,6 +92,8 @@ function createMockContext(opts?: {
     setBulk: vi.fn().mockReturnValue(false),
     getAll: vi.fn().mockReturnValue({}),
     getAllWithInheritance: vi.fn().mockReturnValue({}),
+    getAllMasked: vi.fn().mockReturnValue({}),
+    getAllWithInheritanceMasked: vi.fn().mockReturnValue({}),
     verifyRoundTrip: vi.fn().mockReturnValue([]),
   };
 
@@ -360,16 +362,16 @@ describe('Tool Registry', () => {
     });
     const listEnvVars = getTool(ctx, 'list_env_vars');
 
-    env.getAllWithInheritance.mockReturnValueOnce({
-      DATABASE_URL: 'postgresql://user:pass@localhost:5432',
-      API_KEY: 'sk-1234567890abcdef',
+    env.getAllWithInheritanceMasked.mockReturnValueOnce({
+      DATABASE_URL: 'pos****5432',
+      API_KEY: 'sk-****cdef',
     });
     const result = await listEnvVars.execute({ project_name: 'my-app' }, { target: 'mcp' });
-    expect(env.getAllWithInheritance).toHaveBeenCalledWith('p1', 'env-prod');
+    expect(env.getAllWithInheritanceMasked).toHaveBeenCalledWith('p1');
     expect(result).toEqual({
       variables: {
-        DATABASE_URL: 'postgresql://user:pass@localhost:5432',
-        API_KEY: 'sk-1234567890abcdef',
+        DATABASE_URL: 'pos****5432',
+        API_KEY: 'sk-****cdef',
       },
       count: 2,
     });

@@ -31,7 +31,7 @@ describe('list_env_vars tool', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it.skip('returns masked project env vars when environment_name is omitted', async () => {
+  it('returns masked project env vars when environment_name is omitted', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
     ctx.env.set('p1', 'DATABASE_URL', 'postgresql://user:pass@localhost:5432/db');
     ctx.env.set('p1', 'API_KEY', 'sk-1234567890abcdef');
@@ -50,7 +50,7 @@ describe('list_env_vars tool', () => {
     });
   });
 
-  it.skip('ignores environment_name and still returns project-scoped env vars', async () => {
+  it('ignores environment_name and still returns project-scoped env vars', async () => {
     db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/repo' });
     db.createEnvironment({
       id: 'env-dev',
