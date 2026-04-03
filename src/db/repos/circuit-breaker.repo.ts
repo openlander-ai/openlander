@@ -164,10 +164,6 @@ export class CircuitBreakerRepo {
     }
   }
 
-  findAll(): CircuitBreakerRow[] {
-    return this.db.select().from(circuitBreakerState).all() as CircuitBreakerRow[];
-  }
-
   findAllOpen(): string[] {
     const rows = this.db
       .select({ project_id: circuitBreakerState.project_id })

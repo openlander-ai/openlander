@@ -547,32 +547,6 @@ export const circuitBreakerState = sqliteTable(
   ],
 );
 
-export const projectDependencies = sqliteTable(
-  'project_dependencies',
-  {
-    id: text('id').notNull().primaryKey(),
-    source_project_id: text('source_project_id').notNull(),
-    target_project_id: text('target_project_id'),
-    target_service_id: text('target_service_id'),
-    dependency_type: text('dependency_type', {
-      enum: ['database', 'api', 'cache', 'queue', 'storage', 'custom'],
-    })
-      .notNull()
-      .default('custom'),
-    source: text('source', { enum: ['auto', 'manual'] })
-      .notNull()
-      .default('manual'),
-    created_at: text('created_at').notNull().default(''),
-  },
-  (table) => [
-    index('idx_project_dependencies_source').on(table.source_project_id),
-    index('idx_project_dependencies_target_project').on(table.target_project_id),
-    index('idx_project_dependencies_target_service').on(table.target_service_id),
-  ],
-);
-
-export type ProjectDependencyRow = typeof projectDependencies.$inferSelect;
-export type NewProjectDependency = typeof projectDependencies.$inferInsert;
 export type AiUsageLogRow = typeof aiUsageLog.$inferSelect;
 export type NewAiUsageLog = typeof aiUsageLog.$inferInsert;
 export type ActionRunRow = typeof actionRuns.$inferSelect;
@@ -609,5 +583,4 @@ export const drizzleSchema = {
   opsIncidents,
   opsIncidentEvents,
   circuitBreakerState,
-  projectDependencies,
 };
