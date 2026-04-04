@@ -1,6 +1,7 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { getAllIps } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
+import { isDockerNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
 import {
   backupServiceSchema,
@@ -496,10 +497,7 @@ export const serviceToolDefs: ToolDef[] = [
         return { service: serviceName, logs };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const isContainerGone =
-          message.includes('not found') ||
-          message.includes('No such container') ||
-          message.includes('is not running');
+        const isContainerGone = isDockerNotFoundError(error) || message.includes('is not running');
         if (isContainerGone) {
           return {
             service: serviceName,

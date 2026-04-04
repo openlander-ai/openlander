@@ -9,17 +9,13 @@ import {
   platformReconcileSchema,
   platformRecoverSchema,
 } from './schemas.js';
+import { isDockerNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
 
 function ensureConfirmed(confirm: boolean, toolName: string): void {
   if (!confirm) {
     throw new Error(`CONFIRMATION_REQUIRED: ${toolName} requires confirm=true`);
   }
-}
-
-function isContainerNotFound(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes('No such container') || message.includes('not found');
 }
 
 function stripDockerName(name: string | undefined): string {
@@ -126,7 +122,7 @@ export const platformActionToolDefs: ToolDef[] = [
           await dockerClient.getContainer(project.container_id).inspect();
           continue;
         } catch (error) {
-          if (!isContainerNotFound(error)) {
+          if (!isDockerNotFoundError(error)) {
             throw error;
           }
         }
@@ -209,7 +205,7 @@ export const platformActionToolDefs: ToolDef[] = [
           Config?: { Labels?: Record<string, string> };
         };
       } catch (error) {
-        if (isContainerNotFound(error)) {
+        if (isDockerNotFoundError(error)) {
           return { status: 'not_found', container_id: containerId };
         }
         throw error;
@@ -223,7 +219,7 @@ export const platformActionToolDefs: ToolDef[] = [
         await context.appCtx.docker.stopContainer(containerId);
         await context.appCtx.docker.removeContainer(containerId);
       } catch (error) {
-        if (isContainerNotFound(error)) {
+        if (isDockerNotFoundError(error)) {
           return { status: 'not_found', container_id: containerId };
         }
         throw error;

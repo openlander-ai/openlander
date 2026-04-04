@@ -121,6 +121,44 @@ export class ContainerNotFoundError extends OpenLanderError {
   }
 }
 
+export class NetworkNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Docker network not found: ${identifier}`, 'NETWORK_NOT_FOUND', 404, { identifier });
+    this.name = 'NetworkNotFoundError';
+  }
+}
+
+export class VolumeNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Docker volume not found: ${identifier}`, 'VOLUME_NOT_FOUND', 404, { identifier });
+    this.name = 'VolumeNotFoundError';
+  }
+}
+
+export class ImageNotFoundError extends OpenLanderError {
+  constructor(identifier: string) {
+    super(`Docker image not found: ${identifier}`, 'IMAGE_NOT_FOUND', 404, { identifier });
+    this.name = 'ImageNotFoundError';
+  }
+}
+
+export class CloudflareNotFoundError extends OpenLanderError {
+  constructor(resource: string) {
+    super(`Cloudflare resource not found: ${resource}`, 'CLOUDFLARE_NOT_FOUND', 404, { resource });
+    this.name = 'CloudflareNotFoundError';
+  }
+}
+
+/**
+ * Check if a raw error from dockerode is a "not found" error.
+ * Use at boundaries where raw dockerode is called directly (not via Docker wrapper).
+ * Prefer `instanceof ContainerNotFoundError` etc. when the error comes from Docker class methods.
+ */
+export function isDockerNotFoundError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return /not found|No such (container|network|volume|image)/i.test(msg);
+}
+
 // --- Port errors ---
 
 export class PortExhaustedError extends OpenLanderError {

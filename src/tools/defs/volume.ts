@@ -1,5 +1,6 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { DOCKER_LABELS } from '../../config/index.js';
+import { isDockerNotFoundError } from '../../errors.js';
 import {
   addVolumeSchema,
   cleanupDockerSchema,
@@ -95,9 +96,8 @@ export const volumeToolDefs: ToolDef[] = [
           `A Docker volume named "${dockerVolumeName}" already exists but is not managed by OpenLander. Choose a different volume_name to avoid conflicts.`,
         );
       } catch (error) {
-        const message = getErrorMessage(error);
         // 404 = volume doesn't exist → safe to create
-        if (!message.includes('no such volume') && !message.includes('No such volume')) {
+        if (!isDockerNotFoundError(error)) {
           throw error;
         }
       }
@@ -241,12 +241,12 @@ export const volumeToolDefs: ToolDef[] = [
       try {
         inspected = await volume.inspect();
       } catch (error) {
-        const message = getErrorMessage(error);
-        if (message.includes('no such volume') || message.includes('No such volume')) {
+        if (isDockerNotFoundError(error)) {
           throw new Error(
             `Volume "${dockerVolumeName}" not found. Check project_name and volume_name.`,
           );
         }
+        const message = getErrorMessage(error);
         throw new Error(`Failed to inspect volume "${dockerVolumeName}": ${message}`);
       }
 

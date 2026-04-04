@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid';
 import type { CloudflareConfig } from '../config/index.js';
 import type { Database, DomainMappingRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import { CloudflareNotFoundError } from '../errors.js';
 import { containerName as projectContainerName } from './helpers.js';
 import { buildTraefikLabels } from './traefik.js';
 
@@ -208,7 +209,7 @@ export class CloudflareTunnelManager {
       );
     } catch (error) {
       // Tunnel may have been deleted externally via Cloudflare dashboard
-      if (error instanceof Error && error.message.includes('(404)')) {
+      if (isCloudflare404(error)) {
         log.warn('Tunnel config update failed (404) — tunnel may have been deleted externally');
         return;
       }
@@ -260,7 +261,7 @@ export class CloudflareTunnelManager {
         );
         return updated.id;
       } catch (error) {
-        if (error instanceof Error && error.message.includes('(404)')) {
+        if (isCloudflare404(error)) {
           log.debug(
             { zoneId, recordId: cname.id },
             'CNAME record deleted externally — creating new one',
@@ -289,7 +290,7 @@ export class CloudflareTunnelManager {
       );
     } catch (error) {
       // Zone may have been deleted externally
-      if (error instanceof Error && error.message.includes('(404)')) {
+      if (isCloudflare404(error)) {
         log.debug({ zoneId, domain }, 'Zone not found when fetching DNS records — returning empty');
         return [];
       }
@@ -302,7 +303,7 @@ export class CloudflareTunnelManager {
       await this.cloudflareRequest(`zones/${zoneId}/dns_records/${recordId}`, { method: 'DELETE' });
     } catch (error) {
       // Record already deleted externally (e.g. via Cloudflare dashboard) — safe to ignore
-      if (error instanceof Error && error.message.includes('(404)')) {
+      if (isCloudflare404(error)) {
         log.debug({ zoneId, recordId }, 'DNS record already deleted — skipping');
         return;
       }
@@ -369,4 +370,11 @@ function normalizeDomain(domain: string): string {
 
 function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
+}
+
+function isCloudflare404(error: unknown): boolean {
+  return (
+    error instanceof CloudflareNotFoundError ||
+    (error instanceof Error && error.message.includes('(404)'))
+  );
 }

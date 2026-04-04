@@ -142,10 +142,10 @@ export async function cloneRepo(options: CloneOptions): Promise<CloneResult> {
       if (msg.includes('Authentication failed') || msg.includes('Permission denied')) {
         throw new GitAuthError(repoUrl);
       }
-      if (msg.includes('Remote branch') && msg.includes('not found')) {
+      if (isGitBranchNotFoundMessage(msg)) {
         throw new GitBranchNotFoundError(repoUrl, branch ?? 'unknown');
       }
-      if (msg.includes('not found') || msg.includes('does not exist') || msg.includes('404')) {
+      if (isGitRepoNotFoundMessage(msg)) {
         throw new GitRepoNotFoundError(repoUrl);
       }
       throw new GitCloneError(repoUrl, msg);
@@ -188,4 +188,14 @@ function toSshUrl(url: string): string | null {
   // Only convert known hosts
   if (!['github.com', 'gitlab.com', 'bitbucket.org'].some((h) => host.includes(h))) return null;
   return `git@${host}:${path}`;
+}
+
+function isGitBranchNotFoundMessage(message: string): boolean {
+  return message.includes('Remote branch') && message.includes('not found');
+}
+
+function isGitRepoNotFoundMessage(message: string): boolean {
+  return (
+    message.includes('not found') || message.includes('does not exist') || message.includes('404')
+  );
 }

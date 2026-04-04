@@ -22,6 +22,7 @@ import type { Database, ProjectRow } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import type { EnvManager } from './env.js';
 import type { JobManager } from './job-manager.js';
+import { isDockerNotFoundError } from '../errors.js';
 
 const log = createModuleLogger('compose');
 
@@ -591,8 +592,7 @@ export class ComposePipeline {
             try {
               await this.docker.stopContainer(child.container_id);
             } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              if (!msg.includes('not found') && !msg.includes('No such container')) {
+              if (!isDockerNotFoundError(err)) {
                 throw err;
               }
             }
@@ -851,8 +851,7 @@ export class ComposePipeline {
             try {
               await this.docker.stopContainer(deployment.containerId);
             } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              if (!message.includes('not found') && !message.includes('No such container')) {
+              if (!isDockerNotFoundError(error)) {
                 throw error;
               }
             }
@@ -862,8 +861,7 @@ export class ComposePipeline {
             try {
               await this.docker.stopContainer(containerName);
             } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              if (!message.includes('not found') && !message.includes('No such container')) {
+              if (!isDockerNotFoundError(error)) {
                 throw error;
               }
             }
@@ -1012,8 +1010,7 @@ export class ComposePipeline {
         try {
           await this.docker.stopContainer(deployment.containerId);
         } catch (stopError) {
-          const message = stopError instanceof Error ? stopError.message : String(stopError);
-          if (!message.includes('not found') && !message.includes('No such container')) {
+          if (!isDockerNotFoundError(stopError)) {
             log.debug(
               { err: stopError, serviceName },
               'Failed to stop compose service during rollback',

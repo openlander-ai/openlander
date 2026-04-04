@@ -10,6 +10,7 @@ import { buildTraefikLabels, getProjectUrl } from '../traefik.js';
 import type { Docker } from '../docker.js';
 import { getRouteName } from './helpers.js';
 import { containerName as projectContainerName } from '../helpers.js';
+import { isDockerNotFoundError } from '../../errors.js';
 
 const log = createModuleLogger('deploy:rollback');
 
@@ -162,7 +163,7 @@ export class RollbackExecutor {
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      if (errorMsg.includes('No such image') || errorMsg.includes('not found')) {
+      if (isDockerNotFoundError(error)) {
         return {
           success: false,
           projectId,

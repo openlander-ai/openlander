@@ -27,6 +27,7 @@ import {
 import type { ContainerExecResult } from './service-adapters/types.js';
 import type { Docker } from './docker.js';
 import { allocatePort } from './port.js';
+import { isDockerNotFoundError } from '../errors.js';
 
 const log = createModuleLogger('service-manager');
 const SERVICE_CARD_SUMMARY_CACHE_TTL_MS = 15_000;
@@ -297,7 +298,7 @@ export class ServiceManager {
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes('is not connected') && !msg.includes('No such container')) {
+          if (!msg.includes('is not connected') && !isDockerNotFoundError(err)) {
             throw err;
           }
         }
@@ -325,7 +326,7 @@ export class ServiceManager {
           throw err;
         }
       } catch (err) {
-        if (this.isNotFoundError(err)) {
+        if (isDockerNotFoundError(err)) {
           log.warn(
             { err, serviceId: service.id, serviceName: service.name, containerRef },
             'Service container not found — skipping shared network reconciliation',
@@ -603,14 +604,14 @@ export class ServiceManager {
     try {
       await this.docker.stopContainer(containerId);
     } catch (error) {
-      if (!this.isNotFoundError(error)) {
+      if (!isDockerNotFoundError(error)) {
         throw error;
       }
     }
     try {
       await this.docker.safeRemoveContainer(containerId);
     } catch (error) {
-      if (!this.isNotFoundError(error)) {
+      if (!isDockerNotFoundError(error)) {
         throw error;
       }
     }
@@ -620,7 +621,7 @@ export class ServiceManager {
     try {
       await client.getVolume(volumeName).remove();
     } catch (error) {
-      if (!this.isNotFoundError(error)) {
+      if (!isDockerNotFoundError(error)) {
         throw error;
       }
     }
@@ -1286,23 +1287,6 @@ export class ServiceManager {
     return normalized.length > 0 ? normalized : 'custom';
   }
 
-  private isNotFoundError(error: unknown): boolean {
-    const msg =
-      error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? String((error as { message: unknown }).message)
-          : typeof error === 'string'
-            ? error
-            : '';
-    const lower = msg.toLowerCase();
-    return (
-      lower.includes('not found') ||
-      lower.includes('no such container') ||
-      lower.includes('no such volume')
-    );
-  }
-
   private getRequiredService(serviceId: string): ServiceRow {
     const service = this.db.getService(serviceId);
     if (!service) {
@@ -1319,7 +1303,7 @@ export class ServiceManager {
         throw new Error(`Service container is not running: ${service.id}`);
       }
     } catch (error) {
-      if (this.isNotFoundError(error)) {
+      if (isDockerNotFoundError(error)) {
         throw new Error(`Service container not found: ${service.id}`);
       }
       throw error;

@@ -1,4 +1,5 @@
 import type { Docker } from './docker.js';
+import { isDockerNotFoundError } from '../errors.js';
 
 /**
  * Parsed Docker image URL components.
@@ -153,7 +154,7 @@ export async function getImageExposedPort(
 export function mapPullError(error: Error): string {
   const message = error.message.toLowerCase();
 
-  if (message.includes('repository does not exist') || message.includes('not found')) {
+  if (isDockerNotFoundError(error) || message.includes('repository does not exist')) {
     return 'Image not found. Check the image name and try again.';
   }
 

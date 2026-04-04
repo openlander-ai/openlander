@@ -7,6 +7,7 @@ import type { Docker } from './docker.js';
 import { DOCKER_LABELS, getDataDir, getPolicy, SHARED_NETWORK_NAME } from '../config/index.js';
 import { containerName as projectContainerName } from './helpers.js';
 import { join } from 'node:path';
+import { isDockerNotFoundError } from '../errors.js';
 
 const TRAEFIK_IMAGE = 'traefik:v3.6';
 
@@ -167,8 +168,7 @@ export class TraefikManager {
       await client.getNetwork(name).inspect();
       return;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (!msg.includes('not found') && !msg.includes('No such network')) {
+      if (!isDockerNotFoundError(error)) {
         throw error;
       }
     }

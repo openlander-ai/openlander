@@ -11,7 +11,7 @@ import type { Docker } from './docker.js';
 import type { CloudflareTunnelManager } from './cloudflare.js';
 import { cloneRepo } from './git.js';
 import { allocatePort, scanUsedPorts } from './port.js';
-import { buildTraefikLabels, getProjectUrl } from './traefik.js';
+import { getProjectUrl } from './traefik.js';
 import type { CloudflareTunnel } from './tunnel.js';
 import { BuildRecovery } from './build-recovery.js';
 import { DeployOrchestrator, type ServiceNode } from './orchestrator.js';
@@ -24,6 +24,7 @@ import {
   DeployLockedError,
   InvalidProjectNameError,
   PreflightCheckError,
+  isDockerNotFoundError,
 } from '../errors.js';
 import { preflightCheckOrThrow } from './preflight.js';
 import { buildDeployConfig } from './build-deploy-config.js';
@@ -725,8 +726,7 @@ export class DeployPipeline {
           await this.markRollbackImage(previousTag);
           preservedPreviousTag = currentRunningTag;
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes('No such image') && !msg.includes('not found')) {
+          if (!isDockerNotFoundError(err)) {
             log.warn({ err, currentRunningTag }, 'Failed to preserve previous image for rollback');
           }
         }
@@ -1324,8 +1324,7 @@ export class DeployPipeline {
             );
             redeployPreviousTag = redeployPreviousLabel;
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (!msg.includes('No such image') && !msg.includes('not found')) {
+            if (!isDockerNotFoundError(err)) {
               log.warn(
                 { err, currentRunningTag },
                 'Failed to preserve previous image for rollback',

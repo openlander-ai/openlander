@@ -1,4 +1,5 @@
 import { getLogBuffer, type LogEntry } from '../../lib/log-buffer.js';
+import { isDockerNotFoundError } from '../../errors.js';
 import {
   platformDbInspectSchema,
   platformDockerInspectSchema,
@@ -136,8 +137,7 @@ export const platformDebugToolDefs: ToolDef[] = [
         const container = context.appCtx.docker.getClient().getContainer(containerId);
         return await container.inspect();
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('No such container') || message.includes('not found')) {
+        if (isDockerNotFoundError(error)) {
           throw new Error(`CONTAINER_NOT_FOUND: ${containerId}`);
         }
         throw error;

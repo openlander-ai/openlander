@@ -12,7 +12,12 @@ import { sleep } from '../lib/sleep.js';
 import { containerName, stripContainerPrefix } from './helpers.js';
 import type Dockerode from 'dockerode';
 
-import { DockerNotRunningError, DockerBuildError, ContainerNotFoundError } from '../errors.js';
+import {
+  DockerNotRunningError,
+  DockerBuildError,
+  ContainerNotFoundError,
+  isDockerNotFoundError,
+} from '../errors.js';
 
 export type DockerStatus =
   | { state: 'running' }
@@ -602,7 +607,7 @@ export class Docker {
           disconnectError instanceof Error ? disconnectError.message : String(disconnectError);
         if (
           !disconnectMsg.includes('is not connected') &&
-          !disconnectMsg.includes('No such container')
+          !isDockerNotFoundError(disconnectError)
         ) {
           throw disconnectError;
         }
@@ -721,7 +726,7 @@ export class Docker {
       await container.stop();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('not found') || msg.includes('No such container')) {
+      if (isDockerNotFoundError(error)) {
         throw new ContainerNotFoundError(containerId);
       }
       // Already stopped is not an error
@@ -738,7 +743,7 @@ export class Docker {
       await container.start();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('not found') || msg.includes('No such container')) {
+      if (isDockerNotFoundError(error)) {
         throw new ContainerNotFoundError(containerId);
       }
       // Already running is not an error
@@ -754,8 +759,7 @@ export class Docker {
       const container = this.client.getContainer(containerId);
       await container.remove({ force: true });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('not found') || msg.includes('No such container')) {
+      if (isDockerNotFoundError(error)) {
         return;
       }
       throw error;
@@ -788,11 +792,7 @@ export class Docker {
       await network.disconnect({ Container: containerId, Force: true });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (
-        msg.includes('is not connected') ||
-        msg.includes('not found') ||
-        msg.includes('No such container')
-      ) {
+      if (msg.includes('is not connected') || isDockerNotFoundError(error)) {
         return;
       }
       throw error;
@@ -806,8 +806,7 @@ export class Docker {
       await this.client.getNetwork(networkName).inspect();
       return networkName;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (!msg.includes('not found') && !msg.includes('No such network')) {
+      if (!isDockerNotFoundError(error)) {
         throw error;
       }
     }
@@ -831,7 +830,7 @@ export class Docker {
       await this.client.getNetwork(networkName).remove();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('not found') || msg.includes('No such network')) {
+      if (isDockerNotFoundError(error)) {
         return;
       }
       if (msg.includes('active endpoints')) {
@@ -858,8 +857,7 @@ export class Docker {
       const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(logs as string);
       return stripDockerStreamHeaders(buffer);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('not found') || msg.includes('No such container')) {
+      if (isDockerNotFoundError(error)) {
         throw new ContainerNotFoundError(containerId);
       }
       throw error;
@@ -908,8 +906,7 @@ export class Docker {
           // Health check exists but not yet healthy — keep waiting
         }
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        if (msg.includes('not found') || msg.includes('No such container')) {
+        if (isDockerNotFoundError(error)) {
           return { healthy: false, error: 'Container not found' };
         }
       }
