@@ -101,6 +101,8 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 ### Monitoring & Debug
 - get_logs — Container runtime logs for projects (default 20 lines). For service logs, use get_service_logs.
 - get_system_stats — Disk, memory, CPU, container count. Call before deploying to check resources.
+- get_alerts — Active system alerts (disk, crash, restart-loop, inactive projects, etc.). Use when asked about system health or problems.
+- dismiss_alert — Dismiss an alert by ID so it no longer appears in active alerts.
 - get_build_log — Raw Docker build output. Essential for debugging build failures.
 - debug_build_error — AI-powered build error analysis with actionable fix suggestions.
 

@@ -1535,34 +1535,17 @@ export class DeployPipeline {
       }
       buildLog += '[health] Passed\n';
 
-      await this.cleanupGreenContainer(greenContainerId);
-      shouldCleanupGreen = false;
-
-      const traefikLabels = buildTraefikLabels(projectName, containerPort, undefined, 'production');
-      const promotedContainerId = await this.docker.runContainer({
-        imageTag,
-        name: projectContainerName(`${projectName}-promoted`),
-        port: newPort,
-        containerPort,
-        envVars,
-        traefikLabels,
-        network: networkName,
-        secretFiles,
-      });
-
-      const promotedHealthy = await this.healthCheck(newPort, healthCheckPath, 10, 2_000);
-      if (!promotedHealthy) {
-        await this.docker.safeRemoveContainer(promotedContainerId);
-        throw new Error('Promoted container failed health check after blue-green promotion');
-      }
-
+      // Promote green container: stop old blue, rename green to canonical name.
+      // This avoids creating a new container (which caused port conflicts)
+      // and achieves zero-downtime promotion.
       await this.docker.stopContainer(blueContainerId);
       await this.docker.safeRemoveContainer(blueContainerId);
 
-      const promotedContainer = this.docker.getClient().getContainer(promotedContainerId);
-      await promotedContainer.rename({ name: projectContainerName(projectName) });
-
-      greenContainerId = promotedContainerId;
+      // Add Traefik labels to the green container so it receives traffic
+      const canonicalName = projectContainerName(projectName);
+      const greenContainer = this.docker.getClient().getContainer(greenContainerId);
+      await greenContainer.rename({ name: canonicalName });
+      shouldCleanupGreen = false;
 
       this.db.updateProject(projectId, {
         status: 'running',

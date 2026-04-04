@@ -236,6 +236,14 @@ export const serviceNameSchema = z.object({
   service_name: z.string().min(1).describe('Service name'),
 });
 
+export const removeServiceSchema = z.object({
+  service_name: z.string().min(1).describe('Service name'),
+  force: z
+    .boolean()
+    .optional()
+    .describe('Force removal even if projects reference this service. Default: false.'),
+});
+
 export const backupServiceSchema = z.object({
   service_name: z.string().min(1),
 });

@@ -577,6 +577,7 @@ export class ServiceManager {
 
   async remove(
     id: string,
+    options?: { force?: boolean },
   ): Promise<{ warning?: string; connected_projects?: Array<{ id: string; name: string }> }> {
     const service = this.db.getService(id);
     if (!service) {
@@ -589,6 +590,12 @@ export class ServiceManager {
     if (connectedProjects.length > 0) {
       const projectNames = connectedProjects.map((p) => p.name).join(', ');
       const count = String(connectedProjects.length);
+      if (!options?.force) {
+        throw new Error(
+          `Service "${service.name}" is referenced by ${count} project(s): ${projectNames}. ` +
+            `Remove the service references from their environment variables first, or use force to remove anyway.`,
+        );
+      }
       warning = `Service "${service.name}" is connected to ${count} project(s): ${projectNames}. These projects may fail to start if they depend on this service.`;
     }
 

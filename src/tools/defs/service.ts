@@ -16,6 +16,7 @@ import {
   listDatabasesSchema,
   listServiceBackupsSchema,
   listServicesSchema,
+  removeServiceSchema,
   restoreServiceSchema,
   serviceNameSchema,
 } from './schemas.js';
@@ -400,14 +401,15 @@ export const serviceToolDefs: ToolDef[] = [
     name: 'remove_service',
     riskLevel: 'high',
     description:
-      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. Returns { status, service, warning, connected_projects }. Errors: SERVICE_NOT_FOUND.',
+      'Permanently remove a service — deletes the container, volume, and ALL persistent data. DESTRUCTIVE — cannot be undone. WARNING: This deletes database files, cache data, and everything stored in the service volume. ALWAYS call backup_service BEFORE removing a service with important data. If projects reference this service, removal is blocked unless force=true. Returns { status, service, warning, connected_projects }. Errors: SERVICE_NOT_FOUND, SERVICE_IN_USE.',
     mcpDescription: 'Remove a service container and volume. Data is permanently deleted.',
-    inputSchema: serviceNameSchema,
+    inputSchema: removeServiceSchema,
     execute: async (args, { appCtx }) => {
       const serviceName = args['service_name'] as string;
+      const force = (args['force'] as boolean | undefined) ?? false;
       const service = await getServiceByName(appCtx, serviceName);
       const serviceType = service.type;
-      const result = await appCtx.serviceManager.remove(service.id);
+      const result = await appCtx.serviceManager.remove(service.id, { force });
       return {
         status: 'removed',
         service: serviceName,
