@@ -1284,10 +1284,11 @@ export class ServiceManager {
       return false;
     }
 
+    const msg = error.message.toLowerCase();
     return (
-      error.message.includes('not found') ||
-      error.message.includes('No such container') ||
-      error.message.includes('No such volume')
+      msg.includes('not found') ||
+      msg.includes('no such container') ||
+      msg.includes('no such volume')
     );
   }
 
