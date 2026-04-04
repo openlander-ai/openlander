@@ -16,7 +16,9 @@ const agentExecuteGoalDescription =
   'Run the AI agent to accomplish a complex goal. The agent reasons about steps and chains multiple tools (deploy, configure, debug, etc.) automatically. Use this for multi-step tasks instead of calling individual tools.';
 
 function toInputSchema(schema: z.ZodType) {
-  return z.toJSONSchema(schema);
+  const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
+  delete jsonSchema['$schema'];
+  return jsonSchema;
 }
 
 function successResponse(result: unknown): { content: Array<{ type: 'text'; text: string }> } {
