@@ -332,7 +332,7 @@ function buildDefaultConfig(): OpenLanderConfig {
       enabled: false,
       transport: 'stdio',
       servers: [],
-      platformTools: false,
+      platformTools: true,
     },
     channels: {
       slack: { enabled: false, token: '', signingSecret: '', recoveryChannelId: '' },

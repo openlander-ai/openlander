@@ -263,7 +263,7 @@ export class OpsAgent {
     if (cascadeResult) {
       const cascadeAlert = this.cascade.buildCascadeAlert(cascadeResult, incident.id);
       await this.alerting.sendAlert(cascadeAlert);
-      return;
+      // Don't return — still attempt recovery for this individual project
     }
 
     const alert = this.alerting.buildContextualAlert({

@@ -21,6 +21,10 @@ export class CascadeDetector {
   }
 
   recordFailure(projectId: string): void {
+    // Skip projects already in error state to avoid cascade false positives
+    const project = this.ctx.db.getProject(projectId);
+    if (project?.status === 'error') return;
+
     this.recentFailures.set(projectId, Date.now());
   }
 
@@ -115,7 +119,7 @@ export class CascadeDetector {
   cleanupOldFailures(): void {
     const now = Date.now();
     for (const [projectId, ts] of this.recentFailures.entries()) {
-      if (now - ts > this.CORRELATION_WINDOW_MS * 2) {
+      if (now - ts > this.CORRELATION_WINDOW_MS) {
         this.recentFailures.delete(projectId);
       }
     }
