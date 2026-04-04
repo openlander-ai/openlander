@@ -111,11 +111,7 @@ export class AlertMonitor {
 
     // Also include open/active ops_incidents that may not be in memory
     // (e.g. after server restart, or incidents created by OpsAgent)
-    const now = Date.now();
-    const recentIncidents = this.db.listOpsIncidentsByDateRange(now - MS_PER_DAY, now);
-    const openIncidents = recentIncidents.filter(
-      (inc) => inc.status === 'open' || inc.status === 'active',
-    );
+    const openIncidents = this.db.listAllActiveOpsIncidents();
 
     const memoryAlertProjectIds = new Set(
       memoryAlerts
