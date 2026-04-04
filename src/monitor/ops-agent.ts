@@ -315,9 +315,28 @@ export class OpsAgent {
     await this.alerting.sendAlert(alert);
   }
 
-  private handleDeployFailed(_event: OpsEvent): Promise<void> {
-    void _event;
-    return Promise.resolve();
+  private async handleDeployFailed(event: OpsEvent): Promise<void> {
+    const payload = event.payload as {
+      projectId?: string;
+      error?: string;
+      step?: string;
+    };
+    const projectId = payload.projectId ?? '';
+    if (!projectId || payload.step !== 'run') return;
+
+    // deploy:failed from HealthMonitor doesn't include containerId — look it up
+    const project = this.ctx.db.getProject(projectId);
+    if (!project) return;
+
+    await this.handleCrashEvent({
+      ...event,
+      type: 'deploy:crash',
+      payload: {
+        projectId,
+        projectName: project.name,
+        containerId: project.container_id ?? '',
+      },
+    });
   }
 
   private handleRecoveryExhausted(_event: OpsEvent): Promise<void> {
