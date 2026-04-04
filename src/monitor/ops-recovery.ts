@@ -53,9 +53,28 @@ export class RecoveryPipeline {
       return 'skipped';
     }
 
+    const actionRunId = this.ctx.db.createActionRun({
+      projectId,
+      triggerSource: 'auto_recovery',
+      recoveryStrategy: 'ops_agent',
+    });
+
     this.activeRecoveries.add(projectId);
     try {
-      return await this.runRecoverySequence(context);
+      const outcome = await this.runRecoverySequence(context);
+      this.ctx.db.updateActionRunStatus(
+        actionRunId,
+        outcome === 'recovered' ? 'succeeded' : 'failed',
+        outcome === 'escalated' ? 'Recovery pipeline exhausted' : undefined,
+      );
+      return outcome;
+    } catch (error) {
+      this.ctx.db.updateActionRunStatus(
+        actionRunId,
+        'failed',
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
     } finally {
       this.activeRecoveries.delete(projectId);
     }

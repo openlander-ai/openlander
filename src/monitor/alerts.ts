@@ -107,7 +107,42 @@ export class AlertMonitor {
   }
 
   getActiveAlerts(): Alert[] {
-    return Array.from(this.alerts.values()).filter((a) => !a.dismissed);
+    const memoryAlerts = Array.from(this.alerts.values()).filter((a) => !a.dismissed);
+
+    // Also include open/active ops_incidents that may not be in memory
+    // (e.g. after server restart, or incidents created by OpsAgent)
+    const now = Date.now();
+    const recentIncidents = this.db.listOpsIncidentsByDateRange(now - MS_PER_DAY, now);
+    const openIncidents = recentIncidents.filter(
+      (inc) => inc.status === 'open' || inc.status === 'active',
+    );
+
+    const memoryAlertProjectIds = new Set(
+      memoryAlerts
+        .filter((a) => a.type === 'container-crash')
+        .map((a) => (a.details as { projectId?: string }).projectId)
+        .filter(Boolean),
+    );
+
+    for (const inc of openIncidents) {
+      if (memoryAlertProjectIds.has(inc.project_id)) continue;
+
+      const project = this.db.getProject(inc.project_id);
+      const projectName = project?.name ?? inc.project_id;
+
+      memoryAlerts.push({
+        id: inc.id,
+        type: 'container-crash',
+        severity: inc.severity === 'info' ? 'warning' : inc.severity,
+        message: `Incident: ${projectName} — ${inc.root_cause ?? inc.status}`,
+        details: { projectId: inc.project_id, incidentId: inc.id, source: 'ops_incidents' },
+        suggestion: `Check ops incidents for project "${projectName}". Use get_logs to investigate.`,
+        createdAt: new Date(inc.created_at),
+        dismissed: false,
+      });
+    }
+
+    return memoryAlerts;
   }
 
   dismissAlert(alertId: string): void {
