@@ -452,6 +452,14 @@ export const mapDomainSchema = domainSchema;
 // List domains schema
 export const listDomainsSchema = z.object({}).strict();
 
+// List postmortems schema
+export const listPostmortemsSchema = z.object({}).strict();
+
+// Get postmortem schema
+export const getPostmortemSchema = z.object({
+  identifier: z.string().min(1).describe('Postmortem ID or project name'),
+});
+
 // Agent-specific schemas
 export const agentExecuteGoalSchema = z.object({
   goal: z.string().min(1).describe('The goal for the agent to accomplish using available tools'),

@@ -224,7 +224,7 @@ describe('PostmortemGenerator - lifecycle and generation', () => {
     expect(latest?.projectId).toBe('project-1');
     expect(latest?.projectName).toBe('Demo Project');
     expect(latest?.markdown).toBe('test markdown');
-    expect(latest?.generatedAt).toBeInstanceOf(Date);
+    expect(latest?.createdAt).toBeInstanceOf(Date);
   });
 });
 

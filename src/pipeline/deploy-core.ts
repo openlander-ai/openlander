@@ -733,6 +733,12 @@ export class DeployPipeline {
       } else if (currentRunningTag === previousTag) {
         preservedPreviousTag = currentRunningTag;
       }
+    } else {
+      const currentRunningTag = environment.image_tag ?? project.image_tag;
+      if (currentRunningTag) {
+        this.db.updateProject(projectId, { previousImageTag: currentRunningTag });
+        preservedPreviousTag = currentRunningTag;
+      }
     }
     let dockerfilePath: string | undefined;
     try {

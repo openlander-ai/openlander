@@ -1,12 +1,15 @@
 import { createModuleLogger } from '../../lib/logger.js';
 import { ProjectNotFoundError } from '../../errors.js';
 import { formatStatsSummary, getSystemStats } from '../../monitor/stats.js';
+import { getPostmortemInstance } from '../../monitor/postmortem.js';
 import {
   dismissAlertSchema,
   getAlertsSchema,
   getLogsSchema,
+  getPostmortemSchema,
   getProjectStatsSchema,
   getSystemStatsSchema,
+  listPostmortemsSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
 
@@ -166,6 +169,73 @@ export const monitoringToolDefs: ToolDef[] = [
           },
         };
       }
+    },
+  },
+  {
+    name: 'list_postmortems',
+    riskLevel: 'low',
+    description:
+      'List generated postmortem reports. Returns id, projectId, createdAt, and resolved status for each.',
+    mcpDescription: 'List all generated postmortem reports.',
+    inputSchema: listPostmortemsSchema,
+    execute: () => {
+      const generator = getPostmortemInstance();
+      if (!generator) {
+        return Promise.resolve({
+          count: 0,
+          postmortems: [],
+          _agent_guidance: {
+            message: 'Postmortem generator not initialized.',
+            next_steps: ['Check if the system is fully started'],
+          },
+        });
+      }
+      const postmortems = generator.listPostmortems();
+      return Promise.resolve({
+        count: postmortems.length,
+        postmortems,
+      });
+    },
+  },
+  {
+    name: 'get_postmortem',
+    riskLevel: 'low',
+    description:
+      'Get a specific postmortem report by ID or project name. Returns the full markdown report with timeline, root cause analysis, and remediation steps.',
+    mcpDescription: 'Get a specific postmortem report by ID or project name.',
+    inputSchema: getPostmortemSchema,
+    execute: (args) => {
+      const generator = getPostmortemInstance();
+      if (!generator) {
+        return Promise.resolve({
+          error: 'Postmortem generator not initialized',
+          _agent_guidance: {
+            message: 'Postmortem generator not initialized.',
+            next_steps: ['Check if the system is fully started'],
+          },
+        });
+      }
+      const identifier = args['identifier'] as string;
+      const postmortem = generator.getPostmortem(identifier);
+      if (!postmortem) {
+        return Promise.resolve({
+          error: `Postmortem not found for identifier: ${identifier}`,
+          _agent_guidance: {
+            message: 'Postmortem not found.',
+            next_steps: [
+              'Use list_postmortems to see available postmortems',
+              'Check the project name or ID',
+            ],
+          },
+        });
+      }
+      return Promise.resolve({
+        id: postmortem.id,
+        projectId: postmortem.projectId,
+        projectName: postmortem.projectName,
+        markdown: postmortem.markdown,
+        createdAt: postmortem.createdAt.toISOString(),
+      });
     },
   },
 ];

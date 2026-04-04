@@ -24,12 +24,16 @@ export class CascadeDetector {
     this.recentFailures.set(projectId, Date.now());
   }
 
-  async detectCascade(failedProjectIds: string[]): Promise<CascadeResult | null> {
+  async detectCascade(): Promise<CascadeResult | null> {
+    this.cleanupOldFailures();
+
     const now = Date.now();
-    const recentIds = failedProjectIds.filter((id) => {
-      const ts = this.recentFailures.get(id);
-      return ts !== undefined && now - ts <= this.CORRELATION_WINDOW_MS;
-    });
+    const recentIds: string[] = [];
+    for (const [id, ts] of this.recentFailures) {
+      if (now - ts <= this.CORRELATION_WINDOW_MS) {
+        recentIds.push(id);
+      }
+    }
 
     if (recentIds.length < 2) {
       return null;

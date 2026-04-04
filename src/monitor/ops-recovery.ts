@@ -48,6 +48,8 @@ export class RecoveryPipeline {
       return 'skipped';
     }
 
+    const isHalfOpenAttempt = this.ctx.db.getCircuitBreakerState(projectId)?.state === 'half_open';
+
     if (this.activeRecoveries.has(projectId)) {
       log.warn({ projectId }, 'Recovery already in progress — skipping');
       return 'skipped';
@@ -62,6 +64,10 @@ export class RecoveryPipeline {
     this.activeRecoveries.add(projectId);
     try {
       const outcome = await this.runRecoverySequence(context);
+      if (isHalfOpenAttempt && outcome === 'escalated') {
+        this.ctx.db.openCircuitBreaker(projectId);
+        log.warn({ projectId }, 'Half-open recovery attempt failed — circuit breaker re-opened');
+      }
       this.ctx.db.updateActionRunStatus(
         actionRunId,
         outcome === 'recovered' ? 'succeeded' : 'failed',

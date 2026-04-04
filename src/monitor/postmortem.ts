@@ -6,11 +6,12 @@ import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('postmortem');
 
-interface PostmortemEntry {
+export interface PostmortemEntry {
+  id?: string;
   projectId: string;
   projectName: string;
   markdown: string;
-  generatedAt: Date;
+  createdAt: Date;
 }
 
 type Locale = 'en' | 'ko';
@@ -51,6 +52,28 @@ export class PostmortemGenerator {
 
   getLatest(projectId: string): PostmortemEntry | undefined {
     return this.postmortems.get(projectId);
+  }
+
+  listPostmortems(): Array<{
+    id: string;
+    projectId: string;
+    projectName: string;
+    createdAt: string;
+  }> {
+    return Array.from(this.postmortems.values()).map((p) => ({
+      id: p.id ?? p.projectId,
+      projectId: p.projectId,
+      projectName: p.projectName,
+      createdAt: p.createdAt.toISOString(),
+    }));
+  }
+
+  getPostmortem(identifier: string): PostmortemEntry | undefined {
+    const byId = this.postmortems.get(identifier);
+    if (byId) return byId;
+    return Array.from(this.postmortems.values()).find(
+      (p) => p.projectId === identifier || p.projectName === identifier,
+    );
   }
 
   stop(): void {
@@ -155,10 +178,11 @@ ${buildLogTail}
       const result = await this.agent.chat(prompt, `postmortem-${projectId}`);
 
       this.postmortems.set(projectId, {
+        id: projectId,
         projectId,
         projectName,
         markdown: result.message,
-        generatedAt: new Date(),
+        createdAt: new Date(),
       });
 
       log.info({ projectId }, 'Postmortem generated');

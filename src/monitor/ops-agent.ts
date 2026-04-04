@@ -259,7 +259,7 @@ export class OpsAgent {
 
     const incident = this.incidents.openIncident(projectId, { type: event.type });
 
-    const cascadeResult = await this.cascade.detectCascade([projectId]);
+    const cascadeResult = await this.cascade.detectCascade();
     if (cascadeResult) {
       const cascadeAlert = this.cascade.buildCascadeAlert(cascadeResult, incident.id);
       await this.alerting.sendAlert(cascadeAlert);
