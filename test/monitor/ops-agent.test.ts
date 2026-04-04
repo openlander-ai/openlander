@@ -49,7 +49,7 @@ describe('OpsAgent', () => {
     it('subscribes to 7 event types on start', async () => {
       const agent = new OpsAgent(mockCtx);
       await agent.start();
-      expect(eventBus.on).toHaveBeenCalledTimes(7);
+      expect(eventBus.on).toHaveBeenCalledTimes(9);
       await agent.stop();
     });
 
@@ -57,14 +57,14 @@ describe('OpsAgent', () => {
       const agent = new OpsAgent(mockCtx);
       await agent.start();
       await agent.stop();
-      expect(mockUnsubscribe).toHaveBeenCalledTimes(7);
+      expect(mockUnsubscribe).toHaveBeenCalledTimes(9);
     });
 
     it('is idempotent — second start is no-op', async () => {
       const agent = new OpsAgent(mockCtx);
       await agent.start();
       await agent.start();
-      expect(eventBus.on).toHaveBeenCalledTimes(7);
+      expect(eventBus.on).toHaveBeenCalledTimes(9);
       await agent.stop();
     });
 

@@ -55,6 +55,12 @@ export class OpsAgent {
     this.eventHandlers.set('deploy:crash', (payload) => {
       this.enqueue({ type: 'deploy:crash', payload, timestamp: Date.now() });
     });
+    this.eventHandlers.set('container:die', (payload) => {
+      this.enqueue({ type: 'container:die', payload, timestamp: Date.now() });
+    });
+    this.eventHandlers.set('container:oom', (payload) => {
+      this.enqueue({ type: 'container:oom', payload, timestamp: Date.now() });
+    });
     this.eventHandlers.set('container:missing', (payload) => {
       this.enqueue({ type: 'container:missing', payload, timestamp: Date.now() });
     });
@@ -76,6 +82,8 @@ export class OpsAgent {
         eventName as
           | 'monitor:inactive'
           | 'deploy:crash'
+          | 'container:die'
+          | 'container:oom'
           | 'container:missing'
           | 'deploy:failed'
           | 'recovery:failed'
@@ -165,6 +173,8 @@ export class OpsAgent {
   private async routeEvent(event: OpsEvent): Promise<void> {
     switch (event.type) {
       case 'deploy:crash':
+      case 'container:die':
+      case 'container:oom':
       case 'container:missing':
         await this.handleCrashEvent(event);
         break;

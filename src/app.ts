@@ -20,6 +20,7 @@ import { JobManager } from './pipeline/job-manager.js';
 import { ComposePipeline } from './pipeline/compose.js';
 import { AutoDetector } from './pipeline/auto-detect.js';
 import { AlertMonitor } from './monitor/alerts.js';
+import { DockerEventListener } from './monitor/docker-events.js';
 import { IncidentReporter } from './monitor/incident-reporter.js';
 import {
   PostmortemGenerator,
@@ -67,6 +68,7 @@ export interface AppContext {
   deployQueue: DeployQueue;
   // v0.2 modules
   healthMonitor: HealthMonitor;
+  dockerEventListener?: DockerEventListener;
   opsAgent?: OpsAgent;
   webhookManager: WebhookManager;
   cloudflare: CloudflareTunnelManager;
@@ -332,6 +334,8 @@ export async function createAppContext(
   // v0.5: Alert monitor
   const alertMonitor = new AlertMonitor(docker, db, eventBus);
 
+  const dockerEventListener = new DockerEventListener(docker, db, eventBus);
+
   // Status sync: update project status when container crashes or health checks fail
   // AlertMonitor detects crashes but only creates alerts — this bridges alerts to status.
   const crashFailureCounts = new Map<string, number>();
@@ -491,6 +495,7 @@ export async function createAppContext(
     jobManager,
     autoDetector,
     alertMonitor,
+    dockerEventListener,
     questionBridge,
     serviceManager,
     approvalGate,
@@ -524,6 +529,8 @@ export async function createAppContext(
   rollbackWatcher.start();
   activeRollbackWatcher = rollbackWatcher;
 
+  dockerEventListener.start();
+
   return ctx;
 }
 
@@ -534,6 +541,7 @@ export function shutdownAppContext(ctx: AppContext): void {
   activeIncidentReporter = null;
   activeRollbackWatcher = null;
   getPostmortemInstance()?.stop();
+  ctx.dockerEventListener?.stop();
   void ctx.opsAgent?.stop();
   ctx.healthMonitor.stop();
   ctx.alertMonitor.stop();

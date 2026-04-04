@@ -52,6 +52,8 @@ export type EventType =
   | 'project:unarchive'
   | 'container:missing'
   | 'container:health'
+  | 'container:die'
+  | 'container:oom'
   // Tunnel
   | 'tunnel:start'
   | 'tunnel:stop'
@@ -230,6 +232,17 @@ export interface EventPayload {
     suggestion: string;
   };
   'container:health': { projectId: string; healthy: boolean };
+  'container:die': {
+    projectId: string;
+    containerId: string;
+    containerName: string;
+    exitCode: number;
+  };
+  'container:oom': {
+    projectId: string;
+    containerId: string;
+    containerName: string;
+  };
   'tunnel:start': { projectId: string; localPort: number };
   'tunnel:stop': { projectId: string };
   'tunnel:url': { projectId: string; url: string };

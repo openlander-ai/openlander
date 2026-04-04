@@ -51,6 +51,8 @@ export class AlertMonitor {
   private readonly alertKeys = new Map<string, string>();
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private unsubscribeCrash?: () => void;
+  private unsubscribeContainerDie?: () => void;
+  private unsubscribeContainerOom?: () => void;
   private checking = false;
   private hourlyCounts: number[] = [];
   private lastAlertTime = 0;
@@ -78,6 +80,14 @@ export class AlertMonitor {
       }
     });
 
+    this.unsubscribeContainerDie = this.events.on('container:die', (payload) => {
+      void this.handleContainerDieEvent(payload);
+    });
+
+    this.unsubscribeContainerOom = this.events.on('container:oom', (payload) => {
+      void this.handleContainerOomEvent(payload);
+    });
+
     void this.runChecks();
   }
 
@@ -90,6 +100,10 @@ export class AlertMonitor {
     this.intervalId = undefined;
     this.unsubscribeCrash?.();
     this.unsubscribeCrash = undefined;
+    this.unsubscribeContainerDie?.();
+    this.unsubscribeContainerDie = undefined;
+    this.unsubscribeContainerOom?.();
+    this.unsubscribeContainerOom = undefined;
   }
 
   getActiveAlerts(): Alert[] {
@@ -439,6 +453,57 @@ export class AlertMonitor {
         projectId: project.id,
         projectName: project.name,
         containerId: project.container_id,
+      },
+      suggestion,
+    });
+  }
+
+  private async handleContainerDieEvent(payload: {
+    projectId: string;
+    containerId: string;
+    containerName: string;
+    exitCode: number;
+  }): Promise<void> {
+    const project = this.db.getProject(payload.projectId);
+    if (!project) return;
+
+    const key = `container-crash:${payload.containerId}`;
+    const suggestion = `Check the container logs for errors using "get_logs ${project.name}" and investigate the root cause.`;
+
+    await this.upsertAlert(key, {
+      type: 'container-crash',
+      severity: 'critical',
+      message: `Container crashed: ${project.name} (exit code ${String(payload.exitCode)})`,
+      details: {
+        projectId: project.id,
+        projectName: project.name,
+        containerId: payload.containerId,
+        exitCode: payload.exitCode,
+      },
+      suggestion,
+    });
+  }
+
+  private async handleContainerOomEvent(payload: {
+    projectId: string;
+    containerId: string;
+    containerName: string;
+  }): Promise<void> {
+    const project = this.db.getProject(payload.projectId);
+    if (!project) return;
+
+    const key = `container-crash:${payload.containerId}`;
+    const suggestion = `Container ran out of memory. Consider increasing memory limits or optimizing the application's memory usage. Check logs with "get_logs ${project.name}".`;
+
+    await this.upsertAlert(key, {
+      type: 'container-crash',
+      severity: 'critical',
+      message: `Container OOM killed: ${project.name}`,
+      details: {
+        projectId: project.id,
+        projectName: project.name,
+        containerId: payload.containerId,
+        reason: 'out_of_memory',
       },
       suggestion,
     });

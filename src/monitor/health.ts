@@ -46,6 +46,7 @@ export class HealthMonitor {
   private readonly options: Required<MonitorTimingOptions>;
   private readonly aiProvider: LanguageModel | null;
   private readonly status = new Map<string, HealthCheckResult>();
+  private readonly previousRestartCounts = new Map<string, number>();
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private checking = false;
   private lastCleanupAt = 0;
@@ -293,6 +294,18 @@ export class HealthMonitor {
       const info = await container.inspect();
 
       const restartCount = info.RestartCount;
+
+      const previousCount = this.previousRestartCounts.get(ensuredContainerId) ?? 0;
+      this.previousRestartCounts.set(ensuredContainerId, restartCount);
+      const restartDelta = restartCount - previousCount;
+
+      if (restartDelta > 0 && restartCount < 3) {
+        log.info(
+          { projectId, containerId: ensuredContainerId, restartCount, restartDelta },
+          'Container restart detected via polling fallback',
+        );
+      }
+
       if (restartCount >= 3) {
         const errorSnippet = await this.getContainerStderrSnippet(ensuredContainerId);
         const incidentId = this.recordRuntimeIncident({
