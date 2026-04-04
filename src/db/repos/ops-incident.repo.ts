@@ -67,6 +67,15 @@ export class OpsIncidentRepo {
       .get() as OpsIncidentRow | undefined;
   }
 
+  findAllActive(): OpsIncidentRow[] {
+    return this.db
+      .select()
+      .from(opsIncidents)
+      .where(inArray(opsIncidents.status, ['open', 'active']))
+      .orderBy(desc(opsIncidents.created_at))
+      .all() as OpsIncidentRow[];
+  }
+
   findByDateRange(from: number, to: number): OpsIncidentRow[] {
     return this.db
       .select()

@@ -72,6 +72,8 @@ describe('AlertMonitor missing container handling', () => {
     db = {
       listProjects,
       updateProject,
+      listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
+      getProject: vi.fn().mockReturnValue(null),
     } as unknown as Database;
 
     events = {

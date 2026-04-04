@@ -230,6 +230,7 @@ export class Database implements AuthDatabase {
      getOpsIncident(id: string) { return this.opsIncidentRepo.findById(id); }
      listOpsIncidentsByProject(projectId: string, limit?: number) { return this.opsIncidentRepo.findByProjectId(projectId, limit); }
      getActiveOpsIncident(projectId: string) { return this.opsIncidentRepo.findActive(projectId); }
+     listAllActiveOpsIncidents() { return this.opsIncidentRepo.findAllActive(); }
      updateOpsIncidentStatus(id: string, status: string, extra?: { resolved_at?: number; escalated_at?: number }) { this.opsIncidentRepo.updateStatus(id, status, extra); }
      updateOpsIncident(id: string, data: Parameters<OpsIncidentRepo['update']>[1]) { this.opsIncidentRepo.update(id, data); }
      addOpsIncidentEvent(data: Parameters<OpsIncidentEventRepo['addEvent']>[0]) { return this.opsIncidentEventRepo.addEvent(data); }

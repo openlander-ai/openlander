@@ -73,6 +73,8 @@ describe('AlertMonitor', () => {
 
     db = {
       listProjects,
+      listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
+      getProject: vi.fn().mockReturnValue(null),
     } as unknown as Database;
 
     events = {
@@ -184,6 +186,8 @@ describe('AlertMonitor - checkPortConflicts', () => {
 
     db = {
       listProjects,
+      listOpsIncidentsByDateRange: vi.fn().mockReturnValue([]),
+      getProject: vi.fn().mockReturnValue(null),
     } as unknown as Database;
 
     events = {

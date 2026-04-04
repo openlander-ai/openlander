@@ -56,7 +56,7 @@ export class RecoveryPipeline {
     const actionRunId = this.ctx.db.createActionRun({
       projectId,
       triggerSource: 'auto_recovery',
-      recoveryStrategy: 'ops_agent',
+      recoveryStrategy: 'unknown',
     });
 
     this.activeRecoveries.add(projectId);
