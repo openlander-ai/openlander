@@ -1291,6 +1291,15 @@ export class DeployPipeline {
 
     this.validateProjectName(project.name);
 
+    if (project.archived_at) {
+      return {
+        success: false,
+        projectId,
+        projectName: project.name,
+        error: `Project "${project.name}" is archived. Use unarchive_project first, then redeploy.`,
+      };
+    }
+
     const lockSession = options?.lockSessionId ?? nanoid(12);
     const locked = this.db.acquireDeployLock(projectId, lockSession);
     if (!locked) {
