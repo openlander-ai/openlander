@@ -45,6 +45,10 @@ function createMockDocker(options?: { blueRunning?: boolean }): {
     restart: blueRestartMock,
   };
 
+  const greenContainer = {
+    rename: promotedRenameMock,
+  };
+
   const docker = {
     buildImage: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
@@ -58,6 +62,9 @@ function createMockDocker(options?: { blueRunning?: boolean }): {
       getContainer: vi.fn().mockImplementation((containerId: string) => {
         if (containerId === 'container-blue') {
           return blueContainer;
+        }
+        if (containerId === 'container-green') {
+          return greenContainer;
         }
         if (containerId === 'container-promoted') {
           return promotedContainer;
@@ -148,52 +155,50 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     const stopContainerMock = docker.stopContainer as ReturnType<typeof vi.fn>;
     const safeRemoveContainerMock = docker.safeRemoveContainer as ReturnType<typeof vi.fn>;
 
-    const promotedRunOrder = runContainerMock.mock.invocationCallOrder[1];
-    const stopGreenCallIndex = stopContainerMock.mock.calls.findIndex(
-      ([containerId]) => containerId === 'container-green',
+    const renameCallOrder = dockerControls.promotedRenameMock.mock.invocationCallOrder[0];
+    const stopBlueCallIndex = stopContainerMock.mock.calls.findIndex(
+      ([containerId]) => containerId === 'container-blue',
     );
-    const removeGreenCallIndex = safeRemoveContainerMock.mock.calls.findIndex(
-      ([containerId]) => containerId === 'container-green',
+    const removeBlueCallIndex = safeRemoveContainerMock.mock.calls.findIndex(
+      ([containerId]) => containerId === 'container-blue',
     );
 
-    expect(stopGreenCallIndex).toBeGreaterThanOrEqual(0);
-    expect(removeGreenCallIndex).toBeGreaterThanOrEqual(0);
-    expect(stopContainerMock.mock.invocationCallOrder[stopGreenCallIndex]).toBeLessThan(
-      promotedRunOrder,
+    expect(stopBlueCallIndex).toBeGreaterThanOrEqual(0);
+    expect(removeBlueCallIndex).toBeGreaterThanOrEqual(0);
+    expect(stopContainerMock.mock.invocationCallOrder[stopBlueCallIndex]).toBeLessThan(
+      renameCallOrder,
     );
-    expect(safeRemoveContainerMock.mock.invocationCallOrder[removeGreenCallIndex]).toBeLessThan(
-      promotedRunOrder,
+    expect(safeRemoveContainerMock.mock.invocationCallOrder[removeBlueCallIndex]).toBeLessThan(
+      renameCallOrder,
     );
-    expect(healthCheckSpy).toHaveBeenNthCalledWith(2, 12001, '/', 10, 2000);
+    expect(healthCheckSpy).toHaveBeenNthCalledWith(1, 12001, '/', 10, 2000);
     expect(runContainerMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ name: 'ol-demo-app-promoted' }),
+      1,
+      expect.objectContaining({ name: 'ol-demo-app-green' }),
     );
     expect(dockerControls.promotedRenameMock).toHaveBeenCalledWith({ name: 'ol-demo-app' });
   });
 
   it('keeps blue running when promoted container fails post-promotion health check', async () => {
-    vi.spyOn(pipeline as unknown as { healthCheck: () => Promise<boolean> }, 'healthCheck')
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(false);
+    vi.spyOn(
+      pipeline as unknown as { healthCheck: () => Promise<boolean> },
+      'healthCheck',
+    ).mockResolvedValueOnce(true);
+    dockerControls.promotedRenameMock.mockRejectedValueOnce(new Error('rename failed'));
 
     const result = await pipeline.redeploy('p1', { strategy: 'blue-green' });
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('previous version still serving');
-    expect(result.error).toContain(
-      'Promoted container failed health check after blue-green promotion',
-    );
-    expect(docker.stopContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
-      'container-blue',
-    );
-    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).not.toHaveBeenCalledWith(
+    expect(result.error).toContain('rename failed');
+    expect(docker.stopContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('container-blue');
+    expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-blue',
     );
     expect(docker.safeRemoveContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
-      'container-promoted',
+      'container-green',
     );
-    expect(dockerControls.promotedRenameMock).not.toHaveBeenCalled();
+    expect(dockerControls.promotedRenameMock).toHaveBeenCalledTimes(1);
   });
 
   it('tries to restart blue when promoted container fails and blue is not running', async () => {
@@ -202,9 +207,11 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     dockerControls = mockDocker.controls;
     pipeline = new DeployPipeline(docker, db, env as never, testConfig);
 
-    vi.spyOn(pipeline as unknown as { healthCheck: () => Promise<boolean> }, 'healthCheck')
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(false);
+    vi.spyOn(
+      pipeline as unknown as { healthCheck: () => Promise<boolean> },
+      'healthCheck',
+    ).mockResolvedValueOnce(true);
+    dockerControls.promotedRenameMock.mockRejectedValueOnce(new Error('rename failed'));
 
     const result = await pipeline.redeploy('p1', { strategy: 'blue-green' });
 
@@ -212,6 +219,6 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     expect(result.error).toContain('previous version still serving');
     expect(dockerControls.blueInspectMock).toHaveBeenCalled();
     expect(dockerControls.blueRestartMock).toHaveBeenCalledTimes(1);
-    expect(dockerControls.promotedRenameMock).not.toHaveBeenCalled();
+    expect(dockerControls.promotedRenameMock).toHaveBeenCalledTimes(1);
   });
 });

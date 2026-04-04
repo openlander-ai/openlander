@@ -523,26 +523,21 @@ describe('ServiceManager remove with connected projects warning', () => {
     const db = createDbMock([service], projects);
     vi.mocked(db.getEnvVars).mockImplementation((projectId: string) => {
       if (projectId === 'proj-1') {
-        return { DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' };
+        return { DATABASE_URL: 'postgresql://ol-svc-shared-pg:5432/db' } as Record<string, string>;
       }
       if (projectId === 'proj-2') {
-        return { DB_HOST: 'ol-svc-shared-pg' };
+        return { DB_HOST: 'ol-svc-shared-pg' } as Record<string, string>;
       }
-      return {};
+      return {} as Record<string, string>;
     });
 
     const dockerHarness = createMockDockerHarness();
     const manager = new ServiceManager(dockerHarness.docker, db);
 
-    const result = await manager.remove('svc-pg');
-
-    expect(result.warning).toBeDefined();
-    expect(result.warning).toContain('shared-pg');
-    expect(result.warning).toContain('2');
-    expect(result.warning).toContain('my-app');
-    expect(result.warning).toContain('api-server');
-    expect(result.connected_projects).toEqual(projects);
-    expect(db.deleteService).toHaveBeenCalledWith('svc-pg');
+    await expect(manager.remove('svc-pg')).rejects.toThrow(
+      'Service "shared-pg" is referenced by 2 project(s): my-app, api-server.',
+    );
+    expect(db.deleteService).not.toHaveBeenCalled();
   });
 
   it('remove() returns no warning when service has no connected projects', async () => {

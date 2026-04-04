@@ -361,7 +361,7 @@ describe('MCP service tools (Task 8)', () => {
       status: 'removed',
       service: 'shared-pg',
     });
-    expect(serviceManager.remove).toHaveBeenCalledWith('svc-pg');
+    expect(serviceManager.remove).toHaveBeenCalledWith('svc-pg', { force: false });
 
     expect(await credentialsTool.execute({ service_name: 'shared-pg' }, { target: 'mcp' })).toEqual(
       {

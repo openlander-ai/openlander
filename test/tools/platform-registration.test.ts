@@ -38,37 +38,37 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
 }
 
 describe('Platform Tool Registration', () => {
+  const isPlatformTool = (name: string) =>
+    name.startsWith('platform_') || name === 'recover_platform';
+
   it('excludes platform tools when platformTools is false', () => {
     const toolDefs = getMcpToolDefs(false);
-    const platformToolNames = toolDefs
-      .filter((t) => t.name.startsWith('platform_'))
-      .map((t) => t.name);
+    const platformToolNames = toolDefs.filter((t) => isPlatformTool(t.name)).map((t) => t.name);
 
     expect(platformToolNames).toHaveLength(0);
   });
 
   it('includes exactly 11 platform tools when platformTools is true', () => {
     const toolDefs = getMcpToolDefs(true);
-    const platformToolNames = toolDefs
-      .filter((t) => t.name.startsWith('platform_'))
-      .map((t) => t.name);
+    const platformToolNames = toolDefs.filter((t) => isPlatformTool(t.name)).map((t) => t.name);
 
-    expect(platformToolNames).toHaveLength(11);
+    expect(platformToolNames).toHaveLength(12);
   });
 
   it('maintains consistent non-platform tool count regardless of platformTools setting', () => {
     const toolsWithoutPlatform = getMcpToolDefs(false);
     const toolsWithPlatform = getMcpToolDefs(true);
 
-    const nonPlatformWithout = toolsWithoutPlatform.filter((t) => !t.name.startsWith('platform_'));
-    const nonPlatformWith = toolsWithPlatform.filter((t) => !t.name.startsWith('platform_'));
+    const nonPlatformWithout = toolsWithoutPlatform.filter((t) => !isPlatformTool(t.name));
+    const nonPlatformWith = toolsWithPlatform.filter((t) => !isPlatformTool(t.name));
 
+    expect(nonPlatformWithout).toHaveLength(75);
     expect(nonPlatformWithout).toHaveLength(nonPlatformWith.length);
   });
 
   it('all platform tools have mcp target', () => {
     const toolDefs = getMcpToolDefs(true);
-    const platformTools = toolDefs.filter((t) => t.name.startsWith('platform_'));
+    const platformTools = toolDefs.filter((t) => isPlatformTool(t.name));
 
     for (const tool of platformTools) {
       expect(tool.targets).toBeDefined();

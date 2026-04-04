@@ -90,11 +90,12 @@ describe('platform-action tools', () => {
   });
 
   it('defines exactly three MCP-only tools', () => {
-    expect(platformActionToolDefs).toHaveLength(3);
+    expect(platformActionToolDefs).toHaveLength(4);
     expect(platformActionToolDefs.map((tool) => tool.name)).toEqual([
       'platform_cleanup_orphans',
       'platform_reconcile',
       'platform_force_remove',
+      'recover_platform',
     ]);
     for (const tool of platformActionToolDefs) {
       expect(tool.targets).toEqual(['mcp']);
