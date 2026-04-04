@@ -7,6 +7,7 @@ import {
   platformCleanupOrphansSchema,
   platformForceRemoveSchema,
   platformReconcileSchema,
+  platformRecoverSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
 
@@ -233,6 +234,20 @@ export const platformActionToolDefs: ToolDef[] = [
         container_id: containerId,
         name: stripDockerName(inspected.Name),
       };
+    },
+    targets: ['mcp'],
+  },
+  {
+    name: 'recover_platform',
+    riskLevel: 'medium',
+    description:
+      'Recover all containers after Docker migration. Recreates missing containers from existing images and preserves service volumes with data. Safe — never overwrites existing volumes. Use dry_run=true to preview what would happen.',
+    mcpDescription: 'Recover containers after Docker migration (preserves data volumes).',
+    inputSchema: platformRecoverSchema,
+    execute: async (args, context) => {
+      const dryRun = (args['dry_run'] as boolean | undefined) ?? false;
+      const { recover } = await import('../../pipeline/recover.js');
+      return recover(context.appCtx, { dryRun });
     },
     targets: ['mcp'],
   },

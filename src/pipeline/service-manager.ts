@@ -1280,15 +1280,19 @@ export class ServiceManager {
   }
 
   private isNotFoundError(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-
-    const msg = error.message.toLowerCase();
+    const msg =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? String((error as { message: unknown }).message)
+          : typeof error === 'string'
+            ? error
+            : '';
+    const lower = msg.toLowerCase();
     return (
-      msg.includes('not found') ||
-      msg.includes('no such container') ||
-      msg.includes('no such volume')
+      lower.includes('not found') ||
+      lower.includes('no such container') ||
+      lower.includes('no such volume')
     );
   }
 

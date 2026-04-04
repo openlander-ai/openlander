@@ -118,6 +118,10 @@ export const platformForceRemoveSchema = z.object({
   confirm: z.boolean(),
 });
 
+export const platformRecoverSchema = z.object({
+  dry_run: z.boolean().optional().describe('Preview recovery actions without executing them'),
+});
+
 // Environment & configuration schemas
 export const setEnvVarsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),

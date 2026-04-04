@@ -352,6 +352,116 @@ program
     console.log();
   });
 
+// ── openlander recover ──────────────────────────────────────────────────────
+
+program
+  .command('recover')
+  .description('Recover containers after Docker migration (preserves data)')
+  .option('--dry-run', 'Preview recovery actions without making changes')
+  .action(async (options: { dryRun?: boolean }) => {
+    const { loadConfig, getDbPath } = await import('../config/index.js');
+    const config = loadConfig();
+
+    const { createAppContext } = await import('../app.js');
+    const ctx = await createAppContext(config, getDbPath());
+
+    const { recover } = await import('../pipeline/recover.js');
+    const dryRun = options.dryRun ?? false;
+
+    if (dryRun) {
+      console.log(pc.dim('Dry run — no changes will be made.\n'));
+    }
+
+    console.log(pc.bold('Recovering platform...\n'));
+    const result = await recover(ctx, { dryRun });
+
+    // Networks
+    console.log(pc.bold('Networks:'));
+    for (const n of result.networks) {
+      const icon =
+        n.status === 'error' ? pc.red('✗') : n.status === 'created' ? pc.green('✓') : pc.dim('·');
+      const label =
+        n.status === 'created'
+          ? pc.green('created')
+          : n.status === 'error'
+            ? pc.red(n.error ?? 'error')
+            : pc.dim('ok');
+      console.log(`  ${icon} ${n.name} ${label}`);
+    }
+
+    // Services
+    console.log(pc.bold('\nServices:'));
+    for (const s of result.services) {
+      const icon =
+        s.status === 'error'
+          ? pc.red('✗')
+          : s.status === 'recreated'
+            ? pc.green('✓')
+            : s.status === 'started'
+              ? pc.yellow('↑')
+              : pc.dim('·');
+      const label =
+        s.status === 'error'
+          ? pc.red(s.error ?? 'error')
+          : s.status === 'recreated'
+            ? pc.green('recreated')
+            : s.status === 'started'
+              ? pc.yellow('started')
+              : pc.dim('running');
+      console.log(`  ${icon} ${s.name} ${label}`);
+    }
+
+    // Projects
+    console.log(pc.bold('\nProjects:'));
+    for (const p of result.projects) {
+      const icon =
+        p.status === 'error'
+          ? pc.red('✗')
+          : p.status === 'needs_redeploy'
+            ? pc.yellow('!')
+            : p.status === 'recreated'
+              ? pc.green('✓')
+              : p.status === 'started'
+                ? pc.yellow('↑')
+                : p.status === 'skipped'
+                  ? pc.dim('-')
+                  : pc.dim('·');
+      const label =
+        p.status === 'error'
+          ? pc.red(p.error ?? 'error')
+          : p.status === 'needs_redeploy'
+            ? pc.yellow('needs redeploy (no image)')
+            : p.status === 'recreated'
+              ? pc.green('recreated from image')
+              : p.status === 'started'
+                ? pc.yellow('started')
+                : p.status === 'skipped'
+                  ? pc.dim('skipped (stopped)')
+                  : pc.dim('running');
+      console.log(`  ${icon} ${p.name} ${label}`);
+    }
+
+    // Summary
+    const svcRecovered = result.services.filter(
+      (s) => s.status === 'recreated' || s.status === 'started',
+    ).length;
+    const prjRecovered = result.projects.filter(
+      (p) => p.status === 'recreated' || p.status === 'started',
+    ).length;
+    const errors = [...result.services, ...result.projects].filter(
+      (x) => x.status === 'error',
+    ).length;
+    const needsRedeploy = result.projects.filter((p) => p.status === 'needs_redeploy').length;
+
+    console.log(
+      `\n${pc.bold('Summary:')} ${pc.green(`${String(svcRecovered + prjRecovered)} recovered`)}` +
+        (errors > 0 ? `, ${pc.red(`${String(errors)} errors`)}` : '') +
+        (needsRedeploy > 0 ? `, ${pc.yellow(`${String(needsRedeploy)} need redeploy`)}` : ''),
+    );
+
+    process.exit(errors > 0 ? 1 : 0);
+  });
+
 // ── openlander mcp ───────────────────────────────────────────────────────────
 
 program
