@@ -82,9 +82,8 @@ export class RollbackExecutor {
         };
       };
     };
-    const getClient = dockerWithClient.getClient;
-    if (typeof getClient === 'function') {
-      const dockerClient = getClient();
+    if (typeof dockerWithClient.getClient === 'function') {
+      const dockerClient = dockerWithClient.getClient();
       try {
         await dockerClient.getImage(rollbackImageTag).inspect();
       } catch {
