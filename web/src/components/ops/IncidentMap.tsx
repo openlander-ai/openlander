@@ -63,9 +63,7 @@ function groupIncidents(
       const projectId = latest.project_id;
       return {
         projectId,
-        projectName: projectNameById[projectId]
-          ? projectNameById[projectId]
-          : `[삭제/Archived] (${projectId.substring(0, 8)})`,
+        projectName: projectNameById[projectId] ?? projectId.substring(0, 8),
         group: {
           key,
           severity: latest.severity,
