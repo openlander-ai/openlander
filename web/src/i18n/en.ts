@@ -149,6 +149,9 @@ export const translations = {
       reject: 'Reject',
       loadFailed: 'Failed to load pending approvals.',
       actionFailed: 'Failed to submit approval decision.',
+      incidentContext: 'Incident Context',
+      recoveryPlan: 'AI Recovery Plan',
+      pendingMore: '{count} more pending — View in Operations Center',
     },
     tools: {
       group: '{{count}} tools',
@@ -463,6 +466,16 @@ export const translations = {
       elapsed: 'Elapsed',
       thoughtProcess: 'Thought Process',
     },
+    recoveryStrategy: {
+      llm: 'LLM diagnosis-based',
+      memory: 'Past memory-based',
+      recipe: 'Defined recipe rule',
+      unknown: 'Unknown strategy',
+    },
+    diagnosisSummary: 'Diagnosis: {summary}',
+    aiDiagnosisSummary: '🤖 AI Diagnosis Summary',
+    recentSameEvents: 'Recent similar events ({count})',
+    moreMergedLogs: '{count} more merged logs',
   },
   services: {
     title: 'Services',

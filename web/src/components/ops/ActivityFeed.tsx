@@ -29,6 +29,7 @@ import { useLanguage } from '@/i18n/context';
 
 interface ActivityFeedProps {
   projectId?: string;
+  projectNameById?: Record<string, string>;
 }
 
 type ActivityTypeFilter = 'all' | ActivityItem['type'];
@@ -89,7 +90,7 @@ function groupByCorrelation(items: ActivityItem[]): GroupedActivity[] {
   return groups;
 }
 
-export function ActivityFeed({ projectId }: ActivityFeedProps) {
+export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>('all');
@@ -118,12 +119,18 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
     );
 
     const filtered = sorted
-      .filter((item) => !item.projectName.startsWith('[삭제')) // Hide archived projects
+      .filter((item) => {
+        // Data-driven archive filter: skip items whose projectId isn't in the active project map
+        if (projectNameById && Object.keys(projectNameById).length > 0) {
+          return !!projectNameById[item.projectId];
+        }
+        return true;
+      })
       .filter((item) => (severityFilter === 'all' ? true : item.severity === severityFilter))
       .slice(0, 200);
 
     return groupByCorrelation(filtered);
-  }, [activities, severityFilter]);
+  }, [activities, severityFilter, projectNameById]);
 
   return (
     <Card className="border-border bg-panel p-4 lg:p-5">
@@ -205,7 +212,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
 
               // Title string mapping if ai diagnosis
               const displayTitle = item.aiMetadata?.diagnosisSummary
-                ? `진단 요약: ${item.aiMetadata.diagnosisSummary}`
+                ? t('ops.diagnosisSummary', { summary: item.aiMetadata.diagnosisSummary })
                 : item.title;
 
               return (
@@ -223,13 +230,16 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (!item.projectName.startsWith('[삭제')) {
+                            const isArchived = projectNameById
+                              ? !projectNameById[item.projectId]
+                              : false;
+                            if (!isArchived) {
                               navigate(`/projects/${item.projectId}`);
                             }
                           }}
                           className={cn(
                             'rounded border border-border bg-panel px-2 py-0.5 text-xs font-body text-secondary-ol hover:text-primary-ol',
-                            item.projectName.startsWith('[삭제')
+                            projectNameById && !projectNameById[item.projectId]
                               ? 'cursor-not-allowed opacity-60'
                               : 'cursor-pointer',
                           )}
@@ -302,7 +312,9 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
 
                       {item.aiMetadata?.diagnosisSummary && (
                         <div className="p-3 bg-agent/5 border border-agent/20 rounded-md">
-                          <p className="text-xs font-medium text-agent mb-1">🤖 AI 진단 요약</p>
+                          <p className="text-xs font-medium text-agent mb-1">
+                            {t('ops.aiDiagnosisSummary')}
+                          </p>
                           <p className="text-sm text-primary-ol">
                             {item.aiMetadata.diagnosisSummary}
                           </p>
@@ -312,7 +324,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
                       {hasGroupedItems && (
                         <div className="space-y-1.5 bg-bg-app rounded p-2.5">
                           <p className="text-[11px] font-semibold text-muted-ol mb-2 uppercase tracking-wider">
-                            최근 동일 이벤트 ({group.items.length}건)
+                            {t('ops.recentSameEvents', { count: String(group.items.length) })}
                           </p>
                           {group.items.slice(1, 6).map((subItem) => (
                             <div key={subItem.id} className="flex gap-3 text-xs font-mono">
@@ -324,7 +336,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
                           ))}
                           {group.items.length > 6 && (
                             <p className="text-xs italic text-muted-ol pl-3">
-                              외 {group.items.length - 6}건의 병합된 로그가 더 있습니다.
+                              {t('ops.moreMergedLogs', { count: String(group.items.length - 6) })}
                             </p>
                           )}
                         </div>

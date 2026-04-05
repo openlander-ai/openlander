@@ -57,19 +57,9 @@ export function AiSettingsTab() {
   useEffect(() => {
     async function loadFeatures() {
       try {
-        const [data, providersData, projectsData] = await Promise.all([
-          getAiFeatures(),
-          getProviders(),
-          listProjects(false),
-        ]);
+        const [data, providersData] = await Promise.all([getAiFeatures(), getProviders()]);
         setFeatures(data.features);
         setProviders(providersData.providers);
-
-        const projectMap: Record<string, string> = {};
-        for (const p of projectsData) {
-          projectMap[p.id] = p.name;
-        }
-        setProjects(projectMap);
       } catch (err) {
         setError(err instanceof Error ? err.message : t('settings.ai.errorLoad'));
       } finally {
@@ -77,6 +67,23 @@ export function AiSettingsTab() {
       }
     }
     void loadFeatures();
+  }, []);
+
+  // Load projects independently so failure doesn't block AI settings
+  useEffect(() => {
+    async function loadProjects() {
+      try {
+        const projectsData = await listProjects(false);
+        const projectMap: Record<string, string> = {};
+        for (const p of projectsData) {
+          projectMap[p.id] = p.name;
+        }
+        setProjects(projectMap);
+      } catch (err) {
+        console.error('Failed to load projects for AI usage display', err);
+      }
+    }
+    void loadProjects();
   }, []);
 
   const handleToggle = async (key: keyof AiFeaturesResponse['features'], enabled: boolean) => {

@@ -148,6 +148,9 @@ export const translations = {
       reject: '거부',
       loadFailed: '대기 중인 승인 요청을 불러오지 못했습니다.',
       actionFailed: '승인 처리 요청에 실패했습니다.',
+      incidentContext: '장애 상황',
+      recoveryPlan: 'AI 복구 계획',
+      pendingMore: '{count}건 대기 중 — 운영 센터에서 확인',
     },
     tools: {
       group: '{{count}}개 도구',
@@ -461,6 +464,16 @@ export const translations = {
       elapsed: '경과 시간',
       thoughtProcess: '사고 과정',
     },
+    recoveryStrategy: {
+      llm: 'LLM 진단 기반',
+      memory: '과거 기억 기반',
+      recipe: '정의된 레시피 규칙',
+      unknown: '알 수 없는 전략',
+    },
+    diagnosisSummary: '진단 요약: {summary}',
+    aiDiagnosisSummary: '🤖 AI 진단 요약',
+    recentSameEvents: '최근 동일 이벤트 ({count}건)',
+    moreMergedLogs: '외 {count}건의 병합된 로그',
   },
   services: {
     title: '서비스',

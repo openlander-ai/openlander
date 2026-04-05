@@ -146,7 +146,7 @@ export function OpsCenter() {
               projectNameById={projectNameById}
               refreshToken={refreshToken}
             />
-            <ActivityFeed projectId={filteredProjectId} />
+            <ActivityFeed projectId={filteredProjectId} projectNameById={projectNameById} />
           </div>
         </div>
       </div>

@@ -66,7 +66,7 @@ export function CircuitBreakerMap({
     });
 
     return filtered;
-  }, [breakers, projectId]);
+  }, [breakers, projectId, projectNameById]);
 
   const openBreakers = visibleBreakers.filter((breaker) => breaker.state !== 'closed');
 

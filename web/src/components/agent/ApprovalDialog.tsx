@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
   approveActionRun,
@@ -13,7 +13,8 @@ import { useLanguage } from '@/i18n/context';
 
 export function ApprovalDialog() {
   const { t } = useLanguage();
-  const [pending, setPending] = useState<ActionRun | null>(null);
+  const navigate = useNavigate();
+  const [allPending, setAllPending] = useState<ActionRun[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
@@ -37,7 +38,7 @@ export function ApprovalDialog() {
   const refreshPending = useCallback(async () => {
     try {
       const runs = await fetchPendingApprovals();
-      setPending(runs[0] ?? null);
+      setAllPending(runs);
       setError(null);
     } catch {
       setError(t('agent.approval.loadFailed'));
@@ -54,6 +55,9 @@ export function ApprovalDialog() {
       clearInterval(interval);
     };
   }, [refreshPending]);
+
+  const pending = allPending[0] ?? null;
+  const remainingCount = allPending.length - 1;
 
   const toolName = useMemo(
     () => pending?.approval_tool ?? 'unknown_tool',
@@ -103,7 +107,7 @@ export function ApprovalDialog() {
     : 'System';
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[400px] sm:w-[450px] rounded-xl border border-border bg-bg-panel shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div className="fixed bottom-4 right-4 z-50 w-[calc(100vw-2rem)] max-w-[450px] rounded-xl border border-border bg-bg-panel shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
       {/* Header section */}
       <div className="bg-error/10 border-b border-error/20 p-4 pb-3 flex items-start gap-3">
         <div className="bg-error/20 p-2 rounded-full shrink-0">
@@ -129,7 +133,7 @@ export function ApprovalDialog() {
         {pending.error_message && (
           <div className="space-y-1.5">
             <h4 className="text-[11px] font-semibold text-muted-ol uppercase tracking-wider flex items-center gap-1.5">
-              <Activity className="h-3 w-3" /> Incident Context
+              <Activity className="h-3 w-3" /> {t('agent.approval.incidentContext')}
             </h4>
             <div className="bg-bg-subtle/50 border border-border p-2.5 rounded-md text-xs font-mono text-error whitespace-pre-wrap max-h-[80px] overflow-y-auto">
               {pending.error_message}
@@ -140,7 +144,7 @@ export function ApprovalDialog() {
         {pending.plan && (
           <div className="space-y-1.5">
             <h4 className="text-[11px] font-semibold text-muted-ol uppercase tracking-wider flex items-center gap-1.5">
-              <CheckCircle2 className="h-3 w-3 text-agent" /> AI Recovery Plan
+              <CheckCircle2 className="h-3 w-3 text-agent" /> {t('agent.approval.recoveryPlan')}
             </h4>
             <div className="bg-agent/5 border border-agent/20 p-2.5 rounded-md text-xs font-body text-secondary-ol leading-relaxed max-h-[100px] overflow-y-auto">
               {pending.plan}
@@ -150,7 +154,7 @@ export function ApprovalDialog() {
       </div>
 
       {/* Action section */}
-      <div className="p-4 pt-0 flex gap-3 mt-auto">
+      <div className="p-4 pt-0 flex items-center gap-3 mt-auto">
         <Button size="sm" onClick={() => void handleApprove()} disabled={isSubmitting}>
           {t('agent.approval.approve')}
         </Button>
@@ -162,6 +166,16 @@ export function ApprovalDialog() {
         >
           {t('agent.approval.reject')}
         </Button>
+
+        {remainingCount > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate('/operations')}
+            className="ml-auto text-[11px] text-agent hover:text-agent/80 transition-colors underline underline-offset-2"
+          >
+            {t('agent.approval.pendingMore', { count: String(remainingCount) })}
+          </button>
+        )}
       </div>
     </div>
   );

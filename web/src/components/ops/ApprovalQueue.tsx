@@ -46,16 +46,16 @@ function getRiskTone(toolName: string | null): 'destructive' | 'diagnostic' | 'n
   return 'neutral';
 }
 
-function getRecoveryStrategyLabel(strategy: string | null) {
+function getRecoveryStrategyLabel(strategy: string | null, t: (key: string) => string) {
   switch (strategy) {
     case 'llm':
-      return 'LLM 진단 기반';
+      return t('ops.recoveryStrategy.llm');
     case 'memory':
-      return '과거 기억 기반';
+      return t('ops.recoveryStrategy.memory');
     case 'recipe':
-      return '정의된 레시피 규칙';
+      return t('ops.recoveryStrategy.recipe');
     default:
-      return '알 수 없는 전략';
+      return t('ops.recoveryStrategy.unknown');
   }
 }
 
@@ -201,7 +201,7 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
                     <div className="flex flex-col">
                       <span className="text-xs font-semibold text-agent mb-0.5">
                         {language === 'ko' ? '복구 전략: ' : 'Strategy: '}
-                        {getRecoveryStrategyLabel(approval.recovery_strategy)}
+                        {getRecoveryStrategyLabel(approval.recovery_strategy, t)}
                       </span>
                       {approval.current_step && approval.total_steps && (
                         <p className="text-xs font-body text-secondary-ol mt-0.5">
