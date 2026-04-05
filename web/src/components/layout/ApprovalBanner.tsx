@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
@@ -13,7 +14,9 @@ export interface ApprovalBannerProps {
 export function ApprovalBanner({ approvals, onApprove, onReject }: ApprovalBannerProps) {
   const { t } = useLanguage();
 
-  if (!approvals || approvals.length === 0) {
+  const location = useLocation();
+
+  if (!approvals || approvals.length === 0 || location.pathname === '/operations') {
     return null;
   }
 

@@ -7,7 +7,11 @@ import {
   GitPullRequestArrow,
   Siren,
   ShieldAlert,
+  ChevronRight,
+  ChevronDown,
+  Bot,
 } from 'lucide-react';
+import { relativeTime } from '@/components/ops/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -40,6 +44,7 @@ const ACTIVITY_TYPES: ActivityTypeFilter[] = [
   'all',
   'incident',
   'recovery',
+  'ai_diagnosis',
   'approval',
   'alert',
   'circuit_breaker',
@@ -51,6 +56,7 @@ const SEVERITY_FILTERS: SeverityFilter[] = ['all', 'critical', 'warning', 'info'
 function getTypeIcon(type: ActivityItem['type']) {
   if (type === 'incident') return AlertTriangle;
   if (type === 'recovery') return CheckCircle2;
+  if (type === 'ai_diagnosis') return Bot;
   if (type === 'approval') return GitPullRequestArrow;
   if (type === 'alert') return Siren;
   if (type === 'circuit_breaker') return ShieldAlert;
@@ -69,7 +75,8 @@ function groupByCorrelation(items: ActivityItem[]): GroupedActivity[] {
   const indexByKey = new Map<string, number>();
 
   for (const item of items) {
-    const key = item.correlationId || item.id;
+    const tsBucket = Math.floor(new Date(item.timestamp).getTime() / 300_000);
+    const key = item.correlationId || `${item.projectId}::${item.title}::${tsBucket}`;
     const existingIndex = indexByKey.get(key);
     if (existingIndex === undefined) {
       groups.push({ key, head: item, items: [item] });
@@ -87,6 +94,11 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
   const { t } = useLanguage();
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>('all');
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (key: string) => {
+    setExpandedItems((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const streamTypes = useMemo(() => {
     if (typeFilter === 'all') {
@@ -126,7 +138,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
               isConnected ? 'text-success border-success/40' : 'text-muted-ol',
             )}
           >
-            {isConnected ? t('Connected') : t('Disconnected')}
+            {isConnected ? t('ops.connected') : t('ops.disconnected')}
           </Badge>
         </div>
 
@@ -188,48 +200,144 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
               const item = group.head;
               const TypeIcon = getTypeIcon(item.type);
               const hasGroupedItems = group.items.length > 1;
+              const isExpanded = expandedItems[group.key];
+
+              // Title string mapping if ai diagnosis
+              const displayTitle = item.aiMetadata?.diagnosisSummary
+                ? `진단 요약: ${item.aiMetadata.diagnosisSummary}`
+                : item.title;
 
               return (
                 <div
                   key={group.key}
                   className="rounded-lg border border-border bg-bg-subtle/80 p-3 transition-colors hover:border-agent/40"
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div
+                    className="flex items-start justify-between gap-3 cursor-pointer"
+                    onClick={() => toggleExpand(group.key)}
+                  >
                     <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => navigate(`/projects/${item.projectId}`)}
-                          className="rounded border border-border bg-panel px-2 py-0.5 text-xs font-body text-secondary-ol hover:text-primary-ol"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!item.projectName.startsWith('[삭제')) {
+                              navigate(`/projects/${item.projectId}`);
+                            }
+                          }}
+                          className={cn(
+                            'rounded border border-border bg-panel px-2 py-0.5 text-xs font-body text-secondary-ol hover:text-primary-ol',
+                            item.projectName.startsWith('[삭제')
+                              ? 'cursor-not-allowed opacity-60'
+                              : 'cursor-pointer',
+                          )}
                         >
                           {item.projectName}
                         </button>
 
-                        <Badge variant="outline" className="font-body text-[11px] capitalize">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'font-body text-[11px] capitalize',
+                            item.type === 'ai_diagnosis' && 'text-agent border-agent/30 bg-agent/5',
+                          )}
+                        >
                           <TypeIcon className="mr-1 h-3 w-3" />
                           {t(item.type.replace('_', ' '))}
                         </Badge>
 
                         {hasGroupedItems ? (
                           <Badge variant="secondary" className="font-mono text-[10px]">
-                            {group.items.length}
+                            {group.items.length} {t('events')}
                           </Badge>
                         ) : null}
                       </div>
 
-                      <p className="truncate font-body text-sm text-primary-ol">{item.title}</p>
-                      <p className="mt-1 text-xs font-body text-muted-ol">
-                        {new Date(item.timestamp).toLocaleString()}
+                      <p className="truncate font-body text-sm text-primary-ol flex items-center gap-1.5">
+                        {isExpanded ? (
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-ol" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-ol" />
+                        )}
+                        {displayTitle}
                       </p>
+
+                      <div
+                        className="flex items-center gap-1 mt-1 text-xs font-body text-muted-ol"
+                        title={new Date(item.timestamp).toLocaleString()}
+                      >
+                        <span>
+                          {relativeTime(
+                            new Date(item.timestamp).getTime(),
+                            (t('language') as 'ko' | 'en') || 'ko',
+                          )}
+                        </span>
+                        {item.aiMetadata && (
+                          <>
+                            <span>·</span>
+                            <span className="font-mono">{item.aiMetadata.model}</span>
+                            {item.aiMetadata.durationMs && (
+                              <span>· {(item.aiMetadata.durationMs / 1000).toFixed(1)}s</span>
+                            )}
+                            {item.aiMetadata.tokensUsed && (
+                              <span>· {item.aiMetadata.tokensUsed} tokens</span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     <Badge
                       variant="outline"
-                      className={cn('capitalize', getStatusClass(item.status))}
+                      className={cn('capitalize mt-1', getStatusClass(item.status))}
                     >
                       {t(item.status)}
                     </Badge>
                   </div>
+
+                  {isExpanded && (
+                    <div className="mt-3 pl-5 border-l-[3px] border-agent/20 space-y-3">
+                      {item.description && (
+                        <p className="text-sm font-body text-secondary-ol whitespace-pre-wrap">
+                          {item.description}
+                        </p>
+                      )}
+
+                      {item.aiMetadata?.diagnosisSummary && (
+                        <div className="p-3 bg-agent/5 border border-agent/20 rounded-md">
+                          <p className="text-xs font-medium text-agent mb-1">🤖 AI 진단 요약</p>
+                          <p className="text-sm text-primary-ol">
+                            {item.aiMetadata.diagnosisSummary}
+                          </p>
+                        </div>
+                      )}
+
+                      {hasGroupedItems && (
+                        <div className="space-y-1.5 bg-bg-app rounded p-2.5">
+                          <p className="text-[11px] font-semibold text-muted-ol mb-2 uppercase tracking-wider">
+                            최근 동일 이벤트 ({group.items.length}건)
+                          </p>
+                          {group.items.slice(1, 6).map((subItem) => (
+                            <div key={subItem.id} className="flex gap-3 text-xs font-mono">
+                              <span className="text-muted-ol w-[65px] flex-shrink-0">
+                                {relativeTime(
+                                  new Date(subItem.timestamp).getTime(),
+                                  (t('language') as 'ko' | 'en') || 'ko',
+                                )}
+                              </span>
+                              <span className="text-secondary-ol truncate">{subItem.title}</span>
+                            </div>
+                          ))}
+                          {group.items.length > 6 && (
+                            <p className="text-xs italic text-muted-ol pl-3">
+                              외 {group.items.length - 6}건의 병합된 로그가 더 있습니다.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

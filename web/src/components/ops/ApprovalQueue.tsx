@@ -11,7 +11,7 @@ import {
 } from '@/lib/api/projects';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
-
+import { TOOL_HUMAN_LABELS } from '@/components/ops/utils';
 interface ApprovalQueueProps {
   projectId?: string;
   projectNameById: Record<string, string>;
@@ -44,6 +44,19 @@ function getRiskTone(toolName: string | null): 'destructive' | 'diagnostic' | 'n
   }
 
   return 'neutral';
+}
+
+function getRecoveryStrategyLabel(strategy: string | null) {
+  switch (strategy) {
+    case 'llm':
+      return 'LLM 진단 기반';
+    case 'memory':
+      return '과거 기억 기반';
+    case 'recipe':
+      return '정의된 레시피 규칙';
+    default:
+      return '알 수 없는 전략';
+  }
 }
 
 export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps) {
@@ -112,53 +125,132 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
         </Badge>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {sortedApprovals.map((approval) => {
           const toolName = approval.approval_tool ?? 'unknown_tool';
+          const normalizedToolName = toolName.toLowerCase();
           const riskTone = getRiskTone(toolName);
           const requestedAt = approval.approval_requested_at ?? approval.created_at;
+          const projectNameRaw = projectNameById[approval.project_id];
+          const isArchived = !projectNameRaw;
+          const projectName = isArchived
+            ? `[삭제/Archived] (${approval.project_id.substring(0, 8)})`
+            : projectNameRaw;
+          const language = (t('language') as 'ko' | 'en') || 'ko';
+
+          const fallbackLabel = language === 'ko' ? `${toolName} 실행 요청` : `${toolName} request`;
+          const toolData = TOOL_HUMAN_LABELS[normalizedToolName];
+          const actionLabel = toolData ? toolData[language] : fallbackLabel;
+          const actionImpact = toolData
+            ? toolData[`impact_${language}` as 'impact_ko' | 'impact_en']
+            : '';
 
           return (
             <div
               key={approval.id}
               className={cn(
-                'rounded-lg border bg-bg-subtle p-4',
+                'rounded-xl border bg-bg-panel p-5 shadow-sm transition-shadow hover:shadow-md flex flex-col gap-4',
                 riskTone === 'destructive' && 'border-error/50',
                 riskTone === 'diagnostic' && 'border-agent/50',
                 riskTone === 'neutral' && 'border-border',
               )}
             >
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="font-body text-xs text-secondary-ol">
-                      {projectNameById[approval.project_id] ?? approval.project_id}
-                    </Badge>
-                    <Badge variant="secondary" className="font-mono text-[11px]">
-                      {toolName}
-                    </Badge>
-                  </div>
+              <div className="flex items-center gap-2">
+                <span className="text-error mt-0.5">🔴</span>
+                <h3 className="font-display font-semibold text-primary-ol text-sm">
+                  <span className="font-bold">{projectName}</span>{' '}
+                  <span className="text-secondary-ol">—</span> {actionLabel}
+                </h3>
+              </div>
 
-                  <p className="font-body text-xs text-muted-ol">
-                    {new Date(requestedAt).toLocaleString()}
-                  </p>
+              <div className="flex flex-col gap-3 rounded-lg bg-bg-subtle/50 px-4 py-3 border border-border/50">
+                {approval.error_message && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-secondary-ol pt-0.5">📋</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-secondary-ol mb-0.5">
+                        {language === 'ko' ? '원인' : 'Cause'}
+                      </span>
+                      <p className="text-xs font-mono text-primary-ol leading-relaxed break-words max-h-24 overflow-y-auto pr-2 custom-scrollbar">
+                        {approval.error_message}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-start gap-3">
+                  <span className="text-secondary-ol pt-0.5">🔄</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold text-secondary-ol mb-0.5">
+                      {language === 'ko' ? '예상 행동' : 'Expected Action'}
+                    </span>
+                    <p className="text-xs font-body text-primary-ol leading-relaxed">
+                      {actionLabel}
+                    </p>
+                    {actionImpact && (
+                      <p className="text-xs font-body text-muted-ol mt-0.5">
+                        {language === 'ko' ? '예상 임팩트: ' : 'Impact: '}
+                        {actionImpact}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
+                {approval.recovery_strategy && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-agent pt-0.5">🤖</span>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-agent mb-0.5">
+                        {language === 'ko' ? '복구 전략: ' : 'Strategy: '}
+                        {getRecoveryStrategyLabel(approval.recovery_strategy)}
+                      </span>
+                      {approval.current_step && approval.total_steps && (
+                        <p className="text-xs font-body text-secondary-ol mt-0.5">
+                          {language === 'ko' ? '단계 ' : 'Step '}
+                          {approval.current_step}/{approval.total_steps}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {riskTone === 'destructive' && (
+                <div className="flex items-center gap-2 bg-error/5 border border-error/20 p-2.5 rounded-md px-3">
+                  <span className="text-error text-sm">⚠️</span>
+                  <span className="text-xs font-medium text-error">
+                    {language === 'ko'
+                      ? '이 작업은 서비스를 일시 중단시킬 수 있습니다.'
+                      : 'This action may cause downtime.'}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mt-2 pt-3 border-t border-border">
+                <div className="flex items-center gap-2 text-xs font-body text-muted-ol">
+                  <span>{new Date(requestedAt).toLocaleTimeString()}</span>
+                  <span>·</span>
+                  <span className="font-mono">{approval.trigger_source ?? 'unknown_source'}</span>
+                </div>
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={() => void handleDecision(approval, 'approve')}
-                    disabled={submittingId === approval.id}
-                  >
-                    {t('operations.approvals.approve')}
-                  </Button>
-                  <Button
-                    size="sm"
                     variant="outline"
+                    className="hover:bg-error/10 hover:text-error hover:border-error/30"
                     onClick={() => void handleDecision(approval, 'reject')}
                     disabled={submittingId === approval.id}
                   >
                     {t('operations.approvals.reject')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className={cn(
+                      riskTone === 'destructive' ? 'bg-error hover:bg-error/90 text-white' : '',
+                    )}
+                    onClick={() => void handleDecision(approval, 'approve')}
+                    disabled={submittingId === approval.id}
+                  >
+                    {t('operations.approvals.approve')}
                   </Button>
                 </div>
               </div>

@@ -10,8 +10,7 @@ import {
 } from '@/lib/api/operations';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
-import { relativeTime } from '@/components/ops/utils';
-
+import { describeCBState, relativeTime } from '@/components/ops/utils';
 interface CircuitBreakerMapProps {
   projectId?: string;
   projectNameById: Record<string, string>;
@@ -23,12 +22,6 @@ const STATE_ORDER: Record<CircuitBreakerWithProject['state'], number> = {
   half_open: 1,
   closed: 2,
 };
-
-function stateIndicator(state: CircuitBreakerWithProject['state']) {
-  if (state === 'open') return '🔴';
-  if (state === 'half_open') return '🟡';
-  return '🟢';
-}
 
 export function CircuitBreakerMap({
   projectId,
@@ -117,20 +110,41 @@ export function CircuitBreakerMap({
                 )}
               >
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="truncate font-body text-sm font-medium text-primary-ol">
-                    {projectNameById[breaker.projectId] ?? breaker.projectName}
+                  <p className="truncate font-body text-sm font-medium text-primary-ol max-w-[160px]">
+                    {projectNameById[breaker.projectId]
+                      ? projectNameById[breaker.projectId]
+                      : `[삭제/Archived] (${breaker.projectId.substring(0, 8)})`}
                   </p>
-                  <Badge variant="outline" className="font-body text-xs capitalize">
-                    {stateIndicator(breaker.state)} {breaker.state.replace('_', ' ')}
-                  </Badge>
+                  <div className="flex flex-col gap-1 items-end">
+                    <Badge variant="outline" className="font-body text-xs font-semibold">
+                      {
+                        describeCBState(
+                          breaker.state,
+                          breaker.failureCount,
+                          (t('language') as 'ko' | 'en') || 'en',
+                        ).label
+                      }
+                    </Badge>
+                  </div>
                 </div>
 
-                <p className="font-body text-xs text-secondary-ol">
-                  {t('operations.circuitBreakers.failures', { count: breaker.failureCount })}
-                </p>
-                <p className="mt-1 font-body text-xs text-muted-ol">
-                  {failureTimestamp ? relativeTime(failureTimestamp) : '-'}
-                </p>
+                <div className="flex flex-col gap-1 mt-1 text-xs">
+                  <p className="font-body text-primary-ol leading-relaxed">
+                    {
+                      describeCBState(
+                        breaker.state,
+                        breaker.failureCount,
+                        (t('language') as 'ko' | 'en') || 'en',
+                      ).explanation
+                    }
+                  </p>
+                  <p className="font-body text-muted-ol">
+                    마지막 실패:{' '}
+                    {failureTimestamp
+                      ? relativeTime(failureTimestamp, (t('language') as 'ko' | 'en') || 'ko')
+                      : '-'}
+                  </p>
+                </div>
 
                 <Button
                   size="sm"

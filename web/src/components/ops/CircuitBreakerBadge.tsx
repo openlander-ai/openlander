@@ -1,5 +1,5 @@
-import { ShieldAlert } from 'lucide-react';
 import { cn } from '../../lib/utils.js';
+import { describeCBState } from './utils';
 
 interface CircuitBreakerBadgeProps {
   state: string;
@@ -8,10 +8,10 @@ interface CircuitBreakerBadgeProps {
 }
 
 export function CircuitBreakerBadge({ state, failures = 0, className }: CircuitBreakerBadgeProps) {
+  const { label } = describeCBState(state, failures); // using default 'ko' for short badge
   return (
-    <span className={cn('flex items-center gap-1.5', className)}>
-      <ShieldAlert className="h-3.5 w-3.5" />
-      CB: {state.toUpperCase()} {state !== 'closed' && `${failures}/5`}
+    <span className={cn('flex items-center gap-1.5', className)} title={`${state} (${failures}/5)`}>
+      {label}
     </span>
   );
 }

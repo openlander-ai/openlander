@@ -36,40 +36,40 @@ const STATUS_CONFIG = {
     bg: 'bg-success/5',
     border: 'border-success/20',
     icon: CheckCircle2,
-    title: 'Healthy',
-    desc: 'No active incidents. Auto-recovery enabled.',
+    titleKey: 'ops.status.healthy',
+    descKey: 'ops.status.healthyDesc',
   },
   degraded: {
     color: 'text-warning',
     bg: 'bg-warning/5',
     border: 'border-warning/20',
     icon: AlertTriangle,
-    title: 'Degraded',
-    desc: 'Recovery in progress — service unstable.',
+    titleKey: 'ops.status.degraded',
+    descKey: 'ops.status.degradedDesc',
   },
   broken: {
     color: 'text-error',
     bg: 'bg-error/5',
     border: 'border-error/20',
     icon: XCircle,
-    title: 'Broken',
-    desc: 'Service unavailable. Recovery attempts remaining.',
+    titleKey: 'ops.status.broken',
+    descKey: 'ops.status.brokenDesc',
   },
   blocked: {
     color: 'text-error',
     bg: 'bg-error/10',
     border: 'border-error/30',
     icon: ShieldOff,
-    title: 'Recovery Blocked',
-    desc: 'Auto-recovery paused after repeated failures. Manual action required.',
+    titleKey: 'ops.status.blocked',
+    descKey: 'ops.status.blockedDesc',
   },
   attention: {
     color: 'text-warning',
     bg: 'bg-warning/5',
     border: 'border-warning/20',
     icon: AlertTriangle,
-    title: 'Needs Attention',
-    desc: 'Latest deploy failed. Runtime incidents are clear, but a redeploy/fix is needed.',
+    titleKey: 'ops.status.attention',
+    descKey: 'ops.status.attentionDesc',
   },
 };
 
@@ -100,8 +100,10 @@ export function StatusHeroCard({
       <div className="flex items-start gap-4 mb-4 md:mb-0">
         <StatusIcon className={cn('h-8 w-8 mt-1', currentStatus.color)} />
         <div className="flex flex-col">
-          <h2 className={cn('text-xl font-bold', currentStatus.color)}>{t(currentStatus.title)}</h2>
-          <p className="text-sm text-secondary-ol mt-1">{t(currentStatus.desc)}</p>
+          <h2 className={cn('text-xl font-bold', currentStatus.color)}>
+            {t(currentStatus.titleKey)}
+          </h2>
+          <p className="text-sm text-secondary-ol mt-1">{t(currentStatus.descKey)}</p>
           <div className="flex items-center gap-4 mt-3 text-xs text-muted-ol font-medium">
             <CircuitBreakerBadge state={cbState} failures={cbFailures} />
             <span className="flex items-center gap-1.5">
@@ -112,7 +114,7 @@ export function StatusHeroCard({
             {lastEventTime && (
               <span className="flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5" />
-                {relativeTime(lastEventTime)}
+                {relativeTime(lastEventTime, (t('language') as 'ko' | 'en') || 'ko')}
               </span>
             )}
           </div>
@@ -131,7 +133,7 @@ export function StatusHeroCard({
             ) : (
               <ShieldOff className="h-4 w-4 mr-2" />
             )}
-            {t('Reset Circuit Breaker')}
+            {t('operations.circuitBreakers.reset')}
           </Button>
         )}
         {(status === 'broken' || status === 'blocked') && status !== 'blocked' && (

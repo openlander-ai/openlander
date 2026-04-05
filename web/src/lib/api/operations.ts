@@ -133,7 +133,14 @@ export async function fetchIncidentEvents(
 export interface ActivityItem {
   id: string;
   timestamp: string;
-  type: 'incident' | 'recovery' | 'approval' | 'circuit_breaker' | 'cleanup' | 'alert';
+  type:
+    | 'incident'
+    | 'recovery'
+    | 'approval'
+    | 'circuit_breaker'
+    | 'cleanup'
+    | 'alert'
+    | 'ai_diagnosis';
   severity: 'critical' | 'warning' | 'info';
   projectId: string;
   projectName: string;
@@ -144,6 +151,12 @@ export interface ActivityItem {
   actionRunId?: string;
   correlationId?: string;
   cascadeGroup?: string[];
+  aiMetadata?: {
+    model: string;
+    tokensUsed?: number;
+    durationMs?: number;
+    diagnosisSummary?: string;
+  };
 }
 
 export interface CircuitBreakerWithProject {

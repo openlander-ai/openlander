@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
   approveActionRun,
@@ -72,7 +73,9 @@ export function ApprovalDialog() {
     }
   }, [pending, refreshPending, t]);
 
-  if (!pending) {
+  const location = useLocation();
+
+  if (!pending || location.pathname === '/operations') {
     return null;
   }
 

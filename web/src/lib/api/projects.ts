@@ -44,6 +44,13 @@ export interface ActionRun {
   approval_tool: string | null;
   approval_requested_at: string | null;
   approval_resolved_at: string | null;
+  error_message: string | null;
+  recovery_strategy: 'recipe' | 'llm' | 'memory' | 'unknown' | null;
+  plan: string | null;
+  steps_json: string | null;
+  current_step: number | null;
+  total_steps: number | null;
+  trigger_source: 'web_agent' | 'auto_recovery' | 'monitor' | 'mcp' | null;
   created_at: string;
   updated_at: string | null;
 }

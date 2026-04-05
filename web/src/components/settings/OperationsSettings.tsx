@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { fetchOpsConfig, updateOpsConfig } from '@/lib/api/operations';
+import { useLanguage } from '@/i18n/context';
 
 interface OpsConfigState {
   enabled: boolean;
@@ -44,6 +45,7 @@ const DEFAULT_CONFIG: OpsConfigState = {
 };
 
 export function OperationsSettings() {
+  const { t } = useLanguage();
   const [config, setConfig] = useState<OpsConfigState>(DEFAULT_CONFIG);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -104,14 +106,14 @@ export function OperationsSettings() {
       {/* General */}
       <Card>
         <CardHeader>
-          <CardTitle>General</CardTitle>
+          <CardTitle>{t('settings.operations.general')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {[
-            { key: 'enabled', label: 'OpsAgent enabled' },
-            { key: 'auto_restart', label: 'Auto-restart containers' },
-            { key: 'auto_cleanup', label: 'Auto disk cleanup' },
-            { key: 'drift_detection', label: 'Drift detection' },
+            { key: 'enabled', label: t('settings.operations.enabled') },
+            { key: 'auto_restart', label: t('settings.operations.autoRestart') },
+            { key: 'auto_cleanup', label: t('settings.operations.autoCleanup') },
+            { key: 'drift_detection', label: t('settings.operations.driftDetection') },
           ].map(({ key, label }) => (
             <div key={key} className="flex items-center justify-between">
               <Label>{label}</Label>
@@ -127,12 +129,12 @@ export function OperationsSettings() {
       {/* Thresholds */}
       <Card>
         <CardHeader>
-          <CardTitle>Thresholds</CardTitle>
+          <CardTitle>{t('settings.operations.thresholds')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Disk cleanup threshold (%)</Label>
+              <Label>{t('settings.operations.diskCleanupPercent')}</Label>
               <Input
                 type="number"
                 min={70}
@@ -147,7 +149,7 @@ export function OperationsSettings() {
               />
             </div>
             <div>
-              <Label>Max recovery attempts/day</Label>
+              <Label>{t('settings.operations.recoveryMaxPerDay')}</Label>
               <Input
                 type="number"
                 value={config.thresholds.recovery_max_per_day}
@@ -160,7 +162,7 @@ export function OperationsSettings() {
               />
             </div>
             <div>
-              <Label>Alert dedup window (min)</Label>
+              <Label>{t('settings.operations.alertDedupMinutes')}</Label>
               <Input
                 type="number"
                 value={config.thresholds.alert_dedup_minutes}
@@ -178,11 +180,11 @@ export function OperationsSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Daily Digest</CardTitle>
+          <CardTitle>{t('settings.operations.digestTime')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <Label>Enable daily digest</Label>
+            <Label>{t('settings.operations.digestTime')}</Label>
             <Switch
               checked={config.thresholds.digest_time !== ''}
               onCheckedChange={(v) =>
@@ -194,7 +196,7 @@ export function OperationsSettings() {
             />
           </div>
           <div>
-            <Label>Digest time</Label>
+            <Label>{t('settings.operations.digestTime')}</Label>
             <Input
               type="text"
               placeholder="09:00"
@@ -213,12 +215,12 @@ export function OperationsSettings() {
       {/* Email */}
       <Card>
         <CardHeader>
-          <CardTitle>Email Notifications (SMTP)</CardTitle>
+          <CardTitle>{t('settings.operations.emailNotifications')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>SMTP Host</Label>
+              <Label>{t('settings.operations.smtpHost')}</Label>
               <Input
                 value={emailHost}
                 onChange={(e) => setEmailHost(e.target.value)}
@@ -226,7 +228,7 @@ export function OperationsSettings() {
               />
             </div>
             <div>
-              <Label>Port</Label>
+              <Label>{t('settings.operations.port')}</Label>
               <Input
                 type="number"
                 value={emailPort}
@@ -234,11 +236,11 @@ export function OperationsSettings() {
               />
             </div>
             <div>
-              <Label>Username</Label>
+              <Label>{t('settings.operations.username')}</Label>
               <Input value={emailUser} onChange={(e) => setEmailUser(e.target.value)} />
             </div>
             <div>
-              <Label>Password</Label>
+              <Label>{t('settings.operations.password')}</Label>
               <Input
                 type="password"
                 value={emailPass}
@@ -246,7 +248,7 @@ export function OperationsSettings() {
               />
             </div>
             <div>
-              <Label>From address</Label>
+              <Label>{t('settings.operations.fromAddress')}</Label>
               <Input
                 value={emailFrom}
                 onChange={(e) => setEmailFrom(e.target.value)}
@@ -254,7 +256,7 @@ export function OperationsSettings() {
               />
             </div>
             <div>
-              <Label>Recipients (comma-separated)</Label>
+              <Label>{t('settings.operations.recipients')}</Label>
               <Input
                 value={emailTo}
                 onChange={(e) => setEmailTo(e.target.value)}
@@ -266,7 +268,11 @@ export function OperationsSettings() {
       </Card>
 
       <Button onClick={() => void handleSave()} disabled={saving}>
-        {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save Settings'}
+        {saving
+          ? t('settings.operations.saving')
+          : saved
+            ? t('settings.operations.saved')
+            : t('settings.operations.save')}
       </Button>
     </div>
   );

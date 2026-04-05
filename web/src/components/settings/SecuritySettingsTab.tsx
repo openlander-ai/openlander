@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Eye, EyeOff, Copy, Check, RefreshCw, Lock, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCopy } from '@/hooks/use-copy';
+import { useLanguage } from '@/i18n/context';
 
 export function SecuritySettingsTab() {
+  const { t } = useLanguage();
   const [apiToken, setApiToken] = useState<string>('');
   const [showToken, setShowToken] = useState(false);
   const { copy, isCopied } = useCopy();
@@ -21,8 +23,8 @@ export function SecuritySettingsTab() {
   useEffect(() => {
     getApiToken()
       .then((res) => setApiToken(res.token))
-      .catch(() => toast.error('Failed to load API token'));
-  }, []);
+      .catch(() => toast.error(t('settings.security.loadFailed')));
+  }, [t]);
 
   const handleCopyToken = () => {
     if (!apiToken) return;
@@ -30,16 +32,16 @@ export function SecuritySettingsTab() {
   };
 
   const handleRegenerateToken = async () => {
-    if (!confirm('Previous token will be immediately invalidated. Continue?')) return;
+    if (!confirm(t('settings.security.regenerateConfirm'))) return;
 
     setRegenerating(true);
     try {
       const res = await regenerateApiToken();
       setApiToken(res.token);
       setShowToken(true);
-      toast.success('API token regenerated successfully');
+      toast.success(t('settings.security.regenerateSuccess'));
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Failed to regenerate token');
+      toast.error(err instanceof Error ? err.message : t('settings.security.regenerateFailed'));
     } finally {
       setRegenerating(false);
     }
@@ -50,19 +52,21 @@ export function SecuritySettingsTab() {
     setPasswordError('');
 
     if (newPassword !== confirmPassword) {
-      setPasswordError('New passwords do not match');
+      setPasswordError(t('settings.security.passwordMismatch'));
       return;
     }
 
     setChangingPassword(true);
     try {
       await changePassword(currentPassword, newPassword);
-      toast.success('Password changed successfully');
+      toast.success(t('settings.security.passwordChanged'));
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
-      setPasswordError(err instanceof Error ? err.message : 'Failed to change password');
+      setPasswordError(
+        err instanceof Error ? err.message : t('settings.security.passwordChangeFailed'),
+      );
     } finally {
       setChangingPassword(false);
     }
@@ -77,11 +81,11 @@ export function SecuritySettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Key className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">API Token</h2>
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
+            {t('settings.security.apiToken')}
+          </h2>
         </div>
-        <p className="text-xs font-body text-muted-ol">
-          Use this token to authenticate with the OpenLander API or MCP server.
-        </p>
+        <p className="text-xs font-body text-muted-ol">{t('settings.security.apiTokenDesc')}</p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4 space-y-4">
           <div className="flex items-center gap-3">
@@ -109,7 +113,7 @@ export function SecuritySettingsTab() {
               onClick={handleCopyToken}
             >
               {isCopied() ? <Check className="h-4 w-4 text-agent" /> : <Copy className="h-4 w-4" />}
-              {isCopied() ? 'Copied!' : 'Copy'}
+              {isCopied() ? t('settings.security.copied') : t('settings.security.copy')}
             </Button>
             <Button
               variant="outline"
@@ -119,7 +123,7 @@ export function SecuritySettingsTab() {
               disabled={regenerating}
             >
               <RefreshCw className={`h-4 w-4 ${regenerating ? 'animate-spin' : ''}`} />
-              Regenerate
+              {t('settings.security.regenerate')}
             </Button>
           </div>
         </div>
@@ -128,16 +132,20 @@ export function SecuritySettingsTab() {
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-2">
           <Lock className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">Change Password</h2>
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
+            {t('settings.security.changePassword')}
+          </h2>
         </div>
         <p className="text-xs font-body text-muted-ol">
-          Update your login password. You will remain logged in after changing it.
+          {t('settings.security.changePasswordDesc')}
         </p>
 
         <div className="rounded-lg border border-[hsl(var(--border))] bg-bg-panel p-4">
           <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-primary-ol">Current Password</label>
+              <label className="text-sm font-medium text-primary-ol">
+                {t('settings.security.currentPassword')}
+              </label>
               <Input
                 type="password"
                 value={currentPassword}
@@ -147,7 +155,9 @@ export function SecuritySettingsTab() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-primary-ol">New Password</label>
+              <label className="text-sm font-medium text-primary-ol">
+                {t('settings.security.newPassword')}
+              </label>
               <Input
                 type="password"
                 value={newPassword}
@@ -157,7 +167,9 @@ export function SecuritySettingsTab() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-primary-ol">Confirm New Password</label>
+              <label className="text-sm font-medium text-primary-ol">
+                {t('settings.security.confirmNewPassword')}
+              </label>
               <Input
                 type="password"
                 value={confirmPassword}
@@ -174,7 +186,9 @@ export function SecuritySettingsTab() {
               disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
               className="w-full bg-agent text-white hover:bg-agent/90 font-body"
             >
-              {changingPassword ? 'Changing Password...' : 'Change Password'}
+              {changingPassword
+                ? t('settings.security.changingPassword')
+                : t('settings.security.changePassword')}
             </Button>
           </form>
         </div>

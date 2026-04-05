@@ -15,6 +15,7 @@ import { ApprovalQueue } from '@/components/ops/ApprovalQueue';
 import { IncidentMap } from '@/components/ops/IncidentMap';
 import { ActivityFeed } from '@/components/ops/ActivityFeed';
 import { CircuitBreakerMap } from '@/components/ops/CircuitBreakerMap';
+import { AgentActivityPanel } from '@/components/ops/AgentActivityPanel';
 
 export function OpsCenter() {
   const { t } = useLanguage();
@@ -126,13 +127,14 @@ export function OpsCenter() {
           </div>
         </div>
 
+        <AgentActivityPanel />
         <ApprovalQueue projectId={filteredProjectId} projectNameById={projectNameById} />
-        <CircuitBreakerMap
+        <IncidentMap
           projectId={filteredProjectId}
           projectNameById={projectNameById}
           refreshToken={refreshToken}
         />
-        <IncidentMap
+        <CircuitBreakerMap
           projectId={filteredProjectId}
           projectNameById={projectNameById}
           refreshToken={refreshToken}

@@ -82,8 +82,7 @@ export function IncidentCard({ group }: IncidentCardProps) {
 
         <div className="flex items-center gap-4 ml-9 text-xs text-muted-ol font-medium">
           <span>
-            {group.count} {t('occurrence')}
-            {group.count !== 1 ? 's' : ''}
+            {group.count} {t('ops.occurrences', { count: group.count })}
           </span>
           <span>&middot;</span>
           <span>
@@ -95,7 +94,7 @@ export function IncidentCard({ group }: IncidentCardProps) {
           </span>
           <span>&middot;</span>
           <span>
-            {t('Last')}: {relativeTime(group.lastSeen)}
+            {t('Last')}: {relativeTime(group.lastSeen, (t('language') as 'ko' | 'en') || 'ko')}
           </span>
         </div>
 
@@ -110,13 +109,13 @@ export function IncidentCard({ group }: IncidentCardProps) {
               </Button>
             </CollapsibleTrigger>
             <Button variant="ghost" size="sm" className="h-8 text-xs ml-2">
-              {t('Acknowledge')}
+              {t('ops.acknowledge')}
             </Button>
 
             <CollapsibleContent className="mt-4">
               <div className="bg-bg-subtle rounded-lg p-4 border border-[hsl(var(--border))]">
                 <h5 className="text-xs font-semibold text-muted-ol uppercase tracking-wider mb-4">
-                  {t('Latest Incident Timeline')}
+                  {t('ops.latestTimeline')}
                 </h5>
 
                 {loadingEvents ? (
