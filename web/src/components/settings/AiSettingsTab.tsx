@@ -23,6 +23,7 @@ import { Switch } from '@/components/ui/switch.js';
 import { useLanguage } from '@/i18n/context.js';
 import { cn } from '@/lib/utils.js';
 import { useAiUsage } from '@/hooks/use-ai-usage.js';
+import { listProjects } from '@/lib/api/projects.js';
 import { StatCard } from './shared.js';
 import { formatRelativeTime } from '@/lib/time.js';
 
@@ -46,6 +47,7 @@ export function AiSettingsTab() {
   const { t } = useLanguage();
   const [features, setFeatures] = useState<AiFeaturesResponse['features'] | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [projects, setProjects] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -55,9 +57,19 @@ export function AiSettingsTab() {
   useEffect(() => {
     async function loadFeatures() {
       try {
-        const [data, providersData] = await Promise.all([getAiFeatures(), getProviders()]);
+        const [data, providersData, projectsData] = await Promise.all([
+          getAiFeatures(),
+          getProviders(),
+          listProjects(false),
+        ]);
         setFeatures(data.features);
         setProviders(providersData.providers);
+
+        const projectMap: Record<string, string> = {};
+        for (const p of projectsData) {
+          projectMap[p.id] = p.name;
+        }
+        setProjects(projectMap);
       } catch (err) {
         setError(err instanceof Error ? err.message : t('settings.ai.errorLoad'));
       } finally {
@@ -141,8 +153,145 @@ export function AiSettingsTab() {
   const hasUnavailableFeatures = features && Object.values(features).some((f) => !f.available);
 
   return (
-    <div className="space-y-6">
-      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
+    <div className="space-y-6 flex flex-col">
+      {/* 1. AI Usage Section (moved to top per user request) */}
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5 order-1">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-agent" />
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
+            {t('settings.ai.usage.title')}
+          </h2>
+        </div>
+
+        {usageError && (
+          <div className="rounded-md bg-error/10 p-3 text-sm font-body text-error flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" />
+            {usageError}
+          </div>
+        )}
+
+        {usageLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-agent" />
+            <span className="ml-2 text-sm text-muted-ol">{t('settings.ai.usage.loading')}</span>
+          </div>
+        ) : (
+          <>
+            {/* Always show stat cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div data-testid="usage-total-input-tokens">
+                <StatCard
+                  icon={<ArrowDownToLine className="h-4 w-4" />}
+                  label={t('settings.ai.usage.inputTokens')}
+                  value={summary?.totalInputTokens.toLocaleString() ?? '0'}
+                  color="text-blue-500"
+                />
+              </div>
+              <div data-testid="usage-total-output-tokens">
+                <StatCard
+                  icon={<ArrowUpFromLine className="h-4 w-4" />}
+                  label={t('settings.ai.usage.outputTokens')}
+                  value={summary?.totalOutputTokens.toLocaleString() ?? '0'}
+                  color="text-green-500"
+                />
+              </div>
+              <div data-testid="usage-total-cost">
+                <StatCard
+                  icon={<DollarSign className="h-4 w-4" />}
+                  label={t('settings.ai.usage.totalCost')}
+                  value={`$${summary?.totalCostUsd?.toFixed(3) ?? '0.000'}`}
+                  color="text-yellow-500"
+                />
+              </div>
+              <div data-testid="usage-call-count">
+                <StatCard
+                  icon={<Zap className="h-4 w-4" />}
+                  label={t('settings.ai.usage.callCount')}
+                  value={summary?.callCount.toLocaleString() ?? '0'}
+                  color="text-purple-500"
+                />
+              </div>
+            </div>
+
+            {/* Recent calls section with empty state */}
+            <div className="mt-6 space-y-3">
+              <h3 className="text-sm font-medium text-primary-ol">
+                {t('settings.ai.usage.recentCalls')}
+              </h3>
+              {recent.length === 0 ? (
+                <div className="rounded-lg border border-border bg-bg-panel shadow-sm p-8 text-center">
+                  <p className="text-xs font-body text-muted-ol">{t('settings.ai.usage.empty')}</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border bg-bg-subtle/50 divide-y divide-border">
+                  {recent.slice(0, 10).map((log) => (
+                    <div
+                      key={log.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-4"
+                    >
+                      <div className="flex items-start sm:items-center gap-3">
+                        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-bg-subtle shrink-0 mt-0.5 sm:mt-0">
+                          <Brain className="h-4 w-4 text-agent" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-primary-ol flex flex-wrap items-center gap-2">
+                            {log.projectId && projects[log.projectId] && (
+                              <span className="text-xs font-normal text-agent border border-agent/20 bg-agent/5 px-1.5 py-0.5 rounded mr-1">
+                                {projects[log.projectId]}
+                              </span>
+                            )}
+                            {(t as (key: string) => string)(
+                              `settings.ai.usage.actionType.${log.actionType}`,
+                            ) || log.actionType}
+                            <span className="text-xs font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
+                              {log.modelName}
+                            </span>
+                          </p>
+                          <p className="text-xs text-secondary-ol flex flex-wrap items-center gap-1.5 mt-1">
+                            <span className="flex items-center gap-1 whitespace-nowrap">
+                              <Clock className="h-3 w-3" />
+                              {formatRelativeTime(log.createdAt, t)}
+                            </span>
+                            {log.durationMs && (
+                              <span className="whitespace-nowrap flex items-center gap-1">
+                                <span className="text-border">|</span>
+                                {(log.durationMs / 1000).toFixed(1)}s
+                              </span>
+                            )}
+                            {log.toolsCalled && (
+                              <span
+                                className="truncate max-w-[200px] flex items-center gap-1"
+                                title={log.toolsCalled}
+                              >
+                                <span className="text-border">|</span>
+                                <span className="font-mono text-[10px] bg-bg-subtle px-1 rounded truncate">
+                                  {log.toolsCalled.split(',').length} tools
+                                </span>
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-left sm:text-right shrink-0 ml-11 sm:ml-0">
+                        <p className="text-sm font-medium text-primary-ol">
+                          {((log.inputTokens || 0) + (log.outputTokens || 0)).toLocaleString()}{' '}
+                          {t('settings.ai.usage.tokenUnit')}
+                        </p>
+                        {log.costUsd != null && log.costUsd > 0 && (
+                          <p className="text-xs text-muted-ol">${log.costUsd.toFixed(4)}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* 2. AI Model Settings Section (moved to bottom) */}
+      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5 order-2">
         <div className="flex items-center gap-2">
           <AISparkle className="h-5 w-5" />
           <h2 className="font-display text-sm font-semibold text-primary-ol">
@@ -237,114 +386,6 @@ export function AiSettingsTab() {
           <Info className="h-3.5 w-3.5" />
           {t('settings.ai.requiresRestart')}
         </p>
-      </section>
-
-      <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
-        <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-agent" />
-          <h2 className="font-display text-sm font-semibold text-primary-ol">
-            {t('settings.ai.usage.title')}
-          </h2>
-        </div>
-
-        {usageError && (
-          <div className="rounded-md bg-error/10 p-3 text-sm font-body text-error flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
-            {usageError}
-          </div>
-        )}
-
-        {usageLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-agent" />
-            <span className="ml-2 text-sm text-muted-ol">{t('settings.ai.usage.loading')}</span>
-          </div>
-        ) : (
-          <>
-            {/* Always show stat cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div data-testid="usage-total-input-tokens">
-                <StatCard
-                  icon={<ArrowDownToLine className="h-4 w-4" />}
-                  label={t('settings.ai.usage.inputTokens')}
-                  value={summary?.totalInputTokens.toLocaleString() ?? '0'}
-                  color="text-blue-500"
-                />
-              </div>
-              <div data-testid="usage-total-output-tokens">
-                <StatCard
-                  icon={<ArrowUpFromLine className="h-4 w-4" />}
-                  label={t('settings.ai.usage.outputTokens')}
-                  value={summary?.totalOutputTokens.toLocaleString() ?? '0'}
-                  color="text-green-500"
-                />
-              </div>
-              <div data-testid="usage-total-cost">
-                <StatCard
-                  icon={<DollarSign className="h-4 w-4" />}
-                  label={t('settings.ai.usage.totalCost')}
-                  value={`$${summary?.totalCostUsd?.toFixed(3) ?? '0.000'}`}
-                  color="text-yellow-500"
-                />
-              </div>
-              <div data-testid="usage-call-count">
-                <StatCard
-                  icon={<Zap className="h-4 w-4" />}
-                  label={t('settings.ai.usage.callCount')}
-                  value={summary?.callCount.toLocaleString() ?? '0'}
-                  color="text-purple-500"
-                />
-              </div>
-            </div>
-
-            {/* Recent calls section with empty state */}
-            <div className="mt-6 space-y-3">
-              <h3 className="text-sm font-medium text-primary-ol">
-                {t('settings.ai.usage.recentCalls')}
-              </h3>
-              {recent.length === 0 ? (
-                <div className="rounded-lg border border-border bg-bg-panel shadow-sm p-8 text-center">
-                  <p className="text-xs font-body text-muted-ol">{t('settings.ai.usage.empty')}</p>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-border bg-bg-subtle/50 divide-y divide-border">
-                  {recent.slice(0, 10).map((log) => (
-                    <div key={log.id} className="flex items-center justify-between p-3 gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-bg-subtle">
-                          <Brain className="h-4 w-4 text-agent" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-primary-ol flex items-center gap-2">
-                            {(t as (key: string) => string)(
-                              `settings.ai.usage.actionType.${log.actionType}`,
-                            ) || log.actionType}
-                            <span className="text-xs font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
-                              {log.modelName}
-                            </span>
-                          </p>
-                          <p className="text-xs text-secondary-ol flex items-center gap-1 mt-0.5">
-                            <Clock className="h-3 w-3" />
-                            {formatRelativeTime(log.createdAt, t)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-primary-ol">
-                          {((log.inputTokens || 0) + (log.outputTokens || 0)).toLocaleString()}{' '}
-                          {t('settings.ai.usage.tokenUnit')}
-                        </p>
-                        {log.costUsd != null && log.costUsd > 0 && (
-                          <p className="text-xs text-muted-ol">${log.costUsd.toFixed(4)}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
       </section>
     </div>
   );
