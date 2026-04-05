@@ -27,8 +27,10 @@ import { OpsIncidentRepo } from './repos/ops-incident.repo.js';
 import { OpsIncidentEventRepo } from './repos/ops-incident-event.repo.js';
 import { CircuitBreakerRepo } from './repos/circuit-breaker.repo.js';
 import { ProjectDependencyRepo } from './repos/project-dependency.repo.js';
+import { ProjectOpsOverrideRepo } from './repos/project-ops-override.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
+import type { ProjectOpsOverride } from '../monitor/ops-types.js';
 
 export type {
   EnvironmentType,
@@ -75,10 +77,11 @@ export class Database implements AuthDatabase {
    private readonly deploymentPatternRepo: DeploymentPatternRepo;
    private readonly opsIncidentRepo: OpsIncidentRepo;
    private readonly opsIncidentEventRepo: OpsIncidentEventRepo;
-   private readonly circuitBreakerRepo: CircuitBreakerRepo;
-   private readonly projectDependencyRepo: ProjectDependencyRepo;
+    private readonly circuitBreakerRepo: CircuitBreakerRepo;
+    private readonly projectDependencyRepo: ProjectDependencyRepo;
+    private readonly projectOpsOverrideRepo: ProjectOpsOverrideRepo;
 
-   constructor(dbPath: string) {
+    constructor(dbPath: string) {
       mkdirSync(dirname(dbPath), { recursive: true });
       const { sqlite, db } = createDrizzleDatabase(dbPath);
       this.sqlite = sqlite;
@@ -106,9 +109,10 @@ export class Database implements AuthDatabase {
        this.opsIncidentRepo = new OpsIncidentRepo(this.db, this.sqlite);
        this.opsIncidentEventRepo = new OpsIncidentEventRepo(this.db, this.sqlite);
        this.circuitBreakerRepo = new CircuitBreakerRepo(this.db, this.sqlite);
-       this.projectDependencyRepo = new ProjectDependencyRepo(this.db, this.sqlite);
-       this.actionRunRepo.markStaleAsFailedOnStartup();
-     }
+        this.projectDependencyRepo = new ProjectDependencyRepo(this.db, this.sqlite);
+        this.projectOpsOverrideRepo = new ProjectOpsOverrideRepo(this.db, this.sqlite);
+        this.actionRunRepo.markStaleAsFailedOnStartup();
+      }
 
   createProject(project: Parameters<ProjectRepo['createProject']>[0]): ProjectRow { const created = this.projectRepo.createProject(project); this.environmentRepo.createEnvironment({ id: `${project.id}-production`, projectId: created.id, type: 'production', branch: project.branch ?? 'main' }); return created; }
   getProject(id: string) { return this.projectRepo.getProject(id); }
@@ -251,7 +255,10 @@ export class Database implements AuthDatabase {
        findAllProjectDependencies() { return this.projectDependencyRepo.findAll(); }
        deleteProjectDependency(id: string) { this.projectDependencyRepo.delete(id); }
        deleteProjectDependenciesByProject(projectId: string) { this.projectDependencyRepo.deleteByProject(projectId); }
-       syncDependenciesFromServiceConnections(serviceConnections: Parameters<ProjectDependencyRepo['syncFromServiceConnections']>[0]) { this.projectDependencyRepo.syncFromServiceConnections(serviceConnections); }
-     transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
-     close() { this.sqlite.close(); }
-}
+        syncDependenciesFromServiceConnections(serviceConnections: Parameters<ProjectDependencyRepo['syncFromServiceConnections']>[0]) { this.projectDependencyRepo.syncFromServiceConnections(serviceConnections); }
+        getProjectOpsOverride(projectId: string) { return this.projectOpsOverrideRepo.load(projectId); }
+        setProjectOpsOverride(projectId: string, overrides: ProjectOpsOverride) { this.projectOpsOverrideRepo.save(projectId, overrides); }
+        deleteProjectOpsOverride(projectId: string) { this.projectOpsOverrideRepo.delete(projectId); }
+      transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
+      close() { this.sqlite.close(); }
+    }
