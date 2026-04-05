@@ -271,6 +271,13 @@ export class OpsAgent {
       return;
     }
 
+    // If circuit breaker is open, suppress the entire crash handling chain
+    // (no new incident, no alert, no recovery, no postmortem LLM call)
+    if (this.ctx.db.isCircuitBreakerOpen(projectId)) {
+      log.debug({ projectId }, 'Circuit breaker open — suppressing crash event');
+      return;
+    }
+
     this.cascade.recordFailure(projectId);
 
     const incident = this.incidents.openIncident(projectId, { type: event.type });

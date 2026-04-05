@@ -102,12 +102,23 @@ export class PostmortemGenerator {
     return result;
   }
 
+  private static readonly DEDUP_WINDOW_MS = 30 * 60_000; // 30 minutes
+
   private async generatePostmortem(
     projectId: string,
     recovered: boolean,
     payload: EventPayload['recovery:success'] | EventPayload['recovery:exhausted'],
   ): Promise<void> {
     try {
+      // Dedup: skip if a postmortem was generated for this project recently
+      const existing = this.postmortems.get(projectId);
+      if (
+        existing &&
+        Date.now() - existing.createdAt.getTime() < PostmortemGenerator.DEDUP_WINDOW_MS
+      ) {
+        log.debug({ projectId }, 'Postmortem dedup — skipping (recent postmortem exists)');
+        return;
+      }
       const project = this.db.getProject(projectId);
       const projectName = project?.name ?? projectId;
 

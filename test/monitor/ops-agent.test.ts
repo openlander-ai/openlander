@@ -30,6 +30,7 @@ function createMockCtx() {
       addOpsIncidentEvent: vi.fn(),
       findAllOpenCircuitBreakers: vi.fn(() => []),
       getCircuitBreakerState: vi.fn(() => null),
+      isCircuitBreakerOpen: vi.fn(() => false),
       resetCircuitBreaker: vi.fn(),
       getProjectOpsOverride: vi.fn(() => undefined),
       getActionRunsByApprovalStatus: vi.fn(() => []),

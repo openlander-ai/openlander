@@ -19,6 +19,7 @@ import { envToolDefs } from '../tools/defs/env.js';
 import { gitToolDefs } from '../tools/defs/git.js';
 import { infraToolDefs } from '../tools/defs/infra.js';
 import { monitoringToolDefs } from '../tools/defs/monitoring.js';
+import { opsAutomationToolDefs } from '../tools/defs/ops-automation.js';
 import { projectOpsToolDefs } from '../tools/defs/project-ops.js';
 import { serviceToolDefs } from '../tools/defs/service.js';
 import { volumeToolDefs } from '../tools/defs/volume.js';
@@ -46,6 +47,7 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...infraToolDefs,
     ...gitToolDefs,
     ...monitoringToolDefs,
+    ...opsAutomationToolDefs,
     ...debugToolDefs,
     ...webhookToolDefs,
     ...(platformToolsEnabled
