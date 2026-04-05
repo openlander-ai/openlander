@@ -66,12 +66,12 @@ describe('ops-automation tools', () => {
     it('throws ProjectNotFoundError for missing project', async () => {
       const { ctx } = createMockContext();
 
-      await expect(
+      expect(() =>
         getAutomationTool(ctx, 'get_automation_policy').execute(
           { project_name: 'nonexistent' },
           { target: 'mcp' },
         ),
-      ).rejects.toThrow(ProjectNotFoundError);
+      ).toThrow(ProjectNotFoundError);
     });
 
     it('returns overrides when project has custom policy', async () => {
@@ -126,7 +126,7 @@ describe('ops-automation tools', () => {
     it('throws ProjectNotFoundError for missing project', async () => {
       const { ctx } = createMockContext();
 
-      await expect(
+      expect(() =>
         getAutomationTool(ctx, 'set_automation_policy').execute(
           {
             project_name: 'nonexistent',
@@ -134,7 +134,7 @@ describe('ops-automation tools', () => {
           },
           { target: 'mcp' },
         ),
-      ).rejects.toThrow(ProjectNotFoundError);
+      ).toThrow(ProjectNotFoundError);
     });
 
     it('ignores undefined fields in automation object', async () => {

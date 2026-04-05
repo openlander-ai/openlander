@@ -35,8 +35,12 @@ export function resolveAutomationPolicy(
 
   // Start with defaults, then layer global config (required — always present)
   const result: RecoveryAutomationPolicy = { ...DEFAULT_RECOVERY_AUTOMATION };
+  const globalAutomation = globalConfig.recovery.automation as Partial<RecoveryAutomationPolicy>;
   for (const step of steps) {
-    result[step] = globalConfig.recovery.automation[step];
+    const val = globalAutomation[step];
+    if (val !== undefined) {
+      result[step] = val;
+    }
   }
 
   // Layer 3: project override (Partial — only defined steps override)
