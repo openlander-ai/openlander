@@ -230,7 +230,9 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     const typed = body.automation as
       | Partial<Record<'restart' | 'diagnosis' | 'apply_fixes' | 'rollback', 'auto' | 'confirm'>>
       | undefined;
-    ctx.db.setProjectOpsOverride(projectId, { automation: typed });
+    const existing = ctx.db.getProjectOpsOverride(projectId);
+    const merged = { ...existing?.automation, ...typed };
+    ctx.db.setProjectOpsOverride(projectId, { automation: merged });
     const config = ctx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
     const override = ctx.db.getProjectOpsOverride(projectId);
     const policy = resolveAutomationPolicy(config, override);

@@ -185,5 +185,58 @@ describe('ops-automation tools', () => {
 
       expect(result.isAutopilot).toBe(true);
     });
+
+    it('merges with existing overrides instead of replacing', async () => {
+      const { ctx, project } = createMockContext();
+      const existingOverride = {
+        automation: {
+          rollback: 'confirm',
+        },
+      };
+      (ctx.db.getProjectOpsOverride as any).mockReturnValue(existingOverride);
+
+      // First call sets rollback to confirm
+      await getAutomationTool(ctx, 'set_automation_policy').execute(
+        {
+          project_name: 'demo-app',
+          automation: {
+            rollback: 'confirm',
+          },
+        },
+        { target: 'mcp' },
+      );
+
+      // Reset mock to return the merged result
+      (ctx.db.getProjectOpsOverride as any).mockReturnValue({
+        automation: {
+          rollback: 'confirm',
+          restart: 'confirm',
+        },
+      });
+
+      // Second call adds restart to confirm
+      const result = await getAutomationTool(ctx, 'set_automation_policy').execute(
+        {
+          project_name: 'demo-app',
+          automation: {
+            restart: 'confirm',
+          },
+        },
+        { target: 'mcp' },
+      );
+
+      // Verify that both rollback and restart are in the merged result
+      expect(ctx.db.setProjectOpsOverride).toHaveBeenLastCalledWith(project.id, {
+        automation: {
+          rollback: 'confirm',
+          restart: 'confirm',
+        },
+      });
+
+      expect(result.overrides).toEqual({
+        rollback: 'confirm',
+        restart: 'confirm',
+      });
+    });
   });
 });

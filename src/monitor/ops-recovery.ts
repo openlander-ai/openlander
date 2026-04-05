@@ -115,6 +115,7 @@ export class RecoveryPipeline {
     }
 
     this.ctx.db.updateActionRunStatus(context.actionRunId, 'pending_approval');
+    this.ctx.db.updateActionRunApproval(context.actionRunId, 'pending', step);
 
     await eventBus.emit('recovery:approval-needed', {
       projectId: context.projectId,
@@ -140,9 +141,11 @@ export class RecoveryPipeline {
 
     if (result === 'approved') {
       this.ctx.db.updateActionRunStatus(context.actionRunId, 'running');
+      this.ctx.db.updateActionRunApproval(context.actionRunId, 'approved', step);
       return 'proceed';
     }
 
+    this.ctx.db.updateActionRunApproval(context.actionRunId, 'rejected', step);
     return result;
   }
 

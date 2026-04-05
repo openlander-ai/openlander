@@ -254,6 +254,34 @@ describe('OpsAgent', () => {
       });
       expect(agent.getConfig().recovery.enabled).toBe(false);
     });
+
+    it('reloadConfig deep merges recovery field', () => {
+      const agent = new OpsAgent(mockCtx);
+      const initialConfig = agent.getConfig();
+      expect(initialConfig.recovery.enabled).toBe(true);
+      expect(initialConfig.recovery.automation).toBeDefined();
+
+      agent.reloadConfig({
+        recovery: { enabled: false } as any,
+      });
+      const updatedConfig = agent.getConfig();
+      expect(updatedConfig.recovery.enabled).toBe(false);
+      expect(updatedConfig.recovery.automation).toEqual(DEFAULT_RECOVERY_AUTOMATION);
+
+      agent.reloadConfig({
+        recovery: {
+          automation: {
+            restart: 'confirm',
+            diagnosis: 'auto',
+            apply_fixes: 'auto',
+            rollback: 'auto',
+          },
+        } as any,
+      });
+      const finalConfig = agent.getConfig();
+      expect(finalConfig.recovery.enabled).toBe(false);
+      expect(finalConfig.recovery.automation.restart).toBe('confirm');
+    });
   });
 
   describe('recovery wiring', () => {

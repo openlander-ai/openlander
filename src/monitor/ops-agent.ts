@@ -449,6 +449,17 @@ export class OpsAgent {
       delete raw['auto_restart'];
     }
 
+    // Deep-merge recovery sub-object to preserve unset fields
+    if (config.recovery) {
+      config = {
+        ...config,
+        recovery: {
+          ...this.config.recovery,
+          ...config.recovery,
+        },
+      };
+    }
+
     this.config = { ...this.config, ...config };
     this.alerting.updateConfig(this.config);
 

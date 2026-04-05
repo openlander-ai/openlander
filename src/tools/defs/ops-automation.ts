@@ -79,7 +79,9 @@ export const opsAutomationToolDefs: ToolDef[] = [
       if (automation.rollback !== undefined)
         patch.rollback = automation.rollback as 'auto' | 'confirm';
 
-      context.appCtx.db.setProjectOpsOverride(project.id, { automation: patch });
+      const existing = context.appCtx.db.getProjectOpsOverride(project.id);
+      const merged = { ...existing?.automation, ...patch };
+      context.appCtx.db.setProjectOpsOverride(project.id, { automation: merged });
 
       const config = context.appCtx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
       const override = context.appCtx.db.getProjectOpsOverride(project.id);

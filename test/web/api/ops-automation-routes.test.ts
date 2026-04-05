@@ -148,6 +148,35 @@ describe('Automation Policy Routes', () => {
       const body = await res.json();
       expect(body.error).toBe('Invalid JSON body');
     });
+
+    it('merges with existing overrides instead of replacing', async () => {
+      // First PUT: set rollback to auto
+      const res1 = await app.request('/api/projects/proj-1/automation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ automation: { rollback: 'auto' } }),
+      });
+      expect(res1.status).toBe(200);
+      let body1 = await res1.json();
+      expect(body1.overrides).toEqual({ rollback: 'auto' });
+
+      // Second PUT: set restart to confirm (should merge, not replace)
+      const res2 = await app.request('/api/projects/proj-1/automation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ automation: { restart: 'confirm' } }),
+      });
+      expect(res2.status).toBe(200);
+      const body2 = await res2.json();
+
+      // Verify both overrides are present
+      expect(body2.overrides).toEqual({
+        rollback: 'auto',
+        restart: 'confirm',
+      });
+      expect(body2.effective.rollback).toBe('auto');
+      expect(body2.effective.restart).toBe('confirm');
+    });
   });
 
   describe('DELETE /api/projects/:projectId/automation', () => {
