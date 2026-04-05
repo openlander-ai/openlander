@@ -10,9 +10,10 @@ import {
 } from '@/lib/api/projects';
 import { ShieldAlert, Activity, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
+import { TOOL_HUMAN_LABELS } from '@/components/ops/utils';
 
 export function ApprovalDialog() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [allPending, setAllPending] = useState<ActionRun[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,10 +60,14 @@ export function ApprovalDialog() {
   const pending = allPending[0] ?? null;
   const remainingCount = allPending.length - 1;
 
-  const toolName = useMemo(
-    () => pending?.approval_tool ?? 'unknown_tool',
-    [pending?.approval_tool],
-  );
+  const toolName = useMemo(() => {
+    const rawTool = pending?.approval_tool ?? 'unknown_tool';
+    const toolData = TOOL_HUMAN_LABELS[rawTool.toLowerCase()];
+    if (toolData) {
+      return toolData[language as 'en' | 'ko'] ?? rawTool;
+    }
+    return rawTool;
+  }, [pending?.approval_tool, language]);
 
   const handleApprove = useCallback(async () => {
     if (!pending) {

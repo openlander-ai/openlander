@@ -77,4 +77,10 @@ export const TOOL_HUMAN_LABELS: Record<
     impact_ko: '서비스 완전 중단',
     impact_en: 'Full service shutdown',
   },
+  apply_fixes: {
+    ko: '자동 진단결과 반영',
+    en: 'Apply automated fixes',
+    impact_ko: '리소스 롤아웃 및 수정 (가능성 있음)',
+    impact_en: 'Resource rollout & modifications',
+  },
 };

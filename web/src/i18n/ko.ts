@@ -73,6 +73,27 @@ export const translations = {
   header: {
     llmNotConfigured: 'LLM 구성되지 않음',
   },
+  notifications: {
+    title: '알림',
+    empty: '알림이 없습니다',
+    type: {
+      'container-crash': '컨테이너 시작 실패',
+      'restart-loop': '재시작 루프',
+      'resource-saturation': '리소스 할당량 초과',
+      disk: '디스크 부족',
+      'inactive-project': '장기 미사용 상태',
+      'dangling-images': '미사용 중인 이미지',
+      'port-conflict': '포트 충돌',
+      'orphan-container': '고아 컨테이너',
+    },
+    action: {
+      view_logs: '로그 보기',
+      view_stats: '상세 보기',
+      cleanup_disk: '정리하기',
+      cleanup_images: '정리하기',
+      view_details: '상세 보기',
+    },
+  },
   newProject: {
     selectRepo: '배포할 레포지토리를 선택하세요',
     noReposFound: '검색 결과가 없습니다:',

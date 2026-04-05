@@ -73,6 +73,27 @@ export const translations = {
   header: {
     llmNotConfigured: 'LLM Not Configured',
   },
+  notifications: {
+    title: 'Notifications',
+    empty: 'No notifications',
+    type: {
+      'container-crash': 'Container Crash',
+      'restart-loop': 'Restart Loop',
+      'resource-saturation': 'Resource Saturation',
+      disk: 'Low Disk Space',
+      'inactive-project': 'Inactive Project',
+      'dangling-images': 'Unused Images',
+      'port-conflict': 'Port Conflict',
+      'orphan-container': 'Orphan Container',
+    },
+    action: {
+      view_logs: 'View Logs',
+      view_stats: 'View Details',
+      cleanup_disk: 'Clean Up',
+      cleanup_images: 'Clean Up',
+      view_details: 'View Details',
+    },
+  },
   newProject: {
     selectRepo: 'Select a repository to deploy',
     noReposFound: 'No repositories found for',

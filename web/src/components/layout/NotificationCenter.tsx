@@ -14,6 +14,7 @@ import {
 import type { Notification } from '@/hooks/use-notifications';
 import { cn } from '@/lib/utils';
 import { formatTime } from '@/lib/time';
+import { useLanguage } from '@/i18n/context';
 
 interface NotificationCenterProps {
   notifications: Notification[];
@@ -51,32 +52,21 @@ const typeIcons: Record<Notification['type'], typeof AlertCircle> = {
   'orphan-container': Container,
 };
 
-const typeLabels: Record<Notification['type'], string> = {
-  'container-crash': 'Container Crash',
-  'restart-loop': 'Restart Loop',
-  'resource-saturation': 'Resource Saturation',
-  disk: 'Low Disk Space',
-  'inactive-project': 'Inactive Project',
-  'dangling-images': 'Unused Images',
-  'port-conflict': 'Port Conflict',
-  'orphan-container': 'Orphan Container',
-};
-
 /** Action suggestions by alert type */
-function getActions(type: Notification['type']): Array<{ label: string; action: string }> {
+function getActions(type: Notification['type']): Array<{ labelKey: string; action: string }> {
   switch (type) {
     case 'container-crash':
-      return [{ label: 'View Logs', action: 'view_logs' }];
+      return [{ labelKey: 'view_logs', action: 'view_logs' }];
     case 'restart-loop':
-      return [{ label: 'View Logs', action: 'view_logs' }];
+      return [{ labelKey: 'view_logs', action: 'view_logs' }];
     case 'resource-saturation':
-      return [{ label: 'View Details', action: 'view_stats' }];
+      return [{ labelKey: 'view_stats', action: 'view_stats' }];
     case 'disk':
-      return [{ label: 'Clean Up', action: 'cleanup_disk' }];
+      return [{ labelKey: 'cleanup_disk', action: 'cleanup_disk' }];
     case 'dangling-images':
-      return [{ label: 'Clean Up', action: 'cleanup_images' }];
+      return [{ labelKey: 'cleanup_images', action: 'cleanup_images' }];
     case 'orphan-container':
-      return [{ label: 'View Details', action: 'view_details' }];
+      return [{ labelKey: 'view_details', action: 'view_details' }];
     default:
       return [];
   }
@@ -87,6 +77,7 @@ export function NotificationCenter({
   onDismiss,
   onAction,
 }: NotificationCenterProps) {
+  const { t } = useLanguage();
   const [dismissingId, setDismissingId] = useState<string | null>(null);
 
   const handleDismiss = async (id: string) => {
@@ -102,10 +93,12 @@ export function NotificationCenter({
     return (
       <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-[hsl(var(--border))] bg-bg-panel shadow-xl z-[60]">
         <div className="px-4 py-3 border-b border-[hsl(var(--border))]">
-          <h3 className="text-xs font-display font-semibold text-primary-ol">Notifications</h3>
+          <h3 className="text-xs font-display font-semibold text-primary-ol">
+            {t('notifications.title')}
+          </h3>
         </div>
         <div className="px-4 py-8 text-center">
-          <p className="text-xs text-muted-ol font-body">No notifications</p>
+          <p className="text-xs text-muted-ol font-body">{t('notifications.empty')}</p>
         </div>
       </div>
     );
@@ -116,7 +109,9 @@ export function NotificationCenter({
       {/* Header */}
       <div className="px-4 py-3 border-b border-[hsl(var(--border))] shrink-0">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-display font-semibold text-primary-ol">Notifications</h3>
+          <h3 className="text-xs font-display font-semibold text-primary-ol">
+            {t('notifications.title')}
+          </h3>
           <span className="text-xs font-mono text-muted-ol">{notifications.length}</span>
         </div>
       </div>
@@ -172,7 +167,7 @@ export function NotificationCenter({
                   {/* Footer: badge + actions + time */}
                   <div className="flex items-center gap-2 mt-2">
                     <span className={cn('text-xs font-mono px-1.5 py-0.5 rounded', config.badgeBg)}>
-                      {typeLabels[notification.type]}
+                      {t(`notifications.type.${notification.type}`)}
                     </span>
 
                     {actions.map((action) => (
@@ -181,7 +176,7 @@ export function NotificationCenter({
                         onClick={() => onAction?.(notification, action.action)}
                         className="text-xs font-body text-agent hover:text-agent/80 transition-colors underline underline-offset-2"
                       >
-                        {action.label}
+                        {t(`notifications.action.${action.labelKey}`)}
                       </button>
                     ))}
 
