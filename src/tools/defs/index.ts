@@ -8,6 +8,7 @@ export { envToolDefs } from './env.js';
 export { gitToolDefs } from './git.js';
 export { infraToolDefs } from './infra.js';
 export { monitoringToolDefs } from './monitoring.js';
+export { opsAutomationToolDefs } from './ops-automation.js';
 export { projectOpsToolDefs } from './project-ops.js';
 export { serviceToolDefs } from './service.js';
 export { volumeToolDefs } from './volume.js';

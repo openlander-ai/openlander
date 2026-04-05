@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
 import { updateConfig } from '../../config/index.js';
+import { resolveAutomationPolicy, isAutopilot } from '../../monitor/ops-config-resolver.js';
+import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from '../../monitor/ops-types.js';
 
 interface ActivityItem {
   id: string;
@@ -173,6 +175,76 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     } catch (err) {
       return c.json({ error: String(err) }, 500);
     }
+  });
+
+  // --- Automation Policy ---
+
+  api.get('/automation/defaults', (c) => {
+    const config = ctx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
+    const policy = resolveAutomationPolicy(config);
+    return c.json({
+      defaults: DEFAULT_RECOVERY_AUTOMATION,
+      effective: policy,
+      isAutopilot: policy ? isAutopilot(policy) : false,
+    });
+  });
+
+  api.get('/projects/:projectId/automation', (c) => {
+    const projectId = c.req.param('projectId');
+    const project = ctx.db.getProject(projectId);
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    const config = ctx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
+    const override = ctx.db.getProjectOpsOverride(projectId);
+    const policy = resolveAutomationPolicy(config, override);
+    return c.json({
+      effective: policy,
+      overrides: override?.automation ?? null,
+      isAutopilot: policy ? isAutopilot(policy) : false,
+    });
+  });
+
+  api.put('/projects/:projectId/automation', async (c) => {
+    const projectId = c.req.param('projectId');
+    const project = ctx.db.getProject(projectId);
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404);
+    }
+    let body: { automation?: Record<string, string> };
+    try {
+      body = await c.req.json<{ automation?: Record<string, string> }>();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+    const validSteps = new Set(['restart', 'diagnosis', 'apply_fixes', 'rollback']);
+    const validModes = new Set(['auto', 'confirm']);
+    for (const [step, mode] of Object.entries(body.automation ?? {})) {
+      if (!validSteps.has(step)) {
+        return c.json({ error: `Invalid step: ${step}` }, 400);
+      }
+      if (!validModes.has(mode)) {
+        return c.json({ error: `Invalid mode: ${mode}` }, 400);
+      }
+    }
+    const typed = body.automation as
+      | Partial<Record<'restart' | 'diagnosis' | 'apply_fixes' | 'rollback', 'auto' | 'confirm'>>
+      | undefined;
+    ctx.db.setProjectOpsOverride(projectId, { automation: typed });
+    const config = ctx.opsAgent?.getConfig() ?? DEFAULT_OPS_CONFIG;
+    const override = ctx.db.getProjectOpsOverride(projectId);
+    const policy = resolveAutomationPolicy(config, override);
+    return c.json({
+      effective: policy,
+      overrides: override?.automation ?? null,
+      isAutopilot: policy ? isAutopilot(policy) : false,
+    });
+  });
+
+  api.delete('/projects/:projectId/automation', (c) => {
+    const projectId = c.req.param('projectId');
+    ctx.db.deleteProjectOpsOverride(projectId);
+    return c.json({ deleted: true });
   });
 
   // --- Unified Activity Feed ---
