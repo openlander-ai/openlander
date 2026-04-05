@@ -192,8 +192,7 @@ describe('deploy-plan integration', () => {
       error: 'Service creation failed',
       _agent_guidance: {
         next_steps: [
-          'Call get_build_log for raw build output',
-          'Call debug_build_error for AI diagnosis',
+          'Check the error message above — this is a preflight failure (before build started)',
           'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
         ],
       },

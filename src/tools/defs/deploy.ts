@@ -272,8 +272,8 @@ export const deployToolDefs: ToolDef[] = [
                 : {}),
               _agent_guidance: {
                 next_steps: [
-                  'Call get_build_log for raw build output',
-                  'Call debug_build_error for AI diagnosis',
+                  ...(!job.buildLogTail ? ['Call get_build_log for raw build output'] : []),
+                  ...(!job.autoDiagnosis ? ['Call debug_build_error for AI diagnosis'] : []),
                   'Call get_deploy_history for deployment history and trends',
                   'Fix the issue, then create_deploy_plan + execute_deploy_plan to retry',
                 ],
