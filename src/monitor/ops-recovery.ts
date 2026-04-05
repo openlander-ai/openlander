@@ -113,9 +113,43 @@ export class RecoveryPipeline {
     const restartResult = await this.restartContainer(projectId, containerId);
     if (!restartResult.success) {
       this.incrementAndCheckBreaker(projectId);
-      return await this.diagnoseFixRollbackEscalate(
+      const restartFailureReason = `Restart failed: ${restartResult.reason}`;
+      this.addIncidentEvent(
+        context.incidentId,
+        'diagnosed',
+        `Step diagnosis: ${restartFailureReason}`,
+      );
+
+      const restartLogs = await this.readContainerLogs(context.containerId);
+      const restartDiagnosis = await this.generateDiagnosis(
         context,
-        `Restart failed: ${restartResult.reason}`,
+        restartFailureReason,
+        restartLogs,
+      );
+      if (restartDiagnosis && context.incidentId) {
+        this.ctx.db.updateOpsIncident(context.incidentId, {
+          diagnosis: restartDiagnosis,
+          root_cause: restartFailureReason,
+        });
+      }
+
+      const restartFixNotes = await this.applyFixes(context, restartLogs);
+      if (restartFixNotes.length > 0) {
+        this.addIncidentEvent(
+          context.incidentId,
+          'action_taken',
+          `Step fix: ${restartFixNotes.join(' | ')}`,
+        );
+        if (context.incidentId) {
+          this.ctx.db.updateOpsIncident(context.incidentId, {
+            actions_taken: restartFixNotes.join('\n'),
+          });
+        }
+      }
+
+      return await this.tryRollback(
+        context,
+        `${restartFailureReason}; ${restartFixNotes.join('; ')}`,
       );
     }
 
@@ -135,10 +169,37 @@ export class RecoveryPipeline {
     }
 
     this.incrementAndCheckBreaker(projectId);
-    return await this.diagnoseFixRollbackEscalate(
-      context,
-      'Health check failed after restart (3 attempts over 90 seconds)',
+    const healthFailureReason = 'Health check failed after restart (3 attempts over 90 seconds)';
+    this.addIncidentEvent(
+      context.incidentId,
+      'diagnosed',
+      `Step diagnosis: ${healthFailureReason}`,
     );
+
+    const healthLogs = await this.readContainerLogs(context.containerId);
+    const healthDiagnosis = await this.generateDiagnosis(context, healthFailureReason, healthLogs);
+    if (healthDiagnosis && context.incidentId) {
+      this.ctx.db.updateOpsIncident(context.incidentId, {
+        diagnosis: healthDiagnosis,
+        root_cause: healthFailureReason,
+      });
+    }
+
+    const healthFixNotes = await this.applyFixes(context, healthLogs);
+    if (healthFixNotes.length > 0) {
+      this.addIncidentEvent(
+        context.incidentId,
+        'action_taken',
+        `Step fix: ${healthFixNotes.join(' | ')}`,
+      );
+      if (context.incidentId) {
+        this.ctx.db.updateOpsIncident(context.incidentId, {
+          actions_taken: healthFixNotes.join('\n'),
+        });
+      }
+    }
+
+    return await this.tryRollback(context, `${healthFailureReason}; ${healthFixNotes.join('; ')}`);
   }
 
   private async restartContainer(
@@ -185,38 +246,6 @@ export class RecoveryPipeline {
     }
 
     return false;
-  }
-
-  private async diagnoseFixRollbackEscalate(
-    context: RecoveryContext,
-    failureReason: string,
-  ): Promise<'recovered' | 'escalated'> {
-    this.addIncidentEvent(context.incidentId, 'diagnosed', `Step diagnosis: ${failureReason}`);
-
-    const logs = await this.readContainerLogs(context.containerId);
-    const diagnosis = await this.generateDiagnosis(context, failureReason, logs);
-    if (diagnosis && context.incidentId) {
-      this.ctx.db.updateOpsIncident(context.incidentId, {
-        diagnosis,
-        root_cause: failureReason,
-      });
-    }
-
-    const fixNotes = await this.applyFixes(context, logs);
-    if (fixNotes.length > 0) {
-      this.addIncidentEvent(
-        context.incidentId,
-        'action_taken',
-        `Step fix: ${fixNotes.join(' | ')}`,
-      );
-      if (context.incidentId) {
-        this.ctx.db.updateOpsIncident(context.incidentId, {
-          actions_taken: fixNotes.join('\n'),
-        });
-      }
-    }
-
-    return await this.tryRollback(context, `${failureReason}; ${fixNotes.join('; ')}`);
   }
 
   private async generateDiagnosis(
