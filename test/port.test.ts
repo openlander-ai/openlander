@@ -14,6 +14,24 @@ import {
 import { Database } from '../src/db/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 
+// Mock child_process.exec to prevent OS port scanning from interfering with tests.
+// scanOSPorts() uses exec('lsof ...' / 'ss ...') internally — return empty output
+// so only DB + Docker ports are considered.
+vi.mock('node:child_process', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...original,
+    exec: vi.fn(
+      (
+        _cmd: string,
+        callback: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        callback(null, { stdout: '', stderr: '' });
+      },
+    ),
+  };
+});
+
 // Mock Docker instance for tests
 function createMockDocker(
   containers: { state: string; ports: { PublicPort?: number }[] }[] = [],
