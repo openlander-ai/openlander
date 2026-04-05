@@ -60,7 +60,7 @@ function getRecoveryStrategyLabel(strategy: string | null) {
 }
 
 export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [approvals, setApprovals] = useState<ActionRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -136,7 +136,6 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
           const projectName = isArchived
             ? `[삭제/Archived] (${approval.project_id.substring(0, 8)})`
             : projectNameRaw;
-          const language = (t('language') as 'ko' | 'en') || 'ko';
 
           const fallbackLabel = language === 'ko' ? `${toolName} 실행 요청` : `${toolName} request`;
           const toolData = TOOL_HUMAN_LABELS[normalizedToolName];

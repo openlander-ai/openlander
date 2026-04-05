@@ -31,7 +31,7 @@ interface IncidentCardProps {
 }
 
 export function IncidentCard({ group }: IncidentCardProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [events, setEvents] = useState<OpsIncidentEvent[]>(group.latestIncident.events || []);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -81,20 +81,18 @@ export function IncidentCard({ group }: IncidentCardProps) {
         <p className="text-sm text-secondary-ol ml-9 mb-4">{t(group.description)}</p>
 
         <div className="flex items-center gap-4 ml-9 text-xs text-muted-ol font-medium">
-          <span>
-            {group.count} {t('ops.occurrences', { count: group.count })}
-          </span>
+          <span>{t('ops.occurrences', { count: group.count })}</span>
           <span>&middot;</span>
           <span>
-            {t('First')}:{' '}
-            {new Date(group.firstSeen).toLocaleDateString(undefined, {
+            {t('ops.first')}:{' '}
+            {new Date(group.firstSeen).toLocaleDateString(language === 'ko' ? 'ko-KR' : undefined, {
               month: 'short',
               day: 'numeric',
             })}
           </span>
           <span>&middot;</span>
           <span>
-            {t('Last')}: {relativeTime(group.lastSeen, (t('language') as 'ko' | 'en') || 'ko')}
+            {t('ops.last')}: {relativeTime(group.lastSeen, language)}
           </span>
         </div>
 
@@ -102,7 +100,7 @@ export function IncidentCard({ group }: IncidentCardProps) {
           <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
             <CollapsibleTrigger asChild>
               <Button variant="outline" size="sm" className="h-8 text-xs">
-                {t('View Timeline')}
+                {t('ops.viewTimeline')}
                 <ChevronDown
                   className={cn('ml-2 h-3.5 w-3.5 transition-transform', isOpen && 'rotate-180')}
                 />

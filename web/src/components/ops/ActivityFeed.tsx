@@ -91,7 +91,7 @@ function groupByCorrelation(items: ActivityItem[]): GroupedActivity[] {
 
 export function ActivityFeed({ projectId }: ActivityFeedProps) {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [typeFilter, setTypeFilter] = useState<ActivityTypeFilter>('all');
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
@@ -249,7 +249,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
 
                         {hasGroupedItems ? (
                           <Badge variant="secondary" className="font-mono text-[10px]">
-                            {group.items.length} {t('events')}
+                            {group.items.length} {t('ops.eventCount')}
                           </Badge>
                         ) : null}
                       </div>
@@ -267,12 +267,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
                         className="flex items-center gap-1 mt-1 text-xs font-body text-muted-ol"
                         title={new Date(item.timestamp).toLocaleString()}
                       >
-                        <span>
-                          {relativeTime(
-                            new Date(item.timestamp).getTime(),
-                            (t('language') as 'ko' | 'en') || 'ko',
-                          )}
-                        </span>
+                        <span>{relativeTime(new Date(item.timestamp).getTime(), language)}</span>
                         {item.aiMetadata && (
                           <>
                             <span>·</span>
@@ -321,10 +316,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
                           {group.items.slice(1, 6).map((subItem) => (
                             <div key={subItem.id} className="flex gap-3 text-xs font-mono">
                               <span className="text-muted-ol w-[65px] flex-shrink-0">
-                                {relativeTime(
-                                  new Date(subItem.timestamp).getTime(),
-                                  (t('language') as 'ko' | 'en') || 'ko',
-                                )}
+                                {relativeTime(new Date(subItem.timestamp).getTime(), language)}
                               </span>
                               <span className="text-secondary-ol truncate">{subItem.title}</span>
                             </div>

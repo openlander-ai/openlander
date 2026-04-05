@@ -28,7 +28,7 @@ export function CircuitBreakerMap({
   projectNameById,
   refreshToken,
 }: CircuitBreakerMapProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [breakers, setBreakers] = useState<CircuitBreakerWithProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [resettingProjectId, setResettingProjectId] = useState<string | null>(null);
@@ -117,32 +117,18 @@ export function CircuitBreakerMap({
                   </p>
                   <div className="flex flex-col gap-1 items-end">
                     <Badge variant="outline" className="font-body text-xs font-semibold">
-                      {
-                        describeCBState(
-                          breaker.state,
-                          breaker.failureCount,
-                          (t('language') as 'ko' | 'en') || 'en',
-                        ).label
-                      }
+                      {describeCBState(breaker.state, breaker.failureCount, language).label}
                     </Badge>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-1 mt-1 text-xs">
                   <p className="font-body text-primary-ol leading-relaxed">
-                    {
-                      describeCBState(
-                        breaker.state,
-                        breaker.failureCount,
-                        (t('language') as 'ko' | 'en') || 'en',
-                      ).explanation
-                    }
+                    {describeCBState(breaker.state, breaker.failureCount, language).explanation}
                   </p>
                   <p className="font-body text-muted-ol">
-                    마지막 실패:{' '}
-                    {failureTimestamp
-                      ? relativeTime(failureTimestamp, (t('language') as 'ko' | 'en') || 'ko')
-                      : '-'}
+                    {t('ops.lastFailure')}:{' '}
+                    {failureTimestamp ? relativeTime(failureTimestamp, language) : '-'}
                   </p>
                 </div>
 

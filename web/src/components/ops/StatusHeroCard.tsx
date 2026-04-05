@@ -85,7 +85,7 @@ export function StatusHeroCard({
   onResetCircuitBreaker,
   onToggleAutoRecovery,
 }: StatusHeroCardProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const currentStatus = STATUS_CONFIG[status];
   const StatusIcon = currentStatus.icon;
 
@@ -114,7 +114,7 @@ export function StatusHeroCard({
             {lastEventTime && (
               <span className="flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5" />
-                {relativeTime(lastEventTime, (t('language') as 'ko' | 'en') || 'ko')}
+                {relativeTime(lastEventTime, language)}
               </span>
             )}
           </div>

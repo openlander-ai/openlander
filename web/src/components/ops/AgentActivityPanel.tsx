@@ -5,7 +5,7 @@ import { Bot, Activity, BrainCircuit, RefreshCw, ChevronRight } from 'lucide-rea
 import { relativeTime } from '@/components/ops/utils';
 
 export function AgentActivityPanel() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { activeState, loading } = useAgentActivity();
 
   if (loading) {
@@ -21,18 +21,16 @@ export function AgentActivityPanel() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-secondary-ol font-display">
-              {t('agent.status.idle') || 'Agent is Idle'}
+              {t('ops.agent.idle')}
             </h3>
-            <p className="text-xs text-muted-ol font-body">
-              Standing by for auto-recovery or manual commands.
-            </p>
+            <p className="text-xs text-muted-ol font-body">{t('ops.agent.idleDesc')}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="relative flex h-2.5 w-2.5">
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success opacity-50"></span>
           </span>
-          <span className="text-xs font-mono text-muted-ol">ONLINE</span>
+          <span className="text-xs font-mono text-muted-ol">{t('ops.agent.online')}</span>
         </div>
       </Card>
     );
@@ -42,8 +40,8 @@ export function AgentActivityPanel() {
     activeState;
 
   const duration = startedAt
-    ? relativeTime(new Date(startedAt).getTime(), (t('language') as 'ko' | 'en') || 'ko')
-    : t('language') === 'ko'
+    ? relativeTime(new Date(startedAt).getTime(), language)
+    : language === 'ko'
       ? '방금 전'
       : 'just now';
   const progressPercent =
@@ -73,22 +71,23 @@ export function AgentActivityPanel() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-base font-semibold font-display text-primary-ol flex items-center gap-2">
-                Agent Active on <span className="text-agent">{projectName || 'System'}</span>
+                {t('ops.agent.activeOn')}{' '}
+                <span className="text-agent">{projectName || t('ops.agent.system')}</span>
               </h3>
               <span className="text-xs font-mono text-secondary-ol px-1.5 py-0.5 rounded-sm bg-bg-subtle border border-border">
-                {progressPercent !== undefined ? `${progressPercent}%` : 'Working'}
+                {progressPercent !== undefined ? `${progressPercent}%` : t('ops.agent.working')}
               </span>
             </div>
             <p className="text-sm font-body text-secondary-ol flex items-center gap-1.5 animate-pulse">
               <RefreshCw className="h-3 w-3 text-agent animate-spin" />
-              {currentStep || 'Analyzing system context...'}
+              {currentStep || t('ops.agent.analyzing')}
             </p>
           </div>
         </div>
 
         <div className="flex flex-col items-end gap-1 min-w-[120px]">
           <span className="text-xs font-mono text-muted-ol uppercase tracking-wider flex items-center gap-1">
-            <Activity className="h-3 w-3" /> Elapsed Time
+            <Activity className="h-3 w-3" /> {t('ops.agent.elapsed')}
           </span>
           <span className="font-mono text-sm text-secondary-ol bg-bg-panel border border-border/50 px-2 rounded-md">
             {duration}
@@ -108,7 +107,7 @@ export function AgentActivityPanel() {
       {thoughtLog && thoughtLog.length > 0 && (
         <div className="mt-4 bg-bg-panel/80 rounded-md p-3 border border-border/50">
           <div className="text-[10px] font-mono text-muted-ol mb-2 flex items-center gap-1 uppercase tracking-wider">
-            <BrainCircuit className="h-3 w-3" /> Thought Process
+            <BrainCircuit className="h-3 w-3" /> {t('ops.agent.thoughtProcess')}
           </div>
           <div className="space-y-1">
             {thoughtLog.slice(-3).map((log, i) => (
