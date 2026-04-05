@@ -250,6 +250,8 @@ export const deployPlanToolDefs: ToolDef[] = [
       const envVars = envVarsRaw ? (JSON.parse(envVarsRaw) as Record<string, string>) : undefined;
       const wait = (args['wait'] as boolean | undefined) ?? true;
       const timeoutSec = (args['timeout'] as number | undefined) ?? 300;
+      const expose = (args['expose'] as boolean | undefined) ?? false;
+      const domain = (args['domain'] as string | undefined) ?? undefined;
 
       const plan: DeployPlan = await appCtx.planEngine.createPlan({
         repoUrl: (args['repo_url'] as string | undefined) ?? undefined,
@@ -323,15 +325,19 @@ export const deployPlanToolDefs: ToolDef[] = [
       }
 
       if (!wait) {
+        const nextSteps = ['Poll get_deploy_status to monitor build progress'];
+        if (expose || domain) {
+          nextSteps.push(
+            'expose/domain require wait=true. After deploy completes, call expose_public or map_domain separately.',
+          );
+        }
         return {
           plan_id: plan.plan_id,
           status: 'building',
           project_name: result.project_name,
           project_id: result.project_id,
           estimated_seconds: result.estimated_seconds,
-          _agent_guidance: {
-            next_steps: ['Poll get_deploy_status to monitor build progress'],
-          },
+          _agent_guidance: { next_steps: nextSteps },
         };
       }
 
@@ -357,9 +363,42 @@ export const deployPlanToolDefs: ToolDef[] = [
           unsubFailed();
         };
 
+        const runPostDeploy = async (): Promise<{
+          extra: Record<string, unknown>;
+          warnings: string[];
+        }> => {
+          const extra: Record<string, unknown> = {};
+          const warnings: string[] = [];
+          const proj = appCtx.db.getProjectByName(result.project_name);
+          if (!proj) return { extra, warnings };
+          if (expose) {
+            try {
+              if (proj.assigned_port) {
+                extra.public_url = await appCtx.pipeline.exposeTunnel(proj.id, proj.assigned_port);
+              }
+            } catch (err) {
+              warnings.push(`expose failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+          if (domain) {
+            try {
+              await appCtx.cloudflare.createTunnel(proj.id, domain);
+              extra.domain = domain;
+              extra.domain_url = `https://${domain}`;
+            } catch (err) {
+              warnings.push(
+                `domain mapping failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
+          return { extra, warnings };
+        };
+
         const resolveSuccess = (
           payload: { url?: string; totalDurationMs?: number },
           timedOut: boolean,
+          postDeploy?: Record<string, unknown>,
+          postDeployWarnings?: string[],
         ): void => {
           if (settled) return;
           settled = true;
@@ -376,6 +415,10 @@ export const deployPlanToolDefs: ToolDef[] = [
               ? { elapsed: `${String(Math.round(payload.totalDurationMs / 1000))}s` }
               : {}),
             ...(timedOut ? { timeout: true } : {}),
+            ...postDeploy,
+            ...(postDeployWarnings && postDeployWarnings.length > 0
+              ? { warnings: postDeployWarnings }
+              : {}),
           });
         };
 
@@ -447,7 +490,18 @@ export const deployPlanToolDefs: ToolDef[] = [
         }): boolean => payload.projectId === projectId || payload.parentProjectId === projectId;
 
         const unsubSuccess = eventBus.on('deploy:success', (payload) => {
-          if (matchesProject(payload)) resolveSuccess(payload, false);
+          if (!matchesProject(payload)) return;
+          if (expose || domain) {
+            void runPostDeploy()
+              .then(({ extra, warnings }) => {
+                resolveSuccess(payload, false, extra, warnings);
+              })
+              .catch(() => {
+                resolveSuccess(payload, false);
+              });
+          } else {
+            resolveSuccess(payload, false);
+          }
         });
 
         const unsubFailed = eventBus.on('deploy:failed', (payload) => {
@@ -463,8 +517,21 @@ export const deployPlanToolDefs: ToolDef[] = [
 
         const currentJob = appCtx.jobManager.getStatus(projectId);
         if (currentJob && (currentJob.phase === 'done' || currentJob.phase === 'failed')) {
-          if (currentJob.phase === 'done') resolveSuccess({}, false);
-          else resolveFailed({ error: currentJob.errorSummary }, false);
+          if (currentJob.phase === 'done') {
+            if (expose || domain) {
+              void runPostDeploy()
+                .then(({ extra, warnings }) => {
+                  resolveSuccess({}, false, extra, warnings);
+                })
+                .catch(() => {
+                  resolveSuccess({}, false);
+                });
+            } else {
+              resolveSuccess({}, false);
+            }
+          } else {
+            resolveFailed({ error: currentJob.errorSummary }, false);
+          }
         }
       });
     },

@@ -637,6 +637,18 @@ export const deploySchema = z
       .number()
       .optional()
       .describe('Max seconds to wait for completion when wait=true (default: 300)'),
+    expose: z
+      .boolean()
+      .optional()
+      .describe(
+        'Create a temporary public URL via TryCloudflare after deploy succeeds (default: false). Requires wait=true.',
+      ),
+    domain: z
+      .string()
+      .optional()
+      .describe(
+        'Map a custom domain after deploy succeeds (requires Cloudflare config). Example: api.myapp.com. Requires wait=true.',
+      ),
   })
   .refine(
     (data) => {
