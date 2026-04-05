@@ -126,20 +126,29 @@ export function OpsCenter() {
             )}
           </div>
         </div>
-
         <AgentActivityPanel />
-        <ApprovalQueue projectId={filteredProjectId} projectNameById={projectNameById} />
-        <IncidentMap
-          projectId={filteredProjectId}
-          projectNameById={projectNameById}
-          refreshToken={refreshToken}
-        />
-        <CircuitBreakerMap
-          projectId={filteredProjectId}
-          projectNameById={projectNameById}
-          refreshToken={refreshToken}
-        />
-        <ActivityFeed projectId={filteredProjectId} />
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          {/* Action Items (2/3 width) */}
+          <div className="space-y-5 lg:col-span-2">
+            <ApprovalQueue projectId={filteredProjectId} projectNameById={projectNameById} />
+            <IncidentMap
+              projectId={filteredProjectId}
+              projectNameById={projectNameById}
+              refreshToken={refreshToken}
+            />
+          </div>
+
+          {/* System Tracking (1/3 width) */}
+          <div className="space-y-5">
+            <CircuitBreakerMap
+              projectId={filteredProjectId}
+              projectNameById={projectNameById}
+              refreshToken={refreshToken}
+            />
+            <ActivityFeed projectId={filteredProjectId} />
+          </div>
+        </div>
       </div>
     </div>
   );

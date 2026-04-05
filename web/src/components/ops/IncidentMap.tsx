@@ -48,6 +48,7 @@ function groupIncidents(
   const grouped = new Map<string, OpsIncident[]>();
 
   for (const incident of incidents) {
+    if (!projectNameById[incident.project_id]) continue; // Skip archived projects
     const typeKey = extractEventType(incident);
     const key = `${incident.project_id}::${incident.severity}::${typeKey}`;
     if (!grouped.has(key)) {

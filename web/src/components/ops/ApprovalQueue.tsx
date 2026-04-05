@@ -110,7 +110,11 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
     }
   };
 
-  if (!loading && sortedApprovals.length === 0) {
+  const activeApprovals = sortedApprovals.filter(
+    (approval) => !!projectNameById[approval.project_id],
+  );
+
+  if (!loading && activeApprovals.length === 0) {
     return null;
   }
 
@@ -121,21 +125,17 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
           {t('operations.approvals.title')}
         </h2>
         <Badge variant="outline" className="font-mono text-[11px] text-secondary-ol">
-          {sortedApprovals.length}
+          {activeApprovals.length}
         </Badge>
       </div>
 
       <div className="space-y-4">
-        {sortedApprovals.map((approval) => {
+        {activeApprovals.map((approval) => {
           const toolName = approval.approval_tool ?? 'unknown_tool';
           const normalizedToolName = toolName.toLowerCase();
           const riskTone = getRiskTone(toolName);
           const requestedAt = approval.approval_requested_at ?? approval.created_at;
-          const projectNameRaw = projectNameById[approval.project_id];
-          const isArchived = !projectNameRaw;
-          const projectName = isArchived
-            ? `[삭제/Archived] (${approval.project_id.substring(0, 8)})`
-            : projectNameRaw;
+          const projectName = projectNameById[approval.project_id]!; // Guaranteed to exist by filter
 
           const fallbackLabel = language === 'ko' ? `${toolName} 실행 요청` : `${toolName} request`;
           const toolData = TOOL_HUMAN_LABELS[normalizedToolName];

@@ -118,6 +118,7 @@ export function ActivityFeed({ projectId }: ActivityFeedProps) {
     );
 
     const filtered = sorted
+      .filter((item) => !item.projectName.startsWith('[삭제')) // Hide archived projects
       .filter((item) => (severityFilter === 'all' ? true : item.severity === severityFilter))
       .slice(0, 200);
 

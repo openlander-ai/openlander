@@ -50,9 +50,12 @@ export function CircuitBreakerMap({
   }, [loadBreakers, refreshToken]);
 
   const visibleBreakers = useMemo(() => {
-    const filtered = projectId
+    let filtered = projectId
       ? breakers.filter((breaker) => breaker.projectId === projectId)
       : [...breakers];
+
+    // Hide archived projects
+    filtered = filtered.filter((breaker) => !!projectNameById[breaker.projectId]);
 
     filtered.sort((a, b) => {
       const stateDiff = STATE_ORDER[a.state] - STATE_ORDER[b.state];
@@ -94,7 +97,7 @@ export function CircuitBreakerMap({
           {t('operations.circuitBreakers.allHealthy')}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="flex flex-col gap-3">
           {openBreakers.map((breaker) => {
             const isOpen = breaker.state === 'open';
             const isHalfOpen = breaker.state === 'half_open';
@@ -109,11 +112,12 @@ export function CircuitBreakerMap({
                   isHalfOpen && 'border-warning/60',
                 )}
               >
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="truncate font-body text-sm font-medium text-primary-ol max-w-[160px]">
-                    {projectNameById[breaker.projectId]
-                      ? projectNameById[breaker.projectId]
-                      : `[삭제/Archived] (${breaker.projectId.substring(0, 8)})`}
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <p
+                    className="truncate font-body text-sm font-medium text-primary-ol flex-1"
+                    title={projectNameById[breaker.projectId]}
+                  >
+                    {projectNameById[breaker.projectId]}
                   </p>
                   <div className="flex flex-col gap-1 items-end">
                     <Badge variant="outline" className="font-body text-xs font-semibold">
