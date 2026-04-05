@@ -330,6 +330,17 @@ export const deploy_configs = sqliteTable('deploy_configs', {
   updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const project_ops_overrides = sqliteTable('project_ops_overrides', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id')
+    .notNull()
+    .unique()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  overrides_json: text('overrides_json').notNull(),
+  created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const secretFiles = sqliteTable(
   'secret_files',
   {

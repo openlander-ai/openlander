@@ -366,6 +366,17 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     'CREATE INDEX IF NOT EXISTS idx_deploy_configs_project ON deploy_configs(project_id)',
   );
 
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS project_ops_overrides (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+    overrides_json TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_project_ops_overrides_project ON project_ops_overrides(project_id)',
+  );
+
   // auth table (v1.0.0-rc.2)
   sqlite.exec(`CREATE TABLE IF NOT EXISTS auth (
     id INTEGER PRIMARY KEY DEFAULT 1,
