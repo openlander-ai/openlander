@@ -6,6 +6,12 @@ import type { OpsIncidentEventRow } from '../db/types.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { createModelProxy } from '../llm/model-proxy.js';
 import { eventBus } from '../events/index.js';
+import type {
+  ApprovalMetadata,
+  ApprovalResult,
+  ApprovalGate as ApprovalGateType,
+} from '../pipeline/approval-gate.js';
+import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from './ops-types.js';
 
 const log = createModuleLogger('ops-recovery');
 
@@ -18,19 +24,25 @@ export interface RecoveryContext {
   projectName: string;
   containerId: string;
   incidentId: string | null;
+  automationPolicy: RecoveryAutomationPolicy;
+  actionRunId: string;
 }
 
 type RecoveryOutcome = 'recovered' | 'escalated' | 'skipped';
+type RecoveryExecuteContext = Omit<RecoveryContext, 'actionRunId'>;
+type RecoveryContextForGuards = RecoveryExecuteContext | RecoveryContext;
 
 export class RecoveryPipeline {
   private readonly ctx: AppContext;
+  private readonly approvalGate: ApprovalGateType;
   private readonly activeRecoveries = new Set<string>();
 
-  constructor(ctx: AppContext) {
+  constructor(ctx: AppContext, approvalGate: ApprovalGateType) {
     this.ctx = ctx;
+    this.approvalGate = approvalGate;
   }
 
-  async execute(context: RecoveryContext): Promise<RecoveryOutcome> {
+  async execute(context: RecoveryExecuteContext): Promise<RecoveryOutcome> {
     const { projectId, incidentId } = context;
 
     if (!this.isProductionRecovery(context)) {
@@ -61,9 +73,14 @@ export class RecoveryPipeline {
       recoveryStrategy: 'unknown',
     });
 
+    const executionContext: RecoveryContext = {
+      ...context,
+      actionRunId,
+    };
+
     this.activeRecoveries.add(projectId);
     try {
-      const outcome = await this.runRecoverySequence(context);
+      const outcome = await this.runRecoverySequence(executionContext);
       if (isHalfOpenAttempt && outcome === 'escalated') {
         this.ctx.db.openCircuitBreaker(projectId);
         log.warn({ projectId }, 'Half-open recovery attempt failed — circuit breaker re-opened');
@@ -84,6 +101,49 @@ export class RecoveryPipeline {
     } finally {
       this.activeRecoveries.delete(projectId);
     }
+  }
+
+  private async gateStep(
+    context: RecoveryContext,
+    step: ConfigurableRecoveryStep,
+    _description: string,
+  ): Promise<'proceed' | 'rejected' | 'timed_out'> {
+    void _description;
+    const mode = context.automationPolicy[step];
+    if (mode === 'auto') {
+      return 'proceed';
+    }
+
+    this.ctx.db.updateActionRunStatus(context.actionRunId, 'pending_approval');
+
+    await eventBus.emit('recovery:approval-needed', {
+      projectId: context.projectId,
+      actionRunId: context.actionRunId,
+      toolName: step,
+      attempt: 1,
+      source: 'ops_recovery',
+    });
+
+    const metadata: ApprovalMetadata = {
+      projectId: context.projectId,
+      projectName: context.projectName,
+      toolName: step,
+      attempt: 1,
+      actionRunId: context.actionRunId,
+      createdAt: new Date(),
+    };
+
+    const result: ApprovalResult = await this.approvalGate.waitForApproval(
+      context.actionRunId,
+      metadata,
+    );
+
+    if (result === 'approved') {
+      this.ctx.db.updateActionRunStatus(context.actionRunId, 'running');
+      return 'proceed';
+    }
+
+    return result;
   }
 
   private async runRecoverySequence(context: RecoveryContext): Promise<RecoveryOutcome> {
@@ -109,11 +169,28 @@ export class RecoveryPipeline {
       return 'skipped';
     }
 
+    const restartGate = await this.gateStep(context, 'restart', 'Container restart');
+    if (restartGate !== 'proceed') {
+      return await this.escalate(
+        context,
+        `Recovery gated: restart step ${restartGate} by operator`,
+      );
+    }
+
     this.addIncidentEvent(incidentId, 'action_taken', 'Step restart: attempting container restart');
     const restartResult = await this.restartContainer(projectId, containerId);
     if (!restartResult.success) {
       this.incrementAndCheckBreaker(projectId);
       const restartFailureReason = `Restart failed: ${restartResult.reason}`;
+
+      const diagnosisGate = await this.gateStep(context, 'diagnosis', 'LLM diagnosis of crash');
+      if (diagnosisGate !== 'proceed') {
+        return await this.escalate(
+          context,
+          `Recovery gated: diagnosis step ${diagnosisGate} by operator`,
+        );
+      }
+
       this.addIncidentEvent(
         context.incidentId,
         'diagnosed',
@@ -133,18 +210,30 @@ export class RecoveryPipeline {
         });
       }
 
-      const restartFixNotes = await this.applyFixes(context, restartLogs);
-      if (restartFixNotes.length > 0) {
-        this.addIncidentEvent(
-          context.incidentId,
-          'action_taken',
-          `Step fix: ${restartFixNotes.join(' | ')}`,
-        );
-        if (context.incidentId) {
-          this.ctx.db.updateOpsIncident(context.incidentId, {
-            actions_taken: restartFixNotes.join('\n'),
-          });
+      let restartFixNotes: string[] = [];
+      const fixesGate = await this.gateStep(context, 'apply_fixes', 'Apply deterministic fixes');
+      if (fixesGate === 'proceed') {
+        restartFixNotes = await this.applyFixes(context, restartLogs);
+        if (restartFixNotes.length > 0) {
+          this.addIncidentEvent(
+            context.incidentId,
+            'action_taken',
+            `Step fix: ${restartFixNotes.join(' | ')}`,
+          );
+          if (context.incidentId) {
+            this.ctx.db.updateOpsIncident(context.incidentId, {
+              actions_taken: restartFixNotes.join('\n'),
+            });
+          }
         }
+      }
+
+      const rollbackGate = await this.gateStep(context, 'rollback', 'Rollback to previous version');
+      if (rollbackGate !== 'proceed') {
+        return await this.escalate(
+          context,
+          `Recovery gated: rollback step ${rollbackGate} by operator`,
+        );
       }
 
       return await this.tryRollback(
@@ -170,6 +259,15 @@ export class RecoveryPipeline {
 
     this.incrementAndCheckBreaker(projectId);
     const healthFailureReason = 'Health check failed after restart (3 attempts over 90 seconds)';
+
+    const diagnosisGate = await this.gateStep(context, 'diagnosis', 'LLM diagnosis of crash');
+    if (diagnosisGate !== 'proceed') {
+      return await this.escalate(
+        context,
+        `Recovery gated: diagnosis step ${diagnosisGate} by operator`,
+      );
+    }
+
     this.addIncidentEvent(
       context.incidentId,
       'diagnosed',
@@ -185,18 +283,30 @@ export class RecoveryPipeline {
       });
     }
 
-    const healthFixNotes = await this.applyFixes(context, healthLogs);
-    if (healthFixNotes.length > 0) {
-      this.addIncidentEvent(
-        context.incidentId,
-        'action_taken',
-        `Step fix: ${healthFixNotes.join(' | ')}`,
-      );
-      if (context.incidentId) {
-        this.ctx.db.updateOpsIncident(context.incidentId, {
-          actions_taken: healthFixNotes.join('\n'),
-        });
+    let healthFixNotes: string[] = [];
+    const fixesGate = await this.gateStep(context, 'apply_fixes', 'Apply deterministic fixes');
+    if (fixesGate === 'proceed') {
+      healthFixNotes = await this.applyFixes(context, healthLogs);
+      if (healthFixNotes.length > 0) {
+        this.addIncidentEvent(
+          context.incidentId,
+          'action_taken',
+          `Step fix: ${healthFixNotes.join(' | ')}`,
+        );
+        if (context.incidentId) {
+          this.ctx.db.updateOpsIncident(context.incidentId, {
+            actions_taken: healthFixNotes.join('\n'),
+          });
+        }
       }
+    }
+
+    const rollbackGate = await this.gateStep(context, 'rollback', 'Rollback to previous version');
+    if (rollbackGate !== 'proceed') {
+      return await this.escalate(
+        context,
+        `Recovery gated: rollback step ${rollbackGate} by operator`,
+      );
     }
 
     return await this.tryRollback(context, `${healthFailureReason}; ${healthFixNotes.join('; ')}`);
@@ -391,7 +501,7 @@ export class RecoveryPipeline {
     }
   }
 
-  private async escalate(context: RecoveryContext, reason: string): Promise<'escalated'> {
+  private async escalate(context: RecoveryContextForGuards, reason: string): Promise<'escalated'> {
     if (context.incidentId) {
       this.ctx.db.updateOpsIncidentStatus(context.incidentId, 'escalated', {
         escalated_at: Date.now(),
@@ -447,7 +557,7 @@ export class RecoveryPipeline {
     }
   }
 
-  private isProductionRecovery(context: RecoveryContext): boolean {
+  private isProductionRecovery(context: RecoveryContextForGuards): boolean {
     const environments = this.ctx.db.getEnvironmentsByProject(context.projectId);
     const production = environments.find((environment) => environment.type === 'production');
     const recentIncidents = this.ctx.db.listOpsIncidentsByProject(context.projectId, 1);

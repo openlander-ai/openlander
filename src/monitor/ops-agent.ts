@@ -5,6 +5,7 @@ import { eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { OpsConfig, OpsEvent } from './ops-types.js';
 import { DEFAULT_OPS_CONFIG } from './ops-types.js';
+import { resolveAutomationPolicy } from './ops-config-resolver.js';
 import { RecoveryPipeline } from './ops-recovery.js';
 import { OpsAlerting } from './ops-alerting.js';
 import { CascadeDetector } from './ops-cascade.js';
@@ -35,7 +36,7 @@ export class OpsAgent {
   constructor(ctx: AppContext, config?: Partial<OpsConfig>) {
     this.ctx = ctx;
     this.config = { ...DEFAULT_OPS_CONFIG, ...config };
-    this.recovery = new RecoveryPipeline(ctx);
+    this.recovery = new RecoveryPipeline(ctx, ctx.approvalGate);
     this.alerting = new OpsAlerting(ctx, this.config);
     this.cascade = new CascadeDetector(ctx);
     this.digest = new DigestGenerator(ctx);
@@ -277,12 +278,18 @@ export class OpsAgent {
     });
     await this.alerting.sendAlert(alert);
 
-    if (this.config.auto_restart && containerId) {
+    if (this.config.recovery.enabled && containerId) {
+      const automationPolicy = resolveAutomationPolicy(this.config);
+      if (!automationPolicy) {
+        return;
+      }
+
       const result = await this.recovery.execute({
         projectId,
         projectName,
         containerId,
         incidentId: incident.id,
+        automationPolicy,
       });
       if (result === 'recovered') {
         this.incidents.resolveIncident(incident.id, 'Auto-recovered after restart');
