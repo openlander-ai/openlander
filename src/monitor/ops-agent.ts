@@ -4,7 +4,7 @@ import type { OpsIncidentRow } from '../db/types.js';
 import { eventBus } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 import type { OpsConfig, OpsEvent } from './ops-types.js';
-import { DEFAULT_OPS_CONFIG } from './ops-types.js';
+import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from './ops-types.js';
 import { resolveAutomationPolicy } from './ops-config-resolver.js';
 import { RecoveryPipeline } from './ops-recovery.js';
 import { OpsAlerting } from './ops-alerting.js';
@@ -77,6 +77,14 @@ export class OpsAgent {
     this.eventHandlers.set('monitor:healthcheck', (payload) => {
       this.enqueue({ type: 'monitor:healthcheck', payload, timestamp: Date.now() });
     });
+    this.eventHandlers.set('recovery:approval-resolved', (payload) => {
+      const p = payload as { actionRunId: string; approved: boolean };
+      if (p.approved) {
+        this.ctx.approvalGate.approve(p.actionRunId);
+      } else {
+        this.ctx.approvalGate.reject(p.actionRunId);
+      }
+    });
 
     for (const [eventName, handler] of this.eventHandlers.entries()) {
       const unsubscribe = eventBus.on(
@@ -89,7 +97,8 @@ export class OpsAgent {
           | 'deploy:failed'
           | 'recovery:failed'
           | 'recovery:exhausted'
-          | 'monitor:healthcheck',
+          | 'monitor:healthcheck'
+          | 'recovery:approval-resolved',
         handler,
       );
       this.eventUnsubscribers.set(eventName, unsubscribe);
@@ -125,6 +134,7 @@ export class OpsAgent {
     this.eventHandlers.clear();
 
     this.digest.stopSchedule();
+    this.ctx.approvalGate.dispose();
 
     const drainStart = Date.now();
     while (this.processing && Date.now() - drainStart < 5000) {
@@ -226,6 +236,11 @@ export class OpsAgent {
         this.ctx.db.resetCircuitBreaker(projectId);
       }
 
+      const pendingApprovals = this.ctx.db.getActionRunsByApprovalStatus('pending', 100);
+      for (const run of pendingApprovals) {
+        this.ctx.db.updateActionRunStatus(run.id, 'failed', 'Server restart interrupted approval');
+      }
+
       if (activeIncidents.size > 0 || staleCircuitBreakers.length > 0) {
         log.info(
           {
@@ -279,7 +294,8 @@ export class OpsAgent {
     await this.alerting.sendAlert(alert);
 
     if (this.config.recovery.enabled && containerId) {
-      const automationPolicy = resolveAutomationPolicy(this.config);
+      const projectOverride = this.ctx.db.getProjectOpsOverride(projectId);
+      const automationPolicy = resolveAutomationPolicy(this.config, projectOverride ?? undefined);
       if (!automationPolicy) {
         return;
       }
@@ -424,6 +440,15 @@ export class OpsAgent {
   }
 
   reloadConfig(config: Partial<OpsConfig>): void {
+    const raw = config as Record<string, unknown>;
+    if ('auto_restart' in raw && !('recovery' in raw)) {
+      raw['recovery'] = {
+        enabled: Boolean(raw['auto_restart']),
+        automation: DEFAULT_RECOVERY_AUTOMATION,
+      };
+      delete raw['auto_restart'];
+    }
+
     this.config = { ...this.config, ...config };
     this.alerting.updateConfig(this.config);
 

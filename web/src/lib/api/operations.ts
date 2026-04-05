@@ -2,7 +2,10 @@ import { fetchWithAuth } from './auth.js';
 
 export interface OpsConfig {
   enabled: boolean;
-  auto_restart: boolean;
+  recovery: {
+    enabled: boolean;
+    automation: Record<string, string>;
+  };
   auto_cleanup: boolean;
   drift_detection: boolean;
   thresholds: {
