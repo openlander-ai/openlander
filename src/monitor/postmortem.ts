@@ -122,6 +122,12 @@ export class PostmortemGenerator {
       const project = this.db.getProject(projectId);
       const projectName = project?.name ?? projectId;
 
+      // Skip stopped/archived projects — no postmortem needed
+      if (!project || project.status === 'stopped' || project.archived_at) {
+        log.debug({ projectId }, 'Skipping postmortem for stopped/archived project');
+        return;
+      }
+
       const logs = this.db.getDeployLogs(projectId, 1);
       const latestLog: DeployLogRow | undefined = logs[0];
       const rawBuildLog = latestLog?.build_log?.slice(-3000) ?? 'No build log available';
