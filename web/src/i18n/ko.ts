@@ -278,9 +278,23 @@ export const translations = {
         actionType: {
           web_agent: '웹 에이전트',
           auto_recovery: '자동 복구',
+          build_debugger: '빌드 디버거',
+          monitor_alert: '모니터 알림',
           monitor: '모니터',
           mcp: 'MCP',
         },
+        source: {
+          web: '웹',
+          mcp: 'MCP',
+          'auto-recovery': '자동 복구',
+          monitor: '모니터',
+        },
+        result: {
+          success: '성공',
+          failure: '실패',
+          partial: '부분 성공',
+        },
+        noProject: '알 수 없는 프로젝트',
       },
     },
     mcp: {

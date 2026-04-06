@@ -19,6 +19,7 @@ export interface AiUsageLog {
   toolsCalled: string | null;
   result: string | null;
   durationMs: number | null;
+  source: string | null;
   createdAt: string;
 }
 

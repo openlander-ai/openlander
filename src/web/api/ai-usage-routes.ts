@@ -110,6 +110,7 @@ function mapLogToCamelCase(log: {
   tools_called: string | null;
   result: string | null;
   duration_ms: number | null;
+  source: string | null;
   created_at: string;
 }) {
   return {
@@ -126,6 +127,7 @@ function mapLogToCamelCase(log: {
     toolsCalled: log.tools_called,
     result: log.result,
     durationMs: log.duration_ms,
+    source: log.source,
     createdAt: log.created_at,
   };
 }

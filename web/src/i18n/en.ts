@@ -279,9 +279,23 @@ export const translations = {
         actionType: {
           web_agent: 'Web Agent',
           auto_recovery: 'Auto Recovery',
+          build_debugger: 'Build Debugger',
+          monitor_alert: 'Monitor Alert',
           monitor: 'Monitor',
           mcp: 'MCP',
         },
+        source: {
+          web: 'Web',
+          mcp: 'MCP',
+          'auto-recovery': 'Auto Recovery',
+          monitor: 'Monitor',
+        },
+        result: {
+          success: 'Success',
+          failure: 'Failure',
+          partial: 'Partial',
+        },
+        noProject: 'Unknown Project',
       },
     },
     mcp: {

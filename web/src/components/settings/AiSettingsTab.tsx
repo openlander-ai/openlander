@@ -237,14 +237,29 @@ export function AiSettingsTab() {
                       className="flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-4"
                     >
                       <div className="flex items-start sm:items-center gap-3">
-                        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-bg-subtle shrink-0 mt-0.5 sm:mt-0">
-                          <Brain className="h-4 w-4 text-agent" />
+                        <div
+                          className={cn(
+                            'flex items-center justify-center h-8 w-8 rounded-full shrink-0 mt-0.5 sm:mt-0',
+                            log.result === 'failure' ? 'bg-error/10' : 'bg-bg-subtle',
+                          )}
+                        >
+                          <Brain
+                            className={cn(
+                              'h-4 w-4',
+                              log.result === 'failure' ? 'text-error' : 'text-agent',
+                            )}
+                          />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-primary-ol flex flex-wrap items-center gap-2">
-                            {log.projectId && projects[log.projectId] && (
-                              <span className="text-xs font-normal text-agent border border-agent/20 bg-agent/5 px-1.5 py-0.5 rounded mr-1">
-                                {projects[log.projectId]}
+                          <p className="text-sm font-medium text-primary-ol flex flex-wrap items-center gap-1.5">
+                            {log.projectId && (
+                              <span className="text-xs font-normal text-agent border border-agent/20 bg-agent/5 px-1.5 py-0.5 rounded">
+                                {projects[log.projectId] || log.projectId.slice(0, 12)}
+                              </span>
+                            )}
+                            {!log.projectId && (
+                              <span className="text-xs font-normal text-muted-ol border border-border bg-bg-subtle px-1.5 py-0.5 rounded">
+                                {(t as (key: string) => string)('settings.ai.usage.noProject')}
                               </span>
                             )}
                             {(t as (key: string) => string)(
@@ -263,6 +278,35 @@ export function AiSettingsTab() {
                               <span className="whitespace-nowrap flex items-center gap-1">
                                 <span className="text-border">|</span>
                                 {(log.durationMs / 1000).toFixed(1)}s
+                              </span>
+                            )}
+                            {log.source && (
+                              <span className="whitespace-nowrap flex items-center gap-1">
+                                <span className="text-border">|</span>
+                                <span className="font-mono text-[10px] bg-bg-subtle px-1 rounded">
+                                  {(t as (key: string) => string)(
+                                    `settings.ai.usage.source.${log.source}`,
+                                  ) || log.source}
+                                </span>
+                              </span>
+                            )}
+                            {log.result && (
+                              <span className="whitespace-nowrap flex items-center gap-1">
+                                <span className="text-border">|</span>
+                                <span
+                                  className={cn(
+                                    'font-mono text-[10px] px-1 rounded',
+                                    log.result === 'success'
+                                      ? 'text-success bg-success/10'
+                                      : log.result === 'failure'
+                                        ? 'text-error bg-error/10'
+                                        : 'text-warning bg-warning/10',
+                                  )}
+                                >
+                                  {(t as (key: string) => string)(
+                                    `settings.ai.usage.result.${log.result}`,
+                                  ) || log.result}
+                                </span>
                               </span>
                             )}
                             {log.toolsCalled && (
