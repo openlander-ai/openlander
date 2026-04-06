@@ -208,6 +208,10 @@ export async function createAppContext(
     }
   }
 
+  // v1.0: Recovery coordinator — single owner of all recovery decisions
+  const coordinator = new RecoveryCoordinator(db, eventBus, config);
+  coordinator.start();
+
   const pipeline = new DeployPipeline(
     docker,
     db,
@@ -216,6 +220,7 @@ export async function createAppContext(
     jobManager,
     composePipeline,
     autoDetector,
+    coordinator,
   );
   const approvalGate = new ApprovalGate();
 
@@ -333,10 +338,6 @@ export async function createAppContext(
   const alertMonitor = new AlertMonitor(docker, db, eventBus);
 
   const dockerEventListener = new DockerEventListener(docker, db, eventBus);
-
-  // v1.0: Recovery coordinator — single owner of all recovery decisions
-  const coordinator = new RecoveryCoordinator(db, eventBus, config);
-  coordinator.start();
 
   // Wire platform event capture (captures all eventBus emissions for platform_event_log tool)
   if (config.mcp.platformTools) {
