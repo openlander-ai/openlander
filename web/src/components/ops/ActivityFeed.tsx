@@ -134,15 +134,15 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
 
   return (
     <Card className="border-border bg-panel p-4 lg:p-5">
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="font-display text-lg font-semibold text-primary-ol">
+      <div className="mb-4 flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
+        <div className="flex items-center gap-2 shrink-0">
+          <h2 className="font-display text-lg font-semibold text-primary-ol whitespace-nowrap">
             {t('operations.activity.title')}
           </h2>
           <Badge
             variant="outline"
             className={cn(
-              'font-body text-[11px]',
+              'font-body text-[11px] whitespace-nowrap',
               isConnected ? 'text-success border-success/40' : 'text-muted-ol',
             )}
           >
@@ -151,7 +151,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <span className="text-xs font-body text-muted-ol">
+          <span className="shrink-0 text-xs font-body text-muted-ol whitespace-nowrap">
             {t('operations.activity.filters')}
           </span>
 
