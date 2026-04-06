@@ -12,10 +12,15 @@ import type { TunnelManager } from './tunnel.js';
 
 const log = createModuleLogger('deploy:lifecycle');
 
+export interface CoordinatorSuppressor {
+  suppressProject(projectId: string, durationMs: number): void;
+}
+
 export class ContainerLifecycle {
   constructor(
     private readonly docker: Docker,
     private readonly db: Database,
+    private readonly coordinator?: CoordinatorSuppressor,
   ) {}
 
   async start(projectId: string): Promise<void> {
@@ -60,6 +65,8 @@ export class ContainerLifecycle {
   }
 
   async stop(projectId: string): Promise<void> {
+    this.coordinator?.suppressProject(projectId, 60_000);
+
     const children = this.db
       .listProjects()
       .filter((project) => project.parent_project_id === projectId);
@@ -80,6 +87,13 @@ export class ContainerLifecycle {
       if (!(err instanceof ContainerNotFoundError)) {
         throw err;
       }
+    }
+
+    // Remove container after stop so Docker events can no longer fire for this project
+    try {
+      await this.docker.removeContainer(project.container_id);
+    } catch (err) {
+      log.debug({ err, projectId }, 'Stop remove container skipped (already removed)');
     }
 
     this.db.updateProject(projectId, { status: 'stopped' });
@@ -120,6 +134,8 @@ export class ContainerLifecycle {
     const project = this.db.getProject(projectId);
     if (!project) return;
 
+    this.coordinator?.suppressProject(projectId, 60_000);
+
     if (project.status === 'building') {
       throw new OpenLanderError(
         'Cannot archive a building project',
@@ -135,6 +151,10 @@ export class ContainerLifecycle {
     for (const child of children) {
       await this.archive(child.id, tunnelManager);
     }
+
+    // Archive in DB first so if Docker emits a 'die' event during cleanup,
+    // the Eligibility Gate will see archived_at and reject recovery
+    this.db.archiveProject(projectId);
 
     if (project.container_id) {
       try {
@@ -160,7 +180,6 @@ export class ContainerLifecycle {
 
     tunnelManager?.close(projectId);
     clearPortScanCache();
-    this.db.archiveProject(projectId);
     await eventBus.emit('project:archive', { projectId });
   }
 

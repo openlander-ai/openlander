@@ -1,6 +1,6 @@
 import type { Agent } from '../llm/agent.js';
 import type { Database, DeployLogRow } from '../db/index.js';
-import type { EventBus, EventPayload } from '../events/index.js';
+import type { EventBus } from '../events/index.js';
 import type { OpenLanderConfig } from '../config/index.js';
 import { createModuleLogger } from '../lib/logger.js';
 
@@ -17,15 +17,13 @@ export interface PostmortemEntry {
 type Locale = 'en' | 'ko';
 
 export class PostmortemGenerator {
-  private readonly _events: EventBus;
   private readonly db: Database;
   private readonly agent: Agent;
   private readonly config: OpenLanderConfig;
   private readonly postmortems = new Map<string, PostmortemEntry>();
-  private unsubscribers: Array<() => void> = [];
 
-  constructor(events: EventBus, db: Database, agent: Agent, config: OpenLanderConfig) {
-    this._events = events;
+  constructor(_events: EventBus, db: Database, agent: Agent, config: OpenLanderConfig) {
+    // EventBus parameter kept for backward compatibility but not used
     this.db = db;
     this.agent = agent;
     this.config = config;
@@ -40,13 +38,7 @@ export class PostmortemGenerator {
   }
 
   start(): void {
-    // DISABLED: PostmortemGenerator was causing infinite LLM calls (~15K+ calls).
-    // The recovery:success and recovery:exhausted events keep firing for non-running
-    // projects despite guards. Disabling event listeners entirely until root cause
-    // of continuous event emission is resolved.
-    void this._events;
-    void this._generatePostmortem;
-    log.info('PostmortemGenerator event listeners disabled (cost protection)');
+    log.info('PostmortemGenerator ready (manual invocation only)');
   }
 
   getLatest(projectId: string): PostmortemEntry | undefined {
@@ -76,10 +68,7 @@ export class PostmortemGenerator {
   }
 
   stop(): void {
-    for (const unsub of this.unsubscribers) {
-      unsub();
-    }
-    this.unsubscribers = [];
+    // No subscriptions to clean up
   }
 
   private redactSecrets(text: string): string {
@@ -103,11 +92,7 @@ export class PostmortemGenerator {
 
   private static readonly DEDUP_WINDOW_MS = 30 * 60_000; // 30 minutes
 
-  private async _generatePostmortem(
-    projectId: string,
-    recovered: boolean,
-    payload: EventPayload['recovery:success'] | EventPayload['recovery:exhausted'],
-  ): Promise<void> {
+  async generatePostmortem(projectId: string): Promise<void> {
     try {
       // Dedup: skip if a postmortem was generated for this project recently
       const existing = this.postmortems.get(projectId);
@@ -134,15 +119,9 @@ export class PostmortemGenerator {
       const latestLog: DeployLogRow | undefined = logs[0];
       const rawBuildLog = latestLog?.build_log?.slice(-3000) ?? 'No build log available';
       const buildLogTail = this.redactSecrets(rawBuildLog);
-      const errorMessage = ('lastError' in payload ? payload.lastError : undefined) ?? 'unknown';
-
-      const attempts =
-        'attempt' in payload
-          ? payload.attempt
-          : 'totalAttempts' in payload
-            ? payload.totalAttempts
-            : 0;
-      const durationMs = 'durationMs' in payload ? payload.durationMs : 0;
+      const errorMessage = 'unknown';
+      const attempts = 0;
+      const durationMs = 0;
 
       const locale = this.getCurrentLocale();
       const languageInstruction =
@@ -184,7 +163,7 @@ Required structure:
 
 Incident data:
 - Project: ${projectName}
-- Recovery Status: ${recovered ? 'success' : 'failed'}
+- Recovery Status: unknown
 - Attempts: ${String(attempts)}
 - Recovery Duration: ${String(durationMs)}ms
 - Last Error: ${errorMessage}

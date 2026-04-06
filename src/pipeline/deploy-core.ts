@@ -45,7 +45,7 @@ import {
   detectFailStep,
   parsePendingFix,
 } from './deploy/helpers.js';
-import { ContainerLifecycle } from './deploy/lifecycle.js';
+import { ContainerLifecycle, type CoordinatorSuppressor } from './deploy/lifecycle.js';
 import { RollbackExecutor } from './deploy/rollback.js';
 import { TunnelManager } from './deploy/tunnel.js';
 import { BuildExecutor } from './deploy/build-step.js';
@@ -238,9 +238,10 @@ export class DeployPipeline {
     private readonly jobManager?: JobManager,
     private readonly composePipeline?: ComposePipeline,
     private readonly autoDetector?: AutoDetector,
+    private readonly coordinator?: CoordinatorSuppressor,
   ) {
     this.tunnelManager = new TunnelManager(this.db);
-    this.lifecycle = new ContainerLifecycle(this.docker, this.db);
+    this.lifecycle = new ContainerLifecycle(this.docker, this.db, this.coordinator);
     this.rollbackExecutor = new RollbackExecutor(this.docker, this.db);
     this.buildExecutor = new BuildExecutor(this.docker);
     this.containerRunner = new ContainerRunner(this.docker, this.db);

@@ -57,6 +57,15 @@ function createMockConfig(language: 'en' | 'ko' = 'en'): OpenLanderConfig {
       slack: { enabled: false, token: '', signingSecret: '' },
       discord: { enabled: false, token: '', applicationId: '', publicKey: '' },
       telegram: { enabled: false, token: '', webhookSecret: '' },
+      email: {
+        enabled: false,
+        host: '',
+        port: 587,
+        secure: false,
+        auth: { user: '', pass: '' },
+        from: '',
+        to: [],
+      },
     },
     gitProviders: {
       github: { token: '', username: '' },
@@ -68,6 +77,36 @@ function createMockConfig(language: 'en' | 'ko' = 'en'): OpenLanderConfig {
     },
     traefik: {
       mode: 'managed',
+    },
+    ai: {
+      autoRecovery: { enabled: false },
+      buildDebugger: { enabled: false },
+      webAgent: { enabled: false },
+      envDetection: { enabled: false },
+      secretScan: { enabled: false },
+      rollbackSuggestion: { enabled: false },
+      operationalMonitoring: { enabled: false },
+    },
+    google: {
+      clientId: '',
+      clientSecret: '',
+    },
+    ops: {
+      enabled: false,
+      recovery: {
+        enabled: false,
+        automation: { restart: 'auto', diagnosis: 'auto', apply_fixes: 'auto', rollback: 'auto' },
+      },
+      auto_cleanup: false,
+      drift_detection: false,
+      production_only: false,
+      thresholds: {
+        disk_cleanup_percent: 80,
+        recovery_max_per_day: 5,
+        alert_dedup_minutes: 15,
+        digest_time: '09:00',
+      },
+      channels: {},
     },
   };
 }
@@ -167,20 +206,20 @@ describe('PostmortemGenerator - lifecycle and generation', () => {
     generator = new PostmortemGenerator(events, db, agent, config);
   });
 
-  it('start() subscribes to recovery success and exhausted events', () => {
+  it('start() is a noop (no event subscriptions)', () => {
     expect(events.listenerCount('recovery:success')).toBe(0);
     expect(events.listenerCount('recovery:exhausted')).toBe(0);
 
     generator.start();
 
-    expect(events.listenerCount('recovery:success')).toBe(1);
-    expect(events.listenerCount('recovery:exhausted')).toBe(1);
+    expect(events.listenerCount('recovery:success')).toBe(0);
+    expect(events.listenerCount('recovery:exhausted')).toBe(0);
   });
 
-  it('stop() unsubscribes all handlers', () => {
+  it('stop() is a noop (no subscriptions to clean up)', () => {
     generator.start();
-    expect(events.listenerCount('recovery:success')).toBe(1);
-    expect(events.listenerCount('recovery:exhausted')).toBe(1);
+    expect(events.listenerCount('recovery:success')).toBe(0);
+    expect(events.listenerCount('recovery:exhausted')).toBe(0);
 
     generator.stop();
 
@@ -188,15 +227,10 @@ describe('PostmortemGenerator - lifecycle and generation', () => {
     expect(events.listenerCount('recovery:exhausted')).toBe(0);
   });
 
-  it('generates postmortem from recovery event with redacted build logs', async () => {
-    generator.start();
+  it('generatePostmortem() generates postmortem with redacted build logs', async () => {
+    getProject.mockReturnValue({ name: 'Demo Project', status: 'running' });
 
-    await events.emit('recovery:success', {
-      projectId: 'project-1',
-      attempt: 2,
-      durationMs: 1800,
-      lastError: 'build failed',
-    });
+    await generator.generatePostmortem('project-1');
 
     await waitForAssertion(() => {
       expect(chat).toHaveBeenCalledOnce();
@@ -208,13 +242,9 @@ describe('PostmortemGenerator - lifecycle and generation', () => {
   });
 
   it('getLatest() returns generated postmortem entry', async () => {
-    generator.start();
+    getProject.mockReturnValue({ name: 'Demo Project', status: 'running' });
 
-    await events.emit('recovery:exhausted', {
-      projectId: 'project-1',
-      totalAttempts: 3,
-      lastError: 'still failing',
-    });
+    await generator.generatePostmortem('project-1');
 
     await waitForAssertion(() => {
       expect(generator.getLatest('project-1')).toBeDefined();
@@ -250,7 +280,7 @@ describe('PostmortemGenerator singleton helpers', () => {
 describe('PostmortemGenerator - dynamic locale behavior', () => {
   it('respects runtime language changes in generated prompts', async () => {
     const events = new EventBus();
-    const getProject = vi.fn().mockReturnValue({ name: 'Demo Project' });
+    const getProject = vi.fn().mockReturnValue({ name: 'Demo Project', status: 'running' });
     const getDeployLogs = vi.fn().mockReturnValue([
       {
         build_log: 'Build failed',
@@ -268,14 +298,8 @@ describe('PostmortemGenerator - dynamic locale behavior', () => {
     const config = createMockConfig('en');
 
     const generator = new PostmortemGenerator(events, db, agent, config);
-    generator.start();
 
-    await events.emit('recovery:success', {
-      projectId: 'project-1',
-      attempt: 1,
-      durationMs: 1000,
-      lastError: 'test error',
-    });
+    await generator.generatePostmortem('project-1');
 
     await waitForAssertion(() => {
       expect(chat).toHaveBeenCalledOnce();
@@ -288,12 +312,7 @@ describe('PostmortemGenerator - dynamic locale behavior', () => {
 
     config.language = 'ko';
 
-    await events.emit('recovery:success', {
-      projectId: 'project-2',
-      attempt: 1,
-      durationMs: 1000,
-      lastError: 'test error',
-    });
+    await generator.generatePostmortem('project-2');
 
     await waitForAssertion(() => {
       expect(chat).toHaveBeenCalledOnce();

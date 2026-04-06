@@ -130,6 +130,8 @@ describe('Event wiring (static source scan)', () => {
       // v0.3 placeholders (MCP transport wiring not implemented yet).
       'mcp:connect',
       'mcp:disconnect',
+      // v1.0: Recovery architecture — emitted in Phase 1b when executors are wired
+      'recovery:stopped',
     ]);
 
     const unexpectedDeadTypes = deadTypes.filter(

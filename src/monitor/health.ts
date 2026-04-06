@@ -5,7 +5,6 @@ import type { LanguageModel } from 'ai';
 import { createModuleLogger } from '../lib/logger.js';
 import { shouldRunCleanup, diskThresholdCleanup } from '../pipeline/cleanup.js';
 import type { RecoveryCategory } from '../pipeline/recovery-dispatch.js';
-import { diagnoseRuntimeCrash } from './llm-diagnosis.js';
 
 const log = createModuleLogger('health');
 
@@ -58,6 +57,7 @@ export class HealthMonitor {
     this.events = events;
     this.options = { ...DEFAULT_OPTIONS, ...monitorOptions };
     this.aiProvider = aiProvider;
+    void this.aiProvider;
   }
 
   start(): void {
@@ -314,7 +314,7 @@ export class HealthMonitor {
 
       if (restartCount >= 3) {
         const errorSnippet = await this.getContainerStderrSnippet(ensuredContainerId);
-        const incidentId = this.recordRuntimeIncident({
+        this.recordRuntimeIncident({
           projectId,
           containerId: ensuredContainerId,
           category: 'runtime_crash',
@@ -325,22 +325,14 @@ export class HealthMonitor {
           containerUptimeMs: this.getContainerUptimeMs(info.State.StartedAt),
           restartCount,
         });
-        this.triggerRuntimeCrashDiagnosis({
-          projectId,
-          incidentId,
-          category: 'runtime_crash',
-          errorSnippet,
-          restartCount,
-        });
         log.warn(
           { projectId, containerId: ensuredContainerId, restartCount },
-          'Container in crash loop — marking project as error',
+          'Container in crash loop — emitting health:degraded',
         );
-        this.markProjectAndEnvironmentsError(projectId);
-        await this.events.emit('deploy:failed', {
+        await this.events.emit('health:degraded', {
           projectId,
-          error: `Container crash loop detected (${String(restartCount)} restarts)`,
-          step: 'run',
+          consecutiveFailures: restartCount,
+          lastError: `Container crash loop detected (${String(restartCount)} restarts)`,
         });
         return lastResult;
       }
@@ -361,13 +353,12 @@ export class HealthMonitor {
           });
           log.warn(
             { projectId, containerId: ensuredContainerId, restartCount },
-            'Container restarted with failing health check — marking as error',
+            'Container restarted with failing health check — emitting health:degraded',
           );
-          this.markProjectAndEnvironmentsError(projectId);
-          await this.events.emit('deploy:failed', {
+          await this.events.emit('health:degraded', {
             projectId,
-            error: `Container restarted (${String(restartCount)}x) and health check failing`,
-            step: 'run',
+            consecutiveFailures: restartCount,
+            lastError: `Container restarted (${String(restartCount)}x) and health check failing`,
           });
           return lastResult;
         }
@@ -382,7 +373,7 @@ export class HealthMonitor {
       const exitCode = info.State.ExitCode;
       if (!info.State.Running && exitCode !== 0) {
         const errorSnippet = await this.getContainerStderrSnippet(ensuredContainerId);
-        const incidentId = this.recordRuntimeIncident({
+        this.recordRuntimeIncident({
           projectId,
           containerId: ensuredContainerId,
           category: 'runtime_crash',
@@ -393,22 +384,14 @@ export class HealthMonitor {
           containerUptimeMs: this.getContainerUptimeMs(info.State.StartedAt),
           restartCount,
         });
-        this.triggerRuntimeCrashDiagnosis({
-          projectId,
-          incidentId,
-          category: 'runtime_crash',
-          errorSnippet,
-          restartCount,
-        });
         log.warn(
           { projectId, containerId: ensuredContainerId, exitCode },
-          'Container crashed — marking project as error',
+          'Container crashed — emitting health:degraded',
         );
-        this.markProjectAndEnvironmentsError(projectId);
-        await this.events.emit('deploy:failed', {
+        await this.events.emit('health:degraded', {
           projectId,
-          error: `Container exited with code ${String(exitCode)}`,
-          step: 'run',
+          consecutiveFailures: lastResult.consecutiveFailures,
+          lastError: `Container exited with code ${String(exitCode)}`,
         });
       }
     } catch (error) {
@@ -421,9 +404,13 @@ export class HealthMonitor {
       });
       log.warn(
         { projectId, containerId: ensuredContainerId },
-        'Container not found — marking project as error',
+        'Container not found — emitting health:degraded',
       );
-      this.markProjectAndEnvironmentsError(projectId);
+      await this.events.emit('health:degraded', {
+        projectId,
+        consecutiveFailures: 1,
+        lastError: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return lastResult;
@@ -506,26 +493,6 @@ export class HealthMonitor {
     return productionEnvironment?.id ?? null;
   }
 
-  private markProjectAndEnvironmentsError(projectId: string): void {
-    this.db.updateProject(projectId, { status: 'error' });
-
-    const maybeDb = this.db as {
-      getEnvironmentsByProject?: (id: string) => Array<{ id: string }>;
-      updateEnvironment?: (id: string, updates: { status: 'error' }) => void;
-    };
-
-    if (
-      typeof maybeDb.getEnvironmentsByProject !== 'function' ||
-      typeof maybeDb.updateEnvironment !== 'function'
-    ) {
-      return;
-    }
-
-    for (const environment of maybeDb.getEnvironmentsByProject(projectId)) {
-      maybeDb.updateEnvironment(environment.id, { status: 'error' });
-    }
-  }
-
   private async getContainerStderrSnippet(
     containerId: string,
     tail = INCIDENT_ERROR_SNIPPET_LINES,
@@ -595,35 +562,6 @@ export class HealthMonitor {
       );
       return null;
     }
-  }
-
-  private triggerRuntimeCrashDiagnosis(opts: {
-    projectId: string;
-    incidentId: string | null;
-    category: RecoveryCategory;
-    errorSnippet: string | null;
-    restartCount: number | null;
-  }): void {
-    if (!opts.incidentId || opts.restartCount == null || opts.restartCount < 3) {
-      return;
-    }
-
-    const projectName = this.db.getProject(opts.projectId)?.name;
-
-    void diagnoseRuntimeCrash({
-      db: this.db,
-      incidentId: opts.incidentId,
-      errorSnippet: opts.errorSnippet ?? '',
-      category: opts.category,
-      restartCount: opts.restartCount,
-      projectName,
-      aiProvider: this.aiProvider,
-    }).catch((err: unknown) => {
-      log.warn(
-        { err, incidentId: opts.incidentId, projectId: opts.projectId },
-        'LLM diagnosis failed',
-      );
-    });
   }
 }
 

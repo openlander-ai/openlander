@@ -17,9 +17,9 @@ export const projects = sqliteTable(
     name: text('name').notNull().unique(),
     repo_url: text('repo_url'),
     branch: text('branch').default('main'),
-    status: text('status', { enum: ['running', 'stopped', 'building', 'error'] }).default(
-      'stopped',
-    ),
+    status: text('status', {
+      enum: ['running', 'stopped', 'building', 'error', 'recovering'],
+    }).default('stopped'),
     visibility: text('visibility', {
       enum: ['internal', 'quick-share', 'shared', 'production'],
     }).default('internal'),
@@ -53,7 +53,7 @@ export const projects = sqliteTable(
   (table) => [
     check(
       'projects_status_check',
-      sql`${table.status} IN ('running', 'stopped', 'building', 'error')`,
+      sql`${table.status} IN ('running', 'stopped', 'building', 'error', 'recovering')`,
     ),
     check(
       'projects_visibility_check',

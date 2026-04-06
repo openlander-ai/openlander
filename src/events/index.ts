@@ -79,6 +79,10 @@ export type EventType =
   | 'question:answered'
   // v0.2.0: Agent events (deploy UX fix)
   | 'agent:event'
+  | 'health:degraded'
+  | 'recovery:blocked'
+  | 'recovery:stopped'
+  | 'recovery:started'
   | 'recovery:start'
   | 'recovery:success'
   | 'recovery:failed'
@@ -263,6 +267,23 @@ export interface EventPayload {
     projectId: string;
     event: ChatStreamEvent & { timestamp: string };
     identity?: RequestIdentity;
+  };
+  'health:degraded': {
+    projectId: string;
+    consecutiveFailures: number;
+    lastError: string | null;
+  };
+  'recovery:blocked': {
+    projectId: string;
+    reason: string;
+  };
+  'recovery:stopped': {
+    projectId: string;
+    reason: string;
+  };
+  'recovery:started': {
+    projectId: string;
+    trigger: string;
   };
   'recovery:start': {
     projectId: string;
