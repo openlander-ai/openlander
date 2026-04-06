@@ -274,6 +274,13 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     step?: string,
     buildLog?: string,
   ): Promise<void> {
+    // Defensive guard: skip stopped/archived projects even if the event handler missed it
+    const currentProject = db.getProject(projectId);
+    if (!currentProject || currentProject.status === 'stopped' || currentProject.archived_at) {
+      log.debug({ projectId }, 'Skipping auto-recovery for stopped/archived project');
+      return;
+    }
+
     const gate = runGateChecks(projectId, error, db);
     if (gate.blocked) {
       if (gate.reason === 'max-attempts') {

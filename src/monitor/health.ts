@@ -287,6 +287,12 @@ export class HealthMonitor {
     if (!containerId) {
       return lastResult;
     }
+
+    // Skip stopped/archived projects — no recovery events should be emitted
+    if (project.status === 'stopped' || project.archived_at) {
+      return lastResult;
+    }
+
     const ensuredContainerId = containerId;
 
     try {

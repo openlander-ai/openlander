@@ -206,6 +206,9 @@ export class DockerEventListener {
     const projectId = this.resolveProjectId(attrs);
     if (!projectId) return;
 
+    const project = this.db.getProject(projectId);
+    if (!project || project.status === 'stopped' || project.archived_at) return;
+
     await this.events.emit('container:oom', {
       projectId,
       containerId,
