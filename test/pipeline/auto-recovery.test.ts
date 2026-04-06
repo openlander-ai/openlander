@@ -189,6 +189,7 @@ describe('setupAutoRecovery', () => {
         repoUrl: 'https://github.com/openlander/proj-recipe-path',
         branch: 'main',
       });
+      harness.db.updateProject(projectId, { status: 'running' });
       await emitDeployFailed(harness.eventBus, projectId, 'node-gyp ERR! build failed');
 
       expect(harness.redeployMock).toHaveBeenCalledOnce();
@@ -340,6 +341,7 @@ describe('setupAutoRecovery', () => {
         repoUrl: 'https://github.com/openlander/proj-oom-recipe-path',
         branch: 'main',
       });
+      harness.db.updateProject(projectId, { status: 'running' });
       await emitDeployFailed(harness.eventBus, projectId, 'JavaScript heap out of memory');
 
       expect(harness.redeployMock).toHaveBeenCalledOnce();

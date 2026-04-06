@@ -31,6 +31,7 @@ function createMockCtx() {
       findAllOpenCircuitBreakers: vi.fn(() => []),
       getCircuitBreakerState: vi.fn(() => null),
       isCircuitBreakerOpen: vi.fn(() => false),
+      getProject: vi.fn(() => ({ status: 'running', archived_at: null })),
       resetCircuitBreaker: vi.fn(),
       getProjectOpsOverride: vi.fn(() => undefined),
       getActionRunsByApprovalStatus: vi.fn(() => []),

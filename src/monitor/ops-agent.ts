@@ -271,6 +271,13 @@ export class OpsAgent {
       return;
     }
 
+    // Skip stopped/archived projects — no recovery needed
+    const project = this.ctx.db.getProject(projectId);
+    if (!project || project.status === 'stopped' || project.archived_at) {
+      log.debug({ projectId }, 'Skipping crash event for stopped/archived project');
+      return;
+    }
+
     // If circuit breaker is open, suppress the entire crash handling chain
     // (no new incident, no alert, no recovery, no postmortem LLM call)
     if (this.ctx.db.isCircuitBreakerOpen(projectId)) {

@@ -658,6 +658,11 @@ ${plan.agentGuidance}
       log.info({ projectId: payload.projectId }, 'MCP-triggered deploy, skipping auto-recovery');
       return;
     }
+    // Skip stopped/archived projects
+    const project = db.getProject(payload.projectId);
+    if (project && (project.status === 'stopped' || project.archived_at)) {
+      return;
+    }
     setTimeout(() => {
       enqueueRecoveryCall(
         async () => {

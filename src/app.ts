@@ -354,7 +354,11 @@ export async function createAppContext(
 
         if (typeof projectId === 'string') {
           const project = db.getProject(projectId);
-          if (project && project.status === 'running') {
+          // Skip stopped/archived projects entirely
+          if (!project || project.status === 'stopped' || project.archived_at) {
+            return;
+          }
+          if (project.status === 'running') {
             db.updateProject(projectId, { status: 'error' });
             log.info({ projectId }, 'Project status set to error (container crash detected)');
           }

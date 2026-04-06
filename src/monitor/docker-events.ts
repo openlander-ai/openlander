@@ -237,7 +237,8 @@ export class DockerEventListener {
     if (!projectId) return;
 
     const project = this.db.getProject(projectId);
-    if (!project || project.status === 'building') return;
+    if (!project || project.status === 'building' || project.status === 'stopped') return;
+    if (project.archived_at) return;
 
     this.recentCrashes.set(containerId, Date.now());
 
