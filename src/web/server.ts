@@ -324,6 +324,7 @@ async function startOpsAgent(ctx: AppContext): Promise<void> {
   const opsAgent = new OpsAgent(ctx, ctx.config.ops);
   ctx.opsAgent = opsAgent;
   await opsAgent.start();
+  ctx.coordinator?.setOpsAgent(opsAgent);
   log.info('OpsAgent started');
 }
 

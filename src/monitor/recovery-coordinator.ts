@@ -49,6 +49,8 @@ export class RecoveryCoordinator {
   private unsubscribers: Array<() => void> = [];
   private running = false;
   private readonly projectStatusWriter: ProjectStatusWriter;
+  private opsAgent: OpsAgentRef | undefined;
+  private configGetter: (() => OpenLanderConfig) | null = null;
 
   constructor(
     db: Database,
@@ -68,11 +70,15 @@ export class RecoveryCoordinator {
       return;
     }
 
+    if (opts?.opsAgent) {
+      this.opsAgent = opts.opsAgent;
+    }
+
     this.running = true;
 
     this.unsubscribers.push(
       this.events.on('health:degraded', async (payload) => {
-        await this.handleHealthDegraded(payload, opts?.opsAgent);
+        await this.handleHealthDegraded(payload);
       }),
     );
 
@@ -96,7 +102,7 @@ export class RecoveryCoordinator {
       }),
     );
 
-    log.info({ hasOpsAgent: Boolean(opts?.opsAgent) }, 'RecoveryCoordinator started');
+    log.info({ hasOpsAgent: Boolean(this.opsAgent) }, 'RecoveryCoordinator started');
   }
 
   stop(): void {
@@ -127,7 +133,7 @@ export class RecoveryCoordinator {
       return { eligible: false, reason: 'archived' };
     }
 
-    if (!this.config.ai.autoRecovery.enabled) {
+    if (!this.getConfig().ai.autoRecovery.enabled) {
       return { eligible: false, reason: 'ai_disabled' };
     }
 
@@ -152,6 +158,14 @@ export class RecoveryCoordinator {
 
   suppressProject(projectId: string, durationMs: number): void {
     this.suppressions.set(projectId, Date.now() + durationMs);
+  }
+
+  setOpsAgent(opsAgent: OpsAgentRef): void {
+    this.opsAgent = opsAgent;
+  }
+
+  setConfigGetter(getter: () => OpenLanderConfig): void {
+    this.configGetter = getter;
   }
 
   isOperatorSuppressed(projectId: string): boolean {
@@ -180,10 +194,7 @@ export class RecoveryCoordinator {
     return this.llmCallTimestamps.length >= this.maxLlmCallsPerHour;
   }
 
-  private async handleHealthDegraded(
-    payload: EventPayload['health:degraded'],
-    opsAgent?: OpsAgentRef,
-  ): Promise<void> {
+  private async handleHealthDegraded(payload: EventPayload['health:degraded']): Promise<void> {
     const result = this.checkEligibility(payload.projectId);
     if (!result.eligible) {
       await this.emitBlocked(payload.projectId, result.reason);
@@ -197,9 +208,11 @@ export class RecoveryCoordinator {
       trigger: 'health:degraded',
     });
 
-    if (opsAgent) {
+    this.recordLlmCall();
+
+    if (this.opsAgent) {
       const project = this.getProjectSnapshot(payload.projectId);
-      opsAgent.enqueue({
+      this.opsAgent.enqueue({
         type: 'deploy:crash',
         payload: {
           projectId: payload.projectId,
@@ -227,5 +240,9 @@ export class RecoveryCoordinator {
 
   private getProjectSnapshot(projectId: string): ProjectSnapshot | undefined {
     return this.db.getProject(projectId);
+  }
+
+  private getConfig(): OpenLanderConfig {
+    return this.configGetter ? this.configGetter() : this.config;
   }
 }

@@ -413,6 +413,7 @@ export async function createAppContext(
   // We cast partialCtx which is structurally complete for ChannelManager's actual usage.
   const channelManager = new ChannelManager(partialCtx as AppContext);
   const ctx: AppContext = { ...partialCtx, channelManager };
+  coordinator.setConfigGetter(() => ctx.config);
 
   if (ctx.agentPool) {
     const tools = createTools(ctx, ctx.questionBridge);

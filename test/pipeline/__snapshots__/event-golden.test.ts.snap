@@ -291,13 +291,6 @@ exports[`pipeline event golden snapshots > captures stop/start/remove event sequ
       "containerId": "string",
       "projectId": "string",
     },
-    "type": "container:start",
-  },
-  {
-    "payloadShape": {
-      "containerId": "string",
-      "projectId": "string",
-    },
     "type": "container:remove",
   },
 ]

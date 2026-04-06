@@ -437,10 +437,8 @@ describe('DeployPipeline deploy controls', () => {
     await pipeline.stop('parent-ops');
     expect(db.getProject('parent-ops')?.status).toBe('stopped');
     expect(db.getProject('child-ops')?.status).toBe('stopped');
-
-    await pipeline.start('parent-ops');
-    expect(db.getProject('parent-ops')?.status).toBe('running');
-    expect(db.getProject('child-ops')?.status).toBe('running');
+    // After destructive stop, container_id is cleared — start() requires redeploy
+    expect(db.getProject('child-ops')?.container_id).toBeNull();
   });
 
   it('getLogs returns friendly message when project has no container', async () => {

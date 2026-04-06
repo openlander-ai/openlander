@@ -96,7 +96,7 @@ export class ContainerLifecycle {
       log.debug({ err, projectId }, 'Stop remove container skipped (already removed)');
     }
 
-    this.db.updateProject(projectId, { status: 'stopped' });
+    this.db.updateProject(projectId, { status: 'stopped', containerId: null });
     for (const env of this.db.getEnvironmentsByProject(projectId)) {
       this.db.updateEnvironment(env.id, { status: 'stopped' });
     }

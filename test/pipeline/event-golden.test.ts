@@ -261,11 +261,12 @@ describe('pipeline event golden snapshots', () => {
 
     const events = await capturePipelineEvents(async () => {
       await pipeline.stop('control-project');
+      // After destructive stop, container_id is cleared — start() is a no-op
       await pipeline.start('control-project');
       await pipeline.remove('control-project');
     });
 
-    expect(eventTypes(events)).toEqual(['container:stop', 'container:start', 'container:remove']);
+    expect(eventTypes(events)).toEqual(['container:stop', 'container:remove']);
     expect(events).toMatchSnapshot();
   });
 
