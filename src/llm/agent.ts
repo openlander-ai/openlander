@@ -127,6 +127,7 @@ export class Agent {
 
       const usage = extractUsageFromResult(result.usage);
       this.logUsageSafe({
+        projectId: this.currentScope?.projectId,
         sessionId: resolvedSessionId,
         actionType: this.actionType,
         modelName: this.getModelName(),
@@ -312,6 +313,7 @@ export class Agent {
           this.db.updateActionRunStatus(actionRunId, 'failed', 'Agent stream execution failed');
         }
         this.logUsageSafe({
+          projectId: this.currentScope?.projectId,
           sessionId: resolvedSessionId,
           actionType: this.actionType,
           modelName: this.getModelName(),
@@ -342,6 +344,7 @@ export class Agent {
       }
 
       this.logUsageSafe({
+        projectId: this.currentScope?.projectId,
         sessionId: resolvedSessionId,
         actionType: this.actionType,
         modelName: this.getModelName(),

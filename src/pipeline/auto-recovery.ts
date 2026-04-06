@@ -38,6 +38,7 @@ export interface AutoRecoveryAgent {
     input: string,
     onEvent: (event: ChatStreamEvent) => Promise<void>,
     sessionId?: string,
+    scope?: { type: string; projectId?: string },
   ): Promise<void>;
 }
 
@@ -467,6 +468,7 @@ ${plan.agentGuidance}
             });
           },
           sessionId,
+          { type: 'recovery', projectId },
         );
 
         if (approvalState.blocked) {
@@ -687,6 +689,11 @@ ${plan.agentGuidance}
       );
       return;
     }
+    // Skip stopped/archived projects
+    const composeProject = db.getProject(payload.projectId);
+    if (composeProject && (composeProject.status === 'stopped' || composeProject.archived_at)) {
+      return;
+    }
     setTimeout(() => {
       enqueueRecoveryCall(
         async () => {
@@ -725,6 +732,7 @@ ${plan.agentGuidance}
             });
           },
           `env-detect-${payload.projectId}`,
+          { type: 'recovery', projectId: payload.projectId },
         );
       },
       { projectId: payload.projectId, eventType: 'env:new-keys-detected' },
@@ -763,6 +771,7 @@ ${plan.agentGuidance}
             });
           },
           `secret-scan-${payload.projectId}`,
+          { type: 'recovery', projectId: payload.projectId },
         );
       },
       { projectId: payload.projectId, eventType: 'secret:detected' },
@@ -798,6 +807,7 @@ ${plan.agentGuidance}
             });
           },
           `rollback-${payload.projectId}`,
+          { type: 'recovery', projectId: payload.projectId },
         );
       },
       { projectId: payload.projectId, eventType: 'rollback:suggested' },
