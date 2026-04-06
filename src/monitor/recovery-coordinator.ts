@@ -201,13 +201,6 @@ export class RecoveryCoordinator {
       return;
     }
 
-    this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
-
-    await this.events.emit('recovery:started', {
-      projectId: payload.projectId,
-      trigger: 'health:degraded',
-    });
-
     this.recordLlmCall();
 
     if (this.opsAgent) {
@@ -222,6 +215,13 @@ export class RecoveryCoordinator {
         timestamp: Date.now(),
       });
     }
+
+    this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+
+    await this.events.emit('recovery:started', {
+      projectId: payload.projectId,
+      trigger: 'health:degraded',
+    });
   }
 
   private async emitBlocked(projectId: string, reason?: EligibilityReason): Promise<void> {
