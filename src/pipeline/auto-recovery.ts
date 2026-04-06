@@ -274,10 +274,13 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     step?: string,
     buildLog?: string,
   ): Promise<void> {
-    // Defensive guard: skip stopped/archived projects even if the event handler missed it
+    // Defensive guard: only recover actively running projects
     const currentProject = db.getProject(projectId);
-    if (!currentProject || currentProject.status === 'stopped' || currentProject.archived_at) {
-      log.debug({ projectId }, 'Skipping auto-recovery for stopped/archived project');
+    if (!currentProject || currentProject.status !== 'running' || currentProject.archived_at) {
+      log.debug(
+        { projectId, status: currentProject?.status },
+        'Skipping auto-recovery for non-running project',
+      );
       return;
     }
 

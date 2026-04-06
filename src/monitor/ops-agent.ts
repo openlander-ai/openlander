@@ -271,10 +271,13 @@ export class OpsAgent {
       return;
     }
 
-    // Skip stopped/archived projects — no recovery needed
+    // Skip non-running projects — no recovery needed
     const project = this.ctx.db.getProject(projectId);
-    if (!project || project.status === 'stopped' || project.archived_at) {
-      log.debug({ projectId }, 'Skipping crash event for stopped/archived project');
+    if (!project || project.status !== 'running' || project.archived_at) {
+      log.debug(
+        { projectId, status: project?.status },
+        'Skipping crash event for non-running project',
+      );
       return;
     }
 

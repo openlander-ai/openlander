@@ -42,9 +42,25 @@ export class PostmortemGenerator {
   start(): void {
     this.unsubscribers.push(
       this.events.on('recovery:success', (payload) => {
+        const project = this.db.getProject(payload.projectId);
+        if (!project || project.status !== 'running' || project.archived_at) {
+          log.debug(
+            { projectId: payload.projectId, status: project?.status },
+            'Skipping postmortem — project not running',
+          );
+          return;
+        }
         void this.generatePostmortem(payload.projectId, true, payload);
       }),
       this.events.on('recovery:exhausted', (payload) => {
+        const project = this.db.getProject(payload.projectId);
+        if (!project || project.status !== 'running' || project.archived_at) {
+          log.debug(
+            { projectId: payload.projectId, status: project?.status },
+            'Skipping postmortem — project not running',
+          );
+          return;
+        }
         void this.generatePostmortem(payload.projectId, false, payload);
       }),
     );
@@ -122,9 +138,12 @@ export class PostmortemGenerator {
       const project = this.db.getProject(projectId);
       const projectName = project?.name ?? projectId;
 
-      // Skip stopped/archived projects — no postmortem needed
-      if (!project || project.status === 'stopped' || project.archived_at) {
-        log.debug({ projectId }, 'Skipping postmortem for stopped/archived project');
+      // Skip non-running projects — no postmortem needed
+      if (!project || project.status !== 'running' || project.archived_at) {
+        log.debug(
+          { projectId, status: project?.status },
+          'Skipping postmortem for non-running project',
+        );
         return;
       }
 

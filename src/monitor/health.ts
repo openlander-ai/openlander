@@ -288,8 +288,8 @@ export class HealthMonitor {
       return lastResult;
     }
 
-    // Skip stopped/archived projects — no recovery events should be emitted
-    if (project.status === 'stopped' || project.archived_at) {
+    // Skip non-running projects — no recovery events should be emitted
+    if (project.status !== 'running' || project.archived_at) {
       return lastResult;
     }
 
