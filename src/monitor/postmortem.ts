@@ -17,7 +17,7 @@ export interface PostmortemEntry {
 type Locale = 'en' | 'ko';
 
 export class PostmortemGenerator {
-  private readonly events: EventBus;
+  private readonly _events: EventBus;
   private readonly db: Database;
   private readonly agent: Agent;
   private readonly config: OpenLanderConfig;
@@ -25,7 +25,7 @@ export class PostmortemGenerator {
   private unsubscribers: Array<() => void> = [];
 
   constructor(events: EventBus, db: Database, agent: Agent, config: OpenLanderConfig) {
-    this.events = events;
+    this._events = events;
     this.db = db;
     this.agent = agent;
     this.config = config;
@@ -40,30 +40,13 @@ export class PostmortemGenerator {
   }
 
   start(): void {
-    this.unsubscribers.push(
-      this.events.on('recovery:success', (payload) => {
-        const project = this.db.getProject(payload.projectId);
-        if (!project || project.status !== 'running' || project.archived_at) {
-          log.debug(
-            { projectId: payload.projectId, status: project?.status },
-            'Skipping postmortem — project not running',
-          );
-          return;
-        }
-        void this.generatePostmortem(payload.projectId, true, payload);
-      }),
-      this.events.on('recovery:exhausted', (payload) => {
-        const project = this.db.getProject(payload.projectId);
-        if (!project || project.status !== 'running' || project.archived_at) {
-          log.debug(
-            { projectId: payload.projectId, status: project?.status },
-            'Skipping postmortem — project not running',
-          );
-          return;
-        }
-        void this.generatePostmortem(payload.projectId, false, payload);
-      }),
-    );
+    // DISABLED: PostmortemGenerator was causing infinite LLM calls (~15K+ calls).
+    // The recovery:success and recovery:exhausted events keep firing for non-running
+    // projects despite guards. Disabling event listeners entirely until root cause
+    // of continuous event emission is resolved.
+    void this._events;
+    void this._generatePostmortem;
+    log.info('PostmortemGenerator event listeners disabled (cost protection)');
   }
 
   getLatest(projectId: string): PostmortemEntry | undefined {
@@ -120,7 +103,7 @@ export class PostmortemGenerator {
 
   private static readonly DEDUP_WINDOW_MS = 30 * 60_000; // 30 minutes
 
-  private async generatePostmortem(
+  private async _generatePostmortem(
     projectId: string,
     recovered: boolean,
     payload: EventPayload['recovery:success'] | EventPayload['recovery:exhausted'],
