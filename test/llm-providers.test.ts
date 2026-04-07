@@ -34,19 +34,7 @@ describe('createModel', () => {
     expect(model.modelId).toContain('gpt');
   });
 
-  it('returns a LanguageModel for openrouter provider', () => {
-    const config: LLMConfig = { provider: 'openrouter', apiKey: 'test-key' };
-    const model = createModel(config);
-    expect(model).toBeDefined();
-  });
-
-  it('returns a LanguageModel for ollama provider without apiKey', () => {
-    const config: LLMConfig = { provider: 'ollama', apiKey: '' };
-    const model = createModel(config);
-    expect(model).toBeDefined();
-  });
-
-  it('throws LLMNotConfiguredError when apiKey is missing (non-ollama)', () => {
+  it('throws LLMNotConfiguredError when apiKey is missing', () => {
     const config: LLMConfig = { provider: 'gemini', apiKey: '' };
     expect(() => createModel(config)).toThrow(LLMNotConfiguredError);
   });
@@ -67,15 +55,5 @@ describe('createModel', () => {
     const model = createModel(config);
     expect(model).toBeDefined();
     expect(model.modelId).toContain('gemini-1.5-pro');
-  });
-
-  it('ollama uses custom baseUrl when provided', () => {
-    const config: LLMConfig = {
-      provider: 'ollama',
-      apiKey: '',
-      ollamaBaseUrl: 'http://custom:11434',
-    };
-    const model = createModel(config);
-    expect(model).toBeDefined();
   });
 });

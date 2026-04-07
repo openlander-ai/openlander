@@ -12,19 +12,9 @@ describe('transparency', () => {
       expect(cost).toBeCloseTo(0.0105, 10);
     });
 
-    it('returns zero for ollama provider', () => {
-      const cost = calculateCost('ollama', 'llama3', 1000, 500);
-      expect(cost).toBe(0);
-    });
-
     it('returns null for unknown pricing', () => {
       const cost = calculateCost('unknown-provider', 'unknown-model', 1000, 500);
       expect(cost).toBeNull();
-    });
-
-    it('returns zero cost for openrouter free tier', () => {
-      const cost = calculateCost('openrouter', 'openrouter/free', 1000, 500);
-      expect(cost).toBe(0);
     });
 
     it('calculates claude-sonnet-4-20250514 pricing', () => {
@@ -33,23 +23,15 @@ describe('transparency', () => {
       expect(cost).toBeGreaterThan(0);
     });
 
-    it('returns zero for llama3.2 (local model)', () => {
-      const cost = calculateCost('ollama', 'llama3.2', 1000, 500);
-      expect(cost).toBe(0);
-    });
-
-    it('returns zero for llama3.1 (local model)', () => {
-      const cost = calculateCost('ollama', 'llama3.1', 1000, 500);
-      expect(cost).toBe(0);
-    });
-
     it('all default models return non-null cost', () => {
       const defaultModels = [
-        ['gemini', 'gemini-2.0-flash'],
+        ['gemini', 'gemini-2.5-flash'],
         ['anthropic', 'claude-sonnet-4-20250514'],
-        ['openai', 'gpt-4o-mini'],
-        ['openrouter', 'openrouter/free'],
-        ['ollama', 'llama3.2'],
+        ['openai', 'gpt-4o'],
+        ['xai', 'grok-3-mini-fast'],
+        ['deepseek', 'deepseek-chat'],
+        ['mistral', 'mistral-large-latest'],
+        ['zai', 'glm-4.7'],
       ] as const;
       for (const [provider, model] of defaultModels) {
         const cost = calculateCost(provider, model, 1000, 500);

@@ -46,16 +46,6 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('Only state facts returned by tools');
   });
 
-  it('applies openrouter model overlay', () => {
-    const prompt = buildSystemPrompt(mockContext, 'openrouter', 'en');
-    expect(prompt).toContain('ALWAYS call tools for actions');
-  });
-
-  it('applies ollama model overlay', () => {
-    const prompt = buildSystemPrompt(mockContext, 'ollama', 'en');
-    expect(prompt).toContain('Keep responses very short and direct');
-  });
-
   it('applies English locale directive', () => {
     const prompt = buildSystemPrompt(mockContext, 'gemini', 'en');
     expect(prompt).toContain('CRITICAL: You MUST respond to the user in English');

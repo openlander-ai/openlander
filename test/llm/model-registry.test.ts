@@ -18,7 +18,7 @@ function createBaseConfig(): ModelRoutingConfig {
       primary: {
         provider: 'openai',
         apiKey: 'test-api-key',
-        defaultModel: 'gpt-4o-mini',
+        defaultModel: 'gpt-4o',
       },
     },
     defaultRoute: {
@@ -38,13 +38,12 @@ describe('ModelRegistry', () => {
     const model = registry.getModel('default');
 
     expect(model).not.toBeNull();
-    expect(model).toMatchObject({ modelId: 'gpt-4o-mini' });
+    expect(model).toMatchObject({ modelId: 'gpt-4o' });
     expect(createModel).toHaveBeenCalledWith({
       provider: 'openai',
       apiKey: 'test-api-key',
       authToken: undefined,
-      ollamaBaseUrl: undefined,
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
     });
   });
 
@@ -66,7 +65,6 @@ describe('ModelRegistry', () => {
       provider: 'openai',
       apiKey: 'test-api-key',
       authToken: undefined,
-      ollamaBaseUrl: undefined,
       model: 'gpt-4.1',
     });
   });
@@ -129,7 +127,6 @@ describe('createModelRoutingConfigFromLegacy', () => {
       apiKey: 'legacy-api-key',
       model: 'claude-sonnet-4-20250514',
       authToken: 'legacy-auth-token',
-      ollamaEndpoint: 'http://localhost:11434',
     });
 
     expect(routing).toEqual({
@@ -138,7 +135,6 @@ describe('createModelRoutingConfigFromLegacy', () => {
           provider: 'anthropic',
           apiKey: 'legacy-api-key',
           authToken: 'legacy-auth-token',
-          ollamaEndpoint: 'http://localhost:11434',
           defaultModel: 'claude-sonnet-4-20250514',
         },
       },

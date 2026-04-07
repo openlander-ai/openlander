@@ -145,7 +145,6 @@ describeConfig('normalizeLlmConfig', () => {
     apiKey: 'test-key',
     model: 'gemini-2.0-flash',
     authToken: '',
-    ollamaEndpoint: 'http://localhost:11434',
   };
 
   it('synthesizes providers and defaultRoute from legacy single-provider config', () => {
@@ -156,7 +155,6 @@ describeConfig('normalizeLlmConfig', () => {
         provider: 'gemini',
         apiKey: 'test-key',
         authToken: '',
-        ollamaEndpoint: 'http://localhost:11434',
         defaultModel: 'gemini-2.0-flash',
       },
     });
