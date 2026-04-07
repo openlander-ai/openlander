@@ -32,6 +32,7 @@ import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
 import { RecoveryCoordinator } from './monitor/recovery-coordinator.js';
 import { eventBus } from './events/index.js';
+import type { EventBus } from './events/index.js';
 import type { OpenLanderConfig } from './config/index.js';
 import { normalizeLlmConfig } from './config/index.js';
 import type { LanguageModel } from 'ai';
@@ -47,6 +48,88 @@ const log = createModuleLogger('app');
 
 let activeIncidentReporter: IncidentReporter | null = null;
 let activeRollbackWatcher: RollbackWatcher | null = null;
+let activePostmortemAutomationStop: (() => void) | null = null;
+
+const POSTMORTEM_STABILITY_WINDOW_MS = 5 * 60 * 1000;
+const POSTMORTEM_CANCEL_EVENTS = [
+  'recovery:failed',
+  'recovery:exhausted',
+  'deploy:failed',
+] as const;
+
+type PostmortemProjectLookup = Pick<Database, 'getProject'>;
+type PostmortemGeneratorLike = Pick<PostmortemGenerator, 'generatePostmortem'>;
+
+interface RecoveryPostmortemAutomationOptions {
+  eventBus: EventBus;
+  db: PostmortemProjectLookup;
+  getPostmortem: () => PostmortemGeneratorLike | null;
+  delayMs?: number;
+}
+
+export function setupRecoveryPostmortemAutomation({
+  eventBus,
+  db,
+  getPostmortem,
+  delayMs = POSTMORTEM_STABILITY_WINDOW_MS,
+}: RecoveryPostmortemAutomationOptions): () => void {
+  const postmortemTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const cancelTimer = (projectId: string): void => {
+    const existingTimer = postmortemTimers.get(projectId);
+    if (!existingTimer) {
+      return;
+    }
+
+    clearTimeout(existingTimer);
+    postmortemTimers.delete(projectId);
+  };
+
+  const unsubscribeRecoverySuccess = eventBus.on('recovery:success', (payload) => {
+    cancelTimer(payload.projectId);
+
+    const timer = setTimeout(() => {
+      void (async () => {
+        postmortemTimers.delete(payload.projectId);
+
+        const project = db.getProject(payload.projectId);
+        if (!project || project.status !== 'running') {
+          return;
+        }
+
+        const postmortem = getPostmortem();
+        if (!postmortem) {
+          return;
+        }
+
+        try {
+          await postmortem.generatePostmortem(payload.projectId);
+          log.info({ projectId: payload.projectId }, 'Auto-postmortem generated after recovery');
+        } catch (err) {
+          log.error({ err, projectId: payload.projectId }, 'Auto-postmortem generation failed');
+        }
+      })();
+    }, delayMs);
+
+    postmortemTimers.set(payload.projectId, timer);
+  });
+
+  const unsubscribeCancels = POSTMORTEM_CANCEL_EVENTS.map((eventName) =>
+    eventBus.on(eventName, (payload) => {
+      cancelTimer(payload.projectId);
+    }),
+  );
+
+  return () => {
+    unsubscribeRecoverySuccess();
+    for (const unsubscribe of unsubscribeCancels) {
+      unsubscribe();
+    }
+    for (const timer of postmortemTimers.values()) {
+      clearTimeout(timer);
+    }
+    postmortemTimers.clear();
+  };
+}
 
 /**
  * Application context — wires all modules together.
@@ -296,7 +379,7 @@ export async function createAppContext(
     }
   });
 
-  setupAutoRecovery({
+  const recoveryHandlers = setupAutoRecovery({
     eventBus,
     agent: autoRecoveryEnabled ? agent : null,
     db,
@@ -307,6 +390,54 @@ export async function createAppContext(
     approvalGate,
     language: config.language,
     config,
+    shouldContinue: (projectId) => coordinator.shouldContinue(projectId),
+  });
+  coordinator.setDeploymentRecovery((projectId, error, step, buildLog) =>
+    recoveryHandlers.handleDeploymentRecovery(projectId, error, step, buildLog),
+  );
+
+  eventBus.on('env:new-keys-detected', (payload) => {
+    void recoveryHandlers.handleEnvNewKeysDetected(payload);
+  });
+  eventBus.on('secret:detected', (payload) => {
+    void recoveryHandlers.handleSecretDetected(payload);
+  });
+  eventBus.on('rollback:suggested', (payload) => {
+    void recoveryHandlers.handleRollbackSuggested(payload);
+  });
+  eventBus.on('recovery:approval-resolved', (payload) => {
+    recoveryHandlers.resolveApproval(payload.actionRunId, payload.approved);
+  });
+
+  // Recovery notifications — NotificationCenter integration
+  eventBus.on('recovery:started', (payload) => {
+    void ctx.channelManager
+      .sendRecoveryNotification(
+        `🔄 Recovery started for project "${payload.projectId}" (trigger: ${payload.trigger})`,
+      )
+      .catch((err: unknown) => {
+        log.error({ err }, 'Failed to send recovery:started notification');
+      });
+  });
+
+  eventBus.on('recovery:stopped', (payload) => {
+    void ctx.channelManager
+      .sendRecoveryNotification(
+        `⛔ Recovery stopped for project "${payload.projectId}": ${payload.reason}`,
+      )
+      .catch((err: unknown) => {
+        log.error({ err }, 'Failed to send recovery:stopped notification');
+      });
+  });
+
+  eventBus.on('recovery:blocked', (payload) => {
+    void ctx.channelManager
+      .sendRecoveryNotification(
+        `🚫 Recovery blocked for project "${payload.projectId}" (reason: ${payload.reason})`,
+      )
+      .catch((err: unknown) => {
+        log.error({ err }, 'Failed to send recovery:blocked notification');
+      });
   });
 
   // v0.2: Health monitoring
@@ -431,6 +562,13 @@ export async function createAppContext(
     setPostmortemInstance(postmortem);
   }
 
+  activePostmortemAutomationStop?.();
+  activePostmortemAutomationStop = setupRecoveryPostmortemAutomation({
+    eventBus,
+    db,
+    getPostmortem: getPostmortemInstance,
+  });
+
   const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline);
   rollbackWatcher.start();
   activeRollbackWatcher = rollbackWatcher;
@@ -444,8 +582,10 @@ export async function createAppContext(
 export function shutdownAppContext(ctx: AppContext): void {
   activeIncidentReporter?.stop();
   activeRollbackWatcher?.stop();
+  activePostmortemAutomationStop?.();
   activeIncidentReporter = null;
   activeRollbackWatcher = null;
+  activePostmortemAutomationStop = null;
   getPostmortemInstance()?.stop();
   ctx.dockerEventListener?.stop();
   ctx.coordinator?.stop();
