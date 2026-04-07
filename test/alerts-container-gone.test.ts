@@ -93,10 +93,10 @@ describe('AlertMonitor missing container handling', () => {
     });
   });
 
-  it('updates project status to error when container inspect fails (container gone)', async () => {
+  it('emits container:missing without changing project status (Coordinator manages status)', async () => {
     await runChecks();
 
-    expect(updateProject).toHaveBeenCalledWith('project-1', { status: 'error' });
+    expect(updateProject).not.toHaveBeenCalledWith('project-1', { status: 'error' });
     expect(emit).toHaveBeenCalledWith(
       'container:missing',
       expect.objectContaining({

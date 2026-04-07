@@ -606,7 +606,7 @@ export class AlertMonitor {
         const message = `${project.name} container was removed externally (docker prune or manual deletion)`;
         const suggestion = 'Run restart_project to redeploy.';
 
-        this.db.updateProject(project.id, { status: 'error' });
+        // Status 변경은 RecoveryCoordinator가 관리 (recovery 판단 후 'recovering' 또는 'error' 설정)
 
         await this.events.emit('container:missing', {
           projectId: project.id,
