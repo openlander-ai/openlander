@@ -619,11 +619,18 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     await syncLlmRuntime(ctx);
 
+    const latestConfig = loadConfig();
+    const allProviders = latestConfig.llm.providers ?? {};
+    const recommendations = computeRecommendations(allProviders);
+    applyRecommendations(recommendations);
+    await syncLlmRuntime(ctx);
+
     return c.json({
       status: 'added',
       id: body.id,
       verified: true,
       latencyMs: testResult.latencyMs,
+      recommendations,
     });
   });
 
@@ -711,16 +718,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     return c.json({ status: 'removed', id });
   });
 
-  api.post('/setup/providers/auto-recommend', (c) => {
-    const config = loadConfig();
-    const providers = config.llm.providers ?? {};
-    const providerEntries = Object.entries(providers);
-
-    if (providerEntries.length === 0) {
-      return c.json({ error: 'NO_PROVIDERS', message: 'No providers registered' }, 400);
-    }
-
+  function computeRecommendations(
+    providers: Record<string, { provider: string; defaultModel: string }>,
+  ): Record<string, { providerId: string; model: string }> {
     const recommendations: Record<string, { providerId: string; model: string }> = {};
+    const providerEntries = Object.entries(providers);
 
     for (const [feature, weights] of Object.entries(FEATURE_WEIGHTS)) {
       let bestScore = -1;
@@ -731,7 +733,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         const scores = PROVIDER_SCORES[entry.provider];
         if (!scores) continue;
 
-        // Accuracy & reliability first — cost is only a minor tiebreaker (infrastructure platform)
         const score =
           scores[weights.primary] * 3 + scores[weights.secondary] * 2 - scores.cost * 0.1;
         if (score > bestScore) {
@@ -746,6 +747,35 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       }
     }
 
+    return recommendations;
+  }
+
+  function applyRecommendations(
+    recommendations: Record<string, { providerId: string; model: string }>,
+  ): void {
+    const config = loadConfig();
+    const aiConfig = { ...config.ai };
+    const routes: Record<string, LLMRoute> = { ...(config.llm.routes ?? {}) };
+
+    for (const [feature, rec] of Object.entries(recommendations)) {
+      const key = feature as keyof typeof aiConfig;
+      aiConfig[key] = { ...aiConfig[key], providerId: rec.providerId, model: rec.model };
+      routes[feature] = { providerId: rec.providerId, model: rec.model };
+    }
+
+    const updated = updateConfig({ ai: aiConfig, llm: { routes } });
+    ctx.config = updated;
+  }
+
+  api.post('/setup/providers/auto-recommend', (c) => {
+    const config = loadConfig();
+    const providers = config.llm.providers ?? {};
+
+    if (Object.keys(providers).length === 0) {
+      return c.json({ error: 'NO_PROVIDERS', message: 'No providers registered' }, 400);
+    }
+
+    const recommendations = computeRecommendations(providers);
     return c.json({ recommendations });
   });
 
