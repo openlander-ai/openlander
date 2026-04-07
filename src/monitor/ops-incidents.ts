@@ -3,6 +3,7 @@ import type { OpsIncidentRow, OpsIncidentEventRow } from '../db/types.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('ops-incidents');
+const INCIDENT_FINGERPRINT_WINDOW_MS = 30 * 60 * 1000;
 
 export interface IncidentWithTimeline {
   incident: OpsIncidentRow;
@@ -19,11 +20,31 @@ export class IncidentManager {
   /** Create a new incident for a project (or return existing active one — deduplication). */
   openIncident(projectId: string, trigger: { type: string; details?: string }): OpsIncidentRow {
     const existing = this.ctx.db.getActiveOpsIncident(projectId);
+    const triggerSummary = this.describeTrigger(trigger);
+    const triggerFingerprint = this.generateFingerprint(triggerSummary);
+
     if (existing) {
+      const existingFingerprint = this.generateFingerprint(existing.root_cause ?? '');
+      const incidentAgeMs = Date.now() - existing.created_at;
+
+      if (
+        existingFingerprint.length > 0 &&
+        existingFingerprint === triggerFingerprint &&
+        incidentAgeMs <= INCIDENT_FINGERPRINT_WINDOW_MS
+      ) {
+        this.addEvent(existing.id, 'detected', `Recurring event: ${triggerSummary}`);
+        return existing;
+      }
+
       this.addEvent(
         existing.id,
-        'detected',
-        `Recurring event: ${trigger.type}${trigger.details ? ` — ${trigger.details}` : ''}`,
+        'cascade_detected',
+        `New error pattern detected: ${triggerSummary}`,
+        {
+          existing_fingerprint: existingFingerprint || null,
+          new_fingerprint: triggerFingerprint,
+          window_ms: INCIDENT_FINGERPRINT_WINDOW_MS,
+        },
       );
       return existing;
     }
@@ -35,6 +56,7 @@ export class IncidentManager {
       project_id: projectId,
       severity,
       status: 'open',
+      root_cause: triggerSummary,
     });
 
     this.addEvent(
@@ -125,5 +147,20 @@ export class IncidentManager {
       return 'warning';
     }
     return 'info';
+  }
+
+  private describeTrigger(trigger: { type: string; details?: string }): string {
+    return `${trigger.type}${trigger.details ? ` — ${trigger.details}` : ''}`;
+  }
+
+  private generateFingerprint(errorMessage: string): string {
+    return errorMessage
+      .replace(/[0-9a-f]{8,}/gi, '<id>')
+      .replace(/\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}:\d{2}[^\s]*/gi, '<ts>')
+      .replace(/:\d{4,5}/g, ':<port>')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+      .slice(0, 200);
   }
 }

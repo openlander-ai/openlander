@@ -37,6 +37,7 @@ function createMockCtx() {
       updateOpsIncidentStatus: vi.fn(),
       getOpsIncident: vi.fn(() => mockIncident),
       listOpsIncidentEvents: vi.fn(() => []),
+      findProjectDependents: vi.fn(() => []),
     },
   } as any;
 }
@@ -61,19 +62,34 @@ describe('IncidentManager', () => {
         expect.objectContaining({
           project_id: 'proj-1',
           status: 'open',
+          root_cause: 'container_crash',
         }),
       );
       expect(incident.id).toBe('inc-20260401-abc12');
     });
 
-    it('returns existing active incident without creating new one', () => {
-      const existingIncident = createMockIncident({ id: 'inc-existing' });
+    it('returns existing incident for the same fingerprint within dedup window', () => {
+      const existingIncident = createMockIncident({
+        id: 'inc-existing',
+        created_at: Date.now() - 5 * 60 * 1000,
+        root_cause: 'container_crash — exit code <id> on port :<port>',
+      });
       mockCtx.db.getActiveOpsIncident.mockReturnValue(existingIncident);
 
-      const incident = manager.openIncident('proj-1', { type: 'container_crash' });
+      const incident = manager.openIncident('proj-1', {
+        type: 'container_crash',
+        details: 'exit code abcdef12 on port :8080',
+      });
 
       expect(mockCtx.db.createOpsIncident).not.toHaveBeenCalled();
       expect(incident.id).toBe('inc-existing');
+      expect(mockCtx.db.addOpsIncidentEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          incident_id: 'inc-existing',
+          event_type: 'detected',
+          description: expect.stringContaining('Recurring event'),
+        }),
+      );
     });
 
     it('adds detected event to newly created incident', () => {
@@ -90,8 +106,12 @@ describe('IncidentManager', () => {
       );
     });
 
-    it('adds recurring event to existing incident', () => {
-      const existingIncident = createMockIncident({ id: 'inc-existing' });
+    it('records a cascade event when the active incident fingerprint differs', () => {
+      const existingIncident = createMockIncident({
+        id: 'inc-existing',
+        created_at: Date.now() - 5 * 60 * 1000,
+        root_cause: 'database_connection_failed',
+      });
       mockCtx.db.getActiveOpsIncident.mockReturnValue(existingIncident);
 
       manager.openIncident('proj-1', {
@@ -102,8 +122,30 @@ describe('IncidentManager', () => {
       expect(mockCtx.db.addOpsIncidentEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           incident_id: 'inc-existing',
-          event_type: 'detected',
-          description: expect.stringContaining('Recurring event'),
+          event_type: 'cascade_detected',
+          description: expect.stringContaining('New error pattern detected'),
+        }),
+      );
+    });
+
+    it('records a cascade event when the matching fingerprint is outside the dedup window', () => {
+      const existingIncident = createMockIncident({
+        id: 'inc-existing',
+        created_at: Date.now() - 31 * 60 * 1000,
+        root_cause: 'container_crash — exit code <id>',
+      });
+      mockCtx.db.getActiveOpsIncident.mockReturnValue(existingIncident);
+
+      manager.openIncident('proj-1', {
+        type: 'container_crash',
+        details: 'exit code deadbeef',
+      });
+
+      expect(mockCtx.db.createOpsIncident).not.toHaveBeenCalled();
+      expect(mockCtx.db.addOpsIncidentEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          incident_id: 'inc-existing',
+          event_type: 'cascade_detected',
         }),
       );
     });

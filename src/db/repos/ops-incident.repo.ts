@@ -16,6 +16,7 @@ export class OpsIncidentRepo {
     project_id: string;
     severity: string;
     status?: string;
+    root_cause?: string;
   }): OpsIncidentRow {
     this.db
       .insert(opsIncidents)
@@ -24,6 +25,7 @@ export class OpsIncidentRepo {
         project_id: data.project_id,
         severity: data.severity as 'critical' | 'warning' | 'info',
         status: (data.status ?? 'open') as 'open' | 'active' | 'resolved' | 'escalated',
+        root_cause: data.root_cause,
         created_at: Date.now(),
       })
       .run();
