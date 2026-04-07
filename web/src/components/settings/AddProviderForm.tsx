@@ -80,7 +80,9 @@ export function AddProviderForm({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <p className="text-xs font-body text-muted-ol">Provider</p>
+            <p className="text-xs font-body text-muted-ol">
+              {t('llmSettings.provider') || 'Provider'}
+            </p>
             <Select value={provider} onValueChange={handleProviderChange}>
               <SelectTrigger className="w-full bg-bg-app border-border text-primary-ol">
                 <SelectValue placeholder="Select provider" />

@@ -744,6 +744,7 @@ export const translations = {
     cancel: 'Cancel',
     id: 'Provider ID',
     idHint: 'Unique name for this provider',
+    provider: 'Provider',
     apiKey: 'API Key',
     defaultModel: 'Default Model',
     addSuccess: 'Provider added successfully',

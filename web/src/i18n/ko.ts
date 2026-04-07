@@ -744,6 +744,7 @@ export const translations = {
     cancel: '취소',
     id: '제공자 ID',
     idHint: '이 제공자의 고유 이름',
+    provider: '제공자',
     apiKey: 'API Key',
     defaultModel: '기본 모델',
     addSuccess: '제공자가 성공적으로 추가되었습니다',
