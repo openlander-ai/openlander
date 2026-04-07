@@ -87,7 +87,11 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
   const handleModelChange = async (key: keyof AiFeaturesResponse['features'], value: string) => {
     if (!features) return;
     setUpdating(key);
-    const [providerId, model] = value ? value.split(':') : [undefined, undefined];
+    // Split on first ':' only — model names like "openrouter/free" are safe,
+    // but future models could contain ':' (e.g. "org:model-name").
+    const sepIdx = value ? value.indexOf(':') : -1;
+    const [providerId, model] =
+      sepIdx > 0 ? [value.slice(0, sepIdx), value.slice(sepIdx + 1)] : [undefined, undefined];
     setFeatures((prev) => {
       if (!prev) return prev;
       return { ...prev, [key]: { ...prev[key], providerId, model } };

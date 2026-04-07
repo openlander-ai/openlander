@@ -132,13 +132,10 @@ export function AiUsageSection() {
                           )}
                           {!log.projectId && (
                             <span className="text-xs font-normal text-muted-ol border border-border bg-bg-subtle px-1.5 py-0.5 rounded">
-                              {(t as (key: string) => string)('settings.ai.usage.noProject') ||
-                                'Global'}
+                              {t('settings.ai.usage.noProject') || 'Global'}
                             </span>
                           )}
-                          {(t as (key: string) => string)(
-                            `settings.ai.usage.actionType.${log.actionType}`,
-                          ) || log.actionType}
+                          {t(`settings.ai.usage.actionType.${log.actionType}`) || log.actionType}
                           <span className="text-xs font-normal text-muted-ol bg-bg-subtle px-1.5 py-0.5 rounded">
                             {log.modelName}
                           </span>
@@ -158,9 +155,7 @@ export function AiUsageSection() {
                             <span className="whitespace-nowrap flex items-center gap-1">
                               <span className="text-border">|</span>
                               <span className="font-mono text-[10px] bg-bg-subtle px-1 rounded">
-                                {(t as (key: string) => string)(
-                                  `settings.ai.usage.source.${log.source}`,
-                                ) || log.source}
+                                {t(`settings.ai.usage.source.${log.source}`) || log.source}
                               </span>
                             </span>
                           )}
@@ -177,9 +172,7 @@ export function AiUsageSection() {
                                       : 'text-warning bg-warning/10',
                                 )}
                               >
-                                {(t as (key: string) => string)(
-                                  `settings.ai.usage.result.${log.result}`,
-                                ) || log.result}
+                                {t(`settings.ai.usage.result.${log.result}`) || log.result}
                               </span>
                             </span>
                           )}

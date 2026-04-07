@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Key, Loader2, ShieldCheck, Bot, Plus, Save, Trash2, Eye, EyeOff, Zap } from 'lucide-react';
+import { Key, ShieldCheck, Bot, Plus } from 'lucide-react';
 import {
   addProvider,
   deleteProvider,
@@ -9,20 +9,12 @@ import {
   type ProviderInfo,
 } from '@/lib/api/index.js';
 import { Button } from '@/components/ui/button.js';
-import { Input } from '@/components/ui/input.js';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select.js';
-import { cn } from '@/lib/utils.js';
 import { useLanguage } from '@/i18n/context.js';
 import { emitLlmChanged } from '@/lib/llm-events.js';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog.js';
 import { LlmProviderOAuth } from './LlmProviderOAuth.js';
-import { PROVIDER_DEFS, getDefaultModel, getProviderDef } from './ai-settings-constants.js';
+import { ProviderCard } from './ProviderCard.js';
+import { AddProviderForm } from './AddProviderForm.js';
 
 interface AiProvidersSectionProps {
   providers: ProviderInfo[];
@@ -34,13 +26,6 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
 
   const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newProvider, setNewProvider] = useState({
-    provider: 'gemini',
-    apiKey: '',
-    defaultModel: getDefaultModel('gemini'),
-  });
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [adding, setAdding] = useState(false);
 
   const [providerToDelete, setProviderToDelete] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -59,38 +44,6 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
       setCheckingGoogle(false);
     });
   }, []);
-
-  const handleProviderChange = (providerVal: string) => {
-    setNewProvider({
-      provider: providerVal,
-      apiKey: '',
-      defaultModel: getDefaultModel(providerVal),
-    });
-  };
-
-  const handleAddProvider = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAdding(true);
-    setError(null);
-    try {
-      await addProvider({
-        id: `${newProvider.provider}-${Date.now()}`,
-        provider: newProvider.provider,
-        apiKey: newProvider.apiKey,
-        defaultModel: newProvider.defaultModel,
-      });
-      await onProvidersChange();
-      emitLlmChanged();
-      setShowAddForm(false);
-      setNewProvider({ provider: 'gemini', apiKey: '', defaultModel: getDefaultModel('gemini') });
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t('llmSettings.errorAdd') || 'Failed to add provider',
-      );
-    } finally {
-      setAdding(false);
-    }
-  };
 
   const executeDeleteProvider = async () => {
     if (!providerToDelete) return;
@@ -139,7 +92,11 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
     }
   };
 
-  const handleTestNewConnection = async () => {
+  const handleTestNewConnection = async (data: {
+    provider: string;
+    apiKey: string;
+    defaultModel: string;
+  }) => {
     setTestingId('new');
     setTestResults((prev) => {
       const next = { ...prev };
@@ -148,9 +105,9 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
     });
     try {
       const result = await testLLMConnection({
-        provider: newProvider.provider,
-        apiKey: newProvider.apiKey,
-        model: newProvider.defaultModel,
+        provider: data.provider,
+        apiKey: data.apiKey,
+        model: data.defaultModel,
       });
       setTestResults((prev) => ({ ...prev, new: result }));
     } catch (err) {
@@ -167,7 +124,33 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
     }
   };
 
-  const activeProviderDef = PROVIDER_DEFS.find((p) => p.id === newProvider.provider);
+  const handleAddSubmit = async (data: {
+    provider: string;
+    apiKey: string;
+    defaultModel: string;
+  }) => {
+    setError(null);
+    try {
+      await addProvider({
+        id: `${data.provider}-${Date.now()}`,
+        provider: data.provider,
+        apiKey: data.apiKey,
+        defaultModel: data.defaultModel,
+      });
+      await onProvidersChange();
+      emitLlmChanged();
+      setShowAddForm(false);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : t('llmSettings.errorAdd') || 'Failed to add provider',
+      );
+      throw err;
+    }
+  };
+
+  const testLabel = t('llmSettings.testConnection') || 'Test';
+  const testSuccessLabel = t('llmSettings.testSuccess') || 'Connected ({ms}ms)';
+  const testFailLabel = t('llmSettings.testFail') || 'Connection failed';
 
   return (
     <>
@@ -215,82 +198,20 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
         )}
 
         <div className="space-y-3">
-          {providers.map((provider) => {
-            const pDef = getProviderDef(provider.provider);
-            const isTesting = testingId === provider.id;
-            const testResult = testResults[provider.id];
-
-            return (
-              <div
-                key={provider.id}
-                className="rounded-lg border border-border bg-bg-subtle/50 p-4 flex flex-col gap-3 transition-colors hover:bg-bg-subtle"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 px-2 py-1 rounded bg-bg-app border border-border text-xs font-medium text-primary-ol">
-                      <span
-                        className={cn(
-                          'h-2 w-2 rounded-full shrink-0',
-                          pDef?.color ?? 'bg-gray-400',
-                        )}
-                      />
-                      {pDef?.label || provider.provider}
-                    </div>
-                    <div className="text-sm font-mono text-muted-ol">{provider.defaultModel}</div>
-                    {provider.hasApiKey && (
-                      <div className="text-xs font-mono text-muted-ol bg-bg-app px-2 py-0.5 rounded border border-border">
-                        {provider.apiKeyPreview}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleTestConnection(provider)}
-                      disabled={isTesting}
-                      className="h-8 text-xs gap-1.5"
-                    >
-                      {isTesting ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Zap className="h-3 w-3" />
-                      )}
-                      {t('llmSettings.testConnection') || 'Test'}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setProviderToDelete(provider.id)}
-                      disabled={deletingId === provider.id}
-                      className="h-8 w-8 p-0 text-muted-ol hover:text-error"
-                    >
-                      {deletingId === provider.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-                {testResult && (
-                  <div
-                    className={cn(
-                      'rounded-md px-3 py-2 text-xs font-body',
-                      testResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error',
-                    )}
-                  >
-                    {testResult.ok
-                      ? t('llmSettings.testSuccess')?.replace(
-                          '{ms}',
-                          testResult.latencyMs?.toString() || '0',
-                        ) || `Connection successful (${testResult.latencyMs}ms)`
-                      : testResult.error || t('llmSettings.testFail') || 'Connection failed'}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {providers.map((provider) => (
+            <ProviderCard
+              key={provider.id}
+              provider={provider}
+              isTesting={testingId === provider.id}
+              isDeleting={deletingId === provider.id}
+              testResult={testResults[provider.id]}
+              onTest={() => handleTestConnection(provider)}
+              onDelete={() => setProviderToDelete(provider.id)}
+              testLabel={testLabel}
+              testSuccessLabel={testSuccessLabel}
+              testFailLabel={testFailLabel}
+            />
+          ))}
 
           {providers.length > 0 && !showAddForm && (
             <Button
@@ -304,143 +225,13 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
           )}
 
           {showAddForm && (
-            <div className="rounded-xl border border-border bg-bg-subtle/40 p-5 space-y-5 relative overflow-hidden ring-1 ring-black/5 shadow-sm">
-              <div className="absolute top-0 left-0 w-1 h-full bg-agent" />
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-primary-ol">
-                  {t('llmSettings.addProvider') || 'Add Provider'}
-                </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowAddForm(false)}
-                  className="h-8 text-xs text-muted-ol"
-                >
-                  {t('llmSettings.cancel') || 'Cancel'}
-                </Button>
-              </div>
-
-              <form onSubmit={handleAddProvider} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-body text-muted-ol">Provider</p>
-                    <Select value={newProvider.provider} onValueChange={handleProviderChange}>
-                      <SelectTrigger className="w-full bg-bg-app border-border text-primary-ol">
-                        <SelectValue placeholder="Select provider" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PROVIDER_DEFS.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            <span className="flex items-center gap-2">
-                              <span className={cn('h-2 w-2 rounded-full', p.color)} />
-                              {p.label}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-body text-muted-ol">
-                      {t('llmSettings.defaultModel') || 'Default Model'}
-                    </p>
-                    <Select
-                      value={newProvider.defaultModel}
-                      onValueChange={(val) => setNewProvider({ ...newProvider, defaultModel: val })}
-                    >
-                      <SelectTrigger className="w-full bg-bg-app border-border text-primary-ol font-mono">
-                        <SelectValue placeholder="Select model" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(activeProviderDef?.models ?? []).map((model) => (
-                          <SelectItem key={model} value={model} className="font-mono text-sm">
-                            {model}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <p className="text-xs font-body text-muted-ol">
-                    {t('llmSettings.apiKey') || 'API Key'}
-                  </p>
-                  <div className="relative">
-                    <Input
-                      type={showApiKey ? 'text' : 'password'}
-                      placeholder="sk-..."
-                      value={newProvider.apiKey}
-                      onChange={(e) => setNewProvider({ ...newProvider, apiKey: e.target.value })}
-                      className="pr-10 font-mono text-sm bg-bg-app border-border"
-                      required={newProvider.provider !== 'ollama'}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-ol hover:text-primary-ol flex items-center justify-center p-1 rounded-sm focus:outline-none focus:ring-1 focus:ring-agent"
-                    >
-                      {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2">
-                  <Button
-                    type="submit"
-                    disabled={
-                      adding || (!newProvider.apiKey.trim() && newProvider.provider !== 'ollama')
-                    }
-                    size="sm"
-                    className="gap-1.5 font-body bg-agent text-white hover:bg-agent/90"
-                  >
-                    {adding ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Save className="h-3.5 w-3.5" />
-                    )}
-                    {t('llmSettings.addProvider') || 'Save Provider'}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={
-                      testingId === 'new' ||
-                      (!newProvider.apiKey.trim() && newProvider.provider !== 'ollama')
-                    }
-                    onClick={handleTestNewConnection}
-                    className="gap-1.5 font-body text-xs"
-                  >
-                    {testingId === 'new' ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Zap className="h-3.5 w-3.5" />
-                    )}
-                    {t('llmSettings.testConnection') || 'Test'}
-                  </Button>
-                </div>
-
-                {testResults['new'] && (
-                  <div
-                    className={cn(
-                      'rounded-md px-3 py-2 text-xs font-body mt-2',
-                      testResults['new'].ok
-                        ? 'bg-success/10 text-success'
-                        : 'bg-error/10 text-error',
-                    )}
-                  >
-                    {testResults['new'].ok
-                      ? t('llmSettings.testSuccess')?.replace(
-                          '{ms}',
-                          testResults['new'].latencyMs?.toString() || '0',
-                        ) || 'Success!'
-                      : testResults['new'].error || t('llmSettings.testFail') || 'Failed'}
-                  </div>
-                )}
-              </form>
-            </div>
+            <AddProviderForm
+              onSubmit={handleAddSubmit}
+              onCancel={() => setShowAddForm(false)}
+              onTestNew={handleTestNewConnection}
+              isTestingNew={testingId === 'new'}
+              testResult={testResults['new']}
+            />
           )}
         </div>
 
@@ -450,13 +241,16 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
           </div>
           <div className="relative flex justify-center mb-6">
             <span className="bg-bg-panel px-3 text-xs font-semibold text-muted-ol uppercase tracking-wider">
-              OAuth Providers
+              {t('llmSettings.oauthTitle') || 'OAuth Providers'}
             </span>
           </div>
           <LlmProviderOAuth
             provider="google"
-            label="Google Gemini"
-            description="Connect your Google account to use Gemini models"
+            label={t('llmSettings.oauthGoogleLabel') || 'Google Gemini'}
+            description={
+              t('llmSettings.oauthGoogleDescription') ||
+              'Connect your Google account to use Gemini models'
+            }
             connected={googleConnected}
             loading={checkingGoogle}
             onConnect={startGoogleOAuth}

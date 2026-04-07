@@ -34,6 +34,8 @@ export function getProviderDef(providerId: string) {
   return PROVIDER_DEFS.find((p) => p.id === providerId);
 }
 
+// Currently includes all features. Kept as a Set so new features
+// without per-model selection can simply be omitted from here.
 export const MODEL_SELECTOR_FEATURES = new Set([
   'autoRecovery',
   'buildDebugger',
