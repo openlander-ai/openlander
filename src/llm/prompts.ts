@@ -35,7 +35,8 @@ export type LLMProvider =
   | 'mistral'
   | 'groq'
   | 'togetherai'
-  | 'zai';
+  | 'zai'
+  | 'zai-coding';
 
 /**
  * Build the complete system prompt with dynamic context + model overlay.

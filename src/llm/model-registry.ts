@@ -17,7 +17,8 @@ export interface LLMProviderEntry {
     | 'mistral'
     | 'groq'
     | 'togetherai'
-    | 'zai';
+    | 'zai'
+    | 'zai-coding';
   apiKey?: string;
   authToken?: string;
   ollamaEndpoint?: string;

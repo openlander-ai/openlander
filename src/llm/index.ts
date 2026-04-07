@@ -48,7 +48,8 @@ export interface LLMConfig {
     | 'mistral'
     | 'groq'
     | 'togetherai'
-    | 'zai';
+    | 'zai'
+    | 'zai-coding';
   apiKey: string;
   model?: string;
   /** Ollama base URL (default: http://localhost:11434) */
@@ -111,6 +112,10 @@ export function createModel(config: LLMConfig): LanguageModel {
       );
     case 'zai':
       return createZhipu({ apiKey })(config.model ?? 'glm-4.7-flash');
+    case 'zai-coding':
+      return createZhipu({ apiKey, baseURL: 'https://api.z.ai/api/coding/paas/v4' })(
+        config.model ?? 'glm-4.7-flash',
+      );
     default:
       throw new Error(`Unknown LLM provider: ${String(config.provider)}`);
   }
