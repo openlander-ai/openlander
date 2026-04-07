@@ -138,7 +138,8 @@ export interface LLMProviderConfig {
     | 'deepseek'
     | 'mistral'
     | 'groq'
-    | 'togetherai';
+    | 'togetherai'
+    | 'zai';
   apiKey: string;
   model: string;
   /** v0.2: OAuth access token (used instead of apiKey when OAuth is active) */

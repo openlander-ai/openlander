@@ -18,6 +18,7 @@ export const PROVIDER_MODELS: Record<string, string[]> = {
     'Qwen/Qwen2.5-72B-Instruct-Turbo',
   ],
   openrouter: ['openrouter/free', 'openai/gpt-4o-mini'],
+  zai: ['glm-4.7-flash', 'glm-4.7', 'glm-4.6-flash', 'glm-4.6', 'glm-z1-flash'],
   ollama: ['llama3.2', 'llama3.1', 'mistral'],
 };
 
@@ -46,6 +47,7 @@ export const PROVIDER_DEFS = [
     color: 'bg-purple-500',
     models: PROVIDER_MODELS.openrouter,
   },
+  { id: 'zai', label: 'Z.ai (GLM)', color: 'bg-cyan-500', models: PROVIDER_MODELS.zai },
   { id: 'ollama', label: 'Ollama (Local)', color: 'bg-gray-500', models: PROVIDER_MODELS.ollama },
 ] as const;
 

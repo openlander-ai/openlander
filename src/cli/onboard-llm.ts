@@ -22,6 +22,7 @@ const LLM_PROVIDERS: Array<{ label: string; value: LlmProvider }> = [
   { label: 'Mistral AI', value: 'mistral' },
   { label: 'Groq (fast inference)', value: 'groq' },
   { label: 'Together AI (open-source)', value: 'togetherai' },
+  { label: 'Z.ai (GLM)', value: 'zai' },
   { label: 'Ollama (local)', value: 'ollama' },
 ];
 
@@ -35,6 +36,7 @@ const MODEL_DEFAULTS: Record<LlmProvider, string> = {
   mistral: 'mistral-small-latest',
   groq: 'llama-3.3-70b-versatile',
   togetherai: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+  zai: 'glm-4.7-flash',
   ollama: 'llama3.2',
 };
 

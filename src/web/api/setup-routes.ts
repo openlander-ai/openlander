@@ -122,6 +122,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'mistral',
       'groq',
       'togetherai',
+      'zai',
     ];
     if (!validProviders.includes(provider)) {
       return c.json(
@@ -144,6 +145,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       mistral: 'mistral-small-latest',
       groq: 'llama-3.3-70b-versatile',
       togetherai: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+      zai: 'glm-4.7-flash',
     };
 
     const model = body.model || modelDefaults[provider] || 'gemini-2.0-flash';
@@ -543,6 +545,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'mistral',
       'groq',
       'togetherai',
+      'zai',
     ];
     if (!validProviders.includes(body.provider)) {
       return c.json(

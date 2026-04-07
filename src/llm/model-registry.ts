@@ -16,7 +16,8 @@ export interface LLMProviderEntry {
     | 'deepseek'
     | 'mistral'
     | 'groq'
-    | 'togetherai';
+    | 'togetherai'
+    | 'zai';
   apiKey?: string;
   authToken?: string;
   ollamaEndpoint?: string;

@@ -71,6 +71,7 @@
     "sugar-high": "^0.9.5",
     "ws": "^8.19.0",
     "yaml": "^2.8.2",
+    "zhipu-ai-provider": "^0.3.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

@@ -34,7 +34,8 @@ export type LLMProvider =
   | 'deepseek'
   | 'mistral'
   | 'groq'
-  | 'togetherai';
+  | 'togetherai'
+  | 'zai';
 
 /**
  * Build the complete system prompt with dynamic context + model overlay.

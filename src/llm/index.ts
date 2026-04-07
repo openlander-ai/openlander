@@ -10,6 +10,7 @@
  * - Mistral AI
  * - Groq (fast inference)
  * - Together AI (open-source models)
+ * - Z.ai / Zhipu (GLM models)
  * - OpenRouter (free models, no credit card)
  * - Ollama (local, no API key)
  *
@@ -27,6 +28,7 @@ import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createMistral } from '@ai-sdk/mistral';
 import { createGroq } from '@ai-sdk/groq';
 import { createTogetherAI } from '@ai-sdk/togetherai';
+import { createZhipu } from 'zhipu-ai-provider';
 import type { LanguageModel } from 'ai';
 import { LLMNotConfiguredError } from '../errors.js';
 
@@ -45,7 +47,8 @@ export interface LLMConfig {
     | 'deepseek'
     | 'mistral'
     | 'groq'
-    | 'togetherai';
+    | 'togetherai'
+    | 'zai';
   apiKey: string;
   model?: string;
   /** Ollama base URL (default: http://localhost:11434) */
@@ -106,6 +109,8 @@ export function createModel(config: LLMConfig): LanguageModel {
       return createTogetherAI({ apiKey })(
         config.model ?? 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
       );
+    case 'zai':
+      return createZhipu({ apiKey })(config.model ?? 'glm-4.7-flash');
     default:
       throw new Error(`Unknown LLM provider: ${String(config.provider)}`);
   }
