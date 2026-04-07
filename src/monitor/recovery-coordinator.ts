@@ -2,6 +2,7 @@ import type { OpenLanderConfig } from '../config/index.js';
 import type { Database } from '../db/index.js';
 import type { EventBus, EventPayload } from '../events/index.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { consumeMcpDeploy } from '../pipeline/auto-recovery.js';
 
 const log = createModuleLogger('recovery-coordinator');
 
@@ -39,6 +40,13 @@ export interface OpsAgentRef {
   enqueue(event: { type: string; payload: unknown; timestamp: number }): void;
 }
 
+type DeploymentRecoveryFn = (
+  projectId: string,
+  error: string,
+  step?: string,
+  buildLog?: string,
+) => Promise<void>;
+
 export class RecoveryCoordinator {
   private readonly db: Database;
   private readonly events: EventBus;
@@ -51,6 +59,7 @@ export class RecoveryCoordinator {
   private readonly projectStatusWriter: ProjectStatusWriter;
   private opsAgent: OpsAgentRef | undefined;
   private configGetter: (() => OpenLanderConfig) | null = null;
+  private deploymentRecovery: DeploymentRecoveryFn | undefined;
 
   constructor(
     db: Database,
@@ -82,16 +91,22 @@ export class RecoveryCoordinator {
       }),
     );
 
-    for (const eventType of ['container:die', 'container:oom'] as const) {
+    for (const eventType of ['container:die', 'container:oom', 'container:missing'] as const) {
       this.unsubscribers.push(
         this.events.on(eventType, async (payload) => {
-          const result = this.checkEligibility(payload.projectId);
-          if (!result.eligible) {
-            await this.emitBlocked(payload.projectId, result.reason);
-          }
+          await this.handleContainerFailure(eventType, payload);
         }),
       );
     }
+
+    this.unsubscribers.push(
+      this.events.on('deploy:failed', async (payload) => {
+        await this.handleDeployFailed(payload);
+      }),
+      this.events.on('compose:failed', async (payload) => {
+        await this.handleComposeFailed(payload);
+      }),
+    );
 
     this.unsubscribers.push(
       this.events.on('recovery:success', (payload) => {
@@ -125,7 +140,7 @@ export class RecoveryCoordinator {
       return { eligible: false, reason: 'project_not_found' };
     }
 
-    if (project.status !== 'running') {
+    if (project.status !== 'running' && project.status !== 'error') {
       return { eligible: false, reason: `status_${project.status}` };
     }
 
@@ -168,6 +183,10 @@ export class RecoveryCoordinator {
     this.configGetter = getter;
   }
 
+  setDeploymentRecovery(handler: DeploymentRecoveryFn): void {
+    this.deploymentRecovery = handler;
+  }
+
   isOperatorSuppressed(projectId: string): boolean {
     const expiresAt = this.suppressions.get(projectId);
     if (!expiresAt) {
@@ -194,34 +213,149 @@ export class RecoveryCoordinator {
     return this.llmCallTimestamps.length >= this.maxLlmCallsPerHour;
   }
 
+  shouldContinue(projectId: string): boolean {
+    const project = this.getProjectSnapshot(projectId);
+    if (!project || project.status !== 'running' || project.archived_at) {
+      return false;
+    }
+
+    if (!this.getConfig().ai.autoRecovery.enabled) {
+      return false;
+    }
+
+    if (this.isOperatorSuppressed(projectId)) {
+      return false;
+    }
+
+    const hourAgo = Date.now() - 3_600_000;
+    this.llmCallTimestamps = this.llmCallTimestamps.filter((timestamp) => timestamp > hourAgo);
+    return this.llmCallTimestamps.length <= this.maxLlmCallsPerHour;
+  }
+
   private async handleHealthDegraded(payload: EventPayload['health:degraded']): Promise<void> {
-    const result = this.checkEligibility(payload.projectId);
-    if (!result.eligible) {
-      await this.emitBlocked(payload.projectId, result.reason);
-      return;
-    }
+    try {
+      const result = this.checkEligibility(payload.projectId);
+      if (!result.eligible) {
+        await this.emitBlocked(payload.projectId, result.reason);
+        return;
+      }
 
-    this.recordLlmCall();
+      this.recordLlmCall();
 
-    if (this.opsAgent) {
-      const project = this.getProjectSnapshot(payload.projectId);
-      this.opsAgent.enqueue({
-        type: 'deploy:crash',
-        payload: {
-          projectId: payload.projectId,
-          projectName: project?.name ?? payload.projectId,
-          containerId: project?.container_id ?? '',
-        },
-        timestamp: Date.now(),
+      if (this.opsAgent) {
+        const project = this.getProjectSnapshot(payload.projectId);
+        this.opsAgent.enqueue({
+          type: 'deploy:crash',
+          payload: {
+            projectId: payload.projectId,
+            projectName: project?.name ?? payload.projectId,
+            containerId: project?.container_id ?? '',
+          },
+          timestamp: Date.now(),
+        });
+      }
+
+      this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+
+      await this.events.emit('recovery:started', {
+        projectId: payload.projectId,
+        trigger: 'health:degraded',
       });
+    } catch (err) {
+      log.error(
+        { err, projectId: payload.projectId },
+        'Unhandled error in health:degraded handler',
+      );
     }
+  }
 
-    this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+  private async handleContainerFailure(
+    trigger: 'container:die' | 'container:oom' | 'container:missing',
+    payload:
+      | EventPayload['container:die']
+      | EventPayload['container:oom']
+      | EventPayload['container:missing'],
+  ): Promise<void> {
+    try {
+      const result = this.checkEligibility(payload.projectId);
+      if (!result.eligible) {
+        this.projectStatusWriter.updateProject(payload.projectId, { status: 'error' });
+        await this.emitBlocked(payload.projectId, result.reason);
+        return;
+      }
 
-    await this.events.emit('recovery:started', {
-      projectId: payload.projectId,
-      trigger: 'health:degraded',
-    });
+      this.recordLlmCall();
+
+      if (this.opsAgent) {
+        const project = this.getProjectSnapshot(payload.projectId);
+        this.opsAgent.enqueue({
+          type: 'deploy:crash',
+          payload: {
+            projectId: payload.projectId,
+            projectName: project?.name ?? payload.projectId,
+            containerId: payload.containerId || project?.container_id || '',
+          },
+          timestamp: Date.now(),
+        });
+      }
+
+      this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
+
+      await this.events.emit('recovery:started', {
+        projectId: payload.projectId,
+        trigger,
+      });
+    } catch (err) {
+      log.error({ err, projectId: payload.projectId }, `Unhandled error in ${trigger} handler`);
+    }
+  }
+
+  private async handleDeployFailed(payload: EventPayload['deploy:failed']): Promise<void> {
+    try {
+      if (payload.source === 'mcp' || consumeMcpDeploy(payload.projectId)) {
+        log.info({ projectId: payload.projectId }, 'MCP-triggered deploy, skipping auto-recovery');
+        return;
+      }
+
+      const result = this.checkEligibility(payload.projectId);
+      if (!result.eligible) {
+        await this.emitBlocked(payload.projectId, result.reason);
+        return;
+      }
+
+      this.recordLlmCall();
+      await this.deploymentRecovery?.(
+        payload.projectId,
+        payload.error,
+        payload.step,
+        payload.buildLog,
+      );
+    } catch (err) {
+      log.error({ err, projectId: payload.projectId }, 'Unhandled error in deploy:failed handler');
+    }
+  }
+
+  private async handleComposeFailed(payload: EventPayload['compose:failed']): Promise<void> {
+    try {
+      if (consumeMcpDeploy(payload.projectId)) {
+        log.info(
+          { projectId: payload.projectId },
+          'MCP-triggered compose deploy, skipping auto-recovery',
+        );
+        return;
+      }
+
+      const result = this.checkEligibility(payload.projectId);
+      if (!result.eligible) {
+        await this.emitBlocked(payload.projectId, result.reason);
+        return;
+      }
+
+      this.recordLlmCall();
+      await this.deploymentRecovery?.(payload.projectId, payload.error);
+    } catch (err) {
+      log.error({ err, projectId: payload.projectId }, 'Unhandled error in compose:failed handler');
+    }
   }
 
   private async emitBlocked(projectId: string, reason?: EligibilityReason): Promise<void> {

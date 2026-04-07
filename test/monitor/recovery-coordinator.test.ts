@@ -39,7 +39,9 @@ function createMockDb(projectOverrides?: Partial<MockProject>) {
       }
     }),
     isCircuitBreakerOpen: vi.fn(() => false),
-    getActiveOpsIncident: vi.fn(() => null),
+    getActiveOpsIncident: vi.fn<(projectId: string) => { id: string; project_id: string } | null>(
+      () => null,
+    ),
   };
 
   return { db, project };
@@ -68,6 +70,17 @@ describe('RecoveryCoordinator', () => {
 
   it('returns eligible when all 7 gate conditions pass', () => {
     const { db } = createMockDb();
+    const coordinator = new RecoveryCoordinator(
+      db as unknown as Database,
+      events,
+      createMockConfig(),
+    );
+
+    expect(coordinator.checkEligibility('proj-1')).toEqual({ eligible: true });
+  });
+
+  it('allows recovery for project in error status', () => {
+    const { db } = createMockDb({ status: 'error' });
     const coordinator = new RecoveryCoordinator(
       db as unknown as Database,
       events,
@@ -181,7 +194,7 @@ describe('RecoveryCoordinator', () => {
   });
 
   it('emits recovery:blocked for supplementary container events when gate fails', async () => {
-    const { db } = createMockDb({ status: 'error' });
+    const { db } = createMockDb({ status: 'stopped' });
     const coordinator = new RecoveryCoordinator(
       db as unknown as Database,
       events,
@@ -201,8 +214,70 @@ describe('RecoveryCoordinator', () => {
 
     expect(blocked).toHaveBeenCalledWith({
       projectId: 'proj-1',
-      reason: 'status_error',
+      reason: 'status_stopped',
     });
+  });
+
+  it('routes eligible container failures through OpsAgent like health:degraded', async () => {
+    const { db, project } = createMockDb();
+    const coordinator = new RecoveryCoordinator(
+      db as unknown as Database,
+      events,
+      createMockConfig(),
+    );
+    const opsAgent: OpsAgentRef = { enqueue: vi.fn() };
+    const started = vi.fn();
+
+    events.on('recovery:started', started);
+    coordinator.start({ opsAgent });
+
+    await events.emit('container:oom', {
+      projectId: project.id,
+      containerId: 'container-oom',
+      containerName: 'demo',
+    });
+
+    expect(db.updateProject).toHaveBeenCalledWith(project.id, { status: 'recovering' });
+    expect(opsAgent.enqueue).toHaveBeenCalledWith({
+      type: 'deploy:crash',
+      payload: {
+        projectId: project.id,
+        projectName: project.name,
+        containerId: 'container-oom',
+      },
+      timestamp: Date.now(),
+    });
+    expect(started).toHaveBeenCalledWith({
+      projectId: project.id,
+      trigger: 'container:oom',
+    });
+  });
+
+  it('routes eligible deploy failures to the deployment recovery executor', async () => {
+    const { db, project } = createMockDb();
+    const coordinator = new RecoveryCoordinator(
+      db as unknown as Database,
+      events,
+      createMockConfig(),
+    );
+    const deploymentRecovery = vi.fn(async () => undefined);
+
+    coordinator.setDeploymentRecovery(deploymentRecovery);
+    coordinator.start();
+
+    await events.emit('deploy:failed', {
+      projectId: project.id,
+      step: 'build',
+      error: 'build failed',
+      buildLog: 'full build log',
+    });
+
+    expect(deploymentRecovery).toHaveBeenCalledWith(
+      project.id,
+      'build failed',
+      'build',
+      'full build log',
+    );
   });
 
   it('restores project status on recovery success and exhaustion only while recovering', async () => {
@@ -249,5 +324,42 @@ describe('RecoveryCoordinator', () => {
     });
 
     expect(db.updateProject).not.toHaveBeenCalled();
+  });
+
+  it('blocks second recovery for same project when incident is already active', async () => {
+    const { db, project } = createMockDb();
+    db.getActiveOpsIncident.mockReturnValue(null);
+
+    const coordinator = new RecoveryCoordinator(
+      db as unknown as Database,
+      events,
+      createMockConfig(),
+    );
+    const opsAgent: OpsAgentRef = { enqueue: vi.fn() };
+    const blocked = vi.fn();
+
+    events.on('recovery:blocked', blocked);
+    coordinator.start({ opsAgent });
+
+    await events.emit('container:oom', {
+      projectId: 'proj-1',
+      containerId: 'c1',
+      containerName: 'demo',
+    });
+    expect(opsAgent.enqueue).toHaveBeenCalledTimes(1);
+
+    project.status = 'running';
+    db.getActiveOpsIncident.mockReturnValue({ id: 'inc-1', project_id: 'proj-1' });
+
+    await events.emit('container:oom', {
+      projectId: 'proj-1',
+      containerId: 'c2',
+      containerName: 'demo',
+    });
+    expect(opsAgent.enqueue).toHaveBeenCalledTimes(1);
+    expect(blocked).toHaveBeenCalledWith({
+      projectId: 'proj-1',
+      reason: 'incident_active',
+    });
   });
 });
