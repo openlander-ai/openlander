@@ -1,21 +1,11 @@
-import {
-  Loader2,
-  Settings,
-  Shield,
-  Globe,
-  Github,
-  Sparkles,
-  Bot,
-  Cable,
-  Activity,
-} from 'lucide-react';
+import { Loader2, Settings, Shield, Globe, Github, Bot, Cable, Activity } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { useSetup } from '@/hooks/use-setup';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SystemSettingsTab } from '@/components/settings/SystemSettingsTab';
 import { TraefikSettingsTab } from '@/components/settings/TraefikSettingsTab';
 import { GithubSettingsTab } from '@/components/settings/GithubSettingsTab';
-import { LlmSettingsTab } from '@/components/settings/LlmSettingsTab';
+
 import { SecuritySettingsTab } from '@/components/settings/SecuritySettingsTab';
 import { AiSettingsTab } from '@/components/settings/AiSettingsTab';
 import { McpSettingsTab } from '@/components/settings/McpSettingsTab';
@@ -67,10 +57,7 @@ export function SettingsPage() {
             <Github className="w-4 h-4 shrink-0" />
             {t('settings.tabs.github')}
           </TabsTrigger>
-          <TabsTrigger value="llm" className={triggerClass}>
-            <Sparkles className="w-4 h-4 shrink-0" />
-            {t('settings.tabs.llm')}
-          </TabsTrigger>
+
           <TabsTrigger value="ai" className={triggerClass}>
             <Bot className="w-4 h-4 shrink-0" />
             {t('settings.ai.title')}
@@ -111,12 +98,7 @@ export function SettingsPage() {
           >
             <GithubSettingsTab status={status} refetch={refetch} />
           </TabsContent>
-          <TabsContent
-            value="llm"
-            className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"
-          >
-            <LlmSettingsTab status={status} refetch={refetch} />
-          </TabsContent>
+
           <TabsContent
             value="ai"
             className="mt-0 data-[state=inactive]:!animate-none data-[state=active]:!animate-none"

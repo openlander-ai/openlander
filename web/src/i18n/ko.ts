@@ -265,6 +265,10 @@ export const translations = {
         label: '운영 모니터링',
         description: '크래시, 디스크 사용량, 헬스 모니터링',
       },
+      codingPlan: {
+        label: 'AI 코딩 플랜',
+        description: '단계별 구현 계획 구조화',
+      },
       usage: {
         title: 'AI 사용량',
         inputTokens: '입력 토큰',

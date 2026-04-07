@@ -384,6 +384,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'secretScan',
       'rollbackSuggestion',
       'operationalMonitoring',
+      'codingPlan',
     ];
 
     const features: Record<
@@ -436,6 +437,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'webAgent',
       'envDetection',
       'operationalMonitoring',
+      'codingPlan',
     ];
     for (const fk of featureRoutingKeys) {
       const toggle = updated.ai[fk];
@@ -458,6 +460,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'secretScan',
       'rollbackSuggestion',
       'operationalMonitoring',
+      'codingPlan',
     ];
 
     const features: Record<
@@ -630,6 +633,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'webAgent',
       'envDetection',
       'operationalMonitoring',
+      'codingPlan',
     ];
     let aiUpdated = false;
     const newAiConfig = { ...aiConfig };

@@ -266,6 +266,10 @@ export const translations = {
         label: 'Operational Monitoring',
         description: 'Monitor crashes, disk usage, and health',
       },
+      codingPlan: {
+        label: 'AI Coding Plan',
+        description: 'Generate step-by-step coding plan',
+      },
       usage: {
         title: 'AI Usage',
         inputTokens: 'Input Tokens',

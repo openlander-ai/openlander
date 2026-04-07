@@ -268,6 +268,7 @@ export interface AIFeaturesConfig {
   secretScan: AIFeatureToggle;
   rollbackSuggestion: AIFeatureToggle;
   operationalMonitoring: AIFeatureToggle;
+  codingPlan: AIFeatureToggle;
 }
 
 export interface GitProviderEntry {
@@ -374,6 +375,7 @@ function buildDefaultConfig(): OpenLanderConfig {
       secretScan: { enabled: true },
       rollbackSuggestion: { enabled: true },
       operationalMonitoring: { enabled: true },
+      codingPlan: { enabled: true },
     },
     google: {
       clientId: '',

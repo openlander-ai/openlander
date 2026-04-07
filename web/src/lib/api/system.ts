@@ -351,6 +351,7 @@ export interface AiFeaturesResponse {
     secretScan: AiFeatureState;
     rollbackSuggestion: AiFeatureState;
     operationalMonitoring: AiFeatureState;
+    codingPlan: AiFeatureState;
   };
 }
 

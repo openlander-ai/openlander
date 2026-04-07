@@ -47,6 +47,7 @@ const AI_DEFAULTS: AIFeaturesConfig = {
   secretScan: { enabled: true },
   rollbackSuggestion: { enabled: true },
   operationalMonitoring: { enabled: true },
+  codingPlan: { enabled: true },
 };
 
 const ALL_FEATURE_KEYS: Array<keyof AIFeaturesConfig> = [
@@ -57,14 +58,15 @@ const ALL_FEATURE_KEYS: Array<keyof AIFeaturesConfig> = [
   'secretScan',
   'rollbackSuggestion',
   'operationalMonitoring',
+  'codingPlan',
 ];
 
 describe('AI Features Config Defaults', () => {
-  it('all 7 AI feature toggles default to enabled', () => {
+  it('all 8 AI feature toggles default to enabled', () => {
     for (const key of ALL_FEATURE_KEYS) {
       expect(AI_DEFAULTS[key].enabled).toBe(true);
     }
-    expect(Object.keys(AI_DEFAULTS)).toHaveLength(7);
+    expect(Object.keys(AI_DEFAULTS)).toHaveLength(8);
   });
 
   it('deep merge preserves defaults when ai section is missing from saved config', () => {
@@ -144,12 +146,12 @@ describe('AI Features API Endpoints', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('GET /api/setup/ai-features returns 200 with all 7 features', async () => {
+  it('GET /api/setup/ai-features returns 200 with all 8 features', async () => {
     const res = await app.request('/api/setup/ai-features');
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as { features: Record<string, unknown> };
-    expect(Object.keys(body.features)).toHaveLength(7);
+    expect(Object.keys(body.features)).toHaveLength(8);
 
     for (const key of ALL_FEATURE_KEYS) {
       const feature = body.features[key] as { enabled: boolean; available: boolean };

@@ -23,7 +23,8 @@ export type AIModelFeature =
   | 'buildDebugger'
   | 'webAgent'
   | 'envDetection'
-  | 'operationalMonitoring';
+  | 'operationalMonitoring'
+  | 'codingPlan';
 
 export interface ModelRoutingConfig {
   providers: Record<string, LLMProviderEntry>;
@@ -37,6 +38,7 @@ const AI_MODEL_FEATURES: AIModelFeature[] = [
   'webAgent',
   'envDetection',
   'operationalMonitoring',
+  'codingPlan',
 ];
 
 export function isValidAIModelFeature(feature: string): feature is AIModelFeature {
