@@ -47,7 +47,7 @@ export function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="security" className={triggerClass}>
             <Shield className="w-4 h-4 shrink-0" />
-            Security
+            {t('settings.tabs.security')}
           </TabsTrigger>
           <TabsTrigger value="proxy" className={triggerClass}>
             <Globe className="w-4 h-4 shrink-0" />
@@ -64,7 +64,7 @@ export function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="operations" className={triggerClass}>
             <Activity className="w-4 h-4 shrink-0" />
-            Operations
+            {t('settings.tabs.operations')}
           </TabsTrigger>
           <TabsTrigger value="mcp" className={triggerClass}>
             <Cable className="w-4 h-4 shrink-0" />

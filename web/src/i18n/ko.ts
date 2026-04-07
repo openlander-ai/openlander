@@ -219,12 +219,13 @@ export const translations = {
     description: 'AI 제공자, 연결 및 시스템 구성을 관리합니다.',
     tabs: {
       system: '시스템',
+      security: '보안',
       proxy: '프록시',
       github: 'GitHub',
       llm: 'AI 모델',
       ai: 'AI 기능',
-      mcp: 'MCP',
       operations: '운영',
+      mcp: 'MCP',
     },
     ai: {
       title: 'AI 기능',

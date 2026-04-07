@@ -220,12 +220,13 @@ export const translations = {
     description: 'Manage your AI provider, connections, and system configuration.',
     tabs: {
       system: 'System',
+      security: 'Security',
       proxy: 'Proxy',
       github: 'GitHub',
       llm: 'AI Model',
       ai: 'AI Features',
-      mcp: 'MCP',
       operations: 'Operations',
+      mcp: 'MCP',
     },
     ai: {
       title: 'AI Features',

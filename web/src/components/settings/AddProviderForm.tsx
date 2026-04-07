@@ -78,7 +78,7 @@ export function AddProviderForm({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <p className="text-xs font-body text-muted-ol">
               {t('llmSettings.provider') || 'Provider'}
@@ -139,7 +139,7 @@ export function AddProviderForm({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex flex-wrap items-center gap-2 pt-2">
           <Button
             type="submit"
             disabled={!canSubmit}

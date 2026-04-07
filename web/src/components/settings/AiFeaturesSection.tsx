@@ -168,8 +168,11 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
                 : 'default';
 
             return (
-              <div key={key} className="flex items-center justify-between p-4 gap-4">
-                <div className="space-y-1 flex-1">
+              <div
+                key={key}
+                className="flex flex-wrap items-center justify-between p-4 gap-x-4 gap-y-2"
+              >
+                <div className="space-y-1 min-w-[180px] flex-1">
                   <div className="flex items-center gap-2">
                     <p
                       className={cn(
@@ -191,7 +194,7 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   {MODEL_SELECTOR_FEATURES.has(key) && providers.length > 0 && (
-                    <div className="w-[220px]">
+                    <div className="w-[140px] sm:w-[180px] lg:w-[220px]">
                       <Select
                         value={currentValue}
                         onValueChange={(val) =>
