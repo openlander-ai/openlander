@@ -27,7 +27,6 @@ export function AddProviderForm({ onSubmit, onCancel }: AddProviderFormProps) {
   const [showApiKey, setShowApiKey] = useState(false);
   const [adding, setAdding] = useState(false);
 
-  const activeProviderDef = PROVIDER_DEFS.find((p) => p.id === provider);
   const keyRequired = provider !== 'ollama';
   const canSubmit = !adding && (!keyRequired || apiKey.trim().length > 0);
 
@@ -63,44 +62,25 @@ export function AddProviderForm({ onSubmit, onCancel }: AddProviderFormProps) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <p className="text-xs font-body text-muted-ol">
-              {t('llmSettings.provider') || 'Provider'}
-            </p>
-            <Select value={provider} onValueChange={handleProviderChange}>
-              <SelectTrigger className="w-full bg-bg-app border-border text-primary-ol">
-                <SelectValue placeholder="Select provider" />
-              </SelectTrigger>
-              <SelectContent>
-                {PROVIDER_DEFS.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    <span className="flex items-center gap-2">
-                      <span className={cn('h-2 w-2 rounded-full', p.color)} />
-                      {p.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <p className="text-xs font-body text-muted-ol">
-              {t('llmSettings.defaultModel') || 'Default Model'}
-            </p>
-            <Select value={defaultModel} onValueChange={setDefaultModel}>
-              <SelectTrigger className="w-full bg-bg-app border-border text-primary-ol font-mono">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {(activeProviderDef?.models ?? []).map((model) => (
-                  <SelectItem key={model} value={model} className="font-mono text-sm">
-                    {model}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-1.5">
+          <p className="text-xs font-body text-muted-ol">
+            {t('llmSettings.provider') || 'Provider'}
+          </p>
+          <Select value={provider} onValueChange={handleProviderChange}>
+            <SelectTrigger className="w-full bg-bg-app border-border text-primary-ol">
+              <SelectValue placeholder="Select provider" />
+            </SelectTrigger>
+            <SelectContent>
+              {PROVIDER_DEFS.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <span className="flex items-center gap-2">
+                    <span className={cn('h-2 w-2 rounded-full', p.color)} />
+                    {p.label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-1.5">

@@ -765,7 +765,9 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         const scores = PROVIDER_SCORES[entry.provider];
         if (!scores) continue;
 
-        const score = scores[weights.primary] * 3 + scores[weights.secondary] * 2 - scores.cost;
+        // Accuracy & reliability first — cost is only a minor tiebreaker (infrastructure platform)
+        const score =
+          scores[weights.primary] * 3 + scores[weights.secondary] * 2 - scores.cost * 0.1;
         if (score > bestScore) {
           bestScore = score;
           bestProviderId = id;
