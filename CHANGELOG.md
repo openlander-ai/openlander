@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0-rc.7] — 2026-04-07
+
+### Added
+
+- **RecoveryCoordinator**: Single-owner recovery architecture — all AI recovery calls routed through centralized Eligibility Gate (7 gate conditions: project status, archived, AI enabled, operator suppression, global LLM budget, circuit breaker, incident dedup)
+- **Executor refactoring**: auto-recovery.ts converted to callable handler interface (0 direct EventBus subscriptions), OpsAgent recovery subscriptions removed (container:die/oom/missing/deploy:failed)
+- **shouldContinue mid-stream abort**: LLM chatStream checks project eligibility before each tool call, aborts if project stopped/archived/budget exceeded
+- **ai:invoked/completed events**: Real-time LLM call visibility in Activity Feed NDJSON stream (model, duration, token counts, success status)
+- **NotificationCenter recovery alerts**: recovery:started/stopped/blocked events sent to Slack/Discord/Telegram via ChannelManager
+- **PostmortemGenerator conditional automation v2**: Auto-generate postmortem after recovery:success + 5-min stability window, cancel on failure events
+- **Incident error-pattern fingerprinting**: 30-min dedup window with normalized error fingerprints (hex IDs, timestamps, ports stripped), cascade_detected for different patterns
+- **container:missing Coordinator routing**: Removed OpsAgent direct subscription, routed through Eligibility Gate
+- **Activity Feed**: recovery:blocked/stopped/started and ai:invoked/completed cards with icons, status colors, i18n (en/ko)
+
+### Changed
+
+- **Status ownership**: Detection layer (alerts.ts) no longer sets project status — Coordinator manages status transitions (recovering/error)
+- **Eligibility Gate**: Allows 'error' status for recovery (deploy pipeline sets error before emit)
+
+### Fixed
+
+- **NDJSON live stream**: reason/trigger fields now included in both buffer and live stream paths
+- **Coordinator exception handling**: try/catch added to all async event handlers (deploy:failed, compose:failed, container failure, health:degraded)
+- **Container recovery blocked path**: Sets status='error' when recovery is blocked (prevents stale 'running' status with dead container)
+
 ## [Unreleased]
 
 ### Added
