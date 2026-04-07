@@ -218,6 +218,13 @@ export function createMockContext(db: Database): AppContext {
         .fn()
         .mockResolvedValue({ status: 'building', plan_id: 'plan-test', project_id: 'p1' }),
     } as unknown as AppContext['planEngine'],
+    coordinator: {
+      suppressProject: vi.fn(),
+      stop: vi.fn(),
+      setOpsAgent: vi.fn(),
+      setConfigGetter: vi.fn(),
+      setDeploymentRecovery: vi.fn(),
+    } as unknown as AppContext['coordinator'],
     approvalGate: {
       dispose: vi.fn(),
     } as unknown as AppContext['approvalGate'],

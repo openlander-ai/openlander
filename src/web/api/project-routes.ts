@@ -690,7 +690,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.post('/projects/:id/stop', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    ctx.coordinator?.suppressProject(project.id, 60_000);
+    ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.stop(project.id);
     return c.json({ status: 'stopped', project: project.name });
   });
@@ -721,7 +721,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     const release = await ctx.deployQueue.acquire();
     try {
-      ctx.coordinator?.suppressProject(project.id, 120_000);
+      ctx.coordinator.suppressProject(project.id, 120_000);
       ctx.db.updateProject(project.id, { status: 'building' });
       const result = await ctx.pipeline.redeploy(project.id, {
         noCache: body.no_cache,
@@ -980,7 +980,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
   api.post('/projects/:id/archive', async (c) => {
     const project = getProjectOrThrow(c, ctx);
-    ctx.coordinator?.suppressProject(project.id, 60_000);
+    ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.archive(project.id);
     const updated = ctx.db.getProject(project.id);
     return c.json({ project: updated });
@@ -1002,7 +1002,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
       );
     }
     const project = getProjectOrThrow(c, ctx);
-    ctx.coordinator?.suppressProject(project.id, 60_000);
+    ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.remove(project.id, ctx.cloudflare);
     return c.json({ success: true, message: 'Project permanently deleted' });
   });
@@ -1010,7 +1010,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
   api.delete('/projects/:id', async (c) => {
     const project = getProjectOrThrow(c, ctx);
 
-    ctx.coordinator?.suppressProject(project.id, 60_000);
+    ctx.coordinator.suppressProject(project.id, 60_000);
     await ctx.pipeline.archive(project.id);
     return c.json({ status: 'archived', project: project.name });
   });

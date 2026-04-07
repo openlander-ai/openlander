@@ -286,7 +286,8 @@ Gate가 `running`만 허용하면, 복구해야 할 사고를 gate가 막아버�
    (사용자 stop)   (Coordinator만 설정)
 ```
 
-**Gate 조건**: `project.status === 'running'`만 새 recovery 워크플로 시작 가능.
+**Gate 조건**: `project.status === 'running'` 또는 `'error'`만 새 recovery 워크플로 시작 가능.
+`'error'` 허용 이유: deploy-core.ts가 deploy:failed emit 전에 status='error'를 세팅하기 때문.
 `recovering`은 이미 active recovery가 있으므로 `already_active`로 차단됨.
 
 ### 4. Operator Suppression Window

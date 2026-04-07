@@ -109,6 +109,9 @@ export class RecoveryCoordinator {
     );
 
     this.unsubscribers.push(
+      this.events.on('ai:invoked', () => {
+        this.recordLlmCall();
+      }),
       this.events.on('recovery:success', (payload) => {
         this.restoreStatusIfRecovering(payload.projectId, 'running');
       }),
@@ -279,12 +282,12 @@ export class RecoveryCoordinator {
     try {
       const result = this.checkEligibility(payload.projectId);
       if (!result.eligible) {
-        this.projectStatusWriter.updateProject(payload.projectId, { status: 'error' });
+        if (result.reason !== 'operator_suppressed') {
+          this.projectStatusWriter.updateProject(payload.projectId, { status: 'error' });
+        }
         await this.emitBlocked(payload.projectId, result.reason);
         return;
       }
-
-      this.recordLlmCall();
 
       if (this.opsAgent) {
         const project = this.getProjectSnapshot(payload.projectId);
@@ -323,7 +326,6 @@ export class RecoveryCoordinator {
         return;
       }
 
-      this.recordLlmCall();
       await this.deploymentRecovery?.(
         payload.projectId,
         payload.error,
@@ -351,7 +353,6 @@ export class RecoveryCoordinator {
         return;
       }
 
-      this.recordLlmCall();
       await this.deploymentRecovery?.(payload.projectId, payload.error);
     } catch (err) {
       log.error({ err, projectId: payload.projectId }, 'Unhandled error in compose:failed handler');

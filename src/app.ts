@@ -64,6 +64,7 @@ interface RecoveryPostmortemAutomationOptions {
   eventBus: EventBus;
   db: PostmortemProjectLookup;
   getPostmortem: () => PostmortemGeneratorLike | null;
+  isEligible?: (projectId: string) => boolean;
   delayMs?: number;
 }
 
@@ -71,6 +72,7 @@ export function setupRecoveryPostmortemAutomation({
   eventBus,
   db,
   getPostmortem,
+  isEligible,
   delayMs = POSTMORTEM_STABILITY_WINDOW_MS,
 }: RecoveryPostmortemAutomationOptions): () => void {
   const postmortemTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -93,6 +95,11 @@ export function setupRecoveryPostmortemAutomation({
 
         const project = db.getProject(payload.projectId);
         if (!project || project.status !== 'running') {
+          return;
+        }
+
+        if (isEligible && !isEligible(payload.projectId)) {
+          log.info({ projectId: payload.projectId }, 'Auto-postmortem skipped: not eligible');
           return;
         }
 
@@ -172,7 +179,7 @@ export interface AppContext {
   mcpClientManager: McpClientManager;
   planEngine: PlanEngine;
   // v1.0: Recovery coordinator
-  coordinator?: RecoveryCoordinator;
+  coordinator: RecoveryCoordinator;
   llmVerified: boolean;
 }
 
@@ -567,6 +574,7 @@ export async function createAppContext(
     eventBus,
     db,
     getPostmortem: getPostmortemInstance,
+    isEligible: (projectId) => coordinator.shouldContinue(projectId),
   });
 
   const rollbackWatcher = new RollbackWatcher(eventBus, db, pipeline);
@@ -588,7 +596,7 @@ export function shutdownAppContext(ctx: AppContext): void {
   activePostmortemAutomationStop = null;
   getPostmortemInstance()?.stop();
   ctx.dockerEventListener?.stop();
-  ctx.coordinator?.stop();
+  ctx.coordinator.stop();
   void ctx.opsAgent?.stop();
   ctx.healthMonitor.stop();
   ctx.alertMonitor.stop();
