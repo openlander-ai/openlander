@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Key, Loader2, Plus, Save, Trash2, Zap } from 'lucide-react';
+import { Eye, EyeOff, Key, Loader2, Plus, Save, Trash2, Zap, Bot, ShieldCheck } from 'lucide-react';
 import {
   addProvider,
   deleteProvider,
@@ -210,34 +210,35 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
         <div className="rounded-md bg-error/10 p-3 text-sm font-body text-error">{error}</div>
       )}
 
-      <div
-        className={cn(
-          'rounded-lg border p-3 flex items-center justify-between',
-          providers.length > 0
-            ? 'border-success/30 bg-success/5'
-            : 'border-[hsl(var(--border))] bg-bg-subtle/50',
-        )}
-      >
-        <div className="flex items-center gap-2.5">
-          <span className={cn('text-sm', providers.length > 0 ? 'text-success' : 'text-muted-ol')}>
-            {providers.length > 0 ? '✓' : '○'}
-          </span>
-          <div>
-            <p
-              className={cn(
-                'text-sm font-body font-medium',
-                providers.length > 0 ? 'text-primary-ol' : 'text-muted-ol',
-              )}
-            >
-              {providers.length > 0
-                ? providers.length === 1
-                  ? t('llmSettings.connected').replace('{n}', '1')
-                  : t('llmSettings.connectedPlural').replace('{n}', providers.length.toString())
-                : t('llmSettings.noProviders')}
-            </p>
-          </div>
+      {providers.length > 0 && (
+        <div className="rounded-lg border border-success/30 bg-success/5 px-4 py-3 flex items-center gap-3">
+          <ShieldCheck className="h-5 w-5 text-success" />
+          <p className="text-sm font-body font-medium text-success">
+            {providers.length === 1
+              ? t('llmSettings.connected').replace('{n}', '1')
+              : t('llmSettings.connectedPlural').replace('{n}', providers.length.toString())}
+          </p>
         </div>
-      </div>
+      )}
+
+      {providers.length === 0 && !loadingProviders && !showAddForm && (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-bg-subtle/30 py-12 px-4 text-center">
+          <div className="bg-bg-panel p-3 rounded-full shadow-sm border border-border mb-4">
+            <Bot className="h-6 w-6 text-agent/70" />
+          </div>
+          <h3 className="mb-4 font-display text-sm font-medium text-primary-ol">
+            {t('llmSettings.noProviders')}
+          </h3>
+          <Button
+            size="sm"
+            onClick={() => setShowAddForm(true)}
+            className="gap-2 bg-agent text-white hover:bg-agent/90 shadow-sm transition-transform active:scale-95"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t('llmSettings.addProvider')}
+          </Button>
+        </div>
+      )}
 
       {loadingProviders ? (
         <div className="flex justify-center py-8">
@@ -316,17 +317,18 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
             );
           })}
 
-          {!showAddForm ? (
+          {providers.length > 0 && !showAddForm ? (
             <Button
               variant="outline"
-              className="w-full border-dashed gap-2 text-muted-ol hover:text-primary-ol"
+              className="w-full border-dashed gap-2 text-muted-ol hover:text-primary-ol transition-colors"
               onClick={() => setShowAddForm(true)}
             >
               <Plus className="h-4 w-4" />
               {t('llmSettings.addProvider')}
             </Button>
-          ) : (
-            <div className="rounded-lg border border-border bg-bg-subtle/50 p-4 space-y-4">
+          ) : showAddForm ? (
+            <div className="rounded-xl border border-border bg-bg-subtle/40 p-5 space-y-5 relative overflow-hidden ring-1 ring-black/5 shadow-sm">
+              <div className="absolute top-0 left-0 w-1 h-full bg-agent" />
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium text-primary-ol">
                   {t('llmSettings.addProvider')}
@@ -463,12 +465,19 @@ export function LlmSettingsTab({ refetch }: LlmSettingsTabProps) {
                 )}
               </form>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
-      <div className="pt-6 border-t border-border mt-6">
-        <h3 className="text-sm font-medium text-primary-ol mb-4">OAuth Providers</h3>
+      <div className="pt-6 mt-6 relative">
+        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+          <div className="w-full border-t border-border"></div>
+        </div>
+        <div className="relative flex justify-center mb-6">
+          <span className="bg-bg-panel px-3 text-xs font-semibold text-muted-ol uppercase tracking-wider">
+            OAuth Providers
+          </span>
+        </div>
         <LlmProviderOAuth
           provider="google"
           label="Google Gemini"
