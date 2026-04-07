@@ -25,22 +25,35 @@ import {
 
 const log = createModuleLogger('setup-routes');
 
+// Benchmark-based provider scores (1-5). Sources: MMLU, BFCL v3, ReliabilityBench, MCPMark (2025-2026)
+//                          reasoning  speed  toolUse  cost
+// anthropic (sonnet-4)     MMLU 90%   44t/s  BFCL 70% $3.00/1M
+// openai (gpt-4o-mini)     MMLU 82%   131t/s BFCL~60% $0.15/1M
+// gemini (2.0-flash)       MMLU 85%   221t/s RBench96% $0.08/1M
+// deepseek (V3)            MMLU 89%   48t/s  82%      $0.28/1M
+// xai (grok-3-mini-fast)   MMLU~80%   190t/s 78%      $0.60/1M
+// mistral (small)          MMLU 81%   175t/s 80%      $0.14/1M
+// groq (llama-3.3-70b)     MMLU 86%   200t/s ~75%     $0.59/1M
+// togetherai (llama-3.3)   MMLU 86%   150t/s ~75%     $0.60/1M
+// openrouter (aggregator)  varies     varies varies   varies
+// zai (glm-4.7-flash)      MMLU~78%   180t/s 71%      $0.001/1M
+// ollama (llama3.2 8B)     MMLU 65%   local  ~55%     free
 const PROVIDER_SCORES: Record<
   string,
   { reasoning: number; speed: number; toolUse: number; cost: number }
 > = {
-  anthropic: { reasoning: 5, speed: 3, toolUse: 5, cost: 5 },
-  openai: { reasoning: 5, speed: 4, toolUse: 5, cost: 4 },
+  anthropic: { reasoning: 5, speed: 2, toolUse: 5, cost: 5 },
+  openai: { reasoning: 4, speed: 4, toolUse: 4, cost: 1 },
   gemini: { reasoning: 4, speed: 5, toolUse: 4, cost: 1 },
-  xai: { reasoning: 4, speed: 4, toolUse: 3, cost: 3 },
-  deepseek: { reasoning: 5, speed: 3, toolUse: 3, cost: 2 },
-  mistral: { reasoning: 3, speed: 4, toolUse: 3, cost: 2 },
-  groq: { reasoning: 3, speed: 5, toolUse: 3, cost: 2 },
-  togetherai: { reasoning: 3, speed: 4, toolUse: 3, cost: 2 },
-  openrouter: { reasoning: 4, speed: 3, toolUse: 4, cost: 3 },
+  xai: { reasoning: 3, speed: 5, toolUse: 3, cost: 2 },
+  deepseek: { reasoning: 5, speed: 3, toolUse: 3, cost: 1 },
+  mistral: { reasoning: 3, speed: 4, toolUse: 3, cost: 1 },
+  groq: { reasoning: 4, speed: 5, toolUse: 3, cost: 2 },
+  togetherai: { reasoning: 4, speed: 4, toolUse: 3, cost: 2 },
+  openrouter: { reasoning: 4, speed: 3, toolUse: 3, cost: 2 },
   zai: { reasoning: 3, speed: 4, toolUse: 3, cost: 1 },
   'zai-coding': { reasoning: 3, speed: 4, toolUse: 3, cost: 1 },
-  ollama: { reasoning: 2, speed: 3, toolUse: 2, cost: 0 },
+  ollama: { reasoning: 2, speed: 5, toolUse: 2, cost: 1 },
 };
 
 const FEATURE_WEIGHTS: Record<
