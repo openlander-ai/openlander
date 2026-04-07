@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Loader2, Save, Eye, EyeOff, Zap } from 'lucide-react';
+import { Loader2, Save, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button.js';
 import { Input } from '@/components/ui/input.js';
 import {
@@ -13,27 +13,12 @@ import { cn } from '@/lib/utils.js';
 import { useLanguage } from '@/i18n/context.js';
 import { PROVIDER_DEFS, getDefaultModel } from './ai-settings-constants.js';
 
-interface TestResult {
-  ok: boolean;
-  latencyMs?: number;
-  error?: string;
-}
-
 interface AddProviderFormProps {
   onSubmit: (data: { provider: string; apiKey: string; defaultModel: string }) => Promise<void>;
   onCancel: () => void;
-  onTestNew: (data: { provider: string; apiKey: string; defaultModel: string }) => Promise<void>;
-  isTestingNew: boolean;
-  testResult?: TestResult;
 }
 
-export function AddProviderForm({
-  onSubmit,
-  onCancel,
-  onTestNew,
-  isTestingNew,
-  testResult,
-}: AddProviderFormProps) {
+export function AddProviderForm({ onSubmit, onCancel }: AddProviderFormProps) {
   const { t } = useLanguage();
 
   const [provider, setProvider] = useState('gemini');
@@ -153,39 +138,7 @@ export function AddProviderForm({
             )}
             {t('llmSettings.addProvider') || 'Save Provider'}
           </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isTestingNew || (!apiKey.trim() && keyRequired)}
-            onClick={() => onTestNew({ provider, apiKey, defaultModel })}
-            className="gap-1.5 font-body text-xs"
-          >
-            {isTestingNew ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Zap className="h-3.5 w-3.5" />
-            )}
-            {t('llmSettings.testConnection') || 'Test'}
-          </Button>
         </div>
-
-        {testResult && (
-          <div
-            className={cn(
-              'rounded-md px-3 py-2 text-xs font-body mt-2',
-              testResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error',
-            )}
-          >
-            {testResult.ok
-              ? (t('llmSettings.testSuccess') || 'Success!').replace(
-                  '{ms}',
-                  testResult.latencyMs?.toString() || '0',
-                )
-              : testResult.error || t('llmSettings.testFail') || 'Failed'}
-          </div>
-        )}
       </form>
     </div>
   );

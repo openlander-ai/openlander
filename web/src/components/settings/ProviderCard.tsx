@@ -1,38 +1,16 @@
-import { Loader2, Trash2, Zap } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 import type { ProviderInfo } from '@/lib/api/index.js';
 import { Button } from '@/components/ui/button.js';
 import { cn } from '@/lib/utils.js';
 import { getProviderDef } from './ai-settings-constants.js';
 
-interface TestResult {
-  ok: boolean;
-  latencyMs?: number;
-  error?: string;
-}
-
 interface ProviderCardProps {
   provider: ProviderInfo;
-  isTesting: boolean;
   isDeleting: boolean;
-  testResult?: TestResult;
-  onTest: () => void;
   onDelete: () => void;
-  testLabel: string;
-  testSuccessLabel: string;
-  testFailLabel: string;
 }
 
-export function ProviderCard({
-  provider,
-  isTesting,
-  isDeleting,
-  testResult,
-  onTest,
-  onDelete,
-  testLabel,
-  testSuccessLabel,
-  testFailLabel,
-}: ProviderCardProps) {
+export function ProviderCard({ provider, isDeleting, onDelete }: ProviderCardProps) {
   const pDef = getProviderDef(provider.provider);
 
   return (
@@ -52,16 +30,6 @@ export function ProviderCard({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button
-            variant="outline"
-            size="sm"
-            onClick={onTest}
-            disabled={isTesting}
-            className="h-8 text-xs gap-1.5"
-          >
-            {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-            {testLabel}
-          </Button>
-          <Button
             variant="ghost"
             size="sm"
             onClick={onDelete}
@@ -76,18 +44,6 @@ export function ProviderCard({
           </Button>
         </div>
       </div>
-      {testResult && (
-        <div
-          className={cn(
-            'rounded-md px-3 py-2 text-xs font-body',
-            testResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error',
-          )}
-        >
-          {testResult.ok
-            ? testSuccessLabel.replace('{ms}', testResult.latencyMs?.toString() || '0')
-            : testResult.error || testFailLabel}
-        </div>
-      )}
     </div>
   );
 }

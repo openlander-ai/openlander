@@ -238,6 +238,8 @@ export const translations = {
       unavailable: '사용 불가',
       modelDefault: '기본값',
       modelSelector: '모델',
+      autoSetup: '자동 설정',
+      autoSetupSuccess: 'AI 기능이 자동으로 설정되었습니다',
       autoRecovery: {
         label: '자동 복구',
         description: '빌드 실패 시 자동으로 수정을 시도합니다',
@@ -761,6 +763,9 @@ export const translations = {
     errorLoad: '제공자를 불러오지 못했습니다',
     errorAdd: '제공자를 추가하지 못했습니다',
     errorDelete: '제공자를 삭제하지 못했습니다',
+    verifying: '연결 확인 중...',
+    verified: '연결됨! ({ms}ms)',
+    verifyFailed: '연결 실패. API 키를 확인하세요.',
   },
   project: {
     confirm: {

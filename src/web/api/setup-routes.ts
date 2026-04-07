@@ -25,6 +25,41 @@ import {
 
 const log = createModuleLogger('setup-routes');
 
+const PROVIDER_SCORES: Record<
+  string,
+  { reasoning: number; speed: number; toolUse: number; cost: number }
+> = {
+  anthropic: { reasoning: 5, speed: 3, toolUse: 5, cost: 5 },
+  openai: { reasoning: 5, speed: 4, toolUse: 5, cost: 4 },
+  gemini: { reasoning: 4, speed: 5, toolUse: 4, cost: 1 },
+  xai: { reasoning: 4, speed: 4, toolUse: 3, cost: 3 },
+  deepseek: { reasoning: 5, speed: 3, toolUse: 3, cost: 2 },
+  mistral: { reasoning: 3, speed: 4, toolUse: 3, cost: 2 },
+  groq: { reasoning: 3, speed: 5, toolUse: 3, cost: 2 },
+  togetherai: { reasoning: 3, speed: 4, toolUse: 3, cost: 2 },
+  openrouter: { reasoning: 4, speed: 3, toolUse: 4, cost: 3 },
+  zai: { reasoning: 3, speed: 4, toolUse: 3, cost: 1 },
+  'zai-coding': { reasoning: 3, speed: 4, toolUse: 3, cost: 1 },
+  ollama: { reasoning: 2, speed: 3, toolUse: 2, cost: 0 },
+};
+
+const FEATURE_WEIGHTS: Record<
+  string,
+  {
+    primary: keyof (typeof PROVIDER_SCORES)['gemini'];
+    secondary: keyof (typeof PROVIDER_SCORES)['gemini'];
+  }
+> = {
+  codingPlan: { primary: 'reasoning', secondary: 'toolUse' },
+  autoRecovery: { primary: 'toolUse', secondary: 'reasoning' },
+  buildDebugger: { primary: 'reasoning', secondary: 'speed' },
+  webAgent: { primary: 'toolUse', secondary: 'reasoning' },
+  envDetection: { primary: 'speed', secondary: 'reasoning' },
+  secretScan: { primary: 'speed', secondary: 'reasoning' },
+  rollbackSuggestion: { primary: 'speed', secondary: 'reasoning' },
+  operationalMonitoring: { primary: 'speed', secondary: 'toolUse' },
+};
+
 export function createSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -564,6 +599,25 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'MISSING_FIELD', message: 'apiKey or authToken is required' }, 400);
     }
 
+    const testResult = await runLlmConnectivityTest({
+      provider: body.provider as LLMConfig['provider'],
+      model: body.defaultModel,
+      apiKey: body.apiKey,
+      authToken: body.authToken,
+      ollamaEndpoint: body.ollamaEndpoint,
+    });
+
+    if (!testResult.ok) {
+      return c.json(
+        {
+          error: 'CONNECTION_FAILED',
+          message: testResult.error ?? 'Connection test failed. Check your API key and try again.',
+          latencyMs: testResult.latencyMs,
+        },
+        400,
+      );
+    }
+
     const config = loadConfig();
     const previousDefaultProviderId = normalizeLlmConfig(config.llm).defaultRoute.providerId;
     const existingProviders = config.llm.providers ?? {};
@@ -599,7 +653,12 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     await syncLlmRuntime(ctx);
 
-    return c.json({ status: 'added', id: body.id });
+    return c.json({
+      status: 'added',
+      id: body.id,
+      verified: true,
+      latencyMs: testResult.latencyMs,
+    });
   });
 
   api.delete('/setup/providers/:id', async (c) => {
@@ -684,6 +743,42 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     await syncLlmRuntime(ctx);
 
     return c.json({ status: 'removed', id });
+  });
+
+  api.post('/setup/providers/auto-recommend', (c) => {
+    const config = loadConfig();
+    const providers = config.llm.providers ?? {};
+    const providerEntries = Object.entries(providers);
+
+    if (providerEntries.length === 0) {
+      return c.json({ error: 'NO_PROVIDERS', message: 'No providers registered' }, 400);
+    }
+
+    const recommendations: Record<string, { providerId: string; model: string }> = {};
+
+    for (const [feature, weights] of Object.entries(FEATURE_WEIGHTS)) {
+      let bestScore = -1;
+      let bestProviderId = '';
+      let bestModel = '';
+
+      for (const [id, entry] of providerEntries) {
+        const scores = PROVIDER_SCORES[entry.provider];
+        if (!scores) continue;
+
+        const score = scores[weights.primary] * 3 + scores[weights.secondary] * 2 - scores.cost;
+        if (score > bestScore) {
+          bestScore = score;
+          bestProviderId = id;
+          bestModel = entry.defaultModel;
+        }
+      }
+
+      if (bestProviderId) {
+        recommendations[feature] = { providerId: bestProviderId, model: bestModel };
+      }
+    }
+
+    return c.json({ recommendations });
   });
 
   api.post('/setup/complete', (c) => {

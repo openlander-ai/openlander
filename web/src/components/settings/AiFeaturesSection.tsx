@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Loader2, AlertCircle, Info } from 'lucide-react';
+import { Loader2, AlertCircle, Info, Wand2 } from 'lucide-react';
 import { AISparkle } from '@/components/ui/AISparkle.js';
+import { Button } from '@/components/ui/button.js';
 import { getAiFeatures, updateAiFeatures, type AiFeaturesResponse } from '@/lib/api/system.js';
 import type { ProviderInfo } from '@/lib/api/index.js';
 import { Switch } from '@/components/ui/switch.js';
@@ -41,6 +42,7 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [autoSetting, setAutoSetting] = useState(false);
 
   useEffect(() => {
     void getAiFeatures()
@@ -112,6 +114,45 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
     }
   };
 
+  const handleAutoRecommend = async () => {
+    setAutoSetting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/setup/providers/auto-recommend', { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message ?? 'Auto-recommend failed');
+      }
+      const { recommendations } = (await res.json()) as {
+        recommendations: Record<string, { providerId: string; model: string }>;
+      };
+
+      // Apply all recommendations at once
+      const updates: Record<string, { enabled: boolean; providerId: string; model: string }> = {};
+      if (features) {
+        for (const [key, rec] of Object.entries(recommendations)) {
+          const feature = features[key as keyof typeof features];
+          if (feature) {
+            updates[key] = {
+              enabled: feature.enabled,
+              providerId: rec.providerId,
+              model: rec.model,
+            };
+          }
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        const data = await updateAiFeatures(updates);
+        setFeatures(data.features);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('settings.ai.errorUpdate') || 'Failed');
+    } finally {
+      setAutoSetting(false);
+    }
+  };
+
   if (loading) {
     return (
       <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6">
@@ -126,11 +167,29 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
 
   return (
     <section className="bg-bg-panel shadow-sm border border-[hsl(var(--border))] rounded-xl p-6 space-y-5">
-      <div className="flex items-center gap-2">
-        <AISparkle className="h-5 w-5" />
-        <h2 className="font-display text-sm font-semibold text-primary-ol">
-          {t('settings.ai.title') || 'AI Features'}
-        </h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <AISparkle className="h-5 w-5" />
+          <h2 className="font-display text-sm font-semibold text-primary-ol">
+            {t('settings.ai.title') || 'AI Features'}
+          </h2>
+        </div>
+        {providers.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAutoRecommend}
+            disabled={autoSetting || loading}
+            className="gap-1.5 text-xs font-body"
+          >
+            {autoSetting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Wand2 className="h-3.5 w-3.5" />
+            )}
+            {t('settings.ai.autoSetup') || 'Auto Setup'}
+          </Button>
+        )}
       </div>
 
       {error && (

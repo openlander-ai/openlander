@@ -3,7 +3,6 @@ import { Key, ShieldCheck, Bot, Plus } from 'lucide-react';
 import {
   addProvider,
   deleteProvider,
-  testLLMConnection,
   startGoogleOAuth,
   getGoogleAuthStatus,
   type ProviderInfo,
@@ -29,11 +28,6 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
 
   const [providerToDelete, setProviderToDelete] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const [testingId, setTestingId] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<
-    Record<string, { ok: boolean; latencyMs?: number; error?: string }>
-  >({});
 
   const [googleConnected, setGoogleConnected] = useState(false);
   const [checkingGoogle, setCheckingGoogle] = useState(true);
@@ -65,65 +59,6 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
     }
   };
 
-  const handleTestConnection = async (provider: ProviderInfo) => {
-    setTestingId(provider.id);
-    setTestResults((prev) => {
-      const next = { ...prev };
-      delete next[provider.id];
-      return next;
-    });
-    try {
-      const result = await testLLMConnection({
-        providerId: provider.id,
-        model: provider.defaultModel,
-      });
-      setTestResults((prev) => ({ ...prev, [provider.id]: result }));
-    } catch (err) {
-      setTestResults((prev) => ({
-        ...prev,
-        [provider.id]: {
-          ok: false,
-          error: err instanceof Error ? err.message : t('llmSettings.testFail') || 'Test failed',
-        },
-      }));
-    } finally {
-      setTestingId(null);
-      emitLlmChanged();
-    }
-  };
-
-  const handleTestNewConnection = async (data: {
-    provider: string;
-    apiKey: string;
-    defaultModel: string;
-  }) => {
-    setTestingId('new');
-    setTestResults((prev) => {
-      const next = { ...prev };
-      delete next['new'];
-      return next;
-    });
-    try {
-      const result = await testLLMConnection({
-        provider: data.provider,
-        apiKey: data.apiKey,
-        model: data.defaultModel,
-      });
-      setTestResults((prev) => ({ ...prev, new: result }));
-    } catch (err) {
-      setTestResults((prev) => ({
-        ...prev,
-        new: {
-          ok: false,
-          error: err instanceof Error ? err.message : t('llmSettings.testFail') || 'Test failed',
-        },
-      }));
-    } finally {
-      setTestingId(null);
-      emitLlmChanged();
-    }
-  };
-
   const handleAddSubmit = async (data: {
     provider: string;
     apiKey: string;
@@ -147,10 +82,6 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
       throw err;
     }
   };
-
-  const testLabel = t('llmSettings.testConnection') || 'Test';
-  const testSuccessLabel = t('llmSettings.testSuccess') || 'Connected ({ms}ms)';
-  const testFailLabel = t('llmSettings.testFail') || 'Connection failed';
 
   return (
     <>
@@ -202,14 +133,8 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
             <ProviderCard
               key={provider.id}
               provider={provider}
-              isTesting={testingId === provider.id}
               isDeleting={deletingId === provider.id}
-              testResult={testResults[provider.id]}
-              onTest={() => handleTestConnection(provider)}
               onDelete={() => setProviderToDelete(provider.id)}
-              testLabel={testLabel}
-              testSuccessLabel={testSuccessLabel}
-              testFailLabel={testFailLabel}
             />
           ))}
 
@@ -225,13 +150,7 @@ export function AiProvidersSection({ providers, onProvidersChange }: AiProviders
           )}
 
           {showAddForm && (
-            <AddProviderForm
-              onSubmit={handleAddSubmit}
-              onCancel={() => setShowAddForm(false)}
-              onTestNew={handleTestNewConnection}
-              isTestingNew={testingId === 'new'}
-              testResult={testResults['new']}
-            />
+            <AddProviderForm onSubmit={handleAddSubmit} onCancel={() => setShowAddForm(false)} />
           )}
         </div>
 

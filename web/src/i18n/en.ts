@@ -239,6 +239,8 @@ export const translations = {
       unavailable: 'Unavailable',
       modelDefault: 'Default',
       modelSelector: 'Model',
+      autoSetup: 'Auto Setup',
+      autoSetupSuccess: 'AI features configured automatically',
       autoRecovery: {
         label: 'Auto Recovery',
         description: 'Automatically attempt to fix build failures',
@@ -761,6 +763,9 @@ export const translations = {
     errorLoad: 'Failed to load providers',
     errorAdd: 'Failed to add provider',
     errorDelete: 'Failed to remove provider',
+    verifying: 'Verifying connection...',
+    verified: 'Connected! ({ms}ms)',
+    verifyFailed: 'Connection failed. Check your API key.',
   },
   project: {
     confirm: {
