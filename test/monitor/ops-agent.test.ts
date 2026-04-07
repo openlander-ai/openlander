@@ -57,10 +57,10 @@ describe('OpsAgent', () => {
   });
 
   describe('start / stop', () => {
-    it('subscribes to 10 event types on start', async () => {
+    it('subscribes to 6 event types on start', async () => {
       const agent = new OpsAgent(mockCtx);
       await agent.start();
-      expect(eventBus.on).toHaveBeenCalledTimes(10);
+      expect(eventBus.on).toHaveBeenCalledTimes(6);
       await agent.stop();
     });
 
@@ -68,7 +68,7 @@ describe('OpsAgent', () => {
       const agent = new OpsAgent(mockCtx);
       await agent.start();
       await agent.stop();
-      expect(mockUnsubscribe).toHaveBeenCalledTimes(10);
+      expect(mockUnsubscribe).toHaveBeenCalledTimes(6);
     });
 
     it('disposes approval gate on stop', async () => {
@@ -82,7 +82,7 @@ describe('OpsAgent', () => {
       const agent = new OpsAgent(mockCtx);
       await agent.start();
       await agent.start();
-      expect(eventBus.on).toHaveBeenCalledTimes(10);
+      expect(eventBus.on).toHaveBeenCalledTimes(6);
       await agent.stop();
     });
 

@@ -4,6 +4,7 @@ import type { ChatStreamEvent } from '../types/agent-events.js';
 import type { BuildDebugger } from './build-debugger.js';
 import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
+import type { EventPayload } from '../events/index.js';
 import type { QuestionBridge } from '../lib/question-bridge.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { buildContextSnapshot } from '../llm/context-assembler.js';
@@ -19,7 +20,6 @@ import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
 
 const log = createModuleLogger('auto-recovery');
 
-const MAX_RECOVERY_ATTEMPTS = 3;
 const RECOVERY_OUTCOME_FALLBACK_TIMEOUT_MS = 300_000;
 const RECOVERY_OUTCOME_MAX_TIMEOUT_MS = 600_000;
 const RECOVERY_WINDOW_MS = 60 * 60 * 1000;
@@ -28,9 +28,7 @@ type RecoveryStrategy = 'recipe' | 'llm';
 
 interface GateCheckResult {
   blocked: boolean;
-  reason?: 'already-running' | 'max-attempts' | 'infra-error';
-  recentFailedCount: number;
-  lastFailedError?: string;
+  reason?: 'infra-error';
 }
 
 export interface AutoRecoveryAgent {
@@ -53,6 +51,21 @@ export interface SetupAutoRecoveryParams {
   approvalGate?: ApprovalGateType;
   language: Locale;
   config: OpenLanderConfig;
+  shouldContinue?: (projectId: string) => boolean;
+}
+
+export interface AutoRecoveryHandlers {
+  handleDeploymentRecovery(
+    projectId: string,
+    error: string,
+    step?: string,
+    buildLog?: string,
+    eventType?: 'deploy:failed' | 'compose:failed',
+  ): Promise<void>;
+  handleEnvNewKeysDetected(payload: EventPayload['env:new-keys-detected']): Promise<void>;
+  handleSecretDetected(payload: EventPayload['secret:detected']): Promise<void>;
+  handleRollbackSuggested(payload: EventPayload['rollback:suggested']): Promise<void>;
+  resolveApproval(actionRunId: string, approved: boolean): void;
 }
 
 function normalizeError(error: string): string {
@@ -93,39 +106,19 @@ function getDynamicOutcomeTimeoutMs(db: Database, projectId: string): number {
 }
 
 function runGateChecks(projectId: string, error: string, db: Database): GateCheckResult {
-  const running = db.getRunningActionRuns(projectId);
-  if (running.length > 0) {
-    return { blocked: true, reason: 'already-running', recentFailedCount: 0 };
-  }
-
   const infraPatterns = [
     /docker daemon/i,
     /cannot connect to docker/i,
     /permission denied.*docker/i,
   ];
   if (infraPatterns.some((pattern) => pattern.test(error))) {
-    return { blocked: true, reason: 'infra-error', recentFailedCount: 0 };
+    return { blocked: true, reason: 'infra-error' };
   }
 
-  const nowMs = Date.now();
-  const recent = db.getActionRunsByProject(projectId, 20);
-  const recentFailed = recent.filter(
-    (run) => run.status === 'failed' && isRecent(run.created_at, nowMs),
-  );
-  if (recentFailed.length >= MAX_RECOVERY_ATTEMPTS) {
-    return {
-      blocked: true,
-      reason: 'max-attempts',
-      recentFailedCount: recentFailed.length,
-      lastFailedError: recentFailed[0]?.error_message ?? normalizeError(error),
-    };
-  }
+  void projectId;
+  void db;
 
-  return {
-    blocked: false,
-    recentFailedCount: recentFailed.length,
-    lastFailedError: recentFailed[0]?.error_message ?? undefined,
-  };
+  return { blocked: false };
 }
 
 async function emitTimelineMessage(
@@ -152,6 +145,9 @@ function waitForRecoveryOutcome(
 ): Promise<{ success: boolean; timedOut: boolean }> {
   return new Promise((resolve) => {
     let settled = false;
+    let unsubscribeSuccess: () => void = () => undefined;
+    let unsubscribeFailed: () => void = () => undefined;
+    const subscribeOnce = eventBus['once'].bind(eventBus);
 
     const finalize = (success: boolean, timedOut: boolean): void => {
       if (settled) {
@@ -165,17 +161,30 @@ function waitForRecoveryOutcome(
       resolve({ success, timedOut });
     };
 
-    const unsubscribeSuccess = eventBus.on('deploy:success', (payload) => {
-      if (payload.projectId === projectId) {
-        finalize(true, false);
-      }
-    });
+    const waitForSuccess = (): void => {
+      unsubscribeSuccess = subscribeOnce('deploy:success', (payload) => {
+        if (payload.projectId === projectId) {
+          finalize(true, false);
+          return;
+        }
 
-    const unsubscribeFailed = eventBus.on('deploy:failed', (payload) => {
-      if (payload.projectId === projectId) {
-        finalize(false, false);
-      }
-    });
+        waitForSuccess();
+      });
+    };
+
+    const waitForFailure = (): void => {
+      unsubscribeFailed = subscribeOnce('deploy:failed', (payload) => {
+        if (payload.projectId === projectId) {
+          finalize(false, false);
+          return;
+        }
+
+        waitForFailure();
+      });
+    };
+
+    waitForSuccess();
+    waitForFailure();
 
     const timer = setTimeout(() => {
       finalize(false, true);
@@ -238,7 +247,18 @@ export function markMcpDeploy(projectId: string): void {
   mcpDeployTimers.set(projectId, timer);
 }
 
-export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
+export function consumeMcpDeploy(projectId: string): boolean {
+  const existing = mcpDeployTimers.get(projectId);
+  if (!existing) {
+    return false;
+  }
+
+  clearTimeout(existing);
+  mcpDeployTimers.delete(projectId);
+  return true;
+}
+
+export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecoveryHandlers {
   const {
     eventBus,
     agent,
@@ -250,9 +270,16 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     approvalGate: providedApprovalGate,
     language,
     config,
+    shouldContinue: providedShouldContinue,
   } = params;
 
   const approvalGate = providedApprovalGate ?? new ApprovalGate();
+  const shouldContinue =
+    providedShouldContinue ??
+    ((projectId: string) => {
+      const project = db.getProject(projectId);
+      return Boolean(project && project.status === 'running' && !project.archived_at);
+    });
 
   let recoveryChain = Promise.resolve();
 
@@ -274,41 +301,18 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
     step?: string,
     buildLog?: string,
   ): Promise<void> {
-    // Defensive guard: only recover actively running projects
-    const currentProject = db.getProject(projectId);
-    if (!currentProject || currentProject.status !== 'running' || currentProject.archived_at) {
-      log.debug(
-        { projectId, status: currentProject?.status },
-        'Skipping auto-recovery for non-running project',
-      );
-      return;
-    }
-
     const gate = runGateChecks(projectId, error, db);
     if (gate.blocked) {
-      if (gate.reason === 'max-attempts') {
-        await eventBus.emit('recovery:exhausted', {
-          projectId,
-          totalAttempts: gate.recentFailedCount,
-          lastError: gate.lastFailedError ?? normalizeError(error),
-        });
-        log.info(
-          { projectId, attempts: gate.recentFailedCount },
-          'Auto-recovery exhausted, manual intervention needed',
-        );
-        return;
-      }
-
-      if (gate.reason === 'already-running') {
-        log.info({ projectId }, 'Auto-recovery skipped: action run already in progress');
-        return;
-      }
-
       if (gate.reason === 'infra-error') {
         log.info({ projectId }, 'Infrastructure error detected, skipping auto-recovery');
         return;
       }
     }
+
+    const nowMs = Date.now();
+    const recentFailedCount = db
+      .getActionRunsByProject(projectId, 20)
+      .filter((run) => run.status === 'failed' && isRecent(run.created_at, nowMs)).length;
 
     const advisoryPatterns = [/disk space/i, /no space left/i, /out of memory/i, /killed/i];
     const isAdvisory = advisoryPatterns.some((pattern) => pattern.test(error));
@@ -330,7 +334,7 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
       return;
     }
 
-    const attempt = gate.recentFailedCount + 1;
+    const attempt = recentFailedCount + 1;
     const normalizedError = normalizeError(error);
     const recoveryStartTime = Date.now();
 
@@ -393,9 +397,10 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): void {
       try {
         const sessionId = nanoid(12);
         const contextSnapshot = await buildContextSnapshot(db);
-        const approvalState: { blocked: 'rejected' | 'timed_out' | null; toolName?: string } = {
-          blocked: null,
-        };
+        const approvalState: {
+          blocked: 'rejected' | 'timed_out' | 'aborted' | null;
+          toolName?: string;
+        } = { blocked: null };
         let recoveryMessage = `Deploy of "${projectName}" failed.
 
 ## Failure Context
@@ -428,6 +433,15 @@ ${plan.agentGuidance}
         await agent.chatStream(
           recoveryMessage,
           async (event) => {
+            if (event.type === 'tool_call' && !shouldContinue(projectId)) {
+              approvalState.blocked = 'aborted';
+              log.info(
+                { projectId },
+                'shouldContinue: project no longer eligible, stopping recovery tool execution',
+              );
+              return;
+            }
+
             if (
               event.type === 'tool_call' &&
               decisionEngine.classify(event.toolName) === 'REQUIRE_APPROVAL'
@@ -482,13 +496,23 @@ ${plan.agentGuidance}
         );
 
         if (approvalState.blocked) {
-          const failureReason = 'High-risk tool was rejected or timed out';
+          const failureReason =
+            approvalState.blocked === 'aborted'
+              ? 'Recovery aborted because project is no longer eligible to continue'
+              : 'High-risk tool was rejected or timed out';
           db.updateActionRunStatus(actionRunId, 'failed', failureReason);
-          await eventBus.emit('recovery:failed', {
-            projectId,
-            error: failureReason,
-            attempt,
-          });
+          if (approvalState.blocked === 'aborted') {
+            await eventBus.emit('recovery:stopped', {
+              projectId,
+              reason: failureReason,
+            });
+          } else {
+            await eventBus.emit('recovery:failed', {
+              projectId,
+              error: failureReason,
+              attempt,
+            });
+          }
           trySavePattern(false);
           return;
         }
@@ -664,70 +688,37 @@ ${plan.agentGuidance}
     }
   }
 
-  eventBus.on('deploy:failed', (payload) => {
-    if (payload.source === 'mcp' || mcpDeployTimers.has(payload.projectId)) {
-      mcpDeployTimers.delete(payload.projectId);
-      log.info({ projectId: payload.projectId }, 'MCP-triggered deploy, skipping auto-recovery');
-      return;
-    }
-    // Skip stopped/archived projects
-    const project = db.getProject(payload.projectId);
-    if (project && (project.status === 'stopped' || project.archived_at)) {
-      return;
-    }
-    setTimeout(() => {
-      enqueueRecoveryCall(
-        async () => {
-          await handleAutoRecovery(
-            payload.projectId,
-            payload.error,
-            payload.step,
-            payload.buildLog,
-          );
-        },
-        { projectId: payload.projectId, eventType: 'deploy:failed' },
-      );
-    }, 2000);
-  });
+  async function handleDeploymentRecovery(
+    projectId: string,
+    error: string,
+    step?: string,
+    buildLog?: string,
+    eventType: 'deploy:failed' | 'compose:failed' = 'deploy:failed',
+  ): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 2000);
+    });
 
-  eventBus.on('compose:failed', (payload) => {
-    if (mcpDeployTimers.has(payload.projectId)) {
-      mcpDeployTimers.delete(payload.projectId);
-      log.info(
-        { projectId: payload.projectId },
-        'MCP-triggered compose deploy, skipping auto-recovery',
-      );
-      return;
-    }
-    // Skip stopped/archived projects
-    const composeProject = db.getProject(payload.projectId);
-    if (composeProject && (composeProject.status === 'stopped' || composeProject.archived_at)) {
-      return;
-    }
-    setTimeout(() => {
-      enqueueRecoveryCall(
-        async () => {
-          await handleAutoRecovery(payload.projectId, payload.error);
-        },
-        {
-          projectId: payload.projectId,
-          eventType: 'compose:failed',
-        },
-      );
-    }, 2000);
-  });
+    enqueueRecoveryCall(
+      async () => {
+        await handleAutoRecovery(projectId, error, step, buildLog);
+      },
+      { projectId, eventType },
+    );
 
-  eventBus.on('env:new-keys-detected', (payload) => {
-    if (!config.ai.envDetection.enabled) return;
+    await recoveryChain;
+  }
+
+  function handleEnvNewKeysDetected(payload: EventPayload['env:new-keys-detected']): Promise<void> {
+    if (!config.ai.envDetection.enabled) return Promise.resolve();
     if (!agent) {
-      void eventBus.emit('deploy:needs-user-action', {
+      return eventBus.emit('deploy:needs-user-action', {
         projectId: payload.projectId,
         category: 'env_missing',
         title: 'Environment values required',
         description: `New environment variables were detected for ${payload.projectName}.`,
         userSteps: payload.newKeys.map((key) => ({ label: `Set ${key}` })),
       });
-      return;
     }
 
     const message = `New environment variables detected in ${payload.projectName}'s .env.example: ${payload.newKeys.join(', ')}. These keys are not set yet. Ask the user for values.`;
@@ -747,12 +738,13 @@ ${plan.agentGuidance}
       },
       { projectId: payload.projectId, eventType: 'env:new-keys-detected' },
     );
-  });
+    return Promise.resolve();
+  }
 
-  eventBus.on('secret:detected', (payload) => {
-    if (!config.ai.secretScan.enabled) return;
+  function handleSecretDetected(payload: EventPayload['secret:detected']): Promise<void> {
+    if (!config.ai.secretScan.enabled) return Promise.resolve();
     if (!agent) {
-      void eventBus.emit('deploy:needs-user-action', {
+      return eventBus.emit('deploy:needs-user-action', {
         projectId: payload.projectId,
         category: 'secret_detected',
         title: 'Hardcoded secrets detected',
@@ -761,7 +753,6 @@ ${plan.agentGuidance}
           label: `${secret.file}:${String(secret.line)} (${secret.type})`,
         })),
       });
-      return;
     }
 
     const list = payload.secrets
@@ -786,12 +777,13 @@ ${plan.agentGuidance}
       },
       { projectId: payload.projectId, eventType: 'secret:detected' },
     );
-  });
+    return Promise.resolve();
+  }
 
-  eventBus.on('rollback:suggested', (payload) => {
-    if (!config.ai.rollbackSuggestion.enabled) return;
+  function handleRollbackSuggested(payload: EventPayload['rollback:suggested']): Promise<void> {
+    if (!config.ai.rollbackSuggestion.enabled) return Promise.resolve();
     if (!agent) {
-      void eventBus.emit('deploy:needs-user-action', {
+      return eventBus.emit('deploy:needs-user-action', {
         projectId: payload.projectId,
         category: 'rollback_suggested',
         title: 'Rollback recommended',
@@ -802,7 +794,6 @@ ${plan.agentGuidance}
           },
         ],
       });
-      return;
     }
 
     const message = `Health checks are failing for ${payload.projectName} after deployment. ${String(payload.consecutiveFailures)} consecutive failures. Previous version available (${payload.previousImageTag}). Ask the user if they want to rollback.`;
@@ -822,13 +813,22 @@ ${plan.agentGuidance}
       },
       { projectId: payload.projectId, eventType: 'rollback:suggested' },
     );
-  });
+    return Promise.resolve();
+  }
 
-  eventBus.on('recovery:approval-resolved', (payload) => {
-    if (payload.approved) {
-      approvalGate.approve(payload.actionRunId);
+  function resolveApproval(actionRunId: string, approved: boolean): void {
+    if (approved) {
+      approvalGate.approve(actionRunId);
     } else {
-      approvalGate.reject(payload.actionRunId);
+      approvalGate.reject(actionRunId);
     }
-  });
+  }
+
+  return {
+    handleDeploymentRecovery,
+    handleEnvNewKeysDetected,
+    handleSecretDetected,
+    handleRollbackSuggested,
+    resolveApproval,
+  };
 }

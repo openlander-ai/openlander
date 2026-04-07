@@ -56,18 +56,6 @@ export class OpsAgent {
     this.eventHandlers.set('deploy:crash', (payload) => {
       this.enqueue({ type: 'deploy:crash', payload, timestamp: Date.now() });
     });
-    this.eventHandlers.set('container:die', (payload) => {
-      this.enqueue({ type: 'container:die', payload, timestamp: Date.now() });
-    });
-    this.eventHandlers.set('container:oom', (payload) => {
-      this.enqueue({ type: 'container:oom', payload, timestamp: Date.now() });
-    });
-    this.eventHandlers.set('container:missing', (payload) => {
-      this.enqueue({ type: 'container:missing', payload, timestamp: Date.now() });
-    });
-    this.eventHandlers.set('deploy:failed', (payload) => {
-      this.enqueue({ type: 'deploy:failed', payload, timestamp: Date.now() });
-    });
     this.eventHandlers.set('recovery:failed', (payload) => {
       this.enqueue({ type: 'recovery:failed', payload, timestamp: Date.now() });
     });
@@ -91,10 +79,6 @@ export class OpsAgent {
         eventName as
           | 'monitor:inactive'
           | 'deploy:crash'
-          | 'container:die'
-          | 'container:oom'
-          | 'container:missing'
-          | 'deploy:failed'
           | 'recovery:failed'
           | 'recovery:exhausted'
           | 'monitor:healthcheck'
@@ -184,13 +168,7 @@ export class OpsAgent {
   private async routeEvent(event: OpsEvent): Promise<void> {
     switch (event.type) {
       case 'deploy:crash':
-      case 'container:die':
-      case 'container:oom':
-      case 'container:missing':
         await this.handleCrashEvent(event);
-        break;
-      case 'deploy:failed':
-        await this.handleDeployFailed(event);
         break;
       case 'recovery:failed':
       case 'recovery:exhausted':
@@ -353,30 +331,6 @@ export class OpsAgent {
       description: `Health check failing for project "${projectName}"`,
     });
     await this.alerting.sendAlert(alert);
-  }
-
-  private async handleDeployFailed(event: OpsEvent): Promise<void> {
-    const payload = event.payload as {
-      projectId?: string;
-      error?: string;
-      step?: string;
-    };
-    const projectId = payload.projectId ?? '';
-    if (!projectId || payload.step !== 'run') return;
-
-    // deploy:failed from HealthMonitor doesn't include containerId — look it up
-    const project = this.ctx.db.getProject(projectId);
-    if (!project) return;
-
-    await this.handleCrashEvent({
-      ...event,
-      type: 'deploy:crash',
-      payload: {
-        projectId,
-        projectName: project.name,
-        containerId: project.container_id ?? '',
-      },
-    });
   }
 
   private handleRecoveryExhausted(_event: OpsEvent): Promise<void> {

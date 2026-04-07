@@ -3,7 +3,11 @@ import { join } from 'node:path';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
-import { setupAutoRecovery, type AutoRecoveryAgent } from '../../src/pipeline/auto-recovery.js';
+import {
+  setupAutoRecovery,
+  type AutoRecoveryAgent,
+  type AutoRecoveryHandlers,
+} from '../../src/pipeline/auto-recovery.js';
 import { EventBus } from '../../src/events/index.js';
 import { Database } from '../../src/db/index.js';
 import type { OpenLanderConfig } from '../../src/config/index.js';
@@ -20,6 +24,7 @@ interface Harness {
     options?: { noCache?: boolean; environment?: 'production' | 'development' },
   ) => Promise<DeployResult>;
   agentChatMock: AutoRecoveryAgent['chatStream'] | null;
+  recoveryHandlers: AutoRecoveryHandlers;
   tmpDir: string;
 }
 
@@ -78,7 +83,7 @@ function createHarness(options?: {
   const agent = options?.agent ?? null;
   const testConfig = {} as OpenLanderConfig;
 
-  setupAutoRecovery({
+  const recoveryHandlers = setupAutoRecovery({
     eventBus,
     agent,
     db,
@@ -95,21 +100,19 @@ function createHarness(options?: {
     db,
     redeployMock,
     agentChatMock: agent?.chatStream ?? null,
+    recoveryHandlers,
     tmpDir,
   };
 }
 
 async function emitDeployFailed(
-  eventBus: EventBus,
+  recoveryHandlers: AutoRecoveryHandlers,
   projectId: string,
   error: string,
 ): Promise<void> {
-  await eventBus.emit('deploy:failed', {
-    projectId,
-    step: 'build',
-    error,
-  });
+  const recoveryPromise = recoveryHandlers.handleDeploymentRecovery(projectId, error, 'build');
   await vi.advanceTimersByTimeAsync(2_100);
+  await recoveryPromise;
 }
 
 describe('setupAutoRecovery', () => {
@@ -121,27 +124,17 @@ describe('setupAutoRecovery', () => {
     vi.useRealTimers();
   });
 
-  it('blocks gate check when action_runs has 3 failed records within one hour', async () => {
+  it('skips deployment recovery for infrastructure errors', async () => {
     const harness = createHarness();
 
     try {
-      const projectId = 'proj-max-attempts';
+      const projectId = 'proj-infra-error';
+      await emitDeployFailed(
+        harness.recoveryHandlers,
+        projectId,
+        'Cannot connect to Docker daemon at unix:///var/run/docker.sock',
+      );
 
-      for (let i = 0; i < 3; i++) {
-        const runId = harness.db.createActionRun({
-          projectId,
-          triggerSource: 'auto_recovery',
-          recoveryStrategy: 'recipe',
-        });
-        harness.db.updateActionRunStatus(runId, 'failed', `failed-${String(i)}`);
-      }
-
-      const exhaustedHandler = vi.fn();
-      harness.eventBus.on('recovery:exhausted', exhaustedHandler);
-
-      await emitDeployFailed(harness.eventBus, projectId, 'build failed again');
-
-      expect(exhaustedHandler).toHaveBeenCalledOnce();
       expect(harness.redeployMock).not.toHaveBeenCalled();
     } finally {
       harness.db.close();
@@ -149,23 +142,71 @@ describe('setupAutoRecovery', () => {
     }
   });
 
-  it('blocks gate check when there is already a running action_run', async () => {
-    const harness = createHarness();
+  it('stops tool execution when shouldContinue turns false mid-stream', async () => {
+    let allowContinuation = true;
+    const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
+      await onEvent({
+        type: 'tool_call',
+        toolName: 'list_projects',
+        arguments: {},
+        stepIndex: 0,
+      });
+      allowContinuation = false;
+      await onEvent({
+        type: 'tool_call',
+        toolName: 'create_deploy_plan',
+        arguments: { project_id: 'proj-stop-midstream' },
+        stepIndex: 1,
+      });
+    });
+
+    const harness = createHarness({
+      agent: { chatStream: agentChatMock },
+    });
+
+    harness.recoveryHandlers = setupAutoRecovery({
+      eventBus: harness.eventBus,
+      agent: { chatStream: agentChatMock },
+      db: harness.db,
+      buildDebugger: null,
+      deployQueue: {
+        acquire: vi.fn<() => Promise<() => void>>(async () => () => undefined),
+      } as unknown as DeployQueue,
+      pipeline: { redeploy: harness.redeployMock } as unknown as DeployPipeline,
+      questionBridge: new QuestionBridge(),
+      language: 'en',
+      config: {} as OpenLanderConfig,
+      shouldContinue: () => allowContinuation,
+    });
 
     try {
-      const projectId = 'proj-running';
-      harness.db.createActionRun({
-        projectId,
-        triggerSource: 'auto_recovery',
-        recoveryStrategy: 'recipe',
+      const projectId = 'proj-stop-midstream';
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-stop-midstream',
+        branch: 'main',
       });
+      harness.db.updateProject(projectId, { status: 'running' });
 
-      await emitDeployFailed(harness.eventBus, projectId, 'another failure');
+      const stoppedHandler = vi.fn();
+      harness.eventBus.on('recovery:stopped', stoppedHandler);
+
+      await emitDeployFailed(
+        harness.recoveryHandlers,
+        projectId,
+        'unknown build failure requiring ai',
+      );
 
       expect(harness.redeployMock).not.toHaveBeenCalled();
-      const runs = harness.db.getActionRunsByProject(projectId);
+      expect(stoppedHandler).toHaveBeenCalledWith({
+        projectId,
+        reason: 'Recovery aborted because project is no longer eligible to continue',
+      });
+
+      const runs = harness.db.getActionRunsByProject(projectId, 1);
       expect(runs).toHaveLength(1);
-      expect(runs[0].status).toBe('running');
+      expect(runs[0].status).toBe('failed');
     } finally {
       harness.db.close();
       rmSync(harness.tmpDir, { recursive: true, force: true });
@@ -190,7 +231,7 @@ describe('setupAutoRecovery', () => {
         branch: 'main',
       });
       harness.db.updateProject(projectId, { status: 'running' });
-      await emitDeployFailed(harness.eventBus, projectId, 'node-gyp ERR! build failed');
+      await emitDeployFailed(harness.recoveryHandlers, projectId, 'node-gyp ERR! build failed');
 
       expect(harness.redeployMock).toHaveBeenCalledOnce();
       expect(harness.agentChatMock).not.toHaveBeenCalled();
@@ -229,7 +270,7 @@ describe('setupAutoRecovery', () => {
         fix_action: JSON.stringify({ strategy: 'recipe', recipe: 'Use NODE_OPTIONS 4096MB' }),
       });
 
-      await emitDeployFailed(harness.eventBus, projectId, error);
+      await emitDeployFailed(harness.recoveryHandlers, projectId, error);
 
       const runs = harness.db.getActionRunsByProject(projectId, 1);
       expect(runs).toHaveLength(1);
@@ -259,16 +300,25 @@ describe('setupAutoRecovery', () => {
 
     try {
       const projectId = 'proj-approval-approved';
-      await emitDeployFailed(harness.eventBus, projectId, 'unknown build failure requiring ai');
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-approval-approved',
+        branch: 'main',
+      });
+      harness.db.updateProject(projectId, { status: 'running' });
+      const recoveryPromise = harness.recoveryHandlers.handleDeploymentRecovery(
+        projectId,
+        'unknown build failure requiring ai',
+        'build',
+      );
+      await vi.advanceTimersByTimeAsync(2_100);
 
       const pendingRun = harness.db.getActionRunsByProject(projectId, 1)[0];
       expect(pendingRun.approval_status).toBe('pending');
       expect(pendingRun.approval_tool).toBe('remove_project');
 
-      await harness.eventBus.emit('recovery:approval-resolved', {
-        actionRunId: pendingRun.id,
-        approved: true,
-      });
+      harness.recoveryHandlers.resolveApproval(pendingRun.id, true);
 
       await vi.advanceTimersByTimeAsync(0);
 
@@ -279,6 +329,7 @@ describe('setupAutoRecovery', () => {
       });
 
       await vi.advanceTimersByTimeAsync(0);
+      await recoveryPromise;
 
       const updatedRun = harness.db.getActionRunsByProject(projectId, 1)[0];
       expect(updatedRun.approval_status).toBe('approved');
@@ -308,17 +359,27 @@ describe('setupAutoRecovery', () => {
 
     try {
       const projectId = 'proj-approval-rejected';
-      await emitDeployFailed(harness.eventBus, projectId, 'unknown build failure requiring ai');
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-approval-rejected',
+        branch: 'main',
+      });
+      harness.db.updateProject(projectId, { status: 'running' });
+      const recoveryPromise = harness.recoveryHandlers.handleDeploymentRecovery(
+        projectId,
+        'unknown build failure requiring ai',
+        'build',
+      );
+      await vi.advanceTimersByTimeAsync(2_100);
 
       const pendingRun = harness.db.getActionRunsByProject(projectId, 1)[0];
       expect(pendingRun.approval_status).toBe('pending');
 
-      await harness.eventBus.emit('recovery:approval-resolved', {
-        actionRunId: pendingRun.id,
-        approved: false,
-      });
+      harness.recoveryHandlers.resolveApproval(pendingRun.id, false);
 
       await vi.advanceTimersByTimeAsync(0);
+      await recoveryPromise;
 
       const updatedRun = harness.db.getActionRunsByProject(projectId, 1)[0];
       expect(updatedRun.approval_status).toBe('rejected');
@@ -342,7 +403,7 @@ describe('setupAutoRecovery', () => {
         branch: 'main',
       });
       harness.db.updateProject(projectId, { status: 'running' });
-      await emitDeployFailed(harness.eventBus, projectId, 'JavaScript heap out of memory');
+      await emitDeployFailed(harness.recoveryHandlers, projectId, 'JavaScript heap out of memory');
 
       expect(harness.redeployMock).toHaveBeenCalledOnce();
 
@@ -379,7 +440,7 @@ describe('setupAutoRecovery', () => {
     try {
       const projectId = 'proj-running-status';
       const emitPromise = emitDeployFailed(
-        harness.eventBus,
+        harness.recoveryHandlers,
         projectId,
         'node-gyp ERR! still failing',
       );
@@ -420,7 +481,7 @@ describe('setupAutoRecovery', () => {
 
     try {
       const projectId = 'proj-failed-status';
-      await emitDeployFailed(harness.eventBus, projectId, 'node-gyp ERR! failure');
+      await emitDeployFailed(harness.recoveryHandlers, projectId, 'node-gyp ERR! failure');
 
       const runs = harness.db.getActionRunsByProject(projectId, 1);
       expect(runs).toHaveLength(1);
@@ -437,7 +498,7 @@ describe('setupAutoRecovery', () => {
 
     try {
       const projectId = 'proj-programmatic';
-      await emitDeployFailed(harness.eventBus, projectId, 'unknown build error message');
+      await emitDeployFailed(harness.recoveryHandlers, projectId, 'unknown build error message');
 
       expect(harness.redeployMock).toHaveBeenCalledOnce();
 
