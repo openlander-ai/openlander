@@ -37,7 +37,7 @@ export interface DecryptedToken {
  * Encrypt and store an OAuth token for a provider.
  *
  * @param db - Database instance
- * @param provider - Provider name (e.g., 'openai', 'openrouter')
+ * @param provider - Provider name (e.g., 'openai')
  * @param token - Token data to encrypt and store
  */
 export function encryptAndStoreToken(db: Database, provider: string, token: TokenData): void {

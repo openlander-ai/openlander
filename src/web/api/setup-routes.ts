@@ -3,14 +3,10 @@ import { Hono } from 'hono';
 import type { AppContext } from '../../app.js';
 import { loadConfig, saveConfig, updateConfig, normalizeLlmConfig } from '../../config/index.js';
 import { loadDecryptedToken } from '../../auth/token-store.js';
-import type {
-  OpenLanderConfig,
-  AIFeaturesConfig,
-  LLMProviderEntry,
-  LLMRoute,
-  AIModelFeature,
-} from '../../config/index.js';
+import type { AIFeaturesConfig, LLMRoute, AIModelFeature } from '../../config/index.js';
 import type { LLMConfig } from '../../llm/index.js';
+import type { LLMProviderType } from '../../llm/providers.js';
+import { LLM_PROVIDERS } from '../../llm/providers.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import { createCloudflareSetupRoutes } from './setup/cloudflare-routes.js';
 import { createGithubSetupRoutes } from './setup/github-routes.js';
@@ -25,35 +21,31 @@ import {
 
 const log = createModuleLogger('setup-routes');
 
+function isValidProvider(provider: string): provider is LLMProviderType {
+  return LLM_PROVIDERS.includes(provider as LLMProviderType);
+}
+
 // Benchmark-based provider scores (1-5). Sources: MMLU, BFCL v3, ReliabilityBench, MCPMark (2025-2026)
 //                          reasoning  speed  toolUse  cost
 // anthropic (sonnet-4)     MMLU 90%   44t/s  BFCL 70% $3.00/1M
-// openai (gpt-4o-mini)     MMLU 82%   131t/s BFCL~60% $0.15/1M
-// gemini (2.0-flash)       MMLU 85%   221t/s RBench96% $0.08/1M
+// openai (gpt-4o)          MMLU 88%   80t/s  BFCL~85% $2.50/1M
+// gemini (2.5-flash)       MMLU 85%   200t/s RBench96% $0.30/1M
 // deepseek (V3)            MMLU 89%   48t/s  82%      $0.28/1M
 // xai (grok-3-mini-fast)   MMLU~80%   190t/s 78%      $0.60/1M
-// mistral (small)          MMLU 81%   175t/s 80%      $0.14/1M
-// groq (llama-3.3-70b)     MMLU 86%   200t/s ~75%     $0.59/1M
-// togetherai (llama-3.3)   MMLU 86%   150t/s ~75%     $0.60/1M
-// openrouter (aggregator)  varies     varies varies   varies
-// zai (glm-4.7-flash)      MMLU~78%   180t/s 71%      $0.001/1M
-// ollama (llama3.2 8B)     MMLU 65%   local  ~55%     free
+// mistral (large)          MMLU 86%   90t/s  88%      $2.00/1M
+// zai (glm-4.7)            MMLU~82%   120t/s 71%      $0.60/1M
 const PROVIDER_SCORES: Record<
   string,
   { reasoning: number; speed: number; toolUse: number; cost: number }
 > = {
   anthropic: { reasoning: 5, speed: 2, toolUse: 5, cost: 5 },
-  openai: { reasoning: 4, speed: 4, toolUse: 4, cost: 1 },
+  openai: { reasoning: 5, speed: 3, toolUse: 5, cost: 4 },
   gemini: { reasoning: 4, speed: 5, toolUse: 4, cost: 1 },
   xai: { reasoning: 3, speed: 5, toolUse: 3, cost: 2 },
   deepseek: { reasoning: 5, speed: 3, toolUse: 3, cost: 1 },
-  mistral: { reasoning: 3, speed: 4, toolUse: 3, cost: 1 },
-  groq: { reasoning: 4, speed: 5, toolUse: 3, cost: 2 },
-  togetherai: { reasoning: 4, speed: 4, toolUse: 3, cost: 2 },
-  openrouter: { reasoning: 4, speed: 3, toolUse: 3, cost: 2 },
-  zai: { reasoning: 3, speed: 4, toolUse: 3, cost: 1 },
-  'zai-coding': { reasoning: 3, speed: 4, toolUse: 3, cost: 1 },
-  ollama: { reasoning: 2, speed: 5, toolUse: 2, cost: 1 },
+  mistral: { reasoning: 4, speed: 3, toolUse: 4, cost: 3 },
+  zai: { reasoning: 4, speed: 3, toolUse: 3, cost: 2 },
+  'zai-coding': { reasoning: 4, speed: 3, toolUse: 3, cost: 2 },
 };
 
 const FEATURE_WEIGHTS: Record<
@@ -153,27 +145,14 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const provider = body.provider;
     const rawApiKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
     const rawAuthToken = typeof body.auth_token === 'string' ? body.auth_token.trim() : '';
-    const isOauthProvider = provider === 'openrouter' || provider === 'openai';
+    const isOauthProvider = provider === 'openai';
 
     if (!provider) {
       return c.json({ error: 'MISSING_FIELD', message: 'provider is required' }, 400);
     }
 
-    const validProviders = [
-      'gemini',
-      'openrouter',
-      'anthropic',
-      'openai',
-      'ollama',
-      'xai',
-      'deepseek',
-      'mistral',
-      'groq',
-      'togetherai',
-      'zai',
-      'zai-coding',
-    ];
-    if (!validProviders.includes(provider)) {
+    const validProviders = [...LLM_PROVIDERS];
+    if (!isValidProvider(provider)) {
       return c.json(
         {
           error: 'INVALID_PROVIDER',
@@ -184,21 +163,17 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     }
 
     const modelDefaults: Record<string, string> = {
-      gemini: 'gemini-2.0-flash',
-      openrouter: 'openrouter/free',
+      gemini: 'gemini-2.5-flash',
       anthropic: 'claude-sonnet-4-20250514',
-      openai: 'gpt-4o-mini',
-      ollama: 'llama3.2',
+      openai: 'gpt-4o',
       xai: 'grok-3-mini-fast',
       deepseek: 'deepseek-chat',
-      mistral: 'mistral-small-latest',
-      groq: 'llama-3.3-70b-versatile',
-      togetherai: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-      zai: 'glm-4.7-flash',
-      'zai-coding': 'glm-4.7-flash',
+      mistral: 'mistral-large-latest',
+      zai: 'glm-4.7',
+      'zai-coding': 'glm-4.7',
     };
 
-    const model = body.model || modelDefaults[provider] || 'gemini-2.0-flash';
+    const model = body.model || modelDefaults[provider] || 'gemini-2.5-flash';
     const storedOauthToken = isOauthProvider
       ? (loadDecryptedToken(ctx.db, provider)?.accessToken ?? '')
       : '';
@@ -217,7 +192,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
 
     const updated = updateConfig({
       llm: {
-        provider: provider as OpenLanderConfig['llm']['provider'],
+        provider: provider,
         apiKey,
         authToken: resolvedAuthToken,
         model,
@@ -229,11 +204,10 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       await syncLlmRuntime(ctx);
 
       const verifyResult = await runLlmConnectivityTest({
-        provider: provider as LLMConfig['provider'],
+        provider: provider,
         apiKey,
         authToken: resolvedAuthToken || undefined,
         model,
-        ollamaEndpoint: updated.llm.ollamaEndpoint,
       });
       if (verifyResult.ok) {
         ctx.llmVerified = true;
@@ -293,8 +267,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     let model: string;
     let apiKey = '';
     let authToken: string | undefined;
-    let ollamaEndpoint: string | undefined;
-
     if (providerId) {
       const normalized = normalizeLlmConfig(config.llm);
       const entry = normalized.providers[providerId];
@@ -306,7 +278,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       model = body.model ?? entry.defaultModel;
       apiKey = body.api_key?.trim() || entry.apiKey || '';
       authToken = body.auth_token?.trim() || entry.authToken;
-      ollamaEndpoint = entry.ollamaEndpoint ?? config.llm.ollamaEndpoint;
       persistVerification = normalized.defaultRoute.providerId === providerId;
     } else {
       const useStoredDefault =
@@ -320,11 +291,10 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       apiKey = body.api_key?.trim() || resolvedDefault?.apiKey || config.llm.apiKey;
       authToken =
         body.auth_token?.trim() || resolvedDefault?.authToken || config.llm.authToken || undefined;
-      ollamaEndpoint = resolvedDefault?.ollamaEndpoint ?? config.llm.ollamaEndpoint;
       persistVerification = useStoredDefault;
     }
 
-    if (!apiKey && !authToken && provider !== 'ollama') {
+    if (!apiKey && !authToken) {
       return c.json(
         { ok: false, providerId: providerId || undefined, error: 'No API key configured' },
         400,
@@ -336,7 +306,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       apiKey,
       authToken,
       model,
-      ollamaEndpoint,
     });
     if (persistVerification) {
       ctx.llmVerified = result.ok;
@@ -370,7 +339,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         provider: 'gemini' as const,
         apiKey: '',
         authToken: '',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash',
         providers: {},
         defaultRoute: { providerId: '__none__' },
         routes: {},
@@ -573,7 +542,6 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       provider: string;
       apiKey?: string;
       authToken?: string;
-      ollamaEndpoint?: string;
       defaultModel: string;
     }>();
 
@@ -584,21 +552,8 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const validProviders = [
-      'gemini',
-      'openrouter',
-      'anthropic',
-      'openai',
-      'ollama',
-      'xai',
-      'deepseek',
-      'mistral',
-      'groq',
-      'togetherai',
-      'zai',
-      'zai-coding',
-    ];
-    if (!validProviders.includes(body.provider)) {
+    const validProviders = [...LLM_PROVIDERS];
+    if (!isValidProvider(body.provider)) {
       return c.json(
         {
           error: 'INVALID_PROVIDER',
@@ -608,16 +563,15 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       );
     }
 
-    if (body.provider !== 'ollama' && !body.apiKey && !body.authToken) {
+    if (!body.apiKey && !body.authToken) {
       return c.json({ error: 'MISSING_FIELD', message: 'apiKey or authToken is required' }, 400);
     }
 
     const testResult = await runLlmConnectivityTest({
-      provider: body.provider as LLMConfig['provider'],
+      provider: body.provider,
       model: body.defaultModel,
       apiKey: body.apiKey,
       authToken: body.authToken,
-      ollamaEndpoint: body.ollamaEndpoint,
     });
 
     if (!testResult.ok) {
@@ -638,10 +592,9 @@ export function createSetupRoutes(ctx: AppContext): Hono {
     const updatedProviders = {
       ...existingProviders,
       [body.id]: {
-        provider: body.provider as LLMProviderEntry['provider'],
+        provider: body.provider,
         apiKey: body.apiKey,
         authToken: body.authToken,
-        ollamaEndpoint: body.ollamaEndpoint,
         defaultModel: body.defaultModel,
       },
     };
@@ -691,7 +644,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
           provider: 'gemini' as const,
           apiKey: '',
           authToken: '',
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-flash',
           providers: {},
           defaultRoute: { providerId: '__none__' },
           routes: {},

@@ -26,12 +26,23 @@ export const PRICING_TABLE: Record<string, [number, number]> = {
   'gpt-4.1-mini': [0.4, 1.6],
   'gpt-4.1-nano': [0.1, 0.4],
   'gpt-3.5-turbo': [0.5, 1.5],
+  o3: [2.0, 8.0],
   'o3-mini': [1.1, 4.4],
-  'o4-mini': [1.1, 4.4],
-  'openrouter/free': [0, 0],
-  'llama3.2': [0, 0],
-  'llama3.1': [0, 0],
-  ollama: [0, 0],
+  'o4-mini': [0.55, 2.2],
+  'grok-3-mini-fast': [0.6, 4.0],
+  'grok-3-fast': [5.0, 25.0],
+  'grok-3-mini': [0.3, 0.5],
+  'grok-3': [3.0, 15.0],
+  'deepseek-chat': [0.14, 0.28],
+  'deepseek-reasoner': [0.14, 0.28],
+  'mistral-large-latest': [2.0, 6.0],
+  'mistral-medium-latest': [1.0, 3.0],
+  'mistral-small-latest': [0.2, 0.6],
+  'codestral-latest': [0.3, 0.9],
+  'glm-5': [1.0, 3.2],
+  'glm-4.7': [0.6, 2.2],
+  'glm-4.7-flash': [0.0, 0.0],
+  'glm-4.6': [0.6, 2.2],
 };
 
 interface UsageShape {
@@ -77,15 +88,11 @@ function normalizeSource(source?: string): AiUsageLogRow['source'] {
 }
 
 export function calculateCost(
-  provider: string,
+  _provider: string,
   model: string,
   inputTokens: number,
   outputTokens: number,
 ): number | null {
-  if (provider.toLowerCase() === 'ollama') {
-    return 0;
-  }
-
   const pricing = resolvePricing(model);
   if (!pricing) {
     return null;

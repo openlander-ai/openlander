@@ -1,27 +1,15 @@
 import type { LanguageModel } from 'ai';
 import type { LLMProviderConfig } from '../config/index.js';
 import { createModel } from './index.js';
+import type { LLMProviderType } from './providers.js';
 import { createModuleLogger } from '../lib/logger.js';
 
 const log = createModuleLogger('model-registry');
 
 export interface LLMProviderEntry {
-  provider:
-    | 'gemini'
-    | 'openrouter'
-    | 'anthropic'
-    | 'openai'
-    | 'ollama'
-    | 'xai'
-    | 'deepseek'
-    | 'mistral'
-    | 'groq'
-    | 'togetherai'
-    | 'zai'
-    | 'zai-coding';
+  provider: LLMProviderType;
   apiKey?: string;
   authToken?: string;
-  ollamaEndpoint?: string;
   defaultModel: string;
 }
 
@@ -66,7 +54,6 @@ export function createModelRoutingConfigFromLegacy(
         provider: legacyLlm.provider,
         apiKey: legacyLlm.apiKey,
         authToken: legacyLlm.authToken,
-        ollamaEndpoint: legacyLlm.ollamaEndpoint,
         defaultModel: legacyLlm.model,
       },
     },
@@ -110,7 +97,6 @@ export class ModelRegistry {
       provider: providerEntry.provider,
       apiKey: providerEntry.apiKey ?? '',
       authToken: providerEntry.authToken,
-      ollamaBaseUrl: providerEntry.ollamaEndpoint,
       model: modelName,
     });
 

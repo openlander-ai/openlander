@@ -19,7 +19,6 @@ export interface ResolvedDefaultLlmProvider {
   model: string;
   apiKey: string;
   authToken?: string;
-  ollamaEndpoint?: string;
 }
 
 export interface LlmRuntimeStatus {
@@ -34,7 +33,6 @@ export interface LlmConnectivityTestInput {
   model: string;
   apiKey?: string;
   authToken?: string;
-  ollamaEndpoint?: string;
 }
 
 export interface LlmConnectivityTestResult {
@@ -59,7 +57,6 @@ export function resolveDefaultLlmProvider(
     model: route.model ?? entry.defaultModel,
     apiKey: entry.apiKey ?? '',
     authToken: entry.authToken,
-    ollamaEndpoint: entry.ollamaEndpoint,
   };
 }
 
@@ -69,7 +66,7 @@ export function hasConfiguredDefaultLlmProvider(config: OpenLanderConfig): boole
     return false;
   }
 
-  return resolved.provider === 'ollama' || !!(resolved.apiKey || resolved.authToken);
+  return !!(resolved.apiKey || resolved.authToken);
 }
 
 export function getLlmRuntimeStatus(
@@ -109,7 +106,6 @@ export async function runLlmConnectivityTest(
       provider: input.provider,
       apiKey: input.apiKey ?? '',
       authToken: input.authToken,
-      ollamaBaseUrl: input.ollamaEndpoint,
       model: input.model,
     });
 
@@ -229,7 +225,6 @@ export async function reloadAgent(
     apiKey: options.apiKey,
     model: options.model,
     authToken: options.authToken ?? '',
-    ollamaEndpoint: ctx.config.llm.ollamaEndpoint,
     providers: ctx.config.llm.providers,
     defaultRoute: ctx.config.llm.defaultRoute,
     routes: ctx.config.llm.routes,

@@ -89,8 +89,6 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
   const handleModelChange = async (key: keyof AiFeaturesResponse['features'], value: string) => {
     if (!features) return;
     setUpdating(key);
-    // Split on first ':' only — model names like "openrouter/free" are safe,
-    // but future models could contain ':' (e.g. "org:model-name").
     const sepIdx = value ? value.indexOf(':') : -1;
     const [providerId, model] =
       sepIdx > 0 ? [value.slice(0, sepIdx), value.slice(sepIdx + 1)] : [undefined, undefined];

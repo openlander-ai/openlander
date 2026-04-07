@@ -15,6 +15,7 @@
 export { buildContextSnapshot, buildIncidentBriefing } from './context-assembler.js';
 
 import type { ContextScope } from './context-assembler.js';
+import type { LLMProviderType } from './providers.js';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -24,19 +25,7 @@ import type { ContextScope } from './context-assembler.js';
 export type ContextProvider = (scope?: ContextScope) => string | Promise<string>;
 
 /** LLM provider identifier (matches LLMConfig.provider). */
-export type LLMProvider =
-  | 'gemini'
-  | 'openrouter'
-  | 'anthropic'
-  | 'openai'
-  | 'ollama'
-  | 'xai'
-  | 'deepseek'
-  | 'mistral'
-  | 'groq'
-  | 'togetherai'
-  | 'zai'
-  | 'zai-coding';
+export type LLMProvider = LLMProviderType;
 
 /**
  * Build the complete system prompt with dynamic context + model overlay.
@@ -84,15 +73,6 @@ const MODEL_OVERLAYS: Partial<Record<LLMProvider, string>> = {
   openai: `## Model Instructions
 - Only state facts returned by tools. Never speculate about deployment state.
 - When a tool call fails, report the exact error — do not paraphrase or guess the cause.`,
-
-  openrouter: `## Model Instructions
-- ALWAYS call tools for actions — never simulate results.
-- Keep responses concise and structured.`,
-
-  ollama: `## Model Instructions
-- Keep responses very short and direct — this saves tokens.
-- ALWAYS use tools for any deployment action. Never answer from memory.
-- When unsure, call list_projects first to see current state.`,
 };
 
 // ---------------------------------------------------------------------------

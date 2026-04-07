@@ -27,7 +27,7 @@ export function AddProviderForm({ onSubmit, onCancel }: AddProviderFormProps) {
   const [showApiKey, setShowApiKey] = useState(false);
   const [adding, setAdding] = useState(false);
 
-  const keyRequired = provider !== 'ollama';
+  const keyRequired = true;
   const canSubmit = !adding && (!keyRequired || apiKey.trim().length > 0);
 
   const handleProviderChange = (val: string) => {

@@ -86,8 +86,11 @@ export function LlmStep({
                   <SelectItem value="gemini">Google Gemini</SelectItem>
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
-                  <SelectItem value="openrouter">OpenRouter</SelectItem>
-                  <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                  <SelectItem value="xai">xAI (Grok)</SelectItem>
+                  <SelectItem value="deepseek">DeepSeek</SelectItem>
+                  <SelectItem value="mistral">Mistral AI</SelectItem>
+                  <SelectItem value="zai">Z.ai (GLM)</SelectItem>
+                  <SelectItem value="zai-coding">Z.ai Coding Plan</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -95,22 +98,15 @@ export function LlmStep({
               <p className="text-xs font-body text-muted-ol">{t('setup.llmStep.apiKeyLabel')}</p>
               <Input
                 type="password"
-                placeholder={
-                  llmProvider === 'ollama'
-                    ? 'Not required for Ollama'
-                    : status?.llm?.ok
-                      ? '••••••••••••'
-                      : 'sk-...'
-                }
+                placeholder={status?.llm?.ok ? '••••••••••••' : 'sk-...'}
                 value={llmApiKey}
                 onChange={(e) => onSetLlmApiKey(e.target.value)}
-                disabled={llmProvider === 'ollama'}
                 className="font-mono text-sm bg-bg-app border-border"
               />
             </div>
             <Button
               type="submit"
-              disabled={llmSaving || (llmProvider !== 'ollama' && !llmApiKey.trim())}
+              disabled={llmSaving || !llmApiKey.trim()}
               size="sm"
               className="w-full gap-1.5 bg-agent text-white hover:bg-agent/90 font-body"
             >

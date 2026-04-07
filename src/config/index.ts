@@ -8,6 +8,7 @@ import type {
   AIModelFeature,
   ModelRoutingConfig,
 } from '../llm/model-registry.js';
+import type { LLMProviderType } from '../llm/providers.js';
 import type { OpsConfig } from '../monitor/ops-types.js';
 import { DEFAULT_OPS_CONFIG } from '../monitor/ops-types.js';
 
@@ -128,25 +129,11 @@ export interface GoogleOAuthConfig {
 }
 
 export interface LLMProviderConfig {
-  provider:
-    | 'gemini'
-    | 'openrouter'
-    | 'anthropic'
-    | 'openai'
-    | 'ollama'
-    | 'xai'
-    | 'deepseek'
-    | 'mistral'
-    | 'groq'
-    | 'togetherai'
-    | 'zai'
-    | 'zai-coding';
+  provider: LLMProviderType;
   apiKey: string;
   model: string;
   /** v0.2: OAuth access token (used instead of apiKey when OAuth is active) */
   authToken: string;
-  /** v0.5: Ollama endpoint for local models */
-  ollamaEndpoint: string;
   /** v1.1: Multi-provider registry. If present, used for feature-based routing. */
   providers?: Record<string, LLMProviderEntry>;
   /** v1.1: Default route when no feature-specific route is configured. */
@@ -313,9 +300,8 @@ function buildDefaultConfig(): OpenLanderConfig {
     llm: {
       provider: 'gemini',
       apiKey: '',
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       authToken: '',
-      ollamaEndpoint: 'http://localhost:11434',
     },
     server: {
       port: 10114,
@@ -480,7 +466,6 @@ export function normalizeLlmConfig(llm: LLMProviderConfig): NormalizedLlmConfig 
         provider: llm.provider,
         apiKey: llm.apiKey,
         authToken: llm.authToken,
-        ollamaEndpoint: llm.ollamaEndpoint,
         defaultModel: llm.model,
       },
     },

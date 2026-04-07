@@ -53,7 +53,7 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 
 export interface ProviderInfo {
   id: string;
-  provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
+  provider: string;
   defaultModel: string;
   hasApiKey: boolean;
   apiKeyPreview: string;
@@ -73,7 +73,6 @@ export async function addProvider(data: {
   id: string;
   provider: string;
   apiKey?: string;
-  ollamaEndpoint?: string;
   defaultModel: string;
 }): Promise<{ status: string; id: string }> {
   const res = await fetch('/api/setup/providers', {

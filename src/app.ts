@@ -255,10 +255,7 @@ export async function createAppContext(
       return false;
     }
 
-    return (
-      defaultProvider.provider === 'ollama' ||
-      !!(defaultProvider.apiKey || defaultProvider.authToken)
-    );
+    return !!(defaultProvider.apiKey || defaultProvider.authToken);
   })();
 
   const modelRegistry = new ModelRegistry(
