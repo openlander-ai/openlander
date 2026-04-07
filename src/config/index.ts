@@ -128,7 +128,17 @@ export interface GoogleOAuthConfig {
 }
 
 export interface LLMProviderConfig {
-  provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
+  provider:
+    | 'gemini'
+    | 'openrouter'
+    | 'anthropic'
+    | 'openai'
+    | 'ollama'
+    | 'xai'
+    | 'deepseek'
+    | 'mistral'
+    | 'groq'
+    | 'togetherai';
   apiKey: string;
   model: string;
   /** v0.2: OAuth access token (used instead of apiKey when OAuth is active) */

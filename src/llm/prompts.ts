@@ -24,7 +24,17 @@ import type { ContextScope } from './context-assembler.js';
 export type ContextProvider = (scope?: ContextScope) => string | Promise<string>;
 
 /** LLM provider identifier (matches LLMConfig.provider). */
-export type LLMProvider = 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
+export type LLMProvider =
+  | 'gemini'
+  | 'openrouter'
+  | 'anthropic'
+  | 'openai'
+  | 'ollama'
+  | 'xai'
+  | 'deepseek'
+  | 'mistral'
+  | 'groq'
+  | 'togetherai';
 
 /**
  * Build the complete system prompt with dynamic context + model overlay.

@@ -6,7 +6,17 @@ import { createModuleLogger } from '../lib/logger.js';
 const log = createModuleLogger('model-registry');
 
 export interface LLMProviderEntry {
-  provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
+  provider:
+    | 'gemini'
+    | 'openrouter'
+    | 'anthropic'
+    | 'openai'
+    | 'ollama'
+    | 'xai'
+    | 'deepseek'
+    | 'mistral'
+    | 'groq'
+    | 'togetherai';
   apiKey?: string;
   authToken?: string;
   ollamaEndpoint?: string;

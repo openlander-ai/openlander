@@ -3,9 +3,14 @@
  *
  * BYOK (Bring Your Own Key) — supports:
  * - Google Gemini (free tier available)
- * - OpenRouter (free models, no credit card)
- * - Anthropic Claude
  * - OpenAI
+ * - Anthropic Claude
+ * - xAI (Grok)
+ * - DeepSeek
+ * - Mistral AI
+ * - Groq (fast inference)
+ * - Together AI (open-source models)
+ * - OpenRouter (free models, no credit card)
  * - Ollama (local, no API key)
  *
  * The agent uses function calling / tool use to invoke
@@ -17,6 +22,11 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOllama } from 'ollama-ai-provider-v2';
+import { createXai } from '@ai-sdk/xai';
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createMistral } from '@ai-sdk/mistral';
+import { createGroq } from '@ai-sdk/groq';
+import { createTogetherAI } from '@ai-sdk/togetherai';
 import type { LanguageModel } from 'ai';
 import { LLMNotConfiguredError } from '../errors.js';
 
@@ -25,7 +35,17 @@ import { LLMNotConfiguredError } from '../errors.js';
 // ---------------------------------------------------------------------------
 
 export interface LLMConfig {
-  provider: 'gemini' | 'openrouter' | 'anthropic' | 'openai' | 'ollama';
+  provider:
+    | 'gemini'
+    | 'openrouter'
+    | 'anthropic'
+    | 'openai'
+    | 'ollama'
+    | 'xai'
+    | 'deepseek'
+    | 'mistral'
+    | 'groq'
+    | 'togetherai';
   apiKey: string;
   model?: string;
   /** Ollama base URL (default: http://localhost:11434) */
@@ -73,6 +93,18 @@ export function createModel(config: LLMConfig): LanguageModel {
     case 'ollama':
       return createOllama({ baseURL: config.ollamaBaseUrl ?? 'http://localhost:11434' })(
         config.model ?? 'llama3.2',
+      );
+    case 'xai':
+      return createXai({ apiKey })(config.model ?? 'grok-3-mini-fast');
+    case 'deepseek':
+      return createDeepSeek({ apiKey })(config.model ?? 'deepseek-chat');
+    case 'mistral':
+      return createMistral({ apiKey })(config.model ?? 'mistral-small-latest');
+    case 'groq':
+      return createGroq({ apiKey })(config.model ?? 'llama-3.3-70b-versatile');
+    case 'togetherai':
+      return createTogetherAI({ apiKey })(
+        config.model ?? 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
       );
     default:
       throw new Error(`Unknown LLM provider: ${String(config.provider)}`);

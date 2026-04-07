@@ -17,6 +17,11 @@ const LLM_PROVIDERS: Array<{ label: string; value: LlmProvider }> = [
   { label: 'Gemini (free tier available)', value: 'gemini' },
   { label: 'Anthropic (Claude)', value: 'anthropic' },
   { label: 'OpenAI (GPT)', value: 'openai' },
+  { label: 'xAI (Grok)', value: 'xai' },
+  { label: 'DeepSeek', value: 'deepseek' },
+  { label: 'Mistral AI', value: 'mistral' },
+  { label: 'Groq (fast inference)', value: 'groq' },
+  { label: 'Together AI (open-source)', value: 'togetherai' },
   { label: 'Ollama (local)', value: 'ollama' },
 ];
 
@@ -25,6 +30,11 @@ const MODEL_DEFAULTS: Record<LlmProvider, string> = {
   gemini: 'gemini-2.0-flash',
   anthropic: 'claude-sonnet-4-20250514',
   openai: 'gpt-4o-mini',
+  xai: 'grok-3-mini-fast',
+  deepseek: 'deepseek-chat',
+  mistral: 'mistral-small-latest',
+  groq: 'llama-3.3-70b-versatile',
+  togetherai: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
   ollama: 'llama3.2',
 };
 

@@ -111,7 +111,18 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'MISSING_FIELD', message: 'provider is required' }, 400);
     }
 
-    const validProviders = ['gemini', 'openrouter', 'anthropic', 'openai', 'ollama'];
+    const validProviders = [
+      'gemini',
+      'openrouter',
+      'anthropic',
+      'openai',
+      'ollama',
+      'xai',
+      'deepseek',
+      'mistral',
+      'groq',
+      'togetherai',
+    ];
     if (!validProviders.includes(provider)) {
       return c.json(
         {
@@ -128,6 +139,11 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       anthropic: 'claude-sonnet-4-20250514',
       openai: 'gpt-4o-mini',
       ollama: 'llama3.2',
+      xai: 'grok-3-mini-fast',
+      deepseek: 'deepseek-chat',
+      mistral: 'mistral-small-latest',
+      groq: 'llama-3.3-70b-versatile',
+      togetherai: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     };
 
     const model = body.model || modelDefaults[provider] || 'gemini-2.0-flash';
@@ -516,7 +532,18 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       );
     }
 
-    const validProviders = ['gemini', 'openrouter', 'anthropic', 'openai', 'ollama'];
+    const validProviders = [
+      'gemini',
+      'openrouter',
+      'anthropic',
+      'openai',
+      'ollama',
+      'xai',
+      'deepseek',
+      'mistral',
+      'groq',
+      'togetherai',
+    ];
     if (!validProviders.includes(body.provider)) {
       return c.json(
         {
