@@ -11,6 +11,7 @@ import type { AgentResponse, ToolResult, ChatStreamEvent } from '../types/agent-
 import { compactHistory } from './compaction.js';
 import { decisionEngine } from './decision.js';
 import type { ApprovalGate } from '../pipeline/approval-gate.js';
+import { eventBus } from '../events/index.js';
 
 /**
  * OpenLander AI Agent.
@@ -210,12 +211,24 @@ export class Agent {
       const allToolResults: ToolResult[] = [];
       let responseText = '';
       const startedAt = Date.now();
+      const projectId = scope?.projectId;
+      const modelName = this.getModelName();
+      const source = this.actionType;
       let didStreamFail = false;
       let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
       let currentStepIndex = 0;
       let lastToolName: string | undefined;
 
       const guardedTools = this.buildGuardedTools(onEvent, actionRunId);
+
+      if (projectId) {
+        await eventBus.emit('ai:invoked', {
+          projectId,
+          source,
+          model: modelName,
+          action: 'chatStream',
+        });
+      }
 
       try {
         const result = streamText({
@@ -306,6 +319,19 @@ export class Agent {
           : rawMsg;
         await onEvent({ type: 'error', error: errMsg });
         didStreamFail = true;
+      } finally {
+        if (projectId) {
+          await eventBus.emit('ai:completed', {
+            projectId,
+            source,
+            model: modelName,
+            action: 'chatStream',
+            durationMs: Date.now() - startedAt,
+            inputTokens: usage.inputTokens || undefined,
+            outputTokens: usage.outputTokens || undefined,
+            success: !didStreamFail,
+          });
+        }
       }
 
       if (didStreamFail) {
@@ -316,7 +342,7 @@ export class Agent {
           projectId: this.currentScope?.projectId,
           sessionId: resolvedSessionId,
           actionType: this.actionType,
-          modelName: this.getModelName(),
+          modelName,
           provider: this.provider,
           inputTokens: 0,
           outputTokens: 0,
@@ -347,7 +373,7 @@ export class Agent {
         projectId: this.currentScope?.projectId,
         sessionId: resolvedSessionId,
         actionType: this.actionType,
-        modelName: this.getModelName(),
+        modelName,
         provider: this.provider,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
@@ -360,7 +386,7 @@ export class Agent {
 
       const costUsd = calculateCost(
         this.provider,
-        this.getModelName(),
+        modelName,
         usage.inputTokens,
         usage.outputTokens,
       );

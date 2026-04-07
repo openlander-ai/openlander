@@ -79,6 +79,8 @@ export type EventType =
   | 'question:answered'
   // v0.2.0: Agent events (deploy UX fix)
   | 'agent:event'
+  | 'ai:invoked'
+  | 'ai:completed'
   | 'health:degraded'
   | 'recovery:blocked'
   | 'recovery:stopped'
@@ -267,6 +269,22 @@ export interface EventPayload {
     projectId: string;
     event: ChatStreamEvent & { timestamp: string };
     identity?: RequestIdentity;
+  };
+  'ai:invoked': {
+    projectId: string;
+    source: string;
+    model: string;
+    action: string;
+  };
+  'ai:completed': {
+    projectId: string;
+    source: string;
+    model: string;
+    action: string;
+    durationMs: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    success: boolean;
   };
   'health:degraded': {
     projectId: string;
