@@ -203,10 +203,17 @@ export class RecoveryPipeline {
     const { projectId, containerId, incidentId } = context;
     const project = this.ctx.db.getProject(projectId);
 
-    if (!project) {
-      log.error({ projectId }, 'Project not found for recovery');
-      await this.escalate(context, 'Project not found for recovery');
-      return 'escalated';
+    if (!project || project.archived_at || project.status === 'stopped') {
+      log.info(
+        { projectId, status: project?.status },
+        'Project not found or inactive — skipping recovery',
+      );
+      this.addIncidentEvent(
+        incidentId,
+        'interrupted',
+        'Project not found or inactive — recovery skipped',
+      );
+      return 'skipped';
     }
 
     if (project.deploy_lock_session) {
@@ -431,6 +438,23 @@ export class RecoveryPipeline {
     failureReason: string,
     logs: string,
   ): Promise<string | null> {
+    if (!this.ctx.config.ai.operationalMonitoring.enabled) {
+      log.debug(
+        { projectId: context.projectId },
+        'Skipping LLM diagnosis — operationalMonitoring disabled',
+      );
+      return null;
+    }
+
+    const project = this.ctx.db.getProject(context.projectId);
+    if (!project || project.archived_at || project.status === 'stopped') {
+      log.debug(
+        { projectId: context.projectId, status: project?.status },
+        'Skipping LLM diagnosis — project not active',
+      );
+      return null;
+    }
+
     const providerId = this.ctx.config.llm.defaultRoute?.providerId ?? 'default';
     if (!this.ctx.llmCircuitBreaker.canCall(providerId)) {
       log.warn(
