@@ -65,6 +65,38 @@ const FEATURE_WEIGHTS: Record<
   operationalMonitoring: { primary: 'speed', secondary: 'toolUse' },
 };
 
+type ModelTier = 'flagship' | 'balanced' | 'lite';
+
+const FEATURE_TIER: Record<string, ModelTier> = {
+  codingPlan: 'flagship',
+  autoRecovery: 'flagship',
+  webAgent: 'flagship',
+  buildDebugger: 'balanced',
+  rollbackSuggestion: 'balanced',
+  envDetection: 'lite',
+  secretScan: 'lite',
+  operationalMonitoring: 'lite',
+};
+
+const PROVIDER_MODEL_TIERS: Record<string, Record<ModelTier, string>> = {
+  anthropic: {
+    flagship: 'claude-sonnet-4-20250514',
+    balanced: 'claude-sonnet-4-20250514',
+    lite: 'claude-haiku-4-5-20251001',
+  },
+  openai: { flagship: 'gpt-4o', balanced: 'gpt-4o', lite: 'gpt-4o-mini' },
+  gemini: { flagship: 'gemini-2.5-pro', balanced: 'gemini-2.5-flash', lite: 'gemini-2.5-flash' },
+  xai: { flagship: 'grok-3-fast', balanced: 'grok-3-mini-fast', lite: 'grok-3-mini-fast' },
+  deepseek: { flagship: 'deepseek-reasoner', balanced: 'deepseek-chat', lite: 'deepseek-chat' },
+  mistral: {
+    flagship: 'mistral-large-latest',
+    balanced: 'mistral-medium-latest',
+    lite: 'mistral-small-latest',
+  },
+  zai: { flagship: 'glm-5', balanced: 'glm-4.7', lite: 'glm-4.7-flash' },
+  'zai-coding': { flagship: 'glm-5', balanced: 'glm-4.7', lite: 'glm-4.7-flash' },
+};
+
 export function createSetupRoutes(ctx: AppContext): Hono {
   const api = new Hono();
 
@@ -729,6 +761,8 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       let bestProviderId = '';
       let bestModel = '';
 
+      const tier = FEATURE_TIER[feature] ?? 'balanced';
+
       for (const [id, entry] of providerEntries) {
         const scores = PROVIDER_SCORES[entry.provider];
         if (!scores) continue;
@@ -738,7 +772,7 @@ export function createSetupRoutes(ctx: AppContext): Hono {
         if (score > bestScore) {
           bestScore = score;
           bestProviderId = id;
-          bestModel = entry.defaultModel;
+          bestModel = PROVIDER_MODEL_TIERS[entry.provider]?.[tier] ?? entry.defaultModel;
         }
       }
 
