@@ -13,6 +13,7 @@ import {
   Ban,
   CircleStop,
   RefreshCcw,
+  Activity,
 } from 'lucide-react';
 import { relativeTime } from '@/components/ops/utils';
 import { Badge } from '@/components/ui/badge';
@@ -227,7 +228,8 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
       ) : null}
 
       {groupedActivities.length === 0 ? (
-        <div className="rounded-lg border border-border bg-bg-subtle px-4 py-8 text-center text-sm font-body text-muted-ol">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-bg-subtle px-4 py-12 text-center text-sm font-body text-muted-ol">
+          <Activity className="h-8 w-8 mb-3 opacity-30" />
           {t('operations.activity.empty')}
         </div>
       ) : (
@@ -360,7 +362,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
                           </p>
                           {group.items.slice(1, 6).map((subItem) => (
                             <div key={subItem.id} className="flex gap-3 text-xs font-mono">
-                              <span className="text-muted-ol w-[65px] flex-shrink-0">
+                              <span className="text-muted-ol w-20 flex-shrink-0 whitespace-nowrap">
                                 {relativeTime(new Date(subItem.timestamp).getTime(), language)}
                               </span>
                               <span className="text-secondary-ol truncate">{subItem.title}</span>

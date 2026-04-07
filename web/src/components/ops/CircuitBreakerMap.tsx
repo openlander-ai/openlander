@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -93,7 +94,8 @@ export function CircuitBreakerMap({
       {loading ? (
         <div className="text-sm font-body text-muted-ol">{t('Loading...')}</div>
       ) : openBreakers.length === 0 ? (
-        <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-6 text-center text-sm font-body text-success">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-success/30 bg-success/10 px-4 py-8 text-center text-sm font-body text-success">
+          <CheckCircle2 className="h-6 w-6 mb-2 opacity-80" />
           {t('operations.circuitBreakers.allHealthy')}
         </div>
       ) : (

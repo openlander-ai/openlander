@@ -4,6 +4,7 @@ import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible.js';
 import { AlertTriangle, XCircle, ChevronDown, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '../../lib/utils.js';
 import {
   fetchIncidentEvents,
@@ -106,11 +107,20 @@ export function IncidentCard({ group }: IncidentCardProps) {
                 />
               </Button>
             </CollapsibleTrigger>
-            <Button variant="ghost" size="sm" className="h-8 text-xs ml-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs ml-2"
+              onClick={() =>
+                toast.info(
+                  t('ops.featureNotReady') || 'This feature is currently under development.',
+                )
+              }
+            >
               {t('ops.acknowledge')}
             </Button>
 
-            <CollapsibleContent className="mt-4">
+            <CollapsibleContent className="mt-4 overflow-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=open]:animate-in data-[state=open]:fade-in">
               <div className="bg-bg-subtle rounded-lg p-4 border border-[hsl(var(--border))]">
                 <h5 className="text-xs font-semibold text-muted-ol uppercase tracking-wider mb-4">
                   {t('ops.latestTimeline')}
