@@ -25,10 +25,73 @@ interface ActivityEvent {
   status: string;
   detail?: string;
   time: string;
+  reason?: string;
 }
 
 const activityBuffer: ActivityEvent[] = [];
 const MAX_ACTIVITY = 100;
+
+function toActivityDetail<T extends EventType>(
+  eventType: T,
+  payload: EventPayload[T],
+): Pick<ActivityEvent, 'detail' | 'reason'> {
+  if (eventType === 'deploy:failed') {
+    return { detail: (payload as EventPayload['deploy:failed']).error };
+  }
+  if (eventType === 'tunnel:url') {
+    return { detail: (payload as EventPayload['tunnel:url']).url };
+  }
+  if (eventType === 'compose:failed') {
+    return { detail: (payload as EventPayload['compose:failed']).error };
+  }
+  if (eventType === 'recovery:start') {
+    return { detail: (payload as EventPayload['recovery:start']).error };
+  }
+  if (eventType === 'recovery:failed') {
+    return { detail: (payload as EventPayload['recovery:failed']).error };
+  }
+  if (eventType === 'recovery:exhausted') {
+    return { detail: (payload as EventPayload['recovery:exhausted']).lastError };
+  }
+  if (eventType === 'recovery:blocked') {
+    const reason = (payload as EventPayload['recovery:blocked']).reason;
+    return { detail: reason, reason };
+  }
+  if (eventType === 'recovery:stopped') {
+    const reason = (payload as EventPayload['recovery:stopped']).reason;
+    return { detail: reason, reason };
+  }
+  if (eventType === 'recovery:started') {
+    return { detail: (payload as EventPayload['recovery:started']).trigger };
+  }
+  if (eventType === 'alert:new') {
+    return { detail: (payload as EventPayload['alert:new']).alert.message };
+  }
+  if (eventType === 'ai:invoked') {
+    const aiPayload = payload as EventPayload['ai:invoked'];
+    return { detail: `${aiPayload.model} ${aiPayload.action}` };
+  }
+  if (eventType === 'ai:completed') {
+    return { detail: `${String((payload as EventPayload['ai:completed']).durationMs)}ms` };
+  }
+  return {};
+}
+
+function buildActivityEvent<T extends EventType>(
+  eventType: T,
+  payload: EventPayload[T],
+  projectName: string,
+  status: string,
+): ActivityEvent {
+  return {
+    type: eventType,
+    project: projectName,
+    user: 'system',
+    status,
+    time: new Date().toISOString(),
+    ...toActivityDetail(eventType, payload),
+  };
+}
 
 export function createApiRoutes(ctx: AppContext): Hono {
   const api = new Hono();
@@ -97,6 +160,11 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'recovery:exhausted': 'recovery-exhausted',
     'recovery:approval-needed': 'approval-pending',
     'recovery:approval-resolved': 'approval-resolved',
+    'recovery:blocked': 'recovery-blocked',
+    'recovery:stopped': 'recovery-stopped',
+    'recovery:started': 'recovering',
+    'ai:invoked': 'ai-running',
+    'ai:completed': 'ai-completed',
     'alert:new': 'alert-new',
     'alert:resolved': 'alert-resolved',
   };
@@ -127,6 +195,11 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'recovery:exhausted',
     'recovery:approval-needed',
     'recovery:approval-resolved',
+    'recovery:blocked',
+    'recovery:stopped',
+    'recovery:started',
+    'ai:invoked',
+    'ai:completed',
     'alert:new',
     'alert:resolved',
   ];
@@ -147,29 +220,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       const projectName = project?.name ?? projectId;
       const status = eventToStatus[eventType] ?? 'unknown';
 
-      const activityEvent: ActivityEvent = {
-        type: eventType,
-        project: projectName,
-        user: 'system',
-        status,
-        time: new Date().toISOString(),
-      };
-
-      if (eventType === 'deploy:failed') {
-        activityEvent.detail = (payload as EventPayload['deploy:failed']).error;
-      } else if (eventType === 'tunnel:url') {
-        activityEvent.detail = (payload as EventPayload['tunnel:url']).url;
-      } else if (eventType === 'compose:failed') {
-        activityEvent.detail = (payload as EventPayload['compose:failed']).error;
-      } else if (eventType === 'recovery:start') {
-        activityEvent.detail = (payload as EventPayload['recovery:start']).error;
-      } else if (eventType === 'recovery:failed') {
-        activityEvent.detail = (payload as EventPayload['recovery:failed']).error;
-      } else if (eventType === 'recovery:exhausted') {
-        activityEvent.detail = (payload as EventPayload['recovery:exhausted']).lastError;
-      } else if (eventType === 'alert:new') {
-        activityEvent.detail = (payload as EventPayload['alert:new']).alert.message;
-      }
+      const activityEvent = buildActivityEvent(eventType, payload, projectName, status);
 
       activityBuffer.push(activityEvent);
       if (activityBuffer.length > MAX_ACTIVITY) {
@@ -219,27 +270,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
               const projectName = project?.name ?? projectId;
               const status = eventToStatus[eventType] ?? 'unknown';
 
-              const activityEvent: ActivityEvent = {
-                type: eventType,
-                project: projectName,
-                user: 'system',
-                status,
-                time: new Date().toISOString(),
-              };
-
-              if (eventType === 'deploy:failed') {
-                activityEvent.detail = (payload as EventPayload['deploy:failed']).error;
-              } else if (eventType === 'tunnel:url') {
-                activityEvent.detail = (payload as EventPayload['tunnel:url']).url;
-              } else if (eventType === 'recovery:start') {
-                activityEvent.detail = (payload as EventPayload['recovery:start']).error;
-              } else if (eventType === 'recovery:failed') {
-                activityEvent.detail = (payload as EventPayload['recovery:failed']).error;
-              } else if (eventType === 'recovery:exhausted') {
-                activityEvent.detail = (payload as EventPayload['recovery:exhausted']).lastError;
-              } else if (eventType === 'alert:new') {
-                activityEvent.detail = (payload as EventPayload['alert:new']).alert.message;
-              }
+              const activityEvent = buildActivityEvent(eventType, payload, projectName, status);
 
               void s.write(JSON.stringify(activityEvent) + '\n');
             }),

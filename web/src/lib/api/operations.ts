@@ -140,13 +140,18 @@ export interface ActivityItem {
     | 'circuit_breaker'
     | 'cleanup'
     | 'alert'
-    | 'ai_diagnosis';
+    | 'ai_diagnosis'
+    | 'ai:invoked'
+    | 'ai:completed'
+    | 'recovery:blocked'
+    | 'recovery:stopped'
+    | 'recovery:started';
   severity: 'critical' | 'warning' | 'info';
   projectId: string;
   projectName: string;
   title: string;
   description: string;
-  status: 'active' | 'resolved' | 'pending' | 'failed';
+  status: 'active' | 'resolved' | 'pending' | 'failed' | 'ai-running' | 'ai-completed';
   incidentId?: string;
   actionRunId?: string;
   correlationId?: string;

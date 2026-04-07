@@ -465,6 +465,15 @@ export const translations = {
     },
   },
   ops: {
+    ai: {
+      invoked: 'AI 호출 시작',
+      completed: 'AI 호출 완료',
+    },
+    recovery: {
+      blocked: '복구 차단됨',
+      stopped: '복구 중지됨',
+      started: '복구 시작됨',
+    },
     status: {
       healthy: '정상',
       healthyDesc: '활성 장애가 없습니다. 자동 복구가 활성화되어 있습니다.',
@@ -766,4 +775,9 @@ export const translations = {
       timedOut: '승인 시간 초과',
     },
   },
+  'recovery-blocked': '복구 차단됨',
+  'recovery-stopped': '복구 중지됨',
+  recovering: '복구 중',
+  'ai-running': 'AI 실행 중',
+  'ai-completed': 'AI 완료',
 } as const;

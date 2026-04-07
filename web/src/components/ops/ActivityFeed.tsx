@@ -10,6 +10,9 @@ import {
   ChevronRight,
   ChevronDown,
   Bot,
+  Ban,
+  CircleStop,
+  RefreshCcw,
 } from 'lucide-react';
 import { relativeTime } from '@/components/ops/utils';
 import { Badge } from '@/components/ui/badge';
@@ -46,10 +49,15 @@ const ACTIVITY_TYPES: ActivityTypeFilter[] = [
   'incident',
   'recovery',
   'ai_diagnosis',
+  'ai:invoked',
+  'ai:completed',
   'approval',
   'alert',
   'circuit_breaker',
   'cleanup',
+  'recovery:blocked',
+  'recovery:stopped',
+  'recovery:started',
 ];
 
 const SEVERITY_FILTERS: SeverityFilter[] = ['all', 'critical', 'warning', 'info'];
@@ -58,17 +66,40 @@ function getTypeIcon(type: ActivityItem['type']) {
   if (type === 'incident') return AlertTriangle;
   if (type === 'recovery') return CheckCircle2;
   if (type === 'ai_diagnosis') return Bot;
+  if (type === 'ai:invoked') return Bot;
+  if (type === 'ai:completed') return Bot;
   if (type === 'approval') return GitPullRequestArrow;
   if (type === 'alert') return Siren;
   if (type === 'circuit_breaker') return ShieldAlert;
+  if (type === 'recovery:blocked') return Ban;
+  if (type === 'recovery:stopped') return CircleStop;
+  if (type === 'recovery:started') return RefreshCcw;
   return Bell;
 }
 
-function getStatusClass(status: ActivityItem['status']) {
+function getStatusClass(status: ActivityItem['status'] | string) {
   if (status === 'failed') return 'text-error border-error/40 bg-error/10';
   if (status === 'active') return 'text-warning border-warning/40 bg-warning/10';
   if (status === 'resolved') return 'text-success border-success/40 bg-success/10';
+  if (status === 'ai-running') return 'text-agent border-agent/40 bg-agent/10';
+  if (status === 'ai-completed') return 'text-info border-info/40 bg-info/10';
+  if (status === 'recovery-blocked' || status === 'recovery-stopped')
+    return 'text-warning border-warning/40 bg-warning/10';
+  if (status === 'recovering') return 'text-info border-info/40 bg-info/10';
   return 'text-secondary-ol border-border bg-bg-subtle';
+}
+
+function getTypeLabel(
+  type: ActivityItem['type'],
+  t: (key: string, params?: Record<string, string>) => string,
+) {
+  if (type.startsWith('recovery:')) {
+    return t(`ops.recovery.${type.split(':')[1]}`);
+  }
+  if (type.startsWith('ai:')) {
+    return t(`ops.ai.${type.split(':')[1]}`);
+  }
+  return t(type.replace('_', ' '));
 }
 
 function groupByCorrelation(items: ActivityItem[]): GroupedActivity[] {
@@ -165,9 +196,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
             <SelectContent>
               {ACTIVITY_TYPES.map((type) => (
                 <SelectItem key={type} value={type}>
-                  {type === 'all'
-                    ? t('operations.activity.allTypes')
-                    : t(type.replace('_', ' ').replace(/\b\w/g, (char) => char.toUpperCase()))}
+                  {type === 'all' ? t('operations.activity.allTypes') : getTypeLabel(type, t)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -251,11 +280,14 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
                           variant="outline"
                           className={cn(
                             'font-body text-[11px] capitalize',
-                            item.type === 'ai_diagnosis' && 'text-agent border-agent/30 bg-agent/5',
+                            (item.type === 'ai_diagnosis' ||
+                              item.type === 'ai:invoked' ||
+                              item.type === 'ai:completed') &&
+                              'text-agent border-agent/30 bg-agent/5',
                           )}
                         >
                           <TypeIcon className="mr-1 h-3 w-3" />
-                          {t(item.type.replace('_', ' '))}
+                          {getTypeLabel(item.type, t)}
                         </Badge>
 
                         {hasGroupedItems ? (

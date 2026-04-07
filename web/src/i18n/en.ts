@@ -467,6 +467,15 @@ export const translations = {
     },
   },
   ops: {
+    ai: {
+      invoked: 'AI Invoked',
+      completed: 'AI Completed',
+    },
+    recovery: {
+      blocked: 'Recovery Blocked',
+      stopped: 'Recovery Stopped',
+      started: 'Recovery Started',
+    },
     status: {
       healthy: 'Healthy',
       healthyDesc: 'No active issues. Auto-recovery is enabled.',
@@ -767,6 +776,11 @@ export const translations = {
       timedOut: 'Approval timed out',
     },
   },
+  'recovery-blocked': 'Recovery Blocked',
+  'recovery-stopped': 'Recovery Stopped',
+  recovering: 'Recovering',
+  'ai-running': 'AI Running',
+  'ai-completed': 'AI Completed',
 } as const;
 
 export type TranslationType = typeof translations;
