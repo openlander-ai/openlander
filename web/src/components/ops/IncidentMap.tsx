@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
+
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IncidentCard, type IncidentGroup } from '@/components/ops/IncidentCard';
@@ -134,17 +134,12 @@ export function IncidentMap({ projectId, projectNameById, refreshToken }: Incide
       ) : (
         <div className="space-y-4">
           {groupedIncidents.map(({ group, projectName, projectId: incidentProjectId }) => (
-            <div key={group.key} className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="font-body text-xs text-secondary-ol">
-                  {projectName}
-                </Badge>
-                <Badge variant="secondary" className="font-body text-[11px] capitalize">
-                  {t(group.severity)}
-                </Badge>
-                <span className="font-mono text-[11px] text-muted-ol">{incidentProjectId}</span>
-              </div>
-              <IncidentCard group={group} />
+            <div key={group.key}>
+              <IncidentCard
+                group={group}
+                projectName={projectName}
+                incidentProjectId={incidentProjectId}
+              />
             </div>
           ))}
         </div>

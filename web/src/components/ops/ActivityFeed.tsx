@@ -241,7 +241,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
         </div>
       ) : (
         <ScrollArea className="max-h-[560px] pr-3">
-          <div className="space-y-3">
+          <div className="relative pl-6 space-y-5 before:absolute before:inset-y-0 before:left-[11px] before:w-px before:bg-border/60">
             {groupedActivities.map((group) => {
               const item = group.head;
               const TypeIcon = getTypeIcon(item.type);
@@ -254,136 +254,151 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
                 : item.title;
 
               return (
-                <div
-                  key={group.key}
-                  className="rounded-lg border border-border bg-bg-subtle/80 p-3 transition-colors hover:border-agent/40"
-                >
+                <div key={group.key} className="relative">
+                  {/* Timeline Dot */}
                   <div
-                    className="flex items-start justify-between gap-3 cursor-pointer"
+                    className={cn(
+                      'absolute -left-6 mt-1.5 flex h-[11px] w-[11px] items-center justify-center rounded-full ring-4 ring-bg-panel',
+                      item.type.startsWith('ai:') || item.type === 'ai_diagnosis'
+                        ? 'bg-agent'
+                        : getStatusClass(item.status).includes('error')
+                          ? 'bg-error'
+                          : getStatusClass(item.status).includes('warning')
+                            ? 'bg-warning'
+                            : getStatusClass(item.status).includes('success')
+                              ? 'bg-success'
+                              : 'bg-border',
+                    )}
+                  />
+
+                  <div
+                    className="rounded-lg border border-border/60 bg-bg-panel/50 p-4 transition-colors hover:border-border hover:bg-bg-subtle/50 cursor-pointer shadow-sm"
                     onClick={() => toggleExpand(group.key)}
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-2 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const isArchived = projectNameById
-                              ? !projectNameById[item.projectId]
-                              : false;
-                            if (!isArchived) {
-                              navigate(`/projects/${item.projectId}`);
-                            }
-                          }}
-                          className={cn(
-                            'rounded border border-border bg-panel px-2 py-0.5 text-xs font-body text-secondary-ol hover:text-primary-ol',
-                            projectNameById && !projectNameById[item.projectId]
-                              ? 'cursor-not-allowed opacity-60'
-                              : 'cursor-pointer',
-                          )}
-                        >
-                          {item.projectName}
-                        </button>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const isArchived = projectNameById
+                                ? !projectNameById[item.projectId]
+                                : false;
+                              if (!isArchived) {
+                                navigate(`/projects/${item.projectId}`);
+                              }
+                            }}
+                            className={cn(
+                              'rounded border border-border bg-panel px-2 py-0.5 text-xs font-body text-secondary-ol hover:text-primary-ol',
+                              projectNameById && !projectNameById[item.projectId]
+                                ? 'cursor-not-allowed opacity-60'
+                                : 'cursor-pointer',
+                            )}
+                          >
+                            {item.projectName}
+                          </button>
 
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'font-body text-[11px] capitalize',
-                            (item.type === 'ai_diagnosis' ||
-                              item.type === 'ai:invoked' ||
-                              item.type === 'ai:completed') &&
-                              'text-agent border-agent/30 bg-agent/5',
-                          )}
-                        >
-                          <TypeIcon className="mr-1 h-3 w-3" />
-                          {getTypeLabel(item.type, t)}
-                        </Badge>
-
-                        {hasGroupedItems ? (
-                          <Badge variant="secondary" className="font-mono text-[10px]">
-                            {group.items.length} {t('ops.eventCount')}
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'font-body text-[11px] capitalize',
+                              (item.type === 'ai_diagnosis' ||
+                                item.type === 'ai:invoked' ||
+                                item.type === 'ai:completed') &&
+                                'text-agent border-agent/30 bg-agent/5',
+                            )}
+                          >
+                            <TypeIcon className="mr-1 h-3 w-3" />
+                            {getTypeLabel(item.type, t)}
                           </Badge>
-                        ) : null}
-                      </div>
 
-                      <p className="truncate font-body text-sm text-primary-ol flex items-center gap-1.5">
-                        {isExpanded ? (
-                          <ChevronDown className="h-3.5 w-3.5 text-muted-ol" />
-                        ) : (
-                          <ChevronRight className="h-3.5 w-3.5 text-muted-ol" />
-                        )}
-                        {displayTitle}
-                      </p>
-
-                      <div
-                        className="flex items-center gap-1 mt-1 text-xs font-body text-muted-ol"
-                        title={new Date(item.timestamp).toLocaleString()}
-                      >
-                        <span>{relativeTime(new Date(item.timestamp).getTime(), language)}</span>
-                        {item.aiMetadata && (
-                          <>
-                            <span>·</span>
-                            <span className="font-mono">{item.aiMetadata.model}</span>
-                            {item.aiMetadata.durationMs && (
-                              <span>· {(item.aiMetadata.durationMs / 1000).toFixed(1)}s</span>
-                            )}
-                            {item.aiMetadata.tokensUsed && (
-                              <span>· {item.aiMetadata.tokensUsed} tokens</span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <Badge
-                      variant="outline"
-                      className={cn('capitalize mt-1', getStatusClass(item.status))}
-                    >
-                      {t(item.status)}
-                    </Badge>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="mt-3 pl-5 border-l-[3px] border-agent/20 space-y-3">
-                      {item.description && (
-                        <p className="text-sm font-body text-secondary-ol whitespace-pre-wrap">
-                          {item.description}
-                        </p>
-                      )}
-
-                      {item.aiMetadata?.diagnosisSummary && (
-                        <div className="p-3 bg-agent/5 border border-agent/20 rounded-md">
-                          <p className="text-xs font-medium text-agent mb-1">
-                            {t('ops.aiDiagnosisSummary')}
-                          </p>
-                          <p className="text-sm text-primary-ol">
-                            {item.aiMetadata.diagnosisSummary}
-                          </p>
+                          {hasGroupedItems ? (
+                            <Badge variant="secondary" className="font-mono text-[10px]">
+                              {group.items.length} {t('ops.eventCount')}
+                            </Badge>
+                          ) : null}
                         </div>
-                      )}
 
-                      {hasGroupedItems && (
-                        <div className="space-y-1.5 bg-bg-app rounded p-2.5">
-                          <p className="text-[11px] font-semibold text-muted-ol mb-2 uppercase tracking-wider">
-                            {t('ops.recentSameEvents', { count: String(group.items.length) })}
-                          </p>
-                          {group.items.slice(1, 6).map((subItem) => (
-                            <div key={subItem.id} className="flex gap-3 text-xs font-mono">
-                              <span className="text-muted-ol w-20 flex-shrink-0 whitespace-nowrap">
-                                {relativeTime(new Date(subItem.timestamp).getTime(), language)}
-                              </span>
-                              <span className="text-secondary-ol truncate">{subItem.title}</span>
-                            </div>
-                          ))}
-                          {group.items.length > 6 && (
-                            <p className="text-xs italic text-muted-ol pl-3">
-                              {t('ops.moreMergedLogs', { count: String(group.items.length - 6) })}
-                            </p>
+                        <p className="truncate font-body text-sm text-primary-ol flex items-center gap-1.5">
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5 text-muted-ol" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 text-muted-ol" />
+                          )}
+                          {displayTitle}
+                        </p>
+
+                        <div
+                          className="flex items-center gap-1 mt-1 text-xs font-body text-muted-ol"
+                          title={new Date(item.timestamp).toLocaleString()}
+                        >
+                          <span>{relativeTime(new Date(item.timestamp).getTime(), language)}</span>
+                          {item.aiMetadata && (
+                            <>
+                              <span>·</span>
+                              <span className="font-mono">{item.aiMetadata.model}</span>
+                              {item.aiMetadata.durationMs && (
+                                <span>· {(item.aiMetadata.durationMs / 1000).toFixed(1)}s</span>
+                              )}
+                              {item.aiMetadata.tokensUsed && (
+                                <span>· {item.aiMetadata.tokensUsed} tokens</span>
+                              )}
+                            </>
                           )}
                         </div>
-                      )}
+                      </div>
+
+                      <Badge
+                        variant="outline"
+                        className={cn('capitalize mt-1', getStatusClass(item.status))}
+                      >
+                        {t(item.status)}
+                      </Badge>
                     </div>
-                  )}
+
+                    {isExpanded && (
+                      <div className="mt-3 pl-5 border-l-[3px] border-agent/20 space-y-3">
+                        {item.description && (
+                          <p className="text-sm font-body text-secondary-ol whitespace-pre-wrap">
+                            {item.description}
+                          </p>
+                        )}
+
+                        {item.aiMetadata?.diagnosisSummary && (
+                          <div className="p-3 bg-agent/5 border border-agent/20 rounded-md">
+                            <p className="text-xs font-medium text-agent mb-1">
+                              {t('ops.aiDiagnosisSummary')}
+                            </p>
+                            <p className="text-sm text-primary-ol">
+                              {item.aiMetadata.diagnosisSummary}
+                            </p>
+                          </div>
+                        )}
+
+                        {hasGroupedItems && (
+                          <div className="space-y-1.5 bg-bg-app rounded p-2.5">
+                            <p className="text-[11px] font-semibold text-muted-ol mb-2 uppercase tracking-wider">
+                              {t('ops.recentSameEvents', { count: String(group.items.length) })}
+                            </p>
+                            {group.items.slice(1, 6).map((subItem) => (
+                              <div key={subItem.id} className="flex gap-3 text-xs font-mono">
+                                <span className="text-muted-ol w-20 flex-shrink-0 whitespace-nowrap">
+                                  {relativeTime(new Date(subItem.timestamp).getTime(), language)}
+                                </span>
+                                <span className="text-secondary-ol truncate">{subItem.title}</span>
+                              </div>
+                            ))}
+                            {group.items.length > 6 && (
+                              <p className="text-xs italic text-muted-ol pl-3">
+                                {t('ops.moreMergedLogs', { count: String(group.items.length - 6) })}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

@@ -29,9 +29,11 @@ export interface IncidentGroup {
 
 interface IncidentCardProps {
   group: IncidentGroup;
+  projectName: string;
+  incidentProjectId: string;
 }
 
-export function IncidentCard({ group }: IncidentCardProps) {
+export function IncidentCard({ group, projectName, incidentProjectId }: IncidentCardProps) {
   const { t, language } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [events, setEvents] = useState<OpsIncidentEvent[]>(group.latestIncident.events || []);
@@ -57,50 +59,91 @@ export function IncidentCard({ group }: IncidentCardProps) {
   return (
     <Card
       className={cn(
-        'bg-bg-panel border-[hsl(var(--border))] shadow-sm overflow-hidden transition-colors',
-        isCritical ? 'border-l-4 border-l-error' : 'border-l-4 border-l-warning',
+        'border-[hsl(var(--border))] shadow-sm overflow-hidden transition-colors',
+        isCritical
+          ? 'border-l-4 border-l-error bg-error/5'
+          : 'border-l-4 border-l-warning bg-warning/5',
       )}
     >
-      <div className="p-5">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                'flex items-center justify-center h-6 w-6 rounded-full',
-                isCritical ? 'bg-error/10 text-error' : 'bg-warning/10 text-warning',
-              )}
-            >
-              {isCritical ? <XCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-            </div>
-            <h4 className="text-base font-semibold text-primary-ol">{t(group.label)}</h4>
-          </div>
-          <Badge variant="outline" className="capitalize text-xs font-medium">
+      <div className="p-4 lg:p-5">
+        <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border/50">
+          <Badge
+            variant="outline"
+            className="font-body text-xs text-secondary-ol px-2 py-[2px] bg-bg-panel shadow-sm"
+          >
+            {projectName}
+          </Badge>
+          <span className="font-mono text-[11px] text-muted-ol opacity-80 pl-1 border-l border-border/60">
+            {incidentProjectId}
+          </span>
+          <div className="flex-1" />
+          <Badge
+            variant="outline"
+            className={cn(
+              'capitalize text-[11px] h-6 px-2.5 whitespace-nowrap',
+              isCritical
+                ? 'text-error border-error/50 bg-error/10'
+                : 'text-warning border-warning/50 bg-warning/10',
+              group.status === 'resolved' && 'text-success border-success/50 bg-success/10',
+            )}
+          >
             {t(group.status.replace('_', ' '))}
           </Badge>
         </div>
 
-        <p className="text-sm text-secondary-ol ml-9 mb-4">{t(group.description)}</p>
+        <div className="flex items-start gap-4 mb-5">
+          <div
+            className={cn(
+              'flex items-center justify-center h-8 w-8 rounded-full shrink-0 shadow-sm mt-0.5',
+              isCritical ? 'bg-error/20 text-error' : 'bg-warning/20 text-warning',
+            )}
+          >
+            {isCritical ? <XCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+          </div>
+          <div className="flex-1">
+            <h4
+              className={cn(
+                'text-lg font-semibold font-display mb-1.5',
+                isCritical ? 'text-error' : 'text-warning',
+              )}
+            >
+              {t(group.label)}
+            </h4>
+            <p className="text-sm font-body text-primary-ol leading-relaxed whitespace-pre-wrap">
+              {t(group.description)}
+            </p>
+          </div>
+        </div>
 
-        <div className="flex items-center gap-4 ml-9 text-xs text-muted-ol font-medium">
-          <span>{t('ops.occurrences', { count: group.count })}</span>
-          <span>&middot;</span>
+        <div className="flex items-center gap-3 ml-[48px] text-[11px] font-mono text-muted-ol bg-bg-app rounded-md px-3 py-2 w-fit border border-border/50 shadow-sm">
+          <span className="text-secondary-ol font-medium">
+            {t('ops.occurrences', { count: String(group.count) })}
+          </span>
+          <span className="opacity-40">&middot;</span>
           <span>
             {t('ops.first')}:{' '}
             {new Date(group.firstSeen).toLocaleDateString(language === 'ko' ? 'ko-KR' : undefined, {
               month: 'short',
               day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
             })}
           </span>
-          <span>&middot;</span>
+          <span className="opacity-40">&middot;</span>
           <span>
-            {t('ops.last')}: {relativeTime(group.lastSeen, language)}
+            {t('ops.last')}:{' '}
+            <span className="text-secondary-ol">{relativeTime(group.lastSeen, language)}</span>
           </span>
         </div>
 
-        <div className="flex items-center gap-3 ml-9 mt-4">
+        <div className="flex items-center gap-3 ml-[48px] mt-4">
           <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
             <CollapsibleTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs bg-bg-panel hover:bg-bg-subtle text-secondary-ol"
+              >
                 {t('ops.viewTimeline')}
                 <ChevronDown
                   className={cn('ml-2 h-3.5 w-3.5 transition-transform', isOpen && 'rotate-180')}
@@ -110,7 +153,7 @@ export function IncidentCard({ group }: IncidentCardProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-xs ml-2"
+              className="h-8 text-xs ml-2 text-muted-ol hover:text-secondary-ol"
               onClick={() =>
                 toast.info(
                   t('ops.featureNotReady') || 'This feature is currently under development.',
@@ -121,14 +164,15 @@ export function IncidentCard({ group }: IncidentCardProps) {
             </Button>
 
             <CollapsibleContent className="mt-4 overflow-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=open]:animate-in data-[state=open]:fade-in">
-              <div className="bg-bg-subtle rounded-lg p-4 border border-[hsl(var(--border))]">
-                <h5 className="text-xs font-semibold text-muted-ol uppercase tracking-wider mb-4">
+              <div className="bg-bg-panel/80 rounded-lg p-5 border border-border shadow-sm">
+                <h5 className="text-[11px] font-bold text-muted-ol uppercase tracking-wider mb-5 flex items-center gap-2">
+                  <RefreshCw className="h-3 w-3" />
                   {t('ops.latestTimeline')}
                 </h5>
 
                 {loadingEvents ? (
-                  <div className="flex items-center justify-center py-4">
-                    <RefreshCw className="h-4 w-4 text-muted-ol animate-spin" />
+                  <div className="flex items-center justify-center py-6">
+                    <RefreshCw className="h-5 w-5 text-muted-ol animate-spin" />
                   </div>
                 ) : (
                   <IncidentTimeline events={events} />

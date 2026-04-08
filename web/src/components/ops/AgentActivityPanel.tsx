@@ -15,23 +15,31 @@ export function AgentActivityPanel() {
 
   if (!activeState.isActive) {
     return (
-      <Card className="border-border bg-panel p-4 flex items-center justify-between opacity-80 hover:opacity-100 transition-opacity cursor-default">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-full bg-bg-subtle flex items-center justify-center">
-            <Bot className="h-4 w-4 text-muted-ol" />
+      <Card className="relative overflow-hidden border-border/60 bg-panel/80 p-5 flex items-center justify-between transition-colors shadow-sm cursor-default">
+        {/* Subtle grid background for the empty space */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05]">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#888_1px,transparent_1px),linear-gradient(to_bottom,#888_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:linear-gradient(to_right,white_80%,transparent)]" />
+        </div>
+
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="h-10 w-10 rounded-full bg-bg-panel border border-border flex items-center justify-center shadow-sm">
+            <Bot className="h-5 w-5 text-muted-ol opacity-70" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-secondary-ol font-display">
+            <h3 className="text-base font-semibold text-primary-ol font-display mb-0.5">
               {t('ops.agent.idle')}
             </h3>
-            <p className="text-xs text-muted-ol font-body">{t('ops.agent.idleDesc')}</p>
+            <p className="text-sm text-secondary-ol font-body">{t('ops.agent.idleDesc')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success opacity-50"></span>
+        <div className="flex items-center gap-2 relative z-10 px-3 py-1.5 rounded-full bg-success/10 border border-success/20">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
           </span>
-          <span className="text-xs font-mono text-muted-ol">{t('ops.agent.online')}</span>
+          <span className="text-xs font-mono font-medium text-success">
+            {t('ops.agent.online')}
+          </span>
         </div>
       </Card>
     );

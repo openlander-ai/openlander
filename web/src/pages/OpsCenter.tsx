@@ -97,8 +97,8 @@ export function OpsCenter() {
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-app p-4 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-5">
+    <div className="flex-1 overflow-auto bg-app p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-[1400px] space-y-6 lg:space-y-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
@@ -129,7 +129,7 @@ export function OpsCenter() {
         <AgentActivityPanel />
 
         {loadingProjects ? (
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="space-y-5 lg:col-span-2">
               <Skeleton className="h-40 w-full rounded-xl" />
               <Skeleton className="h-56 w-full rounded-xl" />
@@ -140,7 +140,7 @@ export function OpsCenter() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="space-y-5 lg:col-span-2">
               <ApprovalQueue projectId={filteredProjectId} projectNameById={projectNameById} />
               <IncidentMap
