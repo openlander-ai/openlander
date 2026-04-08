@@ -249,9 +249,13 @@ export class OpsAgent {
       return;
     }
 
-    // Skip non-running projects — no recovery needed
+    // Skip projects not in running/error state — no recovery needed
     const project = this.ctx.db.getProject(projectId);
-    if (!project || project.status !== 'running' || project.archived_at) {
+    if (
+      !project ||
+      (project.status !== 'running' && project.status !== 'error') ||
+      project.archived_at
+    ) {
       log.debug(
         { projectId, status: project?.status },
         'Skipping crash event for non-running project',
