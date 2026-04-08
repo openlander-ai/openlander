@@ -10,7 +10,7 @@ import type { AppContext } from '../app.js';
 import { AuthService } from '../auth/auth-service.js';
 import { createModuleLogger } from '../lib/logger.js';
 import { VERSION } from '../version.js';
-import { registerMcpTools } from '../tools/adapters/mcp.js';
+import { registerCompositeMcpTools, registerMcpTools } from '../tools/adapters/mcp.js';
 import { registerMcpPrompts } from './prompts.js';
 import { debugToolDefs } from '../tools/defs/debug.js';
 import { deployToolDefs } from '../tools/defs/deploy.js';
@@ -29,6 +29,7 @@ import { platformDebugToolDefs } from '../tools/defs/platform-debug.js';
 import { platformActionToolDefs } from '../tools/defs/platform-actions.js';
 import type { ToolDef } from '../tools/defs/types.js';
 import { buildIncidentBriefing } from '../llm/prompts.js';
+import { createCompositeTools, type CompositeTool } from './composite-tools.js';
 
 const log = createModuleLogger('mcp');
 
@@ -56,7 +57,15 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
   ];
 }
 
-const SERVER_INSTRUCTIONS = `You are connected to OpenLander, a self-hosted deployment platform that builds Docker images from git repos and runs them behind Traefik.
+function getPlatformToolDefs(): ToolDef[] {
+  return [...platformReadToolDefs, ...platformDebugToolDefs, ...platformActionToolDefs];
+}
+
+function getCompositeTools(allToolDefs: ToolDef[]): CompositeTool[] {
+  return createCompositeTools(allToolDefs);
+}
+
+const LEGACY_SERVER_INSTRUCTIONS = `You are connected to OpenLander, a self-hosted deployment platform that builds Docker images from git repos and runs them behind Traefik.
 
 CRITICAL: Use the MCP tools below for ALL OpenLander operations. NEVER write HTTP requests, curl commands, fetch() calls, or API client code. Every action you need is available as a tool.
 
@@ -275,13 +284,64 @@ No extra configuration needed. Pass them via env_vars in create_deploy_plan or s
 - Global secrets (set_global_secret) are auto-injected into all deploys. Project-level env vars override them.
 - Secret files (upload_secret_file) mount at /run/secrets/filename inside containers. Use for Firebase JSON, TLS certs, SSH keys — any file the app needs on disk. Set GOOGLE_APPLICATION_CREDENTIALS or similar env var pointing to the mount path.`;
 
+const UNIFIED_SERVER_INSTRUCTIONS = `You are connected to OpenLander — a self-hosted deployment platform.
+
+CRITICAL: Use ONLY the 4 tools below. Each tool takes an { action, params } input.
+Use action="help" on any tool to list available operations.
+NEVER call docker CLI, curl localhost, or docker compose directly — use OpenLander tools instead.
+Docker may run on a remote host. Always use tools, not local commands.
+
+## openlander_deploy
+Deploy & build operations: plans, execution, rollbacks, previews, build logs, Git, infrastructure.
+Key actions: deploy, create_deploy_plan, execute_deploy_plan, get_deploy_status, rollback_project, get_build_log
+All actions: action="help"
+
+## openlander_project
+Project management & config: lifecycle, env vars, secrets, domains, webhooks, public URLs.
+Key actions: list_projects, redeploy_project, set_env_vars, map_domain, enable_webhook, expose_public
+All actions: action="help"
+
+## openlander_service
+Infrastructure services & storage: databases, caches, backups, volumes, disk usage.
+Key actions: create_service, get_service_credentials, backup_service, add_volume, get_disk_usage
+All actions: action="help"
+
+## openlander_monitor
+Monitoring & operations: logs, alerts, system stats, recovery automation.
+Key actions: get_logs, get_alerts, get_system_stats, debug_build_error, dismiss_alert
+All actions: action="help"
+
+## Usage
+Example: openlander_deploy({ action: "deploy", params: { repo_url: "https://github.com/user/repo" } })
+Example: openlander_project({ action: "help" })
+Example: openlander_service({ action: "create_service", params: { name: "pg", type: "postgres" } })
+
+## Deploy Flow (ALWAYS follow for new projects)
+1. openlander_deploy({ action: "deploy", params: { repo_url: "...", name: "..." } })
+2. openlander_deploy({ action: "get_deploy_status", params: { project_name: "..." } })  ← poll until done
+3. openlander_project({ action: "list_projects" })  ← confirm running
+
+## Networking
+- All containers share the "openlander" Docker network
+- Container-to-container: http://ol-{project-name}:{port}
+- Never create Docker networks manually`;
+
+function getServerInstructions(mode: string): string {
+  if (mode === 'unified') {
+    return UNIFIED_SERVER_INSTRUCTIONS;
+  }
+  return LEGACY_SERVER_INSTRUCTIONS;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
 function createMcpServerInstance(ctx: AppContext): Server {
+  const mode = ctx.config.mcp.mode ?? 'legacy';
   const unresolvedIncidents = ctx.db.listUnresolvedRuntimeIncidents();
   const incidentBriefing = buildIncidentBriefing(unresolvedIncidents, ctx.db);
+  const baseInstructions = getServerInstructions(mode);
   const instructions = incidentBriefing
-    ? `${SERVER_INSTRUCTIONS}\n\n${incidentBriefing}`
-    : SERVER_INSTRUCTIONS;
+    ? `${baseInstructions}\n\n${incidentBriefing}`
+    : baseInstructions;
 
   // eslint-disable-next-line @typescript-eslint/no-deprecated -- SDK v1 uses Server class
   const server = new Server(
@@ -289,8 +349,19 @@ function createMcpServerInstance(ctx: AppContext): Server {
     { capabilities: { tools: {}, prompts: {} }, instructions },
   );
 
-  const toolDefs = getMcpToolDefs(ctx.config.mcp.platformTools === true);
-  registerMcpTools(server, toolDefs, ctx);
+  const platformToolsEnabled = ctx.config.mcp.platformTools === true;
+
+  if (mode === 'unified') {
+    const toolDefs = getMcpToolDefs(platformToolsEnabled);
+    const compositeTools = getCompositeTools(toolDefs);
+    const platformDefs = platformToolsEnabled ? getPlatformToolDefs() : [];
+
+    registerCompositeMcpTools(server, compositeTools, platformDefs, ctx);
+  } else {
+    const toolDefs = getMcpToolDefs(platformToolsEnabled);
+    registerMcpTools(server, toolDefs, ctx);
+  }
+
   registerMcpPrompts(server);
 
   return server;

@@ -11,7 +11,7 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
         ┌───────────────┼───────────────┐
         │               │               │
    Pipeline        Tools/MCP        Web API
-   (deploy,        (70+ ToolDefs,   (routes,
+   (deploy,        (69 ToolDefs,    (routes,
     docker,         AI SDK +         middleware,
     traefik)        MCP adapters)    WebSocket)
         │               │               │
@@ -89,7 +89,7 @@ src/
 │   ├── service-manager.ts   #   Infrastructure services
 │   └── service-adapters/    #   DB adapters (postgres, mysql, redis)
 ├── tools/                   # MCP Tool System
-│   ├── defs/                #   ToolDef definitions (14 categories, 70+ tools)
+│   ├── defs/                #   ToolDef definitions (14 categories, 69 tools)
 │   │   ├── types.ts         #   ToolDef interface
 │   │   └── index.ts         #   Registry exports
 │   └── adapters/            #   Protocol adapters
@@ -233,10 +233,19 @@ interface ToolDef {
 }
 ```
 
-14 tool categories, 70+ tools. Two adapters convert ToolDefs to:
+14 tool categories, 69 tools. Two adapters convert ToolDefs to:
 
-- `src/tools/adapters/mcp.ts` — MCP protocol format
+- `src/tools/adapters/mcp.ts` — MCP protocol format (legacy: all 69 tools, unified: 4 composite tools)
 - `src/tools/adapters/ai-sdk.ts` — Vercel AI SDK format
+
+**MCP mode** is controlled by `config.mcp.mode?: 'unified' | 'legacy'` (default: `'legacy'`):
+
+- `legacy`: exposes all 69 individual tools — same as before
+- `unified`: exposes 4 composite tools, each accepting an `action` parameter:
+  - `openlander_deploy` — deploy lifecycle (create_deploy_plan, execute_deploy_plan, etc.)
+  - `openlander_project` — project management, env vars
+  - `openlander_service` — infrastructure services, volumes
+  - `openlander_monitor` — monitoring, alerts, automation
 
 ### EventBus
 

@@ -6,6 +6,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import type { AppContext } from '../../app.js';
+import type { CompositeTool } from '../../mcp/composite-tools.js';
 import type { ToolDef } from '../defs/types.js';
 
 function toInputSchema(schema: unknown): Record<string, unknown> {
@@ -68,6 +69,66 @@ export function registerMcpTools(
       const rawArgs = request.params.arguments ?? {};
 
       const def = mcpDefs.find((item) => item.name === toolName);
+      if (!def) {
+        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
+      }
+
+      const parsed = def.inputSchema.safeParse(rawArgs);
+      if (!parsed.success) {
+        throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
+      }
+
+      const result = await def.execute(parsed.data, { target: 'mcp', appCtx });
+      const transformed = def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
+      return successResponse(transformed);
+    } catch (error) {
+      return errorResponse(error);
+    }
+  });
+}
+
+export function registerCompositeMcpTools(
+  server: McpRequestHandlerServer,
+  composites: CompositeTool[],
+  platformDefs: ToolDef[],
+  appCtx: AppContext,
+): void {
+  const mcpPlatformDefs = platformDefs.filter(isMcpTargeted);
+
+  server.setRequestHandler(ListToolsRequestSchema, () => {
+    const tools = [
+      ...composites.map((composite) => ({
+        name: composite.name,
+        description: composite.description,
+        inputSchema: toInputSchema(composite.inputSchema),
+      })),
+      ...mcpPlatformDefs.map((def) => ({
+        name: def.name,
+        description: def.mcpDescription ?? def.description,
+        inputSchema: toInputSchema(def.inputSchema),
+      })),
+    ];
+
+    return Promise.resolve({ tools });
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    try {
+      const toolName = request.params.name;
+      const rawArgs = request.params.arguments ?? {};
+
+      const composite = composites.find((item) => item.name === toolName);
+      if (composite) {
+        const parsed = composite.inputSchema.safeParse(rawArgs);
+        if (!parsed.success) {
+          throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
+        }
+
+        const result = await composite.execute(parsed.data, { target: 'mcp', appCtx });
+        return successResponse(result);
+      }
+
+      const def = mcpPlatformDefs.find((item) => item.name === toolName);
       if (!def) {
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
       }

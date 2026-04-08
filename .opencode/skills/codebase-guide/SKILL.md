@@ -47,6 +47,15 @@
 - **이름은 불변** — MCP 클라이언트가 캐싱하므로 한번 정하면 변경 금지
 - MCP/AI SDK 어댑터에 자동 노출 (별도 작업 불필요)
 
+**MCP 모드** (`config.mcp.mode?: 'unified' | 'legacy'`, 기본값: `'legacy'`):
+
+- `legacy`: 69개 개별 tool 노출 — 기존 방식과 동일
+- `unified`: 4개 composite tool로 노출 — action 파라미터로 기능 선택
+  - `openlander_deploy`: deploy lifecycle
+  - `openlander_project`: project management, env vars
+  - `openlander_service`: infrastructure services, volumes
+  - `openlander_monitor`: monitoring, alerts, automation
+
 ### 라우트 추가 시
 
 - Hono 웹 프레임워크 (Express 아님)
@@ -111,12 +120,12 @@ class OpenLanderError extends Error {
 
 ### 채널 구조
 
-| 채널          | 위치                | 비고                   |
-| ------------- | ------------------- | ---------------------- |
-| Web Dashboard | `web/src/`          | React 19 + Vite        |
-| REST API      | `src/web/api/`      | Hono 라우트            |
-| MCP           | `src/mcp/server.ts` | 60+ 도구 노출          |
-| Bot           | `src/channels/`     | Slack/Discord/Telegram |
+| 채널          | 위치                | 비고                                            |
+| ------------- | ------------------- | ----------------------------------------------- |
+| Web Dashboard | `web/src/`          | React 19 + Vite                                 |
+| REST API      | `src/web/api/`      | Hono 라우트                                     |
+| MCP           | `src/mcp/server.ts` | 69 tools (legacy) / 4 composite tools (unified) |
+| Bot           | `src/channels/`     | Slack/Discord/Telegram                          |
 
 **새 기능 추가 시**: 어떤 채널에 영향을 주는지 확인.
 
