@@ -5,11 +5,13 @@ import { fetchActivityFeed, type ActivityItem } from '../lib/api/operations';
 export function useActivityStream(options?: { projectId?: string; types?: string[] }) {
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
 
     fetchActivityFeed({ projectId: options?.projectId, types: options?.types, limit: 50 })
       .then(({ activities: initial }) => {
@@ -17,6 +19,9 @@ export function useActivityStream(options?: { projectId?: string; types?: string
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
 
     const controller = new AbortController();
@@ -69,5 +74,5 @@ export function useActivityStream(options?: { projectId?: string; types?: string
     };
   }, [options?.projectId, options?.types?.join(',')]);
 
-  return { activities, isConnected, error };
+  return { activities, isConnected, loading, error };
 }

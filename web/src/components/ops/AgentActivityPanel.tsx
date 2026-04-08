@@ -1,6 +1,7 @@
 import { useLanguage } from '@/i18n/context';
 import { useAgentActivity } from '@/hooks/use-agent-activity';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Bot, Activity, BrainCircuit, RefreshCw, ChevronRight } from 'lucide-react';
 import { relativeTime } from '@/components/ops/utils';
 
@@ -9,7 +10,7 @@ export function AgentActivityPanel() {
   const { activeState, loading } = useAgentActivity();
 
   if (loading) {
-    return null; // Silent load
+    return <Skeleton className="h-[60px] w-full rounded-xl" />;
   }
 
   if (!activeState.isActive) {

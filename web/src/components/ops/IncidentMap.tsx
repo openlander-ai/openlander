@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { IncidentCard, type IncidentGroup } from '@/components/ops/IncidentCard';
 import { type OpsIncident, fetchOpsIncidents } from '@/lib/api/operations';
 import { useLanguage } from '@/i18n/context';
@@ -122,7 +123,10 @@ export function IncidentMap({ projectId, projectNameById, refreshToken }: Incide
       </h2>
 
       {loading ? (
-        <div className="text-sm font-body text-muted-ol">{t('Loading...')}</div>
+        <div className="space-y-3">
+          <Skeleton className="h-12 w-full rounded-lg" />
+          <Skeleton className="h-12 w-full rounded-lg" />
+        </div>
       ) : groupedIncidents.length === 0 ? (
         <div className="rounded-lg border border-border bg-bg-subtle px-4 py-8 text-center text-sm font-body text-muted-ol">
           {t('operations.incidents.empty')}

@@ -18,6 +18,7 @@ import {
 import { relativeTime } from '@/components/ops/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
@@ -140,7 +141,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
     return [typeFilter];
   }, [typeFilter]);
 
-  const { activities, isConnected, error } = useActivityStream({
+  const { activities, isConnected, loading, error } = useActivityStream({
     projectId,
     types: streamTypes,
   });
@@ -227,7 +228,13 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
         </div>
       ) : null}
 
-      {groupedActivities.length === 0 ? (
+      {loading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-lg" />
+          ))}
+        </div>
+      ) : groupedActivities.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-bg-subtle px-4 py-12 text-center text-sm font-body text-muted-ol">
           <Activity className="h-8 w-8 mb-3 opacity-30" />
           {t('operations.activity.empty')}

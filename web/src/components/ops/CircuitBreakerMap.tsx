@@ -4,6 +4,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   fetchAllCircuitBreakers,
   resetCircuitBreaker,
@@ -92,7 +93,10 @@ export function CircuitBreakerMap({
       </h2>
 
       {loading ? (
-        <div className="text-sm font-body text-muted-ol">{t('Loading...')}</div>
+        <div className="space-y-3">
+          <Skeleton className="h-12 w-full rounded-lg" />
+          <Skeleton className="h-12 w-full rounded-lg" />
+        </div>
       ) : openBreakers.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-success/30 bg-success/10 px-4 py-8 text-center text-sm font-body text-success">
           <CheckCircle2 className="h-6 w-6 mb-2 opacity-80" />
