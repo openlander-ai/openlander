@@ -167,10 +167,6 @@ export class RecoveryCoordinator {
       return { eligible: false, reason: 'circuit_breaker_open' };
     }
 
-    if (this.db.getActiveOpsIncident(projectId)) {
-      return { eligible: false, reason: 'incident_active' };
-    }
-
     return { eligible: true };
   }
 
