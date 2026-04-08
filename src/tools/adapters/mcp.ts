@@ -4,18 +4,18 @@ import {
   ErrorCode,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 
 import type { AppContext } from '../../app.js';
 import type { CompositeTool } from '../../mcp/composite-tools.js';
 import type { ToolDef } from '../defs/types.js';
 
-function toInputSchema(schema: unknown): Record<string, unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-  const jsonSchema = (schema as any).toJSON?.() as Record<string, unknown> | undefined;
-  if (jsonSchema !== undefined && '$schema' in jsonSchema) {
+function toInputSchema(schema: z.ZodType): Record<string, unknown> {
+  const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
+  if ('$schema' in jsonSchema) {
     delete jsonSchema['$schema'];
   }
-  return jsonSchema ?? {};
+  return jsonSchema;
 }
 
 function successResponse(result: unknown): { content: Array<{ type: 'text'; text: string }> } {

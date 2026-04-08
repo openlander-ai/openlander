@@ -298,7 +298,7 @@ All actions: action="help"
 
 ## openlander_project
 Project management & config: lifecycle, env vars, secrets, domains, webhooks, public URLs.
-Key actions: list_projects, redeploy_project, set_env_vars, map_domain, enable_webhook, expose_public
+Key actions: list_projects, redeploy_project, set_env_vars, archive_project, enable_webhook, expose_public
 All actions: action="help"
 
 ## openlander_service
@@ -308,7 +308,7 @@ All actions: action="help"
 
 ## openlander_monitor
 Monitoring & operations: logs, alerts, system stats, recovery automation.
-Key actions: get_logs, get_alerts, get_system_stats, debug_build_error, dismiss_alert
+Key actions: get_logs, get_alerts, get_system_stats, get_project_stats, dismiss_alert
 All actions: action="help"
 
 ## Usage
