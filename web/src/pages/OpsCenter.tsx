@@ -128,27 +128,37 @@ export function OpsCenter() {
         </div>
         <AgentActivityPanel />
 
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-          {/* Action Items (2/3 width) */}
-          <div className="space-y-5 lg:col-span-2">
-            <ApprovalQueue projectId={filteredProjectId} projectNameById={projectNameById} />
-            <IncidentMap
-              projectId={filteredProjectId}
-              projectNameById={projectNameById}
-              refreshToken={refreshToken}
-            />
+        {loadingProjects ? (
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div className="space-y-5 lg:col-span-2">
+              <Skeleton className="h-40 w-full rounded-xl" />
+              <Skeleton className="h-56 w-full rounded-xl" />
+            </div>
+            <div className="space-y-5">
+              <Skeleton className="h-48 w-full rounded-xl" />
+              <Skeleton className="h-64 w-full rounded-xl" />
+            </div>
           </div>
-
-          {/* System Tracking (1/3 width) */}
-          <div className="space-y-5">
-            <CircuitBreakerMap
-              projectId={filteredProjectId}
-              projectNameById={projectNameById}
-              refreshToken={refreshToken}
-            />
-            <ActivityFeed projectId={filteredProjectId} projectNameById={projectNameById} />
+        ) : (
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div className="space-y-5 lg:col-span-2">
+              <ApprovalQueue projectId={filteredProjectId} projectNameById={projectNameById} />
+              <IncidentMap
+                projectId={filteredProjectId}
+                projectNameById={projectNameById}
+                refreshToken={refreshToken}
+              />
+            </div>
+            <div className="space-y-5">
+              <CircuitBreakerMap
+                projectId={filteredProjectId}
+                projectNameById={projectNameById}
+                refreshToken={refreshToken}
+              />
+              <ActivityFeed projectId={filteredProjectId} projectNameById={projectNameById} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
