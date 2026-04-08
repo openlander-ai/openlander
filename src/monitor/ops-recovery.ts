@@ -69,7 +69,7 @@ export class RecoveryPipeline {
     const actionRunId = this.ctx.db.createActionRun({
       projectId,
       triggerSource: 'auto_recovery',
-      recoveryStrategy: 'unknown',
+      recoveryStrategy: 'recipe',
     });
 
     const executionContext: RecoveryContext = {
@@ -379,6 +379,7 @@ export class RecoveryPipeline {
         return null;
       }
 
+      this.ctx.db.updateActionRunRecoveryStrategy(context.actionRunId, 'llm');
       const response = await generateText({
         model,
         messages: [

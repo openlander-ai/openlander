@@ -109,6 +109,14 @@ export class ActionRunRepo {
       .run();
   }
 
+  updateRecoveryStrategy(id: string, strategy: ActionRunRow['recovery_strategy']): void {
+    this.db
+      .update(actionRuns)
+      .set({ recovery_strategy: strategy, updated_at: new Date().toISOString() })
+      .where(eq(actionRuns.id, id))
+      .run();
+  }
+
   findPendingApproval(actionRunId: string): ActionRunRow | null {
     const result = this.db
       .select()
