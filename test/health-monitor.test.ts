@@ -65,6 +65,8 @@ describe('HealthMonitor checkPort fallback', () => {
     const db = {
       getProject,
       updateProject: vi.fn(),
+      getCircuitBreakerState: vi.fn().mockReturnValue(null),
+      resetCircuitBreaker: vi.fn(),
     } as unknown as Database;
 
     const events = {

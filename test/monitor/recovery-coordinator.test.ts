@@ -326,7 +326,7 @@ describe('RecoveryCoordinator', () => {
     expect(db.updateProject).not.toHaveBeenCalled();
   });
 
-  it('blocks second recovery for same project when incident is already active', async () => {
+  it('allows recovery even when incident is active (dedup handled by RecoveryPipeline.activeRecoveries)', async () => {
     const { db, project } = createMockDb();
     db.getActiveOpsIncident.mockReturnValue(null);
 
@@ -336,9 +336,7 @@ describe('RecoveryCoordinator', () => {
       createMockConfig(),
     );
     const opsAgent: OpsAgentRef = { enqueue: vi.fn() };
-    const blocked = vi.fn();
 
-    events.on('recovery:blocked', blocked);
     coordinator.start({ opsAgent });
 
     await events.emit('container:oom', {
@@ -348,7 +346,7 @@ describe('RecoveryCoordinator', () => {
     });
     expect(opsAgent.enqueue).toHaveBeenCalledTimes(1);
 
-    project.status = 'running';
+    project.status = 'error';
     db.getActiveOpsIncident.mockReturnValue({ id: 'inc-1', project_id: 'proj-1' });
 
     await events.emit('container:oom', {
@@ -356,10 +354,6 @@ describe('RecoveryCoordinator', () => {
       containerId: 'c2',
       containerName: 'demo',
     });
-    expect(opsAgent.enqueue).toHaveBeenCalledTimes(1);
-    expect(blocked).toHaveBeenCalledWith({
-      projectId: 'proj-1',
-      reason: 'incident_active',
-    });
+    expect(opsAgent.enqueue).toHaveBeenCalledTimes(2);
   });
 });
