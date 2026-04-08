@@ -105,9 +105,8 @@ export class RecoveryPipeline {
   private async gateStep(
     context: RecoveryContext,
     step: ConfigurableRecoveryStep,
-    _description: string,
+    description: string,
   ): Promise<'proceed' | 'rejected' | 'timed_out'> {
-    void _description;
     const mode = context.automationPolicy[step];
     if (mode === 'auto') {
       return 'proceed';
@@ -115,6 +114,7 @@ export class RecoveryPipeline {
 
     this.ctx.db.updateActionRunStatus(context.actionRunId, 'pending_approval');
     this.ctx.db.updateActionRunApproval(context.actionRunId, 'pending', step);
+    this.ctx.db.updateActionRunPlan(context.actionRunId, description);
 
     await eventBus.emit('recovery:approval-needed', {
       projectId: context.projectId,
@@ -185,7 +185,11 @@ export class RecoveryPipeline {
       this.incrementAndCheckBreaker(projectId);
       const restartFailureReason = `Restart failed: ${restartResult.reason}`;
 
-      const diagnosisGate = await this.gateStep(context, 'diagnosis', 'LLM diagnosis of crash');
+      const diagnosisGate = await this.gateStep(
+        context,
+        'diagnosis',
+        `[${context.projectName}] ${restartFailureReason}\nLLM을 통한 크래시 원인 분석을 실행합니다.`,
+      );
       if (diagnosisGate !== 'proceed') {
         return await this.escalate(
           context,
@@ -213,7 +217,10 @@ export class RecoveryPipeline {
       }
 
       let restartFixNotes: string[] = [];
-      const fixesGate = await this.gateStep(context, 'apply_fixes', 'Apply deterministic fixes');
+      const fixesDesc = restartDiagnosis
+        ? `[${context.projectName}] 원인: ${restartFailureReason}\n진단: ${restartDiagnosis.slice(0, 200)}\n자동 수정을 적용합니다.`
+        : `[${context.projectName}] ${restartFailureReason}\n자동 수정을 적용합니다.`;
+      const fixesGate = await this.gateStep(context, 'apply_fixes', fixesDesc);
       if (fixesGate === 'proceed') {
         restartFixNotes = await this.applyFixes(context, restartLogs);
         if (restartFixNotes.length > 0) {
@@ -230,7 +237,8 @@ export class RecoveryPipeline {
         }
       }
 
-      const rollbackGate = await this.gateStep(context, 'rollback', 'Rollback to previous version');
+      const rollbackDesc = `[${context.projectName}] ${restartFailureReason}\n재시작 및 수정 실패. 이전 버전으로 롤백합니다.`;
+      const rollbackGate = await this.gateStep(context, 'rollback', rollbackDesc);
       if (rollbackGate !== 'proceed') {
         return await this.escalate(
           context,
@@ -262,7 +270,11 @@ export class RecoveryPipeline {
     this.incrementAndCheckBreaker(projectId);
     const healthFailureReason = 'Health check failed after restart (3 attempts over 90 seconds)';
 
-    const diagnosisGate = await this.gateStep(context, 'diagnosis', 'LLM diagnosis of crash');
+    const diagnosisGate = await this.gateStep(
+      context,
+      'diagnosis',
+      `[${context.projectName}] ${healthFailureReason}\nLLM을 통한 크래시 원인 분석을 실행합니다.`,
+    );
     if (diagnosisGate !== 'proceed') {
       return await this.escalate(
         context,
@@ -286,7 +298,10 @@ export class RecoveryPipeline {
     }
 
     let healthFixNotes: string[] = [];
-    const fixesGate = await this.gateStep(context, 'apply_fixes', 'Apply deterministic fixes');
+    const healthFixesDesc = healthDiagnosis
+      ? `[${context.projectName}] 원인: ${healthFailureReason}\n진단: ${healthDiagnosis.slice(0, 200)}\n자동 수정을 적용합니다.`
+      : `[${context.projectName}] ${healthFailureReason}\n자동 수정을 적용합니다.`;
+    const fixesGate = await this.gateStep(context, 'apply_fixes', healthFixesDesc);
     if (fixesGate === 'proceed') {
       healthFixNotes = await this.applyFixes(context, healthLogs);
       if (healthFixNotes.length > 0) {
@@ -303,7 +318,8 @@ export class RecoveryPipeline {
       }
     }
 
-    const rollbackGate = await this.gateStep(context, 'rollback', 'Rollback to previous version');
+    const healthRollbackDesc = `[${context.projectName}] ${healthFailureReason}\n재시작 및 수정 실패. 이전 버전으로 롤백합니다.`;
+    const rollbackGate = await this.gateStep(context, 'rollback', healthRollbackDesc);
     if (rollbackGate !== 'proceed') {
       return await this.escalate(
         context,

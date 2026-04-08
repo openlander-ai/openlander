@@ -163,7 +163,21 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
               </div>
 
               <div className="flex flex-col gap-3 rounded-lg bg-bg-subtle/50 px-4 py-3 border border-border/50">
-                {approval.error_message && (
+                {approval.plan && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-secondary-ol pt-0.5">📋</span>
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <span className="text-xs font-semibold text-secondary-ol mb-1">
+                        {language === 'ko' ? '상황 요약' : 'Context'}
+                      </span>
+                      <pre className="text-xs font-mono text-primary-ol leading-relaxed break-words whitespace-pre-wrap max-h-32 overflow-y-auto pr-2 custom-scrollbar bg-bg-app/50 rounded-md p-2 border border-border/30">
+                        {approval.plan}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {!approval.plan && approval.error_message && (
                   <div className="flex items-start gap-3">
                     <span className="text-secondary-ol pt-0.5">📋</span>
                     <div className="flex flex-col">
@@ -177,39 +191,28 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
                   </div>
                 )}
 
-                <div className="flex items-start gap-3">
-                  <span className="text-secondary-ol pt-0.5">🔄</span>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-semibold text-secondary-ol mb-0.5">
-                      {language === 'ko' ? '예상 행동' : 'Expected Action'}
-                    </span>
-                    <p className="text-xs font-body text-primary-ol leading-relaxed">
-                      {actionLabel}
-                    </p>
-                    {actionImpact && (
-                      <p className="text-xs font-body text-muted-ol mt-0.5">
-                        {language === 'ko' ? '예상 임팩트: ' : 'Impact: '}
-                        {actionImpact}
-                      </p>
-                    )}
-                  </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-secondary-ol">🔄</span>
+                  <span className="text-xs font-body text-primary-ol">{actionLabel}</span>
+                  {actionImpact && (
+                    <>
+                      <span className="text-border">·</span>
+                      <span className="text-xs font-body text-muted-ol">{actionImpact}</span>
+                    </>
+                  )}
                 </div>
 
                 {approval.recovery_strategy && (
-                  <div className="flex items-start gap-3">
-                    <span className="text-agent pt-0.5">🤖</span>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-semibold text-agent mb-0.5">
-                        {language === 'ko' ? '복구 전략: ' : 'Strategy: '}
-                        {getRecoveryStrategyLabel(approval.recovery_strategy, t)}
+                  <div className="flex items-center gap-3">
+                    <span className="text-agent">🤖</span>
+                    <span className="text-xs font-semibold text-agent">
+                      {getRecoveryStrategyLabel(approval.recovery_strategy, t)}
+                    </span>
+                    {approval.current_step && approval.total_steps && (
+                      <span className="text-xs font-body text-secondary-ol">
+                        ({approval.current_step}/{approval.total_steps})
                       </span>
-                      {approval.current_step && approval.total_steps && (
-                        <p className="text-xs font-body text-secondary-ol mt-0.5">
-                          {language === 'ko' ? '단계 ' : 'Step '}
-                          {approval.current_step}/{approval.total_steps}
-                        </p>
-                      )}
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
