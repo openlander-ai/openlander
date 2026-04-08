@@ -100,7 +100,7 @@ describe('ApprovalGate', () => {
     const gate = new ApprovalGate();
     const firstMetadata = createMetadata({
       actionRunId: 'run-pending-a',
-      toolName: 'remove_project',
+      toolName: 'rollback_project',
     });
     const secondMetadata = createMetadata({
       actionRunId: 'run-pending-b',
@@ -118,7 +118,7 @@ describe('ApprovalGate', () => {
     ]);
     expect(
       pending.find((entry) => entry.metadata.actionRunId === 'run-pending-a')?.metadata.toolName,
-    ).toBe('remove_project');
+    ).toBe('rollback_project');
   });
 
   it('dispose clears all pending approvals', async () => {

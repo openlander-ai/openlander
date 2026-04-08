@@ -14,7 +14,6 @@ import { gitToolDefs } from '../../src/tools/defs/git.js';
 import { monitoringToolDefs } from '../../src/tools/defs/monitoring.js';
 import { debugToolDefs } from '../../src/tools/defs/debug.js';
 import { webhookToolDefs } from '../../src/tools/defs/webhook.js';
-import { environmentToolDefs } from '../../src/tools/defs/environment.js';
 import type { ToolDef } from '../../src/tools/defs/types.js';
 
 function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
@@ -30,7 +29,6 @@ function getMcpToolDefs(platformToolsEnabled: boolean): ToolDef[] {
     ...monitoringToolDefs,
     ...debugToolDefs,
     ...webhookToolDefs,
-    ...environmentToolDefs,
     ...(platformToolsEnabled
       ? [...platformReadToolDefs, ...platformDebugToolDefs, ...platformActionToolDefs]
       : []),
@@ -62,7 +60,7 @@ describe('Platform Tool Registration', () => {
     const nonPlatformWithout = toolsWithoutPlatform.filter((t) => !isPlatformTool(t.name));
     const nonPlatformWith = toolsWithPlatform.filter((t) => !isPlatformTool(t.name));
 
-    expect(nonPlatformWithout).toHaveLength(77);
+    expect(nonPlatformWithout).toHaveLength(70);
     expect(nonPlatformWithout).toHaveLength(nonPlatformWith.length);
   });
 

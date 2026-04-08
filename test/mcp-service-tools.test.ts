@@ -95,10 +95,8 @@ describe('MCP service tools (Task 8)', () => {
       'stop_service',
       'remove_service',
       'get_service_credentials',
-      'create_service_database',
       'create_service_user',
       'analyze_infrastructure',
-      'web_search',
     ]) {
       expect(names).toContain(toolName);
     }
@@ -112,7 +110,6 @@ describe('MCP service tools (Task 8)', () => {
       'stop_service',
       'remove_service',
       'get_service_credentials',
-      'create_service_database',
       'create_service_user',
     ];
 
@@ -121,12 +118,6 @@ describe('MCP service tools (Task 8)', () => {
       expect(tool.inputSchema.safeParse({ service_id: 'svc-1' }).success).toBe(false);
     }
 
-    expect(
-      getTool(ctx, 'create_service_database').inputSchema.safeParse({
-        service_name: 'shared-pg',
-        database_name: 'appdb',
-      }).success,
-    ).toBe(true);
     expect(
       getTool(ctx, 'create_service_user').inputSchema.safeParse({
         service_name: 'shared-pg',
@@ -389,47 +380,6 @@ describe('MCP service tools (Task 8)', () => {
     }
   });
 
-  it('create_service_database handles happy path, invalid service_name, and redis unsupported path', async () => {
-    const services = [
-      createServiceRow({ id: 'svc-pg', name: 'shared-pg', type: 'postgresql' }),
-      createServiceRow({ id: 'svc-redis', name: 'shared-redis', type: 'redis', port: 6379 }),
-    ];
-    const { ctx, serviceManager } = createMockContext(services);
-    const tool = getTool(ctx, 'create_service_database');
-
-    serviceManager.createDatabase.mockResolvedValueOnce({
-      database: 'appdb',
-      user: 'openlander',
-      password: 'secret',
-      connectionString: 'postgresql://openlander:secret@ol-svc-shared-pg:5432/appdb',
-    });
-
-    const ok = await tool.execute(
-      { service_name: 'shared-pg', database_name: 'appdb' },
-      { target: 'mcp' },
-    );
-    expect(ok).toEqual({
-      status: 'created',
-      service: 'shared-pg',
-      database: 'appdb',
-      user: 'openlander',
-      password: 'secret',
-      connectionString: 'postgresql://openlander:secret@ol-svc-shared-pg:5432/appdb',
-    });
-    expect(serviceManager.createDatabase).toHaveBeenCalledWith('svc-pg', 'appdb');
-
-    await expect(
-      tool.execute({ service_name: 'missing-service', database_name: 'appdb' }, { target: 'mcp' }),
-    ).rejects.toThrow('Service not found: missing-service');
-
-    serviceManager.createDatabase.mockRejectedValueOnce(
-      new Error('Database creation is not supported for redis services'),
-    );
-    await expect(
-      tool.execute({ service_name: 'shared-redis', database_name: 'cachedb' }, { target: 'mcp' }),
-    ).rejects.toThrow('Database creation is not supported for redis services');
-  });
-
   it('create_service_user handles happy path, invalid service_name, and redis unsupported path', async () => {
     const services = [
       createServiceRow({ id: 'svc-pg', name: 'shared-pg', type: 'postgresql' }),
@@ -512,25 +462,5 @@ describe('MCP service tools (Task 8)', () => {
     await expect(
       tool.execute({ repo_url: 'https://github.com/example/bad' }, { target: 'mcp' }),
     ).rejects.toThrow('CLONE_FAILED');
-  });
-
-  it('web_search returns { results } and reports failures', async () => {
-    const { ctx } = createMockContext();
-    const tool = getTool(ctx, 'web_search');
-
-    mockWebSearch.mockResolvedValueOnce({
-      results: [{ title: 'OpenLander', url: 'https://example.com', snippet: 'Deploy fast' }],
-    });
-
-    const ok = await tool.execute({ query: 'openlander', max_results: 3 }, { target: 'mcp' });
-    expect(ok).toEqual({
-      results: [{ title: 'OpenLander', url: 'https://example.com', snippet: 'Deploy fast' }],
-    });
-    expect(mockWebSearch).toHaveBeenCalledWith('openlander', { maxResults: 3 });
-
-    mockWebSearch.mockRejectedValueOnce(new Error('Search backend unavailable'));
-    await expect(tool.execute({ query: 'openlander' }, { target: 'mcp' })).rejects.toThrow(
-      'Search backend unavailable',
-    );
   });
 });

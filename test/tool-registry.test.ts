@@ -16,7 +16,6 @@ const EXPECTED_TOOL_NAMES = [
   'update_deploy_plan',
   'execute_deploy_plan',
   'stop_project',
-  'remove_project',
   'get_logs',
   'list_projects',
   'list_env_vars',
@@ -51,10 +50,8 @@ const EXPECTED_TOOL_NAMES = [
   'stop_service',
   'remove_service',
   'get_service_credentials',
-  'create_service_database',
   'create_service_user',
   'analyze_infrastructure',
-  'web_search',
 ];
 
 function createMockContext(opts?: {

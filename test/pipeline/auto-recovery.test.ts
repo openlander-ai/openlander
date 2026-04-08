@@ -286,8 +286,8 @@ describe('setupAutoRecovery', () => {
     const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
       await onEvent({
         type: 'tool_call',
-        toolName: 'remove_project',
-        arguments: { project_id: 'proj-approval-approved' },
+        toolName: 'rollback_project',
+        arguments: { project_name: 'proj-approval-approved' },
         stepIndex: 0,
       });
     });
@@ -316,7 +316,7 @@ describe('setupAutoRecovery', () => {
 
       const pendingRun = harness.db.getActionRunsByProject(projectId, 1)[0];
       expect(pendingRun.approval_status).toBe('pending');
-      expect(pendingRun.approval_tool).toBe('remove_project');
+      expect(pendingRun.approval_tool).toBe('rollback_project');
 
       harness.recoveryHandlers.resolveApproval(pendingRun.id, true);
 
@@ -345,8 +345,8 @@ describe('setupAutoRecovery', () => {
     const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
       await onEvent({
         type: 'tool_call',
-        toolName: 'remove_project',
-        arguments: { project_id: 'proj-approval-rejected' },
+        toolName: 'rollback_project',
+        arguments: { project_name: 'proj-approval-rejected' },
         stepIndex: 0,
       });
     });

@@ -20,10 +20,6 @@ describe('DecisionEngine', () => {
     expect(engine.classify('rollback_project')).toBe('REQUIRE_APPROVAL');
   });
 
-  it('remove_project → REQUIRE_APPROVAL', () => {
-    expect(engine.classify('remove_project')).toBe('REQUIRE_APPROVAL');
-  });
-
   it('remove_service → REQUIRE_APPROVAL', () => {
     expect(engine.classify('remove_service')).toBe('REQUIRE_APPROVAL');
   });
@@ -50,9 +46,5 @@ describe('DecisionEngine', () => {
 
   it('unknown_tool → NOTIFY_THEN_ALLOW', () => {
     expect(engine.classify('unknown_tool')).toBe('NOTIFY_THEN_ALLOW');
-  });
-
-  it('remove_project with low riskLevel → ALLOW (override)', () => {
-    expect(engine.classify('remove_project', 'low')).toBe('ALLOW');
   });
 });
