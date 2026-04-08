@@ -4,21 +4,17 @@ import {
   ErrorCode,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
+
 import type { AppContext } from '../../app.js';
 import type { ToolDef } from '../defs/types.js';
 
-const agentExecuteGoalSchema = z.object({
-  goal: z.string().min(1).describe('The goal for the agent to accomplish using available tools'),
-});
-
-const agentExecuteGoalDescription =
-  'Run the AI agent to accomplish a complex goal. The agent reasons about steps and chains multiple tools (deploy, configure, debug, etc.) automatically. Use this for multi-step tasks instead of calling individual tools.';
-
-function toInputSchema(schema: z.ZodType) {
-  const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
-  delete jsonSchema['$schema'];
-  return jsonSchema;
+function toInputSchema(schema: unknown): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  const jsonSchema = (schema as any).toJSON?.() as Record<string, unknown> | undefined;
+  if (jsonSchema !== undefined && '$schema' in jsonSchema) {
+    delete jsonSchema['$schema'];
+  }
+  return jsonSchema ?? {};
 }
 
 function successResponse(result: unknown): { content: Array<{ type: 'text'; text: string }> } {
@@ -63,12 +59,6 @@ export function registerMcpTools(
       inputSchema: toInputSchema(def.inputSchema),
     }));
 
-    tools.push({
-      name: 'agent_execute_goal',
-      description: agentExecuteGoalDescription,
-      inputSchema: toInputSchema(agentExecuteGoalSchema),
-    });
-
     return Promise.resolve({ tools });
   });
 
@@ -76,27 +66,6 @@ export function registerMcpTools(
     try {
       const toolName = request.params.name;
       const rawArgs = request.params.arguments ?? {};
-
-      if (toolName === 'agent_execute_goal') {
-        const parsed = agentExecuteGoalSchema.safeParse(rawArgs);
-        if (!parsed.success) {
-          throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
-        }
-
-        if (!appCtx.agent) {
-          return successResponse({
-            error: 'Agent requires an LLM provider. Configure one in OpenLander settings first.',
-          });
-        }
-
-        const sessionId = `mcp-${String(Date.now())}`;
-        const response = await appCtx.agent.chat(parsed.data.goal, sessionId);
-        return successResponse({
-          message: response.message,
-          toolResults: response.toolResults ?? [],
-          sessionId,
-        });
-      }
 
       const def = mcpDefs.find((item) => item.name === toolName);
       if (!def) {
