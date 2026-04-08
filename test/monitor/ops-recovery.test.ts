@@ -37,6 +37,7 @@ interface MockContext {
     createActionRun: ReturnType<typeof vi.fn>;
     updateActionRunStatus: ReturnType<typeof vi.fn>;
     updateActionRunApproval: ReturnType<typeof vi.fn>;
+    updateActionRunPlan: ReturnType<typeof vi.fn>;
     getProject: ReturnType<typeof vi.fn>;
     resetCircuitBreaker: ReturnType<typeof vi.fn>;
     updateOpsIncidentStatus: ReturnType<typeof vi.fn>;
@@ -67,6 +68,7 @@ function createMockContext(): MockContext {
       createActionRun: vi.fn(() => 'action-run-1'),
       updateActionRunStatus: vi.fn(),
       updateActionRunApproval: vi.fn(),
+      updateActionRunPlan: vi.fn(),
       getProject: vi.fn(() => ({
         id: 'project-1',
         assigned_port: 3000,

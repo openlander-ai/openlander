@@ -167,6 +167,10 @@ export class RecoveryCoordinator {
       return { eligible: false, reason: 'circuit_breaker_open' };
     }
 
+    if (this.db.getActiveOpsIncident(projectId)) {
+      return { eligible: false, reason: 'incident_active' };
+    }
+
     return { eligible: true };
   }
 
@@ -278,7 +282,12 @@ export class RecoveryCoordinator {
     try {
       const result = this.checkEligibility(payload.projectId);
       if (!result.eligible) {
-        if (result.reason !== 'operator_suppressed') {
+        const unhandledReasons: EligibilityReason[] = [
+          'ai_disabled',
+          'global_budget_exceeded',
+          'circuit_breaker_open',
+        ];
+        if (result.reason && unhandledReasons.includes(result.reason)) {
           this.projectStatusWriter.updateProject(payload.projectId, { status: 'error' });
         }
         await this.emitBlocked(payload.projectId, result.reason);
