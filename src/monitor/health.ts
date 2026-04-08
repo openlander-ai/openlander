@@ -83,7 +83,11 @@ export class HealthMonitor {
 
   async checkProject(projectId: string): Promise<HealthCheckResult> {
     const project = this.db.getProject(projectId);
-    if (!project || project.status !== 'running' || project.assigned_port == null) {
+    if (
+      !project ||
+      (project.status !== 'running' && project.status !== 'error') ||
+      project.assigned_port == null
+    ) {
       const previous = this.status.get(projectId);
       const result: HealthCheckResult = {
         projectId,
@@ -133,9 +137,13 @@ export class HealthMonitor {
         return;
       }
 
-      const projects = this.db
+      const runningProjects = this.db
         .listProjects('running')
         .filter((project) => project.assigned_port != null);
+      const errorProjects = this.db
+        .listProjects('error')
+        .filter((project) => project.assigned_port != null);
+      const projects = [...runningProjects, ...errorProjects];
 
       await Promise.all([
         Promise.all(projects.map((project) => this.checkProject(project.id))),
@@ -289,7 +297,7 @@ export class HealthMonitor {
     }
 
     // Skip non-running projects — no recovery events should be emitted
-    if (project.status !== 'running' || project.archived_at) {
+    if ((project.status !== 'running' && project.status !== 'error') || project.archived_at) {
       return lastResult;
     }
 
