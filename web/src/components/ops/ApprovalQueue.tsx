@@ -202,7 +202,7 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
                   )}
                 </div>
 
-                {approval.recovery_strategy && (
+                {approval.recovery_strategy && approval.recovery_strategy !== 'unknown' && (
                   <div className="flex items-center gap-3">
                     <span className="text-agent">🤖</span>
                     <span className="text-xs font-semibold text-agent">

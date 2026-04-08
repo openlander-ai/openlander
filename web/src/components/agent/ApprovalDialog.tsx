@@ -156,6 +156,19 @@ export function ApprovalDialog() {
             </div>
           </div>
         )}
+
+        {pending.recovery_strategy && pending.recovery_strategy !== 'unknown' && (
+          <div className="flex items-center gap-1.5 text-xs text-agent font-medium">
+            <span>🤖</span>
+            <span>
+              {pending.recovery_strategy === 'llm'
+                ? t('ops.recoveryStrategy.llm')
+                : pending.recovery_strategy === 'memory'
+                  ? t('ops.recoveryStrategy.memory')
+                  : t('ops.recoveryStrategy.recipe')}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Action section */}
