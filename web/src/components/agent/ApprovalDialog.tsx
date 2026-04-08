@@ -151,7 +151,7 @@ export function ApprovalDialog() {
             <h4 className="text-[11px] font-semibold text-muted-ol uppercase tracking-wider flex items-center gap-1.5">
               <CheckCircle2 className="h-3 w-3 text-agent" /> {t('agent.approval.recoveryPlan')}
             </h4>
-            <div className="bg-agent/5 border border-agent/20 p-2.5 rounded-md text-xs font-body text-secondary-ol leading-relaxed max-h-[100px] overflow-y-auto">
+            <div className="bg-agent/5 border border-agent/20 p-2.5 rounded-md text-xs font-body text-secondary-ol leading-relaxed max-h-[100px] overflow-y-auto whitespace-pre-wrap">
               {pending.plan}
             </div>
           </div>

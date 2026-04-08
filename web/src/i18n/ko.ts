@@ -449,6 +449,7 @@ export const translations = {
       approve: '승인',
       reject: '거부',
       empty: '대기 중인 승인이 없습니다',
+      contextSummary: '상황 요약',
     },
     incidents: {
       title: '활성 인시던트',

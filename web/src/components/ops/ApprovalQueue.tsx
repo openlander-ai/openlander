@@ -168,7 +168,7 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
                     <span className="text-secondary-ol pt-0.5">📋</span>
                     <div className="flex flex-col flex-1 min-w-0">
                       <span className="text-xs font-semibold text-secondary-ol mb-1">
-                        {language === 'ko' ? '상황 요약' : 'Context'}
+                        {t('operations.approvals.contextSummary')}
                       </span>
                       <pre className="text-xs font-mono text-primary-ol leading-relaxed break-words whitespace-pre-wrap max-h-32 overflow-y-auto pr-2 custom-scrollbar bg-bg-app/50 rounded-md p-2 border border-border/30">
                         {approval.plan}

@@ -451,6 +451,7 @@ export const translations = {
       approve: 'Approve',
       reject: 'Reject',
       empty: 'No pending approvals',
+      contextSummary: 'Context',
     },
     incidents: {
       title: 'Active Incidents',

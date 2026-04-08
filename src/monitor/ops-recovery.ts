@@ -18,6 +18,44 @@ const log = createModuleLogger('ops-recovery');
 const HEALTH_CHECK_ATTEMPTS = 3;
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
 
+type Locale = 'en' | 'ko';
+
+const RECOVERY_MESSAGES: Record<
+  Locale,
+  {
+    diagnosisPrompt: (name: string, reason: string) => string;
+    fixesWithDiagnosis: (name: string, reason: string, diagnosis: string) => string;
+    fixesNoDiagnosis: (name: string, reason: string) => string;
+    rollback: (name: string, reason: string) => string;
+    llmSystemPrompt: string;
+  }
+> = {
+  ko: {
+    diagnosisPrompt: (name, reason) =>
+      `[${name}] ${reason}\nLLM을 통한 크래시 원인 분석을 실행합니다.`,
+    fixesWithDiagnosis: (name, reason, diagnosis) =>
+      `[${name}]\n\n📌 원인\n${reason}\n\n🔍 진단\n${diagnosis.slice(0, 200)}\n\n🔧 조치\n자동 수정을 적용합니다.`,
+    fixesNoDiagnosis: (name, reason) =>
+      `[${name}]\n\n📌 원인\n${reason}\n\n🔧 조치\n자동 수정을 적용합니다.`,
+    rollback: (name, reason) =>
+      `[${name}]\n\n📌 원인\n${reason}\n\n⏪ 조치\n재시작 및 수정 실패. 이전 버전으로 롤백합니다.`,
+    llmSystemPrompt:
+      '크래시된 Docker 서비스를 진단합니다. 근본 원인과 즉시 조치 방안을 간결한 한국어로 작성하세요. 기술 용어(Docker, container, OOM 등)는 영어 유지.',
+  },
+  en: {
+    diagnosisPrompt: (name, reason) =>
+      `[${name}] ${reason}\nRunning LLM-based crash root cause analysis.`,
+    fixesWithDiagnosis: (name, reason, diagnosis) =>
+      `[${name}]\n\n📌 Cause\n${reason}\n\n🔍 Diagnosis\n${diagnosis.slice(0, 200)}\n\n🔧 Action\nApplying automatic fixes.`,
+    fixesNoDiagnosis: (name, reason) =>
+      `[${name}]\n\n📌 Cause\n${reason}\n\n🔧 Action\nApplying automatic fixes.`,
+    rollback: (name, reason) =>
+      `[${name}]\n\n📌 Cause\n${reason}\n\n⏪ Action\nRestart and fixes failed. Rolling back to previous version.`,
+    llmSystemPrompt:
+      'You diagnose crashed Dockerized services. Return concise root cause and immediate remediation steps in plain text.',
+  },
+};
+
 export interface RecoveryContext {
   projectId: string;
   projectName: string;
@@ -39,6 +77,14 @@ export class RecoveryPipeline {
   constructor(ctx: AppContext, approvalGate: ApprovalGateType) {
     this.ctx = ctx;
     this.approvalGate = approvalGate;
+  }
+
+  private getLocale(): Locale {
+    return this.ctx.config.language === 'ko' ? 'ko' : 'en';
+  }
+
+  private get msg() {
+    return RECOVERY_MESSAGES[this.getLocale()];
   }
 
   async execute(context: RecoveryExecuteContext): Promise<RecoveryOutcome> {
@@ -188,7 +234,7 @@ export class RecoveryPipeline {
       const diagnosisGate = await this.gateStep(
         context,
         'diagnosis',
-        `[${context.projectName}] ${restartFailureReason}\nLLM을 통한 크래시 원인 분석을 실행합니다.`,
+        this.msg.diagnosisPrompt(context.projectName, restartFailureReason),
       );
       if (diagnosisGate !== 'proceed') {
         return await this.escalate(
@@ -218,8 +264,8 @@ export class RecoveryPipeline {
 
       let restartFixNotes: string[] = [];
       const fixesDesc = restartDiagnosis
-        ? `[${context.projectName}] 원인: ${restartFailureReason}\n진단: ${restartDiagnosis.slice(0, 200)}\n자동 수정을 적용합니다.`
-        : `[${context.projectName}] ${restartFailureReason}\n자동 수정을 적용합니다.`;
+        ? this.msg.fixesWithDiagnosis(context.projectName, restartFailureReason, restartDiagnosis)
+        : this.msg.fixesNoDiagnosis(context.projectName, restartFailureReason);
       const fixesGate = await this.gateStep(context, 'apply_fixes', fixesDesc);
       if (fixesGate === 'proceed') {
         restartFixNotes = await this.applyFixes(context, restartLogs);
@@ -237,7 +283,7 @@ export class RecoveryPipeline {
         }
       }
 
-      const rollbackDesc = `[${context.projectName}] ${restartFailureReason}\n재시작 및 수정 실패. 이전 버전으로 롤백합니다.`;
+      const rollbackDesc = this.msg.rollback(context.projectName, restartFailureReason);
       const rollbackGate = await this.gateStep(context, 'rollback', rollbackDesc);
       if (rollbackGate !== 'proceed') {
         return await this.escalate(
@@ -273,7 +319,7 @@ export class RecoveryPipeline {
     const diagnosisGate = await this.gateStep(
       context,
       'diagnosis',
-      `[${context.projectName}] ${healthFailureReason}\nLLM을 통한 크래시 원인 분석을 실행합니다.`,
+      this.msg.diagnosisPrompt(context.projectName, healthFailureReason),
     );
     if (diagnosisGate !== 'proceed') {
       return await this.escalate(
@@ -299,8 +345,8 @@ export class RecoveryPipeline {
 
     let healthFixNotes: string[] = [];
     const healthFixesDesc = healthDiagnosis
-      ? `[${context.projectName}] 원인: ${healthFailureReason}\n진단: ${healthDiagnosis.slice(0, 200)}\n자동 수정을 적용합니다.`
-      : `[${context.projectName}] ${healthFailureReason}\n자동 수정을 적용합니다.`;
+      ? this.msg.fixesWithDiagnosis(context.projectName, healthFailureReason, healthDiagnosis)
+      : this.msg.fixesNoDiagnosis(context.projectName, healthFailureReason);
     const fixesGate = await this.gateStep(context, 'apply_fixes', healthFixesDesc);
     if (fixesGate === 'proceed') {
       healthFixNotes = await this.applyFixes(context, healthLogs);
@@ -318,7 +364,7 @@ export class RecoveryPipeline {
       }
     }
 
-    const healthRollbackDesc = `[${context.projectName}] ${healthFailureReason}\n재시작 및 수정 실패. 이전 버전으로 롤백합니다.`;
+    const healthRollbackDesc = this.msg.rollback(context.projectName, healthFailureReason);
     const rollbackGate = await this.gateStep(context, 'rollback', healthRollbackDesc);
     if (rollbackGate !== 'proceed') {
       return await this.escalate(
@@ -401,8 +447,7 @@ export class RecoveryPipeline {
         messages: [
           {
             role: 'system',
-            content:
-              'You diagnose crashed Dockerized services. Return concise root cause and immediate remediation steps in plain text.',
+            content: this.msg.llmSystemPrompt,
           },
           {
             role: 'user',

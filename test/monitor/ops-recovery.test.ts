@@ -57,6 +57,9 @@ interface MockContext {
   pipeline: {
     rollback: ReturnType<typeof vi.fn>;
   };
+  config: {
+    language: string;
+  };
   modelRegistry: unknown;
 }
 
@@ -102,6 +105,9 @@ function createMockContext(): MockContext {
     },
     pipeline: {
       rollback: vi.fn(async () => ({ success: true, containerId: 'container-1' })),
+    },
+    config: {
+      language: 'en',
     },
     modelRegistry: {},
   };
