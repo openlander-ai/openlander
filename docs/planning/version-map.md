@@ -8,10 +8,10 @@
 ## 버전 타임라인
 
 ```
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0-rc.6 🧪 ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0-rc.6 🧪 ── v1.0.0-rc.7 🧪 ── v1.0.0 (TBD)
 ```
 
-v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0-rc.6 🧪 ── v1.0.0 (TBD)
+v0.0.1 ✅ ── ... ── v0.9.13 ✅ ── v0.9.14 ✅ ── v0.9.15 ✅ ── v0.9.16 ✅ ── v0.9.17 ✅ ── v0.9.18 ✅ ── v1.0.0-rc.1 🧪 ── v1.0.0-rc.2 🧪 ── v1.0.0-rc.3 🧪 ── v1.0.0-rc.4 🧪 ── v1.0.0-rc.5 🧪 ── v1.0.0-rc.6 🧪 ── v1.0.0-rc.7 🧪 ── v1.0.0 (TBD)
 
 ```
 
@@ -1622,6 +1622,31 @@ AI: bugs.md → 해결됨 + gh issue close
 | MCP session incident briefing                     | MCP 도구 응답에 장애 컨텍스트 포함, AI 에이전트의 복구 가이드 개선              | ✅   |
 
 **다음 단계**: 도그푸딩 완료 → v1.0.0 정식 릴리즈
+
+---
+
+### v1.0.0-rc.7 — Recovery Architecture Rebuild 🧪
+
+**상태**: 🧪 도그푸딩 중 | **날짜**: 2026-04-07
+
+**핵심 가치**: 단일 소유자 복구 아키텍처 + 이벤트 가시성 + 알림 통합 + 인시던트 중복 제거
+
+| 항목                           | 내용                                                                                            | 상태 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- | ---- |
+| RecoveryCoordinator            | 단일 소유자 복구 아키텍처 — 모든 AI 복구를 Eligibility Gate (7 조건) 경유                       | ✅   |
+| Executor refactoring           | auto-recovery.ts를 callable handler로 전환, OpsAgent EventBus 구독 제거                         | ✅   |
+| shouldContinue mid-stream      | LLM chatStream이 각 도구 호출 전 프로젝트 적격성 확인, 부적격 시 중단                           | ✅   |
+| ai:invoked/completed events    | Activity Feed에 실시간 LLM 호출 가시성 (모델, 소요 시간, 토큰 수, 성공 여부)                    | ✅   |
+| NotificationCenter             | recovery:started/stopped/blocked 이벤트를 Slack/Discord/Telegram으로 전송                       | ✅   |
+| PostmortemGenerator v2         | recovery:success 후 5분 안정성 윈도우 확인 후 자동 생성, 실패 시 취소                           | ✅   |
+| Incident fingerprinting        | 30분 중복 제거 윈도우 + 정규화된 에러 핑거프린트 (hex, 타임스탬프, 포트 제거), cascade_detected | ✅   |
+| container:missing routing      | OpsAgent 직접 구독 제거, Eligibility Gate 경유로 변경                                           | ✅   |
+| Activity Feed cards            | recovery:blocked/stopped/started + ai:invoked/completed 카드 (아이콘, 상태 색상, i18n)          | ✅   |
+| Status ownership               | 감지 레이어가 프로젝트 상태 설정하지 않음 — Coordinator가 상태 전이 관리                        | ✅   |
+| NDJSON live stream fix         | reason/trigger 필드가 버퍼와 라이브 스트림 양쪽에 포함                                          | ✅   |
+| Coordinator exception handling | 모든 async 이벤트 핸들러에 try/catch 추가                                                       | ✅   |
+
+**다음 단계**: 멀티 프로바이더 확장 + AI 설정 UX 고도화 → v1.0.0 정식 릴리즈
 
 ---
 

@@ -15,7 +15,6 @@ import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from './ops-t
 
 const log = createModuleLogger('ops-recovery');
 
-const RECOVERY_MAX_FAILURES = 5;
 const HEALTH_CHECK_ATTEMPTS = 3;
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
 
@@ -367,7 +366,19 @@ export class RecoveryPipeline {
     logs: string,
   ): Promise<string | null> {
     try {
-      const model = createModelProxy(this.ctx.modelRegistry, 'operationalMonitoring');
+      let model;
+      try {
+        model = createModelProxy(this.ctx.modelRegistry, 'operationalMonitoring');
+      } catch {
+        // Fallback to default model if operationalMonitoring provider not configured
+        model = this.ctx.model;
+      }
+
+      if (!model) {
+        log.warn({ projectId: context.projectId }, 'No LLM model available for recovery diagnosis');
+        return null;
+      }
+
       const response = await generateText({
         model,
         messages: [
@@ -551,9 +562,11 @@ export class RecoveryPipeline {
   private incrementAndCheckBreaker(projectId: string): void {
     try {
       const state = this.ctx.db.incrementCircuitBreakerFailure(projectId);
-      if (state.failure_count >= RECOVERY_MAX_FAILURES) {
+      const config = this.ctx.opsAgent?.getConfig();
+      const threshold = config?.thresholds.recovery_max_per_day ?? 5;
+      if (state.failure_count >= threshold) {
         this.ctx.db.openCircuitBreaker(projectId);
-        log.warn({ projectId, failures: state.failure_count }, 'Circuit breaker opened');
+        log.warn({ projectId, failures: state.failure_count, threshold }, 'Circuit breaker opened');
       }
     } catch (error) {
       log.warn({ error, projectId }, 'Circuit breaker update failed');

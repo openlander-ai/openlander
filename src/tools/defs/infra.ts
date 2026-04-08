@@ -1,14 +1,8 @@
 import { ProjectNotFoundError } from '../../errors.js';
 import { analyzeInfrastructure } from '../../lib/infra-analyzer.js';
-import { webSearch } from '../../lib/web-search.js';
 import { cloneRepo } from '../../pipeline/git.js';
 import type { ToolDef } from './types.js';
-import {
-  analyzeInfrastructureSchema,
-  listDomainsSchema,
-  mapDomainSchema,
-  webSearchSchema,
-} from './schemas.js';
+import { analyzeInfrastructureSchema, listDomainsSchema, mapDomainSchema } from './schemas.js';
 
 export const infraToolDefs: ToolDef[] = [
   {
@@ -82,26 +76,6 @@ export const infraToolDefs: ToolDef[] = [
         const existingServices = await appCtx.serviceManager.list();
         const analysis = analyzeInfrastructure(cloneResult.path, existingServices);
         return analysis;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(message);
-      }
-    },
-    targets: ['mcp'],
-  },
-  {
-    name: 'web_search',
-    riskLevel: 'low',
-    description:
-      'Search the web using DuckDuckGo. Returns search results with title, URL, and snippet. No API key required. Use when you need to find information online.',
-    mcpDescription: 'Search the web for deployment-related information.',
-    inputSchema: webSearchSchema,
-    execute: async (args) => {
-      const query = args['query'] as string;
-      const maxResults = (args['max_results'] as number | undefined) ?? undefined;
-      try {
-        const result = await webSearch(query, { maxResults });
-        return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(message);

@@ -64,6 +64,7 @@ export interface OpsRecoveryStep {
 export interface OpsConfig {
   enabled: boolean;
   recovery: RecoveryConfig;
+  auto_restart: boolean; // Derived from recovery.enabled for frontend compatibility
   auto_cleanup: boolean;
   drift_detection: boolean;
   production_only: boolean;
@@ -106,6 +107,7 @@ export const DEFAULT_RECOVERY_CONFIG: RecoveryConfig = {
 export const DEFAULT_OPS_CONFIG: OpsConfig = {
   enabled: true,
   recovery: DEFAULT_RECOVERY_CONFIG,
+  auto_restart: true,
   auto_cleanup: true,
   drift_detection: true,
   production_only: true,

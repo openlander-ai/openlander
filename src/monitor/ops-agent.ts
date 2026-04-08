@@ -432,6 +432,7 @@ export class OpsAgent {
     }
 
     this.config = { ...this.config, ...config };
+    this.config.auto_restart = this.config.recovery.enabled;
     this.alerting.updateConfig(this.config);
 
     const digestTime = this.config.thresholds.digest_time;

@@ -7,7 +7,6 @@ import {
   backupServiceSchema,
   createBucketSchema,
   createDatabaseSchema,
-  createServiceDatabaseSchema,
   createServiceSchema,
   createServiceUserSchema,
   deleteBucketSchema,
@@ -581,29 +580,7 @@ export const serviceToolDefs: ToolDef[] = [
     },
     targets: ['mcp'],
   },
-  {
-    name: 'create_service_database',
-    riskLevel: 'medium',
-    description:
-      'Create a new database in a PostgreSQL or MySQL service. Use when a project needs a dedicated database. Returns { status, service, database, user, password, connectionString }. Errors: SERVICE_NOT_FOUND, UNSUPPORTED_SERVICE_TYPE (redis, mongodb), CONTAINER_NOT_RUNNING.',
-    mcpDescription: 'Create an additional database in a PostgreSQL or MySQL service.',
-    inputSchema: createServiceDatabaseSchema,
-    execute: async (args, { appCtx }) => {
-      const serviceName = args['service_name'] as string;
-      const databaseName = args['database_name'] as string;
-      const service = await getServiceByName(appCtx, serviceName);
-      const result = await appCtx.serviceManager.createDatabase(service.id, databaseName);
-      return {
-        status: 'created',
-        service: serviceName,
-        database: result.database,
-        user: result.user,
-        password: result.password,
-        connectionString: result.connectionString,
-      };
-    },
-    targets: ['mcp'],
-  },
+
   {
     name: 'create_service_user',
     riskLevel: 'medium',

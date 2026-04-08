@@ -6,14 +6,12 @@ import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
 import {
   emptySchema,
-  removeProjectSchema,
   archiveProjectSchema,
   unarchiveProjectSchema,
   restartProjectSchema,
   stopProjectSchema,
   startProjectSchema,
   redeployProjectSchema,
-  shareProjectSchema,
   updateProjectConfigSchema,
 } from './schemas.js';
 import type { ToolDef } from './types.js';
@@ -83,7 +81,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     name: 'stop_project',
     riskLevel: 'medium',
     description:
-      'Stop a running project container gracefully. Use when user wants to pause or shut down a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT remove the project; use remove_project for full cleanup.',
+      'Stop a running project container gracefully. Use when user wants to pause or shut down a project. Returns { status, project }. Errors: PROJECT_NOT_FOUND — use list_projects to find valid names. Does NOT remove the project; use archive_project for full cleanup.',
     mcpDescription: 'Stop a running project container.',
     inputSchema: stopProjectSchema,
     execute: async (args, context) => {
@@ -103,39 +101,13 @@ export const projectOpsToolDefs: ToolDef[] = [
         project: projectName,
         _agent_guidance: {
           next_steps: [
-            'Call restart_project to start the project again, or remove_project to delete it entirely.',
+            'Call restart_project to start the project again, or archive_project to delete it entirely.',
           ],
         },
       };
     },
   },
-  {
-    name: 'remove_project',
-    riskLevel: 'high',
-    description:
-      'Archive a project (soft delete). Deprecated — use archive_project instead. Stops and removes containers, frees port, but preserves configuration and history. Returns { status, project }. Errors: PROJECT_NOT_FOUND.',
-    mcpDescription:
-      'Remove a project (now archives instead of permanent deletion). Use archive_project for new integrations.',
-    inputSchema: removeProjectSchema,
-    execute: async (args, context) => {
-      const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
 
-      await context.appCtx.pipeline.archive(project.id);
-      return {
-        status: 'archived',
-        project: projectName,
-        _agent_guidance: {
-          message:
-            'Project has been archived (not permanently deleted). Use archive_project in future. Use purge via web dashboard for permanent deletion.',
-          next_steps: ['Use archive_project instead of remove_project in future interactions.'],
-        },
-      };
-    },
-  },
   {
     name: 'list_projects',
     riskLevel: 'low',
@@ -307,34 +279,7 @@ export const projectOpsToolDefs: ToolDef[] = [
       };
     },
   },
-  {
-    name: 'share_project',
-    riskLevel: 'medium',
-    description:
-      'Create a temporary public URL for a project via TryCloudflare tunnel. Use when user wants to share their app externally or test from another device. Returns { status, project, publicUrl }. The URL is temporary and changes on restart. Errors: PROJECT_NOT_FOUND, "not running" if project has no port — deploy it first. For permanent custom domains, use map_domain instead.',
-    mcpDescription: 'Generate a temporary public URL for a project via TryCloudflare.',
-    inputSchema: shareProjectSchema,
-    execute: async (args, context) => {
-      const projectName = args['project_name'] as string;
-      const project = context.appCtx.db.getProjectByName(projectName);
-      if (!project) {
-        throw new ProjectNotFoundError(projectName);
-      }
-      if (!project.assigned_port) {
-        throw new Error('Project is not running — deploy it first');
-      }
 
-      const url = await context.appCtx.pipeline.exposeTunnel(project.id, project.assigned_port);
-      return {
-        status: 'exposed',
-        project: projectName,
-        publicUrl: url,
-        _agent_guidance: {
-          next_steps: ['Access the app via the publicUrl above'],
-        },
-      };
-    },
-  },
   {
     name: 'update_project_config',
     riskLevel: 'medium',
@@ -392,7 +337,7 @@ export const projectOpsToolDefs: ToolDef[] = [
     description:
       'Archive a project (soft delete). Stops and removes containers, frees port, but preserves all configuration, environment variables, and deployment history. Use unarchive_project to restore.',
     mcpDescription:
-      'Archive a project to stop its containers and free resources while preserving all configuration and history. Preferred over remove_project.',
+      'Archive a project to stop its containers and free resources while preserving all configuration and history.',
     inputSchema: archiveProjectSchema,
     execute: async (args, context) => {
       const projectName = args['project_name'] as string;

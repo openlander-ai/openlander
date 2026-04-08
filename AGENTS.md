@@ -11,7 +11,7 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
         ┌───────────────┼───────────────┐
         │               │               │
    Pipeline        Tools/MCP        Web API
-   (deploy,        (60+ ToolDefs,   (routes,
+   (deploy,        (70+ ToolDefs,   (routes,
     docker,         AI SDK +         middleware,
     traefik)        MCP adapters)    WebSocket)
         │               │               │
@@ -20,12 +20,17 @@ CLI (Commander)  →  AppContext  →  Hono HTTP Server
             Database                    │
          (Drizzle ORM +                 │
           SQLite + Repos)               │
+                │                       │
+         Recovery Layer                 │
+         (RecoveryCoordinator,          │
+          ApprovalGate,                 │
+          AgentPool)                    │
                                         │
                               React 19 Frontend
                            (Vite + Tailwind + Radix)
 ```
 
-**Key principle**: Execution is deterministic (rule-based). AI handles error analysis and recovery only — never makes deployment decisions autonomously.
+**Key principle**: Execution is deterministic (rule-based). AI handles error analysis and recovery via RecoveryCoordinator — gated by 7 eligibility conditions, with approval gates for high-risk actions.
 
 ### Entry Points
 
@@ -60,10 +65,17 @@ src/
 │   │   ├── routes.ts        #   Main router + activity stream
 │   │   ├── project-routes.ts
 │   │   ├── deploy-stream-routes.ts
+│   │   ├── deploy-timeline-stream-routes.ts
 │   │   ├── terminal-routes.ts
 │   │   ├── chat-routes.ts
 │   │   ├── auth-routes.ts
 │   │   ├── setup-routes.ts
+│   │   ├── ai-usage-routes.ts   #   AI usage tracking API
+│   │   ├── approval-routes.ts   #   Recovery approval API
+│   │   ├── llm-routes.ts        #   LLM provider management API
+│   │   ├── ops-routes.ts        #   Operations center API
+│   │   ├── domain-routes.ts     #   Domain management
+│   │   ├── webhook-routes.ts    #   Webhook management
 │   │   └── ...
 │   └── middleware/
 │       └── auth.ts          #   Auth middleware
@@ -77,7 +89,7 @@ src/
 │   ├── service-manager.ts   #   Infrastructure services
 │   └── service-adapters/    #   DB adapters (postgres, mysql, redis)
 ├── tools/                   # MCP Tool System
-│   ├── defs/                #   ToolDef definitions (14 categories, 60+ tools)
+│   ├── defs/                #   ToolDef definitions (14 categories, 70+ tools)
 │   │   ├── types.ts         #   ToolDef interface
 │   │   └── index.ts         #   Registry exports
 │   └── adapters/            #   Protocol adapters
@@ -90,8 +102,23 @@ src/
 │   ├── migration.ts         #   Auto-migration
 │   └── repos/               #   Repository classes (one per table)
 ├── llm/                     # LLM integration (Vercel AI SDK)
+│   ├── agent.ts             #   Chat agent (streaming + tool calling)
+│   ├── agent-pool.ts        #   AgentPool (session isolation, MAX_POOL_SIZE=5)
+│   ├── context-assembler.ts #   Structured context for recovery (project state, server stats)
+│   ├── model-registry.ts    #   ModelRegistry (multi-provider, per-feature routing)
+│   ├── model-proxy.ts       #   Provider-specific model creation
+│   ├── transparency.ts      #   Token tracking, cost calculation (PRICING_TABLE)
+│   ├── providers.ts         #   Provider definitions
+│   └── ...
 ├── events/                  # EventBus (decoupled communication)
-├── monitor/                 # Health monitoring & alerts
+├── monitor/                 # Health monitoring, recovery & operations
+│   ├── alerts.ts            #   Container/health alert detection
+│   ├── recovery-coordinator.ts #   Single-owner recovery (Eligibility Gate, 7 conditions)
+│   ├── ops-recovery.ts      #   Recovery planner (recipe fast-path + LLM fallback)
+│   ├── ops-agent.ts         #   Operations agent
+│   ├── incident-reporter.ts #   Incident dedup (error-pattern fingerprinting)
+│   ├── postmortem.ts        #   PostmortemGenerator (auto after recovery success)
+│   └── ...
 ├── mcp/                     # MCP server (stdio + HTTP)
 ├── auth/                    # Authentication service
 ├── config/                  # Config management (~/.openlander/)
@@ -206,7 +233,7 @@ interface ToolDef {
 }
 ```
 
-14 tool categories, 60+ tools. Two adapters convert ToolDefs to:
+14 tool categories, 70+ tools. Two adapters convert ToolDefs to:
 
 - `src/tools/adapters/mcp.ts` — MCP protocol format
 - `src/tools/adapters/ai-sdk.ts` — Vercel AI SDK format
@@ -263,13 +290,15 @@ Translation files: `web/src/i18n/en.ts`, `web/src/i18n/ko.ts`. Language stored i
 
 API calls organized by domain in `web/src/lib/api/`:
 
-| File          | Domain                                       |
-| ------------- | -------------------------------------------- |
-| `auth.ts`     | Login, logout, verify, token                 |
-| `projects.ts` | Project CRUD, deployments, env vars, domains |
-| `services.ts` | Service management                           |
-| `system.ts`   | System status                                |
-| `chat.ts`     | AI agent chat                                |
+| File            | Domain                                       |
+| --------------- | -------------------------------------------- |
+| `auth.ts`       | Login, logout, verify, token                 |
+| `projects.ts`   | Project CRUD, deployments, env vars, domains |
+| `services.ts`   | Service management                           |
+| `system.ts`     | System status                                |
+| `chat.ts`       | AI agent chat                                |
+| `operations.ts` | Operations center, recovery monitoring       |
+| `usage.ts`      | AI usage tracking, cost summary              |
 
 `fetchWithAuth()` auto-redirects to `/login` on 401.
 

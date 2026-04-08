@@ -43,16 +43,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **AgentPool**: Session-level agent isolation (`MAX_POOL_SIZE=5`) with idle timeout cleanup
 - **Context Assembler**: Structured module extracted from `prompts.ts` — project state, server stats, deploy history
 - **Transparency Layer**: Token tracking (`ai_usage_log` table), cost calculation (`PRICING_TABLE`), usage logging per AI call
-- **AI Feature Settings**: 7 individual toggles (autoRecovery, buildDebugger, webAgent, envDetection, secretScan, rollbackSuggestion, operationalMonitoring) with config + API + Settings UI
+- **AI Feature Settings**: 8 individual toggles (autoRecovery, buildDebugger, webAgent, envDetection, secretScan, rollbackSuggestion, operationalMonitoring, codingPlan) with config + API + Settings UI
 - **RequestIdentity type**: Optional `userId`, `tenantId`, `role`, `source` fields on ToolContext and EventBus payloads for future enterprise extension
 - **action_runs table**: Operation ledger for auto-recovery tracking with `pending_approval` active state and SQLite migration path for existing DBs
 - **i18n**: AI usage dashboard keys (`settings.ai.usage.*`) and approval banner keys (`approval.banner.*`) in en.ts + ko.ts
+- **LLM providers**: xAI (Grok), DeepSeek, Mistral, Groq, Together AI, Z.ai (Zhipu GLM), Z.ai Coding Plan as new provider options
+- **Auto-test on provider register**: Automatically validate provider API key on registration and show connection status
+- **AI feature auto-recommend**: Tier-based model capability assessment with automatic AI feature toggle recommendations on provider register
+- **codingPlan AI feature toggle**: Dedicated toggle for AI-assisted deployment planning in Settings UI
 
 ### Changed
 
 - **Auto-recovery redesign**: Gate Checks → Context Assembler → Recovery Planner (recipe fast-path + LLM fallback) → ApprovalGate for high-risk tools → flag-based reject/timeout short-circuit
 - **Single-environment simplification**: Removed multi-env UI, environment selector, env-specific dropdown; always deploy to production
 - **Token display**: Recovery timeline events now show token usage and cost
+- **Provider scores**: Updated benchmark data with 2025-2026 model scores; prioritize accuracy over cost in auto-recommend scoring
+- **Non-proprietary provider removal**: Removed non-proprietary providers, unified provider type system, updated defaults
 
 ### Fixed
 
@@ -64,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Deploy pipeline auto-expand**: Automatically expand on error status
 - **Sidebar icons**: Center icons in collapsed mode
 - **Domain link styling**: Standardized across dashboard, overview, and settings
+- **AI settings responsive layout**: Responsive layout and i18n fixes for AI settings components
+- **i18n provider label**: Fixed provider label translation in AddProviderForm
+- **Monitor review fixes**: Suppression guard, recordLlmCall timing, postmortem eligibility, coordinator type fixes
 
 ## [1.0.0-rc.5] - 2026-03-27
 

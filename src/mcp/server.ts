@@ -82,7 +82,6 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - restore_service — Restore a service from a backup snapshot.
 - list_service_backups — List available backups for a service.
 - start_service / stop_service / remove_service — Lifecycle management. IMPORTANT: remove_service deletes ALL data. Always backup_service first.
-- create_service_database — Create additional databases inside an existing PostgreSQL/MySQL service.
 - create_service_user — Create a user with optional database grants and per-database access.
 - create_bucket / list_buckets / delete_bucket — Manage S3 buckets inside a MinIO service. Use after creating a MinIO service to set up per-project storage buckets.
 
@@ -110,7 +109,7 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 
 ### Project Management
 - list_projects — All projects with status, ports, URLs.
-- stop_project / restart_project / remove_project — Lifecycle control.
+- stop_project / restart_project / archive_project — Lifecycle control.
 - scan_project — Detect framework, Dockerfiles, compose files, and env requirements from repo. ALWAYS call before first deploy.
 - scan_dockerfiles — Find all Dockerfiles in a monorepo. Use with orchestrate_deploy for multi-service deployment.
 
@@ -125,9 +124,6 @@ IMPORTANT: Docker may run on a remote host, not the MCP client machine. Do NOT u
 - enable_webhook — Configure a git provider (GitHub/GitLab/Bitbucket) to auto-deploy on push. Returns webhook URL and secret for git provider configuration.
 - disable_webhook — Disable webhook for a provider without deleting config.
 - get_webhook_config — List all webhook configs for a project.
-
-### Environments
-- list_environments — See all environments for a project with status and branch info.
 
 ## Deploy Planning (ALWAYS follow for new deploys)
 
@@ -197,10 +193,10 @@ Deploy responses include URLs for all detected network interfaces (LAN and VPN).
 
 ### Shared database for multiple projects
 1. create_service({ name: "shared-pg", template: "postgresql" }) — one database service
-2. create_service_database({ service_name: "shared-pg", database_name: "app1_db" })
-3. create_service_database({ service_name: "shared-pg", database_name: "app2_db" })
+2. create_service_user({ service_name: "shared-pg", username: "app1_user", database: "postgres" })
+3. create_service_user({ service_name: "shared-pg", username: "app2_user", database: "postgres" })
 4. get_service_credentials({ service_name: "shared-pg" }) — get connection details
-5. set_env_vars on each project with its specific database name in the connection string
+5. set_env_vars on each project with its specific user credentials in the connection string
 
 ### Firebase / GCP credential file
 1. upload_secret_file({ project_name: "myapp", filename: "firebase-sa.json", content: '{"type":"service_account",...}' })

@@ -262,11 +262,6 @@ export const getServiceLogsSchema = z.object({
   lines: z.number().int().positive().optional().describe('Number of log lines to retrieve'),
 });
 
-export const createServiceDatabaseSchema = z.object({
-  service_name: z.string().min(1).describe('Service name'),
-  database_name: z.string().min(1).describe('Database name'),
-});
-
 export const listDatabasesSchema = z.object({
   service_name: z.string().min(1).describe('Service name to inspect'),
 });
@@ -308,11 +303,6 @@ export const listServicesSchema = z.object({}).strict();
 export const analyzeInfrastructureSchema = z.object({
   repo_url: z.string().min(1).describe('Git repository URL'),
   branch: z.string().optional().describe('Branch'),
-});
-
-export const webSearchSchema = z.object({
-  query: z.string().min(1).describe('Search query'),
-  max_results: z.number().int().positive().optional().describe('Maximum results'),
 });
 
 // Debug & troubleshooting schemas
@@ -393,11 +383,6 @@ export const stopProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
-// Remove project schema
-export const removeProjectSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-});
-
 // Archive/unarchive project schemas
 export const archiveProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name to archive'),
@@ -417,10 +402,6 @@ export const unexposePublicSchema = z.object({
 });
 
 export const startProjectSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-});
-
-export const shareProjectSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
@@ -451,14 +432,6 @@ export const mapDomainSchema = domainSchema;
 
 // List domains schema
 export const listDomainsSchema = z.object({}).strict();
-
-// List postmortems schema
-export const listPostmortemsSchema = z.object({}).strict();
-
-// Get postmortem schema
-export const getPostmortemSchema = z.object({
-  identifier: z.string().min(1).describe('Postmortem ID or project name'),
-});
 
 // Agent-specific schemas
 export const agentExecuteGoalSchema = z.object({
@@ -514,11 +487,6 @@ export const disableWebhookSchema = z.object({
 });
 
 export const getWebhookConfigSchema = z.object({
-  project_name: z.string().min(1).describe('Project name'),
-});
-
-// Environment management schemas
-export const listEnvironmentsSchema = z.object({
   project_name: z.string().min(1).describe('Project name'),
 });
 
