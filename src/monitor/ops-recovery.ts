@@ -306,7 +306,6 @@ export class RecoveryPipeline {
     const healthy = await this.waitForHealthy(projectId, containerId);
     if (healthy) {
       this.addIncidentEvent(incidentId, 'recovered', 'Container recovered after restart');
-      this.ctx.db.resetCircuitBreaker(projectId);
       if (incidentId) {
         this.ctx.db.updateOpsIncidentStatus(incidentId, 'resolved', { resolved_at: Date.now() });
       }
@@ -555,7 +554,6 @@ export class RecoveryPipeline {
       const healthy = await this.waitForHealthy(context.projectId, containerId);
       if (healthy) {
         this.addIncidentEvent(context.incidentId, 'recovered', 'Recovered via rollback');
-        this.ctx.db.resetCircuitBreaker(context.projectId);
         if (context.incidentId) {
           this.ctx.db.updateOpsIncidentStatus(context.incidentId, 'resolved', {
             resolved_at: Date.now(),

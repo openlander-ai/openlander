@@ -36,6 +36,7 @@ const DEFAULT_OPTIONS: Required<MonitorTimingOptions> = {
 const INACTIVE_FAILURE_THRESHOLD = 5;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CLEANUP_COOLDOWN_MS = 10 * 60 * 1000;
+const STABILITY_WINDOW_MS = 5 * 60_000;
 const INCIDENT_ERROR_SNIPPET_LINES = 40;
 
 export class HealthMonitor {
@@ -104,6 +105,20 @@ export class HealthMonitor {
 
     const result = await this.checkPort(projectId, project.assigned_port);
     this.status.set(projectId, result);
+
+    if (result.healthy) {
+      const cbState = this.db.getCircuitBreakerState(projectId);
+      if (cbState && cbState.failure_count > 0 && cbState.last_failure_at) {
+        const stableMs = Date.now() - cbState.last_failure_at;
+        if (stableMs >= STABILITY_WINDOW_MS) {
+          this.db.resetCircuitBreaker(projectId);
+          log.info(
+            { projectId, stableMinutes: Math.round(stableMs / 60_000) },
+            'Project stable after recovery — circuit breaker reset',
+          );
+        }
+      }
+    }
 
     await this.events.emit('monitor:healthcheck', {
       projectId,
