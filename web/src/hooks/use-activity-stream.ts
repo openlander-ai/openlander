@@ -28,6 +28,7 @@ export function useActivityStream(options?: { projectId?: string; types?: string
     abortRef.current = controller;
     const params = new URLSearchParams({ follow: 'true' });
     if (options?.projectId) params.set('projectId', options.projectId);
+    if (options?.types?.length) params.set('types', options.types.join(','));
 
     void (async () => {
       try {

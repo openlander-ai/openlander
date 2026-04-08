@@ -33,53 +33,35 @@ interface OperationsTabProps {
   projectStatus?: 'running' | 'stopped' | 'building' | 'error' | 'idle';
 }
 
-const EVENT_LABELS: Record<string, string> = {
-  'container:missing': 'Container Missing',
-  'container:crashed': 'Container Crashed',
-  'deploy:crash': 'Container Crashed',
-  'deploy:failed': 'Deploy Failed',
-  'health:degraded': 'Health Degraded',
-  'recovery:failed': 'Recovery Failed',
-  'recovery:exhausted': 'Recovery Exhausted',
-  'monitor:inactive': 'Service Inactive',
-};
+import { humanizeEventType, humanizeDescription } from '../ops/utils.js';
 
-function extractEventType(inc: OpsIncident): string {
-  if (inc.events && inc.events.length > 0) {
-    return inc.events[0].type;
-  }
-  return (inc.title || inc.severity || 'unknown').toLowerCase().replace(/\s+/g, '_');
-}
-
-function humanizeEventType(type: string): string {
-  return EVENT_LABELS[type] || type.replace(':', ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-}
-
-function humanizeDescription(inc: OpsIncident): string {
-  if (inc.events && inc.events.length > 0) {
-    return inc.events[0].message || inc.title || `${inc.severity} incident`;
-  }
-  return inc.title || `${inc.severity} incident`;
-}
-
-function groupIncidents(incidents: OpsIncident[]): IncidentGroup[] {
+function groupIncidents(incidents: OpsIncident[], t: (key: string) => string): IncidentGroup[] {
   const groups = new Map<string, OpsIncident[]>();
   for (const inc of incidents) {
-    const key = `${inc.severity}::${extractEventType(inc)}`;
+    const typeKey =
+      inc.triggerType ||
+      (inc.title || inc.severity || 'unknown').toLowerCase().replace(/\s+/g, '_');
+    const key = `${inc.severity}::${typeKey}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(inc);
   }
-  return Array.from(groups.entries()).map(([key, incidents]) => ({
-    key,
-    severity: incidents[0].severity,
-    label: humanizeEventType(extractEventType(incidents[0])),
-    description: humanizeDescription(incidents[0]),
-    count: incidents.length,
-    firstSeen: Math.min(...incidents.map((i) => new Date(i.created_at).getTime())),
-    lastSeen: Math.max(...incidents.map((i) => new Date(i.created_at).getTime())),
-    latestIncident: incidents[0],
-    status: incidents[0].status,
-  }));
+  return Array.from(groups.entries()).map(([key, incidents]) => {
+    const latest = incidents[0];
+    const typeKey =
+      latest.triggerType ||
+      (latest.title || latest.severity || 'unknown').toLowerCase().replace(/\s+/g, '_');
+    return {
+      key,
+      severity: latest.severity,
+      label: humanizeEventType(typeKey, t),
+      description: humanizeDescription(latest.title || latest.severity, t),
+      count: incidents.length,
+      firstSeen: Math.min(...incidents.map((i) => new Date(i.created_at).getTime())),
+      lastSeen: Math.max(...incidents.map((i) => new Date(i.created_at).getTime())),
+      latestIncident: latest,
+      status: latest.status,
+    };
+  });
 }
 
 export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) {
@@ -181,7 +163,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
   const activeIncidents = incidents.filter((i) => i.status !== 'resolved');
   const pastIncidents = incidents.filter((i) => i.status === 'resolved');
 
-  const activeGroups = groupIncidents(activeIncidents);
+  const activeGroups = groupIncidents(activeIncidents, t);
   const anyEscalated = activeIncidents.some((i) => i.status === 'escalated');
   const cbState = circuitBreaker?.state || 'closed';
   const cbFailures = circuitBreaker?.failure_count || 0;

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import type { AppContext } from '../../app.js';
+import type { OpsIncidentEventRow, OpsIncidentRow } from '../../db/types.js';
 import { updateConfig } from '../../config/index.js';
 import { resolveAutomationPolicy, isAutopilot } from '../../monitor/ops-config-resolver.js';
 import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from '../../monitor/ops-types.js';
@@ -19,6 +20,102 @@ interface ActivityItem {
   actionRunId?: string;
   correlationId?: string;
   cascadeGroup?: string[];
+  triggerType?: string;
+  triggerDetails?: string;
+  trigger_type?: string;
+  trigger_details?: string;
+}
+
+interface ParsedIncidentTrigger {
+  triggerType?: string;
+  triggerDetails?: string;
+}
+
+interface IncidentEventMetadata {
+  trigger_type?: string;
+  trigger_details?: string;
+  affected_project_ids?: string[];
+}
+
+function groupEventsByIncidentId(
+  events: OpsIncidentEventRow[],
+): Map<string, OpsIncidentEventRow[]> {
+  const grouped = new Map<string, OpsIncidentEventRow[]>();
+  for (const event of events) {
+    const existing = grouped.get(event.incident_id);
+    if (existing) {
+      existing.push(event);
+      continue;
+    }
+    grouped.set(event.incident_id, [event]);
+  }
+  return grouped;
+}
+
+function parseEventMetadata(metadata: string | null): IncidentEventMetadata | null {
+  if (!metadata) return null;
+  try {
+    return JSON.parse(metadata) as IncidentEventMetadata;
+  } catch {
+    return null;
+  }
+}
+
+function parseTriggerFromText(text: string | null | undefined): ParsedIncidentTrigger {
+  if (!text) return {};
+  const cleaned = text
+    .replace(/^Incident detected:\s*/i, '')
+    .replace(/^Recurring event:\s*/i, '')
+    .trim();
+  if (!cleaned) return {};
+  const [typePart, ...detailsParts] = cleaned.split(' — ');
+  const triggerType = typePart?.trim();
+  if (!triggerType) return {};
+  const details = detailsParts.join(' — ').trim();
+  return {
+    triggerType,
+    triggerDetails: details || undefined,
+  };
+}
+
+function extractIncidentTrigger(
+  incident: OpsIncidentRow,
+  events: OpsIncidentEventRow[],
+): ParsedIncidentTrigger {
+  const detected = events.find((event) => event.event_type === 'detected');
+  if (detected) {
+    const metadata = parseEventMetadata(detected.metadata);
+    if (metadata?.trigger_type) {
+      return {
+        triggerType: metadata.trigger_type,
+        triggerDetails: metadata.trigger_details,
+      };
+    }
+    const detectedTrigger = parseTriggerFromText(detected.description);
+    if (detectedTrigger.triggerType) return detectedTrigger;
+  }
+  return parseTriggerFromText(incident.root_cause);
+}
+
+function mapIncidentResponse(incident: OpsIncidentRow, events: OpsIncidentEventRow[]) {
+  const trigger = extractIncidentTrigger(incident, events);
+  const title = incident.root_cause ?? 'Incident detected';
+  return {
+    ...incident,
+    title,
+    triggerType: trigger.triggerType,
+    triggerDetails: trigger.triggerDetails,
+    trigger_type: trigger.triggerType,
+    trigger_details: trigger.triggerDetails,
+  };
+}
+
+function mapIncidentEventResponse(event: OpsIncidentEventRow) {
+  return {
+    ...event,
+    type: event.event_type,
+    message: event.description,
+  };
 }
 
 export function createOpsRoutes(ctx: AppContext): Hono {
@@ -44,7 +141,14 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         incidents = incidents.filter((i) => i.status === status);
       }
 
-      return c.json({ incidents: incidents.slice(0, limit) });
+      const page = incidents.slice(0, limit);
+      const events = ctx.db.listOpsIncidentEventsByIncidentIds(page.map((incident) => incident.id));
+      const eventsByIncidentId = groupEventsByIncidentId(events);
+      return c.json({
+        incidents: page.map((incident) =>
+          mapIncidentResponse(incident, eventsByIncidentId.get(incident.id) ?? []),
+        ),
+      });
     } catch {
       return c.json({ error: 'Failed to fetch incidents' }, 500);
     }
@@ -60,7 +164,10 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       }
 
       const events = ctx.db.listOpsIncidentEvents(id);
-      return c.json({ incident, events });
+      return c.json({
+        incident: mapIncidentResponse(incident, events),
+        events: events.map(mapIncidentEventResponse),
+      });
     } catch {
       return c.json({ error: 'Failed to fetch incident' }, 500);
     }
@@ -76,7 +183,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       }
 
       const events = ctx.db.listOpsIncidentEvents(id);
-      return c.json({ events });
+      return c.json({ events: events.map(mapIncidentEventResponse) });
     } catch {
       return c.json({ error: 'Failed to fetch incident events' }, 500);
     }
@@ -269,8 +376,14 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         const incidents = projectId
           ? ctx.db.listOpsIncidentsByProject(projectId, 100)
           : ctx.db.listOpsIncidentsByDateRange(sevenDaysAgo, Date.now());
+        const eventsByIncidentId = groupEventsByIncidentId(
+          ctx.db.listOpsIncidentEventsByIncidentIds(incidents.map((incident) => incident.id)),
+        );
 
         for (const inc of incidents) {
+          const incidentEvents = eventsByIncidentId.get(inc.id) ?? [];
+          const trigger = extractIncidentTrigger(inc, incidentEvents);
+
           if (types.length === 0 || types.includes('incident')) {
             activities.push({
               id: inc.id,
@@ -283,21 +396,18 @@ export function createOpsRoutes(ctx: AppContext): Hono {
               description: inc.diagnosis ?? '',
               status: inc.status === 'resolved' ? 'resolved' : 'active',
               incidentId: inc.id,
+              triggerType: trigger.triggerType,
+              triggerDetails: trigger.triggerDetails,
+              trigger_type: trigger.triggerType,
+              trigger_details: trigger.triggerDetails,
             });
           }
           if (types.length === 0 || types.includes('alert')) {
-            const events = ctx.db.listOpsIncidentEvents(inc.id);
-            for (const ev of events.filter(
+            for (const ev of incidentEvents.filter(
               (e) => (e.event_type as string) === 'cascade_detected',
             )) {
               let cascadeGroup: string[] = [];
-              try {
-                cascadeGroup =
-                  (JSON.parse(ev.metadata ?? '{}') as { affected_project_ids?: string[] })
-                    .affected_project_ids ?? [];
-              } catch {
-                /* ignore */
-              }
+              cascadeGroup = parseEventMetadata(ev.metadata)?.affected_project_ids ?? [];
               activities.push({
                 id: ev.id,
                 timestamp: new Date(ev.created_at).toISOString(),

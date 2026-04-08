@@ -345,6 +345,7 @@ export interface EventPayload {
   'recovery:approval-resolved': {
     actionRunId: string;
     approved: boolean;
+    projectId?: string;
   };
   'env:new-keys-detected': {
     projectId: string;

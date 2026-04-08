@@ -1,4 +1,4 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { opsIncidentEvents } from '../schema.drizzle.js';
 import type { OpsIncidentEventRow } from '../types.js';
@@ -53,6 +53,16 @@ export class OpsIncidentEventRepo {
       .select()
       .from(opsIncidentEvents)
       .where(eq(opsIncidentEvents.incident_id, incidentId))
+      .orderBy(asc(opsIncidentEvents.created_at))
+      .all() as OpsIncidentEventRow[];
+  }
+
+  findByIncidentIds(incidentIds: string[]): OpsIncidentEventRow[] {
+    if (incidentIds.length === 0) return [];
+    return this.db
+      .select()
+      .from(opsIncidentEvents)
+      .where(inArray(opsIncidentEvents.incident_id, incidentIds))
       .orderBy(asc(opsIncidentEvents.created_at))
       .all() as OpsIncidentEventRow[];
   }

@@ -63,6 +63,10 @@ export class IncidentManager {
       incident.id,
       'detected',
       `Incident detected: ${trigger.type}${trigger.details ? ` — ${trigger.details}` : ''}`,
+      {
+        trigger_type: trigger.type,
+        trigger_details: trigger.details,
+      },
     );
 
     // Cascade detection: find dependent projects

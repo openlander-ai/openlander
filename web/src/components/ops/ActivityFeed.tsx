@@ -15,7 +15,7 @@ import {
   RefreshCcw,
   Activity,
 } from 'lucide-react';
-import { relativeTime } from '@/components/ops/utils';
+import { relativeTime, humanizeEventType } from '@/components/ops/utils';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -101,7 +101,7 @@ function getTypeLabel(
   if (type.startsWith('ai:')) {
     return t(`ops.ai.${type.split(':')[1]}`);
   }
-  return t(type.replace('_', ' '));
+  return humanizeEventType(type, t as unknown as (key: string) => string);
 }
 
 function groupByCorrelation(items: ActivityItem[]): GroupedActivity[] {
@@ -384,7 +384,10 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
                               {t('ops.recentSameEvents', { count: String(group.items.length) })}
                             </p>
                             {group.items.slice(1, 6).map((subItem) => (
-                              <div key={subItem.id} className="flex gap-3 text-xs font-mono">
+                              <div
+                                key={subItem.id}
+                                className="flex min-w-0 gap-3 text-xs font-mono"
+                              >
                                 <span className="text-muted-ol w-20 flex-shrink-0 whitespace-nowrap">
                                   {relativeTime(new Date(subItem.timestamp).getTime(), language)}
                                 </span>

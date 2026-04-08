@@ -168,7 +168,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           onClick={() => navigate(`/projects/${project.id}`)}
           title={tooltip}
           className={cn(
-            'w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 lg:text-left transition-all duration-150',
+            'w-full flex min-w-0 items-center gap-2.5 rounded-md px-2.5 py-2 lg:text-left transition-all duration-150',
             'lg:justify-start justify-center',
             'hover:bg-bg-subtle',
             isProjectActive(project.id) ? 'bg-bg-subtle text-primary-ol' : 'text-secondary-ol',

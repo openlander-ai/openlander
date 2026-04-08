@@ -64,24 +64,31 @@ export interface OpsIncidentEvent {
   event_type?: string;
   message: string | null;
   description?: string;
-  metadata?: string;
-  created_at: string;
+  metadata?: string | null;
+  created_at: string | number;
 }
 
 export interface OpsIncident {
   id: string;
   project_id: string;
-  title: string;
+  title?: string;
   status: string;
   severity: string;
   root_cause?: string | null;
   diagnosis?: string | null;
   actions_taken?: string | null;
-  created_at: string;
-  updated_at: string;
-  resolved_at?: string | null;
-  escalated_at?: string | null;
+  created_at: string | number;
+  updated_at?: string | number;
+  resolved_at?: string | number | null;
+  escalated_at?: string | number | null;
   events?: OpsIncidentEvent[];
+  triggerType?: string;
+  trigger_type?: string;
+  triggerDetails?: string;
+  trigger_details?: string;
+  project?: {
+    name: string;
+  };
 }
 
 export interface CircuitBreakerState {
@@ -173,6 +180,8 @@ export interface ActivityItem {
   actionRunId?: string;
   correlationId?: string;
   cascadeGroup?: string[];
+  rawType?: string;
+  detail?: string;
   aiMetadata?: {
     model: string;
     tokensUsed?: number;

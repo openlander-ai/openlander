@@ -19,10 +19,50 @@ const API_SLOW_REQUEST_MS = 300;
 const API_OBSERVE_REQUEST_MS = 150;
 
 interface ActivityEvent {
-  type: string;
+  id: string;
+  timestamp: string;
+  type:
+    | 'incident'
+    | 'recovery'
+    | 'approval'
+    | 'circuit_breaker'
+    | 'cleanup'
+    | 'alert'
+    | 'ai_diagnosis'
+    | 'ai:invoked'
+    | 'ai:completed'
+    | 'recovery:blocked'
+    | 'recovery:stopped'
+    | 'recovery:started';
+  severity: 'critical' | 'warning' | 'info';
+  projectId: string;
+  projectName: string;
+  title: string;
+  description: string;
+  status:
+    | 'active'
+    | 'resolved'
+    | 'pending'
+    | 'failed'
+    | 'ai-running'
+    | 'ai-completed'
+    | 'recovery-blocked'
+    | 'recovery-stopped'
+    | 'recovering';
+  incidentId?: string;
+  actionRunId?: string;
+  correlationId?: string;
+  cascadeGroup?: string[];
+  aiMetadata?: {
+    model: string;
+    tokensUsed?: number;
+    durationMs?: number;
+    diagnosisSummary?: string;
+  };
+  rawType: EventType;
+  // Backward-compatibility aliases for legacy consumers of /api/activity
   project: string;
   user: string;
-  status: string;
   detail?: string;
   time: string;
   reason?: string;
@@ -31,66 +71,433 @@ interface ActivityEvent {
 const activityBuffer: ActivityEvent[] = [];
 const MAX_ACTIVITY = 100;
 
-function toActivityDetail<T extends EventType>(
+const ACTIVITY_TYPES = [
+  'incident',
+  'recovery',
+  'approval',
+  'circuit_breaker',
+  'cleanup',
+  'alert',
+  'ai_diagnosis',
+  'ai:invoked',
+  'ai:completed',
+  'recovery:blocked',
+  'recovery:stopped',
+  'recovery:started',
+] as const;
+
+function isActivityType(value: string): value is ActivityEvent['type'] {
+  return (ACTIVITY_TYPES as readonly string[]).includes(value);
+}
+
+function parseActivityTypeFilter(raw: string | undefined): Set<ActivityEvent['type']> | null {
+  if (!raw) return null;
+  const parsed = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .filter(isActivityType);
+  if (parsed.length === 0) return null;
+  return new Set(parsed);
+}
+
+function parseSeverityFilter(raw: string | undefined): ActivityEvent['severity'] | null {
+  if (raw === 'critical' || raw === 'warning' || raw === 'info') return raw;
+  return null;
+}
+
+function formatEventName(eventType: string): string {
+  return eventType.replace(/[:_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function resolveProjectIdFromEvent<T extends EventType>(
+  ctx: AppContext,
   eventType: T,
   payload: EventPayload[T],
-): Pick<ActivityEvent, 'detail' | 'reason'> {
+): string | undefined {
+  if (eventType === 'alert:new') {
+    const alertPayload = payload as EventPayload['alert:new'];
+    const projectId = alertPayload.alert.details.projectId;
+    return typeof projectId === 'string' ? projectId : undefined;
+  }
+
+  if (eventType === 'recovery:approval-resolved') {
+    const approvalPayload = payload as EventPayload['recovery:approval-resolved'];
+    if (approvalPayload.projectId) return approvalPayload.projectId;
+    const statuses: Array<'pending' | 'approved' | 'rejected'> = [
+      'pending',
+      'approved',
+      'rejected',
+    ];
+    for (const status of statuses) {
+      const matched = ctx.db
+        .getActionRunsByApprovalStatus(status, 200)
+        .find((run) => run.id === approvalPayload.actionRunId);
+      if (matched) {
+        return matched.project_id;
+      }
+    }
+  }
+
+  const projectId = (payload as { projectId?: string }).projectId;
+  return typeof projectId === 'string' ? projectId : undefined;
+}
+
+function mapActivityType(eventType: EventType): ActivityEvent['type'] {
+  if (
+    eventType === 'ai:invoked' ||
+    eventType === 'ai:completed' ||
+    eventType === 'recovery:blocked' ||
+    eventType === 'recovery:stopped' ||
+    eventType === 'recovery:started'
+  ) {
+    return eventType;
+  }
+  if (eventType === 'recovery:approval-needed' || eventType === 'recovery:approval-resolved') {
+    return 'approval';
+  }
+  if (
+    eventType === 'recovery:start' ||
+    eventType === 'recovery:success' ||
+    eventType === 'recovery:failed' ||
+    eventType === 'recovery:exhausted'
+  ) {
+    return 'recovery';
+  }
+  if (eventType.startsWith('alert:')) {
+    return 'alert';
+  }
+  return 'incident';
+}
+
+function mapActivityStatus<T extends EventType>(
+  eventType: T,
+  payload: EventPayload[T],
+): ActivityEvent['status'] {
+  if (eventType === 'ai:invoked') return 'ai-running';
+  if (eventType === 'ai:completed') {
+    const completedPayload = payload as EventPayload['ai:completed'];
+    return completedPayload.success ? 'ai-completed' : 'failed';
+  }
+  if (eventType === 'recovery:blocked') return 'recovery-blocked';
+  if (eventType === 'recovery:stopped') return 'recovery-stopped';
+  if (eventType === 'recovery:started' || eventType === 'recovery:start') return 'recovering';
+  if (eventType === 'recovery:success') return 'resolved';
+  if (eventType === 'recovery:failed' || eventType === 'recovery:exhausted') return 'failed';
+  if (eventType === 'recovery:approval-needed') return 'pending';
+  if (eventType === 'recovery:approval-resolved') {
+    const approvalPayload = payload as EventPayload['recovery:approval-resolved'];
+    return approvalPayload.approved ? 'resolved' : 'failed';
+  }
+  if (eventType === 'alert:resolved') return 'resolved';
+  if (
+    eventType === 'deploy:failed' ||
+    eventType === 'deploy:crash' ||
+    eventType === 'compose:failed' ||
+    eventType === 'container:die' ||
+    eventType === 'container:oom' ||
+    eventType === 'container:missing' ||
+    eventType === 'health:degraded'
+  ) {
+    return 'failed';
+  }
+  return 'active';
+}
+
+function mapActivitySeverity<T extends EventType>(
+  eventType: T,
+  payload: EventPayload[T],
+  status: ActivityEvent['status'],
+): ActivityEvent['severity'] {
+  if (eventType === 'alert:new') {
+    const alertPayload = payload as EventPayload['alert:new'];
+    return alertPayload.alert.severity === 'critical' ? 'critical' : 'warning';
+  }
+  if (
+    eventType === 'deploy:crash' ||
+    eventType === 'container:die' ||
+    eventType === 'container:oom' ||
+    eventType === 'container:missing' ||
+    eventType === 'health:degraded'
+  ) {
+    return 'critical';
+  }
+  if (status === 'failed' || status === 'recovery-blocked' || status === 'recovery-stopped') {
+    return 'warning';
+  }
+  if (eventType === 'recovery:approval-needed') {
+    return 'warning';
+  }
+  return 'info';
+}
+
+function extractEventDetail<T extends EventType>(eventType: T, payload: EventPayload[T]): string {
   if (eventType === 'deploy:failed') {
-    return { detail: (payload as EventPayload['deploy:failed']).error };
+    return (payload as EventPayload['deploy:failed']).error;
   }
   if (eventType === 'tunnel:url') {
-    return { detail: (payload as EventPayload['tunnel:url']).url };
+    return (payload as EventPayload['tunnel:url']).url;
   }
   if (eventType === 'compose:failed') {
-    return { detail: (payload as EventPayload['compose:failed']).error };
+    return (payload as EventPayload['compose:failed']).error;
   }
   if (eventType === 'recovery:start') {
-    return { detail: (payload as EventPayload['recovery:start']).error };
+    return (payload as EventPayload['recovery:start']).error;
   }
   if (eventType === 'recovery:failed') {
-    return { detail: (payload as EventPayload['recovery:failed']).error };
+    return (payload as EventPayload['recovery:failed']).error;
   }
   if (eventType === 'recovery:exhausted') {
-    return { detail: (payload as EventPayload['recovery:exhausted']).lastError };
+    return (payload as EventPayload['recovery:exhausted']).lastError;
   }
   if (eventType === 'recovery:blocked') {
-    const reason = (payload as EventPayload['recovery:blocked']).reason;
-    return { detail: reason, reason };
+    return (payload as EventPayload['recovery:blocked']).reason;
   }
   if (eventType === 'recovery:stopped') {
-    const reason = (payload as EventPayload['recovery:stopped']).reason;
-    return { detail: reason, reason };
+    return (payload as EventPayload['recovery:stopped']).reason;
   }
   if (eventType === 'recovery:started') {
-    return { detail: (payload as EventPayload['recovery:started']).trigger };
+    return (payload as EventPayload['recovery:started']).trigger;
   }
   if (eventType === 'alert:new') {
-    return { detail: (payload as EventPayload['alert:new']).alert.message };
+    return (payload as EventPayload['alert:new']).alert.message;
   }
   if (eventType === 'ai:invoked') {
     const aiPayload = payload as EventPayload['ai:invoked'];
-    return { detail: `${aiPayload.model} ${aiPayload.action}` };
+    return `${aiPayload.model} ${aiPayload.action}`;
   }
   if (eventType === 'ai:completed') {
-    return { detail: `${String((payload as EventPayload['ai:completed']).durationMs)}ms` };
+    return `${String((payload as EventPayload['ai:completed']).durationMs)}ms`;
   }
-  return {};
+  return '';
+}
+
+function describeActivityEvent<T extends EventType>(
+  eventType: T,
+  payload: EventPayload[T],
+): Pick<
+  ActivityEvent,
+  'title' | 'description' | 'actionRunId' | 'aiMetadata' | 'reason' | 'incidentId'
+> {
+  if (eventType === 'deploy:failed') {
+    const deployPayload = payload as EventPayload['deploy:failed'];
+    return {
+      title: `Deploy failed (${deployPayload.step})`,
+      description: deployPayload.error,
+    };
+  }
+  if (eventType === 'deploy:crash') {
+    const crashPayload = payload as EventPayload['deploy:crash'];
+    return {
+      title: 'Deploy crashed',
+      description:
+        crashPayload.error ??
+        (crashPayload.exitCode !== undefined ? `Exit code ${String(crashPayload.exitCode)}` : ''),
+    };
+  }
+  if (eventType === 'compose:failed') {
+    return {
+      title: 'Compose failed',
+      description: (payload as EventPayload['compose:failed']).error,
+    };
+  }
+  if (eventType === 'container:die') {
+    const diePayload = payload as EventPayload['container:die'];
+    return {
+      title: 'Container exited',
+      description: `${diePayload.containerName} (code ${String(diePayload.exitCode)})`,
+    };
+  }
+  if (eventType === 'container:oom') {
+    const oomPayload = payload as EventPayload['container:oom'];
+    return {
+      title: 'Container out of memory',
+      description: oomPayload.containerName,
+    };
+  }
+  if (eventType === 'container:missing') {
+    const missingPayload = payload as EventPayload['container:missing'];
+    return {
+      title: 'Container missing',
+      description: missingPayload.suggestion,
+    };
+  }
+  if (eventType === 'monitor:inactive') {
+    const monitorPayload = payload as EventPayload['monitor:inactive'];
+    return {
+      title: 'Project inactive',
+      description: `${String(monitorPayload.daysSinceLastAccess)} days since last access`,
+    };
+  }
+  if (eventType === 'health:degraded') {
+    const degradedPayload = payload as EventPayload['health:degraded'];
+    return {
+      title: 'Health degraded',
+      description:
+        degradedPayload.lastError ??
+        `Consecutive failures: ${String(degradedPayload.consecutiveFailures)}`,
+    };
+  }
+  if (eventType === 'recovery:start') {
+    const recoveryPayload = payload as EventPayload['recovery:start'];
+    return {
+      title: `Auto-recovery attempt #${String(recoveryPayload.attempt)}`,
+      description: recoveryPayload.error,
+    };
+  }
+  if (eventType === 'recovery:success') {
+    const recoveryPayload = payload as EventPayload['recovery:success'];
+    return {
+      title: 'Auto-recovery succeeded',
+      description:
+        recoveryPayload.lastError ?? `Recovered in ${String(recoveryPayload.durationMs)}ms`,
+    };
+  }
+  if (eventType === 'recovery:failed') {
+    const recoveryPayload = payload as EventPayload['recovery:failed'];
+    return {
+      title: `Auto-recovery failed (attempt #${String(recoveryPayload.attempt)})`,
+      description: recoveryPayload.error,
+    };
+  }
+  if (eventType === 'recovery:exhausted') {
+    const recoveryPayload = payload as EventPayload['recovery:exhausted'];
+    return {
+      title: 'Auto-recovery exhausted',
+      description: recoveryPayload.lastError,
+    };
+  }
+  if (eventType === 'recovery:blocked') {
+    const blockedPayload = payload as EventPayload['recovery:blocked'];
+    return {
+      title: 'Recovery blocked',
+      description: blockedPayload.reason,
+      reason: blockedPayload.reason,
+    };
+  }
+  if (eventType === 'recovery:stopped') {
+    const stoppedPayload = payload as EventPayload['recovery:stopped'];
+    return {
+      title: 'Recovery stopped',
+      description: stoppedPayload.reason,
+      reason: stoppedPayload.reason,
+    };
+  }
+  if (eventType === 'recovery:started') {
+    const startedPayload = payload as EventPayload['recovery:started'];
+    return {
+      title: 'Recovery started',
+      description: startedPayload.trigger,
+    };
+  }
+  if (eventType === 'recovery:approval-needed') {
+    const approvalPayload = payload as EventPayload['recovery:approval-needed'];
+    return {
+      title: `Approval required: ${approvalPayload.toolName}`,
+      description: `Attempt #${String(approvalPayload.attempt)}`,
+      actionRunId: approvalPayload.actionRunId,
+    };
+  }
+  if (eventType === 'recovery:approval-resolved') {
+    const approvalPayload = payload as EventPayload['recovery:approval-resolved'];
+    return {
+      title: approvalPayload.approved ? 'Approval approved' : 'Approval rejected',
+      description: approvalPayload.actionRunId,
+      actionRunId: approvalPayload.actionRunId,
+    };
+  }
+  if (eventType === 'ai:invoked') {
+    const aiPayload = payload as EventPayload['ai:invoked'];
+    return {
+      title: 'AI invoked',
+      description: `${aiPayload.model} ${aiPayload.action}`,
+      aiMetadata: {
+        model: aiPayload.model,
+      },
+    };
+  }
+  if (eventType === 'ai:completed') {
+    const aiPayload = payload as EventPayload['ai:completed'];
+    return {
+      title: aiPayload.success ? 'AI completed' : 'AI failed',
+      description: `${aiPayload.action} (${String(aiPayload.durationMs)}ms)`,
+      aiMetadata: {
+        model: aiPayload.model,
+        durationMs: aiPayload.durationMs,
+        tokensUsed: (aiPayload.inputTokens ?? 0) + (aiPayload.outputTokens ?? 0) || undefined,
+      },
+    };
+  }
+  if (eventType === 'alert:new') {
+    const alertPayload = payload as EventPayload['alert:new'];
+    return {
+      title: `Alert: ${alertPayload.alert.type}`,
+      description: alertPayload.alert.message,
+      incidentId:
+        typeof alertPayload.alert.details.incidentId === 'string'
+          ? alertPayload.alert.details.incidentId
+          : undefined,
+    };
+  }
+
+  return {
+    title: formatEventName(eventType),
+    description: extractEventDetail(eventType, payload),
+  };
 }
 
 function buildActivityEvent<T extends EventType>(
+  ctx: AppContext,
   eventType: T,
   payload: EventPayload[T],
-  projectName: string,
-  status: string,
-): ActivityEvent {
+): ActivityEvent | null {
+  const projectId = resolveProjectIdFromEvent(ctx, eventType, payload);
+  if (!projectId) return null;
+
+  const project = ctx.db.getProject(projectId);
+  const projectName = project?.name ?? projectId;
+  const timestamp = new Date().toISOString();
+  const type = mapActivityType(eventType);
+  const status = mapActivityStatus(eventType, payload);
+  const severity = mapActivitySeverity(eventType, payload, status);
+  const content = describeActivityEvent(eventType, payload);
+  const id = `${eventType}-${String(Date.now())}-${Math.random().toString(36).slice(2, 8)}`;
+
   return {
-    type: eventType,
+    id,
+    timestamp,
+    type,
+    severity,
+    projectId,
+    projectName,
+    title: content.title,
+    description: content.description,
+    status,
+    incidentId: content.incidentId,
+    actionRunId: content.actionRunId,
+    correlationId: content.actionRunId,
+    aiMetadata: content.aiMetadata,
+    rawType: eventType,
     project: projectName,
     user: 'system',
-    status,
-    time: new Date().toISOString(),
-    ...toActivityDetail(eventType, payload),
+    detail: content.description || undefined,
+    time: timestamp,
+    reason: content.reason,
   };
+}
+
+function shouldIncludeActivity(
+  event: ActivityEvent,
+  filters: {
+    projectId?: string;
+    types?: Set<ActivityEvent['type']> | null;
+    severity?: ActivityEvent['severity'] | null;
+  },
+): boolean {
+  if (filters.projectId && event.projectId !== filters.projectId) return false;
+  if (filters.types && !filters.types.has(event.type)) return false;
+  if (filters.severity && event.severity !== filters.severity) return false;
+  return true;
 }
 
 export function createApiRoutes(ctx: AppContext): Hono {
@@ -134,41 +541,6 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
   // --- Event Subscription for Activity Buffer ---
 
-  const eventToStatus: Partial<Record<EventType, string>> = {
-    'deploy:start': 'building',
-    'deploy:clone': 'cloning',
-    'deploy:build': 'building',
-    'deploy:run': 'starting',
-    'deploy:success': 'running',
-    'deploy:failed': 'error',
-    'deploy:rollback': 'rolling-back',
-    'container:start': 'running',
-    'container:stop': 'stopped',
-    'container:remove': 'removed',
-    'container:health': 'health-check',
-    'compose:start': 'building',
-    'compose:up': 'running',
-    'compose:failed': 'error',
-    'tunnel:start': 'tunnel-starting',
-    'tunnel:stop': 'tunnel-stopped',
-    'tunnel:url': 'tunnel-active',
-    'env:set': 'env-updated',
-    'env:delete': 'env-deleted',
-    'recovery:start': 'recovering',
-    'recovery:success': 'recovered',
-    'recovery:failed': 'recovery-failed',
-    'recovery:exhausted': 'recovery-exhausted',
-    'recovery:approval-needed': 'approval-pending',
-    'recovery:approval-resolved': 'approval-resolved',
-    'recovery:blocked': 'recovery-blocked',
-    'recovery:stopped': 'recovery-stopped',
-    'recovery:started': 'recovering',
-    'ai:invoked': 'ai-running',
-    'ai:completed': 'ai-completed',
-    'alert:new': 'alert-new',
-    'alert:resolved': 'alert-resolved',
-  };
-
   const eventTypes: EventType[] = [
     'deploy:start',
     'deploy:clone',
@@ -176,11 +548,15 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'deploy:run',
     'deploy:success',
     'deploy:failed',
+    'deploy:crash',
     'deploy:rollback',
     'container:start',
     'container:stop',
     'container:remove',
     'container:health',
+    'container:die',
+    'container:oom',
+    'container:missing',
     'tunnel:start',
     'tunnel:stop',
     'tunnel:url',
@@ -189,6 +565,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'compose:start',
     'compose:up',
     'compose:failed',
+    'monitor:inactive',
+    'health:degraded',
     'recovery:start',
     'recovery:success',
     'recovery:failed',
@@ -206,21 +584,8 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
   for (const eventType of eventTypes) {
     eventBus.on(eventType, (payload: EventPayload[typeof eventType]) => {
-      let projectId = (payload as { projectId?: string }).projectId;
-
-      if (eventType === 'alert:new') {
-        projectId = (payload as EventPayload['alert:new']).alert.details.projectId as
-          | string
-          | undefined;
-      }
-
-      if (!projectId) return;
-
-      const project = ctx.db.getProject(projectId);
-      const projectName = project?.name ?? projectId;
-      const status = eventToStatus[eventType] ?? 'unknown';
-
-      const activityEvent = buildActivityEvent(eventType, payload, projectName, status);
+      const activityEvent = buildActivityEvent(ctx, eventType, payload);
+      if (!activityEvent) return;
 
       activityBuffer.push(activityEvent);
       if (activityBuffer.length > MAX_ACTIVITY) {
@@ -247,6 +612,11 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
   api.get('/activity', (c) => {
     const follow = c.req.query('follow');
+    const projectIdFilter = c.req.query('projectId') ?? undefined;
+    const typeFilter = parseActivityTypeFilter(c.req.query('types'));
+    const severityFilter = parseSeverityFilter(c.req.query('severity'));
+    const parsedLimit = Number.parseInt(c.req.query('limit') ?? '20', 10);
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 200) : 20;
 
     if (follow) {
       return stream(c, async (s) => {
@@ -256,22 +626,17 @@ export function createApiRoutes(ctx: AppContext): Hono {
         for (const eventType of eventTypes) {
           unsubscribers.push(
             eventBus.on(eventType, (payload: EventPayload[typeof eventType]) => {
-              let projectId = (payload as { projectId?: string }).projectId;
-
-              if (eventType === 'alert:new') {
-                projectId = (payload as EventPayload['alert:new']).alert.details.projectId as
-                  | string
-                  | undefined;
+              const activityEvent = buildActivityEvent(ctx, eventType, payload);
+              if (!activityEvent) return;
+              if (
+                !shouldIncludeActivity(activityEvent, {
+                  projectId: projectIdFilter,
+                  types: typeFilter,
+                  severity: severityFilter,
+                })
+              ) {
+                return;
               }
-
-              if (!projectId) return;
-
-              const project = ctx.db.getProject(projectId);
-              const projectName = project?.name ?? projectId;
-              const status = eventToStatus[eventType] ?? 'unknown';
-
-              const activityEvent = buildActivityEvent(eventType, payload, projectName, status);
-
               void s.write(JSON.stringify(activityEvent) + '\n');
             }),
           );
@@ -287,7 +652,14 @@ export function createApiRoutes(ctx: AppContext): Hono {
       });
     }
 
-    return c.json({ activities: activityBuffer.slice(-20) });
+    const activities = activityBuffer.filter((activity) =>
+      shouldIncludeActivity(activity, {
+        projectId: projectIdFilter,
+        types: typeFilter,
+        severity: severityFilter,
+      }),
+    );
+    return c.json({ activities: activities.slice(-limit) });
   });
 
   // --- Global Secrets ---
@@ -326,7 +698,11 @@ export function createApiRoutes(ctx: AppContext): Hono {
     }
 
     ctx.db.updateActionRunApproval(id, 'approved', actionRun.approval_tool ?? undefined);
-    await eventBus.emit('recovery:approval-resolved', { actionRunId: id, approved: true });
+    await eventBus.emit('recovery:approval-resolved', {
+      actionRunId: id,
+      approved: true,
+      projectId: actionRun.project_id,
+    });
 
     return c.json({ success: true, actionRunId: id, status: 'approved' });
   });
@@ -339,7 +715,11 @@ export function createApiRoutes(ctx: AppContext): Hono {
     }
 
     ctx.db.updateActionRunApproval(id, 'rejected', actionRun.approval_tool ?? undefined);
-    await eventBus.emit('recovery:approval-resolved', { actionRunId: id, approved: false });
+    await eventBus.emit('recovery:approval-resolved', {
+      actionRunId: id,
+      approved: false,
+      projectId: actionRun.project_id,
+    });
 
     return c.json({ success: true, actionRunId: id, status: 'rejected' });
   });

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { IncidentCard, type IncidentGroup } from '@/components/ops/IncidentCard';
+import { humanizeDescription, humanizeEventType } from '@/components/ops/utils';
 import { type OpsIncident, fetchOpsIncidents } from '@/lib/api/operations';
 import { useLanguage } from '@/i18n/context';
 
@@ -36,8 +37,9 @@ function hasSameIncidents(prev: OpsIncident[], next: OpsIncident[]): boolean {
       a.id !== b.id ||
       a.status !== b.status ||
       a.severity !== b.severity ||
-      a.updated_at !== b.updated_at ||
-      a.resolved_at !== b.resolved_at
+      a.title !== b.title ||
+      a.triggerType !== b.triggerType ||
+      a.created_at !== b.created_at
     ) {
       return false;
     }
@@ -46,44 +48,18 @@ function hasSameIncidents(prev: OpsIncident[], next: OpsIncident[]): boolean {
   return true;
 }
 
-function extractEventType(incident: OpsIncident): string {
-  if (incident.events && incident.events.length > 0) {
-    return incident.events[0].type;
-  }
-  return (incident.title || incident.severity || 'unknown').toLowerCase().replace(/\s+/g, '_');
-}
-
-function humanizeEventType(type: string): string {
-  return type.replace(/[:_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function humanizeDescription(incident: OpsIncident): string {
-  // Priority: root_cause > diagnosis > event message > title > generic fallback
-  if (incident.root_cause) {
-    return incident.root_cause;
-  }
-  if (incident.diagnosis) {
-    return incident.diagnosis;
-  }
-  if (incident.events && incident.events.length > 0) {
-    const msg = incident.events[0].message || incident.events[0].description;
-    if (msg) return msg;
-  }
-  if (incident.title && incident.title !== `${incident.severity} incident`) {
-    return incident.title;
-  }
-  return `${incident.severity} incident`;
-}
-
 function groupIncidents(
   incidents: OpsIncident[],
   projectNameById: Record<string, string>,
+  t: (key: string) => string,
 ): GroupedIncident[] {
   const grouped = new Map<string, OpsIncident[]>();
 
   for (const incident of incidents) {
     if (!projectNameById[incident.project_id]) continue; // Skip archived projects
-    const typeKey = extractEventType(incident);
+    const typeKey =
+      incident.triggerType ||
+      (incident.title || incident.severity || 'unknown').toLowerCase().replace(/\s+/g, '_');
     const key = `${incident.project_id}::${incident.severity}::${typeKey}`;
     if (!grouped.has(key)) {
       grouped.set(key, []);
@@ -95,14 +71,17 @@ function groupIncidents(
     .map(([key, entries]) => {
       const latest = entries[0];
       const projectId = latest.project_id;
+      const typeKey =
+        latest.triggerType ||
+        (latest.title || latest.severity || 'unknown').toLowerCase().replace(/\s+/g, '_');
       return {
         projectId,
         projectName: projectNameById[projectId] ?? projectId.substring(0, 8),
         group: {
           key,
           severity: latest.severity,
-          label: humanizeEventType(extractEventType(latest)),
-          description: humanizeDescription(latest),
+          label: humanizeEventType(typeKey, t),
+          description: humanizeDescription(latest.title || latest.severity, t),
           count: entries.length,
           firstSeen: Math.min(...entries.map((item) => new Date(item.created_at).getTime())),
           lastSeen: Math.max(...entries.map((item) => new Date(item.created_at).getTime())),
@@ -131,6 +110,7 @@ export function IncidentMap({ projectId, projectNameById, refreshToken }: Incide
       if (showSkeleton) {
         setLoading(true);
       }
+
       try {
         const data = await fetchOpsIncidents(projectId);
         const active = (data.incidents ?? []).filter((incident) => incident.status !== 'resolved');
@@ -155,8 +135,8 @@ export function IncidentMap({ projectId, projectNameById, refreshToken }: Incide
   }, [loadIncidents, refreshToken]);
 
   const groupedIncidents = useMemo(
-    () => groupIncidents(incidents, projectNameById),
-    [incidents, projectNameById],
+    () => groupIncidents(incidents, projectNameById, t),
+    [incidents, projectNameById, t],
   );
 
   return (

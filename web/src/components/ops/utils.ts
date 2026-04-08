@@ -84,3 +84,32 @@ export const TOOL_HUMAN_LABELS: Record<
     impact_en: 'Resource rollout & modifications',
   },
 };
+
+export const extractEventType = (type: string | undefined): string => {
+  if (!type) return 'unknown';
+  if (type.startsWith('ai:')) {
+    return 'ai_intervention';
+  }
+  return type.toLowerCase().replace(/[:\s]+/g, '_');
+};
+
+export const humanizeEventType = (type: string, t: (key: string) => string): string => {
+  const normalizedKey = extractEventType(type);
+  const translated = t(`operations.events.${normalizedKey}`);
+
+  if (translated === `operations.events.${normalizedKey}`) {
+    return type.replace(/[:_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return translated;
+};
+
+export const humanizeDescription = (
+  description: string | undefined | null,
+  t: (key: string) => string,
+): string => {
+  if (!description) return t('operations.incidents.generic_error');
+  if (description === 'critical incident' || description === 'critical_incident') {
+    return t('operations.incidents.generic_error');
+  }
+  return description;
+};
