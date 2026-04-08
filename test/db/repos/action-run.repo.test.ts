@@ -51,6 +51,18 @@ describe('ActionRunRepo', () => {
       expect(runs[0].trigger_session_id).toBeNull();
       expect(runs[0].recovery_strategy).toBeNull();
     });
+
+    it('normalizes legacy unknown recovery strategy to null', () => {
+      repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'auto_recovery',
+        recoveryStrategy: 'unknown',
+      });
+
+      const runs = repo.findByProjectId('proj-1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].recovery_strategy).toBeNull();
+    });
   });
 
   describe('updateStatus', () => {
@@ -142,6 +154,22 @@ describe('ActionRunRepo', () => {
       expect(runs[0].status).toBe('failed');
       expect(runs[0].error_message).toBe('Approval rejected');
       expect(runs[0].completed_at).toBeTruthy();
+    });
+  });
+
+  describe('updateRecoveryStrategy', () => {
+    it('normalizes legacy unknown recovery strategy to null', () => {
+      const id = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'auto_recovery',
+        recoveryStrategy: 'recipe',
+      });
+
+      repo.updateRecoveryStrategy(id, 'unknown');
+
+      const runs = repo.findByProjectId('proj-1');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].recovery_strategy).toBeNull();
     });
   });
 
@@ -303,6 +331,35 @@ describe('ActionRunRepo', () => {
     });
   });
 
+  describe('findByApprovalStatus', () => {
+    it('returns only truly pending approvals for pending filter', () => {
+      const activePendingId = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'auto_recovery',
+      });
+      repo.updateStatus(activePendingId, 'pending_approval');
+      repo.updateApproval(activePendingId, 'pending', 'rollback');
+
+      const stalePendingId = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'auto_recovery',
+      });
+      repo.updateStatus(stalePendingId, 'failed', 'Server restarted');
+      repo.updateApproval(stalePendingId, 'pending', 'rollback');
+
+      const approvedId = repo.create({
+        projectId: 'proj-1',
+        triggerSource: 'auto_recovery',
+      });
+      repo.updateStatus(approvedId, 'pending_approval');
+      repo.updateApproval(approvedId, 'approved', 'rollback');
+
+      const pending = repo.findByApprovalStatus('pending');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.id).toBe(activePendingId);
+    });
+  });
+
   describe('markStaleAsFailedOnStartup', () => {
     it('marks all running action runs as failed with error message', () => {
       const projectId = 'proj-1';
@@ -393,6 +450,7 @@ describe('ActionRunRepo', () => {
       });
 
       repo.updateStatus(id1, 'pending_approval');
+      repo.updateApproval(id1, 'pending', 'rollback');
       repo.updateStatus(id2, 'succeeded');
 
       const count = repo.markStaleAsFailedOnStartup();
@@ -406,6 +464,8 @@ describe('ActionRunRepo', () => {
       expect(failed?.status).toBe('failed');
       expect(failed?.error_message).toBe('Server restarted');
       expect(failed?.completed_at).toBeTruthy();
+      expect(failed?.approval_status).toBe('rejected');
+      expect(failed?.approval_resolved_at).toBeTruthy();
 
       const succeeded = runs.find((r) => r.id === id2);
       expect(succeeded?.status).toBe('succeeded');

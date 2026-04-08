@@ -311,7 +311,10 @@ export function createApiRoutes(ctx: AppContext): Hono {
       return c.json({ error: 'INVALID_FIELD', message: 'approval_status is invalid' }, 400);
     }
 
-    const actionRuns = ctx.db.getActionRunsByApprovalStatus(approvalStatus, 20);
+    const actionRuns = ctx.db.getActionRunsByApprovalStatus(approvalStatus, 20).map((run) => ({
+      ...run,
+      recovery_strategy: run.recovery_strategy === 'unknown' ? null : run.recovery_strategy,
+    }));
     return c.json({ actionRuns });
   });
 

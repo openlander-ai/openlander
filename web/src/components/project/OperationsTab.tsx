@@ -333,7 +333,12 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
         ) : (
           <div className="space-y-4">
             {activeGroups.map((group) => (
-              <IncidentCard key={group.key} group={group} />
+              <IncidentCard
+                key={group.key}
+                group={group}
+                projectName={t('Project')}
+                incidentProjectId={group.latestIncident.project_id ?? projectId}
+              />
             ))}
           </div>
         )}

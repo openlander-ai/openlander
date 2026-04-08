@@ -24,6 +24,28 @@ interface GroupedIncident {
   group: IncidentGroup;
 }
 
+function hasSameIncidents(prev: OpsIncident[], next: OpsIncident[]): boolean {
+  if (prev.length !== next.length) {
+    return false;
+  }
+
+  for (let i = 0; i < prev.length; i += 1) {
+    const a = prev[i];
+    const b = next[i];
+    if (
+      a.id !== b.id ||
+      a.status !== b.status ||
+      a.severity !== b.severity ||
+      a.updated_at !== b.updated_at ||
+      a.resolved_at !== b.resolved_at
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function extractEventType(incident: OpsIncident): string {
   if (incident.events && incident.events.length > 0) {
     return incident.events[0].type;
@@ -36,10 +58,21 @@ function humanizeEventType(type: string): string {
 }
 
 function humanizeDescription(incident: OpsIncident): string {
-  if (incident.events && incident.events.length > 0) {
-    return incident.events[0].message || incident.title || `${incident.severity} incident`;
+  // Priority: root_cause > diagnosis > event message > title > generic fallback
+  if (incident.root_cause) {
+    return incident.root_cause;
   }
-  return incident.title || `${incident.severity} incident`;
+  if (incident.diagnosis) {
+    return incident.diagnosis;
+  }
+  if (incident.events && incident.events.length > 0) {
+    const msg = incident.events[0].message || incident.events[0].description;
+    if (msg) return msg;
+  }
+  if (incident.title && incident.title !== `${incident.severity} incident`) {
+    return incident.title;
+  }
+  return `${incident.severity} incident`;
 }
 
 function groupIncidents(
@@ -93,22 +126,32 @@ export function IncidentMap({ projectId, projectNameById, refreshToken }: Incide
   const [incidents, setIncidents] = useState<OpsIncident[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadIncidents = useCallback(async () => {
-    try {
-      const data = await fetchOpsIncidents(projectId);
-      const active = (data.incidents ?? []).filter((incident) => incident.status !== 'resolved');
-      active.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      setIncidents(active);
-    } catch (err) {
-      console.error('Failed to load incidents', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId]);
+  const loadIncidents = useCallback(
+    async (showSkeleton: boolean) => {
+      if (showSkeleton) {
+        setLoading(true);
+      }
+      try {
+        const data = await fetchOpsIncidents(projectId);
+        const active = (data.incidents ?? []).filter((incident) => incident.status !== 'resolved');
+        active.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        setIncidents((prev) => (hasSameIncidents(prev, active) ? prev : active));
+      } catch (err) {
+        console.error('Failed to load incidents', err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [projectId],
+  );
 
   useEffect(() => {
-    setLoading(true);
-    void loadIncidents();
+    void loadIncidents(true);
+  }, [loadIncidents]);
+
+  useEffect(() => {
+    if (refreshToken === 0) return;
+    void loadIncidents(false);
   }, [loadIncidents, refreshToken]);
 
   const groupedIncidents = useMemo(
@@ -117,7 +160,7 @@ export function IncidentMap({ projectId, projectNameById, refreshToken }: Incide
   );
 
   return (
-    <Card className="border-border bg-panel p-4 lg:p-5">
+    <Card className="min-w-0 border-border bg-panel p-4 lg:p-5">
       <h2 className="mb-4 font-display text-lg font-semibold text-primary-ol">
         {t('operations.incidents.title')}
       </h2>

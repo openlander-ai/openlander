@@ -21,6 +21,7 @@ export class ActionRunRepo {
   }): string {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
+    const recoveryStrategy = data.recoveryStrategy === 'unknown' ? null : data.recoveryStrategy;
 
     this.db
       .insert(actionRuns)
@@ -31,7 +32,7 @@ export class ActionRunRepo {
         trigger_session_id: data.triggerSessionId ?? null,
         status: 'running',
         error_message: null,
-        recovery_strategy: data.recoveryStrategy ?? null,
+        recovery_strategy: recoveryStrategy ?? null,
         steps_json: null,
         started_at: now,
         completed_at: null,
@@ -110,9 +111,10 @@ export class ActionRunRepo {
   }
 
   updateRecoveryStrategy(id: string, strategy: ActionRunRow['recovery_strategy']): void {
+    const normalized = strategy === 'unknown' ? null : strategy;
     this.db
       .update(actionRuns)
-      .set({ recovery_strategy: strategy, updated_at: new Date().toISOString() })
+      .set({ recovery_strategy: normalized, updated_at: new Date().toISOString() })
       .where(eq(actionRuns.id, id))
       .run();
   }
@@ -128,10 +130,15 @@ export class ActionRunRepo {
   }
 
   findByApprovalStatus(status: 'pending' | 'approved' | 'rejected', limit = 20): ActionRunRow[] {
+    const whereClause =
+      status === 'pending'
+        ? and(eq(actionRuns.approval_status, 'pending'), eq(actionRuns.status, 'pending_approval'))
+        : eq(actionRuns.approval_status, status);
+
     return this.db
       .select()
       .from(actionRuns)
-      .where(eq(actionRuns.approval_status, status))
+      .where(whereClause)
       .orderBy(desc(actionRuns.created_at))
       .limit(limit)
       .all() as ActionRunRow[];
@@ -183,13 +190,26 @@ export class ActionRunRepo {
         status: 'failed',
         error_message: 'Server restarted',
         completed_at: sql`CURRENT_TIMESTAMP`,
+        updated_at: sql`CURRENT_TIMESTAMP`,
       })
       .where(sql`${actionRuns.status} IN ('running', 'pending_approval')`)
       .run();
 
-    const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
+    const staleRow = this.sqlite.prepare('SELECT changes() as changes').get() as {
       changes: number;
     } | null;
-    return row?.changes ?? 0;
+    const staleChanges = staleRow?.changes ?? 0;
+
+    this.db
+      .update(actionRuns)
+      .set({
+        approval_status: 'rejected',
+        approval_resolved_at: sql`CURRENT_TIMESTAMP`,
+        updated_at: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(actionRuns.approval_status, 'pending'))
+      .run();
+
+    return staleChanges;
   }
 }

@@ -15,13 +15,13 @@ export function AgentActivityPanel() {
 
   if (!activeState.isActive) {
     return (
-      <Card className="relative overflow-hidden border-border/60 bg-panel/80 p-5 flex items-center justify-between transition-colors shadow-sm cursor-default">
+      <Card className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden border-border/60 bg-panel/80 p-5 shadow-sm transition-colors cursor-default">
         {/* Subtle grid background for the empty space */}
         <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05]">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#888_1px,transparent_1px),linear-gradient(to_bottom,#888_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:linear-gradient(to_right,white_80%,transparent)]" />
         </div>
 
-        <div className="flex items-center gap-4 relative z-10">
+        <div className="relative z-10 flex min-w-0 items-center gap-4">
           <div className="h-10 w-10 rounded-full bg-bg-panel border border-border flex items-center justify-center shadow-sm">
             <Bot className="h-5 w-5 text-muted-ol opacity-70" />
           </div>
@@ -32,7 +32,7 @@ export function AgentActivityPanel() {
             <p className="text-sm text-secondary-ol font-body">{t('ops.agent.idleDesc')}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 relative z-10 px-3 py-1.5 rounded-full bg-success/10 border border-success/20">
+        <div className="relative z-10 flex shrink-0 items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1.5">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
@@ -63,8 +63,8 @@ export function AgentActivityPanel() {
       {/* Background Animated Pulse */}
       <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-agent/10 blur-3xl animate-pulse" />
 
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-        <div className="flex items-start gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
           <div className="relative">
             <div className="h-10 w-10 rounded-full bg-bg-panel border border-agent/20 flex items-center justify-center shadow-sm">
               <Bot className="h-5 w-5 text-agent" />
@@ -77,24 +77,24 @@ export function AgentActivityPanel() {
             </div>
           </div>
 
-          <div className="flex flex-col">
+          <div className="min-w-0 flex flex-col">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="text-base font-semibold font-display text-primary-ol flex items-center gap-2">
+              <h3 className="flex min-w-0 items-center gap-2 text-base font-semibold font-display text-primary-ol">
                 {t('ops.agent.activeOn')}{' '}
-                <span className="text-agent">{projectName || t('ops.agent.system')}</span>
+                <span className="truncate text-agent">{projectName || t('ops.agent.system')}</span>
               </h3>
               <span className="text-xs font-mono text-secondary-ol px-1.5 py-0.5 rounded-sm bg-bg-subtle border border-border">
                 {progressPercent !== undefined ? `${progressPercent}%` : t('ops.agent.working')}
               </span>
             </div>
-            <p className="text-sm font-body text-secondary-ol flex items-center gap-1.5 animate-pulse">
+            <p className="flex items-center gap-1.5 truncate text-sm font-body text-secondary-ol animate-pulse">
               <RefreshCw className="h-3 w-3 text-agent animate-spin" />
               {currentStep || t('ops.agent.analyzing')}
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-1 min-w-[120px]">
+        <div className="flex min-w-0 flex-col gap-1 self-start md:min-w-[120px] md:items-end">
           <span className="text-xs font-mono text-muted-ol uppercase tracking-wider flex items-center gap-1">
             <Activity className="h-3 w-3" /> {t('ops.agent.elapsed')}
           </span>

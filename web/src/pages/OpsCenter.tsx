@@ -97,8 +97,8 @@ export function OpsCenter() {
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-app p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-[1400px] space-y-6 lg:space-y-8">
+    <div className="flex-1 min-h-0 overflow-auto bg-app px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+      <div className="mx-auto w-full min-w-0 max-w-[1500px] space-y-6 lg:space-y-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
@@ -129,19 +129,19 @@ export function OpsCenter() {
         <AgentActivityPanel />
 
         {loadingProjects ? (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="space-y-5 lg:col-span-2">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+            <div className="min-w-0 space-y-5">
               <Skeleton className="h-40 w-full rounded-xl" />
               <Skeleton className="h-56 w-full rounded-xl" />
             </div>
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-5">
               <Skeleton className="h-48 w-full rounded-xl" />
               <Skeleton className="h-64 w-full rounded-xl" />
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="space-y-5 lg:col-span-2">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+            <div className="min-w-0 space-y-5">
               <ApprovalQueue projectId={filteredProjectId} projectNameById={projectNameById} />
               <IncidentMap
                 projectId={filteredProjectId}
@@ -149,7 +149,7 @@ export function OpsCenter() {
                 refreshToken={refreshToken}
               />
             </div>
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-5">
               <CircuitBreakerMap
                 projectId={filteredProjectId}
                 projectNameById={projectNameById}

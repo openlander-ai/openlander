@@ -166,16 +166,16 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
   }, [activities, severityFilter, projectNameById]);
 
   return (
-    <Card className="border-border bg-panel p-4 lg:p-5">
-      <div className="mb-4 flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
-        <div className="flex items-center gap-2 shrink-0">
-          <h2 className="font-display text-lg font-semibold text-primary-ol whitespace-nowrap">
+    <Card className="min-w-0 border-border bg-panel p-4 lg:p-5">
+      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="truncate font-display text-lg font-semibold text-primary-ol">
             {t('operations.activity.title')}
           </h2>
           <Badge
             variant="outline"
             className={cn(
-              'font-body text-[11px] whitespace-nowrap',
+              'shrink-0 whitespace-nowrap font-body text-[11px]',
               isConnected ? 'text-success border-success/40' : 'text-muted-ol',
             )}
           >
@@ -183,8 +183,8 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
           </Badge>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <span className="shrink-0 text-xs font-body text-muted-ol whitespace-nowrap">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="shrink-0 whitespace-nowrap text-xs font-body text-muted-ol">
             {t('operations.activity.filters')}
           </span>
 
@@ -192,7 +192,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
             value={typeFilter}
             onValueChange={(value) => setTypeFilter(value as ActivityTypeFilter)}
           >
-            <SelectTrigger className="w-full sm:w-[170px] bg-bg-subtle border-border">
+            <SelectTrigger className="w-full sm:w-[160px] bg-bg-subtle border-border">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -208,7 +208,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
             value={severityFilter}
             onValueChange={(value) => setSeverityFilter(value as SeverityFilter)}
           >
-            <SelectTrigger className="w-full sm:w-[140px] bg-bg-subtle border-border">
+            <SelectTrigger className="w-full sm:w-[130px] bg-bg-subtle border-border">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -240,7 +240,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
           {t('operations.activity.empty')}
         </div>
       ) : (
-        <ScrollArea className="max-h-[560px] pr-3">
+        <ScrollArea className="max-h-[560px] overflow-x-hidden pr-3">
           <div className="relative pl-6 space-y-5 before:absolute before:inset-y-0 before:left-[11px] before:w-px before:bg-border/60">
             {groupedActivities.map((group) => {
               const item = group.head;
@@ -274,7 +274,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
                   />
 
                   <div
-                    className="rounded-lg border border-border/60 bg-bg-panel/50 p-4 transition-colors hover:border-border hover:bg-bg-subtle/50 cursor-pointer shadow-sm"
+                    className="min-w-0 cursor-pointer rounded-lg border border-border/60 bg-bg-panel/50 p-4 shadow-sm transition-colors hover:border-border hover:bg-bg-subtle/50"
                     onClick={() => toggleExpand(group.key)}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -322,7 +322,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
                           ) : null}
                         </div>
 
-                        <p className="truncate font-body text-sm text-primary-ol flex items-center gap-1.5">
+                        <p className="flex items-center gap-1.5 truncate font-body text-sm text-primary-ol">
                           {isExpanded ? (
                             <ChevronDown className="h-3.5 w-3.5 text-muted-ol" />
                           ) : (
@@ -362,7 +362,7 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
                     {isExpanded && (
                       <div className="mt-3 pl-5 border-l-[3px] border-agent/20 space-y-3">
                         {item.description && (
-                          <p className="text-sm font-body text-secondary-ol whitespace-pre-wrap">
+                          <p className="break-words whitespace-pre-wrap text-sm font-body text-secondary-ol">
                             {item.description}
                           </p>
                         )}

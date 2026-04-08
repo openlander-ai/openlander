@@ -46,7 +46,10 @@ function getRiskTone(toolName: string | null): 'destructive' | 'diagnostic' | 'n
   return 'neutral';
 }
 
-function getRecoveryStrategyLabel(strategy: string | null, t: (key: string) => string) {
+function getRecoveryStrategyLabel(
+  strategy: string | null,
+  t: (key: string) => string,
+): string | null {
   switch (strategy) {
     case 'llm':
       return t('ops.recoveryStrategy.llm');
@@ -55,7 +58,7 @@ function getRecoveryStrategyLabel(strategy: string | null, t: (key: string) => s
     case 'recipe':
       return t('ops.recoveryStrategy.recipe');
     default:
-      return t('ops.recoveryStrategy.unknown');
+      return null;
   }
 }
 
@@ -119,7 +122,7 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
   }
 
   return (
-    <Card className="border-border bg-panel p-4 lg:p-5">
+    <Card className="min-w-0 border-border bg-panel p-4 lg:p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-display text-lg font-semibold text-primary-ol">
           {t('operations.approvals.title')}
@@ -143,6 +146,7 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
           const actionImpact = toolData
             ? toolData[`impact_${language}` as 'impact_ko' | 'impact_en']
             : '';
+          const recoveryStrategyLabel = getRecoveryStrategyLabel(approval.recovery_strategy, t);
 
           return (
             <div
@@ -202,11 +206,11 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
                   )}
                 </div>
 
-                {approval.recovery_strategy && approval.recovery_strategy !== 'unknown' && (
+                {recoveryStrategyLabel && (
                   <div className="flex items-center gap-3">
                     <span className="text-agent">🤖</span>
                     <span className="text-xs font-semibold text-agent">
-                      {getRecoveryStrategyLabel(approval.recovery_strategy, t)}
+                      {recoveryStrategyLabel}
                     </span>
                     {approval.current_step && approval.total_steps && (
                       <span className="text-xs font-body text-secondary-ol">

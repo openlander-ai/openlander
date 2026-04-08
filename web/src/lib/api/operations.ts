@@ -61,7 +61,10 @@ export interface OpsIncidentEvent {
   id: string;
   incident_id: string;
   type: string;
+  event_type?: string;
   message: string | null;
+  description?: string;
+  metadata?: string;
   created_at: string;
 }
 
@@ -71,8 +74,13 @@ export interface OpsIncident {
   title: string;
   status: string;
   severity: string;
+  root_cause?: string | null;
+  diagnosis?: string | null;
+  actions_taken?: string | null;
   created_at: string;
   updated_at: string;
+  resolved_at?: string | null;
+  escalated_at?: string | null;
   events?: OpsIncidentEvent[];
 }
 

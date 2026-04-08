@@ -25,7 +25,9 @@ export function IncidentTimeline({ events }: IncidentTimelineProps) {
   const groupedEvents: { event: OpsIncidentEvent; count: number }[] = [];
   for (const e of events) {
     const last = groupedEvents[groupedEvents.length - 1];
-    if (last && last.event.type === e.type && last.event.message === e.message) {
+    const currentType = e.type || e.event_type;
+    const lastType = last?.event.type || last?.event.event_type;
+    if (last && lastType === currentType && last.event.message === e.message) {
       last.count++;
     } else {
       groupedEvents.push({ event: e, count: 1 });
@@ -38,16 +40,19 @@ export function IncidentTimeline({ events }: IncidentTimelineProps) {
         <div key={idx} className="relative">
           <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-agent border-2 border-bg-subtle" />
           <div className="flex flex-col">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-sm font-medium text-primary-ol">
-                {t(TIMELINE_LABELS[g.event.type] || g.event.type.replace('_', ' '))}
+                {t(
+                  TIMELINE_LABELS[(g.event.type || g.event.event_type)!] ||
+                    (g.event.type || g.event.event_type || 'unknown').replace(/_/g, ' '),
+                )}
               </span>
               <span className="text-xs text-muted-ol">
                 {new Date(g.event.created_at).toLocaleTimeString()}
               </span>
             </div>
             {g.event.message && (
-              <span className="text-sm text-secondary-ol mt-1">{g.event.message}</span>
+              <span className="mt-1 break-words text-sm text-secondary-ol">{g.event.message}</span>
             )}
             {g.count > 1 && (
               <span className="text-xs text-muted-ol mt-2 italic">

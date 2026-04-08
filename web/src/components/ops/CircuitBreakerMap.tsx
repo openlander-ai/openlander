@@ -25,6 +25,32 @@ const STATE_ORDER: Record<CircuitBreakerWithProject['state'], number> = {
   closed: 2,
 };
 
+function hasSameBreakers(
+  prev: CircuitBreakerWithProject[],
+  next: CircuitBreakerWithProject[],
+): boolean {
+  if (prev.length !== next.length) {
+    return false;
+  }
+
+  for (let i = 0; i < prev.length; i += 1) {
+    const a = prev[i];
+    const b = next[i];
+    if (
+      a.projectId !== b.projectId ||
+      a.state !== b.state ||
+      a.failureCount !== b.failureCount ||
+      a.lastFailureAt !== b.lastFailureAt ||
+      a.openedAt !== b.openedAt ||
+      a.resetAt !== b.resetAt
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function CircuitBreakerMap({
   projectId,
   projectNameById,
@@ -35,10 +61,14 @@ export function CircuitBreakerMap({
   const [loading, setLoading] = useState(true);
   const [resettingProjectId, setResettingProjectId] = useState<string | null>(null);
 
-  const loadBreakers = useCallback(async () => {
+  const loadBreakers = useCallback(async (showSkeleton: boolean) => {
+    if (showSkeleton) {
+      setLoading(true);
+    }
     try {
       const data = await fetchAllCircuitBreakers();
-      setBreakers(data.breakers ?? []);
+      const nextBreakers = data.breakers ?? [];
+      setBreakers((prev) => (hasSameBreakers(prev, nextBreakers) ? prev : nextBreakers));
     } catch (err) {
       console.error('Failed to load circuit breakers', err);
     } finally {
@@ -47,8 +77,12 @@ export function CircuitBreakerMap({
   }, []);
 
   useEffect(() => {
-    setLoading(true);
-    void loadBreakers();
+    void loadBreakers(true);
+  }, [loadBreakers]);
+
+  useEffect(() => {
+    if (refreshToken === 0) return;
+    void loadBreakers(false);
   }, [loadBreakers, refreshToken]);
 
   const visibleBreakers = useMemo(() => {
@@ -77,7 +111,7 @@ export function CircuitBreakerMap({
     try {
       await resetCircuitBreaker(breaker.projectId);
       toast.success(`${breaker.projectName} · ${t('operations.circuitBreakers.reset')}`);
-      await loadBreakers();
+      await loadBreakers(false);
     } catch (err) {
       console.error('Failed to reset circuit breaker', err);
       toast.error(t('approval.banner.error'));
@@ -87,7 +121,7 @@ export function CircuitBreakerMap({
   };
 
   return (
-    <Card className="border-border bg-panel p-4 lg:p-5">
+    <Card className="min-w-0 border-border bg-panel p-4 lg:p-5">
       <h2 className="mb-4 font-display text-lg font-semibold text-primary-ol">
         {t('operations.circuitBreakers.title')}
       </h2>

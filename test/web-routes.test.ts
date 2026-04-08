@@ -1780,4 +1780,31 @@ describe('Web API Routes', () => {
     expect(body.status).toBe('archived');
     expect(ctx.pipeline.archive as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('del-1');
   });
+
+  it('GET /api/action-runs?approval_status=pending excludes stale non-pending_approval rows', async () => {
+    db.createProject({ id: 'ops-p1', name: 'ops-app', repoUrl: 'https://github.com/u/ops-app' });
+
+    const activePendingId = db.createActionRun({
+      projectId: 'ops-p1',
+      triggerSource: 'auto_recovery',
+      recoveryStrategy: 'recipe',
+    });
+    db.updateActionRunStatus(activePendingId, 'pending_approval');
+    db.updateActionRunApproval(activePendingId, 'pending', 'rollback');
+
+    const stalePendingId = db.createActionRun({
+      projectId: 'ops-p1',
+      triggerSource: 'auto_recovery',
+      recoveryStrategy: 'recipe',
+    });
+    db.updateActionRunStatus(stalePendingId, 'failed', 'Server restarted');
+    db.updateActionRunApproval(stalePendingId, 'pending', 'rollback');
+
+    const res = await app.request('/api/action-runs?approval_status=pending');
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    expect(body.actionRuns).toHaveLength(1);
+    expect(body.actionRuns[0].id).toBe(activePendingId);
+  });
 });

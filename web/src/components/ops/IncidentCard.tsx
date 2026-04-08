@@ -59,28 +59,30 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
   return (
     <Card
       className={cn(
-        'border-[hsl(var(--border))] shadow-sm overflow-hidden transition-colors',
+        'min-w-0 overflow-hidden border-[hsl(var(--border))] shadow-sm transition-colors',
         isCritical
           ? 'border-l-4 border-l-error bg-error/5'
           : 'border-l-4 border-l-warning bg-warning/5',
       )}
     >
       <div className="p-4 lg:p-5">
-        <div className="flex items-center gap-3 mb-4 pb-3 border-b border-border/50">
+        <div className="mb-4 flex min-w-0 items-center gap-2.5 border-b border-border/50 pb-3">
           <Badge
             variant="outline"
-            className="font-body text-xs text-secondary-ol px-2 py-[2px] bg-bg-panel shadow-sm"
+            className="shrink-0 bg-bg-panel px-2 py-[2px] font-body text-xs text-secondary-ol shadow-sm"
           >
             {projectName}
           </Badge>
-          <span className="font-mono text-[11px] text-muted-ol opacity-80 pl-1 border-l border-border/60">
+          <span
+            className="min-w-0 flex-1 truncate border-l border-border/60 pl-1 font-mono text-[11px] text-muted-ol opacity-80"
+            title={incidentProjectId}
+          >
             {incidentProjectId}
           </span>
-          <div className="flex-1" />
           <Badge
             variant="outline"
             className={cn(
-              'capitalize text-[11px] h-6 px-2.5 whitespace-nowrap',
+              'h-6 shrink-0 whitespace-nowrap px-2.5 text-[11px] capitalize',
               isCritical
                 ? 'text-error border-error/50 bg-error/10'
                 : 'text-warning border-warning/50 bg-warning/10',
@@ -109,17 +111,17 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
             >
               {t(group.label)}
             </h4>
-            <p className="text-sm font-body text-primary-ol leading-relaxed whitespace-pre-wrap">
+            <p className="break-words whitespace-pre-wrap text-sm font-body leading-relaxed text-primary-ol">
               {t(group.description)}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 ml-[48px] text-[11px] font-mono text-muted-ol bg-bg-app rounded-md px-3 py-2 w-fit border border-border/50 shadow-sm">
-          <span className="text-secondary-ol font-medium">
+        <div className="mt-1 flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border/50 bg-bg-app px-3 py-2 text-[11px] font-mono text-muted-ol shadow-sm sm:ml-[48px] sm:w-fit sm:max-w-[calc(100%-3rem)]">
+          <span className="font-medium text-secondary-ol">
             {t('ops.occurrences', { count: String(group.count) })}
           </span>
-          <span className="opacity-40">&middot;</span>
+          <span className="hidden opacity-40 sm:inline">&middot;</span>
           <span>
             {t('ops.first')}:{' '}
             {new Date(group.firstSeen).toLocaleDateString(language === 'ko' ? 'ko-KR' : undefined, {
@@ -129,50 +131,52 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
               minute: '2-digit',
             })}
           </span>
-          <span className="opacity-40">&middot;</span>
+          <span className="hidden opacity-40 sm:inline">&middot;</span>
           <span>
             {t('ops.last')}:{' '}
             <span className="text-secondary-ol">{relativeTime(group.lastSeen, language)}</span>
           </span>
         </div>
 
-        <div className="flex items-center gap-3 ml-[48px] mt-4">
-          <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
-            <CollapsibleTrigger asChild>
+        <div className="mt-4 sm:ml-[48px]">
+          <Collapsible open={isOpen} onOpenChange={handleOpenChange} className="w-full min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 bg-bg-panel text-xs text-secondary-ol hover:bg-bg-subtle"
+                >
+                  {t('ops.viewTimeline')}
+                  <ChevronDown
+                    className={cn('ml-2 h-3.5 w-3.5 transition-transform', isOpen && 'rotate-180')}
+                  />
+                </Button>
+              </CollapsibleTrigger>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                className="h-8 text-xs bg-bg-panel hover:bg-bg-subtle text-secondary-ol"
+                className="h-8 text-xs text-muted-ol hover:text-secondary-ol"
+                onClick={() =>
+                  toast.info(
+                    t('ops.featureNotReady') || 'This feature is currently under development.',
+                  )
+                }
               >
-                {t('ops.viewTimeline')}
-                <ChevronDown
-                  className={cn('ml-2 h-3.5 w-3.5 transition-transform', isOpen && 'rotate-180')}
-                />
+                {t('ops.acknowledge')}
               </Button>
-            </CollapsibleTrigger>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs ml-2 text-muted-ol hover:text-secondary-ol"
-              onClick={() =>
-                toast.info(
-                  t('ops.featureNotReady') || 'This feature is currently under development.',
-                )
-              }
-            >
-              {t('ops.acknowledge')}
-            </Button>
+            </div>
 
             <CollapsibleContent className="mt-4 overflow-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=open]:animate-in data-[state=open]:fade-in">
-              <div className="bg-bg-panel/80 rounded-lg p-5 border border-border shadow-sm">
-                <h5 className="text-[11px] font-bold text-muted-ol uppercase tracking-wider mb-5 flex items-center gap-2">
+              <div className="rounded-lg border border-border bg-bg-panel/80 p-5 shadow-sm">
+                <h5 className="mb-5 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-muted-ol">
                   <RefreshCw className="h-3 w-3" />
                   {t('ops.latestTimeline')}
                 </h5>
 
                 {loadingEvents ? (
                   <div className="flex items-center justify-center py-6">
-                    <RefreshCw className="h-5 w-5 text-muted-ol animate-spin" />
+                    <RefreshCw className="h-5 w-5 animate-spin text-muted-ol" />
                   </div>
                 ) : (
                   <IncidentTimeline events={events} />
