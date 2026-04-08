@@ -299,13 +299,23 @@ export class OpsAgent {
         return;
       }
 
-      const result = await this.recovery.execute({
-        projectId,
-        projectName,
-        containerId,
-        incidentId: incident.id,
-        automationPolicy,
-      });
+      let result: 'recovered' | 'escalated' | 'skipped';
+      try {
+        result = await this.recovery.execute({
+          projectId,
+          projectName,
+          containerId,
+          incidentId: incident.id,
+          automationPolicy,
+        });
+      } catch (err) {
+        log.error({ err, projectId }, 'Recovery pipeline threw — escalating incident');
+        this.incidents.escalateIncident(
+          incident.id,
+          `Recovery failed with error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return;
+      }
       if (result === 'recovered') {
         this.incidents.resolveIncident(incident.id, 'Auto-recovered after restart');
       } else if (result === 'escalated') {
