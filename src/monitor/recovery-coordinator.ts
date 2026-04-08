@@ -167,11 +167,6 @@ export class RecoveryCoordinator {
       return { eligible: false, reason: 'circuit_breaker_open' };
     }
 
-    const activeIncident = this.db.getActiveOpsIncident(projectId);
-    if (activeIncident && activeIncident.status !== 'escalated') {
-      return { eligible: false, reason: 'incident_active' };
-    }
-
     return { eligible: true };
   }
 
