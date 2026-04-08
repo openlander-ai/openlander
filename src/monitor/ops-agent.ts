@@ -310,6 +310,11 @@ export class OpsAgent {
         this.incidents.resolveIncident(incident.id, 'Auto-recovered after restart');
       } else if (result === 'escalated') {
         this.incidents.escalateIncident(incident.id, 'Recovery pipeline exhausted');
+      } else {
+        this.incidents.escalateIncident(
+          incident.id,
+          'Recovery skipped — concurrent recovery or precondition not met',
+        );
       }
     }
   }
