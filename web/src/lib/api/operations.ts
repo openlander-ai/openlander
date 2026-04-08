@@ -151,7 +151,16 @@ export interface ActivityItem {
   projectName: string;
   title: string;
   description: string;
-  status: 'active' | 'resolved' | 'pending' | 'failed' | 'ai-running' | 'ai-completed';
+  status:
+    | 'active'
+    | 'resolved'
+    | 'pending'
+    | 'failed'
+    | 'ai-running'
+    | 'ai-completed'
+    | 'recovery-blocked'
+    | 'recovery-stopped'
+    | 'recovering';
   incidentId?: string;
   actionRunId?: string;
   correlationId?: string;

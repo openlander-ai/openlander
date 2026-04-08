@@ -261,11 +261,13 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
                       'absolute -left-6 mt-1.5 flex h-[11px] w-[11px] items-center justify-center rounded-full ring-4 ring-bg-panel',
                       item.type.startsWith('ai:') || item.type === 'ai_diagnosis'
                         ? 'bg-agent'
-                        : getStatusClass(item.status).includes('error')
+                        : item.status === 'failed'
                           ? 'bg-error'
-                          : getStatusClass(item.status).includes('warning')
+                          : item.status === 'active' ||
+                              item.status === 'recovery-blocked' ||
+                              item.status === 'recovery-stopped'
                             ? 'bg-warning'
-                            : getStatusClass(item.status).includes('success')
+                            : item.status === 'resolved'
                               ? 'bg-success'
                               : 'bg-border',
                     )}
