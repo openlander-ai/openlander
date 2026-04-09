@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useLanguage } from '../../i18n/context.js';
 import type { Project } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -80,6 +81,7 @@ function sortProjects(a: Project, b: Project) {
 }
 
 export function Sidebar({ projects, loading }: SidebarProps) {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const [groupState, setGroupState] = useState<Record<string, boolean>>({});
@@ -375,7 +377,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
         {/* Services Link */}
         <button
           onClick={() => navigate('/services')}
-          title="Services"
+          title={t('services.title')}
           className={cn(
             'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
             'lg:justify-start justify-center',
@@ -384,13 +386,13 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           )}
         >
           <Database className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-sm font-body">Services</span>
+          <span className="hidden lg:inline text-sm font-body">{t('services.title')}</span>
         </button>
 
         {/* Operations Center */}
         <button
           onClick={() => navigate('/operations')}
-          title="Operations Center"
+          title={t('settings.tabs.operations')}
           className={cn(
             'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
             'lg:justify-start justify-center',
@@ -399,13 +401,15 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           )}
         >
           <ShieldAlert className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-sm font-body">Operations</span>
+          <span className="hidden lg:inline text-sm font-body">
+            {t('settings.tabs.operations')}
+          </span>
         </button>
 
         {/* Settings Link */}
         <button
           onClick={() => navigate('/settings')}
-          title="Settings"
+          title={t('settings.title')}
           className={cn(
             'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
             'lg:justify-start justify-center',
@@ -414,7 +418,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
           )}
         >
           <Settings className="h-4 w-4 shrink-0" />
-          <span className="hidden lg:inline text-sm font-body">Settings</span>
+          <span className="hidden lg:inline text-sm font-body">{t('settings.title')}</span>
         </button>
       </div>
     </div>
