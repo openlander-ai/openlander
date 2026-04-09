@@ -402,7 +402,8 @@ export async function createAppContext(
     config,
     shouldContinue: (projectId) => coordinator.shouldContinue(projectId),
     getAutomationPolicy: (projectId) => {
-      const opsConfig = config.ops;
+      // Use live opsAgent config (hot-reloaded) instead of bootstrap config.ops
+      const opsConfig = ctx.opsAgent?.getConfig() ?? config.ops;
       const override = db.getProjectOpsOverride(projectId);
       return resolveAutomationPolicy(opsConfig, override ?? undefined);
     },

@@ -776,10 +776,10 @@ describe('setupAutoRecovery — automation policy', () => {
     }
   });
 
-  it('TOOL_TO_RECOVERY_STEP maps every HIGH_RISK_DEFAULTS tool to a configurable step', () => {
-    // These are the exact tools DecisionEngine classifies as REQUIRE_APPROVAL by default.
-    // All of them must exist in TOOL_TO_RECOVERY_STEP so the policy can override them.
-    const HIGH_RISK_TOOLS = [
+  it('TOOL_TO_RECOVERY_STEP maps most HIGH_RISK_DEFAULTS tools to a configurable step', () => {
+    // These are the high-risk tools that should be policy-controllable.
+    // remove_volume is intentionally excluded — permanent data deletion always requires approval.
+    const POLICY_MAPPED_TOOLS = [
       'rollback_project',
       'remove_project',
       'remove_service',
@@ -787,12 +787,11 @@ describe('setupAutoRecovery — automation policy', () => {
       'platform_cleanup_orphans',
       'platform_reconcile',
       'platform_force_remove',
-      'remove_volume',
     ] as const;
 
     const validSteps = new Set(['restart', 'diagnosis', 'apply_fixes', 'rollback']);
 
-    for (const tool of HIGH_RISK_TOOLS) {
+    for (const tool of POLICY_MAPPED_TOOLS) {
       const mappedStep = TOOL_TO_RECOVERY_STEP[tool];
       expect(mappedStep, `${tool} must be mapped in TOOL_TO_RECOVERY_STEP`).toBeDefined();
       expect(validSteps, `${tool} must map to a valid ConfigurableRecoveryStep`).toContain(

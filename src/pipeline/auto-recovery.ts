@@ -33,7 +33,7 @@ export const TOOL_TO_RECOVERY_STEP: Record<string, ConfigurableRecoveryStep> = {
   remove_project: 'rollback',
   platform_force_remove: 'rollback',
   remove_service: 'rollback',
-  remove_volume: 'rollback',
+  // remove_volume intentionally excluded — permanent data deletion should always require approval
   create_database: 'apply_fixes',
   platform_cleanup_orphans: 'apply_fixes',
   platform_reconcile: 'apply_fixes',
