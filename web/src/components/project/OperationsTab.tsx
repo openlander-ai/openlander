@@ -211,7 +211,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
       {/* SECTION 2: Triage Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center">
-          <span className="text-xs font-medium text-muted-ol mb-1">{t('Open Issues')}</span>
+          <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.openIssues')}</span>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-primary-ol">{activeGroups.length}</span>
             {activeGroups.length > 0 && (
@@ -235,23 +235,23 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
 
         {noiseSuppressed > 0 ? (
           <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center">
-            <span className="text-xs font-medium text-muted-ol mb-1">{t('Noise Suppressed')}</span>
+            <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.noiseSuppressed')}</span>
             <span className="text-sm font-medium text-secondary-ol">
               <strong className="text-primary-ol">{noiseSuppressed}</strong>{' '}
-              {t('repeated incidents grouped')}
+              {t('ops.repeatedIncidentsGrouped')}
             </span>
           </Card>
         ) : (
           <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center opacity-50">
-            <span className="text-xs font-medium text-muted-ol mb-1">{t('Noise Suppressed')}</span>
+            <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.noiseSuppressed')}</span>
             <span className="text-sm font-medium text-secondary-ol">
-              {t('0 repeated incidents')}
+              {t('ops.zeroRepeatedIncidents')}
             </span>
           </Card>
         )}
 
         <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center">
-          <span className="text-xs font-medium text-muted-ol mb-1">{t('Recovery Status')}</span>
+          <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.recoveryStatusLabel')}</span>
           <div className="flex items-center gap-2">
             <div
               className={cn(
@@ -269,46 +269,46 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
             />
             <span className="text-sm font-medium text-primary-ol">
               {status === 'blocked'
-                ? t('Blocked')
+                ? t('ops.blocked')
                 : status === 'attention'
-                  ? t('Waiting for redeploy')
+                  ? t('ops.waitingForRedeploy')
                   : status === 'degraded' || status === 'broken'
-                    ? t('Retrying')
+                    ? t('ops.retrying')
                     : !(config?.enabled ?? true)
-                      ? t('Disabled')
-                      : t('Idle')}
+                      ? t('ops.disabled')
+                      : t('ops.idle')}
             </span>
           </div>
         </Card>
 
         <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center">
-          <span className="text-xs font-medium text-muted-ol mb-1">{t('Last Alert')}</span>
+          <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.lastAlert')}</span>
           <div className="flex items-center gap-2">
             <BellOff className="h-4 w-4 text-muted-ol" />
-            <span className="text-sm font-medium text-muted-ol">{t('No alerts configured')}</span>
+            <span className="text-sm font-medium text-muted-ol">{t('ops.noAlertsConfigured')}</span>
           </div>
         </Card>
       </div>
 
       {/* SECTION 3: Active Issue Groups */}
       <div className="flex-1 space-y-4">
-        <h3 className="text-sm font-semibold text-primary-ol">{t('Active Issues')}</h3>
+        <h3 className="text-sm font-semibold text-primary-ol">{t('operations.activeIncidents')}</h3>
 
         {activeGroups.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-secondary-ol bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm">
             {status === 'attention' ? (
               <>
                 <AlertTriangle className="h-8 w-8 mb-3 text-warning/70" />
-                <p className="text-sm font-medium text-primary-ol">{t('No runtime incidents')}</p>
+                <p className="text-sm font-medium text-primary-ol">{t('ops.noRuntimeIncidents')}</p>
                 <p className="text-xs text-muted-ol mt-1">
-                  {t('Deployment failed earlier. Check Deployments/Logs and redeploy.')}
+                  {t('ops.deploymentFailedEarlier')}
                 </p>
               </>
             ) : (
               <>
                 <CheckCircle2 className="h-8 w-8 mb-3 text-success/50" />
-                <p className="text-sm font-medium text-primary-ol">{t('All clear')}</p>
-                <p className="text-xs text-muted-ol mt-1">{t('No active issues detected.')}</p>
+                <p className="text-sm font-medium text-primary-ol">{t('ops.allClear')}</p>
+                <p className="text-xs text-muted-ol mt-1">{t('ops.noActiveIssuesDetected')}</p>
               </>
             )}
           </div>
@@ -332,7 +332,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
           <Collapsible>
             <CollapsibleTrigger className="flex items-center gap-2 text-sm font-semibold text-primary-ol hover:text-agent transition-colors">
               <ChevronDown className="h-4 w-4" />
-              {t('Past Incidents')} ({pastIncidents.length})
+              {t('operations.incidentHistory')} ({pastIncidents.length})
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-4 space-y-2">
               {pastIncidents.slice(0, 20).map((incident) => (
