@@ -18,6 +18,30 @@ const THREADS_PAGE_SIZE = 40;
 const EVENTS_PAGE_SIZE = 20;
 
 // ---------------------------------------------------------------------------
+// Title localisation helper
+// ---------------------------------------------------------------------------
+
+const TITLE_PATTERNS: [RegExp, string][] = [
+  [/^Auto-recovery running$/i, 'opsV2.titles.autoRecoveryRunning'],
+  [/^Auto-recovery failed$/i, 'opsV2.titles.autoRecoveryFailed'],
+  [/^Auto-recovery completed$/i, 'opsV2.titles.autoRecoveryCompleted'],
+  [/^Incident detected$/i, 'opsV2.titles.incidentDetected'],
+  [/^Health check failed/i, 'opsV2.titles.healthCheckFailed'],
+  [/^deploy:crash$/i, 'opsV2.titles.deployCrash'],
+  [/^deploy:failed$/i, 'opsV2.titles.deployFailed'],
+  [/^deploy:/i, 'opsV2.titles.deployFailed'],
+];
+
+function localizeTitle(title: string, t: (key: string) => string): string {
+  for (const [pattern, key] of TITLE_PATTERNS) {
+    if (pattern.test(title)) {
+      return t(key);
+    }
+  }
+  return title;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -51,7 +75,7 @@ function groupIntoThreads(items: ActivityItem[]): Omit<Thread, 'isExpanded'>[] {
 
   for (const item of items) {
     const tsBucket = Math.floor(new Date(item.timestamp).getTime() / 300_000);
-    const key = item.correlationId || `${item.projectId}::${item.type}::${tsBucket}`;
+    const key = item.correlationId || `${item.projectId}::${tsBucket}`;
 
     const existing = threadMap.get(key);
     if (existing) {
@@ -112,7 +136,7 @@ function groupIntoThreads(items: ActivityItem[]): Omit<Thread, 'isExpanded'>[] {
 // ---------------------------------------------------------------------------
 // Density approach: standard table rows using CSS grid.
 const ROW_GRID_CLASSES =
-  'grid grid-cols-[24px_minmax(120px,1.5fr)_minmax(200px,3fr)_80px_100px_60px_100px] items-center gap-3 px-3';
+  'grid grid-cols-[24px_minmax(140px,1.8fr)_minmax(200px,3fr)_80px_100px_60px_100px] items-center gap-3 px-3';
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -125,8 +149,9 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({ event }: { event
   const isAiEvent = event.type.startsWith('ai:') || event.type === 'ai_diagnosis';
   const hasDetails = !!event.description || !!event.aiMetadata?.diagnosisSummary;
 
-  const titleText =
+  const rawTitle =
     event.title || humanizeEventType(event.type, t as unknown as (key: string) => string);
+  const titleText = localizeTitle(rawTitle, t as unknown as (key: string) => string);
 
   return (
     <div className="flex flex-col border-b border-[hsl(var(--border))]/30 last:border-0 hover:bg-bg-subtle/30 transition-colors">
@@ -310,7 +335,7 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
         <div role="columnheader">{t('opsV2.timeline.columns.detectedEvent')}</div>
         <div role="columnheader">{t('opsV2.timeline.columns.severity')}</div>
         <div role="columnheader">{t('opsV2.timeline.columns.state')}</div>
-        <div role="columnheader">{t('opsV2.timeline.columns.logsCount')}</div>
+        <div role="columnheader">{t('opsV2.timeline.columns.eventCount')}</div>
         <div role="columnheader">{t('opsV2.timeline.columns.latest')}</div>
       </div>
 
@@ -364,13 +389,22 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
                   <div role="cell" className="min-w-0 flex flex-col justify-center">
                     <span
                       className="truncate text-xs font-medium text-secondary-ol"
-                      title={thread.title}
+                      title={
+                        thread.title
+                          ? localizeTitle(thread.title, t as unknown as (key: string) => string)
+                          : undefined
+                      }
                     >
-                      {thread.title}
+                      {thread.title
+                        ? localizeTitle(thread.title, t as unknown as (key: string) => string)
+                        : thread.title}
                     </span>
                     {thread.triggerType && (
                       <span className="truncate text-[10px] font-mono text-muted-ol mt-0.5">
-                        {thread.triggerType}
+                        {humanizeEventType(
+                          thread.triggerType,
+                          t as unknown as (key: string) => string,
+                        )}
                       </span>
                     )}
                   </div>

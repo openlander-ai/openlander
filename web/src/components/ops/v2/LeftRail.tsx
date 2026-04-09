@@ -3,7 +3,8 @@ import { CheckSquare, AlertCircle, ShieldAlert, ChevronLeft, ChevronRight } from
 import { cn } from '../../../lib/utils.js';
 import { useLanguage } from '../../../i18n/context.js';
 import { ScrollArea } from '../../ui/scroll-area.js';
-import type { OpsIncident, CircuitBreakerState } from '../../../lib/api/operations.js';
+import { humanizeEventType } from '../utils.js';
+import type { OpsIncident, CircuitBreakerWithProject } from '../../../lib/api/operations.js';
 import type { ActionRun } from '../../../lib/api/projects.js';
 
 const STORAGE_KEY = 'ops-v2-rail-collapsed';
@@ -11,7 +12,7 @@ const STORAGE_KEY = 'ops-v2-rail-collapsed';
 export interface LeftRailProps {
   approvals: ActionRun[];
   incidents: OpsIncident[];
-  circuitBreakers: CircuitBreakerState[];
+  circuitBreakers: CircuitBreakerWithProject[];
   onFilterChange?: (filter: { type?: string; severity?: string }) => void;
   /** When true, forces icon-only collapsed mode regardless of local state */
   forceCollapsed?: boolean;
@@ -54,7 +55,16 @@ function SectionHeader({ icon, label, count, collapsed, active, onClick }: Secti
   );
 }
 
-function IncidentRow({ incident, collapsed }: { incident: OpsIncident; collapsed: boolean }) {
+function IncidentRow({
+  incident,
+  count,
+  collapsed,
+}: {
+  incident: OpsIncident;
+  count: number;
+  collapsed: boolean;
+}) {
+  const { t } = useLanguage();
   const severityColor =
     incident.severity === 'critical'
       ? 'bg-error'
@@ -62,12 +72,18 @@ function IncidentRow({ incident, collapsed }: { incident: OpsIncident; collapsed
         ? 'bg-warning'
         : 'bg-muted-ol';
 
+  const displayTitle = incident.triggerType
+    ? humanizeEventType(incident.triggerType, t)
+    : incident.title;
+
+  const titleWithCount = count > 1 ? `${displayTitle} (×${count})` : displayTitle;
+
   if (collapsed) {
     return (
       <div className="flex justify-center py-1">
         <span
           className={cn('h-2 w-2 rounded-full shrink-0', severityColor)}
-          title={incident.title}
+          title={titleWithCount}
         />
       </div>
     );
@@ -76,7 +92,7 @@ function IncidentRow({ incident, collapsed }: { incident: OpsIncident; collapsed
   return (
     <div className="flex items-start gap-2 px-2 py-1.5 rounded-md hover:bg-bg-subtle transition-colors">
       <span className={cn('h-2 w-2 rounded-full shrink-0 mt-1', severityColor)} />
-      <span className="text-xs font-body text-primary-ol truncate">{incident.title}</span>
+      <span className="text-xs font-body text-primary-ol truncate">{titleWithCount}</span>
     </div>
   );
 }
@@ -111,14 +127,15 @@ function CircuitBreakerRow({
   index,
   collapsed,
 }: {
-  breaker: CircuitBreakerState;
+  breaker: CircuitBreakerWithProject;
   index: number;
   collapsed: boolean;
 }) {
   const isOpen = breaker.state === 'open';
   const isHalfOpen = breaker.state === 'half_open';
   const dotColor = isOpen ? 'bg-error' : isHalfOpen ? 'bg-warning' : 'bg-success';
-  const label = `CB #${index + 1}: ${breaker.state}`;
+  const displayName = breaker.projectName || `CB #${index + 1}`;
+  const label = `${displayName}: ${breaker.state}`;
 
   if (collapsed) {
     return (
@@ -193,6 +210,21 @@ export function LeftRail({
   const approvalItems = approvals;
   const openBreakers = circuitBreakers.filter((cb) => cb.state !== 'closed');
 
+  // Group incidents by humanized trigger type (or title) to deduplicate
+  const groupedIncidents = incidents.reduce<Array<{ incident: OpsIncident; count: number }>>(
+    (acc, incident) => {
+      const key = incident.triggerType ?? incident.title;
+      const existing = acc.find((g) => (g.incident.triggerType ?? g.incident.title) === key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        acc.push({ incident, count: 1 });
+      }
+      return acc;
+    },
+    [],
+  );
+
   return (
     <aside
       style={{
@@ -264,8 +296,13 @@ export function LeftRail({
             {!effectivelyCollapsed && incidents.length === 0 && (
               <p className="px-2 py-1 text-xs text-muted-ol">{t('opsV2.empty.noActiveIssues')}</p>
             )}
-            {incidents.map((incident) => (
-              <IncidentRow key={incident.id} incident={incident} collapsed={effectivelyCollapsed} />
+            {groupedIncidents.map(({ incident, count }) => (
+              <IncidentRow
+                key={incident.triggerType ?? incident.id}
+                incident={incident}
+                count={count}
+                collapsed={effectivelyCollapsed}
+              />
             ))}
           </div>
 
@@ -279,11 +316,16 @@ export function LeftRail({
               active={activeFilter === 'circuit_breaker'}
               onClick={() => handleSectionClick('circuit_breaker')}
             />
-            {!effectivelyCollapsed && circuitBreakers.length === 0 && (
+            {!effectivelyCollapsed && openBreakers.length === 0 && (
               <p className="px-2 py-1 text-xs text-muted-ol">{t('opsV2.empty.allSystemsNormal')}</p>
             )}
-            {circuitBreakers.map((cb, i) => (
-              <CircuitBreakerRow key={i} breaker={cb} index={i} collapsed={effectivelyCollapsed} />
+            {openBreakers.map((cb, i) => (
+              <CircuitBreakerRow
+                key={cb.projectId}
+                breaker={cb}
+                index={i}
+                collapsed={effectivelyCollapsed}
+              />
             ))}
           </div>
         </div>
