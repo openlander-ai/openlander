@@ -35,6 +35,21 @@ interface IncidentCardProps {
   incidentProjectId: string;
 }
 
+function formatIncidentTitle(text: string): string {
+  if (!text) return '';
+  // If text contains underscores, we treat it as a raw machine identifier and format it
+  if (text.includes('_')) {
+    let formatted = text.replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    // Ensure proper spacing around parentheses
+    formatted = formatted.replace(/\(\s*/g, '(').replace(/\s*\)/g, ')').replace(/\(/g, ' (');
+    // Capitalize first letter, lowercase the rest
+    formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1).toLowerCase();
+    // Clean up multiple spaces
+    return formatted.replace(/\s+/g, ' ').trim();
+  }
+  return text;
+}
+
 function formatIncidentDescription(text: string): string {
   if (!text) return '';
   let formatted = text;
@@ -125,17 +140,17 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
           <div className="flex-1 w-full overflow-hidden mt-1">
             <h4
               className={cn(
-                'text-lg font-semibold font-display mb-2.5',
+                'text-[17px] font-semibold font-display mb-2.5 tracking-tight leading-snug',
                 isCritical ? 'text-error' : 'text-warning',
               )}
             >
-              {t(group.label)}
+              {formatIncidentTitle(t(group.label))}
             </h4>
             <div className="w-full">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[13px] text-primary-ol font-body
-                  prose-p:leading-[1.7] prose-p:mb-5 last:prose-p:mb-0
+                className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[13.5px] text-primary-ol/90 font-body
+                  prose-p:leading-[1.75] prose-p:mb-5 last:prose-p:mb-0
                   prose-headings:text-primary-ol prose-headings:text-[15px] prose-headings:font-bold prose-headings:mb-3 prose-headings:mt-6 first:prose-headings:mt-0
                   prose-a:text-agent prose-a:no-underline hover:prose-a:underline 
                   prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-none prose-code:after:content-none prose-code:font-mono prose-code:text-[12px]
