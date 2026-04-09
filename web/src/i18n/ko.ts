@@ -527,7 +527,7 @@ export const translations = {
     },
     rail: {
       approvals: '승인 목록',
-      activeIssues: '활성 문제',
+      activeIssues: '현재 문제',
       circuitBreakerStatus: '서킷 브레이커',
       drawerLabel: '내비게이션',
     },

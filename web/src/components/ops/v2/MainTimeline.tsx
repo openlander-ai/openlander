@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useMemo, useState, useCallback } from 'react';
 import { ChevronRight, ChevronDown, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '../../../lib/utils.js';
@@ -103,23 +105,66 @@ function groupIntoThreads(items: ActivityItem[]): Omit<Thread, 'isExpanded'>[] {
 function ThreadEventRow({ event }: { event: ActivityItem }) {
   const { t, language } = useLanguage();
 
+  const isAiEvent = event.type.startsWith('ai:') || event.type === 'ai_diagnosis';
+
   return (
-    <div className="relative flex items-start gap-3 py-2">
-      <div className="absolute -left-[17px] top-3.5 h-1.5 w-1.5 rounded-full bg-agent" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-medium text-primary-ol">
-            {humanizeEventType(event.type, t as unknown as (key: string) => string)}
+    <div className="relative flex items-start gap-3 py-2.5">
+      <div
+        className={cn(
+          'absolute -left-[17px] top-4 h-1.5 w-1.5 rounded-full ring-4 ring-bg-panel',
+          isAiEvent ? 'bg-agent' : 'bg-border',
+        )}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className={cn('font-medium', isAiEvent ? 'text-agent' : 'text-primary-ol')}>
+            {event.title || humanizeEventType(event.type, t as unknown as (key: string) => string)}
           </span>
           <span className="text-muted-ol">
             {relativeTime(new Date(event.timestamp).getTime(), language)}
           </span>
+          {event.aiMetadata && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-ol/50">·</span>
+              <span className="font-mono text-muted-ol text-[10px]">{event.aiMetadata.model}</span>
+              {event.aiMetadata.durationMs && (
+                <>
+                  <span className="text-muted-ol/50">·</span>
+                  <span className="text-muted-ol text-[10px]">
+                    {(event.aiMetadata.durationMs / 1000).toFixed(1)}s
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
+
+        {event.aiMetadata?.diagnosisSummary && (
+          <div className="mt-0.5 mb-1.5 p-3 bg-agent/5 border border-agent/20 rounded-md">
+            <p className="text-xs font-semibold text-agent mb-1.5">{t('ops.aiDiagnosisSummary')}</p>
+            <p className="text-xs text-primary-ol leading-relaxed">
+              {event.aiMetadata.diagnosisSummary}
+            </p>
+          </div>
+        )}
+
         {event.description && (
-          <p className="truncate text-xs text-secondary-ol">{event.description}</p>
+          <div className="w-full overflow-hidden mt-0.5">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-xs text-secondary-ol
+                prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-sm prose-headings:font-semibold 
+                prose-a:text-agent prose-a:no-underline hover:prose-a:underline 
+                prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none
+                prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-xs
+                prose-ul:pl-4 prose-ol:pl-4 prose-li:my-0.5"
+            >
+              {event.description}
+            </ReactMarkdown>
+          </div>
         )}
       </div>
-      <SeverityBadge severity={event.severity} className="shrink-0" />
+      <SeverityBadge severity={event.severity} className="shrink-0 mt-0.5" />
     </div>
   );
 }

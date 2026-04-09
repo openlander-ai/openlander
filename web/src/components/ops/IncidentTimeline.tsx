@@ -1,5 +1,7 @@
 import type { OpsIncidentEvent } from '../../lib/api/operations.js';
 import { useLanguage } from '../../i18n/context.js';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const TIMELINE_EVENT_TYPES = [
   'detected',
@@ -50,7 +52,9 @@ export function IncidentTimeline({ events }: IncidentTimelineProps) {
               </span>
             </div>
             {g.event.message && (
-              <span className="text-sm text-secondary-ol mt-1">{g.event.message}</span>
+              <div className="prose prose-sm max-w-none prose-p:my-1 prose-p:leading-relaxed prose-p:text-secondary-ol prose-strong:text-secondary-ol prose-strong:font-semibold prose-a:text-ai prose-code:text-ai/80 prose-code:bg-bg-subtle prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-ul:my-1 prose-li:my-0 mt-1 break-words">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{g.event.message}</ReactMarkdown>
+              </div>
             )}
             {g.count > 1 && (
               <span className="text-xs text-muted-ol mt-2 italic">

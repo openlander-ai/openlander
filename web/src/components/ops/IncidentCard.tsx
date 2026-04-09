@@ -14,6 +14,8 @@ import {
 import { IncidentTimeline } from './IncidentTimeline.js';
 import { relativeTime } from './utils.js';
 import { useLanguage } from '../../i18n/context.js';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export interface IncidentGroup {
   key: string;
@@ -102,18 +104,29 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
           >
             {isCritical ? <XCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
           </div>
-          <div className="flex-1">
+          <div className="flex-1 w-full overflow-hidden mt-1">
             <h4
               className={cn(
-                'text-lg font-semibold font-display mb-1.5',
+                'text-lg font-semibold font-display mb-2.5',
                 isCritical ? 'text-error' : 'text-warning',
               )}
             >
               {t(group.label)}
             </h4>
-            <p className="break-words whitespace-pre-wrap text-sm font-body leading-relaxed text-primary-ol">
-              {t(group.description)}
-            </p>
+            <div className="w-full">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-sm text-primary-ol
+                  prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-base prose-headings:font-semibold 
+                  prose-a:text-agent prose-a:no-underline hover:prose-a:underline 
+                  prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none
+                  prose-strong:text-primary-ol prose-strong:font-semibold
+                  prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-sm
+                  prose-ul:pl-5 prose-ol:pl-5 prose-li:my-1"
+              >
+                {group.description}
+              </ReactMarkdown>
+            </div>
           </div>
         </div>
 
