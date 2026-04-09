@@ -116,13 +116,14 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
             <div className="w-full">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-sm text-primary-ol
-                  prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-base prose-headings:font-semibold 
+                className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[13px] text-primary-ol font-body
+                  prose-p:leading-[1.7] prose-p:whitespace-pre-wrap prose-p:mb-4 last:prose-p:mb-0
+                  prose-headings:text-primary-ol prose-headings:text-[15px] prose-headings:font-semibold prose-headings:mb-2 prose-headings:mt-4 first:prose-headings:mt-0
                   prose-a:text-agent prose-a:no-underline hover:prose-a:underline 
-                  prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none
-                  prose-strong:text-primary-ol prose-strong:font-semibold
-                  prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-sm
-                  prose-ul:pl-5 prose-ol:pl-5 prose-li:my-1"
+                  prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-none prose-code:after:content-none prose-code:font-mono prose-code:text-[12px]
+                  prose-strong:text-primary-ol prose-strong:font-bold
+                  prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-xs prose-pre:rounded-lg
+                  prose-ul:pl-5 prose-ol:pl-5 prose-li:my-1.5 prose-li:leading-[1.7]"
               >
                 {group.description}
               </ReactMarkdown>
