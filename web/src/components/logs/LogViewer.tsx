@@ -3,7 +3,7 @@ import { useLanguage } from '@/i18n/context';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useLogStream, type LogEntry } from '@/hooks/use-log-stream';
 import { cn } from '@/lib/utils';
-import { Search, ArrowDown, Trash2, Radio, RefreshCw, Clock } from 'lucide-react';
+import { Search, ArrowDown, Trash2, Radio, RefreshCw } from 'lucide-react';
 import { normalizeLogText, parseAnsiLine } from '@/lib/ansi';
 import { detectLevel, levelColors } from '@/lib/log-utils';
 import {
@@ -41,7 +41,6 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
     searchQuery: DEFAULT_CONSOLE_FILTER_STATE.searchQuery,
     logLevel: DEFAULT_CONSOLE_FILTER_STATE.logLevel,
   });
-  const [showTimestamps, setShowTimestamps] = useState(false);
   const parentRef = useRef<HTMLDivElement>(null);
   const isRegex = filters.searchMode === 'regex';
 
@@ -277,20 +276,6 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
 
             <button
               type="button"
-              onClick={() => setShowTimestamps((v) => !v)}
-              title={showTimestamps ? 'Hide timestamps' : 'Show timestamps'}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-body transition-colors',
-                showTimestamps
-                  ? 'bg-agent/10 text-agent hover:bg-agent/20'
-                  : 'text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle/50',
-              )}
-            >
-              <Clock className="h-3.5 w-3.5" />
-            </button>
-
-            <button
-              type="button"
               onClick={clear}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-body text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle/50 transition-colors"
             >
@@ -437,7 +422,7 @@ export function LogViewer({ projectId, toolbarActions }: LogViewerProps) {
                     {virtualItem.index + 1}
                   </span>
                   {/* Timestamp */}
-                  {showTimestamps && entry.time && (
+                  {entry.time && (
                     <span className="shrink-0 pr-3 text-muted-ol/50 group-hover:text-muted-ol/70 select-none tabular-nums text-xs leading-5 font-mono">
                       {formatLogTime(entry.time)}
                     </span>
