@@ -153,45 +153,43 @@ function syntaxHighlightHTML(html: string): string {
 
   // Highlight IPs (IPv4)
   res = res.replace(/(?<!\d)(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)(?:\:\d{1,5})?(?!\d)/g, (match) => {
-    return `<span class="text-sky-400/80">${match}</span>`;
+    return `<span class="text-muted-ol/60">${match}</span>`;
   });
 
   // Highlight HTTP Methods
   res = res.replace(/(?<=\"|\b)(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)(?=\s)/g, (match) => {
     switch (match) {
-      case 'GET': return '<span class="text-sky-400 font-semibold border border-sky-400/20 bg-sky-400/10 px-1 rounded">GET</span>';
-      case 'POST': return '<span class="text-emerald-400 font-semibold border border-emerald-400/20 bg-emerald-400/10 px-1 rounded">POST</span>';
+      case 'GET': return '<span class="text-sky-500 font-medium">' + match + '</span>';
+      case 'POST': return '<span class="text-emerald-500 font-medium">' + match + '</span>';
       case 'PUT':
-      case 'PATCH': return '<span class="text-amber-400 font-semibold border border-amber-400/20 bg-amber-400/10 px-1 rounded">' + match + '</span>';
-      case 'DELETE': return '<span class="text-rose-400 font-semibold border border-rose-400/20 bg-rose-400/10 px-1 rounded">DELETE</span>';
-      default: return '<span class="text-purple-400 font-semibold border border-purple-400/20 bg-purple-400/10 px-1 rounded">' + match + '</span>';
+      case 'PATCH': return '<span class="text-amber-500 font-medium">' + match + '</span>';
+      case 'DELETE': return '<span class="text-rose-500 font-medium">' + match + '</span>';
+      default: return '<span class="text-purple-400 font-medium">' + match + '</span>';
     }
   });
 
   // Highlight HTTP Status Codes
   res = res.replace(/(?<=\s|^|\")(2\d{2}|3\d{2}|4\d{2}|5\d{2})(?=\s|$|\")/g, (match) => {
     const code = parseInt(match, 10);
-    if (code >= 200 && code < 300) return `<span class="text-emerald-500 font-bold">${match}</span>`;
-    if (code >= 300 && code < 400) return `<span class="text-sky-500 font-bold">${match}</span>`;
-    if (code >= 400 && code < 500) return `<span class="text-amber-500 font-bold">${match}</span>`;
-    if (code >= 500) return `<span class="text-rose-500 font-bold">${match}</span>`;
+    if (code >= 200 && code < 300) return `<span class="text-emerald-500 font-medium">${match}</span>`;
+    if (code >= 300 && code < 400) return `<span class="text-sky-500 font-medium">${match}</span>`;
+    if (code >= 400 && code < 500) return `<span class="text-amber-500 font-medium">${match}</span>`;
+    if (code >= 500) return `<span class="text-rose-500 font-medium">${match}</span>`;
     return match;
   });
 
   // Highlight URL paths inside HTTP requests (e.g. GET /api/v1/feed HTTP/1.1)
-  // Uses a non-capturing group to make sure we don't accidentally match style="..." blocks. 
-  // It matches a space, a forward slash followed by non-space/quote chars, ending with space HTTP.
-  res = res.replace(/(\s)(\/[^\s"&]+)(\sHTTP\/(?:1\.1|2|3|\d(?:\.\d)?))/ig, '$1<span class="text-primary-ol/70 italic">$2</span>$3');
+  res = res.replace(/(\s)(\/[^\s"&]+)(\sHTTP\/(?:1\.1|2|3|\d(?:\.\d)?))/ig, '$1<span class="text-primary-ol/60 italic">$2</span>$3');
 
   // Highlight Log Levels (INFO, ERROR, WARN, DEBUG)
   res = res.replace(/(?<=\b|\[)(INFO|ERROR|WARN|WARNING|DEBUG|TRACE)(?=\]|\:|\s)/g, (match) => {
     switch (match) {
-      case 'INFO': return '<span class="text-sky-400">INFO</span>';
-      case 'ERROR': return '<span class="text-rose-400 font-bold">ERROR</span>';
+      case 'INFO': return '<span class="text-secondary-ol font-medium">INFO</span>';
+      case 'ERROR': return '<span class="text-error font-medium">ERROR</span>';
       case 'WARN':
-      case 'WARNING': return '<span class="text-amber-400 font-bold">' + match + '</span>';
+      case 'WARNING': return '<span class="text-warning font-medium">' + match + '</span>';
       case 'DEBUG':
-      case 'TRACE': return '<span class="text-[hsl(var(--muted-foreground))]">' + match + '</span>';
+      case 'TRACE': return '<span class="text-muted-ol">' + match + '</span>';
       default: return match;
     }
   });
