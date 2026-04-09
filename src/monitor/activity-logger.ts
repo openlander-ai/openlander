@@ -47,6 +47,7 @@ const PERSISTED_EVENT_TYPES: EventType[] = [
   'recovery:failed',
   'recovery:exhausted',
   'recovery:approval-needed',
+  'recovery:approval-auto-skipped',
   'recovery:approval-resolved',
   'recovery:blocked',
   'recovery:stopped',

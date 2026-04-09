@@ -507,6 +507,8 @@ export function createSetupRoutes(ctx: AppContext): Hono {
       'envDetection',
       'operationalMonitoring',
       'codingPlan',
+      'secretScan',
+      'rollbackSuggestion',
     ];
     for (const fk of featureRoutingKeys) {
       const toggle = updated.ai[fk];

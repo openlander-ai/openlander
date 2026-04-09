@@ -123,7 +123,11 @@ export function mapActivityType(eventType: EventType): ActivityEvent['type'] {
   ) {
     return eventType;
   }
-  if (eventType === 'recovery:approval-needed' || eventType === 'recovery:approval-resolved') {
+  if (
+    eventType === 'recovery:approval-needed' ||
+    eventType === 'recovery:approval-auto-skipped' ||
+    eventType === 'recovery:approval-resolved'
+  ) {
     return 'approval';
   }
   if (
@@ -155,6 +159,7 @@ export function mapActivityStatus<T extends EventType>(
   if (eventType === 'recovery:success') return 'resolved';
   if (eventType === 'recovery:failed' || eventType === 'recovery:exhausted') return 'failed';
   if (eventType === 'recovery:approval-needed') return 'pending';
+  if (eventType === 'recovery:approval-auto-skipped') return 'resolved';
   if (eventType === 'recovery:approval-resolved') {
     const approvalPayload = payload as EventPayload['recovery:approval-resolved'];
     return approvalPayload.approved ? 'resolved' : 'failed';
@@ -369,6 +374,14 @@ export function describeActivityEvent<T extends EventType>(
       title: `Approval required: ${approvalPayload.toolName}`,
       description: `Attempt #${String(approvalPayload.attempt)}`,
       actionRunId: approvalPayload.actionRunId,
+    };
+  }
+  if (eventType === 'recovery:approval-auto-skipped') {
+    const skippedPayload = payload as EventPayload['recovery:approval-auto-skipped'];
+    return {
+      title: `Approval auto-skipped: ${skippedPayload.toolName}`,
+      description: `Step "${skippedPayload.recoveryStep}" set to auto mode`,
+      actionRunId: skippedPayload.actionRunId,
     };
   }
   if (eventType === 'recovery:approval-resolved') {

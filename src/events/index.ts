@@ -90,6 +90,7 @@ export type EventType =
   | 'recovery:failed'
   | 'recovery:exhausted'
   | 'recovery:approval-needed'
+  | 'recovery:approval-auto-skipped'
   | 'recovery:approval-resolved'
   | 'env:new-keys-detected'
   | 'rollback:suggested'
@@ -349,6 +350,13 @@ export interface EventPayload {
     attempt: number;
     source?: string;
     identity?: RequestIdentity;
+    correlationId?: string;
+  };
+  'recovery:approval-auto-skipped': {
+    projectId: string;
+    actionRunId: string;
+    toolName: string;
+    recoveryStep: string;
     correlationId?: string;
   };
   'recovery:approval-resolved': {

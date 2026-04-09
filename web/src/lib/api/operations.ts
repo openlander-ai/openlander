@@ -241,3 +241,48 @@ export async function fetchDependencyGraph(): Promise<{
   if (!resp.ok) throw new Error(`fetchDependencyGraph failed: ${resp.status}`);
   return resp.json() as Promise<{ nodes: DependencyNode[]; edges: DependencyEdge[] }>;
 }
+
+// === Automation Policy types ===
+
+export type AutomationStep = 'restart' | 'diagnosis' | 'apply_fixes' | 'rollback';
+export type AutomationMode = 'auto' | 'confirm';
+export type AutomationPolicy = Record<AutomationStep, AutomationMode>;
+
+export interface AutomationDefaultsResponse {
+  defaults: AutomationPolicy;
+  effective: AutomationPolicy | null;
+  isAutopilot: boolean;
+}
+
+export interface ProjectAutomationResponse {
+  effective: AutomationPolicy | null;
+  overrides: Partial<AutomationPolicy> | null;
+  isAutopilot: boolean;
+}
+
+export async function fetchAutomationDefaults(): Promise<AutomationDefaultsResponse> {
+  const resp = await fetchWithAuth('/api/ops/automation/defaults');
+  if (!resp.ok) throw new Error(`fetchAutomationDefaults failed: ${resp.status}`);
+  return resp.json() as Promise<AutomationDefaultsResponse>;
+}
+
+export async function fetchProjectAutomation(
+  projectId: string,
+): Promise<ProjectAutomationResponse> {
+  const resp = await fetchWithAuth(`/api/ops/projects/${projectId}/automation`);
+  if (!resp.ok) throw new Error(`fetchProjectAutomation failed: ${resp.status}`);
+  return resp.json() as Promise<ProjectAutomationResponse>;
+}
+
+export async function updateProjectAutomation(
+  projectId: string,
+  automation: Partial<AutomationPolicy>,
+): Promise<ProjectAutomationResponse> {
+  const resp = await fetchWithAuth(`/api/ops/projects/${projectId}/automation`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ automation }),
+  });
+  if (!resp.ok) throw new Error(`updateProjectAutomation failed: ${resp.status}`);
+  return resp.json() as Promise<ProjectAutomationResponse>;
+}

@@ -17,6 +17,7 @@ import { ApprovalGate, type ApprovalGate as ApprovalGateType } from './approval-
 import { decisionEngine } from '../llm/decision.js';
 import type { PendingFixPatch } from './deploy/helpers.js';
 import { findMatchingPatterns, saveRecoveryPattern } from '../llm/memory.js';
+import type { ConfigurableRecoveryStep, RecoveryAutomationPolicy } from '../monitor/ops-types.js';
 
 const log = createModuleLogger('auto-recovery');
 
@@ -25,6 +26,18 @@ const RECOVERY_OUTCOME_MAX_TIMEOUT_MS = 600_000;
 const RECOVERY_WINDOW_MS = 60 * 60 * 1000;
 
 type RecoveryStrategy = 'recipe' | 'llm';
+
+/** Maps high-risk tool names to their corresponding configurable recovery step. */
+export const TOOL_TO_RECOVERY_STEP: Record<string, ConfigurableRecoveryStep> = {
+  rollback_project: 'rollback',
+  remove_project: 'rollback',
+  platform_force_remove: 'rollback',
+  remove_service: 'rollback',
+  remove_volume: 'rollback',
+  create_database: 'apply_fixes',
+  platform_cleanup_orphans: 'apply_fixes',
+  platform_reconcile: 'apply_fixes',
+};
 
 interface GateCheckResult {
   blocked: boolean;
@@ -52,6 +65,7 @@ export interface SetupAutoRecoveryParams {
   language: Locale;
   config: OpenLanderConfig;
   shouldContinue?: (projectId: string) => boolean;
+  getAutomationPolicy?: (projectId: string) => RecoveryAutomationPolicy | null;
 }
 
 export interface AutoRecoveryHandlers {
@@ -271,6 +285,7 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
     language,
     config,
     shouldContinue: providedShouldContinue,
+    getAutomationPolicy,
   } = params;
 
   const approvalGate = providedApprovalGate ?? new ApprovalGate();
@@ -399,6 +414,9 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
       try {
         const sessionId = nanoid(12);
         const contextSnapshot = await buildContextSnapshot(db);
+        // Snapshot automation policy at session start so mid-recovery config changes
+        // don't affect the current session
+        const policySnapshot = getAutomationPolicy?.(projectId) ?? null;
         const approvalState: {
           blocked: 'rejected' | 'timed_out' | 'aborted' | null;
           toolName?: string;
@@ -448,45 +466,108 @@ ${plan.agentGuidance}
               event.type === 'tool_call' &&
               decisionEngine.classify(event.toolName) === 'REQUIRE_APPROVAL'
             ) {
-              const approvalMetadata = {
-                projectId,
-                projectName,
-                toolName: event.toolName,
-                attempt,
-                actionRunId,
-                createdAt: new Date(),
-              };
+              // Check automation policy before requiring manual approval
+              const mappedStep = TOOL_TO_RECOVERY_STEP[event.toolName];
+              if (policySnapshot && mappedStep) {
+                const stepMode = policySnapshot[mappedStep];
+                if (stepMode === 'auto') {
+                  // Policy says auto — skip approval gate, emit audit event
+                  await eventBus.emit('recovery:approval-auto-skipped', {
+                    projectId,
+                    actionRunId,
+                    toolName: event.toolName,
+                    recoveryStep: mappedStep,
+                    correlationId: projectId,
+                  });
+                  log.info(
+                    { projectId, toolName: event.toolName, recoveryStep: mappedStep },
+                    'Approval skipped by automation policy (auto mode)',
+                  );
+                  // Fall through — no approval needed
+                } else {
+                  // Policy says confirm — existing approval behavior
+                  const approvalMetadata = {
+                    projectId,
+                    projectName,
+                    toolName: event.toolName,
+                    attempt,
+                    actionRunId,
+                    createdAt: new Date(),
+                  };
 
-              await eventBus.emit('recovery:approval-needed', {
-                projectId,
-                actionRunId,
-                toolName: event.toolName,
-                attempt,
-                correlationId: projectId,
-              });
+                  await eventBus.emit('recovery:approval-needed', {
+                    projectId,
+                    actionRunId,
+                    toolName: event.toolName,
+                    attempt,
+                    correlationId: projectId,
+                  });
 
-              db.updateActionRunStatus(actionRunId, 'pending_approval');
-              db.updateActionRunApproval(actionRunId, 'pending', event.toolName);
-              approvalState.toolName = event.toolName;
-              const approvalResult = await approvalGate.waitForApproval(
-                actionRunId,
-                approvalMetadata,
-              );
+                  db.updateActionRunStatus(actionRunId, 'pending_approval');
+                  db.updateActionRunApproval(actionRunId, 'pending', event.toolName);
+                  approvalState.toolName = event.toolName;
+                  const approvalResult = await approvalGate.waitForApproval(
+                    actionRunId,
+                    approvalMetadata,
+                  );
 
-              if (approvalResult === 'rejected') {
-                approvalState.blocked = 'rejected';
-                db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
-                return;
+                  if (approvalResult === 'rejected') {
+                    approvalState.blocked = 'rejected';
+                    db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
+                    return;
+                  }
+
+                  if (approvalResult === 'timed_out') {
+                    approvalState.blocked = 'timed_out';
+                    db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
+                    return;
+                  }
+
+                  db.updateActionRunStatus(actionRunId, 'running');
+                  db.updateActionRunApproval(actionRunId, 'approved', event.toolName);
+                }
+              } else {
+                // No policy or tool not mapped — fall back to DecisionEngine behavior
+                const approvalMetadata = {
+                  projectId,
+                  projectName,
+                  toolName: event.toolName,
+                  attempt,
+                  actionRunId,
+                  createdAt: new Date(),
+                };
+
+                await eventBus.emit('recovery:approval-needed', {
+                  projectId,
+                  actionRunId,
+                  toolName: event.toolName,
+                  attempt,
+                  correlationId: projectId,
+                });
+
+                db.updateActionRunStatus(actionRunId, 'pending_approval');
+                db.updateActionRunApproval(actionRunId, 'pending', event.toolName);
+                approvalState.toolName = event.toolName;
+                const approvalResult = await approvalGate.waitForApproval(
+                  actionRunId,
+                  approvalMetadata,
+                );
+
+                if (approvalResult === 'rejected') {
+                  approvalState.blocked = 'rejected';
+                  db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
+                  return;
+                }
+
+                if (approvalResult === 'timed_out') {
+                  approvalState.blocked = 'timed_out';
+                  db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
+                  return;
+                }
+
+                db.updateActionRunStatus(actionRunId, 'running');
+                db.updateActionRunApproval(actionRunId, 'approved', event.toolName);
               }
-
-              if (approvalResult === 'timed_out') {
-                approvalState.blocked = 'timed_out';
-                db.updateActionRunApproval(actionRunId, 'rejected', event.toolName);
-                return;
-              }
-
-              db.updateActionRunStatus(actionRunId, 'running');
-              db.updateActionRunApproval(actionRunId, 'approved', event.toolName);
             }
 
             await eventBus.emit('agent:event', {

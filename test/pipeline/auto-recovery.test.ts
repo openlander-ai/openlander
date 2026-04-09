@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 
 import {
   setupAutoRecovery,
+  TOOL_TO_RECOVERY_STEP,
   type AutoRecoveryAgent,
   type AutoRecoveryHandlers,
 } from '../../src/pipeline/auto-recovery.js';
@@ -15,6 +16,8 @@ import { QuestionBridge } from '../../src/lib/question-bridge.js';
 import type { DeployPipeline, DeployResult } from '../../src/pipeline/deploy.js';
 import type { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 import { normalizeErrorSignature } from '../../src/llm/memory.js';
+import type { RecoveryAutomationPolicy } from '../../src/monitor/ops-types.js';
+import { ApprovalGate } from '../../src/pipeline/approval-gate.js';
 
 interface Harness {
   eventBus: EventBus;
@@ -53,6 +56,8 @@ function createDeferred<T>(): Deferred<T> {
 function createHarness(options?: {
   agent?: AutoRecoveryAgent | null;
   redeployImpl?: Harness['redeployMock'];
+  getAutomationPolicy?: (projectId: string) => RecoveryAutomationPolicy | null;
+  approvalGate?: ApprovalGate;
 }): Harness {
   const tmpDir = mkdtempSync(join(tmpdir(), 'openlander-auto-recovery-'));
   const db = new Database(join(tmpDir, 'test.db'));
@@ -93,6 +98,8 @@ function createHarness(options?: {
     questionBridge,
     language: 'en',
     config: testConfig,
+    getAutomationPolicy: options?.getAutomationPolicy,
+    approvalGate: options?.approvalGate,
   });
 
   return {
@@ -509,6 +516,288 @@ describe('setupAutoRecovery', () => {
     } finally {
       harness.db.close();
       rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── Automation policy tests ────────────────────────────────────────────────────
+
+describe('setupAutoRecovery — automation policy', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('skips approval gate when automationPolicy.rollback is auto for rollback_project tool', async () => {
+    const autoSkippedHandler = vi.fn();
+
+    const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
+      await onEvent({
+        type: 'tool_call',
+        toolName: 'rollback_project',
+        arguments: { project_name: 'proj-auto-policy' },
+        stepIndex: 0,
+      });
+    });
+
+    const policy: RecoveryAutomationPolicy = {
+      restart: 'auto',
+      diagnosis: 'auto',
+      apply_fixes: 'auto',
+      rollback: 'auto',
+    };
+
+    const harness = createHarness({
+      agent: { chatStream: agentChatMock },
+      getAutomationPolicy: () => policy,
+    });
+
+    harness.eventBus.on('recovery:approval-auto-skipped', autoSkippedHandler);
+
+    try {
+      const projectId = 'proj-auto-policy';
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-auto-policy',
+        branch: 'main',
+      });
+      harness.db.updateProject(projectId, { status: 'running' });
+
+      const recoveryPromise = harness.recoveryHandlers.handleDeploymentRecovery(
+        projectId,
+        'unknown build failure requiring ai',
+        'build',
+      );
+      await vi.advanceTimersByTimeAsync(2_100);
+
+      // With rollback='auto', no pending approval should be set
+      const runs = harness.db.getActionRunsByProject(projectId, 1);
+      expect(runs).toHaveLength(1);
+      expect(runs[0].approval_status).not.toBe('pending');
+
+      // Audit event must be emitted
+      expect(autoSkippedHandler).toHaveBeenCalledOnce();
+      expect(autoSkippedHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId,
+          toolName: 'rollback_project',
+          recoveryStep: 'rollback',
+        }),
+      );
+
+      // Let recovery complete (agent stream ended; wait for outcome timeout)
+      await vi.advanceTimersByTimeAsync(300_000);
+      await recoveryPromise;
+    } finally {
+      harness.db.close();
+      rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('triggers approval gate when automationPolicy.rollback is confirm for rollback_project tool', async () => {
+    const approvalNeededHandler = vi.fn();
+
+    const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
+      await onEvent({
+        type: 'tool_call',
+        toolName: 'rollback_project',
+        arguments: { project_name: 'proj-confirm-policy' },
+        stepIndex: 0,
+      });
+    });
+
+    const policy: RecoveryAutomationPolicy = {
+      restart: 'auto',
+      diagnosis: 'auto',
+      apply_fixes: 'auto',
+      rollback: 'confirm',
+    };
+
+    const harness = createHarness({
+      agent: { chatStream: agentChatMock },
+      getAutomationPolicy: () => policy,
+    });
+
+    harness.eventBus.on('recovery:approval-needed', approvalNeededHandler);
+
+    try {
+      const projectId = 'proj-confirm-policy';
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-confirm-policy',
+        branch: 'main',
+      });
+      harness.db.updateProject(projectId, { status: 'running' });
+
+      const recoveryPromise = harness.recoveryHandlers.handleDeploymentRecovery(
+        projectId,
+        'unknown build failure requiring ai',
+        'build',
+      );
+      await vi.advanceTimersByTimeAsync(2_100);
+
+      // With rollback='confirm', approval should be pending
+      const pendingRun = harness.db.getActionRunsByProject(projectId, 1)[0];
+      expect(pendingRun.approval_status).toBe('pending');
+      expect(pendingRun.approval_tool).toBe('rollback_project');
+
+      // Approval event must be emitted
+      expect(approvalNeededHandler).toHaveBeenCalledOnce();
+      expect(approvalNeededHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId,
+          toolName: 'rollback_project',
+        }),
+      );
+
+      // Resolve by rejection so the recovery promise can settle
+      harness.recoveryHandlers.resolveApproval(pendingRun.id, false);
+      await vi.advanceTimersByTimeAsync(0);
+      await recoveryPromise;
+    } finally {
+      harness.db.close();
+      rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses DecisionEngine fallback (requires approval) when policy is null', async () => {
+    const approvalNeededHandler = vi.fn();
+
+    const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
+      await onEvent({
+        type: 'tool_call',
+        toolName: 'rollback_project',
+        arguments: { project_name: 'proj-null-policy' },
+        stepIndex: 0,
+      });
+    });
+
+    // getAutomationPolicy returns null → no policy active
+    const harness = createHarness({
+      agent: { chatStream: agentChatMock },
+      getAutomationPolicy: () => null,
+    });
+
+    harness.eventBus.on('recovery:approval-needed', approvalNeededHandler);
+
+    try {
+      const projectId = 'proj-null-policy';
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-null-policy',
+        branch: 'main',
+      });
+      harness.db.updateProject(projectId, { status: 'running' });
+
+      const recoveryPromise = harness.recoveryHandlers.handleDeploymentRecovery(
+        projectId,
+        'unknown build failure requiring ai',
+        'build',
+      );
+      await vi.advanceTimersByTimeAsync(2_100);
+
+      // With null policy, DecisionEngine classifies rollback_project as REQUIRE_APPROVAL
+      const pendingRun = harness.db.getActionRunsByProject(projectId, 1)[0];
+      expect(pendingRun.approval_status).toBe('pending');
+      expect(approvalNeededHandler).toHaveBeenCalledOnce();
+
+      harness.recoveryHandlers.resolveApproval(pendingRun.id, false);
+      await vi.advanceTimersByTimeAsync(0);
+      await recoveryPromise;
+    } finally {
+      harness.db.close();
+      rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses DecisionEngine fallback for unmapped tool even when policy is set', async () => {
+    // 'create_deploy_plan' is NOTIFY_THEN_ALLOW (medium risk), not in TOOL_TO_RECOVERY_STEP
+    // Even with a policy, an unmapped tool must fall through to DecisionEngine logic
+    const approvalNeededHandler = vi.fn();
+    const autoSkippedHandler = vi.fn();
+
+    const agentChatMock = vi.fn<AutoRecoveryAgent['chatStream']>(async (_input, onEvent) => {
+      await onEvent({
+        type: 'tool_call',
+        toolName: 'create_deploy_plan',
+        arguments: { project_id: 'proj-unmapped-tool' },
+        stepIndex: 0,
+      });
+    });
+
+    const policy: RecoveryAutomationPolicy = {
+      restart: 'auto',
+      diagnosis: 'auto',
+      apply_fixes: 'auto',
+      rollback: 'auto',
+    };
+
+    const harness = createHarness({
+      agent: { chatStream: agentChatMock },
+      getAutomationPolicy: () => policy,
+    });
+
+    harness.eventBus.on('recovery:approval-needed', approvalNeededHandler);
+    harness.eventBus.on('recovery:approval-auto-skipped', autoSkippedHandler);
+
+    try {
+      const projectId = 'proj-unmapped-tool';
+      harness.db.createProject({
+        id: projectId,
+        name: projectId,
+        repoUrl: 'https://github.com/openlander/proj-unmapped-tool',
+        branch: 'main',
+      });
+      harness.db.updateProject(projectId, { status: 'running' });
+
+      const recoveryPromise = harness.recoveryHandlers.handleDeploymentRecovery(
+        projectId,
+        'unknown build failure requiring ai',
+        'build',
+      );
+      await vi.advanceTimersByTimeAsync(2_100);
+
+      // create_deploy_plan is medium risk → NOTIFY_THEN_ALLOW → no approval needed
+      expect(approvalNeededHandler).not.toHaveBeenCalled();
+      expect(autoSkippedHandler).not.toHaveBeenCalled();
+
+      // Let recovery complete (no approval gate blocking it)
+      await vi.advanceTimersByTimeAsync(300_000);
+      await recoveryPromise;
+    } finally {
+      harness.db.close();
+      rmSync(harness.tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('TOOL_TO_RECOVERY_STEP maps every HIGH_RISK_DEFAULTS tool to a configurable step', () => {
+    // These are the exact tools DecisionEngine classifies as REQUIRE_APPROVAL by default.
+    // All of them must exist in TOOL_TO_RECOVERY_STEP so the policy can override them.
+    const HIGH_RISK_TOOLS = [
+      'rollback_project',
+      'remove_project',
+      'remove_service',
+      'create_database',
+      'platform_cleanup_orphans',
+      'platform_reconcile',
+      'platform_force_remove',
+      'remove_volume',
+    ] as const;
+
+    const validSteps = new Set(['restart', 'diagnosis', 'apply_fixes', 'rollback']);
+
+    for (const tool of HIGH_RISK_TOOLS) {
+      const mappedStep = TOOL_TO_RECOVERY_STEP[tool];
+      expect(mappedStep, `${tool} must be mapped in TOOL_TO_RECOVERY_STEP`).toBeDefined();
+      expect(validSteps, `${tool} must map to a valid ConfigurableRecoveryStep`).toContain(
+        mappedStep,
+      );
     }
   });
 });

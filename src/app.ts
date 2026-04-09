@@ -44,6 +44,7 @@ import { AgentPool } from './llm/agent-pool.js';
 import { createTools } from './tools/index.js';
 import { ApprovalGate } from './pipeline/approval-gate.js';
 import type { OpsAgent } from './monitor/ops-agent.js';
+import { resolveAutomationPolicy } from './monitor/ops-config-resolver.js';
 
 const log = createModuleLogger('app');
 
@@ -400,6 +401,11 @@ export async function createAppContext(
     language: config.language,
     config,
     shouldContinue: (projectId) => coordinator.shouldContinue(projectId),
+    getAutomationPolicy: (projectId) => {
+      const opsConfig = config.ops;
+      const override = db.getProjectOpsOverride(projectId);
+      return resolveAutomationPolicy(opsConfig, override ?? undefined);
+    },
   });
   coordinator.setDeploymentRecovery((projectId, error, step, buildLog) =>
     recoveryHandlers.handleDeploymentRecovery(projectId, error, step, buildLog),

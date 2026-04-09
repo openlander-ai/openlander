@@ -244,10 +244,47 @@ export function AiFeaturesSection({ providers }: AiFeaturesSectionProps) {
                         {t('settings.ai.unavailable') || 'UNAVAILABLE'}
                       </span>
                     )}
+                    {key === 'codingPlan' && (
+                      <span className="text-[10px] uppercase tracking-wider font-semibold bg-warning/10 text-warning px-1.5 py-0.5 rounded">
+                        {t('settings.ai.comingSoon') || 'Coming Soon'}
+                      </span>
+                    )}
+                    {MODEL_SELECTOR_FEATURES.has(key) ? (
+                      <span className="text-[10px] font-body text-muted-ol">
+                        {t('settings.ai.appliedImmediately') || 'Applied immediately'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-body text-muted-ol">
+                        {t('settings.ai.restartRequired') || 'Restart required'}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs font-body text-secondary-ol">
                     {t(`settings.ai.${key}.description`) || ''}
                   </p>
+                  {key === 'autoRecovery' && (
+                    <p className="text-xs font-body text-muted-ol mt-0.5">
+                      {(() => {
+                        const note = t('settings.ai.autoRecoveryNote') || '';
+                        const linkText =
+                          t('settings.ai.operationsSettingsLink') || 'Operations settings';
+                        const linkIdx = note.indexOf(linkText);
+                        if (linkIdx === -1) return note;
+                        return (
+                          <>
+                            {note.slice(0, linkIdx)}
+                            <a
+                              href="/settings?tab=operations"
+                              className="text-agent underline underline-offset-2 hover:opacity-80"
+                            >
+                              {linkText}
+                            </a>
+                            {note.slice(linkIdx + linkText.length)}
+                          </>
+                        );
+                      })()}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   {MODEL_SELECTOR_FEATURES.has(key) && providers.length > 0 && (

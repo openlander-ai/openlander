@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { fetchOpsConfig, updateOpsConfig } from '@/lib/api/operations';
 import { useLanguage } from '@/i18n/context';
+import { AutomationPolicyEditor } from './AutomationPolicyEditor';
 
 interface OpsConfigState {
   enabled: boolean;
@@ -125,6 +126,9 @@ export function OperationsSettings() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Automation Policy */}
+      <AutomationPolicyEditor />
 
       {/* Thresholds */}
       <Card>

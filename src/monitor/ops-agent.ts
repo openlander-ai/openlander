@@ -439,13 +439,18 @@ export class OpsAgent {
       delete raw['auto_restart'];
     }
 
-    // Deep-merge recovery sub-object to preserve unset fields
+    // Deep-merge recovery sub-object to preserve unset fields,
+    // including nested automation policy
     if (config.recovery) {
       config = {
         ...config,
         recovery: {
           ...this.config.recovery,
           ...config.recovery,
+          automation: {
+            ...this.config.recovery.automation,
+            ...config.recovery.automation,
+          },
         },
       };
     }
