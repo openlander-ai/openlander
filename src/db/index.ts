@@ -228,6 +228,7 @@ export class Database implements AuthDatabase {
   updateActionRunPlan(id: string, plan: string) { this.actionRunRepo.updatePlan(id, plan); }
   getRunningActionRuns(projectId: string) { return this.actionRunRepo.findRunning(projectId); }
   getActionRunsByProject(projectId: string, limit?: number) { return this.actionRunRepo.findByProjectId(projectId, limit); }
+  getRecentActionRuns(limit: number) { return this.actionRunRepo.findRecent(limit); }
   findActionRunPendingApproval(actionRunId: string) { return this.actionRunRepo.findPendingApproval(actionRunId); }
   getActionRunsByApprovalStatus(status: 'pending' | 'approved' | 'rejected', limit?: number) { return this.actionRunRepo.findByApprovalStatus(status, limit); }
   findDeploymentPatternsByProject(projectId: string) { return this.deploymentPatternRepo.findByProject(projectId); }

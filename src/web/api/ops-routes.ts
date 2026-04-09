@@ -470,10 +470,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       if (types.length === 0 || types.includes('recovery') || types.includes('approval')) {
         const candidateRuns = projectId
           ? ctx.db.getActionRunsByProject(projectId, 100)
-          : projects.flatMap((project) => ctx.db.getActionRunsByProject(project.id, 20));
-        const runs = candidateRuns
-          .sort((a, b) => b.created_at.localeCompare(a.created_at))
-          .slice(0, 200);
+          : ctx.db.getRecentActionRuns(200);
+        const runs = candidateRuns;
         for (const run of runs) {
           if (
             run.trigger_source !== 'auto_recovery' &&
@@ -512,25 +510,25 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       let sorted = activities.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
       if (severity) sorted = sorted.filter((a) => a.severity === severity);
       if (before) sorted = sorted.filter((a) => a.timestamp < before);
-      if (since) sorted = sorted.filter((a) => a.timestamp > since);
+      if (since) sorted = sorted.filter((a) => a.id > since);
       const page = sorted.slice(0, limit);
       return {
         activities: page,
-        nextCursor: page.length === limit ? (page[page.length - 1]?.timestamp ?? null) : null,
+        nextCursor: page.length === limit ? (page[page.length - 1]?.id ?? null) : null,
       };
     };
 
     if (isFollow) {
       return stream(c, async (s) => {
         c.header('Content-Type', 'application/x-ndjson');
-        let lastReportedTime = c.req.query('since') || new Date(Date.now() - 60000).toISOString();
+        let lastReportedId = c.req.query('since') || '';
         let flushInProgress = false;
 
         const sendUpdates = async (): Promise<void> => {
           if (flushInProgress) return;
           flushInProgress = true;
           try {
-            const page = fetchActivities(lastReportedTime);
+            const page = fetchActivities(lastReportedId || undefined);
             if (page.activities.length > 0) {
               const forward = [...page.activities].reverse();
               for (const act of forward) {
@@ -538,7 +536,7 @@ export function createOpsRoutes(ctx: AppContext): Hono {
               }
               const lastActivity = forward[forward.length - 1];
               if (lastActivity) {
-                lastReportedTime = lastActivity.timestamp;
+                lastReportedId = lastActivity.id;
               }
             }
           } catch (err) {

@@ -181,6 +181,18 @@ export class ActionRunRepo {
   }
 
   /**
+   * Find recent action runs globally, ordered by created_at DESC.
+   */
+  findRecent(limit: number): ActionRunRow[] {
+    return this.db
+      .select()
+      .from(actionRuns)
+      .orderBy(desc(actionRuns.created_at))
+      .limit(limit)
+      .all() as ActionRunRow[];
+  }
+
+  /**
    * Mark all stale running and pending_approval action runs as failed on startup.
    * Called during Database initialization to clean up incomplete runs from previous sessions.
    * Returns the count of updated rows.

@@ -55,7 +55,7 @@ export function useOpsCenterData(): OpsCenterData {
   // --- Refs for SSE lifecycle ---
   const abortRef = useRef<AbortController | null>(null);
   const retriesRef = useRef(0);
-  const lastEventTimestampRef = useRef<string | null>(null);
+  const lastEventIdRef = useRef<string | null>(null);
   const dedupSetRef = useRef<Set<string>>(new Set());
   const cancelledRef = useRef(false);
 
@@ -87,8 +87,8 @@ export function useOpsCenterData(): OpsCenterData {
     void (async () => {
       try {
         const params = new URLSearchParams({ follow: 'true' });
-        if (lastEventTimestampRef.current) {
-          params.set('since', lastEventTimestampRef.current);
+        if (lastEventIdRef.current) {
+          params.set('since', lastEventIdRef.current);
         }
 
         const resp = await fetch(`/api/ops/activity?${params.toString()}`, {
@@ -112,8 +112,7 @@ export function useOpsCenterData(): OpsCenterData {
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
         let buf = '';
-        let inBackfill = false;
-        let backfillBatch: ActivityItem[] = [];
+        let reconnectBatch: ActivityItem[] = [];
 
         for (;;) {
           const { value, done } = await reader.read();
@@ -130,45 +129,39 @@ export function useOpsCenterData(): OpsCenterData {
             try {
               const parsed = JSON.parse(trimmed) as Record<string, unknown>;
 
-              // Handle backfill-complete sentinel
+              // Handle backfill-complete sentinel: batch-apply all buffered items
               if (parsed.type === 'backfill-complete') {
-                if (backfillBatch.length > 0) {
-                  // Batch-apply all backfill items in one state update
-                  const batch = backfillBatch;
-                  backfillBatch = [];
+                if (reconnectBatch.length > 0) {
+                  const batch = reconnectBatch;
+                  reconnectBatch = [];
                   setActivities((prev) => {
                     const merged = [...batch, ...prev];
-                    // Deduplicate already handled per-item, just enforce ceiling
                     return merged.slice(0, BUFFER_MAX);
                   });
                 }
-                inBackfill = false;
                 continue;
               }
 
               const item = parsed as unknown as ActivityItem;
               if (!item.id) continue;
 
-              // Track last event timestamp for gap recovery
-              if (item.timestamp) {
-                lastEventTimestampRef.current = item.timestamp;
-              }
+              // Track last event id (ULID) for gap recovery
+              lastEventIdRef.current = item.id;
 
               if (!dedup(item.id)) continue;
 
-              if (parsed.backfill === true) {
-                inBackfill = true;
-                backfillBatch.push(item);
-              } else if (inBackfill) {
-                // Non-backfill item arriving during backfill — buffer it too
-                backfillBatch.push(item);
-              } else {
-                // Incremental live update
-                setActivities((prev) => [item, ...prev].slice(0, BUFFER_MAX));
-              }
+              // Buffer items until backfill-complete, then apply as batch
+              reconnectBatch.push(item);
             } catch {
               // Ignore malformed NDJSON lines
             }
+          }
+
+          // Flush any unbatched items (live incremental updates after backfill-complete)
+          if (reconnectBatch.length > 0) {
+            const batch = reconnectBatch;
+            reconnectBatch = [];
+            setActivities((prev) => [...batch, ...prev].slice(0, BUFFER_MAX));
           }
         }
 
@@ -238,9 +231,9 @@ export function useOpsCenterData(): OpsCenterData {
         for (const item of items) {
           dedupSetRef.current.add(item.id);
         }
-        // Track last event timestamp for SSE gap recovery
+        // Track last event id (ULID) for SSE gap recovery
         if (items.length > 0) {
-          lastEventTimestampRef.current = items[0].timestamp;
+          lastEventIdRef.current = items[0].id;
         }
 
         setActivities(items);

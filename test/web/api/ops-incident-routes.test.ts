@@ -98,6 +98,7 @@ function createHarness(): TestHarness {
       listServices: () => [],
       findAllProjectDependencies: () => [],
       getActionRunsByProject: () => [],
+      getRecentActionRuns: () => [],
       getActionRunsByApprovalStatus: () => [],
     },
   } as unknown as AppContext;

@@ -578,6 +578,17 @@ export const translations = {
       showOlderEvents: '이전 이벤트 보기',
       showMore: '{count}개 더 보기',
     },
+    status: {
+      active: '활성',
+      resolved: '해결됨',
+      failed: '실패',
+      pending: '대기 중',
+      recovering: '복구 중',
+      'ai-running': 'AI 실행 중',
+      'ai-completed': 'AI 완료',
+      'recovery-blocked': '복구 차단됨',
+      'recovery-stopped': '복구 중지됨',
+    },
     filters: {
       density: {
         label: '표시 밀도',

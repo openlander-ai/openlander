@@ -177,7 +177,7 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({ event }: { event
         </div>
 
         {/* Status */}
-        <div className="truncate text-muted-ol">{event.status.replace(/-/g, ' ')}</div>
+        <div className="truncate text-muted-ol">{t(`opsV2.status.${event.status}`)}</div>
 
         {/* Actions empty cell */}
         <div />
@@ -283,7 +283,7 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col" role="table" aria-label={t('opsV2.timeline.eventLog')}>
       {/* List Header */}
       <div className="flex justify-between items-center mb-2 px-1">
         <h2 className="text-sm font-semibold text-primary-ol">{t('opsV2.timeline.eventLog')}</h2>
@@ -298,23 +298,24 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
 
       {/* Grid Table Header */}
       <div
+        role="row"
         className={cn(
           ROW_GRID_CLASSES,
           'bg-bg-panel border-y border-[hsl(var(--border))] py-2',
           'text-[10px] font-mono tracking-wider uppercase font-semibold text-muted-ol',
         )}
       >
-        <div /> {/* expander col */}
-        <div>{t('opsV2.timeline.columns.projectTarget')}</div>
-        <div>{t('opsV2.timeline.columns.detectedEvent')}</div>
-        <div>{t('opsV2.timeline.columns.severity')}</div>
-        <div>{t('opsV2.timeline.columns.state')}</div>
-        <div>{t('opsV2.timeline.columns.logsCount')}</div>
-        <div>{t('opsV2.timeline.columns.latest')}</div>
+        <div role="columnheader" /> {/* expander col */}
+        <div role="columnheader">{t('opsV2.timeline.columns.projectTarget')}</div>
+        <div role="columnheader">{t('opsV2.timeline.columns.detectedEvent')}</div>
+        <div role="columnheader">{t('opsV2.timeline.columns.severity')}</div>
+        <div role="columnheader">{t('opsV2.timeline.columns.state')}</div>
+        <div role="columnheader">{t('opsV2.timeline.columns.logsCount')}</div>
+        <div role="columnheader">{t('opsV2.timeline.columns.latest')}</div>
       </div>
 
       {/* Body Rows */}
-      <div className="flex flex-col bg-app border-b border-[hsl(var(--border))]">
+      <div className="flex flex-col bg-app border-b border-[hsl(var(--border))]" role="rowgroup">
         {threadData.slice(0, visibleThreadCount).map((thread) => {
           const isExpanded = !!expandedMap[thread.correlationId];
           const isCritical = thread.severity === 'critical';
@@ -338,13 +339,14 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
+                  role="row"
                   className={cn(
                     ROW_GRID_CLASSES,
                     'w-full py-2 hover:bg-bg-subtle/80 transition-colors text-left outline-none focus-visible:bg-bg-subtle',
                     isExpanded && 'bg-bg-subtle/40',
                   )}
                 >
-                  <span className="shrink-0 text-muted-ol">
+                  <span role="cell" className="shrink-0 text-muted-ol">
                     {isExpanded ? (
                       <ChevronDown className="h-4 w-4" />
                     ) : (
@@ -352,11 +354,14 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
                     )}
                   </span>
 
-                  <span className="min-w-0 shrink truncate text-xs font-semibold text-primary-ol">
+                  <span
+                    role="cell"
+                    className="min-w-0 shrink truncate text-xs font-semibold text-primary-ol"
+                  >
                     {thread.projectName}
                   </span>
 
-                  <div className="min-w-0 flex flex-col justify-center">
+                  <div role="cell" className="min-w-0 flex flex-col justify-center">
                     <span
                       className="truncate text-xs font-medium text-secondary-ol"
                       title={thread.title}
@@ -370,14 +375,14 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
                     )}
                   </div>
 
-                  <div>
+                  <div role="cell">
                     <SeverityBadge severity={thread.severity} />
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div role="cell" className="flex items-center gap-2">
                     <span
                       className={cn(
-                        'truncate text-[11px] font-medium capitalize',
+                        'truncate text-[11px] font-medium',
                         thread.status === 'active' && 'text-warning',
                         thread.status === 'resolved' && 'text-success',
                         thread.status === 'failed' && 'text-error',
@@ -389,16 +394,18 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
                         thread.status === 'recovery-stopped' && 'text-warning',
                       )}
                     >
-                      {thread.status.replace(/-/g, ' ')}
+                      {t(`opsV2.status.${thread.status}`)}
                     </span>
                     {thread.hasPendingApproval && (
                       <AlertCircle className="h-3.5 w-3.5 text-warning animate-pulse" />
                     )}
                   </div>
 
-                  <span className="text-[11px] text-muted-ol font-mono">{thread.eventCount}</span>
+                  <span role="cell" className="text-[11px] text-muted-ol font-mono">
+                    {thread.eventCount}
+                  </span>
 
-                  <span className="text-[11px] text-muted-ol">
+                  <span role="cell" className="text-[11px] text-muted-ol">
                     {relativeTime(new Date(thread.lastEventTime).getTime(), language)}
                   </span>
                 </button>

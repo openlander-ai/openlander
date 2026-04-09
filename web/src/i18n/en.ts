@@ -581,6 +581,17 @@ export const translations = {
       showOlderEvents: 'Show older events',
       showMore: 'Show {count} more',
     },
+    status: {
+      active: 'Active',
+      resolved: 'Resolved',
+      failed: 'Failed',
+      pending: 'Pending',
+      recovering: 'Recovering',
+      'ai-running': 'AI Running',
+      'ai-completed': 'AI Completed',
+      'recovery-blocked': 'Recovery Blocked',
+      'recovery-stopped': 'Recovery Stopped',
+    },
     filters: {
       density: {
         label: 'Density',
