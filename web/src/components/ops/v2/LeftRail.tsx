@@ -210,20 +210,19 @@ export function LeftRail({
   const approvalItems = approvals;
   const openBreakers = circuitBreakers.filter((cb) => cb.state !== 'closed');
 
-  // Group incidents by humanized trigger type (or title) to deduplicate
-  const groupedIncidents = incidents.reduce<Array<{ incident: OpsIncident; count: number }>>(
-    (acc, incident) => {
-      const key = incident.triggerType ?? incident.title;
-      const existing = acc.find((g) => (g.incident.triggerType ?? g.incident.title) === key);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        acc.push({ incident, count: 1 });
-      }
-      return acc;
-    },
-    [],
-  );
+  // Group incidents by project + humanized trigger type (or title) to deduplicate
+  const groupedIncidents = incidents.reduce<
+    Array<{ incident: OpsIncident; count: number; groupKey: string }>
+  >((acc, incident) => {
+    const key = `${incident.project_id}::${incident.triggerType ?? incident.title}`;
+    const existing = acc.find((g) => g.groupKey === key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      acc.push({ incident, count: 1, groupKey: key });
+    }
+    return acc;
+  }, []);
 
   return (
     <aside
@@ -288,17 +287,17 @@ export function LeftRail({
             <SectionHeader
               icon={<AlertCircle className="h-4 w-4" />}
               label={t('opsV2.rail.activeIssues')}
-              count={incidents.length}
+              count={groupedIncidents.length}
               collapsed={effectivelyCollapsed}
               active={activeFilter === 'incident'}
               onClick={() => handleSectionClick('incident')}
             />
-            {!effectivelyCollapsed && incidents.length === 0 && (
+            {!effectivelyCollapsed && groupedIncidents.length === 0 && (
               <p className="px-2 py-1 text-xs text-muted-ol">{t('opsV2.empty.noActiveIssues')}</p>
             )}
-            {groupedIncidents.map(({ incident, count }) => (
+            {groupedIncidents.map(({ incident, count, groupKey }) => (
               <IncidentRow
-                key={incident.triggerType ?? incident.id}
+                key={groupKey}
                 incident={incident}
                 count={count}
                 collapsed={effectivelyCollapsed}

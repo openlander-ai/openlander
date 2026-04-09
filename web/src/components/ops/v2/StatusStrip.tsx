@@ -141,19 +141,18 @@ export function StatusStrip({
         <span>{t('opsV2.statusStrip.approvalCount', { count: pendingApprovalCount })}</span>
       </button>
 
-      {/* Tripped circuit breakers — hidden at < md */}
-      <span className="h-3 w-px bg-[hsl(var(--border))] hidden md:block" />
-      <div
-        className={cn(
-          'hidden md:flex items-center gap-1.5',
-          trippedCircuitBreakerCount > 0 ? 'text-error' : 'text-muted-ol',
-        )}
-      >
-        <ShieldAlert className="h-3.5 w-3.5" />
-        <span>
-          {t('opsV2.statusStrip.circuitBreakerCount', { count: trippedCircuitBreakerCount })}
-        </span>
-      </div>
+      {/* Tripped circuit breakers — hidden at < md, only shown when count > 0 */}
+      {trippedCircuitBreakerCount > 0 && (
+        <>
+          <span className="h-3 w-px bg-[hsl(var(--border))] hidden md:block" />
+          <div className="hidden md:flex items-center gap-1.5 text-error">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            <span>
+              {t('opsV2.statusStrip.circuitBreakerCount', { count: trippedCircuitBreakerCount })}
+            </span>
+          </div>
+        </>
+      )}
 
       {/* Agent badge — hidden at < md, only when active */}
       {isAgentActive && (

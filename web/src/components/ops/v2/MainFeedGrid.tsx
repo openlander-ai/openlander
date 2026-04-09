@@ -23,13 +23,16 @@ const EVENTS_PAGE_SIZE = 20;
 
 const TITLE_PATTERNS: [RegExp, string][] = [
   [/^Auto-recovery running$/i, 'opsV2.titles.autoRecoveryRunning'],
-  [/^Auto-recovery failed$/i, 'opsV2.titles.autoRecoveryFailed'],
-  [/^Auto-recovery completed$/i, 'opsV2.titles.autoRecoveryCompleted'],
+  [/^Auto-recovery failed/i, 'opsV2.titles.autoRecoveryFailed'],
+  [/^Auto-recovery succeeded$/i, 'opsV2.titles.autoRecoveryCompleted'],
+  [/^Auto-recovery attempt/i, 'opsV2.titles.autoRecoveryRunning'],
+  [/^Auto-recovery exhausted$/i, 'opsV2.titles.autoRecoveryFailed'],
   [/^Incident detected$/i, 'opsV2.titles.incidentDetected'],
   [/^Health check failed/i, 'opsV2.titles.healthCheckFailed'],
-  [/^deploy:crash$/i, 'opsV2.titles.deployCrash'],
-  [/^deploy:failed$/i, 'opsV2.titles.deployFailed'],
-  [/^deploy:/i, 'opsV2.titles.deployFailed'],
+  [/^Health degraded$/i, 'opsV2.titles.healthCheckFailed'],
+  [/^Deploy crashed$/i, 'opsV2.titles.deployCrash'],
+  [/^Deploy failed/i, 'opsV2.titles.deployFailed'],
+  [/^Compose failed$/i, 'opsV2.titles.deployFailed'],
 ];
 
 function localizeTitle(title: string, t: (key: string) => string): string {
@@ -69,13 +72,31 @@ export interface MainFeedGridProps {
 // Grouping logic
 // ---------------------------------------------------------------------------
 
+function eventCategory(type: string): string {
+  if (
+    type === 'recovery' ||
+    type === 'approval' ||
+    type === 'incident' ||
+    type === 'recovery:blocked' ||
+    type === 'recovery:stopped' ||
+    type === 'recovery:started'
+  ) {
+    return 'recovery';
+  }
+  if (type === 'deploy' || type === 'build') {
+    return 'deploy';
+  }
+  return type;
+}
+
 function groupIntoThreads(items: ActivityItem[]): Omit<Thread, 'isExpanded'>[] {
   const threadMap = new Map<string, ActivityItem[]>();
   const orderKeys: string[] = [];
 
   for (const item of items) {
     const tsBucket = Math.floor(new Date(item.timestamp).getTime() / 300_000);
-    const key = item.correlationId || `${item.projectId}::${tsBucket}`;
+    const category = eventCategory(item.type);
+    const key = item.correlationId || `${item.projectId}::${category}::${tsBucket}`;
 
     const existing = threadMap.get(key);
     if (existing) {
