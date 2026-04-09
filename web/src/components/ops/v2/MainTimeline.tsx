@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useMemo, useState, useCallback } from 'react';
+import { memo, useMemo, useState, useCallback } from 'react';
 import { ChevronRight, ChevronDown, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '../../../lib/utils.js';
 import { useLanguage } from '../../../i18n/context.js';
@@ -102,7 +102,7 @@ function groupIntoThreads(items: ActivityItem[]): Omit<Thread, 'isExpanded'>[] {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ThreadEventRow({ event }: { event: ActivityItem }) {
+const ThreadEventRow = memo(function ThreadEventRow({ event }: { event: ActivityItem }) {
   const { t, language } = useLanguage();
 
   const isAiEvent = event.type.startsWith('ai:') || event.type === 'ai_diagnosis';
@@ -112,7 +112,7 @@ function ThreadEventRow({ event }: { event: ActivityItem }) {
       <div
         className={cn(
           'absolute -left-[17px] top-4 h-1.5 w-1.5 rounded-full ring-4 ring-bg-panel',
-          isAiEvent ? 'bg-agent' : 'bg-border',
+          isAiEvent ? 'bg-agent' : 'bg-muted-ol',
         )}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -153,7 +153,7 @@ function ThreadEventRow({ event }: { event: ActivityItem }) {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-xs text-secondary-ol
-                prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-sm prose-headings:font-semibold 
+                prose-p:text-xs prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-sm prose-headings:font-semibold 
                 prose-a:text-agent prose-a:no-underline hover:prose-a:underline 
                 prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none
                 prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-xs
@@ -167,7 +167,7 @@ function ThreadEventRow({ event }: { event: ActivityItem }) {
       <SeverityBadge severity={event.severity} className="shrink-0 mt-0.5" />
     </div>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Main component
