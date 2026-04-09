@@ -180,7 +180,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
               statusColor[project.status] ?? 'bg-[var(--text-muted)]',
             )}
           />
-          <span className="hidden lg:inline text-xs font-body truncate">{project.name}</span>
+          <span className="hidden lg:block flex-1 text-xs font-body truncate">{project.name}</span>
         </button>
       </div>
     );
@@ -190,16 +190,16 @@ export function Sidebar({ projects, loading }: SidebarProps) {
   const allSortedProjects = [...projects].sort(sortProjects);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full min-w-0">
       <Separator className="bg-[hsl(var(--border))]" />
 
       <div className="p-2 lg:p-4 shrink-0" data-testid="mode-toggle">
-        <div className="flex gap-1 p-1 rounded-lg bg-bg-subtle">
+        <div className="flex gap-1 p-1 rounded-lg bg-bg-subtle min-w-0 break-words">
           <button
             data-testid="mode-toggle-dashboard"
             onClick={() => navigate('/projects')}
             className={cn(
-              'flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all',
+              'flex-1 flex min-w-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all',
               isDashboardMode
                 ? 'bg-bg-panel text-primary-ol shadow-sm font-semibold'
                 : 'text-muted-ol hover:text-secondary-ol',
@@ -212,7 +212,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
             data-testid="mode-toggle-agent"
             onClick={() => openPanel()}
             className={cn(
-              'flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all',
+              'flex-1 flex min-w-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all',
               isAgentMode
                 ? 'bg-agent/10 text-agent shadow-sm font-semibold border border-agent/20'
                 : 'text-muted-ol hover:text-secondary-ol',
@@ -281,7 +281,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                     }}
                     title={parent.name}
                     className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2 lg:text-left transition-colors group',
+                      'w-full flex min-w-0 items-center gap-2 px-3 py-2 lg:text-left transition-colors group',
                       'lg:justify-start justify-center',
                       isProjectActive(parent.id)
                         ? 'text-primary-ol'
@@ -299,7 +299,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                         statusColor[status] ?? 'bg-[var(--text-muted)]',
                       )}
                     />
-                    <span className="text-sm font-medium truncate">{parent.name}</span>
+                    <span className="flex-1 text-sm font-medium truncate">{parent.name}</span>
                     <span className="text-xs bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
                       {parentChildren.length}
                     </span>
@@ -325,7 +325,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                     onClick={() => toggleGroup(url, projs)}
                     title={repoName}
                     className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2 lg:text-left transition-colors group',
+                      'w-full flex min-w-0 items-center gap-2 px-3 py-2 lg:text-left transition-colors group',
                       'lg:justify-start justify-center',
                       'text-muted-ol hover:text-secondary-ol',
                     )}
@@ -335,7 +335,7 @@ export function Sidebar({ projects, loading }: SidebarProps) {
                     ) : (
                       <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                     )}
-                    <span className="text-sm font-medium truncate">{repoName}</span>
+                    <span className="flex-1 text-sm font-medium truncate">{repoName}</span>
                     <span className="text-xs bg-bg-subtle px-1.5 py-0.5 rounded-full ml-auto group-hover:bg-foreground/10 transition-colors">
                       {visibleProjs.length}
                     </span>
