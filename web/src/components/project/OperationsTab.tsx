@@ -209,8 +209,8 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
       />
 
       {/* SECTION 2: Triage Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center">
+      <Card className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x border-border bg-bg-panel/40 shadow-sm overflow-hidden rounded-xl">
+        <div className="p-4 flex flex-col justify-center">
           <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.openIssues')}</span>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-primary-ol">{activeGroups.length}</span>
@@ -231,27 +231,33 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
               </div>
             )}
           </div>
-        </Card>
+        </div>
 
         {noiseSuppressed > 0 ? (
-          <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center">
-            <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.noiseSuppressed')}</span>
+          <div className="p-4 flex flex-col justify-center">
+            <span className="text-xs font-medium text-muted-ol mb-1">
+              {t('ops.noiseSuppressed')}
+            </span>
             <span className="text-sm font-medium text-secondary-ol">
               <strong className="text-primary-ol">{noiseSuppressed}</strong>{' '}
               {t('ops.repeatedIncidentsGrouped')}
             </span>
-          </Card>
+          </div>
         ) : (
-          <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center opacity-50">
-            <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.noiseSuppressed')}</span>
+          <div className="p-4 flex flex-col justify-center opacity-60">
+            <span className="text-xs font-medium text-muted-ol mb-1">
+              {t('ops.noiseSuppressed')}
+            </span>
             <span className="text-sm font-medium text-secondary-ol">
               {t('ops.zeroRepeatedIncidents')}
             </span>
-          </Card>
+          </div>
         )}
 
-        <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center">
-          <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.recoveryStatusLabel')}</span>
+        <div className="p-4 flex flex-col justify-center">
+          <span className="text-xs font-medium text-muted-ol mb-1">
+            {t('ops.recoveryStatusLabel')}
+          </span>
           <div className="flex items-center gap-2">
             <div
               className={cn(
@@ -279,20 +285,25 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
                       : t('ops.idle')}
             </span>
           </div>
-        </Card>
+        </div>
 
-        <Card className="p-4 bg-bg-panel border-[hsl(var(--border))] shadow-sm flex flex-col justify-center">
+        <div className="p-4 flex flex-col justify-center">
           <span className="text-xs font-medium text-muted-ol mb-1">{t('ops.lastAlert')}</span>
-          <div className="flex items-center gap-2">
-            <BellOff className="h-4 w-4 text-muted-ol" />
-            <span className="text-sm font-medium text-muted-ol">{t('ops.noAlertsConfigured')}</span>
+          <div className="flex items-center gap-2 text-muted-ol">
+            <BellOff className="h-4 w-4" />
+            <span className="text-sm font-medium">{t('ops.noAlertsConfigured')}</span>
           </div>
-        </Card>
-      </div>
+        </div>
+      </Card>
 
       {/* SECTION 3: Active Issue Groups */}
       <div className="flex-1 space-y-4">
-        <h3 className="text-sm font-semibold text-primary-ol">{t('operations.activeIncidents')}</h3>
+        <h3 className="text-sm font-semibold text-primary-ol flex items-center gap-2">
+          {t('operations.activeIncidents')}
+          <span className="bg-bg-subtle text-muted-ol px-2 rounded-full text-xs font-mono">
+            {activeGroups.length}
+          </span>
+        </h3>
 
         {activeGroups.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-secondary-ol bg-bg-panel border border-[hsl(var(--border))] rounded-xl shadow-sm">
@@ -300,9 +311,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
               <>
                 <AlertTriangle className="h-8 w-8 mb-3 text-warning/70" />
                 <p className="text-sm font-medium text-primary-ol">{t('ops.noRuntimeIncidents')}</p>
-                <p className="text-xs text-muted-ol mt-1">
-                  {t('ops.deploymentFailedEarlier')}
-                </p>
+                <p className="text-xs text-muted-ol mt-1">{t('ops.deploymentFailedEarlier')}</p>
               </>
             ) : (
               <>
@@ -313,7 +322,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
             )}
           </div>
         ) : (
-          <div className="space-y-4">
+          <Card className="divide-y divide-border/60 border-border bg-bg-panel shadow-sm rounded-xl overflow-hidden">
             {activeGroups.map((group) => (
               <IncidentCard
                 key={group.key}
@@ -322,7 +331,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
                 incidentProjectId={group.latestIncident.project_id ?? projectId}
               />
             ))}
-          </div>
+          </Card>
         )}
       </div>
 

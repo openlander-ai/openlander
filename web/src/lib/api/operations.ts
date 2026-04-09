@@ -175,6 +175,8 @@ export interface ActivityItem {
   actionRunId?: string;
   correlationId?: string;
   cascadeGroup?: string[];
+  triggerType?: string;
+  triggerDetails?: string;
   aiMetadata?: {
     model: string;
     tokensUsed?: number;

@@ -137,8 +137,8 @@ function App() {
                   <Route path="/projects/:id" element={<ProjectDetail />} />
                   <Route path="/services" element={<ServicesPage />} />
                   <Route path="/services/:id" element={<ServiceDetail />} />
-                  <Route path="/operations" element={<OpsCenter />} />
-                  <Route path="/ops-center-v2" element={<OpsCenterV2 />} />
+                  <Route path="/operations" element={<OpsCenterV2 />} />
+                  <Route path="/ops-v1" element={<OpsCenter />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent" element={<AgentRouteRedirect />} />
                 </Route>

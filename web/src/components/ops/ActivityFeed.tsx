@@ -167,37 +167,37 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
 
   return (
     <Card className="min-w-0 border-border bg-panel p-4 lg:p-5">
-      <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <h2 className="truncate font-display text-lg font-semibold text-primary-ol">
-            {t('operations.activity.title')}
-          </h2>
-          <Badge
-            variant="outline"
-            className={cn(
-              'shrink-0 whitespace-nowrap font-body text-[11px]',
-              isConnected ? 'text-success border-success/40' : 'text-muted-ol',
-            )}
-          >
-            {isConnected ? t('ops.connected') : t('ops.disconnected')}
-          </Badge>
+      <div className="mb-4 flex flex-col gap-3 border-b border-border/40 pb-3">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <h2 className="truncate font-display text-[15px] font-semibold text-primary-ol">
+              {t('operations.activity.title')}
+            </h2>
+            <Badge
+              variant="outline"
+              className={cn(
+                'shrink-0 whitespace-nowrap font-body text-[10px] h-5 px-1.5 shadow-none',
+                isConnected
+                  ? 'text-success border-success/30 bg-success/5'
+                  : 'text-muted-ol bg-bg-subtle',
+              )}
+            >
+              {isConnected ? t('ops.connected') : t('ops.disconnected')}
+            </Badge>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="shrink-0 whitespace-nowrap text-xs font-body text-muted-ol">
-            {t('operations.activity.filters')}
-          </span>
-
+        <div className="flex items-center gap-2 w-full">
           <Select
             value={typeFilter}
             onValueChange={(value) => setTypeFilter(value as ActivityTypeFilter)}
           >
-            <SelectTrigger className="w-full sm:w-[160px] bg-bg-subtle border-border">
+            <SelectTrigger className="h-8 flex-1 bg-bg-subtle/50 hover:bg-bg-subtle border-border/80 text-xs shadow-sm transition-colors">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {ACTIVITY_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
+                <SelectItem key={type} value={type} className="text-xs">
                   {type === 'all' ? t('operations.activity.allTypes') : getTypeLabel(type, t)}
                 </SelectItem>
               ))}
@@ -208,12 +208,12 @@ export function ActivityFeed({ projectId, projectNameById }: ActivityFeedProps) 
             value={severityFilter}
             onValueChange={(value) => setSeverityFilter(value as SeverityFilter)}
           >
-            <SelectTrigger className="w-full sm:w-[130px] bg-bg-subtle border-border">
+            <SelectTrigger className="h-8 flex-1 bg-bg-subtle/50 hover:bg-bg-subtle border-border/80 text-xs shadow-sm transition-colors">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {SEVERITY_FILTERS.map((severity) => (
-                <SelectItem key={severity} value={severity}>
+                <SelectItem key={severity} value={severity} className="text-xs">
                   {severity === 'all' ? t('All') : t(severity)}
                 </SelectItem>
               ))}

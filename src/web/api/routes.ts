@@ -317,7 +317,11 @@ export function createApiRoutes(ctx: AppContext): Hono {
         }
 
         // Step 6: From here, live events are written directly by the listener above
-        await Promise.resolve();
+        await new Promise<void>((resolve) => {
+          s.onAbort(() => {
+            resolve();
+          });
+        });
       });
     }
 

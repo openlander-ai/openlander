@@ -3,16 +3,13 @@ import { CheckSquare, AlertCircle, ShieldAlert, ChevronLeft, ChevronRight } from
 import { cn } from '../../../lib/utils.js';
 import { useLanguage } from '../../../i18n/context.js';
 import { ScrollArea } from '../../ui/scroll-area.js';
-import type {
-  ActivityItem,
-  OpsIncident,
-  CircuitBreakerState,
-} from '../../../lib/api/operations.js';
+import type { OpsIncident, CircuitBreakerState } from '../../../lib/api/operations.js';
+import type { ActionRun } from '../../../lib/api/projects.js';
 
 const STORAGE_KEY = 'ops-v2-rail-collapsed';
 
 export interface LeftRailProps {
-  approvals: ActivityItem[];
+  approvals: ActionRun[];
   incidents: OpsIncident[];
   circuitBreakers: CircuitBreakerState[];
   onFilterChange?: (filter: { type?: string; severity?: string }) => void;
@@ -84,11 +81,17 @@ function IncidentRow({ incident, collapsed }: { incident: OpsIncident; collapsed
   );
 }
 
-function ApprovalRow({ approval, collapsed }: { approval: ActivityItem; collapsed: boolean }) {
+function ApprovalRow({ approval, collapsed }: { approval: ActionRun; collapsed: boolean }) {
+  const { t } = useLanguage();
+  const strategy = approval.recovery_strategy
+    ? t(`ops.recoveryStrategy.${approval.recovery_strategy}`)
+    : t('ops.recoveryStrategy.unknown');
+  const label = `${t('opsV2.rail.actionRequired')}: ${strategy}`;
+
   if (collapsed) {
     return (
       <div className="flex justify-center py-1">
-        <span className="h-2 w-2 rounded-full shrink-0 bg-warning" title={approval.title} />
+        <span className="h-2 w-2 rounded-full shrink-0 bg-warning" title={label} />
       </div>
     );
   }
@@ -96,7 +99,9 @@ function ApprovalRow({ approval, collapsed }: { approval: ActivityItem; collapse
   return (
     <div className="flex items-start gap-2 px-2 py-1.5 rounded-md hover:bg-bg-subtle transition-colors">
       <span className="h-2 w-2 rounded-full shrink-0 mt-1 bg-warning" />
-      <span className="text-xs font-body text-primary-ol truncate">{approval.title}</span>
+      <span className="text-xs font-body text-primary-ol truncate" title={label}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -185,7 +190,7 @@ export function LeftRail({
     [activeFilter, onFilterChange],
   );
 
-  const approvalItems = approvals.filter((a) => a.type === 'approval');
+  const approvalItems = approvals;
   const openBreakers = circuitBreakers.filter((cb) => cb.state !== 'closed');
 
   return (

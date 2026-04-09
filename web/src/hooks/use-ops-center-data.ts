@@ -55,7 +55,7 @@ export function useOpsCenterData(): OpsCenterData {
   // --- Refs for SSE lifecycle ---
   const abortRef = useRef<AbortController | null>(null);
   const retriesRef = useRef(0);
-  const lastEventIdRef = useRef<string | null>(null);
+  const lastEventTimestampRef = useRef<string | null>(null);
   const dedupSetRef = useRef<Set<string>>(new Set());
   const cancelledRef = useRef(false);
 
@@ -87,11 +87,11 @@ export function useOpsCenterData(): OpsCenterData {
     void (async () => {
       try {
         const params = new URLSearchParams({ follow: 'true' });
-        if (lastEventIdRef.current) {
-          params.set('since', lastEventIdRef.current);
+        if (lastEventTimestampRef.current) {
+          params.set('since', lastEventTimestampRef.current);
         }
 
-        const resp = await fetch(`/api/activity?${params.toString()}`, {
+        const resp = await fetch(`/api/ops/activity?${params.toString()}`, {
           signal: controller.signal,
           credentials: 'include',
         });
@@ -149,8 +149,10 @@ export function useOpsCenterData(): OpsCenterData {
               const item = parsed as unknown as ActivityItem;
               if (!item.id) continue;
 
-              // Track last event ID for gap recovery
-              lastEventIdRef.current = item.id;
+              // Track last event timestamp for gap recovery
+              if (item.timestamp) {
+                lastEventTimestampRef.current = item.timestamp;
+              }
 
               if (!dedup(item.id)) continue;
 
@@ -217,7 +219,7 @@ export function useOpsCenterData(): OpsCenterData {
 
     // Parallel REST snapshot
     Promise.all([
-      fetch('/api/activity?limit=100', { credentials: 'include' }).then((r) => {
+      fetch('/api/ops/activity?limit=100', { credentials: 'include' }).then((r) => {
         if (!r.ok) throw new Error(`Activity fetch failed: ${r.status}`);
         return r.json() as Promise<{ activities: ActivityItem[]; nextCursor: string | null }>;
       }),
@@ -236,9 +238,9 @@ export function useOpsCenterData(): OpsCenterData {
         for (const item of items) {
           dedupSetRef.current.add(item.id);
         }
-        // Track last event ID for SSE gap recovery
+        // Track last event timestamp for SSE gap recovery
         if (items.length > 0) {
-          lastEventIdRef.current = items[0].id;
+          lastEventTimestampRef.current = items[0].timestamp;
         }
 
         setActivities(items);

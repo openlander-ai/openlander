@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { stream } from 'hono/streaming';
 
 import type { AppContext } from '../../app.js';
 import type { OpsIncidentEventRow, OpsIncidentRow } from '../../db/types.js';
@@ -187,6 +188,43 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
   // --- OpsAgent Config ---
 
+  api.get('/agent/active', (c) => {
+    try {
+      const projects = ctx.db.listProjects();
+      const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
+      const activeRuns = projects
+        .flatMap((project) => ctx.db.getRunningActionRuns(project.id))
+        .sort((a, b) => b.started_at.localeCompare(a.started_at));
+      const activeRun = activeRuns[0];
+
+      if (!activeRun) {
+        return c.json({ isActive: false });
+      }
+
+      const approvalPending =
+        activeRun.approval_status === 'pending' ||
+        (activeRun.status as string) === 'pending_approval';
+      const currentStep = approvalPending
+        ? 'Awaiting approval'
+        : typeof activeRun.current_step === 'number' && typeof activeRun.total_steps === 'number'
+          ? `Executing step ${String(activeRun.current_step)} / ${String(activeRun.total_steps)}`
+          : undefined;
+
+      return c.json({
+        isActive: true,
+        projectId: activeRun.project_id,
+        projectName: projectNameById.get(activeRun.project_id) ?? activeRun.project_id,
+        currentStep,
+        currentStepNumber: activeRun.current_step ?? undefined,
+        totalSteps: activeRun.total_steps ?? undefined,
+        startedAt: activeRun.started_at,
+        lastUpdatedAt: activeRun.updated_at ?? activeRun.created_at,
+      });
+    } catch {
+      return c.json({ isActive: false });
+    }
+  });
+
   api.get('/config', (c) => {
     const config = ctx.opsAgent?.getConfig() ?? {};
     return c.json({ config });
@@ -355,12 +393,16 @@ export function createOpsRoutes(ctx: AppContext): Hono {
   // --- Unified Activity Feed ---
 
   api.get('/activity', (c) => {
-    try {
+    const isFollow = c.req.query('follow') === 'true';
+
+    const fetchActivities = (sinceParam?: string) => {
       const projectId = c.req.query('projectId');
       const types = c.req.query('types')?.split(',').filter(Boolean) ?? [];
       const severity = c.req.query('severity');
-      const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200);
+      const limitParam = c.req.query('limit');
+      const limit = isFollow ? 100 : Math.min(parseInt(limitParam ?? '50', 10), 200);
       const before = c.req.query('before');
+      const since = sinceParam || c.req.query('since');
 
       const projects = ctx.db.listProjects();
       const projectMap = new Map(projects.map((p) => [p.id, p.name]));
@@ -401,7 +443,11 @@ export function createOpsRoutes(ctx: AppContext): Hono {
               (e) => (e.event_type as string) === 'cascade_detected',
             )) {
               let cascadeGroup: string[] = [];
-              cascadeGroup = parseEventMetadata(ev.metadata)?.affected_project_ids ?? [];
+              try {
+                cascadeGroup = parseEventMetadata(ev.metadata)?.affected_project_ids ?? [];
+              } catch {
+                // ignore parsing error
+              }
               activities.push({
                 id: ev.id,
                 timestamp: new Date(ev.created_at).toISOString(),
@@ -422,9 +468,12 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
       // Action runs
       if (types.length === 0 || types.includes('recovery') || types.includes('approval')) {
-        const runs = projectId
+        const candidateRuns = projectId
           ? ctx.db.getActionRunsByProject(projectId, 100)
-          : ctx.db.getActionRunsByApprovalStatus('pending', 50);
+          : projects.flatMap((project) => ctx.db.getActionRunsByProject(project.id, 20));
+        const runs = candidateRuns
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .slice(0, 200);
         for (const run of runs) {
           if (
             run.trigger_source !== 'auto_recovery' &&
@@ -463,11 +512,62 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       let sorted = activities.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
       if (severity) sorted = sorted.filter((a) => a.severity === severity);
       if (before) sorted = sorted.filter((a) => a.timestamp < before);
+      if (since) sorted = sorted.filter((a) => a.timestamp > since);
       const page = sorted.slice(0, limit);
-      return c.json({
+      return {
         activities: page,
         nextCursor: page.length === limit ? (page[page.length - 1]?.timestamp ?? null) : null,
+      };
+    };
+
+    if (isFollow) {
+      return stream(c, async (s) => {
+        c.header('Content-Type', 'application/x-ndjson');
+        let lastReportedTime = c.req.query('since') || new Date(Date.now() - 60000).toISOString();
+        let flushInProgress = false;
+
+        const sendUpdates = async (): Promise<void> => {
+          if (flushInProgress) return;
+          flushInProgress = true;
+          try {
+            const page = fetchActivities(lastReportedTime);
+            if (page.activities.length > 0) {
+              const forward = [...page.activities].reverse();
+              for (const act of forward) {
+                await s.write(JSON.stringify(act) + '\n');
+              }
+              const lastActivity = forward[forward.length - 1];
+              if (lastActivity) {
+                lastReportedTime = lastActivity.timestamp;
+              }
+            }
+          } catch (err) {
+            console.error('Unified feed streaming error:', err);
+          } finally {
+            flushInProgress = false;
+          }
+        };
+
+        // Initial backfill
+        await sendUpdates();
+        await s.write(JSON.stringify({ type: 'backfill-complete' }) + '\n');
+
+        const interval = setInterval(() => {
+          void sendUpdates();
+        }, 2000);
+
+        await new Promise<void>((resolve) => {
+          s.onAbort(() => {
+            clearInterval(interval);
+            resolve();
+          });
+        });
       });
+    }
+
+    try {
+      const page = fetchActivities();
+      return c.json(page);
     } catch (err) {
       return c.json({ error: String(err) }, 500);
     }

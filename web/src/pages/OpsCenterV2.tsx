@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, AlertTriangle, RefreshCw } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { useOpsCenterData } from '@/hooks/use-ops-center-data';
 import { StatusStrip } from '@/components/ops/v2/StatusStrip';
 import { LeftRail } from '@/components/ops/v2/LeftRail';
-import { MainTimeline } from '@/components/ops/v2/MainTimeline';
+import { MainFeedGrid } from '@/components/ops/v2/MainFeedGrid';
 import { FilterBar, useFilterSearchParams } from '@/components/ops/v2/FilterBar';
 import { cn } from '@/lib/utils';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
@@ -46,8 +46,6 @@ export function OpsCenterV2() {
     isConnected,
     isReconnecting,
     isLoading,
-    error,
-    retry,
   } = useOpsCenterData();
 
   // Responsive breakpoints
@@ -119,25 +117,6 @@ export function OpsCenterV2() {
         connectionStatus={isLoading ? undefined : connectionStatus}
         onMenuClick={isBelowMd ? openDrawer : undefined}
       />
-
-      {/* Error banner */}
-      {error && !isLoading && (
-        <div
-          role="alert"
-          className="flex items-center gap-3 px-4 py-2.5 bg-error/10 border-b border-error/20 text-error text-sm"
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span className="flex-1 truncate">{t('opsV2.error.loadFailed')}</span>
-          <button
-            type="button"
-            onClick={retry}
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium bg-error/10 hover:bg-error/20 transition-colors shrink-0"
-          >
-            <RefreshCw className="h-3 w-3" />
-            {t('opsV2.error.retry')}
-          </button>
-        </div>
-      )}
 
       {/* Main body: rail + content */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -228,9 +207,9 @@ export function OpsCenterV2() {
             {/* Filters */}
             <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
 
-            {/* Main content — timeline */}
+            {/* Main content — feed grid */}
             <main className="min-w-0">
-              <MainTimeline activities={filteredActivities} />
+              <MainFeedGrid activities={filteredActivities} />
             </main>
           </div>
         </div>
