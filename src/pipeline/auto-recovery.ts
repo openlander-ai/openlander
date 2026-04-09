@@ -374,12 +374,14 @@ export function setupAutoRecovery(params: SetupAutoRecoveryParams): AutoRecovery
       projectId,
       triggerSource: 'auto_recovery',
       recoveryStrategy: matchingPatterns.length > 0 ? 'memory' : strategy,
+      correlationId: projectId,
     });
 
     await eventBus.emit('recovery:start', {
       projectId,
       error,
       attempt,
+      correlationId: projectId,
     });
 
     questionBridge.setActiveProject(projectId);
@@ -460,6 +462,7 @@ ${plan.agentGuidance}
                 actionRunId,
                 toolName: event.toolName,
                 attempt,
+                correlationId: projectId,
               });
 
               db.updateActionRunStatus(actionRunId, 'pending_approval');
@@ -505,12 +508,14 @@ ${plan.agentGuidance}
             await eventBus.emit('recovery:stopped', {
               projectId,
               reason: failureReason,
+              correlationId: projectId,
             });
           } else {
             await eventBus.emit('recovery:failed', {
               projectId,
               error: failureReason,
               attempt,
+              correlationId: projectId,
             });
           }
           trySavePattern(false);
@@ -527,6 +532,7 @@ ${plan.agentGuidance}
             attempt,
             durationMs,
             lastError: normalizedError,
+            correlationId: projectId,
           });
           trySavePattern(true);
         } else {
@@ -538,6 +544,7 @@ ${plan.agentGuidance}
             projectId,
             error: failureReason,
             attempt,
+            correlationId: projectId,
           });
           trySavePattern(false);
         }
@@ -551,6 +558,7 @@ ${plan.agentGuidance}
           projectId,
           error: errorMessage,
           attempt,
+          correlationId: projectId,
         });
         trySavePattern(false);
         return;

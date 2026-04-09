@@ -625,4 +625,29 @@ export function runMigrations(sqlite: SqliteDatabase): void {
   sqlite.exec(
     'CREATE INDEX IF NOT EXISTS idx_project_dependencies_target_service ON project_dependencies(target_service_id)',
   );
+
+  // activity_log table (ops-center-v2)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS activity_log (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    activity_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    correlation_id TEXT,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  )`);
+  sqlite.exec('CREATE INDEX IF NOT EXISTS idx_activity_log_created_at ON activity_log(created_at)');
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_correlation_id ON activity_log(correlation_id)',
+  );
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_project_created ON activity_log(project_id, created_at)',
+  );
+  sqlite.exec(
+    'CREATE INDEX IF NOT EXISTS idx_activity_log_type_created ON activity_log(activity_type, created_at)',
+  );
 }

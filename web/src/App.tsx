@@ -10,6 +10,7 @@ import { DeploymentDetail } from '@/pages/DeploymentDetail';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
 import { OpsCenter } from '@/pages/OpsCenter';
+import { OpsCenterV2 } from '@/pages/OpsCenterV2';
 import { ServiceDetail } from '@/pages/ServiceDetail';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { LoginPage } from '@/pages/LoginPage';
@@ -137,6 +138,7 @@ function App() {
                   <Route path="/services" element={<ServicesPage />} />
                   <Route path="/services/:id" element={<ServiceDetail />} />
                   <Route path="/operations" element={<OpsCenter />} />
+                  <Route path="/ops-center-v2" element={<OpsCenterV2 />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent" element={<AgentRouteRedirect />} />
                 </Route>

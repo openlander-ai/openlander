@@ -256,9 +256,14 @@ export class RecoveryCoordinator {
 
       this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
 
+      // When OpsAgent is unavailable (null), use projectId as fallback correlationId
+      // since no incident is created in that case
+      const correlationId = this.opsAgent ? undefined : payload.projectId;
+
       await this.events.emit('recovery:started', {
         projectId: payload.projectId,
         trigger: 'health:degraded',
+        correlationId,
       });
     } catch (err) {
       log.error(
@@ -305,9 +310,13 @@ export class RecoveryCoordinator {
 
       this.projectStatusWriter.updateProject(payload.projectId, { status: 'recovering' });
 
+      // When OpsAgent is unavailable (null), use projectId as fallback correlationId
+      const correlationId = this.opsAgent ? undefined : payload.projectId;
+
       await this.events.emit('recovery:started', {
         projectId: payload.projectId,
         trigger,
+        correlationId,
       });
     } catch (err) {
       log.error({ err, projectId: payload.projectId }, `Unhandled error in ${trigger} handler`);

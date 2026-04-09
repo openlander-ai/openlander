@@ -11,39 +11,10 @@ import {
 } from '@/lib/api/projects';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
-import { TOOL_HUMAN_LABELS } from '@/components/ops/utils';
+import { getRiskTone, getToolLabel } from '@/components/ops/utils';
 interface ApprovalQueueProps {
   projectId?: string;
   projectNameById: Record<string, string>;
-}
-
-function getRiskTone(toolName: string | null): 'destructive' | 'diagnostic' | 'neutral' {
-  if (!toolName) {
-    return 'neutral';
-  }
-
-  const normalized = toolName.toLowerCase();
-  if (
-    normalized.includes('rollback') ||
-    normalized.includes('stop') ||
-    normalized.includes('delete') ||
-    normalized.includes('purge') ||
-    normalized.includes('remove')
-  ) {
-    return 'destructive';
-  }
-
-  if (
-    normalized.includes('diagnose') ||
-    normalized.includes('debug') ||
-    normalized.includes('inspect') ||
-    normalized.includes('status') ||
-    normalized.includes('log')
-  ) {
-    return 'diagnostic';
-  }
-
-  return 'neutral';
 }
 
 function getRecoveryStrategyLabel(
@@ -63,7 +34,7 @@ function getRecoveryStrategyLabel(
 }
 
 export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [approvals, setApprovals] = useState<ActionRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
@@ -140,12 +111,7 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
           const requestedAt = approval.approval_requested_at ?? approval.created_at;
           const projectName = projectNameById[approval.project_id]!; // Guaranteed to exist by filter
 
-          const fallbackLabel = language === 'ko' ? `${toolName} 실행 요청` : `${toolName} request`;
-          const toolData = TOOL_HUMAN_LABELS[normalizedToolName];
-          const actionLabel = toolData ? toolData[language] : fallbackLabel;
-          const actionImpact = toolData
-            ? toolData[`impact_${language}` as 'impact_ko' | 'impact_en']
-            : '';
+          const { label: actionLabel, impact: actionImpact } = getToolLabel(normalizedToolName, t);
           const recoveryStrategyLabel = getRecoveryStrategyLabel(approval.recovery_strategy, t);
 
           return (
@@ -186,7 +152,7 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
                     <span className="text-secondary-ol pt-0.5">📋</span>
                     <div className="flex flex-col">
                       <span className="text-xs font-semibold text-secondary-ol mb-0.5">
-                        {language === 'ko' ? '원인' : 'Cause'}
+                        {t('operations.approvals.cause')}
                       </span>
                       <p className="text-xs font-mono text-primary-ol leading-relaxed break-words max-h-24 overflow-y-auto pr-2 custom-scrollbar">
                         {approval.error_message}
@@ -225,9 +191,7 @@ export function ApprovalQueue({ projectId, projectNameById }: ApprovalQueueProps
                 <div className="flex items-center gap-2 bg-error/5 border border-error/20 p-2.5 rounded-md px-3">
                   <span className="text-error text-sm">⚠️</span>
                   <span className="text-xs font-medium text-error">
-                    {language === 'ko'
-                      ? '이 작업은 서비스를 일시 중단시킬 수 있습니다.'
-                      : 'This action may cause downtime.'}
+                    {t('operations.approvals.destructiveWarning')}
                   </span>
                 </div>
               )}

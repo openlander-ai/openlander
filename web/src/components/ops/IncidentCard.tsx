@@ -157,11 +157,7 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
                 variant="ghost"
                 size="sm"
                 className="h-8 text-xs text-muted-ol hover:text-secondary-ol"
-                onClick={() =>
-                  toast.info(
-                    t('ops.featureNotReady') || 'This feature is currently under development.',
-                  )
-                }
+                onClick={() => toast.info(t('ops.featureNotReady'))}
               >
                 {t('ops.acknowledge')}
               </Button>

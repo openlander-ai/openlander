@@ -227,6 +227,7 @@ export class Agent {
           source,
           model: modelName,
           action: 'chatStream',
+          correlationId: projectId,
         });
       }
 
@@ -326,6 +327,7 @@ export class Agent {
             source,
             model: modelName,
             action: 'chatStream',
+            correlationId: projectId,
             durationMs: Date.now() - startedAt,
             inputTokens: usage.inputTokens || undefined,
             outputTokens: usage.outputTokens || undefined,

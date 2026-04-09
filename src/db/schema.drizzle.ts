@@ -598,6 +598,32 @@ export type NewOpsIncidentEvent = typeof opsIncidentEvents.$inferInsert;
 export type CircuitBreakerRow = typeof circuitBreakerState.$inferSelect;
 export type NewCircuitBreaker = typeof circuitBreakerState.$inferInsert;
 
+export const activityLog = sqliteTable(
+  'activity_log',
+  {
+    id: text('id').primaryKey(),
+    event_type: text('event_type').notNull(),
+    activity_type: text('activity_type').notNull(),
+    severity: text('severity').notNull(),
+    project_id: text('project_id').notNull(),
+    correlation_id: text('correlation_id'),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    status: text('status').notNull(),
+    metadata: text('metadata').notNull().default('{}'),
+    created_at: text('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_activity_log_created_at').on(table.created_at),
+    index('idx_activity_log_correlation_id').on(table.correlation_id),
+    index('idx_activity_log_project_created').on(table.project_id, table.created_at),
+    index('idx_activity_log_type_created').on(table.activity_type, table.created_at),
+  ],
+);
+
+export type ActivityLogRow = typeof activityLog.$inferSelect;
+export type NewActivityLog = typeof activityLog.$inferInsert;
+
 export const drizzleSchema = {
   projects,
   environments,
@@ -622,4 +648,5 @@ export const drizzleSchema = {
   opsIncidentEvents,
   circuitBreakerState,
   projectDependencies,
+  activityLog,
 };

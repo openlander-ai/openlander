@@ -1,15 +1,16 @@
 import type { OpsIncidentEvent } from '../../lib/api/operations.js';
 import { useLanguage } from '../../i18n/context.js';
 
-const TIMELINE_LABELS: Record<string, string> = {
-  detected: 'Problem detected',
-  diagnosed: 'Diagnosis attempted',
-  action_taken: 'Recovery action taken',
-  recovered: 'Service recovered',
-  escalated: 'Manual intervention required',
-  alert_sent: 'Alert sent',
-  interrupted: 'Interrupted by restart',
-};
+const TIMELINE_EVENT_TYPES = [
+  'detected',
+  'diagnosed',
+  'action_taken',
+  'recovered',
+  'escalated',
+  'alert_sent',
+  'interrupted',
+  'cascade_detected',
+] as const;
 
 interface IncidentTimelineProps {
   events: OpsIncidentEvent[];
@@ -40,7 +41,9 @@ export function IncidentTimeline({ events }: IncidentTimelineProps) {
           <div className="flex flex-col">
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-primary-ol">
-                {t(TIMELINE_LABELS[g.event.type] || g.event.type.replace('_', ' '))}
+                {(TIMELINE_EVENT_TYPES as readonly string[]).includes(g.event.type)
+                  ? t(`operations.timelineEvents.${g.event.type}`)
+                  : g.event.type.replace(/_/g, ' ')}
               </span>
               <span className="text-xs text-muted-ol">
                 {new Date(g.event.created_at).toLocaleTimeString()}
@@ -51,8 +54,8 @@ export function IncidentTimeline({ events }: IncidentTimelineProps) {
             )}
             {g.count > 1 && (
               <span className="text-xs text-muted-ol mt-2 italic">
-                {t('This condition repeated {count} times without state change.', {
-                  count: g.count,
+                {t('operations.timelineEvents.repeatedCondition', {
+                  count: String(g.count),
                 })}
               </span>
             )}

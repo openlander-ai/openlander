@@ -81,7 +81,7 @@ function groupIncidents(
           key,
           severity: latest.severity,
           label: humanizeEventType(typeKey, t),
-          description: humanizeDescription(latest.title || latest.severity, t),
+          description: humanizeDescription(latest, t),
           count: entries.length,
           firstSeen: Math.min(...entries.map((item) => new Date(item.created_at).getTime())),
           lastSeen: Math.max(...entries.map((item) => new Date(item.created_at).getTime())),

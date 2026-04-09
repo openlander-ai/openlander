@@ -280,3 +280,17 @@ export interface CircuitBreakerRow {
   state: 'closed' | 'open' | 'half_open';
   reset_at: number | null;
 }
+
+export interface ActivityLogRow {
+  id: string;
+  event_type: string;
+  activity_type: string;
+  severity: string;
+  project_id: string;
+  correlation_id: string | null;
+  title: string;
+  description: string;
+  status: string;
+  metadata: string;
+  created_at: string;
+}

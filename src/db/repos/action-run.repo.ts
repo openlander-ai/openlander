@@ -18,6 +18,7 @@ export class ActionRunRepo {
     triggerSource: ActionRunRow['trigger_source'];
     triggerSessionId?: string;
     recoveryStrategy?: ActionRunRow['recovery_strategy'];
+    correlationId?: string;
   }): string {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -33,6 +34,7 @@ export class ActionRunRepo {
         status: 'running',
         error_message: null,
         recovery_strategy: recoveryStrategy ?? null,
+        correlation_id: data.correlationId ?? null,
         steps_json: null,
         started_at: now,
         completed_at: null,

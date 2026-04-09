@@ -202,6 +202,7 @@ describe('setupAutoRecovery', () => {
       expect(stoppedHandler).toHaveBeenCalledWith({
         projectId,
         reason: 'Recovery aborted because project is no longer eligible to continue',
+        correlationId: projectId,
       });
 
       const runs = harness.db.getActionRunsByProject(projectId, 1);

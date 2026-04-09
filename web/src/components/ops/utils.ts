@@ -49,6 +49,56 @@ export function describeCBState(
   return labels[key]?.[lang] ?? { label: state, explanation: '' };
 }
 
+const KNOWN_TOOLS = [
+  'rollback',
+  'restart_container',
+  'diagnose_crash',
+  'stop_project',
+  'apply_fixes',
+];
+
+export function getToolLabel(
+  toolName: string,
+  t: (key: string, params?: Record<string, string>) => string,
+): { label: string; impact: string } {
+  const normalized = toolName.toLowerCase();
+  if (!KNOWN_TOOLS.includes(normalized)) {
+    return { label: t('operations.approvals.toolRequest', { tool: toolName }), impact: '' };
+  }
+  const label = t(`operations.tools.${normalized}`);
+  const impact = t(`operations.tools.${normalized}_impact`);
+  return { label, impact };
+}
+
+export function getRiskTone(toolName: string | null): 'destructive' | 'diagnostic' | 'neutral' {
+  if (!toolName) {
+    return 'neutral';
+  }
+
+  const normalized = toolName.toLowerCase();
+  if (
+    normalized.includes('rollback') ||
+    normalized.includes('stop') ||
+    normalized.includes('delete') ||
+    normalized.includes('purge') ||
+    normalized.includes('remove')
+  ) {
+    return 'destructive';
+  }
+
+  if (
+    normalized.includes('diagnose') ||
+    normalized.includes('debug') ||
+    normalized.includes('inspect') ||
+    normalized.includes('status') ||
+    normalized.includes('log')
+  ) {
+    return 'diagnostic';
+  }
+
+  return 'neutral';
+}
+
 export const TOOL_HUMAN_LABELS: Record<
   string,
   { ko: string; en: string; impact_ko: string; impact_en: string }
@@ -104,12 +154,16 @@ export const humanizeEventType = (type: string, t: (key: string) => string): str
 };
 
 export const humanizeDescription = (
-  description: string | undefined | null,
+  incident: {
+    triggerDetails?: string;
+    diagnosis?: string | null;
+    title?: string;
+    severity?: string;
+  },
   t: (key: string) => string,
 ): string => {
-  if (!description) return t('operations.incidents.generic_error');
-  if (description === 'critical incident' || description === 'critical_incident') {
-    return t('operations.incidents.generic_error');
-  }
-  return description;
+  if (incident.triggerDetails) return incident.triggerDetails;
+  if (incident.diagnosis) return incident.diagnosis;
+  if (incident.title && incident.title !== `${incident.severity} incident`) return incident.title;
+  return t('operations.incidents.generic_error');
 };

@@ -108,8 +108,7 @@ export function StatusHeroCard({
             <CircuitBreakerBadge state={cbState} failures={cbFailures} />
             <span className="flex items-center gap-1.5">
               <Activity className="h-3.5 w-3.5" />
-              {activeIssuesCount} {t('Issue')}
-              {activeIssuesCount !== 1 ? 's' : ''}
+              {t('ops.issueCount', { count: String(activeIssuesCount) })}
             </span>
             {lastEventTime && (
               <span className="flex items-center gap-1.5">
@@ -139,11 +138,11 @@ export function StatusHeroCard({
         {(status === 'broken' || status === 'blocked') && status !== 'blocked' && (
           <Button variant="outline" className="w-full sm:w-auto">
             <RefreshCw className="h-4 w-4 mr-2" />
-            {t('Retry Recovery')}
+            {t('ops.retryRecovery')}
           </Button>
         )}
         <div className="flex items-center gap-3 bg-bg-panel px-4 py-2 rounded-lg border border-[hsl(var(--border))] w-full sm:w-auto justify-between sm:justify-start">
-          <span className="text-sm font-medium text-primary-ol">{t('Auto-recovery')}</span>
+          <span className="text-sm font-medium text-primary-ol">{t('ops.autoRecovery')}</span>
           <Switch
             checked={autoRecoveryEnabled}
             onCheckedChange={onToggleAutoRecovery}

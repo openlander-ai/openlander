@@ -22,8 +22,6 @@ interface ActivityItem {
   cascadeGroup?: string[];
   triggerType?: string;
   triggerDetails?: string;
-  trigger_type?: string;
-  trigger_details?: string;
 }
 
 interface ParsedIncidentTrigger {
@@ -105,8 +103,6 @@ function mapIncidentResponse(incident: OpsIncidentRow, events: OpsIncidentEventR
     title,
     triggerType: trigger.triggerType,
     triggerDetails: trigger.triggerDetails,
-    trigger_type: trigger.triggerType,
-    trigger_details: trigger.triggerDetails,
   };
 }
 
@@ -398,8 +394,6 @@ export function createOpsRoutes(ctx: AppContext): Hono {
               incidentId: inc.id,
               triggerType: trigger.triggerType,
               triggerDetails: trigger.triggerDetails,
-              trigger_type: trigger.triggerType,
-              trigger_details: trigger.triggerDetails,
             });
           }
           if (types.length === 0 || types.includes('alert')) {

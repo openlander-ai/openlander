@@ -116,6 +116,7 @@ export class RecoveryPipeline {
       projectId,
       triggerSource: 'auto_recovery',
       recoveryStrategy: 'recipe',
+      correlationId: incidentId ?? undefined,
     });
 
     const executionContext: RecoveryContext = {
@@ -168,6 +169,7 @@ export class RecoveryPipeline {
       toolName: step,
       attempt: 1,
       source: 'ops_recovery',
+      correlationId: context.incidentId ?? undefined,
     });
 
     const metadata: ApprovalMetadata = {
@@ -592,6 +594,7 @@ export class RecoveryPipeline {
       projectId: context.projectId,
       totalAttempts: this.ctx.db.getCircuitBreakerState(context.projectId)?.failure_count ?? 0,
       lastError: reason,
+      correlationId: context.incidentId ?? undefined,
     });
 
     log.error({ projectId: context.projectId, reason }, 'Recovery escalated');

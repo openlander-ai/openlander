@@ -275,6 +275,7 @@ export interface EventPayload {
     source: string;
     model: string;
     action: string;
+    correlationId?: string;
   };
   'ai:completed': {
     projectId: string;
@@ -285,6 +286,7 @@ export interface EventPayload {
     inputTokens?: number;
     outputTokens?: number;
     success: boolean;
+    correlationId?: string;
   };
   'health:degraded': {
     projectId: string;
@@ -298,10 +300,12 @@ export interface EventPayload {
   'recovery:stopped': {
     projectId: string;
     reason: string;
+    correlationId?: string;
   };
   'recovery:started': {
     projectId: string;
     trigger: string;
+    correlationId?: string;
   };
   'recovery:start': {
     projectId: string;
@@ -309,6 +313,7 @@ export interface EventPayload {
     attempt: number;
     source?: string;
     identity?: RequestIdentity;
+    correlationId?: string;
   };
   'recovery:success': {
     projectId: string;
@@ -319,6 +324,7 @@ export interface EventPayload {
     identity?: RequestIdentity;
     tokenCount?: number;
     costUsd?: number | null;
+    correlationId?: string;
   };
   'recovery:failed': {
     projectId: string;
@@ -326,6 +332,7 @@ export interface EventPayload {
     attempt: number;
     source?: string;
     identity?: RequestIdentity;
+    correlationId?: string;
   };
   'recovery:exhausted': {
     projectId: string;
@@ -333,6 +340,7 @@ export interface EventPayload {
     lastError: string;
     source?: string;
     identity?: RequestIdentity;
+    correlationId?: string;
   };
   'recovery:approval-needed': {
     projectId: string;
@@ -341,11 +349,13 @@ export interface EventPayload {
     attempt: number;
     source?: string;
     identity?: RequestIdentity;
+    correlationId?: string;
   };
   'recovery:approval-resolved': {
     actionRunId: string;
     approved: boolean;
     projectId?: string;
+    correlationId?: string;
   };
   'env:new-keys-detected': {
     projectId: string;

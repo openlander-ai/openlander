@@ -28,6 +28,7 @@ import {
   getPostmortemInstance,
 } from './monitor/postmortem.js';
 import { RollbackWatcher } from './monitor/rollback-watcher.js';
+import { ActivityLogger } from './monitor/activity-logger.js';
 import { McpClientManager } from './mcp/client-manager.js';
 import { PlanEngine } from './pipeline/deploy-plan/engine.js';
 import { RecoveryCoordinator } from './monitor/recovery-coordinator.js';
@@ -49,8 +50,12 @@ const log = createModuleLogger('app');
 let activeIncidentReporter: IncidentReporter | null = null;
 let activeRollbackWatcher: RollbackWatcher | null = null;
 let activePostmortemAutomationStop: (() => void) | null = null;
+let activeActivityLogger: ActivityLogger | null = null;
+let activeActivityLogCleanupInterval: ReturnType<typeof setInterval> | null = null;
 
 const POSTMORTEM_STABILITY_WINDOW_MS = 5 * 60 * 1000;
+const ACTIVITY_LOG_TTL_DAYS = 30;
+const ACTIVITY_LOG_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const POSTMORTEM_CANCEL_EVENTS = [
   'recovery:failed',
   'recovery:exhausted',
@@ -578,6 +583,31 @@ export async function createAppContext(
   rollbackWatcher.start();
   activeRollbackWatcher = rollbackWatcher;
 
+  // Activity log cleanup: purge records older than ACTIVITY_LOG_TTL_DAYS on startup and every 24h
+  const runActivityLogCleanup = (): void => {
+    try {
+      const cutoff = new Date(
+        Date.now() - ACTIVITY_LOG_TTL_DAYS * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      const deleted = db.deleteActivityLogOlderThan(cutoff);
+      if (deleted > 0) log.info({ deleted }, 'Activity log cleanup completed');
+    } catch (err) {
+      log.error({ err }, 'Activity log cleanup failed');
+    }
+  };
+  runActivityLogCleanup();
+  if (activeActivityLogCleanupInterval) clearInterval(activeActivityLogCleanupInterval);
+  activeActivityLogCleanupInterval = setInterval(
+    runActivityLogCleanup,
+    ACTIVITY_LOG_CLEANUP_INTERVAL_MS,
+  );
+
+  // Activity event persistence subscriber
+  activeActivityLogger?.stop();
+  const activityLogger = new ActivityLogger(eventBus, db);
+  activityLogger.start();
+  activeActivityLogger = activityLogger;
+
   dockerEventListener.start();
 
   return ctx;
@@ -587,9 +617,15 @@ export async function createAppContext(
 export function shutdownAppContext(ctx: AppContext): void {
   activeIncidentReporter?.stop();
   activeRollbackWatcher?.stop();
+  activeActivityLogger?.stop();
   activePostmortemAutomationStop?.();
+  if (activeActivityLogCleanupInterval) {
+    clearInterval(activeActivityLogCleanupInterval);
+    activeActivityLogCleanupInterval = null;
+  }
   activeIncidentReporter = null;
   activeRollbackWatcher = null;
+  activeActivityLogger = null;
   activePostmortemAutomationStop = null;
   getPostmortemInstance()?.stop();
   ctx.dockerEventListener?.stop();

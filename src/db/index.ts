@@ -28,6 +28,7 @@ import { OpsIncidentEventRepo } from './repos/ops-incident-event.repo.js';
 import { CircuitBreakerRepo } from './repos/circuit-breaker.repo.js';
 import { ProjectDependencyRepo } from './repos/project-dependency.repo.js';
 import { ProjectOpsOverrideRepo } from './repos/project-ops-override.repo.js';
+import { ActivityLogRepo } from './repos/activity-log.repo.js';
 import type { ProjectRow } from './types.js';
 import type { AuthDatabase } from '../auth/auth-service.js';
 import type { ProjectOpsOverride } from '../monitor/ops-types.js';
@@ -50,6 +51,7 @@ export type {
   OpsIncidentRow,
   OpsIncidentEventRow,
   CircuitBreakerRow,
+  ActivityLogRow,
 } from './types.js';
 
 // prettier-ignore
@@ -80,6 +82,7 @@ export class Database implements AuthDatabase {
   private readonly circuitBreakerRepo: CircuitBreakerRepo;
   private readonly projectDependencyRepo: ProjectDependencyRepo;
   private readonly projectOpsOverrideRepo: ProjectOpsOverrideRepo;
+  private readonly activityLogRepo: ActivityLogRepo;
 
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
@@ -111,6 +114,7 @@ export class Database implements AuthDatabase {
     this.circuitBreakerRepo = new CircuitBreakerRepo(this.db, this.sqlite);
     this.projectDependencyRepo = new ProjectDependencyRepo(this.db, this.sqlite);
     this.projectOpsOverrideRepo = new ProjectOpsOverrideRepo(this.db, this.sqlite);
+    this.activityLogRepo = new ActivityLogRepo(this.db, this.sqlite);
     this.actionRunRepo.markStaleAsFailedOnStartup();
   }
 
@@ -262,6 +266,12 @@ export class Database implements AuthDatabase {
   getProjectOpsOverride(projectId: string) { return this.projectOpsOverrideRepo.load(projectId); }
   setProjectOpsOverride(projectId: string, overrides: ProjectOpsOverride) { this.projectOpsOverrideRepo.save(projectId, overrides); }
   deleteProjectOpsOverride(projectId: string) { this.projectOpsOverrideRepo.delete(projectId); }
+  insertActivityLog(data: Parameters<ActivityLogRepo['insert']>[0]) { return this.activityLogRepo.insert(data); }
+  findActivityLogSince(lastUlid: string, limit?: number) { return this.activityLogRepo.findSince(lastUlid, limit); }
+  findActivityLogByDateRange(from: string, to: string, filters?: { project_id?: string; activity_type?: string }, cursor?: string, limit?: number) { return this.activityLogRepo.findByDateRange(from, to, filters, cursor, limit); }
+  findActivityLogRecent(limit?: number, filters?: { project_id?: string; activity_type?: string; severity?: string; correlation_id?: string }) { return this.activityLogRepo.findRecent(limit, filters); }
+  findActivityLogSinceFiltered(lastUlid: string, limit?: number, filters?: { project_id?: string; activity_type?: string; severity?: string; correlation_id?: string }) { return this.activityLogRepo.findSinceFiltered(lastUlid, limit, filters); }
+  deleteActivityLogOlderThan(isoDate: string) { return this.activityLogRepo.deleteOlderThan(isoDate); }
   transaction<T>(fn: () => T) { return this.sqlite.transaction(fn)(); }
   close() { this.sqlite.close(); }
 }

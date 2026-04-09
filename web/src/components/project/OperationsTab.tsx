@@ -54,7 +54,7 @@ function groupIncidents(incidents: OpsIncident[], t: (key: string) => string): I
       key,
       severity: latest.severity,
       label: humanizeEventType(typeKey, t),
-      description: humanizeDescription(latest.title || latest.severity, t),
+      description: humanizeDescription(latest, t),
       count: incidents.length,
       firstSeen: Math.min(...incidents.map((i) => new Date(i.created_at).getTime())),
       lastSeen: Math.max(...incidents.map((i) => new Date(i.created_at).getTime())),
