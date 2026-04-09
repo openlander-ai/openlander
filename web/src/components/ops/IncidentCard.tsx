@@ -35,6 +35,23 @@ interface IncidentCardProps {
   incidentProjectId: string;
 }
 
+function formatIncidentDescription(text: string): string {
+  if (!text) return '';
+  let formatted = text;
+  
+  // 1. Force paragraph breaks before sections like [근본 원인] or **Root Cause**
+  formatted = formatted.replace(/(?<!\n\n)(^|\n)(\[[^\]]+\]|\*\*[^*]+\*\*)/g, '\n\n$1$2');
+  
+  // 2. Force paragraph breaks before lists so they render properly instead of merging with text
+  formatted = formatted.replace(/(?<!\n\n)(^|\n)(\s*[-*]|\s*\d+\.)/g, '\n\n$1$2');
+  
+  // 3. Add double spaces to all single newlines to trigger markdown <br /> rendering.
+  // This preserves AI line breaks inside a single paragraph block.
+  formatted = formatted.replace(/([^\s])(\n)/g, '$1  $2');
+  
+  return formatted.trim();
+}
+
 export function IncidentCard({ group, projectName, incidentProjectId }: IncidentCardProps) {
   const { t, language } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
@@ -57,6 +74,7 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
   };
 
   const isCritical = group.severity === 'critical';
+  const formattedDescription = formatIncidentDescription(group.description);
 
   return (
     <Card
@@ -117,15 +135,15 @@ export function IncidentCard({ group, projectName, incidentProjectId }: Incident
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[13px] text-primary-ol font-body
-                  prose-p:leading-[1.7] prose-p:whitespace-pre-wrap prose-p:mb-4 last:prose-p:mb-0
-                  prose-headings:text-primary-ol prose-headings:text-[15px] prose-headings:font-semibold prose-headings:mb-2 prose-headings:mt-4 first:prose-headings:mt-0
+                  prose-p:leading-[1.7] prose-p:mb-5 last:prose-p:mb-0
+                  prose-headings:text-primary-ol prose-headings:text-[15px] prose-headings:font-bold prose-headings:mb-3 prose-headings:mt-6 first:prose-headings:mt-0
                   prose-a:text-agent prose-a:no-underline hover:prose-a:underline 
                   prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-none prose-code:after:content-none prose-code:font-mono prose-code:text-[12px]
-                  prose-strong:text-primary-ol prose-strong:font-bold
+                  prose-strong:text-primary-ol prose-strong:font-bold prose-strong:text-[14px]
                   prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-xs prose-pre:rounded-lg
-                  prose-ul:pl-5 prose-ol:pl-5 prose-li:my-1.5 prose-li:leading-[1.7]"
+                  prose-ul:pl-5 prose-ol:pl-5 prose-li:my-1 prose-li:leading-[1.6]"
               >
-                {group.description}
+                {formattedDescription}
               </ReactMarkdown>
             </div>
           </div>
