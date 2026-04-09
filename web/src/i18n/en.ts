@@ -543,7 +543,7 @@ export const translations = {
   },
   opsV2: {
     page: {
-      title: 'Operations Center v2',
+      title: 'Operations Center',
       description: 'Unified timeline of all system events, active issues, and pending actions.',
     },
     statusStrip: {
@@ -552,6 +552,10 @@ export const translations = {
       approvalCount: '{count} pending approvals',
       circuitBreakerCount: '{count} circuit breakers open',
       agentStatus: 'Agent Status',
+      healthy: 'Healthy',
+      degraded: 'Degraded',
+      critical: 'Critical',
+      unknown: 'Unknown',
     },
     rail: {
       approvals: 'Approvals',

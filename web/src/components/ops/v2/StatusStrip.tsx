@@ -32,25 +32,25 @@ const HEALTH_CONFIG = {
     icon: CheckCircle2,
     color: 'text-success',
     bg: 'bg-success/10',
-    label: 'Healthy',
+    labelKey: 'opsV2.statusStrip.healthy',
   },
   degraded: {
     icon: AlertTriangle,
     color: 'text-warning',
     bg: 'bg-warning/10',
-    label: 'Degraded',
+    labelKey: 'opsV2.statusStrip.degraded',
   },
   critical: {
     icon: XCircle,
     color: 'text-error',
     bg: 'bg-error/10',
-    label: 'Critical',
+    labelKey: 'opsV2.statusStrip.critical',
   },
   unknown: {
     icon: HelpCircle,
     color: 'text-muted-ol',
     bg: 'bg-muted/10',
-    label: 'Unknown',
+    labelKey: 'opsV2.statusStrip.unknown',
   },
 } as const;
 
@@ -102,7 +102,7 @@ export function StatusStrip({
             health.color,
           )}
         >
-          {health.label}
+          {t(health.labelKey)}
         </span>
       </div>
 

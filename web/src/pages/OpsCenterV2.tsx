@@ -185,23 +185,6 @@ export function OpsCenterV2() {
               <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
                 {t('opsV2.page.title')}
               </h1>
-              <p className="mt-1 text-sm text-muted-ol font-body">{t('opsV2.page.description')}</p>
-              {!isLoading && (
-                <span
-                  className={
-                    isConnected
-                      ? 'inline-flex items-center gap-1 text-xs text-success'
-                      : 'inline-flex items-center gap-1 text-xs text-muted-ol'
-                  }
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-success' : 'bg-muted-ol'}`}
-                  />
-                  {isConnected
-                    ? t('opsV2.connection.connected')
-                    : t('opsV2.connection.disconnected')}
-                </span>
-              )}
             </div>
 
             {/* Filters */}

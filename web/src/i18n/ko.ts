@@ -540,7 +540,7 @@ export const translations = {
   },
   opsV2: {
     page: {
-      title: '운영 센터 v2',
+      title: '운영 센터',
       description: '모든 시스템 이벤트, 활성 문제, 대기 중인 작업의 통합 타임라인입니다.',
     },
     statusStrip: {
@@ -549,6 +549,10 @@ export const translations = {
       approvalCount: '{count}개 승인 대기',
       circuitBreakerCount: '{count}개 서킷 브레이커 개방',
       agentStatus: '에이전트 상태',
+      healthy: '정상',
+      degraded: '불안정',
+      critical: '위험',
+      unknown: '알 수 없음',
     },
     rail: {
       approvals: '승인 목록',

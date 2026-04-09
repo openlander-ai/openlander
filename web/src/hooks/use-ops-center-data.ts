@@ -99,6 +99,20 @@ export function useOpsCenterData(): OpsCenterData {
         if (!resp.ok || !resp.body) {
           if (!cancelledRef.current) {
             setError(`Stream error: ${resp.status}`);
+            setIsConnected(false);
+
+            // Auto-retry with exponential backoff on non-OK responses
+            if (retriesRef.current < MAX_RETRIES) {
+              retriesRef.current += 1;
+              setIsReconnecting(true);
+              const delay = BASE_RETRY_DELAY * Math.pow(2, retriesRef.current - 1);
+              setTimeout(() => {
+                if (!cancelledRef.current) {
+                  setIsReconnecting(false);
+                  connect();
+                }
+              }, delay);
+            }
           }
           return;
         }
