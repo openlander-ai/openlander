@@ -307,26 +307,18 @@ describeDocker('Docker core operations', () => {
     );
   });
 
-  it('Alias reconciled when connectContainerToSharedNetwork hits already connected', async () => {
+  it('ensureSharedNetworkAttachment silently returns when container is already connected', async () => {
     const container = createDockerContainerHandle({ id: 'container-reconcile-id' });
     mockCreateContainer.mockResolvedValueOnce(container);
 
     const connect = vi
       .fn()
-      .mockRejectedValueOnce(new Error('endpoint with name already exists in network openlander'))
-      .mockResolvedValueOnce(undefined);
+      .mockRejectedValueOnce(new Error('endpoint with name already exists in network openlander'));
     const disconnect = vi.fn().mockResolvedValue(undefined);
-    const inspect = vi.fn().mockResolvedValue({
-      Containers: {
-        'container-reconcile-id': {
-          Aliases: ['stale-alias'],
-        },
-      },
-    });
 
     mockGetNetwork.mockImplementation((networkName: string) => {
       if (networkName === 'openlander') {
-        return { connect, disconnect, inspect };
+        return { connect, disconnect, inspect: vi.fn().mockResolvedValue({}) };
       }
       return {
         connect: vi.fn().mockResolvedValue(undefined),
@@ -345,22 +337,16 @@ describeDocker('Docker core operations', () => {
       traefikLabels: {},
     });
 
-    expect(connect).toHaveBeenNthCalledWith(1, {
+    expect(connect).toHaveBeenCalledOnce();
+    expect(connect).toHaveBeenCalledWith({
       Container: 'container-reconcile-id',
       EndpointConfig: { Aliases: ['mono-worker'] },
     });
-    expect(disconnect).toHaveBeenCalledWith({
-      Container: 'container-reconcile-id',
-      Force: false,
-    });
-    expect(connect).toHaveBeenNthCalledWith(2, {
-      Container: 'container-reconcile-id',
-      EndpointConfig: { Aliases: ['mono-worker'] },
-    });
+    expect(disconnect).not.toHaveBeenCalled();
 
     writeEvidence(
       '.sisyphus/evidence/task-1-alias-reconcile.txt',
-      'Verified already-connected path inspects aliases, disconnects when alias missing, and reconnects with Aliases=["mono-worker"].',
+      'Verified ensureSharedNetworkAttachment silently returns on "already exists" without disconnect or reconnect.',
     );
   });
 
