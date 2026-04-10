@@ -667,8 +667,7 @@ export class ComposePipeline {
       for (const service of filteredComposeProject.services) {
         const staleContainerName = composeContainerName(parentName, service.name);
         try {
-          const existing = this.docker.getClient().getContainer(staleContainerName);
-          await existing.remove({ force: true });
+          await this.docker.safeRemoveContainer(staleContainerName);
         } catch {
           // container doesn't exist — expected
         }
