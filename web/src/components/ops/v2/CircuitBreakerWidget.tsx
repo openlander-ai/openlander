@@ -1,7 +1,19 @@
-import { ShieldAlert } from 'lucide-react';
+import { useState } from 'react';
+import { ShieldAlert, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '../../../lib/utils.js';
 import { useLanguage } from '../../../i18n/context.js';
+import { resetCircuitBreaker } from '../../../lib/api/operations.js';
 import type { CircuitBreakerWithProject } from '../../../lib/api/operations.js';
+import { Button } from '../../ui/button.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '../../ui/dialog.js';
 
 interface CircuitBreakerWidgetProps {
   circuitBreakers: CircuitBreakerWithProject[];
@@ -25,6 +37,81 @@ const STATE_STYLES: Record<'open' | 'half_open' | 'closed', { badge: string; lab
   },
 };
 
+function CircuitBreakerItem({ cb }: { cb: CircuitBreakerWithProject }) {
+  const { t } = useLanguage();
+  const [isResetting, setIsResetting] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const state = cb.state as 'open' | 'half_open' | 'closed';
+  const styles = STATE_STYLES[state] ?? STATE_STYLES.closed;
+  const isOpen = state === 'open';
+
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      await resetCircuitBreaker(cb.projectId);
+      toast.success(t('opsV2.widgets.circuitBreakers.resetSuccess'));
+      setShowConfirm(false);
+    } catch {
+      toast.error(t('opsV2.widgets.circuitBreakers.resetError'));
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between rounded px-2 py-1 text-xs hover:bg-bg-subtle transition-colors group">
+        <span className="min-w-0 flex-1 truncate text-foreground" title={cb.projectName}>
+          {cb.projectName}
+        </span>
+        <div className="flex items-center gap-1">
+          {isOpen && (
+            <button
+              type="button"
+              onClick={() => setShowConfirm(true)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-bg-panel rounded text-muted-foreground hover:text-foreground"
+              title={t('opsV2.widgets.circuitBreakers.reset')}
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          )}
+          <span
+            className={cn('shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold', styles.badge)}
+          >
+            {t(styles.label)}
+          </span>
+        </div>
+      </div>
+
+      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('opsV2.widgets.circuitBreakers.resetConfirmTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('opsV2.widgets.circuitBreakers.resetConfirmDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConfirm(false)}
+              disabled={isResetting}
+            >
+              {t('opsV2.approvals.confirmCancel')}
+            </Button>
+            <Button size="sm" onClick={() => void handleReset()} disabled={isResetting}>
+              {isResetting ? <RefreshCw className="h-3 w-3 animate-spin mr-2" /> : null}
+              {t('opsV2.widgets.circuitBreakers.reset')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function CircuitBreakerWidget({ circuitBreakers, onFilter }: CircuitBreakerWidgetProps) {
   const { t } = useLanguage();
 
@@ -47,28 +134,9 @@ export function CircuitBreakerWidget({ circuitBreakers, onFilter }: CircuitBreak
 
       {hasAny && (
         <div className="flex flex-col gap-0.5">
-          {visible.map((cb) => {
-            const state = cb.state as 'open' | 'half_open' | 'closed';
-            const styles = STATE_STYLES[state] ?? STATE_STYLES.closed;
-            return (
-              <div
-                key={cb.projectId}
-                className="flex items-center justify-between rounded px-2 py-1 text-xs"
-              >
-                <span className="min-w-0 flex-1 truncate text-foreground" title={cb.projectName}>
-                  {cb.projectName}
-                </span>
-                <span
-                  className={cn(
-                    'ml-2 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold',
-                    styles.badge,
-                  )}
-                >
-                  {t(styles.label)}
-                </span>
-              </div>
-            );
-          })}
+          {visible.map((cb) => (
+            <CircuitBreakerItem key={cb.projectId} cb={cb} />
+          ))}
 
           {hiddenCount > 0 && (
             <button

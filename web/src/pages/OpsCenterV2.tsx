@@ -6,6 +6,7 @@ import { StatusStrip } from '@/components/ops/v2/StatusStrip';
 import { LeftRail } from '@/components/ops/v2/LeftRail';
 import { MainFeedGrid } from '@/components/ops/v2/MainFeedGrid';
 import { FilterBar, useFilterSearchParams } from '@/components/ops/v2/FilterBar';
+import { CircuitBreakerWidget } from '@/components/ops/v2/CircuitBreakerWidget';
 import { cn } from '@/lib/utils';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
 
@@ -221,7 +222,19 @@ export function OpsCenterV2() {
             )}
 
             {/* Filters */}
-            <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
+            <div className="flex flex-col lg:flex-row gap-6 items-start">
+              <div className="flex-1 w-full">
+                <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
+              </div>
+              {circuitBreakers.length > 0 && (
+                <div className="w-full lg:w-64 shrink-0 bg-bg-subtle/30 rounded-lg border border-[hsl(var(--border))] p-3">
+                  <CircuitBreakerWidget
+                    circuitBreakers={circuitBreakers}
+                    onFilter={() => setFilters({ density: 'actions-only' })}
+                  />
+                </div>
+              )}
+            </div>
 
             {/* Main content — feed grid */}
             <main className="min-w-0">

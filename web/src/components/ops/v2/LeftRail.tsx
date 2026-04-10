@@ -1,12 +1,30 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CheckSquare, AlertCircle, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  CheckSquare,
+  AlertCircle,
+  ShieldAlert,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+} from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '../../../lib/utils.js';
 import { useLanguage } from '../../../i18n/context.js';
 import { ScrollArea } from '../../ui/scroll-area.js';
 import { humanizeEventType, relativeTime } from '../utils.js';
 import { SeverityBadge } from '../SeverityBadge.js';
+import { resetCircuitBreaker } from '../../../lib/api/operations.js';
 import type { OpsIncident, CircuitBreakerWithProject } from '../../../lib/api/operations.js';
 import type { ActionRun } from '../../../lib/api/projects.js';
+import { Button } from '../../ui/button.js';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '../../ui/dialog.js';
 
 const STORAGE_KEY = 'ops-v2-rail-collapsed';
 
@@ -162,11 +180,28 @@ function CircuitBreakerRow({
   index: number;
   collapsed: boolean;
 }) {
+  const { t } = useLanguage();
+  const [isResetting, setIsResetting] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   const isOpen = breaker.state === 'open';
   const isHalfOpen = breaker.state === 'half_open';
   const dotColor = isOpen ? 'bg-error' : isHalfOpen ? 'bg-warning' : 'bg-success';
   const displayName = breaker.projectName || `CB #${index + 1}`;
   const label = `${displayName}: ${breaker.state}`;
+
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      await resetCircuitBreaker(breaker.projectId);
+      toast.success(t('opsV2.widgets.circuitBreakers.resetSuccess'));
+      setShowConfirm(false);
+    } catch {
+      toast.error(t('opsV2.widgets.circuitBreakers.resetError'));
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   if (collapsed) {
     return (
@@ -177,10 +212,49 @@ function CircuitBreakerRow({
   }
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-bg-subtle transition-colors">
-      <span className={cn('h-2 w-2 rounded-full shrink-0', dotColor)} />
-      <span className="text-xs font-body text-primary-ol truncate">{label}</span>
-    </div>
+    <>
+      <div className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-bg-subtle transition-colors group">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={cn('h-2 w-2 rounded-full shrink-0', dotColor)} />
+          <span className="text-xs font-body text-primary-ol truncate">{label}</span>
+        </div>
+        {isOpen && (
+          <button
+            type="button"
+            onClick={() => setShowConfirm(true)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-bg-panel rounded text-muted-ol hover:text-primary-ol"
+            title={t('opsV2.widgets.circuitBreakers.reset')}
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('opsV2.widgets.circuitBreakers.resetConfirmTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('opsV2.widgets.circuitBreakers.resetConfirmDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConfirm(false)}
+              disabled={isResetting}
+            >
+              {t('opsV2.approvals.confirmCancel')}
+            </Button>
+            <Button size="sm" onClick={() => void handleReset()} disabled={isResetting}>
+              {isResetting ? <RefreshCw className="h-3 w-3 animate-spin mr-2" /> : null}
+              {t('opsV2.widgets.circuitBreakers.reset')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
