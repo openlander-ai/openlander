@@ -88,47 +88,51 @@ export function OpsCenterV2() {
   }, [isBelowMd]);
 
   // Keyboard shortcuts
-  const threadCount = useMemo(() => {
-    const threads = activities.length > 0 ? activities.length : 0;
-    return threads;
-  }, [activities]);
+  const [threadCount, setThreadCount] = useState(0);
 
-  useKeyboardShortcuts([
-    {
-      key: 'j',
-      handler: () => {
-        setCurrentFocusIndex((prev) => Math.min(prev + 1, Math.max(0, threadCount - 1)));
+  const shortcuts = useMemo(
+    () => [
+      {
+        key: 'j',
+        handler: () => {
+          setCurrentFocusIndex((prev) => Math.min(prev + 1, Math.max(0, threadCount - 1)));
+        },
       },
-    },
-    {
-      key: 'k',
-      handler: () => {
-        setCurrentFocusIndex((prev) => Math.max(prev - 1, 0));
+      {
+        key: 'k',
+        handler: () => {
+          setCurrentFocusIndex((prev) => Math.max(prev - 1, 0));
+        },
       },
-    },
-    {
-      key: '/',
-      handler: () => {
-        const searchInput = document.querySelector(
-          '[data-testid="incident-search-input"]',
-        ) as HTMLInputElement;
-        searchInput?.focus();
+      {
+        key: '/',
+        handler: () => {
+          const searchInput = document.querySelector(
+            '[data-testid="incident-search-input"]',
+          ) as HTMLInputElement;
+          searchInput?.focus();
+        },
       },
-    },
-    {
-      key: 'Escape',
-      handler: () => {
-        setSelectedIncidentId(null);
+      {
+        key: 'Escape',
+        handler: () => {
+          setSelectedIncidentId(null);
+        },
       },
-    },
-    {
-      key: '?',
-      handler: () => {
-        const helpButton = document.querySelector('[aria-label*="Keyboard"]') as HTMLButtonElement;
-        helpButton?.click();
+      {
+        key: '?',
+        handler: () => {
+          const helpButton = document.querySelector(
+            '[data-testid="keyboard-shortcuts-help-btn"]',
+          ) as HTMLButtonElement;
+          helpButton?.click();
+        },
       },
-    },
-  ]);
+    ],
+    [threadCount],
+  );
+
+  useKeyboardShortcuts(shortcuts);
 
   const healthState = deriveHealthState(incidents, circuitBreakers);
   const trippedCount = circuitBreakers.filter((cb) => cb.state === 'open').length;
@@ -326,7 +330,8 @@ export function OpsCenterV2() {
                   <div className="w-full lg:w-64 shrink-0 bg-bg-subtle/30 rounded-lg border border-[hsl(var(--border))] p-3">
                     <CircuitBreakerWidget
                       circuitBreakers={circuitBreakers}
-                      onFilter={() => setFilters({ density: 'actions-only' })}
+                      onFilter={() => setFilters({ ...filters, density: 'actions-only' })}
+                      onReset={retry}
                     />
                   </div>
                 )}
@@ -338,9 +343,10 @@ export function OpsCenterV2() {
                 <MainFeedGrid
                   activities={filteredActivities}
                   isFiltered={activities.length > 0 && filteredActivities.length === 0}
-                  onClearFilters={() => setFilters({ density: 'all' })}
+                  onClearFilters={() => setFilters({ ...filters, density: 'all' })}
                   onThreadSelect={handleThreadSelect}
                   focusedIndex={currentFocusIndex}
+                  onThreadCountChange={setThreadCount}
                 />
               ) : (
                 <div className="h-[600px] w-full">

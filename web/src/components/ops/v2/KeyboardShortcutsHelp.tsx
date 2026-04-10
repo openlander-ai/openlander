@@ -31,6 +31,7 @@ export function KeyboardShortcutsHelp({ className }: KeyboardShortcutsHelpProps)
             className,
           )}
           aria-label={t('opsV2.shortcuts.helpLabel')}
+          data-testid="keyboard-shortcuts-help-btn"
         >
           <HelpCircle className="h-4 w-4" />
         </button>

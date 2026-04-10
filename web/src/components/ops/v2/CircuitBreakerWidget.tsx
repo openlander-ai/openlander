@@ -18,6 +18,7 @@ import {
 interface CircuitBreakerWidgetProps {
   circuitBreakers: CircuitBreakerWithProject[];
   onFilter?: () => void;
+  onReset?: () => void;
 }
 
 const MAX_VISIBLE = 3;
@@ -37,7 +38,13 @@ const STATE_STYLES: Record<'open' | 'half_open' | 'closed', { badge: string; lab
   },
 };
 
-function CircuitBreakerItem({ cb }: { cb: CircuitBreakerWithProject }) {
+function CircuitBreakerItem({
+  cb,
+  onReset,
+}: {
+  cb: CircuitBreakerWithProject;
+  onReset?: () => void;
+}) {
   const { t } = useLanguage();
   const [isResetting, setIsResetting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -52,6 +59,7 @@ function CircuitBreakerItem({ cb }: { cb: CircuitBreakerWithProject }) {
       await resetCircuitBreaker(cb.projectId);
       toast.success(t('opsV2.widgets.circuitBreakers.resetSuccess'));
       setShowConfirm(false);
+      onReset?.();
     } catch {
       toast.error(t('opsV2.widgets.circuitBreakers.resetError'));
     } finally {
@@ -112,7 +120,11 @@ function CircuitBreakerItem({ cb }: { cb: CircuitBreakerWithProject }) {
   );
 }
 
-export function CircuitBreakerWidget({ circuitBreakers, onFilter }: CircuitBreakerWidgetProps) {
+export function CircuitBreakerWidget({
+  circuitBreakers,
+  onFilter,
+  onReset,
+}: CircuitBreakerWidgetProps) {
   const { t } = useLanguage();
 
   const visible = circuitBreakers.slice(0, MAX_VISIBLE);
@@ -135,7 +147,7 @@ export function CircuitBreakerWidget({ circuitBreakers, onFilter }: CircuitBreak
       {hasAny && (
         <div className="flex flex-col gap-0.5">
           {visible.map((cb) => (
-            <CircuitBreakerItem key={cb.projectId} cb={cb} />
+            <CircuitBreakerItem key={cb.projectId} cb={cb} onReset={onReset} />
           ))}
 
           {hiddenCount > 0 && (

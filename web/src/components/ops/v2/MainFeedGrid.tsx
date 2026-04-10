@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
-import { memo, useMemo, useState, useCallback } from 'react';
+import { memo, useMemo, useState, useCallback, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Clock, AlertCircle, FileText } from 'lucide-react';
 import { cn } from '../../../lib/utils.js';
 import { useLanguage } from '../../../i18n/context.js';
@@ -78,6 +78,7 @@ export interface MainFeedGridProps {
   isFiltered?: boolean;
   onClearFilters?: () => void;
   focusedIndex?: number;
+  onThreadCountChange?: (count: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,9 +275,8 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
   const hasLongDescription = !!event.description && event.description.length >= 100;
   const hasAnyDetails = hasDiagnosis || !!event.description;
 
-  const rawTitle =
-    event.title || humanizeEventType(event.type, t as unknown as (key: string) => string);
-  const titleText = localizeTitle(rawTitle, t as unknown as (key: string) => string);
+  const rawTitle = event.title || humanizeEventType(event.type, t);
+  const titleText = localizeTitle(rawTitle, t);
 
   const isDuplicateTitle = threadTitle && titleText === threadTitle;
 
@@ -366,17 +366,20 @@ export function MainFeedGrid({
   isFiltered,
   onClearFilters,
   focusedIndex = 0,
+  onThreadCountChange,
 }: MainFeedGridProps) {
   const { t, language } = useLanguage();
 
   const threadData = useMemo(() => {
-    const threads = groupIntoThreads(activities, t as unknown as (key: string) => string);
+    const threads = groupIntoThreads(activities, t);
     // Pin threads with pending approvals to the top
-    return [
+    const sorted = [
       ...threads.filter((th) => th.hasPendingApproval),
       ...threads.filter((th) => !th.hasPendingApproval),
     ];
-  }, [activities, t]);
+    onThreadCountChange?.(sorted.length);
+    return sorted;
+  }, [activities, t, onThreadCountChange]);
 
   const [visibleThreadCount, setVisibleThreadCount] = useState(THREADS_PAGE_SIZE);
   const [expandedEventsMap, setExpandedEventsMap] = useState<Record<string, number>>({});
@@ -387,6 +390,19 @@ export function MainFeedGrid({
     }
     return initial;
   });
+
+  // Auto-expand pending approval threads when threadData changes
+  useEffect(() => {
+    setExpandedMap((prev) => {
+      const next = { ...prev };
+      for (const th of threadData) {
+        if (th.hasPendingApproval && !prev[th.correlationId]) {
+          next[th.correlationId] = true;
+        }
+      }
+      return next;
+    });
+  }, [threadData]);
 
   const allExpanded =
     threadData.length > 0 && threadData.every((th) => !!expandedMap[th.correlationId]);
@@ -541,23 +557,14 @@ export function MainFeedGrid({
                   <div role="cell" className="min-w-0 flex flex-col justify-center">
                     <span
                       className="truncate text-xs font-medium text-secondary-ol"
-                      title={
-                        thread.title
-                          ? localizeTitle(thread.title, t as unknown as (key: string) => string)
-                          : undefined
-                      }
+                      title={thread.title ? localizeTitle(thread.title, t) : undefined}
                     >
-                      {thread.title
-                        ? localizeTitle(thread.title, t as unknown as (key: string) => string)
-                        : thread.title}
+                      {thread.title ? localizeTitle(thread.title, t) : thread.title}
                     </span>
                     <div className="flex items-center gap-2 mt-0.5">
                       {thread.triggerType && (
                         <span className="truncate text-[10px] font-mono text-muted-ol">
-                          {humanizeEventType(
-                            thread.triggerType,
-                            t as unknown as (key: string) => string,
-                          )}
+                          {humanizeEventType(thread.triggerType, t)}
                         </span>
                       )}
                       {thread.cascadeGroup && thread.cascadeGroup.length > 0 && (
@@ -630,11 +637,7 @@ export function MainFeedGrid({
                     <ThreadEventDenseRow
                       key={event.id}
                       event={event}
-                      threadTitle={
-                        thread.title
-                          ? localizeTitle(thread.title, t as unknown as (key: string) => string)
-                          : undefined
-                      }
+                      threadTitle={thread.title ? localizeTitle(thread.title, t) : undefined}
                     />
                   ))}
 
