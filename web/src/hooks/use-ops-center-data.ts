@@ -46,7 +46,36 @@ export interface OpsCenterData {
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useOpsCenterData(): OpsCenterData {
+function getTimeRangeParams(timeRange?: string): { from?: number; to?: number } {
+  if (!timeRange || timeRange === '_all') return {};
+
+  const now = Date.now();
+  let from: number;
+
+  switch (timeRange) {
+    case '1h':
+      from = now - 60 * 60 * 1000;
+      break;
+    case '6h':
+      from = now - 6 * 60 * 60 * 1000;
+      break;
+    case '24h':
+      from = now - 24 * 60 * 60 * 1000;
+      break;
+    case '7d':
+      from = now - 7 * 24 * 60 * 60 * 1000;
+      break;
+    case '30d':
+      from = now - 30 * 24 * 60 * 60 * 1000;
+      break;
+    default:
+      return {};
+  }
+
+  return { from, to: now };
+}
+
+export function useOpsCenterData(timeRange?: string): OpsCenterData {
   // --- Core state ---
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [incidents, setIncidents] = useState<OpsIncident[]>([]);
@@ -235,13 +264,20 @@ export function useOpsCenterData(): OpsCenterData {
     cancelledRef.current = false;
     setIsLoading(true);
 
+    const { from, to } = getTimeRangeParams(timeRange);
+    const activityParams = new URLSearchParams({ limit: '100' });
+    if (from) activityParams.set('from', String(from));
+    if (to) activityParams.set('to', String(to));
+
     // Parallel REST snapshot
     Promise.all([
-      fetch('/api/ops/activity?limit=100', { credentials: 'include' }).then((r) => {
-        if (!r.ok) throw new Error(`Activity fetch failed: ${r.status}`);
-        return r.json() as Promise<{ activities: ActivityItem[]; nextCursor: string | null }>;
-      }),
-      fetchOpsIncidents(undefined, 'open'),
+      fetch(`/api/ops/activity?${activityParams.toString()}`, { credentials: 'include' }).then(
+        (r) => {
+          if (!r.ok) throw new Error(`Activity fetch failed: ${r.status}`);
+          return r.json() as Promise<{ activities: ActivityItem[]; nextCursor: string | null }>;
+        },
+      ),
+      fetchOpsIncidents(undefined, 'open', undefined, from, to),
       fetchAllCircuitBreakers(),
       fetchPendingApprovals().catch(() => [] as ActionRun[]),
       fetchWithAuth('/api/ops/agent/active')
@@ -291,7 +327,7 @@ export function useOpsCenterData(): OpsCenterData {
       abortRef.current = null;
       dedupSetRef.current.clear();
     };
-  }, [connect]);
+  }, [connect, timeRange]);
 
   // ---------------------------------------------------------------------------
   // Manual retry: reset error and reconnect

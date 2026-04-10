@@ -198,16 +198,21 @@ export function FilterBar({ filters, projects, onFilterChange }: FilterBarProps)
       <div className="flex items-center gap-1.5 shrink-0">
         <span className="text-muted-ol whitespace-nowrap">{t('opsV2.filters.timeRange')}</span>
         <Select value={filters.timeRange ?? '_all'} onValueChange={handleTimeRangeChange}>
-          <SelectTrigger className="h-7 min-w-[90px] text-xs">
+          <SelectTrigger className="h-7 min-w-[110px] text-xs" data-testid="time-range-trigger">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="_all" className="text-xs">
+            <SelectItem value="_all" className="text-xs" data-testid="time-range-option-_all">
               {t('opsV2.filters.density.all')}
             </SelectItem>
             {TIME_RANGE_OPTIONS.map((range) => (
-              <SelectItem key={range} value={range} className="text-xs">
-                {range}
+              <SelectItem
+                key={range}
+                value={range}
+                className="text-xs"
+                data-testid={`time-range-option-${range}`}
+              >
+                {t(`opsV2.filters.timeRangeOptions.${range}`)}
               </SelectItem>
             ))}
           </SelectContent>

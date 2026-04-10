@@ -73,7 +73,7 @@ export interface Thread {
 
 export interface MainFeedGridProps {
   activities: ActivityItem[];
-  onThreadSelect?: (correlationId: string) => void;
+  onThreadSelect?: (correlationId: string, incidentId?: string) => void;
   isFiltered?: boolean;
   onClearFilters?: () => void;
 }
@@ -398,9 +398,9 @@ export function MainFeedGrid({
   }, [allExpanded, threadData]);
 
   const toggleThread = useCallback(
-    (correlationId: string) => {
+    (correlationId: string, incidentId?: string) => {
       setExpandedMap((prev) => ({ ...prev, [correlationId]: !prev[correlationId] }));
-      onThreadSelect?.(correlationId);
+      onThreadSelect?.(correlationId, incidentId);
     },
     [onThreadSelect],
   );
@@ -484,7 +484,12 @@ export function MainFeedGrid({
             <Collapsible
               key={thread.correlationId}
               open={isExpanded}
-              onOpenChange={() => toggleThread(thread.correlationId)}
+              onOpenChange={() =>
+                toggleThread(
+                  thread.correlationId,
+                  thread.events.find((e) => e.incidentId)?.incidentId,
+                )
+              }
               className={cn(
                 'group border-b border-[hsl(var(--border))]/50 last:border-0 transition-colors',
                 isCritical && 'bg-error/5',
