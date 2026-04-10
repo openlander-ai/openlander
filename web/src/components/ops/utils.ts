@@ -147,7 +147,7 @@ export const humanizeEventType = (type: string, t: (key: string) => string): str
   const normalizedKey = extractEventType(type);
   const translated = t(`operations.events.${normalizedKey}`);
 
-  if (translated === `operations.events.${normalizedKey}`) {
+  if (!translated || translated === `operations.events.${normalizedKey}`) {
     return type.replace(/[:_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   }
   return translated;

@@ -33,6 +33,8 @@ const TITLE_PATTERNS: [RegExp, string][] = [
   [/^Deploy crashed$/i, 'opsV2.titles.deployCrash'],
   [/^Deploy failed/i, 'opsV2.titles.deployFailed'],
   [/^Compose failed$/i, 'opsV2.titles.deployFailed'],
+  [/^Circuit breaker open/i, 'opsV2.titles.circuitBreakerOpen'],
+  [/^Circuit breaker reset/i, 'opsV2.titles.circuitBreakerReset'],
 ];
 
 function localizeTitle(title: string, t: (key: string) => string): string {
@@ -41,7 +43,7 @@ function localizeTitle(title: string, t: (key: string) => string): string {
       return t(key);
     }
   }
-  return title;
+  return humanizeEventType(title, t);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +91,10 @@ function eventCategory(type: string): string {
   return type;
 }
 
-function groupIntoThreads(items: ActivityItem[]): Omit<Thread, 'isExpanded'>[] {
+function groupIntoThreads(
+  items: ActivityItem[],
+  t: (key: string) => string,
+): Omit<Thread, 'isExpanded'>[] {
   const threadMap = new Map<string, ActivityItem[]>();
   const orderKeys: string[] = [];
 
@@ -128,7 +133,7 @@ function groupIntoThreads(items: ActivityItem[]): Omit<Thread, 'isExpanded'>[] {
 
     // Try to find a meaningful title
     const activeIncident = events.find((e) => e.type === 'incident');
-    const title = activeIncident?.title || head.title || humanizeEventType(head.type, (k) => k);
+    const title = activeIncident?.title || head.title || humanizeEventType(head.type, t);
     const triggerType = activeIncident?.triggerType;
 
     threads.push({
@@ -272,13 +277,13 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
   const { t, language } = useLanguage();
 
   const threadData = useMemo(() => {
-    const threads = groupIntoThreads(activities);
+    const threads = groupIntoThreads(activities, t as unknown as (key: string) => string);
     // Pin threads with pending approvals to the top
     return [
       ...threads.filter((th) => th.hasPendingApproval),
       ...threads.filter((th) => !th.hasPendingApproval),
     ];
-  }, [activities]);
+  }, [activities, t]);
 
   const [visibleThreadCount, setVisibleThreadCount] = useState(THREADS_PAGE_SIZE);
   const [expandedEventsMap, setExpandedEventsMap] = useState<Record<string, number>>({});

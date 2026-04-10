@@ -12,12 +12,13 @@ export function SeverityBadge({ severity, count, className }: SeverityBadgeProps
   const { t } = useLanguage();
   const isCritical = severity === 'critical';
   const isWarning = severity === 'warning';
+  const isInfo = severity === 'info';
 
   if (isCritical) {
     return (
       <Badge variant="destructive" className={cn('h-5 px-1.5 text-[10px]', className)}>
         {count !== undefined ? `${count} ` : ''}
-        {t('operations.severity.critical')}
+        {t('opsV2.severity.critical')}
       </Badge>
     );
   }
@@ -29,7 +30,19 @@ export function SeverityBadge({ severity, count, className }: SeverityBadgeProps
         className={cn('h-5 px-1.5 text-[10px] text-warning border-warning/50', className)}
       >
         {count !== undefined ? `${count} ` : ''}
-        {t('operations.severity.warning')}
+        {t('opsV2.severity.warning')}
+      </Badge>
+    );
+  }
+
+  if (isInfo) {
+    return (
+      <Badge
+        variant="outline"
+        className={cn('h-5 px-1.5 text-[10px] text-info border-info/50', className)}
+      >
+        {count !== undefined ? `${count} ` : ''}
+        {t('opsV2.severity.info')}
       </Badge>
     );
   }
