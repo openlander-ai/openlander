@@ -1,5 +1,3 @@
-import { PassThrough } from 'node:stream';
-
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
 import type { ContainerExecResult, ServiceCredentials } from './types.js';
@@ -19,90 +17,54 @@ export async function execInServiceContainer(
   command: string[],
   options?: ExecOptions,
 ): Promise<ContainerExecResult> {
-  const client = docker.getClient();
   const containerId = service.container_id ?? service.container_name;
-  const container = client.getContainer(containerId);
-  const exec = await container.exec({
-    Cmd: command,
-    AttachStdin: false,
-    AttachStdout: true,
-    AttachStderr: true,
-    Tty: false,
-  });
-
   const timeoutMs = options?.timeoutMs ?? DEFAULT_EXEC_TIMEOUT_MS;
   const maxBytes = options?.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
 
-  const stream = await exec.start({ hijack: false, stdin: false });
-  const stdoutChunks: Buffer[] = [];
-  const stderrChunks: Buffer[] = [];
-  const state = { stdoutSize: 0, stderrSize: 0, truncated: false, timedOut: false };
-  const stdoutStream = new PassThrough();
-  const stderrStream = new PassThrough();
-
-  stdoutStream.on('data', (chunk: Buffer) => {
-    if (state.stdoutSize < maxBytes) {
-      const remaining = maxBytes - state.stdoutSize;
-      stdoutChunks.push(remaining >= chunk.length ? chunk : chunk.subarray(0, remaining));
-    } else {
-      state.truncated = true;
-    }
-    state.stdoutSize += chunk.length;
-  });
-  stderrStream.on('data', (chunk: Buffer) => {
-    if (state.stderrSize < maxBytes) {
-      const remaining = maxBytes - state.stderrSize;
-      stderrChunks.push(remaining >= chunk.length ? chunk : chunk.subarray(0, remaining));
-    } else {
-      state.truncated = true;
-    }
-    state.stderrSize += chunk.length;
-  });
-
-  client.modem.demuxStream(stream, stdoutStream, stderrStream);
-
-  const streamDone = new Promise<void>((resolve, reject) => {
-    stream.on('error', reject);
-    stream.on('end', resolve);
-  });
-
-  const timer = setTimeout(() => {
-    state.timedOut = true;
-    stream.destroy();
-  }, timeoutMs);
+  let execResult: { exitCode: number; stdout: string; stderr: string };
+  let timedOut = false;
 
   try {
-    await streamDone;
-  } catch {
-    if (!state.timedOut) throw new Error(`Exec stream error for service: ${service.id}`);
-  } finally {
-    clearTimeout(timer);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('exec timeout'));
+      }, timeoutMs);
+    });
+
+    execResult = await Promise.race([docker.execSimple(containerId, command), timeoutPromise]);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'exec timeout') {
+      timedOut = true;
+      execResult = { exitCode: -1, stdout: '', stderr: '' };
+    } else {
+      throw error;
+    }
   }
 
-  if (state.timedOut) {
-    const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-    const stderr = Buffer.concat(stderrChunks).toString('utf8');
-    return { stdout, stderr, exitCode: -1, truncated: true };
+  if (timedOut) {
+    return { stdout: '', stderr: '', exitCode: -1, truncated: true };
   }
 
-  const info = await exec.inspect();
-  const exitCode = info.ExitCode;
-  if (typeof exitCode !== 'number') {
-    throw new Error(`Container command did not report an exit code for service: ${service.id}`);
-  }
+  const truncated = execResult.stdout.length > maxBytes || execResult.stderr.length > maxBytes;
+  const stdout =
+    execResult.stdout.length > maxBytes ? execResult.stdout.slice(0, maxBytes) : execResult.stdout;
+  const stderr =
+    execResult.stderr.length > maxBytes ? execResult.stderr.slice(0, maxBytes) : execResult.stderr;
 
-  const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-  const stderr = Buffer.concat(stderrChunks).toString('utf8');
-
-  if (options?.throwOnNonZeroExit !== false && exitCode !== 0) {
+  if (options?.throwOnNonZeroExit !== false && execResult.exitCode !== 0) {
     const commandText = command.join(' ');
     const output = stderr.trim() || stdout.trim();
     throw new Error(
-      `Container command failed (${commandText}) with exit code ${String(exitCode)}${output ? `: ${output}` : ''}`,
+      `Container command failed (${commandText}) with exit code ${String(execResult.exitCode)}${output ? `: ${output}` : ''}`,
     );
   }
 
-  return { stdout, stderr, exitCode, ...(state.truncated ? { truncated: true } : {}) };
+  return {
+    stdout,
+    stderr,
+    exitCode: execResult.exitCode,
+    ...(truncated ? { truncated: true } : {}),
+  };
 }
 
 export function parseServiceCredentials(service: ServiceRow): ServiceCredentials {

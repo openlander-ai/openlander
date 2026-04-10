@@ -1,5 +1,3 @@
-import { PassThrough } from 'node:stream';
-
 import type { Docker } from '../docker.js';
 
 export interface ConnectivityResult {
@@ -13,13 +11,6 @@ export interface ConnectivityResult {
 interface EndpointTarget {
   hostname: string;
   port?: number;
-}
-
-interface ContainerCommandResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-  startFailed: boolean;
 }
 
 const DEFAULT_PORT_BY_PROTOCOL: Record<string, number> = {
@@ -121,45 +112,13 @@ async function runInContainer(
   docker: Docker,
   containerId: string,
   command: string[],
-): Promise<ContainerCommandResult> {
-  const client = docker.getClient();
-  const container = client.getContainer(containerId);
-
+): Promise<{ stdout: string; stderr: string; exitCode: number; startFailed: boolean }> {
   try {
-    const exec = await container.exec({
-      Cmd: command,
-      AttachStdin: false,
-      AttachStdout: true,
-      AttachStderr: true,
-      Tty: false,
-    });
-
-    const stream = await exec.start({ hijack: false, stdin: false });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    const stdoutStream = new PassThrough();
-    const stderrStream = new PassThrough();
-
-    stdoutStream.on('data', (chunk: Buffer) => {
-      stdoutChunks.push(chunk);
-    });
-    stderrStream.on('data', (chunk: Buffer) => {
-      stderrChunks.push(chunk);
-    });
-
-    client.modem.demuxStream(stream, stdoutStream, stderrStream);
-
-    await new Promise<void>((resolve, reject) => {
-      stream.on('error', reject);
-      stream.on('end', resolve);
-    });
-
-    const info = await exec.inspect();
-    const exitCode = typeof info.ExitCode === 'number' ? info.ExitCode : 1;
+    const result = await docker.execSimple(containerId, command);
     return {
-      stdout: Buffer.concat(stdoutChunks).toString('utf8'),
-      stderr: Buffer.concat(stderrChunks).toString('utf8'),
-      exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
       startFailed: false,
     };
   } catch (error) {
