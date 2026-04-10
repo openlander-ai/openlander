@@ -39,6 +39,7 @@ export interface LeftRailProps {
   onIncidentSelect?: (incidentId: string) => void;
   /** When true, forces icon-only collapsed mode regardless of local state */
   forceCollapsed?: boolean;
+  searchInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 interface SectionHeaderProps {
@@ -278,6 +279,7 @@ export function LeftRail({
   onFilterChange,
   onIncidentSelect,
   forceCollapsed,
+  searchInputRef,
 }: LeftRailProps) {
   const { t } = useLanguage();
 
@@ -479,6 +481,7 @@ export function LeftRail({
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-ol" />
                   <Input
+                    ref={searchInputRef}
                     data-testid="incident-search-input"
                     placeholder={t('opsV2.rail.searchIncidents')}
                     value={searchQuery}

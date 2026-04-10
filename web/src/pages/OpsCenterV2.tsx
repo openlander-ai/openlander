@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, useRef } from 'react';
 import { X, AlertCircle, RefreshCw, Loader2, Activity, Network } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { useOpsCenterData } from '@/hooks/use-ops-center-data';
@@ -73,6 +73,10 @@ export function OpsCenterV2() {
   // Keyboard shortcuts state
   const [currentFocusIndex, setCurrentFocusIndex] = useState(0);
 
+  // Refs for keyboard shortcuts
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const helpButtonRef = useRef<HTMLButtonElement>(null);
+
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
@@ -107,10 +111,7 @@ export function OpsCenterV2() {
       {
         key: '/',
         handler: () => {
-          const searchInput = document.querySelector(
-            '[data-testid="incident-search-input"]',
-          ) as HTMLInputElement;
-          searchInput?.focus();
+          searchInputRef.current?.focus();
         },
       },
       {
@@ -122,10 +123,7 @@ export function OpsCenterV2() {
       {
         key: '?',
         handler: () => {
-          const helpButton = document.querySelector(
-            '[data-testid="keyboard-shortcuts-help-btn"]',
-          ) as HTMLButtonElement;
-          helpButton?.click();
+          helpButtonRef.current?.click();
         },
       },
     ],
@@ -196,6 +194,7 @@ export function OpsCenterV2() {
             circuitBreakers={circuitBreakers}
             forceCollapsed={isBelowLg ? true : undefined}
             onIncidentSelect={setSelectedIncidentId}
+            searchInputRef={searchInputRef}
           />
         </div>
 
@@ -245,6 +244,7 @@ export function OpsCenterV2() {
                   setSelectedIncidentId(id);
                   closeDrawer();
                 }}
+                searchInputRef={searchInputRef}
               />
             </div>
           </>
@@ -259,7 +259,7 @@ export function OpsCenterV2() {
                 {t('opsV2.page.title')}
               </h1>
               <div className="flex items-center gap-3">
-                <KeyboardShortcutsHelp />
+                <KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />
                 <div className="flex items-center bg-bg-subtle rounded-lg p-1 border border-[hsl(var(--border))]">
                   <button
                     onClick={() => setViewMode('feed')}

@@ -218,7 +218,7 @@ const ROW_GRID_CLASSES =
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function EventDetailsContent({
+const EventDetailsContent = memo(function EventDetailsContent({
   event,
   detailsOpen,
 }: {
@@ -258,7 +258,7 @@ function EventDetailsContent({
       )}
     </div>
   );
-}
+});
 
 const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
   event,

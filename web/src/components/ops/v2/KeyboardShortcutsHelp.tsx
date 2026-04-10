@@ -9,9 +9,10 @@ import { cn } from '../../../lib/utils.js';
 
 export interface KeyboardShortcutsHelpProps {
   className?: string;
+  helpButtonRef?: React.RefObject<HTMLButtonElement | null>;
 }
 
-export function KeyboardShortcutsHelp({ className }: KeyboardShortcutsHelpProps) {
+export function KeyboardShortcutsHelp({ className, helpButtonRef }: KeyboardShortcutsHelpProps) {
   const { t } = useLanguage();
 
   const shortcuts = [
@@ -26,6 +27,7 @@ export function KeyboardShortcutsHelp({ className }: KeyboardShortcutsHelpProps)
     <Popover>
       <PopoverTrigger asChild>
         <button
+          ref={helpButtonRef}
           className={cn(
             'inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-subtle hover:text-foreground transition-colors',
             className,

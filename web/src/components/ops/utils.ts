@@ -99,42 +99,6 @@ export function getRiskTone(toolName: string | null): 'destructive' | 'diagnosti
   return 'neutral';
 }
 
-export const TOOL_HUMAN_LABELS: Record<
-  string,
-  { ko: string; en: string; impact_ko: string; impact_en: string }
-> = {
-  rollback: {
-    ko: '이전 버전으로 롤백',
-    en: 'Rollback to previous version',
-    impact_ko: '서비스 일시 중단 (~15초)',
-    impact_en: 'Brief service interruption (~15s)',
-  },
-  restart_container: {
-    ko: '컨테이너 재시작',
-    en: 'Restart container',
-    impact_ko: '서비스 일시 중단 (~10초)',
-    impact_en: 'Brief service interruption (~10s)',
-  },
-  diagnose_crash: {
-    ko: '크래시 원인 분석',
-    en: 'Analyze crash cause',
-    impact_ko: '변경 없음 (읽기 전용)',
-    impact_en: 'No changes (read-only)',
-  },
-  stop_project: {
-    ko: '프로젝트 중지',
-    en: 'Stop project',
-    impact_ko: '서비스 완전 중단',
-    impact_en: 'Full service shutdown',
-  },
-  apply_fixes: {
-    ko: '자동 진단결과 반영',
-    en: 'Apply automated fixes',
-    impact_ko: '리소스 롤아웃 및 수정 (가능성 있음)',
-    impact_en: 'Resource rollout & modifications',
-  },
-};
-
 export const extractEventType = (type: string | undefined): string => {
   if (!type) return 'unknown';
   if (type.startsWith('ai:')) {

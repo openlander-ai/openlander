@@ -197,6 +197,14 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
                 continue;
               }
 
+              if (
+                !parsed ||
+                typeof parsed !== 'object' ||
+                !('type' in parsed) ||
+                !('created_at' in parsed)
+              ) {
+                continue;
+              }
               const item = parsed as unknown as ActivityItem;
               if (!item || typeof item.id !== 'string' || typeof item.type !== 'string') continue;
 
