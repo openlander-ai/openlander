@@ -46,6 +46,7 @@ export interface EnvironmentRow {
   image_tag: string | null;
   previous_image_tag: string | null;
   public_url: string | null;
+  container_port: number | null;
   created_at: string;
   updated_at: string;
 }

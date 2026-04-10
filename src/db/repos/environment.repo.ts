@@ -69,6 +69,7 @@ export class EnvironmentRepo {
       imageTag: string | null;
       previousImageTag: string | null;
       publicUrl: string | null;
+      containerPort: number | null;
     }>,
   ): void {
     const setValues: Partial<typeof environments.$inferInsert> = {};
@@ -93,6 +94,9 @@ export class EnvironmentRepo {
     }
     if (updates.publicUrl !== undefined) {
       setValues.public_url = updates.publicUrl;
+    }
+    if (updates.containerPort !== undefined) {
+      setValues.container_port = updates.containerPort;
     }
 
     if (Object.keys(setValues).length === 0) return;

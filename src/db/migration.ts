@@ -88,11 +88,21 @@ export function runMigrations(sqlite: SqliteDatabase): void {
     image_tag TEXT,
     previous_image_tag TEXT,
     public_url TEXT,
+    container_port INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(project_id, type)
   )`);
   sqlite.exec('CREATE INDEX IF NOT EXISTS idx_environments_project ON environments(project_id)');
+
+  const environmentColumns = sqlite.prepare("PRAGMA table_info('environments')").all() as Array<{
+    name: string;
+  }>;
+  const environmentColNames = new Set(environmentColumns.map((c) => c.name));
+
+  if (!environmentColNames.has('container_port')) {
+    sqlite.exec('ALTER TABLE environments ADD COLUMN container_port INTEGER');
+  }
 
   const envVarColumns = sqlite.prepare("PRAGMA table_info('env_vars')").all() as Array<{
     name: string;

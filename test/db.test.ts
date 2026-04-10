@@ -9,6 +9,7 @@ import { ProjectAlreadyExistsError } from '../src/errors.js';
 
 type LegacySqlite = {
   exec: (sql: string) => unknown;
+  prepare: (sql: string) => { all: () => unknown };
   close: () => void;
 };
 
@@ -430,6 +431,38 @@ describe('Database', () => {
       expect(() =>
         db.createProject({ id: 'p2', name: 'app-2', repoUrl: 'https://github.com/test/b' }),
       ).not.toThrow();
+    });
+  });
+
+  describe('Environments container_port', () => {
+    beforeEach(() => {
+      db.createProject({ id: 'p1', name: 'my-app', repoUrl: 'https://github.com/test/a' });
+    });
+
+    it('environments table has container_port column after migration', () => {
+      const dbPath = join(tmpDir, 'test.db');
+      const sqlite = createLegacySqlite(dbPath);
+
+      const columns = (
+        sqlite.prepare('PRAGMA table_info(environments)').all() as Array<{
+          name: string;
+        }>
+      ).map((c) => c.name);
+
+      sqlite.close();
+      expect(columns).toContain('container_port');
+    });
+
+    it('updateEnvironment persists containerPort', () => {
+      const envs = db.getEnvironmentsByProject('p1');
+      const env = envs.find((e) => e.type === 'production');
+      expect(env).toBeDefined();
+
+      db.updateEnvironment(env!.id, { containerPort: 8080 });
+
+      const updated = db.getEnvironment(env!.id);
+      expect(updated).toBeDefined();
+      expect(updated!.container_port).toBe(8080);
     });
   });
 });

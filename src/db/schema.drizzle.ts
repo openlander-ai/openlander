@@ -82,6 +82,7 @@ export const environments = sqliteTable(
     image_tag: text('image_tag'),
     previous_image_tag: text('previous_image_tag'),
     public_url: text('public_url'),
+    container_port: integer('container_port'),
     created_at: text('created_at').default(sql`CURRENT_TIMESTAMP`),
     updated_at: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
   },
