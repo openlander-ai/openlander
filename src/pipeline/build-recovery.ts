@@ -72,6 +72,9 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
       /connection timed out/i,
       /TLS handshake timeout/i,
       /fetch failed/i,
+      /network sandbox/i,
+      /failed to create endpoint/i,
+      /network not found/i,
     ],
   },
   {

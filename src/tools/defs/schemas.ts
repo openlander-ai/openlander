@@ -313,6 +313,12 @@ export const getBuildLogSchema = z.object({
     .int()
     .optional()
     .describe('Deploy index (0 = latest, 1 = previous). Default: 0'),
+  tail: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Return only the last N lines of the build log. Useful for large logs.'),
 });
 
 export const debugBuildErrorSchema = z.object({
