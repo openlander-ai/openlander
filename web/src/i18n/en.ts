@@ -582,6 +582,10 @@ export const translations = {
       expandSidebar: 'Expand sidebar',
       collapseSidebar: 'Collapse sidebar',
     },
+    nav: {
+      openNavigation: 'Open navigation',
+      closeNavigation: 'Close navigation',
+    },
     timeline: {
       threadTitle: '{project} — {type}',
       eventCount: '{count} events',

@@ -225,7 +225,7 @@ export function OpsCenterV2() {
                 <button
                   type="button"
                   onClick={closeDrawer}
-                  aria-label="Close navigation"
+                  aria-label={t('opsV2.nav.closeNavigation')}
                   className="flex items-center justify-center h-6 w-6 rounded-md text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle transition-colors"
                 >
                   <X className="h-4 w-4" />

@@ -579,6 +579,10 @@ export const translations = {
       expandSidebar: '사이드바 펼치기',
       collapseSidebar: '사이드바 접기',
     },
+    nav: {
+      openNavigation: '내비게이션 열기',
+      closeNavigation: '내비게이션 닫기',
+    },
     timeline: {
       threadTitle: '{project} — {type}',
       eventCount: '{count}개 이벤트',

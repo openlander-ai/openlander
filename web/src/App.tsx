@@ -9,7 +9,6 @@ import { ProjectsGrid } from '@/pages/ProjectsGrid';
 import { DeploymentDetail } from '@/pages/DeploymentDetail';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
-import { OpsCenter } from '@/pages/OpsCenter';
 import { OpsCenterV2 } from '@/pages/OpsCenterV2';
 import { ServiceDetail } from '@/pages/ServiceDetail';
 import { useAgentPanel } from '@/contexts/agent-panel';
@@ -138,7 +137,7 @@ function App() {
                   <Route path="/services" element={<ServicesPage />} />
                   <Route path="/services/:id" element={<ServiceDetail />} />
                   <Route path="/operations" element={<OpsCenterV2 />} />
-                  <Route path="/ops-v1" element={<OpsCenter />} />
+                  <Route path="/ops-v1" element={<Navigate to="/operations" replace />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/agent" element={<AgentRouteRedirect />} />
                 </Route>
