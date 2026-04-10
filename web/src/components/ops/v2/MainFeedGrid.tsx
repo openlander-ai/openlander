@@ -63,6 +63,7 @@ export interface Thread {
   isExpanded: boolean;
   triggerType?: string;
   title?: string;
+  cascadeGroup?: string[];
 }
 
 export interface MainFeedGridProps {
@@ -137,6 +138,8 @@ function groupIntoThreads(
     const activeIncident = events.find((e) => e.type === 'incident');
     const title = activeIncident?.title || head.title || humanizeEventType(head.type, t);
     const triggerType = activeIncident?.triggerType;
+    const cascadeEvent = events.find((e) => e.cascadeGroup && e.cascadeGroup.length > 0);
+    const cascadeGroup = cascadeEvent?.cascadeGroup;
 
     threads.push({
       correlationId: key,
@@ -150,6 +153,7 @@ function groupIntoThreads(
       events,
       title,
       triggerType,
+      cascadeGroup,
     });
   }
 
@@ -444,6 +448,9 @@ export function MainFeedGrid({
                 'group border-b border-[hsl(var(--border))]/50 last:border-0 transition-colors',
                 isCritical && 'bg-error/5',
                 isWarning && !isCritical && 'bg-warning/5',
+                thread.cascadeGroup &&
+                  thread.cascadeGroup.length > 0 &&
+                  'border-l-2 border-l-warning',
               )}
             >
               {/* Parent Row */}
@@ -485,14 +492,24 @@ export function MainFeedGrid({
                         ? localizeTitle(thread.title, t as unknown as (key: string) => string)
                         : thread.title}
                     </span>
-                    {thread.triggerType && (
-                      <span className="truncate text-[10px] font-mono text-muted-ol mt-0.5">
-                        {humanizeEventType(
-                          thread.triggerType,
-                          t as unknown as (key: string) => string,
-                        )}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {thread.triggerType && (
+                        <span className="truncate text-[10px] font-mono text-muted-ol">
+                          {humanizeEventType(
+                            thread.triggerType,
+                            t as unknown as (key: string) => string,
+                          )}
+                        </span>
+                      )}
+                      {thread.cascadeGroup && thread.cascadeGroup.length > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning bg-warning/10 px-1.5 py-0.5 rounded">
+                          ⚡{' '}
+                          {t('opsV2.cascade.affected', {
+                            projects: thread.cascadeGroup.join(', '),
+                          })}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div role="cell">

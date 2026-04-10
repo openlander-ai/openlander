@@ -550,6 +550,9 @@ export const translations = {
     },
   },
   opsV2: {
+    ai: {
+      tokens: 'tokens',
+    },
     page: {
       title: '운영 센터',
       description: '모든 시스템 이벤트, 활성 문제, 대기 중인 작업의 통합 타임라인입니다.',
@@ -671,6 +674,12 @@ export const translations = {
         open: '중단',
         halfOpen: '재시도 중',
         closed: '정상',
+        reset: '리셋',
+        resetConfirmTitle: '서킷브레이커 리셋',
+        resetConfirmDescription:
+          '서킷브레이커를 리셋하면 자동 복구가 다시 활성화됩니다. 계속하시겠습니까?',
+        resetSuccess: '서킷브레이커가 리셋되었습니다',
+        resetError: '서킷브레이커 리셋에 실패했습니다',
       },
     },
     titles: {
@@ -699,6 +708,10 @@ export const translations = {
       search: '검색',
       close: '닫기',
       help: '도움말',
+    },
+    cascade: {
+      label: '연쇄 영향',
+      affected: '영향받음: {projects}',
     },
   },
   ops: {

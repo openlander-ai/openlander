@@ -553,6 +553,9 @@ export const translations = {
     },
   },
   opsV2: {
+    ai: {
+      tokens: 'tokens',
+    },
     page: {
       title: 'Operations Center',
       description: 'Unified timeline of all system events, active issues, and pending actions.',
@@ -675,6 +678,12 @@ export const translations = {
         open: 'Paused',
         halfOpen: 'Retrying',
         closed: 'Closed',
+        reset: 'Reset',
+        resetConfirmTitle: 'Reset Circuit Breaker',
+        resetConfirmDescription:
+          'Resetting the circuit breaker will re-enable auto-recovery for this project. Do you want to continue?',
+        resetSuccess: 'Circuit breaker reset successfully',
+        resetError: 'Failed to reset circuit breaker',
       },
     },
     titles: {
@@ -703,6 +712,10 @@ export const translations = {
       search: 'Search',
       close: 'Close',
       help: 'Help',
+    },
+    cascade: {
+      label: 'Cascade',
+      affected: 'Affected: {projects}',
     },
   },
   ops: {
