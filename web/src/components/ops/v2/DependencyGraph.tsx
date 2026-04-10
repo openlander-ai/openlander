@@ -132,7 +132,7 @@ export default function DependencyGraph() {
         setEdges(layoutedEdges);
       } catch (err) {
         if (mounted) {
-          setError(err instanceof Error ? err.message : t('opsV2.error.loadFailed'));
+          setError(err instanceof Error ? err.message : t('opsV2.errors.loadFailed'));
         }
       } finally {
         if (mounted) {

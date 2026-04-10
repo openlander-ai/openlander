@@ -489,6 +489,7 @@ export const translations = {
       viewGraph: 'Graph View',
       viewList: 'List View',
       generic_error: 'Unknown error occurred',
+      backToCenter: 'Back to Operations Center',
     },
     events: {
       deploy_crash: 'Deployment Crash',
@@ -658,7 +659,7 @@ export const translations = {
       nodeTypeProject: 'Project',
       nodeTypeService: 'Service',
     },
-    error: {
+    errors: {
       loadFailed: 'Failed to load operations data',
       retry: 'Retry',
       connectionLost: 'Connection to server lost',

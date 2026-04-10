@@ -486,6 +486,7 @@ export const translations = {
       viewGraph: '그래프 뷰',
       viewList: '리스트 뷰',
       generic_error: '알 수 없는 오류 발생',
+      backToCenter: '운영 센터로 돌아가기',
     },
     events: {
       deploy_crash: '배포 실패',
@@ -655,7 +656,7 @@ export const translations = {
       nodeTypeProject: '프로젝트',
       nodeTypeService: '서비스',
     },
-    error: {
+    errors: {
       loadFailed: '운영 데이터를 불러오지 못했습니다',
       retry: '다시 시도',
       connectionLost: '서버와의 연결이 끊어졌습니다',
