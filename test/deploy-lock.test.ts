@@ -3,12 +3,16 @@ import { join } from 'node:path';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
+import type { AppContext } from '../src/app.js';
 import { DeployPipeline } from '../src/pipeline/deploy.js';
+import { JobManager } from '../src/pipeline/job-manager.js';
 import { Database } from '../src/db/index.js';
 import { DeployLockedError } from '../src/errors.js';
+import { eventBus } from '../src/events/index.js';
 import type { OpenLanderConfig } from '../src/config/index.js';
 import type { Docker } from '../src/pipeline/docker.js';
 import { clearPortScanCache } from '../src/pipeline/port.js';
+import { deployToolDefs } from '../src/tools/defs/deploy.js';
 
 type EnvLike = {
   getMergedForDeploy: (projectId: string, environmentId?: string) => Record<string, string>;
@@ -31,6 +35,19 @@ function createMockDocker(): Docker {
     getLogs: vi.fn().mockResolvedValue(''),
     cleanupSecretFiles: vi.fn(),
   } as unknown as Docker;
+}
+
+function createStatusToolContext(db: Database, jobManager: JobManager): AppContext {
+  return {
+    db,
+    jobManager,
+  } as unknown as AppContext;
+}
+
+function getDeployStatusTool() {
+  const tool = deployToolDefs.find((entry) => entry.name === 'get_deploy_status');
+  expect(tool).toBeDefined();
+  return tool!;
 }
 
 describe('BUG-010: Deploy lock prevents concurrent deploys', () => {
@@ -191,6 +208,109 @@ describe('BUG-010: Deploy lock prevents concurrent deploys', () => {
       const result = await pipeline.redeploy('nonexistent');
       expect(result.success).toBe(false);
       expect(result.error).toContain('Project not found');
+    });
+  });
+
+  describe('get_deploy_status wait=true hardening', () => {
+    it('wait=true resolves from deploy_logs when job not in JobManager', async () => {
+      vi.useFakeTimers();
+
+      db.createProject({
+        id: 'p1',
+        name: 'status-app',
+        repoUrl: 'https://github.com/test/status-app',
+      });
+      db.createDeployLog({
+        id: 'log-1',
+        projectId: 'p1',
+        status: 'success',
+        trigger: 'api',
+      });
+
+      const ctx = createStatusToolContext(db, new JobManager());
+      const tool = getDeployStatusTool();
+
+      const resultPromise = tool.execute(
+        { project_name: 'status-app', wait: true, timeout: 6 },
+        { appCtx: ctx, target: 'agent' },
+      ) as Promise<Record<string, unknown>>;
+
+      await vi.advanceTimersByTimeAsync(5000);
+      const result = await resultPromise;
+
+      expect(result).toMatchObject({
+        active: 0,
+        jobs: [expect.objectContaining({ name: 'status-app', phase: 'done' })],
+      });
+      expect(result).not.toHaveProperty('timeout');
+    });
+
+    it('wait=true shows locked/queued when lock held but no active job', async () => {
+      db.createProject({
+        id: 'p1',
+        name: 'locked-status-app',
+        repoUrl: 'https://github.com/test/locked-status-app',
+      });
+      db.acquireDeployLock('p1', 'test-session');
+
+      const ctx = createStatusToolContext(db, new JobManager());
+      const tool = getDeployStatusTool();
+
+      const result = (await tool.execute(
+        { project_name: 'locked-status-app', wait: true, timeout: 30 },
+        { appCtx: ctx, target: 'agent' },
+      )) as Record<string, unknown>;
+
+      expect(result).toMatchObject({
+        active: 1,
+        locked: true,
+        lock_session: 'test-session',
+        jobs: [expect.objectContaining({ name: 'locked-status-app', phase: 'queued' })],
+      });
+    });
+
+    it('wait=true transitions through queued to done when deploy event fires', async () => {
+      db.createProject({
+        id: 'p1',
+        name: 'evented-status-app',
+        repoUrl: 'https://github.com/test/evented-status-app',
+      });
+      db.acquireDeployLock('p1', 'test-session');
+
+      const jobManager = new JobManager();
+      const ctx = createStatusToolContext(db, jobManager);
+      const tool = getDeployStatusTool();
+
+      const queuedResult = (await tool.execute(
+        { project_name: 'evented-status-app', wait: true, timeout: 30 },
+        { appCtx: ctx, target: 'agent' },
+      )) as Record<string, unknown>;
+
+      expect(queuedResult).toMatchObject({
+        active: 1,
+        locked: true,
+        lock_session: 'test-session',
+        jobs: [expect.objectContaining({ name: 'evented-status-app', phase: 'queued' })],
+      });
+
+      jobManager.trackJob('p1', 'evented-status-app');
+      jobManager.updatePhase('p1', 'done');
+      db.releaseDeployLock('p1');
+      await eventBus.emit('deploy:success', {
+        projectId: 'p1',
+        url: 'https://example.test',
+        totalDurationMs: 1000,
+      });
+
+      const doneResult = (await tool.execute(
+        { project_name: 'evented-status-app', wait: true, timeout: 30 },
+        { appCtx: ctx, target: 'agent' },
+      )) as Record<string, unknown>;
+
+      expect(doneResult).toMatchObject({
+        active: 0,
+        jobs: [expect.objectContaining({ name: 'evented-status-app', phase: 'done' })],
+      });
     });
   });
 });

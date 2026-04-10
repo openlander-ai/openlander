@@ -348,6 +348,24 @@ export const deployToolDefs: ToolDef[] = [
           };
         };
 
+        const buildLockedQueuedResult = (
+          currentLockInfo: { session: string; lockedAt: string },
+          timedOut = false,
+        ) => ({
+          active: 1,
+          locked: true,
+          lock_session: currentLockInfo.session,
+          jobs: [
+            formatJob({
+              projectId: project.id,
+              projectName: project.name,
+              phase: 'queued',
+              startedAt: new Date(currentLockInfo.lockedAt),
+            }),
+          ],
+          ...(timedOut ? { timeout: true } : {}),
+        });
+
         let status = appCtx.jobManager.getStatus(project.id);
         const lockInfo = appCtx.db.getDeployLockInfo(project.id);
 
@@ -375,8 +393,40 @@ export const deployToolDefs: ToolDef[] = [
           return buildProjectResult(status);
         }
 
+        if (lockInfo && !status) {
+          return buildLockedQueuedResult(lockInfo);
+        }
+
         return await new Promise((resolve) => {
           let settled = false;
+
+          const cleanup = (): void => {
+            clearTimeout(timer);
+            clearInterval(dbPollInterval);
+            unsubSuccess();
+            unsubFailed();
+          };
+
+          const resolveFromDeployLog = (lastLogCreatedAt: string): void => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+
+            const dbProject = appCtx.db.getProjectByName(projectName);
+            resolve({
+              active: 0,
+              jobs: [
+                formatJob({
+                  projectId: project.id,
+                  projectName: project.name,
+                  phase: 'done',
+                  startedAt: new Date(lastLogCreatedAt),
+                  completedAt: new Date(lastLogCreatedAt),
+                }),
+              ],
+              ...(dbProject ? { health: dbProject.status } : {}),
+            });
+          };
 
           const matchesProject = (payload: {
             projectId: string;
@@ -386,9 +436,7 @@ export const deployToolDefs: ToolDef[] = [
           const resolveWithCurrent = (timedOut: boolean): void => {
             if (settled) return;
             settled = true;
-            clearTimeout(timer);
-            unsubSuccess();
-            unsubFailed();
+            cleanup();
 
             const current = appCtx.jobManager.getStatus(project.id);
             if (current) {
@@ -400,7 +448,6 @@ export const deployToolDefs: ToolDef[] = [
                 lastLog.status === 'success' &&
                 (current.phase === 'failed' || current.phase === 'done')
               ) {
-                const dbProject = appCtx.db.getProjectByName(projectName);
                 resolve({
                   active: 0,
                   jobs: [
@@ -412,7 +459,9 @@ export const deployToolDefs: ToolDef[] = [
                       completedAt: new Date(lastLog.created_at),
                     }),
                   ],
-                  ...(dbProject ? { health: dbProject.status } : {}),
+                  ...(appCtx.db.getProjectByName(projectName)
+                    ? { health: appCtx.db.getProjectByName(projectName)?.status }
+                    : {}),
                   ...(timedOut ? { timeout: true } : {}),
                 });
                 return;
@@ -421,6 +470,12 @@ export const deployToolDefs: ToolDef[] = [
               const payload = buildProjectResult(current) as Record<string, unknown>;
               if (timedOut) payload['timeout'] = true;
               resolve(payload);
+              return;
+            }
+
+            const currentLockInfo = appCtx.db.getDeployLockInfo(project.id);
+            if (currentLockInfo) {
+              resolve(buildLockedQueuedResult(currentLockInfo, timedOut));
               return;
             }
 
@@ -447,6 +502,27 @@ export const deployToolDefs: ToolDef[] = [
             },
             Math.max(1, timeoutSec) * 1000,
           );
+
+          const dbPollInterval = setInterval(() => {
+            if (settled) {
+              clearInterval(dbPollInterval);
+              return;
+            }
+
+            const lastLog = appCtx.db.getLastDeployLog(project.id);
+            if (!lastLog || lastLog.status !== 'success') {
+              return;
+            }
+
+            const currentJob = appCtx.jobManager.getStatus(project.id);
+            const logIsNewer =
+              !currentJob ||
+              new Date(lastLog.created_at).getTime() > currentJob.startedAt.getTime();
+
+            if (logIsNewer) {
+              resolveFromDeployLog(lastLog.created_at);
+            }
+          }, 5000);
 
           status = appCtx.jobManager.getStatus(project.id);
           if (status && (status.phase === 'done' || status.phase === 'failed')) {
