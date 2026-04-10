@@ -1389,7 +1389,7 @@ export class DeployPipeline {
 
       return await this.deploy(config);
     } finally {
-      this.db.releaseDeployLock(projectId);
+      this.db.releaseDeployLock(projectId, lockSession);
     }
   }
 
@@ -1799,7 +1799,7 @@ export class DeployPipeline {
     try {
       return await this.rollbackExecutor.rollbackToImage(projectId, environmentId);
     } finally {
-      this.db.releaseDeployLock(projectId);
+      this.db.releaseDeployLock(projectId, lockSession);
     }
   }
 

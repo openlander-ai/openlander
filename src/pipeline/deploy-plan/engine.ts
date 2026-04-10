@@ -787,7 +787,7 @@ export class PlanEngine {
       }
 
       try {
-        this.db.releaseDeployLock(lockProjectId);
+        this.db.releaseDeployLock(lockProjectId, lockSessionId ?? `plan-${planId}`);
       } catch (error) {
         log.warn({ planId, projectId: lockProjectId, error }, 'Failed to release deploy lock');
       } finally {

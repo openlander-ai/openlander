@@ -1,8 +1,11 @@
 import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { OpenLanderError, ProjectAlreadyExistsError, ProjectNotFoundError } from '../../errors.js';
+import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { projects } from '../schema.drizzle.js';
 import type { PendingFixRow, ProjectRow } from '../types.js';
+
+const log = createModuleLogger('project-repo');
 
 export class ProjectRepo {
   constructor(
@@ -315,12 +318,40 @@ export class ProjectRepo {
     return (row?.changes ?? 0) > 0;
   }
 
-  releaseDeployLock(projectId: string): void {
+  releaseDeployLock(projectId: string, sessionId?: string): boolean {
+    if (sessionId !== undefined) {
+      this.db
+        .update(projects)
+        .set({
+          deploy_lock_session: null,
+          deploy_lock_at: null,
+          updated_at: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(and(eq(projects.id, projectId), eq(projects.deploy_lock_session, sessionId)))
+        .run();
+
+      const row = this.sqlite.prepare('SELECT changes() as changes').get() as {
+        changes: number;
+      } | null;
+
+      if ((row?.changes ?? 0) === 0) {
+        log.warn(
+          { projectId, sessionId },
+          '[DeployLock] releaseDeployLock session mismatch or lock missing',
+        );
+        return false;
+      }
+
+      return true;
+    }
+
     this.db
       .update(projects)
       .set({ deploy_lock_session: null, deploy_lock_at: null, updated_at: sql`CURRENT_TIMESTAMP` })
       .where(eq(projects.id, projectId))
       .run();
+
+    return true;
   }
 
   getDeployLockInfo(projectId: string): { session: string; lockedAt: string } | null {

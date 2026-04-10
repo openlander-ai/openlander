@@ -120,6 +120,75 @@ describe('BUG-010: Deploy lock prevents concurrent deploys', () => {
       expect(db.acquireDeployLock('p1', 'session-1')).toBe(true);
       expect(db.acquireDeployLock('p2', 'session-2')).toBe(true);
     });
+
+    it('releaseDeployLock with correct session succeeds', () => {
+      db.createProject({
+        id: 'p1',
+        name: 'session-release-app',
+        repoUrl: 'https://github.com/test/session-release-app',
+      });
+
+      expect(db.acquireDeployLock('p1', 'session-abc')).toBe(true);
+      const releaseDeployLock = Reflect.get(db, 'releaseDeployLock') as (
+        projectId: string,
+        sessionId?: string,
+      ) => boolean;
+
+      expect(releaseDeployLock.call(db, 'p1', 'session-abc')).toBe(true);
+      expect(db.getDeployLockInfo('p1')).toBeNull();
+    });
+
+    it('releaseDeployLock with wrong session returns false and keeps lock', () => {
+      db.createProject({
+        id: 'p1',
+        name: 'wrong-session-release-app',
+        repoUrl: 'https://github.com/test/wrong-session-release-app',
+      });
+
+      expect(db.acquireDeployLock('p1', 'session-abc')).toBe(true);
+      const releaseDeployLock = Reflect.get(db, 'releaseDeployLock') as (
+        projectId: string,
+        sessionId?: string,
+      ) => boolean;
+
+      expect(releaseDeployLock.call(db, 'p1', 'session-xyz')).toBe(false);
+      expect(db.getDeployLockInfo('p1')).toEqual(
+        expect.objectContaining({ session: 'session-abc' }),
+      );
+    });
+
+    it('releaseDeployLock without session releases unconditionally', () => {
+      db.createProject({
+        id: 'p1',
+        name: 'unconditional-release-app',
+        repoUrl: 'https://github.com/test/unconditional-release-app',
+      });
+
+      expect(db.acquireDeployLock('p1', 'session-abc')).toBe(true);
+
+      expect(db.releaseDeployLock('p1')).toBe(true);
+      expect(db.getDeployLockInfo('p1')).toBeNull();
+    });
+
+    it('cleanExpiredDeployLocks bypasses session check', () => {
+      db.createProject({
+        id: 'p1',
+        name: 'expired-lock-app',
+        repoUrl: 'https://github.com/test/expired-lock-app',
+      });
+
+      expect(db.acquireDeployLock('p1', 'session-abc')).toBe(true);
+
+      const sqlite = Reflect.get(db, 'sqlite') as {
+        prepare: (sql: string) => { run: (...params: Array<string | number>) => unknown };
+      };
+      sqlite
+        .prepare("UPDATE projects SET deploy_lock_at = datetime('now', '-31 minutes') WHERE id = ?")
+        .run('p1');
+
+      expect(db.cleanExpiredDeployLocks()).toBeGreaterThan(0);
+      expect(db.getDeployLockInfo('p1')).toBeNull();
+    });
   });
 
   describe('DeployLockedError', () => {

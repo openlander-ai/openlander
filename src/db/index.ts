@@ -134,7 +134,9 @@ export class Database implements AuthDatabase {
   getPreviewProjects(parentProjectId: string) { return this.projectRepo.getPreviewProjects(parentProjectId); }
   isParentProject(id: string) { return this.projectRepo.isParentProject(id); }
   acquireDeployLock(projectId: string, sessionId: string) { return this.projectRepo.acquireDeployLock(projectId, sessionId); }
-  releaseDeployLock(projectId: string) { this.projectRepo.releaseDeployLock(projectId); }
+  releaseDeployLock(projectId: string, sessionId?: string) {
+    return this.projectRepo.releaseDeployLock(projectId, sessionId);
+  }
   getDeployLockInfo(projectId: string) { return this.projectRepo.getDeployLockInfo(projectId); }
   cleanExpiredDeployLocks(timeoutMinutes = 10) { return this.projectRepo.cleanExpiredDeployLocks(timeoutMinutes); }
   createEnvironment(environment: Parameters<EnvironmentRepo['createEnvironment']>[0]) { return this.environmentRepo.createEnvironment(environment); }
