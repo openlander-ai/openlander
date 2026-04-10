@@ -579,6 +579,7 @@ export const translations = {
       collapse: '상세 숨기기',
       expandAll: '모두 펼치기',
       collapseAll: '모두 접기',
+      clearFilters: '필터 초기화',
       detailsShow: '세부 정보',
       detailsHide: '세부 정보 숨기기',
       eventLog: '이벤트 로그',
@@ -616,7 +617,8 @@ export const translations = {
       timeRange: '시간 범위',
     },
     empty: {
-      noActivity: '최근 활동이 없습니다',
+      noActivity: '현재 운영 활동이 없습니다. 모든 시스템이 정상입니다.',
+      filtered: '선택한 필터에 해당하는 활동이 없습니다',
       noActiveIssues: '활성 문제가 없습니다',
       noPendingApprovals: '대기 중인 승인이 없습니다',
       allSystemsNormal: '모든 시스템 정상',
@@ -624,6 +626,9 @@ export const translations = {
     error: {
       loadFailed: '운영 데이터를 불러오지 못했습니다',
       retry: '다시 시도',
+      connectionLost: '서버와의 연결이 끊어졌습니다',
+      retrying: '재연결 시도 중 ({count}/5)',
+      apiError: '데이터를 불러오는 중 오류가 발생했습니다',
     },
     approvals: {
       approve: '승인',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { X } from 'lucide-react';
+import { X, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { useOpsCenterData } from '@/hooks/use-ops-center-data';
 import { StatusStrip } from '@/components/ops/v2/StatusStrip';
@@ -46,6 +46,8 @@ export function OpsCenterV2() {
     isConnected,
     isReconnecting,
     isLoading,
+    error,
+    retry,
   } = useOpsCenterData();
 
   // Responsive breakpoints
@@ -187,12 +189,47 @@ export function OpsCenterV2() {
               </h1>
             </div>
 
+            {/* Error Banners */}
+            {isReconnecting && (
+              <div className="flex items-center gap-3 rounded-md bg-warning/10 border border-warning/20 px-4 py-3 text-sm text-warning">
+                <Loader2 className="h-4 w-4 animate-spin text-warning" />
+                <p>
+                  {t('opsV2.errors.retrying').replace('{count}', String(error?.retryCount ?? 1))}
+                </p>
+              </div>
+            )}
+            {error && !isReconnecting && (
+              <div className="flex items-center justify-between gap-3 rounded-md bg-error/10 border border-error/20 px-4 py-3 text-sm text-error">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="h-4 w-4 text-error" />
+                  <p>
+                    {error.type === 'connection_lost'
+                      ? t('opsV2.errors.connectionLost')
+                      : error.type === 'api_error'
+                        ? t('opsV2.errors.apiError')
+                        : error.message}
+                  </p>
+                </div>
+                <button
+                  onClick={retry}
+                  className="flex items-center gap-2 rounded bg-bg-panel px-3 py-1.5 text-xs font-medium text-primary-ol hover:bg-bg-subtle border border-[hsl(var(--border))] transition-colors"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  {t('opsV2.errors.retry')}
+                </button>
+              </div>
+            )}
+
             {/* Filters */}
             <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
 
             {/* Main content — feed grid */}
             <main className="min-w-0">
-              <MainFeedGrid activities={filteredActivities} />
+              <MainFeedGrid
+                activities={filteredActivities}
+                isFiltered={activities.length > 0 && filteredActivities.length === 0}
+                onClearFilters={() => setFilters({ density: 'all' })}
+              />
             </main>
           </div>
         </div>

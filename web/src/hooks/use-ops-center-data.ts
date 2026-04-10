@@ -23,6 +23,12 @@ const BASE_RETRY_DELAY = 3_000; // ms
 // Public interface
 // ---------------------------------------------------------------------------
 
+export interface OpsCenterError {
+  type: 'connection_lost' | 'api_error' | 'timeout';
+  message: string;
+  retryCount?: number;
+}
+
 export interface OpsCenterData {
   activities: ActivityItem[];
   incidents: OpsIncident[];
@@ -32,7 +38,7 @@ export interface OpsCenterData {
   isConnected: boolean;
   isReconnecting: boolean;
   isLoading: boolean;
-  error: string | null;
+  error: OpsCenterError | null;
   retry: () => void;
 }
 
@@ -50,7 +56,7 @@ export function useOpsCenterData(): OpsCenterData {
   const [isConnected, setIsConnected] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<OpsCenterError | null>(null);
 
   // --- Refs for SSE lifecycle ---
   const abortRef = useRef<AbortController | null>(null);
@@ -98,7 +104,7 @@ export function useOpsCenterData(): OpsCenterData {
 
         if (!resp.ok || !resp.body) {
           if (!cancelledRef.current) {
-            setError(`Stream error: ${resp.status}`);
+            setError({ type: 'api_error', message: `Stream error: ${resp.status}` });
             setIsConnected(false);
 
             // Auto-retry with exponential backoff on non-OK responses
@@ -197,7 +203,12 @@ export function useOpsCenterData(): OpsCenterData {
 
         if (!cancelledRef.current) {
           const message = err instanceof Error ? err.message : 'Stream failed';
-          setError(message);
+          const isTimeout = err instanceof Error && err.name === 'AbortError';
+          setError({
+            type: isTimeout ? 'timeout' : 'connection_lost',
+            message,
+            retryCount: retriesRef.current,
+          });
           setIsConnected(false);
 
           // Auto-retry with exponential backoff
@@ -259,7 +270,9 @@ export function useOpsCenterData(): OpsCenterData {
       })
       .catch((err: unknown) => {
         if (!cancelledRef.current) {
-          setError(err instanceof Error ? err.message : String(err));
+          const message = err instanceof Error ? err.message : String(err);
+          const isTimeout = err instanceof Error && err.name === 'AbortError';
+          setError({ type: isTimeout ? 'timeout' : 'api_error', message });
         }
       })
       .finally(() => {

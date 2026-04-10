@@ -311,7 +311,12 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
 // Main component
 // ---------------------------------------------------------------------------
 
-export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) {
+export function MainFeedGrid({
+  activities,
+  onThreadSelect,
+  isFiltered,
+  onClearFilters,
+}: MainFeedGridProps) {
   const { t, language } = useLanguage();
 
   const threadData = useMemo(() => {
@@ -363,6 +368,23 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
   }, []);
 
   if (activities.length === 0) {
+    if (isFiltered) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-center border rounded border-dashed border-[hsl(var(--border))]">
+          <Clock className="mb-3 h-8 w-8 text-muted-ol/50" />
+          <p className="text-sm text-muted-ol mb-4">{t('opsV2.empty.filtered')}</p>
+          {onClearFilters && (
+            <button
+              onClick={onClearFilters}
+              className="text-xs font-medium text-primary-ol bg-bg-panel hover:bg-bg-subtle border border-[hsl(var(--border))] px-3 py-1.5 rounded transition-colors"
+            >
+              {t('opsV2.timeline.clearFilters')}
+            </button>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center border rounded border-dashed border-[hsl(var(--border))]">
         <Clock className="mb-3 h-8 w-8 text-muted-ol/50" />

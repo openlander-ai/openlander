@@ -582,6 +582,7 @@ export const translations = {
       collapse: 'Hide details',
       expandAll: 'Expand all',
       collapseAll: 'Collapse all',
+      clearFilters: 'Clear filters',
       detailsShow: 'Details',
       detailsHide: 'Hide details',
       eventLog: 'Event Log',
@@ -619,7 +620,8 @@ export const translations = {
       timeRange: 'Time range',
     },
     empty: {
-      noActivity: 'No recent activity',
+      noActivity: 'No operational activity. All systems are normal.',
+      filtered: 'No activity matches the selected filters',
       noActiveIssues: 'No active issues',
       noPendingApprovals: 'No pending approvals',
       allSystemsNormal: 'All systems normal',
@@ -627,6 +629,9 @@ export const translations = {
     error: {
       loadFailed: 'Failed to load operations data',
       retry: 'Retry',
+      connectionLost: 'Connection to server lost',
+      retrying: 'Attempting to reconnect ({count}/5)',
+      apiError: 'An error occurred while loading data',
     },
     approvals: {
       approve: 'Approve',
