@@ -269,6 +269,7 @@ exports[`pipeline event golden snapshots > captures single deploy event sequence
   {
     "payloadShape": {
       "projectId": "string",
+      "sessionId": "undefined",
       "totalDurationMs": "number",
       "url": "string",
     },

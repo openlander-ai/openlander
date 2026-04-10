@@ -186,18 +186,18 @@ export function createApiRoutes(ctx: AppContext): Hono {
     'alert:resolved',
   ];
 
-  // Auto-release deploy locks on completion/failure
+  // Auto-release deploy locks on completion/failure (session-scoped to prevent lock stealing)
   eventBus.on('deploy:success', (p) => {
-    ctx.db.releaseDeployLock(p.projectId);
+    ctx.db.releaseDeployLock(p.projectId, p.sessionId);
   });
   eventBus.on('deploy:failed', (p) => {
-    ctx.db.releaseDeployLock(p.projectId);
+    ctx.db.releaseDeployLock(p.projectId, p.sessionId);
   });
   eventBus.on('compose:up', (p) => {
-    ctx.db.releaseDeployLock(p.projectId);
+    ctx.db.releaseDeployLock(p.projectId, p.sessionId);
   });
   eventBus.on('compose:failed', (p) => {
-    ctx.db.releaseDeployLock(p.projectId);
+    ctx.db.releaseDeployLock(p.projectId, p.sessionId);
   });
 
   // --- Helper: resolve project names for activity log rows ---

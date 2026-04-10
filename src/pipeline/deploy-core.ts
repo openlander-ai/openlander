@@ -98,6 +98,8 @@ export interface ProjectConfig {
   _projectId?: string;
   _noCacheBuild?: boolean;
   _preferredPort?: number;
+  /** @internal Deploy lock session for event-based session-scoped release. */
+  _lockSessionId?: string;
   /** Specific docker-compose services to deploy. Deploys all if omitted. */
   composeServices?: string[];
   /** Deployment source type (git or pre-built image) */
@@ -911,6 +913,7 @@ export class DeployPipeline {
         error: errorMsg,
         buildLog: buildLogWithError,
         diffContext,
+        sessionId: deployConfig._lockSessionId,
       });
       const logLines = buildLogWithError.split('\n').filter(Boolean);
       const buildLogTail = logLines.slice(-100).join('\n');
@@ -1323,7 +1326,10 @@ export class DeployPipeline {
 
       const strategy = options?.strategy ?? 'force';
       if (strategy === 'blue-green') {
-        return await this.blueGreenRedeploy(projectId, options);
+        return await this.blueGreenRedeploy(projectId, {
+          ...options,
+          lockSessionId: lockSession,
+        });
       }
 
       const redeployRouteName = getRouteName(project.name);
@@ -1380,6 +1386,7 @@ export class DeployPipeline {
         runtimeOverrides: {
           _projectId: projectId,
           _preferredPort: previousPort,
+          _lockSessionId: lockSession,
           _noCacheBuild: project.source === 'image' ? true : options?.noCache,
           environment: 'production',
           ...(options?.cmd && { imageCmd: options.cmd }),
@@ -1600,6 +1607,7 @@ export class DeployPipeline {
         projectId,
         url: projectUrl,
         totalDurationMs: durationMs,
+        sessionId: options?.lockSessionId,
       });
 
       return {
@@ -1675,6 +1683,7 @@ export class DeployPipeline {
         step: 'blue-green',
         error: errorMsg,
         buildLog,
+        sessionId: options?.lockSessionId,
       });
 
       return {

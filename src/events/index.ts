@@ -149,6 +149,8 @@ export interface EventPayload {
     status?: 'pending' | 'in_progress' | 'success' | 'failed';
     message?: string;
     planId?: string;
+    /** Deploy lock session ID — enables session-scoped lock release in event handlers. */
+    sessionId?: string;
   };
   'deploy:failed': {
     projectId: string;
@@ -164,6 +166,8 @@ export interface EventPayload {
     durationMs?: number;
     /** When 'mcp', auto-recovery is skipped — the MCP client agent handles failure. */
     source?: 'mcp' | 'dashboard' | 'webhook';
+    /** Deploy lock session ID — enables session-scoped lock release in event handlers. */
+    sessionId?: string;
   };
   'deploy:needs-user-action': {
     projectId: string;
@@ -189,10 +193,10 @@ export interface EventPayload {
     logChunk?: string;
   };
   'compose:start': { projectId: string; composePath: string; serviceCount: number };
-  'compose:up': { projectId: string; services: string[] };
+  'compose:up': { projectId: string; services: string[]; sessionId?: string };
   'compose:down': { projectId: string };
   'compose:orphans-cleaned': { projectId: string; removed: string[] };
-  'compose:failed': { projectId: string; error: string };
+  'compose:failed': { projectId: string; error: string; sessionId?: string };
   'orchestration:plan': {
     topology: {
       services: Array<{

@@ -7,7 +7,7 @@ export interface ProjectRow {
   name: string;
   repo_url: string | null;
   branch: string;
-  status: 'running' | 'stopped' | 'building' | 'error';
+  status: 'running' | 'stopped' | 'building' | 'error' | 'recovering';
   visibility: 'internal' | 'quick-share' | 'shared' | 'production';
   assigned_port: number | null;
   container_id: string | null;

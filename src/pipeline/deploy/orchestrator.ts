@@ -682,6 +682,7 @@ export async function handlePostDeploy(
         projectId,
         url: successUrl,
         totalDurationMs: totalDuration,
+        sessionId: config._lockSessionId,
       });
     }
   }
