@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
+import { PassThrough } from 'node:stream';
 import { getDataDir, getPolicy, SHARED_NETWORK_NAME, DOCKER_LABELS } from '../config/index.js';
 import { sleep } from '../lib/sleep.js';
 import { containerName, stripContainerPrefix } from './helpers.js';
@@ -799,6 +800,106 @@ export class Docker {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('is not connected') || isDockerNotFoundError(error)) {
         return;
+      }
+      throw error;
+    }
+  }
+
+  /** Inspect a container and return full metadata. */
+  async inspectContainer(containerId: string): Promise<Dockerode.ContainerInspectInfo> {
+    try {
+      const container = this.client.getContainer(containerId);
+      return await container.inspect();
+    } catch (error) {
+      if (isDockerNotFoundError(error)) {
+        throw new ContainerNotFoundError(containerId);
+      }
+      throw error;
+    }
+  }
+
+  /** Connect a container to a network with optional aliases. Silently succeeds if already connected. */
+  async connectContainerToNetwork(
+    containerId: string,
+    networkName: string,
+    aliases?: string[],
+  ): Promise<void> {
+    try {
+      const network = this.client.getNetwork(networkName);
+      await network.connect({
+        Container: containerId,
+        EndpointConfig: aliases ? { Aliases: aliases } : undefined,
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('already exists') || msg.includes('already connected')) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /** Restart a running container. */
+  async restartContainer(containerId: string): Promise<void> {
+    try {
+      const container = this.client.getContainer(containerId);
+      await container.restart();
+    } catch (error) {
+      if (isDockerNotFoundError(error)) {
+        throw new ContainerNotFoundError(containerId);
+      }
+      throw error;
+    }
+  }
+
+  /** Execute a non-interactive command in a container and return structured output. */
+  async execSimple(
+    containerId: string,
+    cmd: string[],
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    const container = this.client.getContainer(containerId);
+    const exec = await container.exec({
+      Cmd: cmd,
+      AttachStdout: true,
+      AttachStderr: true,
+    });
+
+    const stream = await exec.start({ hijack: false, stdin: false });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    const stdoutStream = new PassThrough();
+    const stderrStream = new PassThrough();
+
+    stdoutStream.on('data', (chunk: Buffer) => {
+      stdoutChunks.push(chunk);
+    });
+    stderrStream.on('data', (chunk: Buffer) => {
+      stderrChunks.push(chunk);
+    });
+
+    this.client.modem.demuxStream(stream, stdoutStream, stderrStream);
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on('error', reject);
+      stream.on('end', resolve);
+    });
+
+    const info = await exec.inspect();
+    return {
+      exitCode: info.ExitCode ?? 0,
+      stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+      stderr: Buffer.concat(stderrChunks).toString('utf8'),
+    };
+  }
+
+  /** Inspect a Docker network and return its metadata. */
+  async getNetworkInfo(networkName: string): Promise<Dockerode.NetworkInspectInfo> {
+    try {
+      const network = this.client.getNetwork(networkName);
+      return await network.inspect();
+    } catch (error) {
+      if (isDockerNotFoundError(error)) {
+        throw new Error(`Network not found: ${networkName}`);
       }
       throw error;
     }
