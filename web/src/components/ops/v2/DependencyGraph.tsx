@@ -146,7 +146,7 @@ export default function DependencyGraph() {
     return () => {
       mounted = false;
     };
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, t]);
 
   if (isLoading) {
     return (
@@ -191,8 +191,9 @@ export default function DependencyGraph() {
         <Controls className="bg-bg-panel border-[hsl(var(--border))] fill-primary-ol" />
         <MiniMap
           nodeColor={(n) => {
-            if (n.className?.includes('green')) return '#22c55e';
-            if (n.className?.includes('red')) return '#ef4444';
+            const status = (n.data as { status?: string })?.status;
+            if (status === 'running') return '#22c55e';
+            if (status === 'error' || status === 'exited') return '#ef4444';
             return '#f59e0b';
           }}
           maskColor="hsl(var(--background) / 0.6)"

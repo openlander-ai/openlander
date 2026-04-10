@@ -61,7 +61,7 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
     return () => {
       isMounted = false;
     };
-  }, [incidentId]);
+  }, [incidentId, t]);
 
   const isOpen = incidentId !== null;
 

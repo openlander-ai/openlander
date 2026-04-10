@@ -47,10 +47,13 @@ export function SeverityBadge({ severity, count, className }: SeverityBadgeProps
     );
   }
 
+  const translatedSeverity = t(`opsV2.severity.${severity}`);
+  const label = translatedSeverity !== `opsV2.severity.${severity}` ? translatedSeverity : severity;
+
   return (
     <Badge variant="outline" className={cn('h-5 px-1.5 text-[10px] capitalize', className)}>
       {count !== undefined ? `${count} ` : ''}
-      {severity}
+      {label}
     </Badge>
   );
 }

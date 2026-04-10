@@ -539,6 +539,7 @@ export const translations = {
     severity: {
       critical: 'CRIT',
       warning: 'WARN',
+      info: 'INFO',
     },
     tools: {
       rollback: 'Rollback to previous version',
@@ -706,7 +707,7 @@ export const translations = {
         empty: 'All systems normal',
         open: 'Paused',
         halfOpen: 'Retrying',
-        closed: 'Closed',
+        closed: 'Normal',
         reset: 'Reset',
         resetConfirmTitle: 'Reset Circuit Breaker',
         resetConfirmDescription:

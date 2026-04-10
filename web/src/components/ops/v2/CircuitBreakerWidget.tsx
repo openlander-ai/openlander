@@ -47,9 +47,9 @@ function CircuitBreakerItem({
 }) {
   const { t } = useLanguage();
   const [isResetting, setIsResetting] = useState(false);
+  const state: keyof typeof STATE_STYLES =
+    cb.state in STATE_STYLES ? (cb.state as keyof typeof STATE_STYLES) : 'closed';
   const [showConfirm, setShowConfirm] = useState(false);
-
-  const state = cb.state as 'open' | 'half_open' | 'closed';
   const styles = STATE_STYLES[state] ?? STATE_STYLES.closed;
   const isOpen = state === 'open';
 

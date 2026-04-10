@@ -536,6 +536,7 @@ export const translations = {
     severity: {
       critical: '위험',
       warning: '경고',
+      info: '정보',
     },
     tools: {
       rollback: '이전 버전으로 롤백',
@@ -552,7 +553,7 @@ export const translations = {
   },
   opsV2: {
     ai: {
-      tokens: 'tokens',
+      tokens: '토큰',
     },
     page: {
       title: '운영 센터',

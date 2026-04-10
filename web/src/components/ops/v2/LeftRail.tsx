@@ -376,25 +376,32 @@ export function LeftRail({
   const displayIncidents = searchResults !== null ? searchResults : incidents;
 
   // Group incidents by project + humanized trigger type (or title) to deduplicate
-  const groupedIncidents = displayIncidents.reduce<
-    Array<{ incident: OpsIncident; count: number; groupKey: string; lastEventTime: number }>
-  >((acc, incident) => {
-    const key = `${incident.project_id}::${incident.triggerType ?? incident.title}`;
-    const existing = acc.find((g) => g.groupKey === key);
-    const time =
-      typeof incident.created_at === 'string'
-        ? new Date(incident.created_at).getTime()
-        : incident.created_at;
-    if (existing) {
-      existing.count += 1;
-      if (time > existing.lastEventTime) {
-        existing.lastEventTime = time;
+  const groupedIncidents = (() => {
+    const map = new Map<
+      string,
+      { incident: OpsIncident; count: number; groupKey: string; lastEventTime: number }
+    >();
+    const order: string[] = [];
+    for (const incident of displayIncidents) {
+      const key = `${incident.project_id}::${incident.triggerType ?? incident.title}`;
+      const time =
+        typeof incident.created_at === 'string'
+          ? new Date(incident.created_at).getTime()
+          : incident.created_at;
+      const existing = map.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (time > existing.lastEventTime) {
+          existing.lastEventTime = time;
+        }
+      } else {
+        const entry = { incident, count: 1, groupKey: key, lastEventTime: time };
+        map.set(key, entry);
+        order.push(key);
       }
-    } else {
-      acc.push({ incident, count: 1, groupKey: key, lastEventTime: time });
     }
-    return acc;
-  }, []);
+    return order.map((k) => map.get(k)!);
+  })();
 
   return (
     <aside

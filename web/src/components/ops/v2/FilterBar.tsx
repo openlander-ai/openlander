@@ -59,7 +59,12 @@ export function useFilterSearchParams(): [FilterState, (next: FilterState) => vo
   const [searchParams, setSearchParams] = useSearchParams();
 
   const filters: FilterState = {
-    density: (searchParams.get(PARAM_KEYS.density) as DensityMode | null) ?? 'all',
+    density: (() => {
+      const raw = searchParams.get(PARAM_KEYS.density);
+      return raw && ['all', 'actions-only', 'critical-only'].includes(raw)
+        ? (raw as DensityMode)
+        : 'all';
+    })(),
     severity: searchParams.get(PARAM_KEYS.severity) ?? undefined,
     projectId: searchParams.get(PARAM_KEYS.projectId) ?? undefined,
     timeRange: searchParams.get(PARAM_KEYS.timeRange) ?? undefined,

@@ -198,7 +198,7 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
               }
 
               const item = parsed as unknown as ActivityItem;
-              if (!item.id) continue;
+              if (!item || typeof item.id !== 'string' || typeof item.type !== 'string') continue;
 
               // Track last event id (ULID) for gap recovery
               lastEventIdRef.current = item.id;

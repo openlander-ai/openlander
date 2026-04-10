@@ -42,8 +42,8 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[]): void {
         target instanceof HTMLSelectElement ||
         (target instanceof HTMLElement && target.contentEditable === 'true');
 
-      // Skip shortcuts if focused on input-like element
-      if (isInputLike) {
+      // Skip shortcuts if focused on input-like element (Escape is always allowed)
+      if (isInputLike && event.key !== 'Escape') {
         return;
       }
 
