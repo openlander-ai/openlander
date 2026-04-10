@@ -81,7 +81,7 @@ src/
 │       └── auth.ts          #   Auth middleware
 ├── pipeline/                # Core deployment logic
 │   ├── deploy-core.ts       #   DeployPipeline class
-│   ├── docker.ts            #   Docker client (dockerode)
+│   ├── docker.ts            #   Docker abstraction layer (single entry point for all Docker operations)
 │   ├── traefik.ts           #   Traefik manager
 │   ├── compose.ts           #   Docker Compose pipeline
 │   ├── deploy-plan/         #   Plan engine (create → update → execute)
@@ -244,6 +244,27 @@ MCP exposes 4 composite tools, each accepting an `action` parameter (`action="he
 - `openlander_project` — project management, env vars
 - `openlander_service` — infrastructure services, volumes
 - `openlander_monitor` — monitoring, alerts, automation
+
+### Docker Abstraction Layer
+
+`src/pipeline/docker.ts` is the **single entry point** for all Docker operations. All new code MUST use docker.ts methods, never raw `getClient()` calls.
+
+**Method categories**:
+
+- **Container lifecycle**: `runContainer`, `safeRemoveContainer`, `restartContainer`, `stopContainer`, `startContainer`
+- **Network management**: `connectContainerToNetwork`, `disconnectContainerFromNetwork`, `getNetworkInfo`
+- **Execution**: `execSimple`, `execStream`
+- **Inspection**: `inspectContainer`, `listContainers`, `getContainerInfo`
+- **Image operations**: `buildImage`, `pullImage`, `removeImage`
+
+**Deprecation**: `getClient()` is deprecated and will be removed after PR2 (read-path) and PR3 (special cases) migrate all 24 remaining callers. The deprecation is signaled via `@deprecated` JSDoc to guide developers away from raw dockerode calls.
+
+**Why**: Centralizing Docker operations in one module enables:
+
+- Consistent error handling and logging
+- Easier testing (mock one module, not 24 files)
+- Future Docker API changes isolated to one place
+- Clear audit trail of all Docker operations
 
 ### EventBus
 

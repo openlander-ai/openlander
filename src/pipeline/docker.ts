@@ -1124,6 +1124,13 @@ export class Docker {
     return this.networkName;
   }
 
+  /**
+   * @deprecated Use specific docker.ts methods instead.
+   * This method will be removed once all callers are migrated (PR2/PR3).
+   *
+   * Available methods: inspectContainer, execSimple, connectContainerToNetwork,
+   * restartContainer, getNetworkInfo, runContainer, safeRemoveContainer, etc.
+   */
   getClient(): Dockerode {
     return this.client;
   }
