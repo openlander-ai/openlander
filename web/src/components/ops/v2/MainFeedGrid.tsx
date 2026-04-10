@@ -1,5 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { memo, useMemo, useState, useCallback } from 'react';
 import { ChevronRight, ChevronDown, Clock, AlertCircle, FileText } from 'lucide-react';
 import { cn } from '../../../lib/utils.js';
@@ -248,7 +249,9 @@ function EventDetailsContent({
       {(hasShortDescription || (detailsOpen && hasLongDescription)) && (
         <div className="w-full overflow-hidden mt-0.5">
           <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[11px] text-secondary-ol prose-p:text-[11px] prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-xs prose-headings:font-semibold prose-a:text-agent prose-a:no-underline hover:prose-a:underline prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-[11px] prose-ul:pl-4 prose-ol:pl-4 prose-li:my-0.5">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.description}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+              {event.description}
+            </ReactMarkdown>
           </div>
         </div>
       )}

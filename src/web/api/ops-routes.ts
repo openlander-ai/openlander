@@ -158,15 +158,17 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     const search = c.req.query('search');
     const fromParam = c.req.query('from');
     const toParam = c.req.query('to');
-    const limit = Number(c.req.query('limit') ?? 50);
+    const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 500);
 
     try {
       let incidents;
       if (projectId) {
         incidents = ctx.db.listOpsIncidentsByProject(projectId, limit);
       } else {
-        const from = fromParam ? Number(fromParam) : Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const to = toParam ? Number(toParam) : Date.now();
+        const from = fromParam
+          ? Math.max(0, parseInt(fromParam, 10) || 0)
+          : Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const to = toParam ? Math.max(0, parseInt(toParam, 10) || 0) : Date.now();
         incidents = ctx.db.listOpsIncidentsByDateRange(from, to, search);
       }
 

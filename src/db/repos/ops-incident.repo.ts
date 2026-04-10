@@ -3,6 +3,10 @@ import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { opsIncidents } from '../schema.drizzle.js';
 import type { OpsIncidentRow } from '../types.js';
 
+function escapeLikePattern(text: string): string {
+  return text.replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 export class OpsIncidentRepo {
   constructor(
     private readonly db: DrizzleClient,
@@ -81,9 +85,10 @@ export class OpsIncidentRepo {
   findByDateRange(from: number, to: number, searchText?: string): OpsIncidentRow[] {
     const conditions = [gte(opsIncidents.created_at, from), lte(opsIncidents.created_at, to)];
     if (searchText) {
+      const escaped = escapeLikePattern(searchText);
       const searchCondition = or(
-        like(opsIncidents.root_cause, `%${searchText}%`),
-        like(opsIncidents.diagnosis, `%${searchText}%`),
+        like(opsIncidents.root_cause, `%${escaped}%`),
+        like(opsIncidents.diagnosis, `%${escaped}%`),
       );
       if (searchCondition) conditions.push(searchCondition);
     }
@@ -96,13 +101,14 @@ export class OpsIncidentRepo {
   }
 
   findBySearch(searchText: string, limit?: number): OpsIncidentRow[] {
+    const escaped = escapeLikePattern(searchText);
     const baseQuery = this.db
       .select()
       .from(opsIncidents)
       .where(
         or(
-          like(opsIncidents.root_cause, `%${searchText}%`),
-          like(opsIncidents.diagnosis, `%${searchText}%`),
+          like(opsIncidents.root_cause, `%${escaped}%`),
+          like(opsIncidents.diagnosis, `%${escaped}%`),
         ),
       )
       .orderBy(desc(opsIncidents.created_at));
