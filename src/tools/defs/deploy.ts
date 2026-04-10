@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
+import { createModuleLogger } from '../../lib/logger.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
@@ -14,6 +15,8 @@ import {
   previewDeploySchema,
   rollbackProjectSchema,
 } from './schemas.js';
+
+const log = createModuleLogger('tools-defs-deploy');
 
 function buildDeployLockedResponse(error: DeployLockedError) {
   return {
@@ -120,10 +123,11 @@ export const deployToolDefs: ToolDef[] = [
     name: 'deploy_blue_green',
     riskLevel: 'medium',
     description:
-      'Deploy a project with zero downtime using blue-green strategy. Builds a new version alongside the current one, runs health checks, then switches traffic atomically. Use when downtime is unacceptable. Returns { success, projectId, projectName, previousImageTag, containerId, url, port, commitSha, buildDurationMs }. Errors: PROJECT_NOT_FOUND. HEALTH_CHECK_FAILED is returned in error (old version kept running), not thrown.',
-    mcpDescription: 'Deploy with zero downtime using blue-green strategy.',
+      'Start a zero-downtime blue-green deployment (non-blocking). Returns immediately with { status: "deploying" }. Poll get_deploy_status to track progress. Builds a new version alongside the current one, runs health checks, then switches traffic atomically. Errors: PROJECT_NOT_FOUND, DEPLOY_LOCKED.',
+    mcpDescription:
+      'Start zero-downtime blue-green deployment (non-blocking). Poll get_deploy_status for progress.',
     inputSchema: deployBlueGreenSchema,
-    execute: async (args, context) => {
+    execute: (args, context) => {
       const projectName = args['project_name'] as string;
       const toolSessionId = `mcp-blue-green-${nanoid(12)}`;
       const healthCheckPath = args['health_check_path'] as string | undefined;
@@ -131,31 +135,41 @@ export const deployToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
-      const release = await context.appCtx.deployQueue.acquire();
-      let result;
-      try {
-        const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
-        if (lockResult) {
-          return lockResult;
-        }
-        result = await context.appCtx.pipeline.redeploy(project.id, {
+      const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+      if (lockResult) {
+        return lockResult;
+      }
+
+      void context.appCtx.pipeline
+        .redeploy(project.id, {
           strategy: 'blue-green',
           healthCheckPath: healthCheckPath?.trim() || undefined,
           lockSessionId: toolSessionId,
+        })
+        .catch((err: unknown) => {
+          if (err instanceof DeployLockedError) {
+            log.warn(
+              { err, projectId: project.id },
+              'Blue-green deploy skipped: project lock is held',
+            );
+            return;
+          }
+          log.error({ err, projectId: project.id }, 'Blue-green deploy failed');
+        })
+        .finally(() => {
+          context.appCtx.db.releaseDeployLock(project.id, toolSessionId);
         });
-      } catch (err) {
-        if (err instanceof DeployLockedError) {
-          return buildDeployLockedResponse(err);
-        }
-        throw err;
-      } finally {
-        release();
-      }
+
       return {
-        ...result,
+        status: 'deploying',
+        strategy: 'blue-green',
+        project: projectName,
+        project_id: project.id,
+        lock_session: toolSessionId,
         _agent_guidance: {
           next_steps: [
-            'Call get_deploy_status to poll blue-green deployment progress. Do NOT use wait=true — it blocks the agent.',
+            'Call get_deploy_status to poll blue-green deployment progress.',
+            'Blue-green deploys take 2-5 minutes (build + health check + traffic switch).',
           ],
         },
       };
@@ -201,7 +215,7 @@ export const deployToolDefs: ToolDef[] = [
     description:
       'Get real-time deployment status for one or all projects currently being built. Shows phase (queued/cloning/building/starting/done/failed), timing, and progress details. jobs[] may include urls, internal_host, docker_host, completed_at, health (done), build_step/build_step_total/build_step_desc (building), auto_diagnosis (failed), build_log_tail, and timeout. Use when user asks "is it done yet?" or "what is building?" during a deploy. Returns { active, jobs[] }. If no deploys are in progress, returns { active: 0, jobs: [] }. With wait=true: blocks until completion. Without project_name, waits for ALL active deploys to finish.',
     mcpDescription:
-      'Get real-time deployment status. During build phase, includes build_step, build_step_total, build_step_desc for progress tracking. Done jobs include urls/internal_host/docker_host/health/completed_at. Failed jobs may include auto_diagnosis and build_log_tail. Wait mode may return timeout=true. Poll this tool to monitor deployment progress. For no_cache rebuilds, use timeout=600 (builds may take 3-5+ minutes).',
+      'Get real-time deployment status. During build phase, includes build_step, build_step_total, build_step_desc for progress tracking. Done jobs include urls/internal_host/docker_host/health/completed_at. Failed jobs may include auto_diagnosis and build_log_tail. Wait mode may return timeout=true. IMPORTANT: MCP transport timeout (~30s) overrides the timeout parameter. Prefer polling without wait=true over long waits.',
     inputSchema: deployStatusSchema,
     execute: async (args, context) => {
       const appCtx = context.appCtx;

@@ -268,6 +268,9 @@ export const projectOpsToolDefs: ToolDef[] = [
             return;
           }
           log.error({ err, projectId: project.id }, 'Redeploy failed');
+        })
+        .finally(() => {
+          context.appCtx.db.releaseDeployLock(project.id, toolSessionId);
         });
 
       return {

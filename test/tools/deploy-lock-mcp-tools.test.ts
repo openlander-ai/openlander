@@ -116,15 +116,12 @@ describe('BUG-002 MCP deploy tool lock guard', () => {
     expect(ctx.pipeline.redeploy).not.toHaveBeenCalled();
   });
 
-  it('deploy_blue_green calls queue release function after lock check', async () => {
-    const releaseFn = vi.fn();
+  it('deploy_blue_green does not use deploy queue (fire-and-forget)', async () => {
     const ctx = createLockedContext();
-    (ctx.deployQueue.acquire as ReturnType<typeof vi.fn>).mockResolvedValue(releaseFn);
 
     const tool = getTool(ctx, 'deploy_blue_green');
     await tool.execute({ project_name: 'locked-app' }, { target: 'mcp' });
 
-    expect(ctx.deployQueue.acquire).toHaveBeenCalled();
-    expect(releaseFn).toHaveBeenCalled();
+    expect(ctx.deployQueue.acquire).not.toHaveBeenCalled();
   });
 });
