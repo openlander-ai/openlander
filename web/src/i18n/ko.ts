@@ -576,6 +576,8 @@ export const translations = {
       drawerLabel: '내비게이션',
       incidentCount: '{title} (×{count})',
       searchIncidents: '문제 검색...',
+      expandSidebar: '사이드바 펼치기',
+      collapseSidebar: '사이드바 접기',
     },
     timeline: {
       threadTitle: '{project} — {type}',

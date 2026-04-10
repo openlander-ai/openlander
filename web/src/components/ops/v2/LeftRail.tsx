@@ -420,7 +420,9 @@ export function LeftRail({
           <button
             type="button"
             onClick={toggle}
-            title={effectivelyCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={
+              effectivelyCollapsed ? t('opsV2.rail.expandSidebar') : t('opsV2.rail.collapseSidebar')
+            }
             className="flex items-center justify-center h-6 w-6 rounded-md text-muted-ol hover:text-secondary-ol hover:bg-bg-subtle transition-colors"
           >
             {effectivelyCollapsed ? (

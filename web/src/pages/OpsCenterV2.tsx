@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'reac
 import { X, AlertCircle, RefreshCw, Loader2, Activity, Network } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { useOpsCenterData } from '@/hooks/use-ops-center-data';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { StatusStrip } from '@/components/ops/v2/StatusStrip';
 import { LeftRail } from '@/components/ops/v2/LeftRail';
 import { MainFeedGrid } from '@/components/ops/v2/MainFeedGrid';
 import { FilterBar, useFilterSearchParams } from '@/components/ops/v2/FilterBar';
 import { CircuitBreakerWidget } from '@/components/ops/v2/CircuitBreakerWidget';
 import { IncidentDetailSlideover } from '@/components/ops/v2/IncidentDetailSlideover';
+import { KeyboardShortcutsHelp } from '@/components/ops/v2/KeyboardShortcutsHelp';
 import { cn } from '@/lib/utils';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
 
@@ -68,6 +70,9 @@ export function OpsCenterV2() {
   // Incident slideover state
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
 
+  // Keyboard shortcuts state
+  const [currentFocusIndex, setCurrentFocusIndex] = useState(0);
+
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
@@ -81,6 +86,49 @@ export function OpsCenterV2() {
   useEffect(() => {
     if (!isBelowMd) setDrawerOpen(false);
   }, [isBelowMd]);
+
+  // Keyboard shortcuts
+  const threadCount = useMemo(() => {
+    const threads = activities.length > 0 ? activities.length : 0;
+    return threads;
+  }, [activities]);
+
+  useKeyboardShortcuts([
+    {
+      key: 'j',
+      handler: () => {
+        setCurrentFocusIndex((prev) => Math.min(prev + 1, Math.max(0, threadCount - 1)));
+      },
+    },
+    {
+      key: 'k',
+      handler: () => {
+        setCurrentFocusIndex((prev) => Math.max(prev - 1, 0));
+      },
+    },
+    {
+      key: '/',
+      handler: () => {
+        const searchInput = document.querySelector(
+          '[data-testid="incident-search-input"]',
+        ) as HTMLInputElement;
+        searchInput?.focus();
+      },
+    },
+    {
+      key: 'Escape',
+      handler: () => {
+        setSelectedIncidentId(null);
+      },
+    },
+    {
+      key: '?',
+      handler: () => {
+        const helpButton = document.querySelector('[aria-label*="Keyboard"]') as HTMLButtonElement;
+        helpButton?.click();
+      },
+    },
+  ]);
 
   const healthState = deriveHealthState(incidents, circuitBreakers);
   const trippedCount = circuitBreakers.filter((cb) => cb.state === 'open').length;
@@ -206,31 +254,34 @@ export function OpsCenterV2() {
               <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
                 {t('opsV2.page.title')}
               </h1>
-              <div className="flex items-center bg-bg-subtle rounded-lg p-1 border border-[hsl(var(--border))]">
-                <button
-                  onClick={() => setViewMode('feed')}
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                    viewMode === 'feed'
-                      ? 'bg-bg-panel text-primary-ol shadow-sm'
-                      : 'text-muted-ol hover:text-secondary-ol',
-                  )}
-                >
-                  <Activity className="h-4 w-4" />
-                  {t('opsV2.graph.feedView')}
-                </button>
-                <button
-                  onClick={() => setViewMode('graph')}
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                    viewMode === 'graph'
-                      ? 'bg-bg-panel text-primary-ol shadow-sm'
-                      : 'text-muted-ol hover:text-secondary-ol',
-                  )}
-                >
-                  <Network className="h-4 w-4" />
-                  {t('opsV2.graph.graphView')}
-                </button>
+              <div className="flex items-center gap-3">
+                <KeyboardShortcutsHelp />
+                <div className="flex items-center bg-bg-subtle rounded-lg p-1 border border-[hsl(var(--border))]">
+                  <button
+                    onClick={() => setViewMode('feed')}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                      viewMode === 'feed'
+                        ? 'bg-bg-panel text-primary-ol shadow-sm'
+                        : 'text-muted-ol hover:text-secondary-ol',
+                    )}
+                  >
+                    <Activity className="h-4 w-4" />
+                    {t('opsV2.graph.feedView')}
+                  </button>
+                  <button
+                    onClick={() => setViewMode('graph')}
+                    className={cn(
+                      'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                      viewMode === 'graph'
+                        ? 'bg-bg-panel text-primary-ol shadow-sm'
+                        : 'text-muted-ol hover:text-secondary-ol',
+                    )}
+                  >
+                    <Network className="h-4 w-4" />
+                    {t('opsV2.graph.graphView')}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -289,6 +340,7 @@ export function OpsCenterV2() {
                   isFiltered={activities.length > 0 && filteredActivities.length === 0}
                   onClearFilters={() => setFilters({ density: 'all' })}
                   onThreadSelect={handleThreadSelect}
+                  focusedIndex={currentFocusIndex}
                 />
               ) : (
                 <div className="h-[600px] w-full">

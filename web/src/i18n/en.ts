@@ -579,6 +579,8 @@ export const translations = {
       drawerLabel: 'Navigation',
       incidentCount: '{title} (×{count})',
       searchIncidents: 'Search issues...',
+      expandSidebar: 'Expand sidebar',
+      collapseSidebar: 'Collapse sidebar',
     },
     timeline: {
       threadTitle: '{project} — {type}',

@@ -49,7 +49,7 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
       })
       .catch((err) => {
         if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Failed to load incident');
+          setError(err instanceof Error ? err.message : t('opsV2.incident.loadError'));
         }
       })
       .finally(() => {
