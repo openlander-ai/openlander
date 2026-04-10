@@ -46,47 +46,6 @@ interface McpRequestHandlerServer {
   ): void;
 }
 
-export function registerMcpTools(
-  server: McpRequestHandlerServer,
-  defs: ToolDef[],
-  appCtx: AppContext,
-): void {
-  const mcpDefs = defs.filter(isMcpTargeted);
-
-  server.setRequestHandler(ListToolsRequestSchema, () => {
-    const tools = mcpDefs.map((def) => ({
-      name: def.name,
-      description: def.mcpDescription ?? def.description,
-      inputSchema: toInputSchema(def.inputSchema),
-    }));
-
-    return Promise.resolve({ tools });
-  });
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    try {
-      const toolName = request.params.name;
-      const rawArgs = request.params.arguments ?? {};
-
-      const def = mcpDefs.find((item) => item.name === toolName);
-      if (!def) {
-        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
-      }
-
-      const parsed = def.inputSchema.safeParse(rawArgs);
-      if (!parsed.success) {
-        throw new McpError(ErrorCode.InvalidParams, parsed.error.message);
-      }
-
-      const result = await def.execute(parsed.data, { target: 'mcp', appCtx });
-      const transformed = def.mcp?.transformResult ? def.mcp.transformResult(result) : result;
-      return successResponse(transformed);
-    } catch (error) {
-      return errorResponse(error);
-    }
-  });
-}
-
 export function registerCompositeMcpTools(
   server: McpRequestHandlerServer,
   composites: CompositeTool[],

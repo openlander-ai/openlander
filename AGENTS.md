@@ -235,17 +235,15 @@ interface ToolDef {
 
 14 tool categories, 69 tools. Two adapters convert ToolDefs to:
 
-- `src/tools/adapters/mcp.ts` — MCP protocol format (legacy: all 69 tools, unified: 4 composite tools)
+- `src/tools/adapters/mcp.ts` — MCP protocol format (4 composite tools)
 - `src/tools/adapters/ai-sdk.ts` — Vercel AI SDK format
 
-**MCP mode** is controlled by `config.mcp.mode?: 'unified' | 'legacy'` (default: `'legacy'`):
+MCP exposes 4 composite tools, each accepting an `action` parameter (`action="help"` lists operations):
 
-- `legacy`: exposes all 69 individual tools — same as before
-- `unified`: exposes 4 composite tools, each accepting an `action` parameter:
-  - `openlander_deploy` — deploy lifecycle (create_deploy_plan, execute_deploy_plan, etc.)
-  - `openlander_project` — project management, env vars
-  - `openlander_service` — infrastructure services, volumes
-  - `openlander_monitor` — monitoring, alerts, automation
+- `openlander_deploy` — deploy lifecycle (create_deploy_plan, execute_deploy_plan, etc.)
+- `openlander_project` — project management, env vars
+- `openlander_service` — infrastructure services, volumes
+- `openlander_monitor` — monitoring, alerts, automation
 
 ### EventBus
 

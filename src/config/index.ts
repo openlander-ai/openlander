@@ -211,8 +211,6 @@ export interface MCPConfig {
   servers: McpServerEntry[];
   /** Whether to expose platform tools (Docker, Git, etc.) via MCP */
   platformTools?: boolean;
-  /** MCP tool consolidation mode: 'unified' (consolidated tools) or 'legacy' (separate tools) */
-  mode?: 'unified' | 'legacy';
 }
 
 export interface EmailChannelConfig {
@@ -334,7 +332,6 @@ function buildDefaultConfig(): OpenLanderConfig {
       transport: 'stdio',
       servers: [],
       platformTools: true,
-      mode: 'legacy',
     },
     channels: {
       slack: { enabled: false, token: '', signingSecret: '', recoveryChannelId: '' },
@@ -404,17 +401,6 @@ export function getConfigPath(): string {
 }
 
 /**
- * Validate and normalize MCP mode value.
- * Returns 'legacy' if the value is invalid or missing.
- */
-function normalizeMcpMode(mode: unknown): 'unified' | 'legacy' {
-  if (mode === 'unified' || mode === 'legacy') {
-    return mode;
-  }
-  return 'legacy';
-}
-
-/**
  * Load configuration from disk.
  * Merges saved config with defaults — new fields get default values automatically.
  */
@@ -430,9 +416,6 @@ export function loadConfig(): OpenLanderConfig {
     const raw = readFileSync(configPath, 'utf-8');
     const saved = JSON.parse(raw) as Partial<OpenLanderConfig>;
     const merged = deepMerge(defaults, saved);
-
-    // Normalize MCP mode to ensure it's always valid
-    merged.mcp.mode = normalizeMcpMode(merged.mcp.mode);
 
     return merged;
   } catch (err) {

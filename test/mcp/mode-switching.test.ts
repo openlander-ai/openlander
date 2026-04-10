@@ -42,21 +42,12 @@ function isMcpTargeted(def: ToolDef): boolean {
   return !def.targets || def.targets.includes('mcp');
 }
 
-/** Mirrors src/config/index.ts normalizeMcpMode() contract */
-function normalizeMcpMode(mode: unknown): 'unified' | 'legacy' {
-  if (mode === 'unified' || mode === 'legacy') return mode;
-  return 'legacy';
-}
-
-describe('MCP Mode Switching', () => {
-  it('legacy mode returns 69 individual MCP tools', () => {
+describe('MCP Composite Tools', () => {
+  it('returns 4 composite tools from 69 underlying tool defs', () => {
     const defs = getMcpToolDefs(false);
-    const mcp = defs.filter(isMcpTargeted);
-    expect(mcp).toHaveLength(69);
-  });
+    const mcpDefs = defs.filter(isMcpTargeted);
+    expect(mcpDefs).toHaveLength(69);
 
-  it('unified mode returns 4 composite tools', () => {
-    const defs = getMcpToolDefs(false);
     const composites = createCompositeTools(defs);
     expect(composites).toHaveLength(4);
     expect(composites.map((c) => c.name)).toEqual([
@@ -67,12 +58,11 @@ describe('MCP Mode Switching', () => {
     ]);
   });
 
-  it('unified mode with platformTools=true adds platform tools separately', () => {
+  it('platformTools=true adds platform tools separately', () => {
     const withPlatform = getMcpToolDefs(true).filter(isMcpTargeted);
     const withoutPlatform = getMcpToolDefs(false).filter(isMcpTargeted);
     const platformCount = withPlatform.length - withoutPlatform.length;
 
-    // All platform tools target 'mcp', so the delta equals total platform defs
     const totalPlatformDefs = [
       ...platformReadToolDefs,
       ...platformDebugToolDefs,
@@ -97,21 +87,5 @@ describe('MCP Mode Switching', () => {
       expect(composite.inputSchema).toBeDefined();
       expect(typeof composite.execute).toBe('function');
     }
-  });
-
-  it('default mode (undefined) is treated as legacy', () => {
-    expect(normalizeMcpMode(undefined)).toBe('legacy');
-    expect(normalizeMcpMode(null)).toBe('legacy');
-    expect(normalizeMcpMode('')).toBe('legacy');
-    expect(normalizeMcpMode('invalid')).toBe('legacy');
-    expect(normalizeMcpMode(42)).toBe('legacy');
-  });
-
-  it('unified mode is preserved when explicitly set', () => {
-    expect(normalizeMcpMode('unified')).toBe('unified');
-  });
-
-  it('legacy mode is preserved when explicitly set', () => {
-    expect(normalizeMcpMode('legacy')).toBe('legacy');
   });
 });

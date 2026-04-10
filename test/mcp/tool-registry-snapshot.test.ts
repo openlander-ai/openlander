@@ -16,7 +16,7 @@ import type { ToolDef } from '../../src/tools/defs/types.js';
 /**
  * Snapshot of MCP-exposed tools (non-platform, baseline for regression testing).
  * This list was captured after T2 deletions (8 tools removed).
- * Used to validate that mode='legacy' doesn't accidentally expose/hide tools.
+ * Used to validate that the MCP tool registry doesn't accidentally expose/hide tools.
  */
 const EXPECTED_TOOLS = [
   'add_volume',
