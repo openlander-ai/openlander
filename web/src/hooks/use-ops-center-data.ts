@@ -75,6 +75,11 @@ function getTimeRangeParams(timeRange?: string): { from?: number; to?: number } 
   return { from, to: now };
 }
 
+function getFromTime(timeRange?: string): number | null {
+  const params = getTimeRangeParams(timeRange);
+  return params.from ?? null;
+}
+
 export function useOpsCenterData(timeRange?: string): OpsCenterData {
   // --- Core state ---
   const [activities, setActivities] = useState<ActivityItem[]>([]);
@@ -93,6 +98,7 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
   const lastEventIdRef = useRef<string | null>(null);
   const dedupSetRef = useRef<Set<string>>(new Set());
   const cancelledRef = useRef(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---------------------------------------------------------------------------
   // Deduplication helper: returns true if the item is new (not a dup)
@@ -141,7 +147,7 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
               retriesRef.current += 1;
               setIsReconnecting(true);
               const delay = BASE_RETRY_DELAY * Math.pow(2, retriesRef.current - 1);
-              setTimeout(() => {
+              timeoutRef.current = setTimeout(() => {
                 if (!cancelledRef.current) {
                   setIsReconnecting(false);
                   connect();
@@ -199,6 +205,18 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
 
               if (!dedup(item.id)) continue;
 
+              // Filter by time range: skip stale backfill events unless they're recent (live window)
+              const fromTime = getFromTime(timeRange);
+              const LIVE_WINDOW_MS = 5 * 60 * 1000;
+              const itemTime =
+                typeof item.timestamp === 'string'
+                  ? new Date(item.timestamp).getTime()
+                  : item.timestamp;
+              const isLive = itemTime > Date.now() - LIVE_WINDOW_MS;
+              if (fromTime !== null && !isLive && itemTime < fromTime) {
+                continue;
+              }
+
               // Buffer items until backfill-complete, then apply as batch
               reconnectBatch.push(item);
             } catch {
@@ -220,7 +238,7 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
           setIsConnected(false);
           setIsReconnecting(true);
           const delay = BASE_RETRY_DELAY * Math.pow(2, retriesRef.current - 1);
-          setTimeout(() => {
+          timeoutRef.current = setTimeout(() => {
             if (!cancelledRef.current) {
               setIsReconnecting(false);
               connect();
@@ -245,7 +263,7 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
             retriesRef.current += 1;
             setIsReconnecting(true);
             const delay = BASE_RETRY_DELAY * Math.pow(2, retriesRef.current - 1);
-            setTimeout(() => {
+            timeoutRef.current = setTimeout(() => {
               if (!cancelledRef.current) {
                 setIsReconnecting(false);
                 connect();
@@ -258,19 +276,15 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
   }, [dedup]);
 
   // ---------------------------------------------------------------------------
-  // Initial parallel REST snapshot + SSE connect
+  // REST snapshot fetcher (used by initial load and retry)
   // ---------------------------------------------------------------------------
-  useEffect(() => {
-    cancelledRef.current = false;
-    setIsLoading(true);
-
-    const { from, to } = getTimeRangeParams(timeRange);
+  const fetchRestSnapshot = useCallback(async (timeRangeParam?: string) => {
+    const { from, to } = getTimeRangeParams(timeRangeParam);
     const activityParams = new URLSearchParams({ limit: '100' });
     if (from) activityParams.set('from', String(from));
     if (to) activityParams.set('to', String(to));
 
-    // Parallel REST snapshot
-    Promise.all([
+    return Promise.all([
       fetch(`/api/ops/activity?${activityParams.toString()}`, { credentials: 'include' }).then(
         (r) => {
           if (!r.ok) throw new Error(`Activity fetch failed: ${r.status}`);
@@ -283,7 +297,18 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
       fetchWithAuth('/api/ops/agent/active')
         .then((r) => (r.ok ? (r.json() as Promise<AgentActiveState>) : { isActive: false }))
         .catch(() => ({ isActive: false }) as AgentActiveState),
-    ])
+    ]);
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Initial parallel REST snapshot + SSE connect
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    cancelledRef.current = false;
+    setIsLoading(true);
+
+    // Parallel REST snapshot
+    fetchRestSnapshot(timeRange)
       .then(([activityData, incidentData, cbData, approvalData, agentData]) => {
         if (cancelledRef.current) return;
 
@@ -326,18 +351,57 @@ export function useOpsCenterData(timeRange?: string): OpsCenterData {
       abortRef.current?.abort();
       abortRef.current = null;
       dedupSetRef.current.clear();
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
-  }, [connect, timeRange]);
+  }, [connect, fetchRestSnapshot, timeRange]);
 
   // ---------------------------------------------------------------------------
-  // Manual retry: reset error and reconnect
+  // Manual retry: reset error, refresh REST data, and reconnect SSE
   // ---------------------------------------------------------------------------
   const retry = useCallback(() => {
     setError(null);
     setIsLoading(true);
     retriesRef.current = 0;
-    connect();
-  }, [connect]);
+
+    // Refresh REST snapshot
+    fetchRestSnapshot(timeRange)
+      .then(([activityData, incidentData, cbData, approvalData, agentData]) => {
+        if (cancelledRef.current) return;
+
+        const items = activityData.activities.slice(0, BUFFER_MAX);
+        for (const item of items) {
+          dedupSetRef.current.add(item.id);
+        }
+        if (items.length > 0) {
+          lastEventIdRef.current = items[0].id;
+        }
+
+        setActivities(items);
+        setIncidents(incidentData.incidents ?? []);
+        setCircuitBreakers(cbData.breakers ?? []);
+        setApprovals(approvalData);
+        setAgentStatus(agentData as AgentActiveState);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (!cancelledRef.current) {
+          const message = err instanceof Error ? err.message : String(err);
+          const isTimeout = err instanceof Error && err.name === 'AbortError';
+          setError({ type: isTimeout ? 'timeout' : 'api_error', message });
+        }
+      })
+      .finally(() => {
+        if (!cancelledRef.current) setIsLoading(false);
+
+        // Reconnect SSE
+        if (!cancelledRef.current) {
+          connect();
+        }
+      });
+  }, [connect, fetchRestSnapshot, timeRange]);
 
   return {
     activities,
