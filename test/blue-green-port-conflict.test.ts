@@ -201,6 +201,30 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
     expect(dockerControls.promotedRenameMock).toHaveBeenCalledTimes(1);
   });
 
+  it('persists containerPort to environment after blue-green promotion', async () => {
+    db.updateEnvironment('p1-production', {
+      status: 'running',
+      containerId: 'container-blue',
+      imageTag: 'openlander/demo-app:old',
+      assignedPort: 10010,
+    });
+
+    vi.spyOn(
+      pipeline as unknown as { healthCheck: () => Promise<boolean> },
+      'healthCheck',
+    ).mockResolvedValue(true);
+
+    const result = await pipeline.redeploy('p1', { strategy: 'blue-green' });
+
+    expect(result.success).toBe(true);
+
+    const environment = db.getEnvironment('p1-production');
+    expect(environment?.container_port).toBe(3000);
+
+    const project = db.getProject('p1');
+    expect(project?.container_port).toBe(3000);
+  });
+
   it('tries to restart blue when promoted container fails and blue is not running', async () => {
     const mockDocker = createMockDocker({ blueRunning: false });
     docker = mockDocker.docker;

@@ -116,6 +116,7 @@ export class RollbackExecutor {
       this.db.updateProject(projectId, {
         status: 'running',
         assignedPort: port,
+        containerPort,
         containerId,
         imageTag: rollbackImageTag,
         previousImageTag: currentImageTag,
@@ -128,6 +129,7 @@ export class RollbackExecutor {
           imageTag: rollbackImageTag,
           previousImageTag: currentImageTag,
           assignedPort: port,
+          containerPort,
         });
       }
 
