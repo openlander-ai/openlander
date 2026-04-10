@@ -694,6 +694,16 @@ export const translations = {
       warning: 'Warning',
       info: 'Info',
     },
+    shortcuts: {
+      title: 'Keyboard Shortcuts',
+      description: 'Use keyboard shortcuts to navigate the operations center.',
+      helpLabel: 'Keyboard shortcuts help',
+      nextItem: 'Next item',
+      prevItem: 'Previous item',
+      search: 'Search',
+      close: 'Close',
+      help: 'Help',
+    },
   },
   ops: {
     ai: {

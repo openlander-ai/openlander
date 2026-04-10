@@ -690,6 +690,16 @@ export const translations = {
       warning: '경고',
       info: '정보',
     },
+    shortcuts: {
+      title: '키보드 단축키',
+      description: '키보드 단축키를 사용하여 운영 센터를 탐색하세요.',
+      helpLabel: '키보드 단축키 도움말',
+      nextItem: '다음 항목',
+      prevItem: '이전 항목',
+      search: '검색',
+      close: '닫기',
+      help: '도움말',
+    },
   },
   ops: {
     ai: {
