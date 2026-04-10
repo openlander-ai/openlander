@@ -15,7 +15,7 @@ import dagre from '@dagrejs/dagre';
 import { fetchDependencyGraph } from '@/lib/api/operations';
 import type { DependencyNode, DependencyEdge } from '@/lib/api/operations';
 import { useLanguage } from '@/i18n/context';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Share2 } from 'lucide-react';
 
 const nodeWidth = 200;
 const nodeHeight = 60;
@@ -96,7 +96,9 @@ export default function DependencyGraph() {
                     {n.name}
                   </div>
                   <div className={`text-xs mt-1 ${textColor}`}>
-                    {n.type === 'project' ? 'Project' : 'Service'}
+                    {n.type === 'project'
+                      ? t('opsV2.graph.nodeTypeProject')
+                      : t('opsV2.graph.nodeTypeService')}
                   </div>
                 </div>
               ),
@@ -130,7 +132,7 @@ export default function DependencyGraph() {
         setEdges(layoutedEdges);
       } catch (err) {
         if (mounted) {
-          setError(err instanceof Error ? err.message : 'Failed to load graph');
+          setError(err instanceof Error ? err.message : t('opsV2.error.loadFailed'));
         }
       } finally {
         if (mounted) {
@@ -165,8 +167,12 @@ export default function DependencyGraph() {
 
   if (nodes.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))] text-muted-ol">
-        <p>{t('opsV2.graph.empty')}</p>
+      <div className="flex flex-col items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))] text-center p-6">
+        <Share2 className="mb-3 h-8 w-8 text-muted-ol/50" />
+        <h3 className="text-sm font-semibold text-primary-ol mb-1">
+          {t('opsV2.graph.emptyTitle')}
+        </h3>
+        <p className="text-sm text-muted-ol">{t('opsV2.graph.emptyDesc')}</p>
       </div>
     );
   }

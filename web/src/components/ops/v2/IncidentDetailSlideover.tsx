@@ -12,7 +12,7 @@ import { SeverityBadge } from '@/components/ops/SeverityBadge';
 import { IncidentTimeline } from '@/components/ops/IncidentTimeline';
 import { fetchOpsIncident } from '@/lib/api/operations';
 import type { OpsIncident, OpsIncidentEvent } from '@/lib/api/operations';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Clock } from 'lucide-react';
 import { humanizeEventType } from '@/components/ops/utils';
 import { cn } from '@/lib/utils';
 
@@ -192,7 +192,15 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
                   {events.length > 0 ? (
                     <IncidentTimeline events={events} />
                   ) : (
-                    <p className="text-sm text-muted-ol italic">{t('opsV2.incident.noEvents')}</p>
+                    <div className="flex flex-col items-center justify-center py-8 text-center border rounded border-dashed border-[hsl(var(--border))]">
+                      <Clock className="mb-2 h-6 w-6 text-muted-ol/50" />
+                      <p className="text-sm font-medium text-primary-ol">
+                        {t('opsV2.incident.noEventsTitle')}
+                      </p>
+                      <p className="text-xs text-muted-ol mt-1">
+                        {t('opsV2.incident.noEventsDesc')}
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>

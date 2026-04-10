@@ -484,15 +484,23 @@ export function LeftRail({
             )}
 
             {!effectivelyCollapsed && groupedIncidents.length === 0 && (
-              <p className="px-2 py-1 text-xs text-muted-ol">
-                {searchResults !== null ? (
-                  <span data-testid="incident-search-empty">
-                    {t('opsV2.empty.noSearchResults')}
-                  </span>
-                ) : (
-                  t('opsV2.empty.noActiveIssues')
-                )}
-              </p>
+              <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+                <AlertCircle className="mb-2 h-6 w-6 text-muted-ol/50" />
+                <p className="text-xs font-medium text-primary-ol">
+                  {searchResults !== null ? (
+                    <span data-testid="incident-search-empty">
+                      {t('opsV2.empty.noSearchResults')}
+                    </span>
+                  ) : (
+                    t('opsV2.empty.noActiveIssues')
+                  )}
+                </p>
+                <p className="text-[11px] text-muted-ol mt-1">
+                  {searchResults !== null
+                    ? t('opsV2.empty.noSearchResultsDesc')
+                    : t('opsV2.empty.noActiveIssuesDesc')}
+                </p>
+              </div>
             )}
             {groupedIncidents.map(({ incident, count, groupKey, lastEventTime }) => (
               <IncidentRow

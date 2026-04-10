@@ -76,6 +76,7 @@ export interface MainFeedGridProps {
   onThreadSelect?: (correlationId: string, incidentId?: string) => void;
   isFiltered?: boolean;
   onClearFilters?: () => void;
+  focusedIndex?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -361,6 +362,7 @@ export function MainFeedGrid({
   onThreadSelect,
   isFiltered,
   onClearFilters,
+  focusedIndex = 0,
 }: MainFeedGridProps) {
   const { t, language } = useLanguage();
 
@@ -417,7 +419,10 @@ export function MainFeedGrid({
       return (
         <div className="flex flex-col items-center justify-center py-16 text-center border rounded border-dashed border-[hsl(var(--border))]">
           <Clock className="mb-3 h-8 w-8 text-muted-ol/50" />
-          <p className="text-sm text-muted-ol mb-4">{t('opsV2.empty.filtered')}</p>
+          <h3 className="text-sm font-semibold text-primary-ol mb-1">
+            {t('opsV2.empty.filteredTitle')}
+          </h3>
+          <p className="text-sm text-muted-ol mb-4">{t('opsV2.empty.filteredDesc')}</p>
           {onClearFilters && (
             <button
               onClick={onClearFilters}
@@ -433,7 +438,10 @@ export function MainFeedGrid({
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center border rounded border-dashed border-[hsl(var(--border))]">
         <Clock className="mb-3 h-8 w-8 text-muted-ol/50" />
-        <p className="text-sm text-muted-ol">{t('opsV2.empty.noActivity')}</p>
+        <h3 className="text-sm font-semibold text-primary-ol mb-1">
+          {t('opsV2.empty.noActivityTitle')}
+        </h3>
+        <p className="text-sm text-muted-ol">{t('opsV2.empty.noActivityDesc')}</p>
       </div>
     );
   }
@@ -472,10 +480,11 @@ export function MainFeedGrid({
 
       {/* Body Rows */}
       <div className="flex flex-col bg-app border-b border-[hsl(var(--border))]" role="rowgroup">
-        {threadData.slice(0, visibleThreadCount).map((thread) => {
+        {threadData.slice(0, visibleThreadCount).map((thread, index) => {
           const isExpanded = !!expandedMap[thread.correlationId];
           const isCritical = thread.severity === 'critical';
           const isWarning = thread.severity === 'warning';
+          const isFocused = index === focusedIndex;
           const maxVisibleEvents = expandedEventsMap[thread.correlationId] ?? EVENTS_PAGE_SIZE;
           const visibleEvents = thread.events.slice(0, maxVisibleEvents);
           const hiddenEventCount = thread.events.length - visibleEvents.length;
@@ -497,6 +506,7 @@ export function MainFeedGrid({
                 thread.cascadeGroup &&
                   thread.cascadeGroup.length > 0 &&
                   'border-l-2 border-l-warning',
+                isFocused && 'ring-1 ring-agent/50 ring-inset',
               )}
             >
               {/* Parent Row */}
