@@ -195,7 +195,7 @@ export const platformReadToolDefs: ToolDef[] = [
           : allProjects;
 
       const { knownIds, knownNames } = collectKnownContainerNames(
-        projects,
+        allProjects,
         () => [],
         (projectName) => projectContainerName(projectName),
         services,

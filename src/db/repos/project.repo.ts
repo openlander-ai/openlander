@@ -335,10 +335,18 @@ export class ProjectRepo {
       } | null;
 
       if ((row?.changes ?? 0) === 0) {
-        log.warn(
-          { projectId, sessionId },
-          '[DeployLock] releaseDeployLock session mismatch or lock missing',
-        );
+        const current = this.getDeployLockInfo(projectId);
+        if (current) {
+          log.warn(
+            { projectId, sessionId, currentSession: current.session },
+            '[DeployLock] releaseDeployLock session mismatch — lock held by different session',
+          );
+        } else {
+          log.debug(
+            { projectId, sessionId },
+            '[DeployLock] releaseDeployLock no-op — lock already released',
+          );
+        }
         return false;
       }
 
