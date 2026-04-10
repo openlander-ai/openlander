@@ -38,7 +38,7 @@ function createLockedContext(): AppContext {
       rollback: vi.fn(),
     },
     deployQueue: {
-      acquire: vi.fn(),
+      acquire: vi.fn().mockResolvedValue(() => {}),
     },
   } as unknown as AppContext;
 }

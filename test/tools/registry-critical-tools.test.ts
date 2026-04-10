@@ -54,6 +54,7 @@ function createMockContext() {
     db: {
       getProjectByName: vi.fn().mockReturnValue(project),
       getLastDeployLog: vi.fn(),
+      getDeployLockInfo: vi.fn().mockReturnValue(null),
     },
     composePipeline,
     jobManager,
