@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, AlertCircle, RefreshCw, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { X, AlertCircle, RefreshCw, Loader2, Activity, Network } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { useOpsCenterData } from '@/hooks/use-ops-center-data';
 import { StatusStrip } from '@/components/ops/v2/StatusStrip';
@@ -7,8 +7,11 @@ import { LeftRail } from '@/components/ops/v2/LeftRail';
 import { MainFeedGrid } from '@/components/ops/v2/MainFeedGrid';
 import { FilterBar, useFilterSearchParams } from '@/components/ops/v2/FilterBar';
 import { CircuitBreakerWidget } from '@/components/ops/v2/CircuitBreakerWidget';
+import { IncidentDetailSlideover } from '@/components/ops/v2/IncidentDetailSlideover';
 import { cn } from '@/lib/utils';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
+
+const DependencyGraph = React.lazy(() => import('../components/ops/v2/DependencyGraph.js'));
 
 function deriveHealthState(
   incidents: { severity: string }[],
@@ -39,6 +42,9 @@ function useBreakpoint(maxWidthPx: number): boolean {
 
 export function OpsCenterV2() {
   const { t } = useLanguage();
+  // Filter state (synced with URL search params)
+  const [filters, setFilters] = useFilterSearchParams();
+
   const {
     activities,
     incidents,
@@ -49,17 +55,27 @@ export function OpsCenterV2() {
     isLoading,
     error,
     retry,
-  } = useOpsCenterData();
+  } = useOpsCenterData(filters.timeRange);
 
   // Responsive breakpoints
   const isBelowMd = useBreakpoint(768); // < md: hide rail, show drawer trigger
   const isBelowLg = useBreakpoint(1024); // < lg: force icon-only rail
 
-  // Mobile drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const [viewMode, setViewMode] = useState<'feed' | 'graph'>('feed');
+
+  // Incident slideover state
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
 
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
+  const handleThreadSelect = useCallback((_correlationId: string, incidentId?: string) => {
+    if (incidentId) {
+      setSelectedIncidentId(incidentId);
+    }
+  }, []);
 
   // Close drawer when resizing past md breakpoint
   useEffect(() => {
@@ -77,9 +93,6 @@ export function OpsCenterV2() {
     : isReconnecting
       ? 'reconnecting'
       : 'disconnected';
-
-  // Filter state (synced with URL search params)
-  const [filters, setFilters] = useFilterSearchParams();
 
   // Derive unique projects for filter dropdown
   const projects = useMemo(() => {
@@ -130,6 +143,7 @@ export function OpsCenterV2() {
             incidents={incidents}
             circuitBreakers={circuitBreakers}
             forceCollapsed={isBelowLg ? true : undefined}
+            onIncidentSelect={setSelectedIncidentId}
           />
         </div>
 
@@ -175,6 +189,10 @@ export function OpsCenterV2() {
                 incidents={incidents}
                 circuitBreakers={circuitBreakers}
                 forceCollapsed={false}
+                onIncidentSelect={(id) => {
+                  setSelectedIncidentId(id);
+                  closeDrawer();
+                }}
               />
             </div>
           </>
@@ -184,10 +202,36 @@ export function OpsCenterV2() {
         <div className="flex-1 overflow-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
           <div className="mx-auto w-full min-w-0 max-w-[1500px] space-y-6">
             {/* Page header */}
-            <div>
+            <div className="flex items-center justify-between">
               <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
                 {t('opsV2.page.title')}
               </h1>
+              <div className="flex items-center bg-bg-subtle rounded-lg p-1 border border-[hsl(var(--border))]">
+                <button
+                  onClick={() => setViewMode('feed')}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                    viewMode === 'feed'
+                      ? 'bg-bg-panel text-primary-ol shadow-sm'
+                      : 'text-muted-ol hover:text-secondary-ol',
+                  )}
+                >
+                  <Activity className="h-4 w-4" />
+                  {t('opsV2.graph.feedView')}
+                </button>
+                <button
+                  onClick={() => setViewMode('graph')}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+                    viewMode === 'graph'
+                      ? 'bg-bg-panel text-primary-ol shadow-sm'
+                      : 'text-muted-ol hover:text-secondary-ol',
+                  )}
+                >
+                  <Network className="h-4 w-4" />
+                  {t('opsV2.graph.graphView')}
+                </button>
+              </div>
             </div>
 
             {/* Error Banners */}
@@ -222,31 +266,52 @@ export function OpsCenterV2() {
             )}
 
             {/* Filters */}
-            <div className="flex flex-col lg:flex-row gap-6 items-start">
-              <div className="flex-1 w-full">
-                <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
+            {viewMode === 'feed' && (
+              <div className="flex flex-col lg:flex-row gap-6 items-start">
+                <div className="flex-1 w-full">
+                  <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
+                </div>
+                {circuitBreakers.length > 0 && (
+                  <div className="w-full lg:w-64 shrink-0 bg-bg-subtle/30 rounded-lg border border-[hsl(var(--border))] p-3">
+                    <CircuitBreakerWidget
+                      circuitBreakers={circuitBreakers}
+                      onFilter={() => setFilters({ density: 'actions-only' })}
+                    />
+                  </div>
+                )}
               </div>
-              {circuitBreakers.length > 0 && (
-                <div className="w-full lg:w-64 shrink-0 bg-bg-subtle/30 rounded-lg border border-[hsl(var(--border))] p-3">
-                  <CircuitBreakerWidget
-                    circuitBreakers={circuitBreakers}
-                    onFilter={() => setFilters({ density: 'actions-only' })}
-                  />
+            )}
+
+            <main className="min-w-0">
+              {viewMode === 'feed' ? (
+                <MainFeedGrid
+                  activities={filteredActivities}
+                  isFiltered={activities.length > 0 && filteredActivities.length === 0}
+                  onClearFilters={() => setFilters({ density: 'all' })}
+                  onThreadSelect={handleThreadSelect}
+                />
+              ) : (
+                <div className="h-[600px] w-full">
+                  <Suspense
+                    fallback={
+                      <div className="flex items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))]">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-ol" />
+                      </div>
+                    }
+                  >
+                    <DependencyGraph />
+                  </Suspense>
                 </div>
               )}
-            </div>
-
-            {/* Main content — feed grid */}
-            <main className="min-w-0">
-              <MainFeedGrid
-                activities={filteredActivities}
-                isFiltered={activities.length > 0 && filteredActivities.length === 0}
-                onClearFilters={() => setFilters({ density: 'all' })}
-              />
             </main>
           </div>
         </div>
       </div>
+
+      <IncidentDetailSlideover
+        incidentId={selectedIncidentId}
+        onClose={() => setSelectedIncidentId(null)}
+      />
     </div>
   );
 }
