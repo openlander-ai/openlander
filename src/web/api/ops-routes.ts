@@ -6,6 +6,9 @@ import type { OpsIncidentEventRow, OpsIncidentRow } from '../../db/types.js';
 import { updateConfig } from '../../config/index.js';
 import { resolveAutomationPolicy, isAutopilot } from '../../monitor/ops-config-resolver.js';
 import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from '../../monitor/ops-types.js';
+import { createModuleLogger } from '../../lib/logger.js';
+
+const log = createModuleLogger('ops-routes');
 
 interface ActivityItem {
   id: string;
@@ -82,7 +85,8 @@ function parseEventMetadata(metadata: string | null): IncidentEventMetadata | nu
   if (!metadata) return null;
   try {
     return JSON.parse(metadata) as IncidentEventMetadata;
-  } catch {
+  } catch (err) {
+    log.warn({ err }, 'Failed to parse deploy lock');
     return null;
   }
 }
@@ -192,7 +196,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
           ),
         ),
       });
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch incidents');
       return c.json({ error: 'Failed to fetch incidents' }, 500);
     }
   });
@@ -214,7 +219,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         incident: mapIncidentResponse(incident, events, projectName),
         events: events.map(mapIncidentEventResponse),
       });
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch incident');
       return c.json({ error: 'Failed to fetch incident' }, 500);
     }
   });
@@ -230,7 +236,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
       const events = ctx.db.listOpsIncidentEvents(id);
       return c.json({ events: events.map(mapIncidentEventResponse) });
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch incident events');
       return c.json({ error: 'Failed to fetch incident events' }, 500);
     }
   });
@@ -269,7 +276,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         startedAt: activeRun.started_at,
         lastUpdatedAt: activeRun.updated_at ?? activeRun.created_at,
       });
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch agent status');
       return c.json({ isActive: false });
     }
   });
@@ -285,7 +293,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       ctx.opsAgent?.reloadConfig(body);
       updateConfig({ ops: body });
       return c.json({ config: ctx.opsAgent?.getConfig() ?? {} });
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to update ops config');
       return c.json({ error: 'Invalid config' }, 400);
     }
   });
@@ -314,7 +323,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     try {
       const state = ctx.db.getCircuitBreakerState(projectId);
       return c.json({ state });
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch circuit breaker state');
       return c.json({ state: null });
     }
   });
@@ -325,7 +335,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     try {
       ctx.db.resetCircuitBreaker(projectId);
       return c.json({ reset: true });
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to reset circuit breaker');
       return c.json({ reset: false }, 500);
     }
   });
@@ -404,7 +415,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
     let body: { automation?: Record<string, string> };
     try {
       body = await c.req.json<{ automation?: Record<string, string> }>();
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to update automation policy');
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
     const validSteps = new Set(['restart', 'diagnosis', 'apply_fixes', 'rollback']);
@@ -497,8 +509,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
               let cascadeGroup: string[] = [];
               try {
                 cascadeGroup = parseEventMetadata(ev.metadata)?.affected_project_ids ?? [];
-              } catch {
-                // ignore parsing error
+              } catch (err) {
+                log.warn({ err }, 'Failed to parse SSE activity line');
               }
               activities.push({
                 id: ev.id,
@@ -572,8 +584,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
             let metadata: Record<string, unknown> = {};
             try {
               metadata = JSON.parse(row.metadata) as Record<string, unknown>;
-            } catch {
-              // ignore
+            } catch (err) {
+              log.warn({ err }, 'Failed to write SSE heartbeat');
             }
 
             activities.push({
