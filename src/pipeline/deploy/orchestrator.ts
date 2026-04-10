@@ -589,6 +589,7 @@ export async function runAndVerify(
     deps.db.updateProject(projectId, {
       status: 'running',
       assignedPort: port,
+      ...(containerPort != null ? { containerPort } : {}),
       containerId,
       imageTag,
       ...(previousProjectImageTag != null ? { previousImageTag: previousProjectImageTag } : {}),

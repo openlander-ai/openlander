@@ -131,13 +131,13 @@ export const deployToolDefs: ToolDef[] = [
       if (!project) {
         throw new ProjectNotFoundError(projectName);
       }
-      const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
-      if (lockResult) {
-        return lockResult;
-      }
       const release = await context.appCtx.deployQueue.acquire();
       let result;
       try {
+        const lockResult = tryAcquireDeployLockOrResponse(project.id, toolSessionId, context);
+        if (lockResult) {
+          return lockResult;
+        }
         result = await context.appCtx.pipeline.redeploy(project.id, {
           strategy: 'blue-green',
           healthCheckPath: healthCheckPath?.trim() || undefined,
@@ -349,9 +349,26 @@ export const deployToolDefs: ToolDef[] = [
         };
 
         let status = appCtx.jobManager.getStatus(project.id);
+        const lockInfo = appCtx.db.getDeployLockInfo(project.id);
 
         if (!wait) {
-          return buildProjectResult(status);
+          const result = buildProjectResult(status) as Record<string, unknown>;
+          if (lockInfo) {
+            result['locked'] = true;
+            result['lock_session'] = lockInfo.session;
+          }
+          if (!status && lockInfo) {
+            result['active'] = 1;
+            result['jobs'] = [
+              formatJob({
+                projectId: project.id,
+                projectName: project.name,
+                phase: 'queued',
+                startedAt: new Date(lockInfo.lockedAt),
+              }),
+            ];
+          }
+          return result;
         }
 
         if (status && (status.phase === 'done' || status.phase === 'failed')) {
@@ -375,6 +392,32 @@ export const deployToolDefs: ToolDef[] = [
 
             const current = appCtx.jobManager.getStatus(project.id);
             if (current) {
+              const lastLog = appCtx.db.getLastDeployLog(project.id);
+              const logIsNewer =
+                lastLog && new Date(lastLog.created_at).getTime() > current.startedAt.getTime();
+              if (
+                logIsNewer &&
+                lastLog.status === 'success' &&
+                (current.phase === 'failed' || current.phase === 'done')
+              ) {
+                const dbProject = appCtx.db.getProjectByName(projectName);
+                resolve({
+                  active: 0,
+                  jobs: [
+                    formatJob({
+                      projectId: project.id,
+                      projectName: project.name,
+                      phase: 'done',
+                      startedAt: new Date(lastLog.created_at),
+                      completedAt: new Date(lastLog.created_at),
+                    }),
+                  ],
+                  ...(dbProject ? { health: dbProject.status } : {}),
+                  ...(timedOut ? { timeout: true } : {}),
+                });
+                return;
+              }
+
               const payload = buildProjectResult(current) as Record<string, unknown>;
               if (timedOut) payload['timeout'] = true;
               resolve(payload);

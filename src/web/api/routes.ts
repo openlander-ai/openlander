@@ -428,6 +428,26 @@ export function createApiRoutes(ctx: AppContext): Hono {
 
   api.get('/traefik/config', (c) => {
     const routers: Record<string, { rule: string; entryPoints: string[]; service: string }> = {};
+    const services: Record<string, { loadBalancer: { servers: Array<{ url: string }> } }> = {};
+
+    // Build self-contained services for projects with an active container.
+    // Uses Docker DNS (container name) + container port — no @docker dependency.
+    // Includes 'building' status to keep routes alive during blue-green deploys.
+    const allProjects = ctx.db
+      .listProjects()
+      .filter((p) => p.status === 'running' || (p.status === 'building' && p.container_id));
+    for (const project of allProjects) {
+      const internalPort = project.container_port ?? project.assigned_port;
+      if (!internalPort) continue;
+      const svcName = `svc-${project.name}`;
+      services[svcName] = {
+        loadBalancer: {
+          servers: [
+            { url: `http://${projectContainerName(project.name)}:${String(internalPort)}` },
+          ],
+        },
+      };
+    }
 
     const mappings = ctx.db.listDomainMappings();
     const projectDomains = new Map<string, { projectName: string; domains: string[] }>();
@@ -446,24 +466,27 @@ export function createApiRoutes(ctx: AppContext): Hono {
       }
     }
     for (const [, { projectName, domains }] of projectDomains) {
+      const svcName = `svc-${projectName}`;
+      if (!services[svcName]) continue;
       const routeRule = domains.map((d) => `Host(\`${d}\`)`).join(' || ');
       routers[`prod-${projectName}`] = {
         rule: routeRule,
         entryPoints: ['web'],
-        service: `${projectContainerName(projectName)}@docker`,
+        service: svcName,
       };
     }
 
-    const allProjects = ctx.db.listProjects('running');
     const detectedIps = getAllIps();
     for (const project of allProjects) {
+      const svcName = `svc-${project.name}`;
+      if (!services[svcName]) continue;
       for (const ip of detectedIps) {
         const sslipHost = getEnvironmentProjectHostname(project.name, 'production', ip.address);
         if (sslipHost && !sslipHost.endsWith('.localhost')) {
           routers[`sslip-${project.name}-${ip.type}`] = {
             rule: `Host(\`${sslipHost}\`)`,
             entryPoints: ['web'],
-            service: `${projectContainerName(project.name)}@docker`,
+            service: svcName,
           };
         }
       }
@@ -477,7 +500,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
           routers[`qs-${project.name}`] = {
             rule: `Host(\`${host}\`)`,
             entryPoints: ['web'],
-            service: `${projectContainerName(project.name)}@docker`,
+            service: svcName,
           };
         } catch {
           // skip invalid URL
@@ -485,7 +508,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
       }
     }
 
-    return c.json({ http: { routers } });
+    return c.json({ http: { routers, services } });
   });
 
   api.route('/', createDeployStreamRoutes(ctx));

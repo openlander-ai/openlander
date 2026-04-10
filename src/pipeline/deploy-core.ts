@@ -1566,6 +1566,7 @@ export class DeployPipeline {
         status: 'running',
         containerId: greenContainerId,
         assignedPort: newPort,
+        containerPort,
         imageTag,
         previousImageTag: project.image_tag,
       });

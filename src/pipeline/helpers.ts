@@ -42,6 +42,8 @@ export function collectKnownContainerNames<TEnvironment extends { container_id: 
   for (const project of projects) {
     if (project.container_id) knownIds.add(project.container_id);
     knownNames.add(containerName(project.name));
+    knownNames.add(containerName(`${project.name}-green`));
+    knownNames.add(containerName(`${project.name}-blue`));
 
     for (const environment of environmentsByProject(project.id)) {
       if (environment.container_id) knownIds.add(environment.container_id);
