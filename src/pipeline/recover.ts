@@ -36,7 +36,7 @@ async function containerExists(
   nameOrId: string,
 ): Promise<{ exists: boolean; running: boolean }> {
   try {
-    const info = await ctx.docker.getClient().getContainer(nameOrId).inspect();
+    const info = await ctx.docker.inspectContainer(nameOrId);
     return { exists: true, running: info.State.Running };
   } catch {
     return { exists: false, running: false };
@@ -45,6 +45,7 @@ async function containerExists(
 
 async function imageExists(ctx: AppContext, tag: string): Promise<boolean> {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR3: no image wrapper yet
     await ctx.docker.getClient().getImage(tag).inspect();
     return true;
   } catch {
@@ -54,6 +55,7 @@ async function imageExists(ctx: AppContext, tag: string): Promise<boolean> {
 
 async function volumeExists(ctx: AppContext, name: string): Promise<boolean> {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR3: no volume wrapper yet
     await ctx.docker.getClient().getVolume(name).inspect();
     return true;
   } catch {
@@ -66,6 +68,7 @@ async function ensureNetwork(
   name: string,
 ): Promise<RecoverItemResult<NetworkStatus>> {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR3: no network wrapper yet
     const client = ctx.docker.getClient();
     try {
       await client.getNetwork(name).inspect();
@@ -124,6 +127,7 @@ async function recoverService(
     // Ensure volume (preserve existing data!)
     const volExists = await volumeExists(ctx, vName);
     if (!volExists) {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR3: no volume wrapper yet
       await ctx.docker.getClient().createVolume({
         Name: vName,
         Labels: {
@@ -140,73 +144,39 @@ async function recoverService(
       await ctx.docker.pullImage(service.image);
     }
 
-    // Parse stored env vars
-    const envVars: string[] = service.env_vars ? (JSON.parse(service.env_vars) as string[]) : [];
+    const rawEnvVars: string[] = service.env_vars ? (JSON.parse(service.env_vars) as string[]) : [];
+    const envVars: Record<string, string> = {};
+    for (const entry of rawEnvVars) {
+      const eqIdx = entry.indexOf('=');
+      if (eqIdx > 0) {
+        envVars[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+      }
+    }
 
     // Get template config
     const template = SERVICE_TEMPLATES[service.type];
     const containerPort = getServiceContainerPort(service);
     const dataMountPath = getDataMountPath(service.type);
 
-    // Create container
-    const client = ctx.docker.getClient();
-    const newContainer = await client.createContainer({
-      Image: service.image,
+    await ctx.docker.safeRemoveContainer(cName);
+
+    const containerId = await ctx.docker.runContainer({
+      imageTag: service.image,
       name: cName,
-      Env: envVars,
-      ...(template?.cmd ? { Cmd: template.cmd } : {}),
-      ...(template?.healthcheck
-        ? {
-            Healthcheck: {
-              Test: template.healthcheck.test,
-              Interval: template.healthcheck.interval * 1_000_000_000,
-              Timeout: template.healthcheck.timeout * 1_000_000_000,
-              Retries: template.healthcheck.retries,
-              StartPeriod: template.healthcheck.startPeriod * 1_000_000_000,
-            },
-          }
-        : {}),
-      Labels: {
-        [DOCKER_LABELS.MANAGED]: 'true',
+      port: service.port,
+      containerPort,
+      envVars,
+      cmd: template?.cmd,
+      traefikLabels: {
         [DOCKER_LABELS.ROLE]: 'service',
         [DOCKER_LABELS.SERVICE]: service.name,
       },
-      ExposedPorts: {
-        [`${String(containerPort)}/tcp`]: {},
-      },
-      NetworkingConfig: {
-        EndpointsConfig: {
-          [SHARED_NETWORK_NAME]: { Aliases: [service.name] },
-        },
-      },
-      HostConfig: {
-        NetworkMode: ctx.docker.getNetworkName(),
-        RestartPolicy: { Name: 'unless-stopped' },
-        Binds: [`${vName}:${dataMountPath}`],
-        PortBindings: {
-          [`${String(containerPort)}/tcp`]: [{ HostPort: String(service.port) }],
-        },
-        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
-      },
+      network: SHARED_NETWORK_NAME,
+      restartPolicy: { Name: 'unless-stopped' },
+      extraBinds: [`${vName}:${dataMountPath}`],
     });
 
-    await newContainer.start();
-
-    // Connect to shared network if different from primary
-    const primaryNetwork = ctx.docker.getNetworkName();
-    if (primaryNetwork !== SHARED_NETWORK_NAME) {
-      try {
-        const sharedNet = client.getNetwork(SHARED_NETWORK_NAME);
-        await sharedNet.connect({
-          Container: newContainer.id,
-          EndpointConfig: { Aliases: [service.name] },
-        });
-      } catch {
-        // best-effort — may already be connected via NetworkingConfig
-      }
-    }
-
-    ctx.db.updateService(service.id, { status: 'running', containerId: newContainer.id });
+    ctx.db.updateService(service.id, { status: 'running', containerId });
 
     log.info({ service: service.name }, 'Service recovered');
     return { name: service.name, status: 'recreated' };

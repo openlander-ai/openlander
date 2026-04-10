@@ -46,6 +46,8 @@ export interface RunContainerOptions {
   secretFiles?: SecretFileMount[];
   /** Docker restart policy (default: on-failure with MaximumRetryCount: 5). */
   restartPolicy?: { Name: string; MaximumRetryCount?: number };
+  /** Additional volume or bind mounts (e.g. `["vol:/data"]`). */
+  extraBinds?: string[];
 }
 
 export interface RunComposeServiceOptions {
@@ -445,7 +447,7 @@ export class Docker {
           }
         : undefined;
     const volumeBinds = await this.getProjectVolumeBinds(projectName);
-    const binds = [...secretBinds, ...volumeBinds];
+    const binds = [...secretBinds, ...volumeBinds, ...(options.extraBinds ?? [])];
 
     const container = await this.client.createContainer({
       Image: options.imageTag,
@@ -591,6 +593,17 @@ export class Docker {
       throw error;
     }
 
+    return container.id;
+  }
+
+  /**
+   * Create and start an infrastructure container (e.g. Traefik).
+   * Unlike runContainer, this accepts raw Dockerode options for non-project
+   * containers that don't follow the standard port/Traefik-label pattern.
+   */
+  async runInfraContainer(options: Dockerode.ContainerCreateOptions): Promise<string> {
+    const container = await this.client.createContainer(options);
+    await container.start();
     return container.id;
   }
 
