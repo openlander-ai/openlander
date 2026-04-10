@@ -1523,9 +1523,12 @@ export class DeployPipeline {
       const secretFiles = this.env.getSecretFilesForDeploy(projectId);
       const networkName = getPolicy('production').networkName;
 
+      const greenName = projectContainerName(`${projectName}-green`);
+      await this.removeStaleGreenContainer(greenName);
+
       greenContainerId = await this.docker.runContainer({
         imageTag,
-        name: projectContainerName(`${projectName}-green`),
+        name: greenName,
         port: newPort,
         containerPort,
         envVars,
@@ -1729,6 +1732,17 @@ export class DeployPipeline {
 
   private normalizeHealthCheckPath(path: string): string {
     return path.startsWith('/') ? path : `/${path}`;
+  }
+
+  private async removeStaleGreenContainer(greenName: string): Promise<void> {
+    try {
+      const container = this.docker.getClient().getContainer(greenName);
+      await container.inspect();
+      log.warn({ greenName }, 'Removing stale green container from previous failed deploy');
+      await this.docker.safeRemoveContainer(greenName);
+    } catch {
+      // Container doesn't exist — expected for first attempt
+    }
   }
 
   private async cleanupGreenContainer(containerId: string): Promise<void> {

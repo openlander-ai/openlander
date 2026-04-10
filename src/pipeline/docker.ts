@@ -772,10 +772,17 @@ export class Docker {
       const info = await container.inspect();
       const networks = info.NetworkSettings.Networks;
       for (const net of Object.keys(networks)) {
-        await this.disconnectContainerFromNetwork(containerId, net);
+        try {
+          await this.disconnectContainerFromNetwork(containerId, net);
+        } catch (disconnectErr) {
+          log.warn(
+            { containerId, network: net, err: disconnectErr },
+            'Failed to disconnect container from network before removal',
+          );
+        }
       }
-    } catch (_) {
-      void _;
+    } catch (inspectErr) {
+      log.debug({ containerId, err: inspectErr }, 'Container inspect failed during safe removal');
     }
     await this.removeContainer(containerId);
   }
