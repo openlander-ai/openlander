@@ -464,5 +464,23 @@ describe('Database', () => {
       expect(updated).toBeDefined();
       expect(updated!.container_port).toBe(8080);
     });
+
+    it('backfill SQL copies container_port from projects to environments', () => {
+      db.updateProject('p1', { containerPort: 3000 });
+
+      db.updateEnvironment(
+        db.getEnvironmentsByProject('p1').find((e) => e.type === 'production')!.id,
+        { containerPort: null },
+      );
+
+      const sqlite = (db as unknown as { sqlite: { exec: (sql: string) => void } }).sqlite;
+      sqlite.exec(
+        'UPDATE environments SET container_port = (SELECT container_port FROM projects WHERE id = environments.project_id) WHERE container_port IS NULL',
+      );
+
+      const env = db.getEnvironmentsByProject('p1').find((e) => e.type === 'production');
+      expect(env).toBeDefined();
+      expect(env!.container_port).toBe(3000);
+    });
   });
 });

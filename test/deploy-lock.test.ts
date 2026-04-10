@@ -69,7 +69,9 @@ describe('BUG-010: Deploy lock prevents concurrent deploys', () => {
     pipeline = new DeployPipeline(docker, db, env as never, testConfig);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    vi.useRealTimers();
+    await new Promise((r) => setTimeout(r, 200));
     clearPortScanCache();
     db.close();
     rmSync(tmpDir, { recursive: true, force: true });
@@ -282,15 +284,45 @@ describe('BUG-010: Deploy lock prevents concurrent deploys', () => {
 
   describe('get_deploy_status wait=true hardening', () => {
     it('wait=true resolves from deploy_logs when job not in JobManager', async () => {
-      vi.useFakeTimers();
-
       db.createProject({
         id: 'p1',
         name: 'status-app',
         repoUrl: 'https://github.com/test/status-app',
       });
+
+      const ctx = createStatusToolContext(db, new JobManager());
+      const tool = getDeployStatusTool();
+
+      const resultPromise = tool.execute(
+        { project_name: 'status-app', wait: true, timeout: 15 },
+        { appCtx: ctx, target: 'agent' },
+      ) as Promise<Record<string, unknown>>;
+
+      await new Promise((r) => setTimeout(r, 2000));
       db.createDeployLog({
         id: 'log-1',
+        projectId: 'p1',
+        status: 'success',
+        trigger: 'api',
+      });
+
+      const result = await resultPromise;
+
+      expect(result).toMatchObject({
+        active: 0,
+        jobs: [expect.objectContaining({ name: 'status-app', phase: 'done' })],
+      });
+      expect(result).not.toHaveProperty('timeout');
+    }, 20000);
+
+    it('wait=true ignores deploy_logs created before wait started', async () => {
+      db.createProject({
+        id: 'p1',
+        name: 'old-log-app',
+        repoUrl: 'https://github.com/test/old-log-app',
+      });
+      db.createDeployLog({
+        id: 'old-log-1',
         projectId: 'p1',
         status: 'success',
         trigger: 'api',
@@ -299,20 +331,15 @@ describe('BUG-010: Deploy lock prevents concurrent deploys', () => {
       const ctx = createStatusToolContext(db, new JobManager());
       const tool = getDeployStatusTool();
 
-      const resultPromise = tool.execute(
-        { project_name: 'status-app', wait: true, timeout: 6 },
+      const result = (await tool.execute(
+        { project_name: 'old-log-app', wait: true, timeout: 2 },
         { appCtx: ctx, target: 'agent' },
-      ) as Promise<Record<string, unknown>>;
+      )) as Record<string, unknown>;
 
-      await vi.advanceTimersByTimeAsync(5000);
-      const result = await resultPromise;
+      expect(result).toHaveProperty('timeout', true);
 
-      expect(result).toMatchObject({
-        active: 0,
-        jobs: [expect.objectContaining({ name: 'status-app', phase: 'done' })],
-      });
-      expect(result).not.toHaveProperty('timeout');
-    });
+      await new Promise((r) => setTimeout(r, 100));
+    }, 10000);
 
     it('wait=true shows locked/queued when lock held but no active job', async () => {
       db.createProject({

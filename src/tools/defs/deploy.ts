@@ -397,6 +397,8 @@ export const deployToolDefs: ToolDef[] = [
           return buildLockedQueuedResult(lockInfo);
         }
 
+        const waitStartedAt = Date.now() - 1000;
+
         return await new Promise((resolve) => {
           let settled = false;
 
@@ -448,6 +450,7 @@ export const deployToolDefs: ToolDef[] = [
                 lastLog.status === 'success' &&
                 (current.phase === 'failed' || current.phase === 'done')
               ) {
+                const freshProject = appCtx.db.getProjectByName(projectName);
                 resolve({
                   active: 0,
                   jobs: [
@@ -459,9 +462,7 @@ export const deployToolDefs: ToolDef[] = [
                       completedAt: new Date(lastLog.created_at),
                     }),
                   ],
-                  ...(appCtx.db.getProjectByName(projectName)
-                    ? { health: appCtx.db.getProjectByName(projectName)?.status }
-                    : {}),
+                  ...(freshProject ? { health: freshProject.status } : {}),
                   ...(timedOut ? { timeout: true } : {}),
                 });
                 return;
@@ -510,17 +511,40 @@ export const deployToolDefs: ToolDef[] = [
             }
 
             const lastLog = appCtx.db.getLastDeployLog(project.id);
-            if (!lastLog || lastLog.status !== 'success') {
+            if (!lastLog || (lastLog.status !== 'success' && lastLog.status !== 'failed')) {
+              return;
+            }
+
+            // H1 fix: Only consider logs created after we started waiting
+            const logTime = new Date(lastLog.created_at + 'Z').getTime();
+            if (logTime < waitStartedAt) {
               return;
             }
 
             const currentJob = appCtx.jobManager.getStatus(project.id);
-            const logIsNewer =
-              !currentJob ||
-              new Date(lastLog.created_at).getTime() > currentJob.startedAt.getTime();
+            const logIsNewer = !currentJob || logTime > currentJob.startedAt.getTime();
 
             if (logIsNewer) {
-              resolveFromDeployLog(lastLog.created_at);
+              if (lastLog.status === 'failed') {
+                settled = true;
+                cleanup();
+                const dbProject = appCtx.db.getProjectByName(projectName);
+                resolve({
+                  active: 0,
+                  jobs: [
+                    formatJob({
+                      projectId: project.id,
+                      projectName: project.name,
+                      phase: 'failed',
+                      startedAt: new Date(lastLog.created_at),
+                      completedAt: new Date(lastLog.created_at),
+                    }),
+                  ],
+                  ...(dbProject ? { health: dbProject.status } : {}),
+                });
+              } else {
+                resolveFromDeployLog(lastLog.created_at);
+              }
             }
           }, 5000);
 

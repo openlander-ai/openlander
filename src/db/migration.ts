@@ -102,11 +102,10 @@ export function runMigrations(sqlite: SqliteDatabase): void {
 
   if (!environmentColNames.has('container_port')) {
     sqlite.exec('ALTER TABLE environments ADD COLUMN container_port INTEGER');
-    // Backfill container_port from projects table for existing environments
-    sqlite.exec(
-      'UPDATE environments SET container_port = (SELECT container_port FROM projects WHERE id = environments.project_id) WHERE container_port IS NULL',
-    );
   }
+  sqlite.exec(
+    'UPDATE environments SET container_port = (SELECT container_port FROM projects WHERE id = environments.project_id) WHERE container_port IS NULL',
+  );
 
   const envVarColumns = sqlite.prepare("PRAGMA table_info('env_vars')").all() as Array<{
     name: string;
