@@ -10,19 +10,46 @@ import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from '../../monitor/o
 interface ActivityItem {
   id: string;
   timestamp: string;
-  type: 'incident' | 'recovery' | 'approval' | 'circuit_breaker' | 'cleanup' | 'alert';
+  type:
+    | 'incident'
+    | 'recovery'
+    | 'approval'
+    | 'circuit_breaker'
+    | 'cleanup'
+    | 'alert'
+    | 'ai_diagnosis'
+    | 'ai:invoked'
+    | 'ai:completed'
+    | 'recovery:blocked'
+    | 'recovery:stopped'
+    | 'recovery:started';
   severity: 'critical' | 'warning' | 'info';
   projectId: string;
   projectName: string;
   title: string;
   description: string;
-  status: 'active' | 'resolved' | 'pending' | 'failed';
+  status:
+    | 'active'
+    | 'resolved'
+    | 'pending'
+    | 'failed'
+    | 'ai-running'
+    | 'ai-completed'
+    | 'recovery-blocked'
+    | 'recovery-stopped'
+    | 'recovering';
   incidentId?: string;
   actionRunId?: string;
   correlationId?: string;
   cascadeGroup?: string[];
   triggerType?: string;
   triggerDetails?: string;
+  aiMetadata?: {
+    model: string;
+    tokensUsed?: number;
+    durationMs?: number;
+    diagnosisSummary?: string;
+  };
 }
 
 interface ParsedIncidentTrigger {
@@ -128,6 +155,9 @@ export function createOpsRoutes(ctx: AppContext): Hono {
   api.get('/incidents', (c) => {
     const projectId = c.req.query('projectId');
     const status = c.req.query('status');
+    const search = c.req.query('search');
+    const fromParam = c.req.query('from');
+    const toParam = c.req.query('to');
     const limit = Number(c.req.query('limit') ?? 50);
 
     try {
@@ -135,8 +165,9 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       if (projectId) {
         incidents = ctx.db.listOpsIncidentsByProject(projectId, limit);
       } else {
-        const from = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        incidents = ctx.db.listOpsIncidentsByDateRange(from, Date.now());
+        const from = fromParam ? Number(fromParam) : Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const to = toParam ? Number(toParam) : Date.now();
+        incidents = ctx.db.listOpsIncidentsByDateRange(from, to, search);
       }
 
       if (status) {
@@ -419,6 +450,8 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       const limit = isFollow ? 100 : Math.min(parseInt(limitParam ?? '50', 10), 200);
       const before = c.req.query('before');
       const since = sinceParam || c.req.query('since');
+      const fromParam = c.req.query('from');
+      const toParam = c.req.query('to');
 
       const projects = ctx.db.listProjects();
       const projectMap = new Map(projects.map((p) => [p.id, p.name]));
@@ -426,10 +459,11 @@ export function createOpsRoutes(ctx: AppContext): Hono {
 
       // Incidents
       if (types.length === 0 || types.includes('incident') || types.includes('alert')) {
-        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const from = fromParam ? Number(fromParam) : Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const to = toParam ? Number(toParam) : Date.now();
         const incidents = projectId
           ? ctx.db.listOpsIncidentsByProject(projectId, 100)
-          : ctx.db.listOpsIncidentsByDateRange(sevenDaysAgo, Date.now());
+          : ctx.db.listOpsIncidentsByDateRange(from, to);
         const eventsByIncidentId = groupEventsByIncidentId(
           ctx.db.listOpsIncidentEventsByIncidentIds(incidents.map((incident) => incident.id)),
         );
@@ -520,6 +554,40 @@ export function createOpsRoutes(ctx: AppContext): Hono {
             actionRunId: run.id,
             correlationId: run.correlation_id ?? undefined,
           });
+        }
+      }
+
+      // AI Events
+      if (types.length === 0 || types.includes('ai:invoked') || types.includes('ai:completed')) {
+        const aiTypes = ['ai:invoked', 'ai:completed'];
+        for (const aiType of aiTypes) {
+          if (types.length > 0 && !types.includes(aiType)) continue;
+          const aiRows = ctx.db.findActivityLogRecent(200, {
+            project_id: projectId,
+            activity_type: aiType,
+          });
+          for (const row of aiRows) {
+            let metadata: Record<string, unknown> = {};
+            try {
+              metadata = JSON.parse(row.metadata) as Record<string, unknown>;
+            } catch {
+              // ignore
+            }
+
+            activities.push({
+              id: row.id,
+              timestamp: row.created_at,
+              type: row.activity_type as ActivityItem['type'],
+              severity: row.severity as ActivityItem['severity'],
+              projectId: row.project_id,
+              projectName: projectMap.get(row.project_id) ?? row.project_id,
+              title: row.title,
+              description: row.description,
+              status: row.status as ActivityItem['status'],
+              correlationId: row.correlation_id ?? undefined,
+              aiMetadata: metadata.aiMetadata as ActivityItem['aiMetadata'],
+            });
+          }
         }
       }
 

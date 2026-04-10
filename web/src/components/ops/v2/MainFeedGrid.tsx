@@ -64,6 +64,11 @@ export interface Thread {
   triggerType?: string;
   title?: string;
   cascadeGroup?: string[];
+  aiMetadata?: {
+    model: string;
+    tokensUsed?: number;
+    durationMs?: number;
+  };
 }
 
 export interface MainFeedGridProps {
@@ -92,6 +97,17 @@ function eventCategory(type: string): string {
     return 'deploy';
   }
   return type;
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function groupIntoThreads(
@@ -141,6 +157,30 @@ function groupIntoThreads(
     const cascadeEvent = events.find((e) => e.cascadeGroup && e.cascadeGroup.length > 0);
     const cascadeGroup = cascadeEvent?.cascadeGroup;
 
+    let threadAiMetadata: Thread['aiMetadata'] = undefined;
+    for (const e of events) {
+      if (e.aiMetadata?.model) {
+        if (!threadAiMetadata) {
+          threadAiMetadata = {
+            model: e.aiMetadata.model,
+            tokensUsed: e.aiMetadata.tokensUsed ?? 0,
+            durationMs: e.aiMetadata.durationMs ?? 0,
+          };
+        } else {
+          threadAiMetadata.tokensUsed =
+            (threadAiMetadata.tokensUsed ?? 0) + (e.aiMetadata.tokensUsed ?? 0);
+          threadAiMetadata.durationMs =
+            (threadAiMetadata.durationMs ?? 0) + (e.aiMetadata.durationMs ?? 0);
+        }
+      }
+    }
+    if (threadAiMetadata && threadAiMetadata.tokensUsed === 0) {
+      threadAiMetadata.tokensUsed = undefined;
+    }
+    if (threadAiMetadata && threadAiMetadata.durationMs === 0) {
+      threadAiMetadata.durationMs = undefined;
+    }
+
     threads.push({
       correlationId: key,
       projectId: head.projectId,
@@ -154,6 +194,7 @@ function groupIntoThreads(
       title,
       triggerType,
       cascadeGroup,
+      aiMetadata: threadAiMetadata,
     });
   }
 
@@ -507,6 +548,17 @@ export function MainFeedGrid({
                           {t('opsV2.cascade.affected', {
                             projects: thread.cascadeGroup.join(', '),
                           })}
+                        </span>
+                      )}
+                      {thread.aiMetadata && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-agent bg-agent/10 px-1.5 py-0.5 rounded">
+                          {thread.aiMetadata.model}
+                          {thread.aiMetadata.tokensUsed
+                            ? ` · ${thread.aiMetadata.tokensUsed.toLocaleString()} ${t('opsV2.ai.tokens')}`
+                            : ''}
+                          {thread.aiMetadata.durationMs
+                            ? ` · ${formatDurationMs(thread.aiMetadata.durationMs)}`
+                            : ''}
                         </span>
                       )}
                     </div>
