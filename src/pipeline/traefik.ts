@@ -52,6 +52,7 @@ export class TraefikManager {
 
   async isRunning(): Promise<boolean> {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
       const client = this.docker.getClient();
       const containers = await client.listContainers({
         filters: { label: [`${DOCKER_LABELS.ROLE}=traefik`] },
@@ -65,6 +66,7 @@ export class TraefikManager {
 
   private async hasCurrentConfig(): Promise<boolean> {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
       const client = this.docker.getClient();
       const container = client.getContainer(this.containerName);
       const info = await container.inspect();
@@ -101,15 +103,7 @@ export class TraefikManager {
     networkName: string,
   ): Promise<boolean> {
     try {
-      const client = this.docker.getClient();
-      const container = client.getContainer(containerName);
-      const info = await container.inspect();
-      const connected = Object.keys(info.NetworkSettings.Networks);
-      if (connected.includes(networkName)) {
-        return true;
-      }
-      const network = client.getNetwork(networkName);
-      await network.connect({ Container: container.id });
+      await this.docker.connectContainerToNetwork(containerName, networkName);
       log.info({ containerName, networkName }, 'Traefik connected to network');
       return true;
     } catch (err) {
@@ -119,6 +113,7 @@ export class TraefikManager {
   }
 
   private async tryAdoptExistingTraefik(): Promise<boolean> {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
     const client = this.docker.getClient();
     const containers = await client.listContainers({
       filters: { label: [`${DOCKER_LABELS.ROLE}=traefik`], status: ['running'] },
@@ -162,6 +157,7 @@ export class TraefikManager {
   }
 
   private async ensureNetworkByName(name: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
     const client = this.docker.getClient();
 
     try {
@@ -202,6 +198,7 @@ export class TraefikManager {
       return;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
     const client = this.docker.getClient();
 
     try {
@@ -239,7 +236,7 @@ export class TraefikManager {
     const httpPortStr = String(this.httpPort);
     const dashboardPortStr = String(this.dashboardPort);
 
-    const container = await client.createContainer({
+    await this.docker.runInfraContainer({
       Image: TRAEFIK_IMAGE,
       name: this.containerName,
       Cmd: [
@@ -271,7 +268,6 @@ export class TraefikManager {
         [DOCKER_LABELS.ROLE]: 'traefik',
       },
     });
-    await container.start();
 
     await this.ensureMultiNetwork();
   }
@@ -621,9 +617,7 @@ export async function connectToTraefikNetwork(
   networkName: string,
 ): Promise<void> {
   try {
-    const client = docker.getClient();
-    const network = client.getNetwork(networkName);
-    await network.connect({ Container: containerId });
+    await docker.connectContainerToNetwork(containerId, networkName);
     log.debug({ containerId, networkName }, 'Container connected to Traefik network');
   } catch (error) {
     log.warn({ error, containerId, networkName }, 'Failed to connect container to Traefik network');

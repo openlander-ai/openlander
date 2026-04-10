@@ -222,6 +222,7 @@ export class ServiceManager {
    */
   async reconcileServiceNetworks(): Promise<void> {
     const services = this.db.listServices();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
     const client = this.docker.getClient();
 
     let reconciled = 0;
@@ -257,28 +258,12 @@ export class ServiceManager {
         const hasAlias = aliases.includes(service.name);
 
         if (!sharedNetwork) {
-          try {
-            await client.getNetwork(SHARED_NETWORK_NAME).connect({
-              Container: info.Id,
-              EndpointConfig: { Aliases: [service.name] },
-            });
-            migrated += 1;
-            log.info(
-              { serviceId: service.id, serviceName: service.name, containerId: info.Id },
-              'Service network reconciled (migrated to shared network)',
-            );
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes('already exists') || msg.includes('already connected')) {
-              alreadyConnected += 1;
-              log.info(
-                { serviceId: service.id, serviceName: service.name, containerId: info.Id },
-                'Service already connected to shared network',
-              );
-              continue;
-            }
-            throw err;
-          }
+          await this.docker.connectContainerToNetwork(info.Id, SHARED_NETWORK_NAME, [service.name]);
+          migrated += 1;
+          log.info(
+            { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+            'Service network reconciled (migrated to shared network)',
+          );
           continue;
         }
 
@@ -291,40 +276,14 @@ export class ServiceManager {
           continue;
         }
 
-        try {
-          await client.getNetwork(SHARED_NETWORK_NAME).disconnect({
-            Container: info.Id,
-            Force: false,
-          });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes('is not connected') && !isDockerNotFoundError(err)) {
-            throw err;
-          }
-        }
+        await this.docker.disconnectContainerFromNetwork(info.Id, SHARED_NETWORK_NAME);
 
-        try {
-          await client.getNetwork(SHARED_NETWORK_NAME).connect({
-            Container: info.Id,
-            EndpointConfig: { Aliases: [service.name] },
-          });
-          migrated += 1;
-          log.info(
-            { serviceId: service.id, serviceName: service.name, containerId: info.Id },
-            'Service network reconciled (alias updated on shared network)',
-          );
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (msg.includes('already exists') || msg.includes('already connected')) {
-            alreadyConnected += 1;
-            log.info(
-              { serviceId: service.id, serviceName: service.name, containerId: info.Id },
-              'Service already connected to shared network',
-            );
-            continue;
-          }
-          throw err;
-        }
+        await this.docker.connectContainerToNetwork(info.Id, SHARED_NETWORK_NAME, [service.name]);
+        migrated += 1;
+        log.info(
+          { serviceId: service.id, serviceName: service.name, containerId: info.Id },
+          'Service network reconciled (alias updated on shared network)',
+        );
       } catch (err) {
         if (isDockerNotFoundError(err)) {
           log.warn(
@@ -456,6 +415,7 @@ export class ServiceManager {
 
     await this.docker.pullImage(image);
 
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
     const client = this.docker.getClient();
     await client.createVolume({
       Name: volumeName,
@@ -466,6 +426,9 @@ export class ServiceManager {
       },
     });
 
+    // Raw createContainer: incompatible with docker.runContainer() — service containers
+    // need different labels (ROLE/SERVICE vs PROJECT), custom healthcheck support,
+    // explicit volume binds, and 'unless-stopped' restart policy. Consolidation deferred.
     const container = await client.createContainer({
       Image: image,
       name: containerName,
@@ -515,16 +478,8 @@ export class ServiceManager {
 
     for (const networkName of additionalNetworks) {
       try {
-        const client = this.docker.getClient();
-        await client.getNetwork(networkName).connect({
-          Container: container.id,
-          EndpointConfig: { Aliases: [opts.name] },
-        });
+        await this.docker.connectContainerToNetwork(container.id, networkName, [opts.name]);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes('already exists') || msg.includes('already connected')) {
-          continue;
-        }
         log.warn(
           { err, networkName, containerName },
           'Failed to connect service to additional network',
@@ -617,6 +572,7 @@ export class ServiceManager {
     }
 
     const volumeName = this.getVolumeName(service.name);
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
     const client = this.docker.getClient();
     try {
       await client.getVolume(volumeName).remove();
@@ -683,7 +639,10 @@ export class ServiceManager {
 
     await this.docker.pullImage('alpine');
 
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
     const client = this.docker.getClient();
+    // Raw createContainer: ephemeral backup container (AutoRemove, no port/network/labels)
+    // is incompatible with docker.runContainer(). Consolidation deferred.
     const container = await client.createContainer({
       Image: 'alpine',
       Cmd: ['tar', 'czf', `/backup/${backupId}.tar.gz`, '-C', '/data', '.'],
@@ -727,7 +686,10 @@ export class ServiceManager {
 
     try {
       await this.docker.pullImage('alpine');
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
       const client = this.docker.getClient();
+      // Raw createContainer: ephemeral restore container (AutoRemove, no port/network/labels)
+      // is incompatible with docker.runContainer(). Consolidation deferred.
       const container = await client.createContainer({
         Image: 'alpine',
         Cmd: ['sh', '-c', `rm -rf /data/* && tar xzf /backup/${backupFilename} -C /data`],
@@ -809,6 +771,7 @@ export class ServiceManager {
 
     const containerId = service.container_id ?? service.container_name;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
       const info = await this.docker.getClient().getContainer(containerId).inspect();
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
       const containerIdFromDocker = info.Id;
@@ -936,6 +899,7 @@ export class ServiceManager {
 
     const containerRef = service.container_id ?? service.container_name;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
       const info = await this.docker.getClient().getContainer(containerRef).inspect();
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
       const healthRaw: unknown = info.State.Health?.Status;
@@ -1032,6 +996,7 @@ export class ServiceManager {
     let memoryLimitBytes: number | null = null;
     try {
       const containerId = service.container_id ?? service.container_name;
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
       const container = this.docker.getClient().getContainer(containerId);
       const rawStats = await container.stats({ stream: false });
       const cpuDelta =
@@ -1298,6 +1263,7 @@ export class ServiceManager {
   private async ensureServiceContainerRunning(service: ServiceRow): Promise<void> {
     const containerId = service.container_id ?? service.container_name;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
       const info = await this.docker.getClient().getContainer(containerId).inspect();
       if (!info.State.Running) {
         throw new Error(`Service container is not running: ${service.id}`);

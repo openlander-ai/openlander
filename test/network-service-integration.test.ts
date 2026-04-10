@@ -403,9 +403,8 @@ describe('reconcileServiceNetworks', () => {
     vi.clearAllMocks();
   });
 
-  it('calls network.connect for services not on shared network', async () => {
-    const connect = vi.fn(async () => undefined);
-    const disconnect = vi.fn(async () => undefined);
+  it('calls connectContainerToNetwork for services not on shared network', async () => {
+    const connectContainerToNetwork = vi.fn(async () => undefined);
 
     const service = createService({
       id: 'svc-migrate',
@@ -421,10 +420,9 @@ describe('reconcileServiceNetworks', () => {
           NetworkSettings: { Networks: {} },
         }),
       }),
-      getNetwork: () => ({ connect, disconnect }),
     };
 
-    const docker = { getClient: () => client };
+    const docker = { getClient: () => client, connectContainerToNetwork };
     const db = { listServices: () => [service] };
     const manager = new ServiceManager(
       docker as unknown as ConstructorParameters<typeof ServiceManager>[0],
@@ -433,11 +431,10 @@ describe('reconcileServiceNetworks', () => {
 
     await manager.reconcileServiceNetworks();
 
-    expect(connect).toHaveBeenCalledTimes(1);
-    expect(connect).toHaveBeenCalledWith({
-      Container: 'container-123',
-      EndpointConfig: { Aliases: ['shared-pg'] },
-    });
+    expect(connectContainerToNetwork).toHaveBeenCalledTimes(1);
+    expect(connectContainerToNetwork).toHaveBeenCalledWith('container-123', SHARED_NETWORK_NAME, [
+      'shared-pg',
+    ]);
   });
 
   it('skips services already connected with correct alias', async () => {
@@ -545,8 +542,7 @@ describe('reconcileServiceNetworks', () => {
   });
 
   it('logs summary with migrated and already-connected counts', async () => {
-    const connect = vi.fn(async () => undefined);
-    const disconnect = vi.fn(async () => undefined);
+    const connectContainerToNetwork = vi.fn(async () => undefined);
 
     const svcMigrated = createService({
       id: 'svc-migrate',
@@ -582,10 +578,9 @@ describe('reconcileServiceNetworks', () => {
           };
         },
       }),
-      getNetwork: () => ({ connect, disconnect }),
     };
 
-    const docker = { getClient: () => client };
+    const docker = { getClient: () => client, connectContainerToNetwork };
     const db = { listServices: () => [svcMigrated, svcAlready] };
     const manager = new ServiceManager(
       docker as unknown as ConstructorParameters<typeof ServiceManager>[0],
@@ -594,13 +589,11 @@ describe('reconcileServiceNetworks', () => {
 
     await manager.reconcileServiceNetworks();
 
-    expect(connect).toHaveBeenCalledTimes(1);
-    expect(connect).toHaveBeenCalledWith(
-      expect.objectContaining({
-        Container: 'container-migrate',
-        EndpointConfig: { Aliases: ['migrate-db'] },
-      }),
+    expect(connectContainerToNetwork).toHaveBeenCalledTimes(1);
+    expect(connectContainerToNetwork).toHaveBeenCalledWith(
+      'container-migrate',
+      SHARED_NETWORK_NAME,
+      ['migrate-db'],
     );
-    expect(disconnect).not.toHaveBeenCalled();
   });
 });
