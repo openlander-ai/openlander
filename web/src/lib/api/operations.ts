@@ -71,6 +71,7 @@ export interface OpsIncidentEvent {
 export interface OpsIncident {
   id: string;
   project_id: string;
+  projectName?: string;
   title: string;
   status: string;
   severity: string;

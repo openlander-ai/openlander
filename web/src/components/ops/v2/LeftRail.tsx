@@ -3,7 +3,8 @@ import { CheckSquare, AlertCircle, ShieldAlert, ChevronLeft, ChevronRight } from
 import { cn } from '../../../lib/utils.js';
 import { useLanguage } from '../../../i18n/context.js';
 import { ScrollArea } from '../../ui/scroll-area.js';
-import { humanizeEventType } from '../utils.js';
+import { humanizeEventType, relativeTime } from '../utils.js';
+import { SeverityBadge } from '../SeverityBadge.js';
 import type { OpsIncident, CircuitBreakerWithProject } from '../../../lib/api/operations.js';
 import type { ActionRun } from '../../../lib/api/projects.js';
 
@@ -58,13 +59,15 @@ function SectionHeader({ icon, label, count, collapsed, active, onClick }: Secti
 function IncidentRow({
   incident,
   count,
+  lastEventTime,
   collapsed,
 }: {
   incident: OpsIncident;
   count: number;
+  lastEventTime: number;
   collapsed: boolean;
 }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const severityColor =
     incident.severity === 'critical'
       ? 'bg-error'
@@ -76,23 +79,51 @@ function IncidentRow({
     ? humanizeEventType(incident.triggerType, t)
     : incident.title;
 
-  const titleWithCount = count > 1 ? `${displayTitle} (×${count})` : displayTitle;
+  const titleWithCount =
+    count > 1
+      ? t('opsV2.rail.incidentCount', { title: displayTitle, count: String(count) })
+      : displayTitle;
+  const projectName = incident.projectName || incident.project_id;
+  const timeStr = relativeTime(lastEventTime, language as 'ko' | 'en');
 
   if (collapsed) {
     return (
-      <div className="flex justify-center py-1">
-        <span
-          className={cn('h-2 w-2 rounded-full shrink-0', severityColor)}
-          title={titleWithCount}
-        />
+      <div className="flex justify-center py-1" title={`${projectName}: ${titleWithCount}`}>
+        <div
+          className={cn(
+            'relative flex items-center justify-center h-6 w-6 rounded-md shrink-0 border',
+            incident.severity === 'critical'
+              ? 'border-error text-error bg-error/10'
+              : incident.severity === 'warning'
+                ? 'border-warning text-warning bg-warning/10'
+                : 'border-muted-ol text-muted-ol bg-muted-ol/10',
+          )}
+        >
+          <span className="text-[10px] font-bold">{projectName.charAt(0).toUpperCase()}</span>
+          <span className={cn('absolute -top-1 -right-1 h-2 w-2 rounded-full', severityColor)} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex items-start gap-2 px-2 py-1.5 rounded-md hover:bg-bg-subtle transition-colors">
-      <span className={cn('h-2 w-2 rounded-full shrink-0 mt-1', severityColor)} />
-      <span className="text-xs font-body text-primary-ol truncate">{titleWithCount}</span>
+    <div
+      className={cn(
+        'flex flex-col gap-1 px-2 py-2 rounded-md transition-colors',
+        incident.severity === 'critical' ? 'bg-error/5 hover:bg-error/10' : 'hover:bg-bg-subtle',
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={cn('h-2 w-2 rounded-full shrink-0', severityColor)} />
+          <SeverityBadge severity={incident.severity} />
+          <span className="text-xs font-semibold text-primary-ol truncate">{projectName}</span>
+        </div>
+        <span className="text-[10px] text-muted-ol shrink-0 ml-2">{timeStr}</span>
+      </div>
+      <div className="pl-4 mt-0.5">
+        <span className="text-xs font-body text-secondary-ol truncate block">{titleWithCount}</span>
+      </div>
     </div>
   );
 }
@@ -212,14 +243,21 @@ export function LeftRail({
 
   // Group incidents by project + humanized trigger type (or title) to deduplicate
   const groupedIncidents = incidents.reduce<
-    Array<{ incident: OpsIncident; count: number; groupKey: string }>
+    Array<{ incident: OpsIncident; count: number; groupKey: string; lastEventTime: number }>
   >((acc, incident) => {
     const key = `${incident.project_id}::${incident.triggerType ?? incident.title}`;
     const existing = acc.find((g) => g.groupKey === key);
+    const time =
+      typeof incident.created_at === 'string'
+        ? new Date(incident.created_at).getTime()
+        : incident.created_at;
     if (existing) {
       existing.count += 1;
+      if (time > existing.lastEventTime) {
+        existing.lastEventTime = time;
+      }
     } else {
-      acc.push({ incident, count: 1, groupKey: key });
+      acc.push({ incident, count: 1, groupKey: key, lastEventTime: time });
     }
     return acc;
   }, []);
@@ -295,11 +333,12 @@ export function LeftRail({
             {!effectivelyCollapsed && groupedIncidents.length === 0 && (
               <p className="px-2 py-1 text-xs text-muted-ol">{t('opsV2.empty.noActiveIssues')}</p>
             )}
-            {groupedIncidents.map(({ incident, count, groupKey }) => (
+            {groupedIncidents.map(({ incident, count, groupKey, lastEventTime }) => (
               <IncidentRow
                 key={groupKey}
                 incident={incident}
                 count={count}
+                lastEventTime={lastEventTime}
                 collapsed={effectivelyCollapsed}
               />
             ))}

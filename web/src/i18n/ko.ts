@@ -571,6 +571,7 @@ export const translations = {
       circuitBreakerStatus: '복구 상태',
       actionRequired: '작업 필요',
       drawerLabel: '내비게이션',
+      incidentCount: '{title} (×{count})',
     },
     timeline: {
       threadTitle: '{project} — {type}',

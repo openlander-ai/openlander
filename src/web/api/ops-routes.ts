@@ -96,11 +96,16 @@ function extractIncidentTrigger(
   return parseTriggerFromText(incident.root_cause);
 }
 
-function mapIncidentResponse(incident: OpsIncidentRow, events: OpsIncidentEventRow[]) {
+function mapIncidentResponse(
+  incident: OpsIncidentRow,
+  events: OpsIncidentEventRow[],
+  projectName?: string,
+) {
   const trigger = extractIncidentTrigger(incident, events);
   const title = incident.root_cause ?? 'Incident detected';
   return {
     ...incident,
+    projectName,
     title,
     triggerType: trigger.triggerType,
     triggerDetails: trigger.triggerDetails,
@@ -141,9 +146,17 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       const page = incidents.slice(0, limit);
       const events = ctx.db.listOpsIncidentEventsByIncidentIds(page.map((incident) => incident.id));
       const eventsByIncidentId = groupEventsByIncidentId(events);
+
+      const projects = ctx.db.listProjects();
+      const projectMap = new Map(projects.map((p) => [p.id, p.name]));
+
       return c.json({
         incidents: page.map((incident) =>
-          mapIncidentResponse(incident, eventsByIncidentId.get(incident.id) ?? []),
+          mapIncidentResponse(
+            incident,
+            eventsByIncidentId.get(incident.id) ?? [],
+            projectMap.get(incident.project_id) ?? incident.project_id,
+          ),
         ),
       });
     } catch {
@@ -160,9 +173,12 @@ export function createOpsRoutes(ctx: AppContext): Hono {
         return c.json({ error: 'Incident not found' }, 404);
       }
 
+      const project = ctx.db.getProject(incident.project_id);
+      const projectName = project?.name ?? incident.project_id;
+
       const events = ctx.db.listOpsIncidentEvents(id);
       return c.json({
-        incident: mapIncidentResponse(incident, events),
+        incident: mapIncidentResponse(incident, events, projectName),
         events: events.map(mapIncidentEventResponse),
       });
     } catch {
