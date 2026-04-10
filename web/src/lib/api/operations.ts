@@ -97,10 +97,16 @@ export interface CircuitBreakerState {
 export async function fetchOpsIncidents(
   projectId?: string,
   status?: string,
+  search?: string,
+  from?: number,
+  to?: number,
 ): Promise<{ incidents: OpsIncident[] }> {
   const params = new URLSearchParams();
   if (projectId) params.set('projectId', projectId);
   if (status) params.set('status', status);
+  if (search) params.set('search', search);
+  if (from !== undefined) params.set('from', String(from));
+  if (to !== undefined) params.set('to', String(to));
   const response = await fetchWithAuth(`/api/ops/incidents?${params.toString()}`);
   if (!response.ok) throw new Error('Failed to fetch incidents');
   return response.json();
@@ -215,6 +221,8 @@ export async function fetchActivityFeed(opts?: {
   severity?: string;
   limit?: number;
   before?: string;
+  from?: number;
+  to?: number;
 }): Promise<{ activities: ActivityItem[]; nextCursor: string | null }> {
   const params = new URLSearchParams();
   if (opts?.projectId) params.set('projectId', opts.projectId);
@@ -222,6 +230,8 @@ export async function fetchActivityFeed(opts?: {
   if (opts?.severity) params.set('severity', opts.severity);
   if (opts?.limit) params.set('limit', String(opts.limit));
   if (opts?.before) params.set('before', opts.before);
+  if (opts?.from !== undefined) params.set('from', String(opts.from));
+  if (opts?.to !== undefined) params.set('to', String(opts.to));
   const query = params.toString() ? `?${params.toString()}` : '';
   const resp = await fetchWithAuth(`/api/ops/activity${query}`);
   if (!resp.ok) throw new Error(`fetchActivityFeed failed: ${resp.status}`);

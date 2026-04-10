@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, like, lte, or } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
 import { opsIncidents } from '../schema.drizzle.js';
 import type { OpsIncidentRow } from '../types.js';
@@ -78,13 +78,40 @@ export class OpsIncidentRepo {
       .all() as OpsIncidentRow[];
   }
 
-  findByDateRange(from: number, to: number): OpsIncidentRow[] {
+  findByDateRange(from: number, to: number, searchText?: string): OpsIncidentRow[] {
+    const conditions = [gte(opsIncidents.created_at, from), lte(opsIncidents.created_at, to)];
+    if (searchText) {
+      const searchCondition = or(
+        like(opsIncidents.root_cause, `%${searchText}%`),
+        like(opsIncidents.diagnosis, `%${searchText}%`),
+      );
+      if (searchCondition) conditions.push(searchCondition);
+    }
     return this.db
       .select()
       .from(opsIncidents)
-      .where(and(gte(opsIncidents.created_at, from), lte(opsIncidents.created_at, to)))
+      .where(and(...conditions))
       .orderBy(desc(opsIncidents.created_at))
       .all() as OpsIncidentRow[];
+  }
+
+  findBySearch(searchText: string, limit?: number): OpsIncidentRow[] {
+    const baseQuery = this.db
+      .select()
+      .from(opsIncidents)
+      .where(
+        or(
+          like(opsIncidents.root_cause, `%${searchText}%`),
+          like(opsIncidents.diagnosis, `%${searchText}%`),
+        ),
+      )
+      .orderBy(desc(opsIncidents.created_at));
+
+    if (limit) {
+      return baseQuery.limit(limit).all() as OpsIncidentRow[];
+    }
+
+    return baseQuery.all() as OpsIncidentRow[];
   }
 
   updateStatus(
