@@ -68,6 +68,8 @@ export interface Thread {
 export interface MainFeedGridProps {
   activities: ActivityItem[];
   onThreadSelect?: (correlationId: string) => void;
+  isFiltered?: boolean;
+  onClearFilters?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,19 +170,74 @@ const ROW_GRID_CLASSES =
 // Sub-components
 // ---------------------------------------------------------------------------
 
-const ThreadEventDenseRow = memo(function ThreadEventDenseRow({ event }: { event: ActivityItem }) {
+function EventDetailsContent({
+  event,
+  detailsOpen,
+}: {
+  event: ActivityItem;
+  detailsOpen: boolean;
+}) {
+  const { t } = useLanguage();
+  const hasDiagnosis = !!event.aiMetadata?.diagnosisSummary;
+  const hasShortDescription = !!event.description && event.description.length < 100;
+  const hasLongDescription = !!event.description && event.description.length >= 100;
+
+  if (!hasDiagnosis && !hasShortDescription && !(detailsOpen && hasLongDescription)) {
+    return null;
+  }
+
+  return (
+    <div className="pl-[165px] pr-4 pb-2 pt-1 animate-in fade-in slide-in-from-top-1">
+      {hasDiagnosis && (
+        <div className="mt-0.5 mb-1.5 p-2 bg-agent/5 border border-agent/20 rounded-md">
+          <p className="text-[10px] font-semibold text-agent mb-1 uppercase tracking-wider">
+            {t('ops.aiDiagnosisSummary')}
+          </p>
+          <p className="text-[11px] text-primary-ol leading-relaxed">
+            {event.aiMetadata!.diagnosisSummary}
+          </p>
+        </div>
+      )}
+
+      {(hasShortDescription || (detailsOpen && hasLongDescription)) && (
+        <div className="w-full overflow-hidden mt-0.5">
+          <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[11px] text-secondary-ol prose-p:text-[11px] prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-xs prose-headings:font-semibold prose-a:text-agent prose-a:no-underline hover:prose-a:underline prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-[11px] prose-ul:pl-4 prose-ol:pl-4 prose-li:my-0.5">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.description}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
+  event,
+  threadTitle,
+}: {
+  event: ActivityItem;
+  threadTitle?: string;
+}) {
   const { t, language } = useLanguage();
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const isAiEvent = event.type.startsWith('ai:') || event.type === 'ai_diagnosis';
-  const hasDetails = !!event.description || !!event.aiMetadata?.diagnosisSummary;
+  const hasDiagnosis = !!event.aiMetadata?.diagnosisSummary;
+  const hasLongDescription = !!event.description && event.description.length >= 100;
+  const hasAnyDetails = hasDiagnosis || !!event.description;
 
   const rawTitle =
     event.title || humanizeEventType(event.type, t as unknown as (key: string) => string);
   const titleText = localizeTitle(rawTitle, t as unknown as (key: string) => string);
 
+  const isDuplicateTitle = threadTitle && titleText === threadTitle;
+
   return (
-    <div className="flex flex-col border-b border-[hsl(var(--border))]/30 last:border-0 hover:bg-bg-subtle/30 transition-colors">
+    <div
+      className={cn(
+        'flex flex-col border-b border-[hsl(var(--border))]/30 last:border-0 hover:bg-bg-subtle/30 transition-colors',
+        hasAnyDetails && 'bg-bg-subtle/30 border-l-2 border-l-agent/50',
+      )}
+    >
       <div className={cn(ROW_GRID_CLASSES, 'py-1.5 text-[11px]')}>
         {/* Empty left gap for alignment with parent chevron */}
         <div className="flex justify-end">
@@ -201,13 +258,15 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({ event }: { event
 
         {/* Event Name & Expand Toggle */}
         <div className="flex items-center gap-2 min-w-0">
-          <span
-            className={cn('truncate font-medium', isAiEvent ? 'text-agent' : 'text-primary-ol')}
-            title={titleText}
-          >
-            {titleText}
-          </span>
-          {hasDetails && (
+          {!isDuplicateTitle && (
+            <span
+              className={cn('truncate font-medium', isAiEvent ? 'text-agent' : 'text-primary-ol')}
+              title={titleText}
+            >
+              {titleText}
+            </span>
+          )}
+          {hasLongDescription && (
             <button
               type="button"
               onClick={(e) => {
@@ -243,28 +302,7 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({ event }: { event
       </div>
 
       {/* Inline Details Expansion */}
-      {detailsOpen && hasDetails && (
-        <div className="pl-[165px] pr-4 pb-2 pt-1 animate-in fade-in slide-in-from-top-1">
-          {event.aiMetadata?.diagnosisSummary && (
-            <div className="mt-0.5 mb-1.5 p-2 bg-agent/5 border border-agent/20 rounded-md">
-              <p className="text-[10px] font-semibold text-agent mb-1 uppercase tracking-wider">
-                {t('ops.aiDiagnosisSummary')}
-              </p>
-              <p className="text-[11px] text-primary-ol leading-relaxed">
-                {event.aiMetadata.diagnosisSummary}
-              </p>
-            </div>
-          )}
-
-          {event.description && (
-            <div className="w-full overflow-hidden mt-0.5">
-              <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-[11px] text-secondary-ol prose-p:text-[11px] prose-p:leading-relaxed prose-headings:text-primary-ol prose-headings:text-xs prose-headings:font-semibold prose-a:text-agent prose-a:no-underline hover:prose-a:underline prose-code:bg-bg-subtle prose-code:text-primary-ol prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-bg-subtle prose-pre:border prose-pre:border-border/50 prose-pre:text-[11px] prose-ul:pl-4 prose-ol:pl-4 prose-li:my-0.5">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.description}</ReactMarkdown>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <EventDetailsContent event={event} detailsOpen={detailsOpen} />
     </div>
   );
 });
@@ -471,11 +509,24 @@ export function MainFeedGrid({ activities, onThreadSelect }: MainFeedGridProps) 
                 </button>
               </CollapsibleTrigger>
 
+              {/* Inline details for 1-event thread */}
+              {thread.eventCount === 1 && !isExpanded && (
+                <EventDetailsContent event={thread.events[0]} detailsOpen={false} />
+              )}
+
               {/* Child Events Section */}
               <CollapsibleContent>
                 <div className="bg-bg-panel/20 shadow-inner">
                   {visibleEvents.map((event) => (
-                    <ThreadEventDenseRow key={event.id} event={event} />
+                    <ThreadEventDenseRow
+                      key={event.id}
+                      event={event}
+                      threadTitle={
+                        thread.title
+                          ? localizeTitle(thread.title, t as unknown as (key: string) => string)
+                          : undefined
+                      }
+                    />
                   ))}
 
                   {/* Load more within thread */}
