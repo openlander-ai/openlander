@@ -6,6 +6,8 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Search,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils.js';
@@ -13,10 +15,11 @@ import { useLanguage } from '../../../i18n/context.js';
 import { ScrollArea } from '../../ui/scroll-area.js';
 import { humanizeEventType, relativeTime } from '../utils.js';
 import { SeverityBadge } from '../SeverityBadge.js';
-import { resetCircuitBreaker } from '../../../lib/api/operations.js';
+import { resetCircuitBreaker, fetchOpsIncidents } from '../../../lib/api/operations.js';
 import type { OpsIncident, CircuitBreakerWithProject } from '../../../lib/api/operations.js';
 import type { ActionRun } from '../../../lib/api/projects.js';
 import { Button } from '../../ui/button.js';
+import { Input } from '../../ui/input.js';
 import {
   Dialog,
   DialogContent,
@@ -33,6 +36,7 @@ export interface LeftRailProps {
   incidents: OpsIncident[];
   circuitBreakers: CircuitBreakerWithProject[];
   onFilterChange?: (filter: { type?: string; severity?: string }) => void;
+  onIncidentSelect?: (incidentId: string) => void;
   /** When true, forces icon-only collapsed mode regardless of local state */
   forceCollapsed?: boolean;
 }
@@ -79,11 +83,13 @@ function IncidentRow({
   count,
   lastEventTime,
   collapsed,
+  onClick,
 }: {
   incident: OpsIncident;
   count: number;
   lastEventTime: number;
   collapsed: boolean;
+  onClick?: () => void;
 }) {
   const { t, language } = useLanguage();
   const severityColor =
@@ -106,7 +112,12 @@ function IncidentRow({
 
   if (collapsed) {
     return (
-      <div className="flex justify-center py-1" title={`${projectName}: ${titleWithCount}`}>
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex justify-center py-1 w-full hover:bg-bg-subtle rounded-md transition-colors"
+        title={`${projectName}: ${titleWithCount}`}
+      >
         <div
           className={cn(
             'relative flex items-center justify-center h-6 w-6 rounded-md shrink-0 border',
@@ -120,18 +131,20 @@ function IncidentRow({
           <span className="text-[10px] font-bold">{projectName.charAt(0).toUpperCase()}</span>
           <span className={cn('absolute -top-1 -right-1 h-2 w-2 rounded-full', severityColor)} />
         </div>
-      </div>
+      </button>
     );
   }
 
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       className={cn(
-        'flex flex-col gap-1 px-2 py-2 rounded-md transition-colors',
+        'flex flex-col gap-1 px-2 py-2 rounded-md transition-colors w-full text-left',
         incident.severity === 'critical' ? 'bg-error/5 hover:bg-error/10' : 'hover:bg-bg-subtle',
       )}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between w-full">
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn('h-2 w-2 rounded-full shrink-0', severityColor)} />
           <SeverityBadge severity={incident.severity} />
@@ -139,10 +152,10 @@ function IncidentRow({
         </div>
         <span className="text-[10px] text-muted-ol shrink-0 ml-2">{timeStr}</span>
       </div>
-      <div className="pl-4 mt-0.5">
+      <div className="pl-4 mt-0.5 w-full">
         <span className="text-xs font-body text-secondary-ol truncate block">{titleWithCount}</span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -263,6 +276,7 @@ export function LeftRail({
   incidents,
   circuitBreakers,
   onFilterChange,
+  onIncidentSelect,
   forceCollapsed,
 }: LeftRailProps) {
   const { t } = useLanguage();
@@ -279,6 +293,50 @@ export function LeftRail({
   const effectivelyCollapsed = forceCollapsed ?? collapsed;
 
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<OpsIncident[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!debouncedSearch) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsSearching(true);
+
+    fetchOpsIncidents(undefined, 'open', debouncedSearch)
+      .then((data) => {
+        if (isMounted) {
+          setSearchResults(data.incidents);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSearchResults([]);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsSearching(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [debouncedSearch]);
 
   const toggle = useCallback(() => {
     setCollapsed((prev) => {
@@ -315,8 +373,10 @@ export function LeftRail({
   const approvalItems = approvals;
   const openBreakers = circuitBreakers.filter((cb) => cb.state !== 'closed');
 
+  const displayIncidents = searchResults !== null ? searchResults : incidents;
+
   // Group incidents by project + humanized trigger type (or title) to deduplicate
-  const groupedIncidents = incidents.reduce<
+  const groupedIncidents = displayIncidents.reduce<
     Array<{ incident: OpsIncident; count: number; groupKey: string; lastEventTime: number }>
   >((acc, incident) => {
     const key = `${incident.project_id}::${incident.triggerType ?? incident.title}`;
@@ -404,8 +464,35 @@ export function LeftRail({
               active={activeFilter === 'incident'}
               onClick={() => handleSectionClick('incident')}
             />
+
+            {!effectivelyCollapsed && (
+              <div className="px-2 py-2">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-ol" />
+                  <Input
+                    data-testid="incident-search-input"
+                    placeholder={t('opsV2.rail.searchIncidents')}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-7 pl-7 text-xs bg-bg-app border-[hsl(var(--border))] focus-visible:ring-1"
+                  />
+                  {isSearching && (
+                    <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin text-muted-ol" />
+                  )}
+                </div>
+              </div>
+            )}
+
             {!effectivelyCollapsed && groupedIncidents.length === 0 && (
-              <p className="px-2 py-1 text-xs text-muted-ol">{t('opsV2.empty.noActiveIssues')}</p>
+              <p className="px-2 py-1 text-xs text-muted-ol">
+                {searchResults !== null ? (
+                  <span data-testid="incident-search-empty">
+                    {t('opsV2.empty.noSearchResults')}
+                  </span>
+                ) : (
+                  t('opsV2.empty.noActiveIssues')
+                )}
+              </p>
             )}
             {groupedIncidents.map(({ incident, count, groupKey, lastEventTime }) => (
               <IncidentRow
@@ -414,6 +501,7 @@ export function LeftRail({
                 count={count}
                 lastEventTime={lastEventTime}
                 collapsed={effectivelyCollapsed}
+                onClick={() => onIncidentSelect?.(incident.id)}
               />
             ))}
           </div>

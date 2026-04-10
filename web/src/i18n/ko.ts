@@ -575,6 +575,7 @@ export const translations = {
       actionRequired: '작업 필요',
       drawerLabel: '내비게이션',
       incidentCount: '{title} (×{count})',
+      searchIncidents: '문제 검색...',
     },
     timeline: {
       threadTitle: '{project} — {type}',
@@ -619,6 +620,13 @@ export const translations = {
       severity: '심각도',
       project: '프로젝트',
       timeRange: '시간 범위',
+      timeRangeOptions: {
+        '1h': '최근 1시간',
+        '6h': '최근 6시간',
+        '24h': '최근 24시간',
+        '7d': '최근 7일',
+        '30d': '최근 30일',
+      },
     },
     empty: {
       noActivity: '현재 운영 활동이 없습니다. 모든 시스템이 정상입니다.',
@@ -626,6 +634,13 @@ export const translations = {
       noActiveIssues: '활성 문제가 없습니다',
       noPendingApprovals: '대기 중인 승인이 없습니다',
       allSystemsNormal: '모든 시스템 정상',
+      noSearchResults: '검색 결과가 없습니다',
+    },
+    graph: {
+      title: '의존성 그래프',
+      empty: '연결된 서비스가 없습니다',
+      feedView: '활동 피드',
+      graphView: '의존성 그래프',
     },
     error: {
       loadFailed: '운영 데이터를 불러오지 못했습니다',
@@ -712,6 +727,18 @@ export const translations = {
     cascade: {
       label: '연쇄 영향',
       affected: '영향받음: {projects}',
+    },
+    incident: {
+      title: '문제 상세 정보',
+      status: '상태',
+      severity: '심각도',
+      timeline: '이벤트 타임라인',
+      diagnosis: '진단',
+      rootCause: '근본 원인',
+      actionsTaken: '조치 내역',
+      trigger: '트리거',
+      noEvents: '이 문제에 기록된 이벤트가 없습니다.',
+      recovering: '복구 진행 중...',
     },
   },
   ops: {

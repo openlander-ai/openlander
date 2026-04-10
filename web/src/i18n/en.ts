@@ -578,6 +578,7 @@ export const translations = {
       actionRequired: 'Action required',
       drawerLabel: 'Navigation',
       incidentCount: '{title} (×{count})',
+      searchIncidents: 'Search issues...',
     },
     timeline: {
       threadTitle: '{project} — {type}',
@@ -622,6 +623,13 @@ export const translations = {
       severity: 'Severity',
       project: 'Project',
       timeRange: 'Time range',
+      timeRangeOptions: {
+        '1h': 'Last 1 hour',
+        '6h': 'Last 6 hours',
+        '24h': 'Last 24 hours',
+        '7d': 'Last 7 days',
+        '30d': 'Last 30 days',
+      },
     },
     empty: {
       noActivity: 'No operational activity. All systems are normal.',
@@ -629,6 +637,13 @@ export const translations = {
       noActiveIssues: 'No active issues',
       noPendingApprovals: 'No pending approvals',
       allSystemsNormal: 'All systems normal',
+      noSearchResults: 'No issues found',
+    },
+    graph: {
+      title: 'Dependency Graph',
+      empty: 'No connected services',
+      feedView: 'Activity Feed',
+      graphView: 'Dependency Graph',
     },
     error: {
       loadFailed: 'Failed to load operations data',
@@ -716,6 +731,18 @@ export const translations = {
     cascade: {
       label: 'Cascade',
       affected: 'Affected: {projects}',
+    },
+    incident: {
+      title: 'Incident Details',
+      status: 'Status',
+      severity: 'Severity',
+      timeline: 'Event Timeline',
+      diagnosis: 'Diagnosis',
+      rootCause: 'Root Cause',
+      actionsTaken: 'Actions Taken',
+      trigger: 'Trigger',
+      noEvents: 'No events recorded for this incident.',
+      recovering: 'Recovery in progress...',
     },
   },
   ops: {
