@@ -474,7 +474,10 @@ export class Docker {
 
     await container.start();
 
-    await this.connectContainerToSharedNetwork(container.id, projectName);
+    if (networkMode !== SHARED_NETWORK_NAME) {
+      await this.ensureSharedNetworkAttachment(container.id, projectName);
+    }
+
     return container.id;
   }
 
@@ -487,6 +490,16 @@ export class Docker {
     const volumeBinds = await this.getProjectVolumeBinds(projectName);
     const binds = [...secretBinds, ...volumeBinds];
     const networkMode = opts.network ?? opts.networks?.[0] ?? this.networkName;
+    const networkingConfig =
+      networkMode === SHARED_NETWORK_NAME
+        ? {
+            EndpointsConfig: {
+              [SHARED_NETWORK_NAME]: {
+                Aliases: [projectName],
+              },
+            },
+          }
+        : undefined;
 
     if (typeof opts.command === 'string' && /[;&|`$(){}]/.test(opts.command)) {
       throw new Error('Command contains disallowed shell metacharacters');
@@ -534,6 +547,7 @@ export class Docker {
       Cmd: command,
       Entrypoint: opts.entrypoint,
       Healthcheck: healthcheck,
+      NetworkingConfig: networkingConfig,
       HostConfig: {
         PortBindings: {
           [`${String(cPort)}/tcp`]: [{ HostPort: String(opts.port) }],
@@ -548,7 +562,9 @@ export class Docker {
 
     await container.start();
 
-    await this.connectContainerToSharedNetwork(container.id, projectName);
+    if (networkMode !== SHARED_NETWORK_NAME) {
+      await this.ensureSharedNetworkAttachment(container.id, projectName);
+    }
 
     const additionalNetworks =
       opts.networks
@@ -577,7 +593,7 @@ export class Docker {
     return container.id;
   }
 
-  private async connectContainerToSharedNetwork(containerId: string, alias: string): Promise<void> {
+  public async ensureSharedNetworkAttachment(containerId: string, alias: string): Promise<void> {
     const network = this.client.getNetwork(SHARED_NETWORK_NAME);
 
     try {
@@ -587,36 +603,11 @@ export class Docker {
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (!msg.includes('already exists') && !msg.includes('already connected')) {
-        throw error;
-      }
-
-      const networkInfo = (await network.inspect()) as {
-        Containers?: Record<string, { Aliases?: string[] | null }>;
-      };
-      const containerEndpoint = networkInfo.Containers?.[containerId];
-      const currentAliases: string[] = containerEndpoint?.Aliases ?? [];
-      if (currentAliases.includes(alias)) {
+      if (msg.includes('already exists') || msg.includes('already connected')) {
         return;
       }
 
-      try {
-        await network.disconnect({ Container: containerId, Force: false });
-      } catch (disconnectError) {
-        const disconnectMsg =
-          disconnectError instanceof Error ? disconnectError.message : String(disconnectError);
-        if (
-          !disconnectMsg.includes('is not connected') &&
-          !isDockerNotFoundError(disconnectError)
-        ) {
-          throw disconnectError;
-        }
-      }
-
-      await network.connect({
-        Container: containerId,
-        EndpointConfig: { Aliases: [alias] },
-      });
+      throw error;
     }
   }
 
@@ -767,24 +758,31 @@ export class Docker {
   }
 
   async safeRemoveContainer(containerId: string): Promise<void> {
-    try {
-      const container = this.client.getContainer(containerId);
-      const info = await container.inspect();
-      const networks = info.NetworkSettings.Networks;
-      for (const net of Object.keys(networks)) {
-        try {
-          await this.disconnectContainerFromNetwork(containerId, net);
-        } catch (disconnectErr) {
-          log.warn(
-            { containerId, network: net, err: disconnectErr },
-            'Failed to disconnect container from network before removal',
-          );
-        }
-      }
-    } catch (inspectErr) {
-      log.debug({ containerId, err: inspectErr }, 'Container inspect failed during safe removal');
-    }
     await this.removeContainer(containerId);
+
+    const maxAttempts = 5;
+    const intervalMs = 200;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const container = this.client.getContainer(containerId);
+        await container.inspect();
+        await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (
+          isDockerNotFoundError(error) ||
+          msg.includes('ECONNREFUSED') ||
+          msg.includes('ENOENT')
+        ) {
+          return;
+        }
+
+        log.debug({ containerId, err: error }, 'Unexpected error during removal polling');
+        return;
+      }
+    }
+
+    log.warn({ containerId }, 'Container sandbox cleanup polling timed out — proceeding anyway');
   }
 
   async tagImage(sourceTag: string, repo: string, newTag: string): Promise<void> {
