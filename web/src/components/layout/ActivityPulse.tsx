@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Rocket, RefreshCw, ShieldCheck, DollarSign } from 'lucide-react';
+import { Rocket, RefreshCw, ShieldCheck, AlertTriangle, DollarSign } from 'lucide-react';
 import { usePollingTask } from '@/hooks/use-polling-task';
 import { apiGet } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -51,7 +51,7 @@ export function ActivityPulse() {
           'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
           stats.active_deploys > 0
             ? 'bg-primary-ol/10 text-primary-ol hover:bg-primary-ol/20'
-            : 'text-muted-foreground hover:bg-bg-subtle opacity-50',
+            : 'text-muted-foreground bg-muted/50 hover:bg-muted',
         )}
         title="Active Deployments"
       >
@@ -67,7 +67,7 @@ export function ActivityPulse() {
           'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
           stats.active_recoveries > 0
             ? 'bg-warning/10 text-warning hover:bg-warning/20'
-            : 'text-muted-foreground hover:bg-bg-subtle opacity-50',
+            : 'text-muted-foreground bg-muted/50 hover:bg-muted',
         )}
         title="Active Recoveries"
       >
@@ -83,13 +83,29 @@ export function ActivityPulse() {
           'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
           stats.pending_approvals > 0
             ? 'bg-error/10 text-error hover:bg-error/20'
-            : 'text-muted-foreground hover:bg-bg-subtle opacity-50',
+            : 'text-muted-foreground bg-muted/50 hover:bg-muted',
         )}
         title="Pending Approvals"
       >
         <ShieldCheck className="h-3.5 w-3.5" />
         <span className="font-mono">{stats.pending_approvals}</span>
         <span className="hidden md:inline">{t('pulse.approval')}</span>
+      </button>
+
+      {/* Open Incidents */}
+      <button
+        onClick={() => navigate('/operations?tab=incidents')}
+        className={cn(
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+          stats.open_incidents > 0
+            ? 'bg-error/10 text-error hover:bg-error/20'
+            : 'text-muted-foreground bg-muted/50 hover:bg-muted',
+        )}
+        title="Open Incidents"
+      >
+        <AlertTriangle className="h-3.5 w-3.5" />
+        <span className="font-mono">{stats.open_incidents}</span>
+        <span className="hidden md:inline">{t('pulse.incidents')}</span>
       </button>
 
       {/* AI Spend */}
@@ -99,7 +115,7 @@ export function ActivityPulse() {
           'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
           stats.ai_spend_today > 0
             ? 'text-agent hover:bg-agent/10'
-            : 'text-muted-foreground hover:bg-bg-subtle opacity-50',
+            : 'text-muted-foreground bg-muted/50 hover:bg-muted',
         )}
         title={t('pulse.aiSpend')}
       >

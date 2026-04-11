@@ -47,7 +47,7 @@ export function PostmortemsTab() {
   if (postmortems.length === 0) {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
-        <FileText className="h-12 w-12 text-muted-ol mb-4" />
+        <FileText className="h-14 w-14 text-muted-foreground/60 mb-4" />
         <h3 className="text-lg font-medium text-primary-ol mb-2">
           {t('postmortemsTab.noPostmortems')}
         </h3>

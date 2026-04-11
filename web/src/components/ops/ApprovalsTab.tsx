@@ -3,7 +3,7 @@ import { ShieldCheck, Check, X, Loader2 } from 'lucide-react';
 import { getPendingApprovals, approveRecovery, rejectRecovery } from '@/lib/api/usage';
 import type { PendingApproval } from '@/lib/api/usage';
 import { Skeleton } from '@/components/ui/skeleton';
-import { parseTimestamp } from '@/lib/time';
+import { parseTimestamp, formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 
 export function ApprovalsTab() {
@@ -93,7 +93,9 @@ export function ApprovalsTab() {
                 </span>
               </div>
               <p className="text-sm text-muted-ol">
-                {t('approvalsTab.requested')} {date ? date.toLocaleString() : 'Unknown time'}
+                {t('approvalsTab.requested')}{' '}
+                {formatRelativeTime(String(createdAt), t) ||
+                  (date ? date.toLocaleString() : 'Unknown time')}
               </p>
             </div>
             <div className="flex items-center gap-2">

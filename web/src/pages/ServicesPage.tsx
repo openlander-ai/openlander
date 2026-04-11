@@ -85,9 +85,7 @@ export function ServicesPage() {
   if (loading) {
     return (
       <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
-        <h2 className="text-sm font-body font-medium text-secondary-ol tracking-wide uppercase">
-          {t('services.title')}
-        </h2>
+        <h2 className="text-lg font-semibold text-primary-ol">{t('services.title')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <div

@@ -34,6 +34,7 @@ export const translations = {
     deploying: '배포 중',
     recovery: '복구 중',
     approval: '승인 대기',
+    incidents: '인시던트',
     aiSpend: 'AI 비용',
   },
   setup: {

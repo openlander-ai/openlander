@@ -34,6 +34,7 @@ export const translations = {
     deploying: 'Deploying',
     recovery: 'Recovery',
     approval: 'Approval',
+    incidents: 'Incidents',
     aiSpend: 'AI Spend',
   },
   setup: {

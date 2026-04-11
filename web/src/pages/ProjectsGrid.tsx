@@ -166,7 +166,7 @@ export function ProjectsGrid() {
               }
               navigate('/projects/new');
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-foreground text-background hover:bg-foreground/90 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-body bg-agent text-white hover:bg-agent/90 transition-colors"
           >
             <Plus className="h-3.5 w-3.5" />
             New Project

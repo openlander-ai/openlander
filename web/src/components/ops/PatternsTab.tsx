@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { apiGet } from '@/lib/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
-import { parseTimestamp } from '@/lib/time';
+import { parseTimestamp, formatRelativeTime } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
 
 function humanizeSnakeCase(value: string): string {
@@ -68,7 +68,7 @@ export function PatternsTab() {
   if (patterns.length === 0) {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
-        <TrendingUp className="h-12 w-12 text-muted-ol mb-4" />
+        <TrendingUp className="h-14 w-14 text-muted-foreground/60 mb-4" />
         <h3 className="text-lg font-medium text-primary-ol mb-2">{t('patternsTab.noPatterns')}</h3>
         <p className="text-sm text-muted-ol max-w-md">{t('patternsTab.emptyMessage')}</p>
       </div>
@@ -126,7 +126,8 @@ export function PatternsTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right text-muted-ol whitespace-nowrap">
-                      {date ? date.toLocaleDateString() : t('patternsTab.unknown')}
+                      {formatRelativeTime(String(pattern.last_seen_at)) ||
+                        (date ? date.toLocaleDateString() : t('patternsTab.unknown'))}
                     </td>
                   </tr>
                 );

@@ -356,7 +356,9 @@ function KpiCard({
         <div className="p-2 bg-bg-subtle rounded-md">{icon}</div>
         <span className="font-display font-bold text-xl text-primary-ol">{value}</span>
       </div>
-      <span className="text-xs font-medium text-secondary-ol">{label}</span>
+      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+        {label}
+      </span>
     </div>
   );
 }
