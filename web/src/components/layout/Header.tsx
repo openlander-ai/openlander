@@ -11,6 +11,7 @@ import { useLanguage } from '@/i18n/context';
 import { useNavigate } from 'react-router-dom';
 import { Logo } from '@/components/icons/Logo';
 import { subscribeLlmChanged } from '@/lib/llm-events';
+import { ActivityPulse } from './ActivityPulse';
 
 interface HeaderProps {
   stats: SystemStats | null;
@@ -124,6 +125,8 @@ export function Header({
         </Button>
       </div>
       <div className="flex items-center gap-3 text-xs">
+        <ActivityPulse />
+
         {/* System Stats */}
         {stats && (
           <div className="hidden md:flex items-center gap-3 font-mono text-muted-ol">
