@@ -4,6 +4,7 @@ import type { Database } from '../db/index.js';
 import type { EventBus } from '../events/index.js';
 import { getSystemStats } from './stats.js';
 import { createModuleLogger } from '../lib/logger.js';
+import { parseDBTimestamp } from '../lib/parse-db-timestamp.js';
 
 const log = createModuleLogger('alerts');
 
@@ -247,7 +248,7 @@ export class AlertMonitor {
 
     for (const project of projects) {
       const key = `inactive-project:${project.id}`;
-      const updatedAt = new Date(project.updated_at).getTime();
+      const updatedAt = parseDBTimestamp(project.updated_at).getTime();
       const daysSinceUpdate = (now - updatedAt) / MS_PER_DAY;
 
       if (daysSinceUpdate <= INACTIVE_DAYS_THRESHOLD) {

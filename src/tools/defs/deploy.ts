@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { DeployLockedError, ProjectNotFoundError } from '../../errors.js';
 import { eventBus } from '../../events/index.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { parseDBTimestamp } from '../../lib/parse-db-timestamp.js';
 import { getDockerHostType } from '../../pipeline/docker.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrls } from '../../pipeline/traefik.js';
@@ -349,7 +350,7 @@ export const deployToolDefs: ToolDef[] = [
               projectId: project.id,
               projectName: project.name,
               phase: 'queued',
-              startedAt: new Date(currentLockInfo.lockedAt),
+              startedAt: parseDBTimestamp(currentLockInfo.lockedAt),
             }),
           ],
           ...(timedOut ? { timeout: true } : {}),
@@ -371,7 +372,7 @@ export const deployToolDefs: ToolDef[] = [
                 projectId: project.id,
                 projectName: project.name,
                 phase: 'queued',
-                startedAt: new Date(lockInfo.lockedAt),
+                startedAt: parseDBTimestamp(lockInfo.lockedAt),
               }),
             ];
           }
@@ -433,7 +434,8 @@ export const deployToolDefs: ToolDef[] = [
             if (current) {
               const lastLog = appCtx.db.getLastDeployLog(project.id);
               const logIsNewer =
-                lastLog && new Date(lastLog.created_at).getTime() > current.startedAt.getTime();
+                lastLog &&
+                parseDBTimestamp(lastLog.created_at).getTime() > current.startedAt.getTime();
               if (
                 logIsNewer &&
                 lastLog.status === 'success' &&
@@ -447,8 +449,8 @@ export const deployToolDefs: ToolDef[] = [
                       projectId: project.id,
                       projectName: project.name,
                       phase: 'done',
-                      startedAt: new Date(lastLog.created_at),
-                      completedAt: new Date(lastLog.created_at),
+                      startedAt: parseDBTimestamp(lastLog.created_at),
+                      completedAt: parseDBTimestamp(lastLog.created_at),
                     }),
                   ],
                   ...(freshProject ? { health: freshProject.status } : {}),
@@ -504,8 +506,8 @@ export const deployToolDefs: ToolDef[] = [
               return;
             }
 
-            // H1 fix: Only consider logs created after we started waiting
-            const logTime = new Date(lastLog.created_at + 'Z').getTime();
+            // Only consider logs created after we started waiting
+            const logTime = parseDBTimestamp(lastLog.created_at).getTime();
             if (logTime < waitStartedAt) {
               return;
             }
@@ -525,8 +527,8 @@ export const deployToolDefs: ToolDef[] = [
                       projectId: project.id,
                       projectName: project.name,
                       phase: 'failed',
-                      startedAt: new Date(lastLog.created_at),
-                      completedAt: new Date(lastLog.created_at),
+                      startedAt: parseDBTimestamp(lastLog.created_at),
+                      completedAt: parseDBTimestamp(lastLog.created_at),
                     }),
                   ],
                   ...(dbProject ? { health: dbProject.status } : {}),
