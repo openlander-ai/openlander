@@ -1,0 +1,52 @@
+import { ContainerNotFoundError, isDockerNotFoundError } from '../../errors.js';
+import type { DockerContext } from './context.js';
+import { stripDockerStreamHeaders } from './helpers.js';
+
+export class StreamOps {
+  constructor(private readonly ctx: DockerContext) {}
+
+  /** Get container logs as a string. */
+  async getLogs(containerId: string, tail = 100): Promise<string> {
+    try {
+      const container = this.ctx.client.getContainer(containerId);
+      const logs = await container.logs({
+        stdout: true,
+        stderr: true,
+        tail,
+        follow: false,
+      });
+      const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(logs as string);
+      return stripDockerStreamHeaders(buffer);
+    } catch (error) {
+      if (isDockerNotFoundError(error)) {
+        throw new ContainerNotFoundError(containerId);
+      }
+      throw error;
+    }
+  }
+
+  /** Follow container logs as a readable stream for real-time log tailing. */
+  async getLogStream(
+    containerId: string,
+    opts?: { tail?: number; stdout?: boolean; stderr?: boolean },
+  ): Promise<NodeJS.ReadableStream> {
+    const container = this.ctx.client.getContainer(containerId);
+    return (await container.logs({
+      follow: true,
+      stdout: opts?.stdout ?? true,
+      stderr: opts?.stderr ?? true,
+      tail: opts?.tail ?? 50,
+    })) as unknown as NodeJS.ReadableStream;
+  }
+
+  /** Get Docker daemon event stream for real-time container events. */
+  async getEventStream(filters: Record<string, string[]>): Promise<NodeJS.ReadableStream> {
+    return await (
+      this.ctx.client.getEvents as (opts: {
+        filters: Record<string, string[]>;
+      }) => Promise<NodeJS.ReadableStream>
+    )({
+      filters,
+    });
+  }
+}
