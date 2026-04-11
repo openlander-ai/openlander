@@ -156,21 +156,7 @@ export class TraefikManager {
       }
     }
 
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- TODO: createNetwork not yet in docker.ts wrapper (PR3 deferred)
-      const client = (this.docker as any).getClient();
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- PR3 deferred
-      await client.createNetwork({
-        Name: name,
-        Driver: 'bridge',
-      });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('already exists')) {
-        return;
-      }
-      throw error;
-    }
+    await this.docker.ensureNetwork(name);
   }
 
   async start(): Promise<void> {

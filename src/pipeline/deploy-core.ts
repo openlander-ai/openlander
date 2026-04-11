@@ -726,7 +726,7 @@ export class DeployPipeline {
       if (currentRunningTag && currentRunningTag !== previousTag) {
         try {
           await this.docker.tagImage(currentRunningTag, `openlander/${routeName}`, 'previous');
-          await this.markRollbackImage(previousTag);
+
           preservedPreviousTag = currentRunningTag;
         } catch (err) {
           if (!isDockerNotFoundError(err)) {
@@ -934,54 +934,6 @@ export class DeployPipeline {
         } catch {
           // best-effort cleanup
         }
-      }
-    }
-  }
-
-  private async markRollbackImage(imageTag: string): Promise<void> {
-    const [repo, tag] = imageTag.split(':');
-    if (!repo || !tag) {
-      return;
-    }
-
-    const dockerWithClient = this.docker as unknown as {
-      getClient?: () => {
-        createContainer: (opts: {
-          Image: string;
-          Labels?: Record<string, string>;
-          Cmd?: string[];
-        }) => Promise<{
-          id: string;
-          commit: (opts: { repo: string; tag: string; changes?: string[] }) => Promise<unknown>;
-          remove: (opts: { force: boolean }) => Promise<void>;
-        }>;
-      };
-    };
-
-    const getClient = dockerWithClient.getClient;
-    if (typeof getClient !== 'function') {
-      return;
-    }
-
-    const client = getClient();
-
-    const temp = await client.createContainer({
-      Image: imageTag,
-      Labels: { 'ol.rollback': 'true' },
-      Cmd: ['true'],
-    });
-
-    try {
-      await temp.commit({
-        repo,
-        tag,
-        changes: ['LABEL ol.rollback=true'],
-      });
-    } finally {
-      try {
-        await temp.remove({ force: true });
-      } catch {
-        // best-effort cleanup
       }
     }
   }
