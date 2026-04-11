@@ -12,13 +12,33 @@ import {
   rejectRecovery,
   type PendingApproval,
 } from '@/lib/api/usage';
+import { fetchWithAuth } from '@/lib/api/auth';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, CheckCircle2, XCircle, FileText, ShieldAlert, History } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  ShieldAlert,
+  History,
+  RefreshCw,
+  Loader2,
+} from 'lucide-react';
 import { parseTimestamp } from '@/lib/time';
 import { SeverityBadge } from '../ops/SeverityBadge';
 import { useLanguage } from '@/i18n/context';
+
+interface AgentActiveState {
+  isActive: boolean;
+  projectId?: string;
+  projectName?: string;
+  currentStep?: string;
+  currentStepNumber?: number;
+  totalSteps?: number;
+  startedAt?: string;
+}
 
 interface RecoveryTabProps {
   projectId: string;
@@ -31,6 +51,28 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [agentState, setAgentState] = useState<AgentActiveState | null>(null);
+
+  usePollingTask(
+    useCallback(async () => {
+      try {
+        const res = await fetchWithAuth('/api/ops/agent/active').catch(() => null);
+        if (!res || !res.ok) {
+          setAgentState(null);
+          return;
+        }
+        const payload: AgentActiveState = await res.json();
+        if (payload.isActive && payload.projectId === projectId) {
+          setAgentState(payload);
+        } else {
+          setAgentState(null);
+        }
+      } catch {
+        setAgentState(null);
+      }
+    }, [projectId]),
+    { intervalMs: 5000 },
+  );
 
   const fetchData = useCallback(async () => {
     try {
@@ -101,6 +143,52 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
 
   return (
     <div className="flex flex-col h-full p-6 bg-bg-app overflow-auto space-y-8">
+      {agentState && (
+        <Card className="p-5 bg-agent/5 border-agent/30">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-agent/10 rounded-lg">
+              <Loader2 className="h-5 w-5 text-agent animate-spin" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-primary-ol">
+                {t('recovery.activeRecovery')}
+              </h3>
+              {agentState.startedAt && (
+                <p className="text-xs text-muted-ol">
+                  {t('recovery.agentStarted').replace(
+                    '{time}',
+                    parseTimestamp(agentState.startedAt)?.toLocaleTimeString() ?? '',
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <RefreshCw className="h-4 w-4 text-agent shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-secondary-ol">
+                {agentState.currentStepNumber && agentState.totalSteps
+                  ? t('recovery.agentStep')
+                      .replace('{current}', String(agentState.currentStepNumber))
+                      .replace('{total}', String(agentState.totalSteps))
+                      .replace('{description}', agentState.currentStep ?? '')
+                  : (agentState.currentStep ?? t('recovery.agentAnalyzing'))}
+              </p>
+              {agentState.currentStepNumber != null && agentState.totalSteps != null && (
+                <div className="mt-2 h-1.5 w-full bg-bg-subtle rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-agent rounded-full transition-all duration-500"
+                    style={{
+                      width: `${(agentState.currentStepNumber / agentState.totalSteps) * 100}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* SECTION 1: Incident/Recovery History */}
       <section>
         <div className="flex items-center gap-2 mb-4">

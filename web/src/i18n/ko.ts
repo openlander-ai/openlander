@@ -1156,6 +1156,10 @@ export const translations = {
       '성공적인 복구 후 보고서가 자동 생성됩니다. 메모리에 보관되며 서버 재시작 시 초기화됩니다.',
     pendingApprovals: '대기 중인 승인',
     noApprovals: '대기 중인 승인 요청이 없습니다.',
+    activeRecovery: '진행 중인 복구',
+    agentStep: '단계 {current}/{total}: {description}',
+    agentStarted: '{time}에 시작됨',
+    agentAnalyzing: '분석 중...',
   },
   deploymentsList: {
     title: '배포',

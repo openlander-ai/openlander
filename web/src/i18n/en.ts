@@ -1159,6 +1159,10 @@ export const translations = {
       'Reports are auto-generated after successful recoveries. They are kept in memory and reset when the server restarts.',
     pendingApprovals: 'Pending Approvals',
     noApprovals: 'No pending approval requests.',
+    activeRecovery: 'Active Recovery',
+    agentStep: 'Step {current}/{total}: {description}',
+    agentStarted: 'Started {time}',
+    agentAnalyzing: 'Analyzing...',
   },
   deploymentsList: {
     title: 'Deployments',
