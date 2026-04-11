@@ -14,7 +14,6 @@ import {
   ArrowLeft,
   GitCommit,
   Clock,
-  AlertTriangle,
   CheckCircle2,
   XCircle,
   MinusCircle,
@@ -22,8 +21,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/i18n/context';
-import { DiagnoseButton } from '@/components/agent/DiagnoseButton';
 import { StaticLogViewer } from '@/components/logs/StaticLogViewer';
+import { DiagnosisPanel } from '@/components/deploy/DiagnosisPanel';
 
 export function DeploymentDetail() {
   const { id, deployId } = useParams();
@@ -183,51 +182,36 @@ export function DeploymentDetail() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6">
-        {deployment.status === 'failed' && deployment.buildLog && (
-          <div className="rounded-lg border border-warning/30 bg-warning/5 border-l-4 border-l-warning p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <h3 className="text-sm font-display font-medium text-primary-ol">
-                  {'AI Analysis'}
-                </h3>
-                <p className="text-sm font-body text-secondary-ol">
-                  {t('deploy.buildFailureDetected')}
-                </p>
-                <DiagnoseButton
-                  className="mt-2"
-                  projectId={id}
-                  deployId={deployId ?? deployment.id}
-                  errorMessage={deployment.failureSummary ?? deployment.buildLog ?? undefined}
-                  logLines={deployment.buildLog.split('\n').slice(-80)}
-                />
+      <div className="flex-1 overflow-auto p-6">
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="flex-1 space-y-6 min-w-0">
+            <div className="space-y-2">
+              <h3 className="text-sm font-display font-medium text-secondary-ol">Build Logs</h3>
+              <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+                <StaticLogViewer content={deployment.buildLog} />
               </div>
             </div>
-          </div>
-        )}
 
-        <div className="space-y-2">
-          <h3 className="text-sm font-display font-medium text-secondary-ol">Build Logs</h3>
-          <div className="flex flex-col h-full min-h-[400px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
-            <StaticLogViewer content={deployment.buildLog} />
+            {deployment.runtimeLog && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-display font-medium text-secondary-ol flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Runtime Logs
+                  <span className="text-xs font-body text-muted-ol font-normal">
+                    (last 500 lines before redeploy)
+                  </span>
+                </h3>
+                <div className="flex flex-col h-full min-h-[300px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+                  <StaticLogViewer content={deployment.runtimeLog} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="lg:w-80 xl:w-96 shrink-0">
+            <DiagnosisPanel deployment={deployment} />
           </div>
         </div>
-
-        {deployment.runtimeLog && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-display font-medium text-secondary-ol flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              Runtime Logs
-              <span className="text-xs font-body text-muted-ol font-normal">
-                (last 500 lines before redeploy)
-              </span>
-            </h3>
-            <div className="flex flex-col h-full min-h-[300px] rounded-lg border border-[hsl(var(--border))] overflow-hidden">
-              <StaticLogViewer content={deployment.runtimeLog} />
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
