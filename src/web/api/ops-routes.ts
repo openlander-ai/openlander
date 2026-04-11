@@ -6,6 +6,7 @@ import type { OpsIncidentEventRow, OpsIncidentRow } from '../../db/types.js';
 import { updateConfig } from '../../config/index.js';
 import { resolveAutomationPolicy, isAutopilot } from '../../monitor/ops-config-resolver.js';
 import { DEFAULT_OPS_CONFIG, DEFAULT_RECOVERY_AUTOMATION } from '../../monitor/ops-types.js';
+import { getPostmortemInstance } from '../../monitor/postmortem.js';
 import { createModuleLogger } from '../../lib/logger.js';
 
 const log = createModuleLogger('ops-routes');
@@ -666,6 +667,107 @@ export function createOpsRoutes(ctx: AppContext): Hono {
       return c.json(page);
     } catch (err) {
       return c.json({ error: String(err) }, 500);
+    }
+  });
+
+  // --- Postmortems ---
+
+  api.get('/postmortems', (c) => {
+    const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '20', 10) || 20, 1), 100);
+    const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
+
+    try {
+      const generator = getPostmortemInstance();
+      if (!generator) {
+        return c.json({ postmortems: [], total: 0 });
+      }
+
+      const all = generator.listPostmortems();
+      all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const total = all.length;
+      const page = all.slice(offset, offset + limit);
+
+      return c.json({
+        postmortems: page.map((p) => ({
+          id: p.id,
+          project_id: p.projectId,
+          project_name: p.projectName,
+          content: generator.getPostmortem(p.id)?.markdown ?? '',
+          created_at: p.createdAt,
+        })),
+        total,
+      });
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch postmortems');
+      return c.json({ postmortems: [], total: 0 });
+    }
+  });
+
+  api.get('/postmortems/:projectId', (c) => {
+    const projectId = c.req.param('projectId');
+    const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '20', 10) || 20, 1), 100);
+    const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
+
+    try {
+      const generator = getPostmortemInstance();
+      if (!generator) {
+        return c.json({ postmortems: [], total: 0 });
+      }
+
+      const all = generator
+        .listPostmortems()
+        .filter((p) => p.projectId === projectId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const total = all.length;
+      const page = all.slice(offset, offset + limit);
+
+      return c.json({
+        postmortems: page.map((p) => ({
+          id: p.id,
+          project_id: p.projectId,
+          project_name: p.projectName,
+          content: generator.getPostmortem(p.id)?.markdown ?? '',
+          created_at: p.createdAt,
+        })),
+        total,
+      });
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch postmortems for project');
+      return c.json({ postmortems: [], total: 0 });
+    }
+  });
+
+  // --- Deployment Patterns ---
+
+  api.get('/patterns', (c) => {
+    const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
+
+    try {
+      const all = ctx.db.listAllDeploymentPatterns();
+      const page = all.slice(offset, offset + limit);
+      return c.json({ patterns: page, total: all.length });
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch deployment patterns');
+      return c.json({ error: 'Failed to fetch deployment patterns' }, 500);
+    }
+  });
+
+  api.get('/patterns/:projectId', (c) => {
+    const projectId = c.req.param('projectId');
+    const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
+
+    try {
+      const all = ctx.db.findDeploymentPatternsByProject(projectId);
+      const sorted = [...all].sort((a, b) =>
+        (b.last_seen_at ?? '').localeCompare(a.last_seen_at ?? ''),
+      );
+      const page = sorted.slice(offset, offset + limit);
+      return c.json({ patterns: page, total: all.length });
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch deployment patterns');
+      return c.json({ error: 'Failed to fetch deployment patterns' }, 500);
     }
   });
 
