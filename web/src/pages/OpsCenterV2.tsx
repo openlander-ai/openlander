@@ -3,12 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 import {
   X,
   AlertCircle,
+  AlertTriangle,
   RefreshCw,
   Loader2,
   Activity,
   ShieldCheck,
   FileText,
-  GitBranch,
+  TrendingUp,
   BarChart3,
 } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
@@ -317,7 +318,7 @@ export function OpsCenterV2() {
                   Live
                 </TabsTrigger>
                 <TabsTrigger value="incidents">
-                  <AlertCircle className="h-4 w-4 mr-1.5" />
+                  <AlertTriangle className="h-4 w-4 mr-1.5" />
                   Incidents
                 </TabsTrigger>
                 <TabsTrigger value="approvals">
@@ -329,7 +330,7 @@ export function OpsCenterV2() {
                   Postmortems
                 </TabsTrigger>
                 <TabsTrigger value="patterns">
-                  <GitBranch className="h-4 w-4 mr-1.5" />
+                  <TrendingUp className="h-4 w-4 mr-1.5" />
                   Patterns
                 </TabsTrigger>
                 <TabsTrigger value="usage">

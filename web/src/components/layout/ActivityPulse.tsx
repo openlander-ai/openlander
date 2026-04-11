@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Rocket, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
+import { Rocket, RefreshCw, ShieldCheck, DollarSign } from 'lucide-react';
 import { usePollingTask } from '@/hooks/use-polling-task';
 import { apiGet } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -103,7 +103,7 @@ export function ActivityPulse() {
         )}
         title={t('pulse.aiSpend')}
       >
-        <Sparkles className="h-3.5 w-3.5" />
+        <DollarSign className="h-3.5 w-3.5" />
         <span className="font-mono">{formatSpend(stats.ai_spend_today)}</span>
         <span className="hidden md:inline">{t('pulse.aiSpend')}</span>
       </button>

@@ -59,7 +59,7 @@ export function UsageTab() {
         <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel">
           <p className="text-sm font-medium text-muted-ol mb-1">{t('usageTab.totalCost')}</p>
           <p className="text-2xl font-semibold text-primary-ol">
-            ${summary.totalCostUsd ? summary.totalCostUsd.toFixed(4) : '0.0000'}
+            ${summary.totalCostUsd ? summary.totalCostUsd.toFixed(2) : '0.00'}
           </p>
         </div>
         <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel">

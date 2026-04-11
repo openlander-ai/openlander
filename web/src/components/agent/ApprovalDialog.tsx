@@ -9,7 +9,7 @@ import {
   listProjects,
   type ActionRun,
 } from '@/lib/api/projects';
-import { ShieldAlert, Activity, CheckCircle2 } from 'lucide-react';
+import { ShieldAlert, Activity, CheckCircle2, X } from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { TOOL_HUMAN_LABELS } from '@/components/ops/utils';
 
@@ -20,6 +20,7 @@ export function ApprovalDialog() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
     async function initProjects() {
@@ -95,7 +96,11 @@ export function ApprovalDialog() {
 
   const location = useLocation();
 
-  if (!pending || location.pathname === '/operations') {
+  useEffect(() => {
+    setDismissed(false);
+  }, [pending?.id]);
+
+  if (!pending || dismissed || location.pathname === '/operations') {
     return null;
   }
 
@@ -110,13 +115,20 @@ export function ApprovalDialog() {
         <div className="bg-error/20 p-2 rounded-full shrink-0">
           <ShieldAlert className="h-5 w-5 text-error" />
         </div>
-        <div>
+        <div className="flex-1">
           <h3 className="text-sm font-semibold text-error mb-1">{t('agent.approval.title')}</h3>
           <p className="text-xs text-secondary-ol font-medium">
             <span className="font-mono bg-bg-subtle px-1 rounded mr-1.5">{projectName}</span>
             {t('agent.approval.description', { tool: toolName })}
           </p>
         </div>
+        <button
+          onClick={() => setDismissed(true)}
+          className="shrink-0 p-1 rounded-md hover:bg-error/10 transition-colors"
+          title="Dismiss"
+        >
+          <X className="h-4 w-4 text-muted-ol" />
+        </button>
       </div>
 
       {/* Context section */}

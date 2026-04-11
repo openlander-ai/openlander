@@ -1,9 +1,26 @@
 import { useEffect, useState } from 'react';
-import { GitBranch } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { apiGet } from '@/lib/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseTimestamp } from '@/lib/time';
 import { useLanguage } from '@/i18n/context';
+
+function humanizeSnakeCase(value: string): string {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function humanizeFixAction(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as { strategy?: string; action?: string };
+    return parsed.strategy
+      ? humanizeSnakeCase(parsed.strategy)
+      : parsed.action
+        ? humanizeSnakeCase(parsed.action)
+        : raw;
+  } catch {
+    return humanizeSnakeCase(raw);
+  }
+}
 
 interface DeploymentPattern {
   id: string;
@@ -51,7 +68,7 @@ export function PatternsTab() {
   if (patterns.length === 0) {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
-        <GitBranch className="h-12 w-12 text-muted-ol mb-4" />
+        <TrendingUp className="h-12 w-12 text-muted-ol mb-4" />
         <h3 className="text-lg font-medium text-primary-ol mb-2">{t('patternsTab.noPatterns')}</h3>
         <p className="text-sm text-muted-ol max-w-md">{t('patternsTab.emptyMessage')}</p>
       </div>
@@ -82,7 +99,7 @@ export function PatternsTab() {
                   <tr key={pattern.id} className="hover:bg-bg-subtle/50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="px-2 py-1 rounded-md bg-bg-subtle border border-[hsl(var(--border))] text-xs font-medium text-primary-ol">
-                        {pattern.pattern_type}
+                        {humanizeSnakeCase(pattern.pattern_type)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -98,7 +115,7 @@ export function PatternsTab() {
                         className="max-w-[250px] truncate text-secondary-ol"
                         title={pattern.fix_action}
                       >
-                        {pattern.fix_action}
+                        {humanizeFixAction(pattern.fix_action)}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">

@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Rocket, RefreshCw, ShieldCheck, AlertCircle, Server, Sparkles } from 'lucide-react';
+import { Rocket, RefreshCw, ShieldCheck, AlertCircle, DollarSign, HeartOff } from 'lucide-react';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePollingTask } from '@/hooks/use-polling-task';
@@ -184,13 +184,13 @@ export function Overview() {
           onClick={() => navigate('/operations?tab=incidents')}
         />
         <KpiCard
-          icon={<Server className="h-5 w-5 text-orange-500" />}
+          icon={<HeartOff className="h-5 w-5 text-orange-500" />}
           value={stats?.unhealthy_services ?? 0}
           label={t('overview.kpi.services')}
           onClick={() => navigate('/services')}
         />
         <KpiCard
-          icon={<Sparkles className="h-5 w-5 text-emerald-500" />}
+          icon={<DollarSign className="h-5 w-5 text-emerald-500" />}
           value={`$${(stats?.ai_spend_today ?? 0).toFixed(2)}`}
           label={t('overview.kpi.aiSpend')}
           onClick={() => navigate('/operations?tab=usage')}
@@ -366,7 +366,7 @@ function ActivityIcon({ type, severity }: { type: string; severity: string }) {
   if (type === 'recovery' || type.startsWith('recovery:'))
     return <RefreshCw className="h-4 w-4 text-purple-500" />;
   if (type === 'approval') return <ShieldCheck className="h-4 w-4 text-warning" />;
-  if (type.startsWith('ai')) return <Sparkles className="h-4 w-4 text-emerald-500" />;
+  if (type.startsWith('ai')) return <DollarSign className="h-4 w-4 text-emerald-500" />;
 
   if (severity === 'critical') return <AlertCircle className="h-4 w-4 text-error" />;
   if (severity === 'warning') return <AlertCircle className="h-4 w-4 text-warning" />;
