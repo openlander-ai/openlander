@@ -276,7 +276,6 @@ export class AlertMonitor {
   }
 
   private async checkContainerRestartLoops(): Promise<void> {
-    const dockerClient = this.docker.getClient();
     const projects = this.db.listProjects('running');
 
     for (const project of projects) {
@@ -285,8 +284,7 @@ export class AlertMonitor {
       const key = `restart-loop:${project.container_id}`;
 
       try {
-        const container = dockerClient.getContainer(project.container_id);
-        const info = await container.inspect();
+        const info = await this.docker.inspectContainer(project.container_id);
         const restartCount: number = (info.RestartCount as number | undefined) ?? 0;
 
         // Check if container was restarted recently (within 24h)
@@ -329,10 +327,7 @@ export class AlertMonitor {
     const key = 'dangling-images:system';
 
     try {
-      const dockerClient = this.docker.getClient();
-      const images = await dockerClient.listImages({
-        filters: { dangling: ['true'] },
-      });
+      const images = await this.docker.listDanglingImages();
 
       if (images.length < DANGLING_IMAGES_THRESHOLD) {
         this.resolveAlert(key, 'dangling-images');
@@ -541,7 +536,6 @@ export class AlertMonitor {
   }
 
   private async checkContainerCrashes(): Promise<void> {
-    const dockerClient = this.docker.getClient();
     const projects = this.db.listProjects();
 
     for (const project of projects) {
@@ -551,8 +545,7 @@ export class AlertMonitor {
       const key = `container-crash:${project.container_id}`;
 
       try {
-        const container = dockerClient.getContainer(project.container_id);
-        const info = await container.inspect();
+        const info = await this.docker.inspectContainer(project.container_id);
         const state = info.State;
         const restartCount: number = (info.RestartCount as number | undefined) ?? 0;
 
@@ -634,7 +627,6 @@ export class AlertMonitor {
   }
 
   private async checkContainerMemory(): Promise<void> {
-    const dockerClient = this.docker.getClient();
     const projects = this.db.listProjects('running');
 
     for (const project of projects) {
@@ -643,9 +635,8 @@ export class AlertMonitor {
       const key = `resource-saturation:${project.container_id}`;
 
       try {
-        const container = dockerClient.getContainer(project.container_id);
-        const statsStream = await container.stats({ stream: false });
-        const stats = statsStream as unknown as {
+        const statsRaw = await this.docker.getContainerStats(project.container_id);
+        const stats = statsRaw as {
           memory_stats?: { usage?: number; limit?: number };
         };
 
@@ -691,8 +682,7 @@ export class AlertMonitor {
 
   private async checkOrphanContainers(): Promise<void> {
     try {
-      const dockerClient = this.docker.getClient();
-      const containers = await dockerClient.listContainers({ all: true });
+      const containers = await this.docker.listAllContainers();
 
       const projects = this.db.listProjects();
       const services = this.db.listServices();
@@ -707,17 +697,15 @@ export class AlertMonitor {
 
       const orphans: { id: string; name: string; state: string }[] = [];
       for (const container of containers) {
-        const names = container.Names.map((n: string) => n.replace(/^\//, ''));
-        const isOpenLanderContainer = names.some(
-          (n: string) => n.startsWith('ol-') || n.startsWith('openlander'),
-        );
+        const isOpenLanderContainer =
+          container.name.startsWith('ol-') || container.name.startsWith('openlander');
         if (!isOpenLanderContainer) continue;
-        if (knownContainerIds.has(container.Id)) continue;
+        if (knownContainerIds.has(container.id)) continue;
 
         orphans.push({
-          id: container.Id.slice(0, 12),
-          name: names[0] || container.Id.slice(0, 12),
-          state: container.State,
+          id: container.id.slice(0, 12),
+          name: container.name || container.id.slice(0, 12),
+          state: container.state,
         });
       }
 

@@ -1103,6 +1103,11 @@ export class Docker {
       return [];
     }
   }
+  /** List dangling (untagged) Docker images. */
+  async listDanglingImages(): Promise<Dockerode.ImageInfo[]> {
+    return await this.client.listImages({ filters: { dangling: ['true'] } });
+  }
+
   /**
    * Pull a Docker image from registry.
    * Silently succeeds if the image already exists locally and pull fails

@@ -382,7 +382,7 @@ export class RecoveryPipeline {
     containerId: string,
   ): Promise<{ success: true } | { success: false; reason: string }> {
     try {
-      await this.ctx.docker.getClient().getContainer(containerId).restart();
+      await this.ctx.docker.restartContainer(containerId);
       log.info({ projectId, containerId }, 'Container restart step completed');
       return { success: true };
     } catch (error) {
@@ -664,7 +664,7 @@ export class RecoveryPipeline {
 
   private async isContainerRunning(containerId: string): Promise<boolean> {
     try {
-      const info = await this.ctx.docker.getClient().getContainer(containerId).inspect();
+      const info = await this.ctx.docker.inspectContainer(containerId);
       return info.State.Running && !info.State.Restarting;
     } catch (error) {
       log.debug({ error, containerId }, 'Container inspect failed during health check');

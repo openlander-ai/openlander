@@ -191,8 +191,7 @@ export class HealthMonitor {
         const containerRef = service.container_id ?? service.container_name;
 
         try {
-          const container = this.docker.getClient().getContainer(containerRef);
-          const info = await container.inspect();
+          const info = await this.docker.inspectContainer(containerRef);
 
           if (!info.State.Running) {
             if (service.status === 'running') {
@@ -319,8 +318,7 @@ export class HealthMonitor {
     const ensuredContainerId = containerId;
 
     try {
-      const container = this.docker.getClient().getContainer(ensuredContainerId);
-      const info = await container.inspect();
+      const info = await this.docker.inspectContainer(ensuredContainerId);
 
       const restartCount = info.RestartCount;
 
@@ -521,15 +519,7 @@ export class HealthMonitor {
     tail = INCIDENT_ERROR_SNIPPET_LINES,
   ): Promise<string | null> {
     try {
-      const container = this.docker.getClient().getContainer(containerId);
-      const logs = await container.logs({
-        stdout: false,
-        stderr: true,
-        tail,
-        follow: false,
-      });
-      const buffer = Buffer.isBuffer(logs) ? logs : Buffer.from(logs as string);
-      const decoded = stripDockerStreamHeaders(buffer).trim();
+      const decoded = (await this.docker.getLogs(containerId, tail)).trim();
       return decoded.length > 0 ? decoded : null;
     } catch (error) {
       log.debug({ containerId, error }, 'Failed to read container stderr snippet');
@@ -586,38 +576,4 @@ export class HealthMonitor {
       return null;
     }
   }
-}
-
-function stripDockerStreamHeaders(buffer: Buffer): string {
-  if (buffer.length === 0) return '';
-
-  const firstByte = buffer[0];
-  if (firstByte !== 0 && firstByte !== 1 && firstByte !== 2) {
-    return buffer.toString('utf8');
-  }
-
-  const HEADER_SIZE = 8;
-  const chunks: string[] = [];
-  let offset = 0;
-
-  while (offset < buffer.length) {
-    if (offset + HEADER_SIZE > buffer.length) {
-      chunks.push(buffer.subarray(offset).toString('utf8'));
-      break;
-    }
-
-    const payloadSize = buffer.readUInt32BE(offset + 4);
-    const payloadStart = offset + HEADER_SIZE;
-    const payloadEnd = payloadStart + payloadSize;
-
-    if (payloadEnd > buffer.length) {
-      chunks.push(buffer.subarray(payloadStart).toString('utf8'));
-      break;
-    }
-
-    chunks.push(buffer.subarray(payloadStart, payloadEnd).toString('utf8'));
-    offset = payloadEnd;
-  }
-
-  return chunks.join('');
 }

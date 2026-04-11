@@ -62,9 +62,7 @@ export class DriftDetector {
     if (!containerRef) return null;
 
     try {
-      const client = this.ctx.docker.getClient();
-      const container = client.getContainer(containerRef);
-      const info = await container.inspect();
+      const info = await this.ctx.docker.inspectContainer(containerRef);
 
       if (!info.State.Running) {
         return {
