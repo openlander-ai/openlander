@@ -45,8 +45,7 @@ async function containerExists(
 
 async function imageExists(ctx: AppContext, tag: string): Promise<boolean> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR3: no image wrapper yet
-    await ctx.docker.getClient().getImage(tag).inspect();
+    await ctx.docker.inspectImage(tag);
     return true;
   } catch {
     return false;
@@ -55,8 +54,7 @@ async function imageExists(ctx: AppContext, tag: string): Promise<boolean> {
 
 async function volumeExists(ctx: AppContext, name: string): Promise<boolean> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR3: no volume wrapper yet
-    await ctx.docker.getClient().getVolume(name).inspect();
+    await ctx.docker.inspectVolume(name);
     return true;
   } catch {
     return false;
@@ -68,15 +66,13 @@ async function ensureNetwork(
   name: string,
 ): Promise<RecoverItemResult<NetworkStatus>> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR3: no network wrapper yet
-    const client = ctx.docker.getClient();
     try {
-      await client.getNetwork(name).inspect();
+      await ctx.docker.getNetworkInfo(name);
       return { name, status: 'existed' };
     } catch {
-      // doesn't exist
+      // Network doesn't exist — will create below
     }
-    await client.createNetwork({ Name: name, Driver: 'bridge' });
+    await ctx.docker.ensureNetwork(name);
     return { name, status: 'created' };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -127,11 +123,9 @@ async function recoverService(
     // Ensure volume (preserve existing data!)
     const volExists = await volumeExists(ctx, vName);
     if (!volExists) {
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR3: no volume wrapper yet
-      await ctx.docker.getClient().createVolume({
-        Name: vName,
-        Labels: {
-          [DOCKER_LABELS.MANAGED]: 'true',
+      await ctx.docker.createVolume({
+        name: vName,
+        labels: {
           [DOCKER_LABELS.ROLE]: 'service',
           [DOCKER_LABELS.SERVICE]: service.name,
         },

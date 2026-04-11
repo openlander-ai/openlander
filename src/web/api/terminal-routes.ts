@@ -116,8 +116,8 @@ export function createTerminalRoutes(
                 return;
               }
 
-              const container = ctx.docker.getClient().getContainer(project.container_id);
-              const containerInfo = await container.inspect();
+              const containerId = project.container_id;
+              const containerInfo = await ctx.docker.inspectContainer(containerId);
               if (!containerInfo.State.Running) {
                 closeWithError(ws, 'Container is not running');
                 return;
@@ -125,25 +125,8 @@ export function createTerminalRoutes(
 
               const probeShell = async (shell: string): Promise<boolean> => {
                 try {
-                  const probeExec = await container.exec({
-                    Cmd: [shell, '-c', 'exit 0'],
-                    AttachStdin: false,
-                    AttachStdout: true,
-                    AttachStderr: true,
-                    Tty: false,
-                  });
-                  const probeStream = await probeExec.start({ hijack: false, stdin: false });
-
-                  await new Promise<void>((resolve) => {
-                    probeStream.on('data', () => {});
-                    probeStream.on('end', resolve);
-                    probeStream.on('error', () => {
-                      resolve();
-                    });
-                  });
-
-                  const info = await probeExec.inspect();
-                  return info.ExitCode === 0;
+                  const result = await ctx.docker.execSimple(containerId, [shell, '-c', 'exit 0']);
+                  return result.exitCode === 0;
                 } catch (_err) {
                   return false;
                 }
@@ -163,15 +146,9 @@ export function createTerminalRoutes(
                 return;
               }
 
-              const shellExec = await container.exec({
-                Cmd: [shellCmd],
-                AttachStdin: true,
-                AttachStdout: true,
-                AttachStderr: true,
-                Tty: true,
-              });
-              const exec = shellExec as TerminalExec;
-              const stream = await shellExec.start({ hijack: true, stdin: true });
+              const terminal = await ctx.docker.execTerminal(containerId, [shellCmd]);
+              const exec: TerminalExec = terminal;
+              const stream = terminal.stream as unknown as Duplex;
 
               const idleTimer = setTimeout(() => {
                 ws.send(JSON.stringify({ type: 'error', message: 'Terminal idle timeout (30m)' }));

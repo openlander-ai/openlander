@@ -109,9 +109,7 @@ function createApp(
 
     let dockerContainers = 0;
     try {
-      const containers = await ctx.docker.getClient().listContainers({
-        filters: { label: ['openlander.managed=true'] },
-      });
+      const containers = await ctx.docker.listManagedContainers();
       dockerContainers = containers.length;
     } catch (err) {
       log.debug({ err }, 'Docker container list failed during health check');

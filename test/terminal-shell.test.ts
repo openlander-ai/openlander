@@ -11,9 +11,9 @@ type ProjectRecord = {
 };
 
 type ExecMock = {
-  start: ReturnType<typeof vi.fn>;
-  inspect?: ReturnType<typeof vi.fn>;
-  resize: ReturnType<typeof vi.fn>;
+  start: () => Promise<unknown>;
+  inspect?: () => Promise<{ ExitCode: number }>;
+  resize: (opts: { w: number; h: number }) => Promise<void>;
 };
 
 type WsConnection = {
@@ -63,13 +63,6 @@ function createTestHarness(execFactory: (cmd: string[]) => ExecMock) {
     container_id: 'container-1',
   };
   const execCalls: string[][] = [];
-  const container = {
-    inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
-    exec: vi.fn().mockImplementation(async (opts: { Cmd: string[] }) => {
-      execCalls.push(opts.Cmd);
-      return execFactory(opts.Cmd);
-    }),
-  };
   const ctx = {
     config: { server: { host: 'localhost' } },
     db: {
@@ -85,9 +78,22 @@ function createTestHarness(execFactory: (cmd: string[]) => ExecMock) {
       deleteSession: vi.fn(),
     },
     docker: {
-      getClient: vi.fn(() => ({
-        getContainer: vi.fn(() => container),
-      })),
+      inspectContainer: vi.fn().mockResolvedValue({ State: { Running: true } }),
+      execSimple: vi.fn().mockImplementation(async (_id: string, cmd: string[]) => {
+        execCalls.push(cmd);
+        const exec = execFactory(cmd);
+        if (exec.inspect) {
+          const result = await exec.inspect();
+          return { exitCode: result.ExitCode, stdout: '', stderr: '' };
+        }
+        return { exitCode: 1, stdout: '', stderr: '' };
+      }),
+      execTerminal: vi.fn().mockImplementation(async (_id: string, cmd: string[]) => {
+        execCalls.push(cmd);
+        const exec = execFactory(cmd);
+        const stream = await exec.start();
+        return { stream, resize: exec.resize };
+      }),
     },
   } as unknown as AppContext;
 
@@ -120,7 +126,7 @@ function createTestHarness(execFactory: (cmd: string[]) => ExecMock) {
     close: vi.fn(),
   };
 
-  return { container, execCalls, handlers: activeHandlers, ws };
+  return { execCalls, handlers: activeHandlers, ws };
 }
 
 describe('createTerminalRoutes shell fallback', () => {

@@ -220,6 +220,29 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
       stopContainer: vi.fn(async (containerId: string) => {
         await getContainerControl(containerId).stop();
       }),
+      inspectContainer: vi.fn(async (containerId: string) => {
+        return getContainerControl(containerId).inspect();
+      }),
+      createVolume: vi.fn(async (opts: { name: string; labels?: Record<string, string> }) => {
+        createdVolumes.push({ Name: opts.name, Labels: opts.labels ?? {} });
+      }),
+      removeVolume: vi.fn().mockResolvedValue(undefined),
+      runServiceContainer: vi.fn(async (opts: Record<string, unknown>) => {
+        createdContainers.push(opts);
+        const name =
+          typeof opts['name'] === 'string' ? opts['name'] : `svc-${createdContainers.length}`;
+        const id = `${name}-id`;
+        runningContainers.set(id, true);
+        return id;
+      }),
+      runInfraContainer: vi.fn(async (opts: Record<string, unknown>) => {
+        createdContainers.push(opts);
+        const id = `infra-${createdContainers.length}-id`;
+        runningContainers.set(id, true);
+        return id;
+      }),
+      waitForContainer: vi.fn().mockResolvedValue({ StatusCode: 0 }),
+      connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
       pullImage: vi.fn().mockResolvedValue(undefined),
       getClient: vi.fn().mockReturnValue(client),
       getNetworkName: vi.fn().mockReturnValue('openlander-prod'),

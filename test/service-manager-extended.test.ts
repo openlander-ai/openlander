@@ -422,9 +422,9 @@ describe('ServiceManager reconciliation behavior', () => {
     });
     const db = createDbMock([service]);
     const dockerHarness = createMockDockerHarness();
-    dockerHarness.client.getContainer.mockReturnValue({
-      inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
-    });
+    (dockerHarness.docker.inspectContainer as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('inspect failed'),
+    );
 
     const manager = new ServiceManager(dockerHarness.docker, db);
     const list = await manager.list();
@@ -490,9 +490,9 @@ describe('ServiceManager reconciliation behavior', () => {
     ];
     const db = createDbMock(services);
     const dockerHarness = createMockDockerHarness();
-    dockerHarness.docker.getClient = vi.fn(() => {
-      throw new Error('Docker daemon unavailable');
-    });
+    (dockerHarness.docker.inspectContainer as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Docker daemon unavailable'),
+    );
 
     const manager = new ServiceManager(dockerHarness.docker, db);
     const list = await manager.list();

@@ -222,9 +222,6 @@ export class ServiceManager {
    */
   async reconcileServiceNetworks(): Promise<void> {
     const services = this.db.listServices();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-    const client = this.docker.getClient();
-
     let reconciled = 0;
     let migrated = 0;
     let alreadyConnected = 0;
@@ -238,8 +235,7 @@ export class ServiceManager {
       reconciled += 1;
 
       try {
-        const container = client.getContainer(containerRef);
-        const info = await container.inspect();
+        const info = await this.docker.inspectContainer(containerRef);
 
         if (!info.State.Running) {
           log.warn(
@@ -415,61 +411,33 @@ export class ServiceManager {
 
     await this.docker.pullImage(image);
 
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-    const client = this.docker.getClient();
-    await client.createVolume({
-      Name: volumeName,
-      Labels: {
-        [DOCKER_LABELS.MANAGED]: 'true',
+    await this.docker.createVolume({
+      name: volumeName,
+      labels: {
         [DOCKER_LABELS.ROLE]: 'service',
         [DOCKER_LABELS.SERVICE]: opts.name,
       },
     });
 
-    // Raw createContainer: incompatible with docker.runContainer() — service containers
-    // need different labels (ROLE/SERVICE vs PROJECT), custom healthcheck support,
-    // explicit volume binds, and 'unless-stopped' restart policy. Consolidation deferred.
-    const container = await client.createContainer({
-      Image: image,
+    const envRecord: Record<string, string> = {};
+    for (const entry of env) {
+      const eqIdx = entry.indexOf('=');
+      if (eqIdx > 0) {
+        envRecord[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+      }
+    }
+
+    const containerId = await this.docker.runServiceContainer({
+      imageTag: image,
       name: containerName,
-      Env: env,
-      ...(containerCmd ? { Cmd: containerCmd } : {}),
-      ...(containerHealthcheck
-        ? {
-            Healthcheck: {
-              Test: containerHealthcheck.test,
-              Interval: containerHealthcheck.interval * 1_000_000_000,
-              Timeout: containerHealthcheck.timeout * 1_000_000_000,
-              Retries: containerHealthcheck.retries,
-              StartPeriod: containerHealthcheck.startPeriod * 1_000_000_000,
-            },
-          }
-        : {}),
-      Labels: {
-        [DOCKER_LABELS.MANAGED]: 'true',
-        [DOCKER_LABELS.ROLE]: 'service',
-        [DOCKER_LABELS.SERVICE]: opts.name,
-      },
-      ExposedPorts: {
-        [`${String(containerPort)}/tcp`]: {},
-      },
-      NetworkingConfig: {
-        EndpointsConfig: {
-          [SHARED_NETWORK_NAME]: { Aliases: [opts.name] },
-        },
-      },
-      HostConfig: {
-        NetworkMode: this.docker.getNetworkName(),
-        RestartPolicy: { Name: 'unless-stopped' },
-        Binds: [`${volumeName}:${dataMountPath}`],
-        PortBindings: {
-          [`${String(containerPort)}/tcp`]: [{ HostPort: String(hostPort) }],
-        },
-        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
-      },
+      port: containerPort,
+      hostPort,
+      envVars: envRecord,
+      serviceName: opts.name,
+      volumeBinds: [`${volumeName}:${dataMountPath}`],
+      ...(containerHealthcheck ? { healthcheck: containerHealthcheck } : {}),
+      ...(containerCmd ? { cmd: containerCmd } : {}),
     });
-
-    await container.start();
 
     const primaryNetwork = this.docker.getNetworkName();
     const additionalNetworks = [SHARED_NETWORK_NAME].filter(
@@ -478,7 +446,7 @@ export class ServiceManager {
 
     for (const networkName of additionalNetworks) {
       try {
-        await this.docker.connectContainerToNetwork(container.id, networkName, [opts.name]);
+        await this.docker.connectContainerToNetwork(containerId, networkName, [opts.name]);
       } catch (err) {
         log.warn(
           { err, networkName, containerName },
@@ -498,7 +466,7 @@ export class ServiceManager {
       credentials: credentialsJson,
     });
 
-    this.db.updateService(id, { status: 'running', containerId: container.id });
+    this.db.updateService(id, { status: 'running', containerId });
     this.invalidateServiceCardSummaryCache();
     const created = this.db.getService(id);
     if (!created) {
@@ -572,15 +540,7 @@ export class ServiceManager {
     }
 
     const volumeName = this.getVolumeName(service.name);
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-    const client = this.docker.getClient();
-    try {
-      await client.getVolume(volumeName).remove();
-    } catch (error) {
-      if (!isDockerNotFoundError(error)) {
-        throw error;
-      }
-    }
+    await this.docker.removeVolume(volumeName);
 
     this.db.deleteService(id);
     this.invalidateServiceCardSummaryCache();
@@ -639,11 +599,7 @@ export class ServiceManager {
 
     await this.docker.pullImage('alpine');
 
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-    const client = this.docker.getClient();
-    // Raw createContainer: ephemeral backup container (AutoRemove, no port/network/labels)
-    // is incompatible with docker.runContainer(). Consolidation deferred.
-    const container = await client.createContainer({
+    const backupContainerId = await this.docker.runInfraContainer({
       Image: 'alpine',
       Cmd: ['tar', 'czf', `/backup/${backupId}.tar.gz`, '-C', '/data', '.'],
       HostConfig: {
@@ -652,12 +608,7 @@ export class ServiceManager {
       },
     });
 
-    await container.start();
-    const waitResult: unknown = await container.wait();
-    const backupExitCode =
-      waitResult && typeof waitResult === 'object' && 'StatusCode' in waitResult
-        ? (waitResult as { StatusCode: number }).StatusCode
-        : 1;
+    const { StatusCode: backupExitCode } = await this.docker.waitForContainer(backupContainerId);
     if (backupExitCode !== 0) {
       throw new Error(
         `Backup failed with exit code ${String(backupExitCode)} for service: ${service.id}`,
@@ -686,11 +637,8 @@ export class ServiceManager {
 
     try {
       await this.docker.pullImage('alpine');
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-      const client = this.docker.getClient();
-      // Raw createContainer: ephemeral restore container (AutoRemove, no port/network/labels)
-      // is incompatible with docker.runContainer(). Consolidation deferred.
-      const container = await client.createContainer({
+
+      const restoreContainerId = await this.docker.runInfraContainer({
         Image: 'alpine',
         Cmd: ['sh', '-c', `rm -rf /data/* && tar xzf /backup/${backupFilename} -C /data`],
         HostConfig: {
@@ -699,12 +647,8 @@ export class ServiceManager {
         },
       });
 
-      await container.start();
-      const waitResult: unknown = await container.wait();
-      const restoreExitCode =
-        waitResult && typeof waitResult === 'object' && 'StatusCode' in waitResult
-          ? (waitResult as { StatusCode: number }).StatusCode
-          : 1;
+      const { StatusCode: restoreExitCode } =
+        await this.docker.waitForContainer(restoreContainerId);
       if (restoreExitCode !== 0) {
         throw new Error(
           `Restore failed with exit code ${String(restoreExitCode)} for service: ${service.id}`,
@@ -771,8 +715,7 @@ export class ServiceManager {
 
     const containerId = service.container_id ?? service.container_name;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-      const info = await this.docker.getClient().getContainer(containerId).inspect();
+      const info = await this.docker.inspectContainer(containerId);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
       const containerIdFromDocker = info.Id;
 
@@ -899,8 +842,7 @@ export class ServiceManager {
 
     const containerRef = service.container_id ?? service.container_name;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-      const info = await this.docker.getClient().getContainer(containerRef).inspect();
+      const info = await this.docker.inspectContainer(containerRef);
       const status: ServiceRow['status'] = info.State.Running ? 'running' : 'stopped';
       const healthRaw: unknown = info.State.Health?.Status;
       const startedAtRaw: unknown = info.State.StartedAt;
@@ -996,19 +938,24 @@ export class ServiceManager {
     let memoryLimitBytes: number | null = null;
     try {
       const containerId = service.container_id ?? service.container_name;
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-      const container = this.docker.getClient().getContainer(containerId);
-      const rawStats = await container.stats({ stream: false });
+      const rawStats = (await this.docker.getContainerStats(containerId)) as {
+        cpu_stats: {
+          cpu_usage: { total_usage: number; percpu_usage?: number[] };
+          system_cpu_usage: number;
+        };
+        precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+        memory_stats: { usage?: number; limit?: number };
+      };
       const cpuDelta =
         rawStats.cpu_stats.cpu_usage.total_usage - rawStats.precpu_stats.cpu_usage.total_usage;
       const systemDelta =
         rawStats.cpu_stats.system_cpu_usage - rawStats.precpu_stats.system_cpu_usage;
-      const percpuUsage = rawStats.cpu_stats.cpu_usage.percpu_usage as number[] | undefined;
+      const percpuUsage = rawStats.cpu_stats.cpu_usage.percpu_usage;
       const numCpus = percpuUsage ? percpuUsage.length : 1;
       cpuPercent =
         systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * numCpus * 100 * 10) / 10 : 0;
-      memoryUsageBytes = (rawStats.memory_stats.usage as number | undefined) ?? null;
-      memoryLimitBytes = (rawStats.memory_stats.limit as number | undefined) ?? null;
+      memoryUsageBytes = rawStats.memory_stats.usage ?? null;
+      memoryLimitBytes = rawStats.memory_stats.limit ?? null;
     } catch {
       // container stats unavailable — non-fatal
     }
@@ -1263,8 +1210,7 @@ export class ServiceManager {
   private async ensureServiceContainerRunning(service: ServiceRow): Promise<void> {
     const containerId = service.container_id ?? service.container_name;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-      const info = await this.docker.getClient().getContainer(containerId).inspect();
+      const info = await this.docker.inspectContainer(containerId);
       if (!info.State.Running) {
         throw new Error(`Service container is not running: ${service.id}`);
       }

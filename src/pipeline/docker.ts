@@ -1328,6 +1328,70 @@ export class Docker {
     return this.networkName;
   }
 
+  /** Ensure a Docker network exists, creating it if missing. Returns the network name. */
+  async ensureNetwork(name: string): Promise<string> {
+    try {
+      await this.client.getNetwork(name).inspect();
+      return name;
+    } catch (error) {
+      if (!isDockerNotFoundError(error)) {
+        throw error;
+      }
+    }
+    try {
+      await this.client.createNetwork({ Name: name, Driver: 'bridge' });
+      return name;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('already exists')) {
+        return name;
+      }
+      throw error;
+    }
+  }
+
+  /** Follow container logs as a readable stream for real-time log tailing. */
+  async getLogStream(
+    containerId: string,
+    opts?: { tail?: number; stdout?: boolean; stderr?: boolean },
+  ): Promise<NodeJS.ReadableStream> {
+    const container = this.client.getContainer(containerId);
+    return (await container.logs({
+      follow: true,
+      stdout: opts?.stdout ?? true,
+      stderr: opts?.stderr ?? true,
+      tail: opts?.tail ?? 50,
+    })) as unknown as NodeJS.ReadableStream;
+  }
+
+  /** Open an interactive terminal exec with resize support. Returns stream and resize function. */
+  async execTerminal(
+    containerId: string,
+    cmd: string[],
+  ): Promise<{
+    stream: NodeJS.ReadWriteStream;
+    resize: (size: { w: number; h: number }) => Promise<void>;
+  }> {
+    const container = this.client.getContainer(containerId);
+    const exec = await container.exec({
+      Cmd: cmd,
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: true,
+    });
+    const stream = (await exec.start({
+      hijack: true,
+      stdin: true,
+    })) as unknown as NodeJS.ReadWriteStream;
+    return {
+      stream,
+      resize: async (size: { w: number; h: number }) => {
+        await exec.resize(size);
+      },
+    };
+  }
+
   /**
    * @deprecated Use specific docker.ts methods instead.
    * This method will be removed once all callers are migrated (PR2/PR3).

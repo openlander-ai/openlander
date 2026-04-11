@@ -235,8 +235,15 @@ export function createProjectRoutes(ctx: AppContext): Hono {
 
     if (project.container_id && project.status === 'running') {
       try {
-        const container = ctx.docker.getClient().getContainer(project.container_id);
-        const stats = await container.stats({ stream: false });
+        const stats = (await ctx.docker.getContainerStats(project.container_id)) as {
+          cpu_stats: {
+            cpu_usage: { total_usage: number };
+            system_cpu_usage: number;
+            online_cpus?: number;
+          };
+          precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+          memory_stats: { usage: number; limit: number };
+        };
 
         const cpuDelta =
           stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
@@ -943,12 +950,10 @@ export function createProjectRoutes(ctx: AppContext): Hono {
             c.id !== project.container_id &&
             c.status === 'running',
         );
-        const client = ctx.docker.getClient();
         for (const container of stale) {
           try {
-            const dockerContainer = client.getContainer(container.id);
-            await dockerContainer.stop();
-            await dockerContainer.remove();
+            await ctx.docker.stopContainer(container.id);
+            await ctx.docker.removeContainer(container.id);
           } catch (err) {
             log.warn({ err, containerId: container.id }, 'Failed to remove stale container');
           }
@@ -1026,13 +1031,7 @@ export function createProjectRoutes(ctx: AppContext): Hono {
         c.header('Content-Type', 'application/x-ndjson');
 
         try {
-          const container = ctx.docker.getClient().getContainer(containerId);
-          const logStream = await container.logs({
-            follow: true,
-            stdout: true,
-            stderr: true,
-            tail: 50,
-          });
+          const logStream = await ctx.docker.getLogStream(containerId, { tail: 50 });
 
           logStream.on('data', (chunk: Buffer) => {
             const headerSize = 8;
