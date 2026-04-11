@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense, useRef } from 'react';
-import { X, AlertCircle, RefreshCw, Loader2, Activity, Network } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  X,
+  AlertCircle,
+  RefreshCw,
+  Loader2,
+  Activity,
+  ShieldCheck,
+  FileText,
+  GitBranch,
+  BarChart3,
+} from 'lucide-react';
 import { useLanguage } from '@/i18n/context';
 import { useOpsCenterData } from '@/hooks/use-ops-center-data';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
@@ -10,6 +21,7 @@ import { FilterBar, useFilterSearchParams } from '@/components/ops/v2/FilterBar'
 import { CircuitBreakerWidget } from '@/components/ops/v2/CircuitBreakerWidget';
 import { IncidentDetailSlideover } from '@/components/ops/v2/IncidentDetailSlideover';
 import { KeyboardShortcutsHelp } from '@/components/ops/v2/KeyboardShortcutsHelp';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
 
@@ -65,7 +77,9 @@ export function OpsCenterV2() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const [viewMode, setViewMode] = useState<'feed' | 'graph'>('feed');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') ?? 'live';
+  const setTab = (tab: string) => setSearchParams({ tab });
 
   // Incident slideover state
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
@@ -258,35 +272,7 @@ export function OpsCenterV2() {
               <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
                 {t('opsV2.page.title')}
               </h1>
-              <div className="flex items-center gap-3">
-                <KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />
-                <div className="flex items-center bg-bg-subtle rounded-lg p-1 border border-[hsl(var(--border))]">
-                  <button
-                    onClick={() => setViewMode('feed')}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                      viewMode === 'feed'
-                        ? 'bg-bg-panel text-primary-ol shadow-sm'
-                        : 'text-muted-ol hover:text-secondary-ol',
-                    )}
-                  >
-                    <Activity className="h-4 w-4" />
-                    {t('opsV2.graph.feedView')}
-                  </button>
-                  <button
-                    onClick={() => setViewMode('graph')}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                      viewMode === 'graph'
-                        ? 'bg-bg-panel text-primary-ol shadow-sm'
-                        : 'text-muted-ol hover:text-secondary-ol',
-                    )}
-                  >
-                    <Network className="h-4 w-4" />
-                    {t('opsV2.graph.graphView')}
-                  </button>
-                </div>
-              </div>
+              <KeyboardShortcutsHelp helpButtonRef={helpButtonRef} />
             </div>
 
             {/* Error Banners */}
@@ -320,48 +306,96 @@ export function OpsCenterV2() {
               </div>
             )}
 
-            {/* Filters */}
-            {viewMode === 'feed' && (
-              <div className="flex flex-col lg:flex-row gap-6 items-start">
-                <div className="flex-1 w-full">
-                  <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
-                </div>
-                {circuitBreakers.length > 0 && (
-                  <div className="w-full lg:w-64 shrink-0 bg-bg-subtle/30 rounded-lg border border-[hsl(var(--border))] p-3">
-                    <CircuitBreakerWidget
-                      circuitBreakers={circuitBreakers}
-                      onFilter={() => setFilters({ ...filters, density: 'actions-only' })}
-                      onReset={retry}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+            <Tabs value={activeTab} onValueChange={setTab} className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="live">
+                  <Activity className="h-4 w-4 mr-1.5" />
+                  Live
+                </TabsTrigger>
+                <TabsTrigger value="incidents">
+                  <AlertCircle className="h-4 w-4 mr-1.5" />
+                  Incidents
+                </TabsTrigger>
+                <TabsTrigger value="approvals">
+                  <ShieldCheck className="h-4 w-4 mr-1.5" />
+                  Approvals
+                </TabsTrigger>
+                <TabsTrigger value="postmortems">
+                  <FileText className="h-4 w-4 mr-1.5" />
+                  Postmortems
+                </TabsTrigger>
+                <TabsTrigger value="patterns">
+                  <GitBranch className="h-4 w-4 mr-1.5" />
+                  Patterns
+                </TabsTrigger>
+                <TabsTrigger value="usage">
+                  <BarChart3 className="h-4 w-4 mr-1.5" />
+                  Usage
+                </TabsTrigger>
+              </TabsList>
 
-            <main className="min-w-0">
-              {viewMode === 'feed' ? (
-                <MainFeedGrid
-                  activities={filteredActivities}
-                  isFiltered={activities.length > 0 && filteredActivities.length === 0}
-                  onClearFilters={() => setFilters({ ...filters, density: 'all' })}
-                  onThreadSelect={handleThreadSelect}
-                  focusedIndex={currentFocusIndex}
-                  onThreadCountChange={setThreadCount}
-                />
-              ) : (
-                <div className="h-[600px] w-full">
-                  <Suspense
-                    fallback={
-                      <div className="flex items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))]">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-ol" />
-                      </div>
-                    }
-                  >
-                    <DependencyGraph />
-                  </Suspense>
+              <TabsContent value="live">
+                {/* Filters */}
+                <div className="flex flex-col lg:flex-row gap-6 items-start mb-6">
+                  <div className="flex-1 w-full">
+                    <FilterBar filters={filters} projects={projects} onFilterChange={setFilters} />
+                  </div>
+                  {circuitBreakers.length > 0 && (
+                    <div className="w-full lg:w-64 shrink-0 bg-bg-subtle/30 rounded-lg border border-[hsl(var(--border))] p-3">
+                      <CircuitBreakerWidget
+                        circuitBreakers={circuitBreakers}
+                        onFilter={() => setFilters({ ...filters, density: 'actions-only' })}
+                        onReset={retry}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </main>
+
+                <main className="min-w-0">
+                  <MainFeedGrid
+                    activities={filteredActivities}
+                    isFiltered={activities.length > 0 && filteredActivities.length === 0}
+                    onClearFilters={() => setFilters({ ...filters, density: 'all' })}
+                    onThreadSelect={handleThreadSelect}
+                    focusedIndex={currentFocusIndex}
+                    onThreadCountChange={setThreadCount}
+                  />
+                  <div className="h-[600px] w-full mt-6">
+                    <Suspense
+                      fallback={
+                        <div className="flex items-center justify-center h-full w-full bg-bg-panel rounded-lg border border-[hsl(var(--border))]">
+                          <Loader2 className="h-8 w-8 animate-spin text-muted-ol" />
+                        </div>
+                      }
+                    >
+                      <DependencyGraph />
+                    </Suspense>
+                  </div>
+                </main>
+              </TabsContent>
+
+              <TabsContent value="incidents">
+                <div className="p-6 text-muted-foreground text-sm">Incidents view coming soon</div>
+              </TabsContent>
+
+              <TabsContent value="approvals">
+                <div className="p-6 text-muted-foreground text-sm">Approvals view coming soon</div>
+              </TabsContent>
+
+              <TabsContent value="postmortems">
+                <div className="p-6 text-muted-foreground text-sm">
+                  Postmortems view coming soon
+                </div>
+              </TabsContent>
+
+              <TabsContent value="patterns">
+                <div className="p-6 text-muted-foreground text-sm">Patterns view coming soon</div>
+              </TabsContent>
+
+              <TabsContent value="usage">
+                <div className="p-6 text-muted-foreground text-sm">Usage view coming soon</div>
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       </div>
