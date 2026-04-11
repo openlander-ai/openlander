@@ -116,6 +116,17 @@ export class DeploymentPatternRepo {
   }
 
   /**
+   * Find all deployment patterns across all projects, sorted by last_seen_at DESC.
+   */
+  findAll(): DeploymentPatternRow[] {
+    return this.db
+      .select()
+      .from(deploymentPatterns)
+      .orderBy(desc(deploymentPatterns.last_seen_at))
+      .all() as DeploymentPatternRow[];
+  }
+
+  /**
    * Get top patterns for a project sorted by success_count descending.
    */
   getTopPatterns(projectId: string, limit: number = 10): DeploymentPatternRow[] {
