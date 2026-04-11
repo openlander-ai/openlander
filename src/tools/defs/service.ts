@@ -308,7 +308,7 @@ export const serviceToolDefs: ToolDef[] = [
       const containerId = service.container_id ?? service.container_name;
       if (containerId) {
         try {
-          const info = (await appCtx.docker.getClient().getContainer(containerId).inspect()) as {
+          const info = (await appCtx.docker.inspectContainer(containerId)) as {
             State?: { Health?: { Status?: string } };
           };
           const dockerHealth = info.State?.Health?.Status;

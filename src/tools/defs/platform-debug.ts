@@ -19,22 +19,6 @@ const PINO_LEVEL_MAP: Record<string, number> = {
 
 const FORBIDDEN_TABLES = new Set(['global_secrets', 'oauth_tokens', 'secret_files', 'env_vars']);
 
-interface DockerPsContainer {
-  Id: string;
-  Names?: string[];
-  Image: string;
-  Status: string;
-  State: string;
-  Created: number;
-  Labels?: Record<string, string>;
-  Ports?: Array<{
-    IP?: string;
-    PrivatePort?: number;
-    PublicPort?: number;
-    Type?: string;
-  }>;
-}
-
 function mapManagedContainer(container: {
   id: string;
   name: string;
@@ -55,19 +39,6 @@ function mapManagedContainer(container: {
       container.port !== undefined
         ? [{ PublicPort: container.port, Type: 'tcp' as const }]
         : ([] as Array<{ PublicPort?: number; Type?: 'tcp' }>),
-  };
-}
-
-function mapDockerPsContainer(container: DockerPsContainer) {
-  return {
-    id: container.Id,
-    name: container.Names?.[0]?.replace(/^\//, '') ?? 'unknown',
-    image: container.Image,
-    status: container.Status,
-    state: container.State,
-    created: container.Created,
-    labels: container.Labels ?? {},
-    ports: container.Ports ?? [],
   };
 }
 
@@ -134,8 +105,7 @@ export const platformDebugToolDefs: ToolDef[] = [
       const containerId = args['container_id'] as string;
 
       try {
-        const container = context.appCtx.docker.getClient().getContainer(containerId);
-        return await container.inspect();
+        return await context.appCtx.docker.inspectContainer(containerId);
       } catch (error) {
         if (isDockerNotFoundError(error)) {
           throw new Error(`CONTAINER_NOT_FOUND: ${containerId}`);
@@ -162,10 +132,18 @@ export const platformDebugToolDefs: ToolDef[] = [
         return { count: containers.length, containers };
       }
 
-      const listed = (await context.appCtx.docker
-        .getClient()
-        .listContainers({ all })) as DockerPsContainer[];
-      const containers = listed.map(mapDockerPsContainer);
+      const allContainers = await context.appCtx.docker.listAllContainers();
+      const filtered = all ? allContainers : allContainers.filter((c) => c.state === 'running');
+      const containers = filtered.map((c) => ({
+        id: c.id,
+        name: c.name,
+        image: c.image,
+        status: c.status,
+        state: c.state,
+        created: c.created,
+        labels: c.labels,
+        ports: c.ports,
+      }));
 
       return {
         count: containers.length,

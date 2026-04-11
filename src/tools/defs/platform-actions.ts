@@ -108,8 +108,6 @@ export const platformActionToolDefs: ToolDef[] = [
         (projectName, env) => projectContainerName(getRouteName(projectName, env.type)),
         context.appCtx.db.listServices(),
       );
-      const dockerClient = context.appCtx.docker.getClient();
-
       const actions: Array<{ type: 'mark_error' | 'stop_orphan'; target: string; detail: string }> =
         [];
 
@@ -119,7 +117,7 @@ export const platformActionToolDefs: ToolDef[] = [
         }
 
         try {
-          await dockerClient.getContainer(project.container_id).inspect();
+          await context.appCtx.docker.inspectContainer(project.container_id);
           continue;
         } catch (error) {
           if (!isDockerNotFoundError(error)) {
@@ -196,11 +194,9 @@ export const platformActionToolDefs: ToolDef[] = [
       const confirm = args['confirm'] as boolean;
       ensureConfirmed(confirm, 'platform_force_remove');
 
-      const container = context.appCtx.docker.getClient().getContainer(containerId);
-
       let inspected: { Name?: string; Config?: { Labels?: Record<string, string> } };
       try {
-        inspected = (await container.inspect()) as {
+        inspected = (await context.appCtx.docker.inspectContainer(containerId)) as {
           Name?: string;
           Config?: { Labels?: Record<string, string> };
         };

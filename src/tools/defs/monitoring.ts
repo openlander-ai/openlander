@@ -111,16 +111,21 @@ export const monitoringToolDefs: ToolDef[] = [
       }
 
       try {
-        const container = appCtx.docker.getClient().getContainer(project.container_id);
-        const stats = await container.stats({ stream: false });
-        const inspect = await container.inspect();
+        const stats = (await appCtx.docker.getContainerStats(project.container_id)) as {
+          cpu_stats: {
+            cpu_usage: { total_usage: number; percpu_usage?: unknown };
+            system_cpu_usage: number;
+          };
+          precpu_stats: { cpu_usage: { total_usage: number }; system_cpu_usage: number };
+          memory_stats: { usage: number; limit: number };
+        };
+        const inspect = await appCtx.docker.inspectContainer(project.container_id);
         // Calculate CPU percentage
         const cpuDelta =
           stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage;
         const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage;
         const cpuCount =
-          (stats.cpu_stats.cpu_usage.percpu_usage as unknown as { length?: number } | undefined)
-            ?.length ?? 1;
+          (stats.cpu_stats.cpu_usage.percpu_usage as { length?: number } | undefined)?.length ?? 1;
         const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
         // Convert bytes to MB
         const memoryUsageMb = Math.round((stats.memory_stats.usage / 1024 / 1024) * 10) / 10;

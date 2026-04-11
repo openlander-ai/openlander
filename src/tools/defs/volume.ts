@@ -80,12 +80,10 @@ export const volumeToolDefs: ToolDef[] = [
       const mountPath = args['mount_path'] as string;
       const dockerVolumeName = getDockerVolumeName(projectName, volumeName);
 
-      const client = appCtx.docker.getClient();
-
       // Docker createVolume is idempotent — it silently returns existing volumes.
       // We must inspect first to detect duplicates and reject foreign volumes.
       try {
-        const existing = await client.getVolume(dockerVolumeName).inspect();
+        const existing = await appCtx.docker.inspectVolume(dockerVolumeName);
         const existingLabels = getLabels(existing);
         if (existingLabels[DOCKER_LABELS.MANAGED] === 'true') {
           throw new Error(
@@ -109,8 +107,7 @@ export const volumeToolDefs: ToolDef[] = [
           `${DOCKER_LABELS.ROLE}=volume`,
           `${DOCKER_LABELS.PROJECT}=${projectName}`,
         ];
-        const result = await client.listVolumes({ filters: { label: labels } });
-        const existingVolumes = Array.isArray(result.Volumes) ? result.Volumes : [];
+        const existingVolumes = await appCtx.docker.listVolumes({ label: labels });
 
         for (const volumeInfo of existingVolumes) {
           const volumeLabels = getLabels(volumeInfo);
@@ -136,10 +133,9 @@ export const volumeToolDefs: ToolDef[] = [
       }
 
       try {
-        await client.createVolume({
-          Name: dockerVolumeName,
-          Labels: {
-            [DOCKER_LABELS.MANAGED]: 'true',
+        await appCtx.docker.createVolume({
+          name: dockerVolumeName,
+          labels: {
             [DOCKER_LABELS.ROLE]: 'volume',
             [DOCKER_LABELS.PROJECT]: projectName,
             [DOCKER_LABELS.VOLUME]: volumeName,
@@ -168,7 +164,6 @@ export const volumeToolDefs: ToolDef[] = [
     inputSchema: listVolumesSchema,
     execute: async (args, { appCtx }) => {
       const projectName = args['project_name'] as string | undefined;
-      const client = appCtx.docker.getClient();
 
       const labels = projectName
         ? [
@@ -178,8 +173,7 @@ export const volumeToolDefs: ToolDef[] = [
           ]
         : [`${DOCKER_LABELS.MANAGED}=true`, `${DOCKER_LABELS.ROLE}=volume`];
 
-      const result = await client.listVolumes({ filters: { label: labels } });
-      const listedVolumes = Array.isArray(result.Volumes) ? result.Volumes : [];
+      const listedVolumes = await appCtx.docker.listVolumes({ label: labels });
 
       const volumes = await Promise.all(
         listedVolumes.map(async (volumeInfo) => {
@@ -191,7 +185,7 @@ export const volumeToolDefs: ToolDef[] = [
 
           if (name) {
             try {
-              const inspectedVolume = await client.getVolume(name).inspect();
+              const inspectedVolume = await appCtx.docker.inspectVolume(name);
               sizeBytes = getVolumeUsageSizeBytes(inspectedVolume) ?? sizeBytes;
               const inspectedLabels = getLabels(inspectedVolume);
               if (Object.keys(inspectedLabels).length > 0) {
@@ -234,12 +228,9 @@ export const volumeToolDefs: ToolDef[] = [
       const volumeName = args['volume_name'] as string;
       const dockerVolumeName = getDockerVolumeName(projectName, volumeName);
 
-      const client = appCtx.docker.getClient();
-      const volume = client.getVolume(dockerVolumeName);
-
       let inspected: unknown;
       try {
-        inspected = await volume.inspect();
+        inspected = await appCtx.docker.inspectVolume(dockerVolumeName);
       } catch (error) {
         if (isDockerNotFoundError(error)) {
           throw new Error(
@@ -258,7 +249,7 @@ export const volumeToolDefs: ToolDef[] = [
       }
 
       try {
-        await volume.remove();
+        await appCtx.docker.removeVolume(dockerVolumeName);
       } catch (error) {
         const message = getErrorMessage(error);
         if (message.toLowerCase().includes('in use')) {
@@ -285,7 +276,7 @@ export const volumeToolDefs: ToolDef[] = [
     mcpDescription: 'Get Docker disk usage totals and managed volume sizes.',
     inputSchema: getDiskUsageSchema,
     execute: async (_args, { appCtx }) => {
-      const diskUsageData: unknown = await appCtx.docker.getClient().df();
+      const diskUsageData: unknown = await appCtx.docker.getDiskUsage();
       if (!isRecord(diskUsageData)) {
         return {
           images: { count: 0, totalSizeBytes: 0 },

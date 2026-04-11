@@ -45,13 +45,6 @@ function tryAcquireDeployLockOrResponse(
 }
 
 async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
-  let client: ReturnType<typeof appCtx.docker.getClient>;
-  try {
-    client = appCtx.docker.getClient();
-  } catch {
-    return;
-  }
-
   const projects = appCtx.db.listProjects();
 
   for (const project of projects) {
@@ -60,7 +53,7 @@ async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1
     }
 
     try {
-      const info = await client.getContainer(project.container_id).inspect();
+      const info = await appCtx.docker.inspectContainer(project.container_id);
       const status = info.State.Running ? 'running' : 'stopped';
 
       if (status !== project.status || info.Id !== project.container_id) {
