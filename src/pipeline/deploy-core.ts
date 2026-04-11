@@ -957,10 +957,12 @@ export class DeployPipeline {
         }>;
       };
     };
+
     const getClient = dockerWithClient.getClient;
     if (typeof getClient !== 'function') {
       return;
     }
+
     const client = getClient();
 
     const temp = await client.createContainer({

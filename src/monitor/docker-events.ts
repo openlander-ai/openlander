@@ -77,17 +77,10 @@ export class DockerEventListener {
   private async watch(): Promise<void> {
     while (this.running) {
       try {
-        const client = this.docker.getClient();
-        const stream = await (
-          client.getEvents as (opts: {
-            filters: Record<string, string[]>;
-          }) => Promise<NodeJS.ReadableStream>
-        )({
-          filters: {
-            type: ['container'],
-            event: ['die', 'oom', 'start'],
-            label: [`${DOCKER_LABELS.MANAGED}=true`],
-          },
+        const stream = await this.docker.getEventStream({
+          type: ['container'],
+          event: ['die', 'oom', 'start'],
+          label: [`${DOCKER_LABELS.MANAGED}=true`],
         });
 
         this.stream = stream;
