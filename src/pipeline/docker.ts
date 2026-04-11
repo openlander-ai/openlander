@@ -1133,6 +1133,192 @@ export class Docker {
     }
   }
 
+  /** Inspect a Docker image. Throws if not found. */
+  async inspectImage(tag: string): Promise<Dockerode.ImageInspectInfo> {
+    try {
+      return await this.client.getImage(tag).inspect();
+    } catch (error) {
+      if (isDockerNotFoundError(error)) throw new Error(`Image not found: ${tag}`);
+      throw error;
+    }
+  }
+
+  /** Remove a Docker image. Silent on 404. */
+  async removeImage(tag: string, force = false): Promise<void> {
+    try {
+      await this.client.getImage(tag).remove({ force });
+    } catch (error) {
+      if (isDockerNotFoundError(error)) return;
+      throw error;
+    }
+  }
+
+  /** Get one-shot container stats (CPU, memory). */
+  async getContainerStats(containerId: string): Promise<unknown> {
+    try {
+      const container = this.client.getContainer(containerId);
+      return await container.stats({ stream: false });
+    } catch (error) {
+      if (isDockerNotFoundError(error)) throw new ContainerNotFoundError(containerId);
+      throw error;
+    }
+  }
+
+  /** Rename a container. */
+  async renameContainer(containerId: string, newName: string): Promise<void> {
+    try {
+      const container = this.client.getContainer(containerId);
+      await container.rename({ name: newName });
+    } catch (error) {
+      if (isDockerNotFoundError(error)) throw new ContainerNotFoundError(containerId);
+      throw error;
+    }
+  }
+
+  /** Wait for a container to exit. Returns exit code. */
+  async waitForContainer(containerId: string): Promise<{ StatusCode: number }> {
+    const container = this.client.getContainer(containerId);
+    return (await container.wait()) as { StatusCode: number };
+  }
+
+  /** Docker system disk usage (images, containers, volumes). */
+  async getDiskUsage(): Promise<unknown> {
+    return await this.client.df();
+  }
+
+  /** Inspect a volume. */
+  async inspectVolume(name: string): Promise<Dockerode.VolumeInspectInfo> {
+    try {
+      return await this.client.getVolume(name).inspect();
+    } catch (error) {
+      if (isDockerNotFoundError(error)) throw new Error(`Volume not found: ${name}`);
+      throw error;
+    }
+  }
+
+  /** List volumes with optional filters. */
+  async listVolumes(filters?: Record<string, string[]>): Promise<Dockerode.VolumeInspectInfo[]> {
+    const result = (await this.client.listVolumes(
+      filters ? { filters } : undefined,
+    )) as unknown as { Volumes?: Dockerode.VolumeInspectInfo[] };
+    return result.Volumes ?? [];
+  }
+
+  /** Create a volume. Always applies MANAGED=true label. */
+  async createVolume(opts: { name: string; labels?: Record<string, string> }): Promise<void> {
+    await this.client.createVolume({
+      Name: opts.name,
+      Labels: {
+        [DOCKER_LABELS.MANAGED]: 'true',
+        ...opts.labels,
+      },
+    });
+  }
+
+  /** Remove a volume. Silent on 404. */
+  async removeVolume(name: string): Promise<void> {
+    try {
+      await this.client.getVolume(name).remove();
+    } catch (error) {
+      if (isDockerNotFoundError(error)) return;
+      throw error;
+    }
+  }
+
+  /** Run a service container (PostgreSQL, Redis, etc.) with SERVICE role labels and unless-stopped restart. */
+  async runServiceContainer(opts: {
+    imageTag: string;
+    name: string;
+    port: number;
+    containerPort?: number;
+    hostPort?: number;
+    envVars: Record<string, string>;
+    serviceName: string;
+    volumeBinds?: string[];
+    healthcheck?: {
+      test: string[];
+      interval: number;
+      timeout: number;
+      retries: number;
+      startPeriod: number;
+    };
+    cmd?: string[];
+  }): Promise<string> {
+    const envArray = Object.entries(opts.envVars).map(([k, v]) => `${k}=${v}`);
+    const containerPort = opts.containerPort ?? opts.port;
+    const hostPort = opts.hostPort ?? opts.port;
+    const networkingConfig = {
+      EndpointsConfig: {
+        [SHARED_NETWORK_NAME]: { Aliases: [opts.serviceName] },
+      },
+    };
+
+    const container = await this.client.createContainer({
+      Image: opts.imageTag,
+      name: opts.name,
+      Env: envArray,
+      ...(opts.cmd ? { Cmd: opts.cmd } : {}),
+      ...(opts.healthcheck
+        ? {
+            Healthcheck: {
+              Test: opts.healthcheck.test,
+              Interval: opts.healthcheck.interval * 1_000_000_000,
+              Timeout: opts.healthcheck.timeout * 1_000_000_000,
+              Retries: opts.healthcheck.retries,
+              StartPeriod: opts.healthcheck.startPeriod * 1_000_000_000,
+            },
+          }
+        : {}),
+      Labels: {
+        [DOCKER_LABELS.MANAGED]: 'true',
+        [DOCKER_LABELS.ROLE]: 'service',
+        [DOCKER_LABELS.SERVICE]: opts.serviceName,
+      },
+      ExposedPorts: { [`${String(containerPort)}/tcp`]: {} },
+      NetworkingConfig: networkingConfig,
+      HostConfig: {
+        NetworkMode: this.networkName,
+        RestartPolicy: { Name: 'unless-stopped' },
+        Binds: opts.volumeBinds ?? [],
+        PortBindings: {
+          [`${String(containerPort)}/tcp`]: [{ HostPort: String(hostPort) }],
+        },
+        LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
+      },
+    });
+
+    await container.start();
+    return container.id;
+  }
+
+  /** Open an interactive TTY exec stream for WebSocket bridging. Returns duplex stream. */
+  async execStream(
+    containerId: string,
+    cmd: string[],
+    opts?: { tty?: boolean },
+  ): Promise<NodeJS.ReadWriteStream> {
+    const container = this.client.getContainer(containerId);
+    const exec = await container.exec({
+      Cmd: cmd,
+      AttachStdin: true,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: opts?.tty ?? true,
+    });
+    return (await exec.start({ hijack: true, stdin: true })) as unknown as NodeJS.ReadWriteStream;
+  }
+
+  /** Get Docker daemon event stream for real-time container events. */
+  async getEventStream(filters: Record<string, string[]>): Promise<NodeJS.ReadableStream> {
+    return await (
+      this.client.getEvents as (opts: {
+        filters: Record<string, string[]>;
+      }) => Promise<NodeJS.ReadableStream>
+    )({
+      filters,
+    });
+  }
+
   getNetworkName(): string {
     return this.networkName;
   }
