@@ -11,6 +11,8 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { ServicesPage } from '@/pages/ServicesPage';
 import { OpsCenterV2 } from '@/pages/OpsCenterV2';
 import { ServiceDetail } from '@/pages/ServiceDetail';
+import { Overview } from '@/pages/Overview';
+import { DeploymentsList } from '@/pages/DeploymentsList';
 import { useAgentPanel } from '@/contexts/agent-panel';
 import { LoginPage } from '@/pages/LoginPage';
 import { AuthProvider, useAuth } from '@/contexts/auth';
@@ -127,6 +129,8 @@ function App() {
               />
               <Route element={<SetupGuard />}>
                 <Route element={<AppLayout />}>
+                  <Route path="/overview" element={<Overview />} />
+                  <Route path="/deployments" element={<DeploymentsList />} />
                   <Route path="/projects" element={<ProjectsGrid />} />
                   <Route path="/projects/new" element={<NewProjectFlow />} />
                   <Route
@@ -142,8 +146,8 @@ function App() {
                   <Route path="/agent" element={<AgentRouteRedirect />} />
                 </Route>
               </Route>
-              <Route path="/" element={<Navigate to="/projects" replace />} />
-              <Route path="*" element={<Navigate to="/projects" replace />} />
+              <Route path="/" element={<Navigate to="/overview" replace />} />
+              <Route path="*" element={<Navigate to="/overview" replace />} />
             </Routes>
           </BrowserRouter>
         </ErrorBoundary>
