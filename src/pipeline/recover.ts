@@ -267,6 +267,7 @@ async function recoverProject(
       traefikLabels,
       network: getPolicy('production').networkName,
       secretFiles,
+      restartPolicy: { Name: 'unless-stopped' },
     });
 
     ctx.db.updateProject(project.id, {
