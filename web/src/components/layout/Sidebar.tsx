@@ -16,6 +16,7 @@ import {
   Bot,
   Search,
   ShieldAlert,
+  Rocket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getSetupStatus } from '@/lib/api';
@@ -372,6 +373,42 @@ export function Sidebar({ projects, loading }: SidebarProps) {
         >
           <Plus className="h-4 w-4 shrink-0" />
           <span className="hidden lg:inline">New Project</span>
+        </button>
+
+        {/* Overview Link */}
+        <button
+          data-testid="sidebar-nav-overview"
+          onClick={() => navigate('/overview')}
+          title={t('nav.overview')}
+          className={cn(
+            'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
+            'lg:justify-start justify-center',
+            'hover:bg-bg-subtle',
+            location.pathname === '/overview'
+              ? 'bg-bg-subtle text-primary-ol'
+              : 'text-secondary-ol',
+          )}
+        >
+          <LayoutDashboard className="h-4 w-4 shrink-0" />
+          <span className="hidden lg:inline text-sm font-body">{t('nav.overview')}</span>
+        </button>
+
+        {/* Deployments Link */}
+        <button
+          data-testid="sidebar-nav-deployments"
+          onClick={() => navigate('/deployments')}
+          title={t('nav.deployments')}
+          className={cn(
+            'w-full flex items-center gap-3 rounded-md px-3 py-2.5 transition-all duration-150',
+            'lg:justify-start justify-center',
+            'hover:bg-bg-subtle',
+            location.pathname === '/deployments' || location.pathname.startsWith('/deployments/')
+              ? 'bg-bg-subtle text-primary-ol'
+              : 'text-secondary-ol',
+          )}
+        >
+          <Rocket className="h-4 w-4 shrink-0" />
+          <span className="hidden lg:inline text-sm font-body">{t('nav.deployments')}</span>
         </button>
 
         {/* Services Link */}
