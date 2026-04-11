@@ -3,6 +3,33 @@ export const translations = {
     overview: '개요',
     deployments: '배포',
   },
+  overview: {
+    title: '개요',
+    kpi: {
+      activeDeploys: '진행중인 배포',
+      recoveries: '복구',
+      approvals: '승인 대기',
+      incidents: '인시던트',
+      services: '비정상 서비스',
+      aiSpend: 'AI 사용량',
+    },
+    activity: {
+      title: '실시간 활동',
+      empty: '아직 활동이 없습니다.',
+      timeAgo: '{time} 전',
+    },
+    attention: {
+      title: '주의 필요',
+      empty: '모든 시스템이 정상입니다.',
+      projectError: '{name} 배포 실패',
+      pendingApprovals: '{count}개의 승인 대기',
+      unhealthyServices: '{count}개의 비정상 서비스',
+    },
+    health: {
+      title: '프로젝트 상태',
+    },
+    empty: '아직 활동이 없습니다. 첫 번째 프로젝트를 배포하여 실시간 업데이트를 확인하세요.',
+  },
   pulse: {
     deploying: '배포 중',
     recovery: '복구 중',

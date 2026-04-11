@@ -3,6 +3,33 @@ export const translations = {
     overview: 'Overview',
     deployments: 'Deployments',
   },
+  overview: {
+    title: 'Overview',
+    kpi: {
+      activeDeploys: 'Active Deploys',
+      recoveries: 'Recoveries',
+      approvals: 'Approvals',
+      incidents: 'Incidents',
+      services: 'Unhealthy Services',
+      aiSpend: 'AI Spend',
+    },
+    activity: {
+      title: 'Live Activity',
+      empty: 'No activity yet.',
+      timeAgo: '{time} ago',
+    },
+    attention: {
+      title: 'Needs Attention',
+      empty: 'All systems healthy.',
+      projectError: '{name} deployment failed',
+      pendingApprovals: '{count} pending approvals',
+      unhealthyServices: '{count} unhealthy services',
+    },
+    health: {
+      title: 'Project Health',
+    },
+    empty: 'No activity yet. Deploy your first project to see live updates here.',
+  },
   pulse: {
     deploying: 'Deploying',
     recovery: 'Recovery',
