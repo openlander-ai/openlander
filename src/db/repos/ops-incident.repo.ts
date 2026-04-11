@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, inArray, like, lte, or } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { pickDefined } from '../helpers.js';
 import { opsIncidents } from '../schema.drizzle.js';
 import type { OpsIncidentRow } from '../types.js';
 
@@ -147,17 +148,12 @@ export class OpsIncidentRepo {
       status: string;
     }>,
   ): void {
-    const setValues: Record<string, unknown> = {};
-
-    if (data.root_cause !== undefined) {
-      setValues.root_cause = data.root_cause;
-    }
-    if (data.diagnosis !== undefined) {
-      setValues.diagnosis = data.diagnosis;
-    }
-    if (data.actions_taken !== undefined) {
-      setValues.actions_taken = data.actions_taken;
-    }
+    const setValues: Record<string, unknown> = pickDefined(
+      data,
+      'root_cause',
+      'diagnosis',
+      'actions_taken',
+    );
     if (data.status !== undefined) {
       setValues.status = data.status as 'open' | 'active' | 'resolved' | 'escalated';
     }

@@ -1,4 +1,4 @@
-import { fetchWithAuth } from './auth.js';
+import { apiGet, apiPost, apiPostVoid, apiPut } from './client';
 
 export interface OpsConfig {
   enabled: boolean;
@@ -27,34 +27,15 @@ export interface OpsConfig {
 }
 
 export async function fetchOpsConfig(): Promise<{ config: OpsConfig }> {
-  const res = await fetchWithAuth('/api/ops/config');
-  if (!res.ok) {
-    throw new Error('Failed to fetch operations config');
-  }
-  return res.json();
+  return apiGet<{ config: OpsConfig }>('/api/ops/config');
 }
 
 export async function updateOpsConfig(config: Partial<OpsConfig>): Promise<{ config: OpsConfig }> {
-  const res = await fetchWithAuth('/api/ops/config', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(config),
-  });
-  if (!res.ok) {
-    throw new Error('Failed to update operations config');
-  }
-  return res.json();
+  return apiPut<{ config: OpsConfig }>('/api/ops/config', config);
 }
 
 export async function triggerTestEmail(): Promise<void> {
-  const res = await fetchWithAuth('/api/ops/digest/trigger', {
-    method: 'POST',
-  });
-  if (!res.ok) {
-    throw new Error('Failed to send test email');
-  }
+  return apiPostVoid('/api/ops/digest/trigger');
 }
 
 export interface OpsIncidentEvent {
@@ -107,42 +88,35 @@ export async function fetchOpsIncidents(
   if (search) params.set('search', search);
   if (from !== undefined) params.set('from', String(from));
   if (to !== undefined) params.set('to', String(to));
-  const response = await fetchWithAuth(`/api/ops/incidents?${params.toString()}`);
-  if (!response.ok) throw new Error('Failed to fetch incidents');
-  return response.json();
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return apiGet<{ incidents: OpsIncident[] }>(`/api/ops/incidents${query}`);
 }
 
 export async function fetchOpsIncident(
   id: string,
 ): Promise<{ incident: OpsIncident; events: OpsIncidentEvent[] }> {
-  const response = await fetchWithAuth(`/api/ops/incidents/${id}`);
-  if (!response.ok) throw new Error('Failed to fetch incident');
-  return response.json();
+  return apiGet<{ incident: OpsIncident; events: OpsIncidentEvent[] }>(`/api/ops/incidents/${id}`);
 }
 
 export async function fetchCircuitBreakerState(projectId: string): Promise<CircuitBreakerState> {
-  const response = await fetchWithAuth(`/api/ops/circuit-breaker/${projectId}`);
-  if (!response.ok) throw new Error('Failed to fetch circuit breaker state');
-  const data = (await response.json()) as {
+  const data = await apiGet<{
     state: (CircuitBreakerState & { project_id?: string }) | null;
-  };
+  }>(`/api/ops/circuit-breaker/${projectId}`);
   return data.state ?? { state: 'closed' };
 }
 
 export async function resetCircuitBreaker(projectId: string): Promise<{ reset: boolean }> {
-  const response = await fetchWithAuth(`/api/ops/circuit-breaker/${projectId}/reset`, {
-    method: 'POST',
-  });
-  if (!response.ok) throw new Error('Failed to reset circuit breaker');
-  return response.json() as Promise<{ reset: boolean }>;
+  return apiPost<{ reset: boolean }>(`/api/ops/circuit-breaker/${projectId}/reset`);
 }
 
 export async function fetchIncidentEvents(
   incidentId: string,
 ): Promise<{ events: OpsIncidentEvent[] }> {
-  const response = await fetchWithAuth(`/api/ops/incidents/${incidentId}/events`);
-  if (!response.ok) return { events: [] };
-  return response.json() as Promise<{ events: OpsIncidentEvent[] }>;
+  try {
+    return await apiGet<{ events: OpsIncidentEvent[] }>(`/api/ops/incidents/${incidentId}/events`);
+  } catch {
+    return { events: [] };
+  }
 }
 
 // === Operations Center types ===
@@ -233,26 +207,22 @@ export async function fetchActivityFeed(opts?: {
   if (opts?.from !== undefined) params.set('from', String(opts.from));
   if (opts?.to !== undefined) params.set('to', String(opts.to));
   const query = params.toString() ? `?${params.toString()}` : '';
-  const resp = await fetchWithAuth(`/api/ops/activity${query}`);
-  if (!resp.ok) throw new Error(`fetchActivityFeed failed: ${resp.status}`);
-  return resp.json() as Promise<{ activities: ActivityItem[]; nextCursor: string | null }>;
+  return apiGet<{ activities: ActivityItem[]; nextCursor: string | null }>(
+    `/api/ops/activity${query}`,
+  );
 }
 
 export async function fetchAllCircuitBreakers(): Promise<{
   breakers: CircuitBreakerWithProject[];
 }> {
-  const resp = await fetchWithAuth('/api/ops/circuit-breakers');
-  if (!resp.ok) throw new Error(`fetchAllCircuitBreakers failed: ${resp.status}`);
-  return resp.json() as Promise<{ breakers: CircuitBreakerWithProject[] }>;
+  return apiGet<{ breakers: CircuitBreakerWithProject[] }>('/api/ops/circuit-breakers');
 }
 
 export async function fetchDependencyGraph(): Promise<{
   nodes: DependencyNode[];
   edges: DependencyEdge[];
 }> {
-  const resp = await fetchWithAuth('/api/ops/dependencies');
-  if (!resp.ok) throw new Error(`fetchDependencyGraph failed: ${resp.status}`);
-  return resp.json() as Promise<{ nodes: DependencyNode[]; edges: DependencyEdge[] }>;
+  return apiGet<{ nodes: DependencyNode[]; edges: DependencyEdge[] }>('/api/ops/dependencies');
 }
 
 // === Automation Policy types ===
@@ -274,28 +244,20 @@ export interface ProjectAutomationResponse {
 }
 
 export async function fetchAutomationDefaults(): Promise<AutomationDefaultsResponse> {
-  const resp = await fetchWithAuth('/api/ops/automation/defaults');
-  if (!resp.ok) throw new Error(`fetchAutomationDefaults failed: ${resp.status}`);
-  return resp.json() as Promise<AutomationDefaultsResponse>;
+  return apiGet<AutomationDefaultsResponse>('/api/ops/automation/defaults');
 }
 
 export async function fetchProjectAutomation(
   projectId: string,
 ): Promise<ProjectAutomationResponse> {
-  const resp = await fetchWithAuth(`/api/ops/projects/${projectId}/automation`);
-  if (!resp.ok) throw new Error(`fetchProjectAutomation failed: ${resp.status}`);
-  return resp.json() as Promise<ProjectAutomationResponse>;
+  return apiGet<ProjectAutomationResponse>(`/api/ops/projects/${projectId}/automation`);
 }
 
 export async function updateProjectAutomation(
   projectId: string,
   automation: Partial<AutomationPolicy>,
 ): Promise<ProjectAutomationResponse> {
-  const resp = await fetchWithAuth(`/api/ops/projects/${projectId}/automation`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ automation }),
+  return apiPut<ProjectAutomationResponse>(`/api/ops/projects/${projectId}/automation`, {
+    automation,
   });
-  if (!resp.ok) throw new Error(`updateProjectAutomation failed: ${resp.status}`);
-  return resp.json() as Promise<ProjectAutomationResponse>;
 }

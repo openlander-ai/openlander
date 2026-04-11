@@ -4,6 +4,7 @@ import { createModuleLogger } from '../../lib/logger.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getProjectUrl, getProjectUrls } from '../../pipeline/traefik.js';
 import { SHARED_NETWORK_NAME } from '../../config/index.js';
+import { tryAcquireDeployLockOrResponse } from './helpers.js';
 import {
   emptySchema,
   archiveProjectSchema,
@@ -17,32 +18,6 @@ import {
 import type { ToolDef } from './types.js';
 
 const log = createModuleLogger('tools-defs-project-ops');
-
-function buildDeployLockedResponse(error: DeployLockedError) {
-  return {
-    success: false,
-    error: 'DEPLOY_LOCKED',
-    message: error.message,
-    _agent_guidance: {
-      message: 'Another deploy is in progress for this project.',
-      next_steps: ['Wait 30 seconds and try again', 'Check deploy status with get_deploy_status'],
-    },
-  };
-}
-
-function tryAcquireDeployLockOrResponse(
-  projectId: string,
-  sessionId: string,
-  context: Parameters<ToolDef['execute']>[1],
-) {
-  const locked = context.appCtx.db.acquireDeployLock(projectId, sessionId);
-  if (locked) {
-    return null;
-  }
-  const lockInfo = context.appCtx.db.getDeployLockInfo(projectId);
-  const error = new DeployLockedError(projectId, lockInfo?.session ?? 'unknown');
-  return buildDeployLockedResponse(error);
-}
 
 async function reconcileRunningProjects(appCtx: Parameters<ToolDef['execute']>[1]['appCtx']) {
   const projects = appCtx.db.listProjects();

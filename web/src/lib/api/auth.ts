@@ -1,3 +1,5 @@
+import { apiGet, apiPost, apiPostVoid } from './client';
+
 export async function fetchWithAuth(url: string, options?: RequestInit): Promise<Response> {
   const res = await fetch(url, options);
 
@@ -10,90 +12,31 @@ export async function fetchWithAuth(url: string, options?: RequestInit): Promise
 }
 
 export async function login(password: string): Promise<void> {
-  const res = await fetchWithAuth('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
-  });
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to login');
-  }
+  await apiPostVoid('/api/auth/login', { password });
 }
 
 export async function logout(): Promise<void> {
-  const res = await fetchWithAuth('/api/auth/logout', {
-    method: 'POST',
-  });
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to logout');
-  }
+  await apiPostVoid('/api/auth/logout');
 }
 
 export async function verifySession(): Promise<{ authenticated: boolean }> {
-  const res = await fetchWithAuth('/api/auth/verify');
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to verify session');
-  }
-
-  return res.json();
+  return apiGet<{ authenticated: boolean }>('/api/auth/verify');
 }
 
 export async function setupPassword(password: string): Promise<{ apiToken: string }> {
-  const res = await fetchWithAuth('/api/auth/setup-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
-  });
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to setup password');
-  }
-
-  return res.json();
+  return apiPost<{ apiToken: string }>('/api/auth/setup-password', { password });
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  const res = await fetchWithAuth('/api/auth/change-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ currentPassword, newPassword }),
-  });
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to change password');
-  }
+  await apiPostVoid('/api/auth/change-password', { currentPassword, newPassword });
 }
 
 export async function getApiToken(): Promise<{ token: string }> {
-  const res = await fetchWithAuth('/api/auth/token');
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to get API token');
-  }
-
-  return res.json();
+  return apiGet<{ token: string }>('/api/auth/token');
 }
 
 export async function regenerateApiToken(): Promise<{ token: string }> {
-  const res = await fetchWithAuth('/api/auth/token/regenerate', {
-    method: 'POST',
-  });
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to regenerate API token');
-  }
-
-  return res.json();
+  return apiPost<{ token: string }>('/api/auth/token/regenerate');
 }
 
 export async function startGoogleOAuth(): Promise<void> {

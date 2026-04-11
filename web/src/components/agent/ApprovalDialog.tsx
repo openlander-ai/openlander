@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePollingTask } from '@/hooks/use-polling-task';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,16 +47,7 @@ export function ApprovalDialog() {
     }
   }, [t]);
 
-  useEffect(() => {
-    void refreshPending();
-    const interval = setInterval(() => {
-      void refreshPending();
-    }, 5000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshPending]);
+  usePollingTask(refreshPending, { intervalMs: 5000 });
 
   const pending = allPending[0] ?? null;
   const remainingCount = allPending.length - 1;

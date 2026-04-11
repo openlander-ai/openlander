@@ -20,6 +20,22 @@ import {
   isDockerNotFoundError,
 } from '../errors.js';
 
+function isAlreadyConnectedError(msg: string): boolean {
+  return msg.includes('already exists') || msg.includes('already connected');
+}
+
+function isContainerNotRunning(msg: string): boolean {
+  return msg.includes('is not running');
+}
+
+function isContainerAlreadyRunning(msg: string): boolean {
+  return msg.includes('is already running') || msg.includes('already started');
+}
+
+function isNotConnectedToNetwork(msg: string): boolean {
+  return msg.includes('is not connected');
+}
+
 export type DockerStatus =
   | { state: 'running' }
   | { state: 'not_installed' }
@@ -631,7 +647,7 @@ export class Docker {
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('already exists') || msg.includes('already connected')) {
+      if (isAlreadyConnectedError(msg)) {
         return;
       }
 
@@ -748,8 +764,7 @@ export class Docker {
       if (isDockerNotFoundError(error)) {
         throw new ContainerNotFoundError(containerId);
       }
-      // Already stopped is not an error
-      if (!msg.includes('is not running')) {
+      if (!isContainerNotRunning(msg)) {
         throw error;
       }
     }
@@ -765,8 +780,7 @@ export class Docker {
       if (isDockerNotFoundError(error)) {
         throw new ContainerNotFoundError(containerId);
       }
-      // Already running is not an error
-      if (!msg.includes('is already running') && !msg.includes('already started')) {
+      if (!isContainerAlreadyRunning(msg)) {
         throw error;
       }
     }
@@ -825,7 +839,7 @@ export class Docker {
       await network.disconnect({ Container: containerId, Force: true });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('is not connected') || isDockerNotFoundError(error)) {
+      if (isNotConnectedToNetwork(msg) || isDockerNotFoundError(error)) {
         return;
       }
       throw error;
@@ -859,7 +873,7 @@ export class Docker {
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.includes('already exists') || msg.includes('already connected')) {
+      if (isAlreadyConnectedError(msg)) {
         return;
       }
       throw error;

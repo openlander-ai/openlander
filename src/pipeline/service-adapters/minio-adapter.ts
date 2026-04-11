@@ -1,6 +1,7 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
-import { execInServiceContainer, sleep } from './shared.js';
+import { waitUntilReady } from '../lib/retry.js';
+import { execInServiceContainer } from './shared.js';
 import type {
   ConnectionStats,
   CreateDatabaseResult,
@@ -43,25 +44,21 @@ export class MinioAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, _docker: Docker): Promise<void> {
-    let lastError = '';
-
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      try {
+    await waitUntilReady(
+      async () => {
         const response = await fetch(`http://localhost:${String(service.port)}/minio/health/live`, {
           signal: AbortSignal.timeout(2000),
         });
-        if (response.ok) {
-          return;
+        if (!response.ok) {
+          throw new Error(`HTTP ${String(response.status)}`);
         }
-        lastError = `HTTP ${String(response.status)}`;
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-      }
-
-      await sleep(2000);
-    }
-
-    throw new Error(`MinIO service is not ready: ${service.id} (${lastError})`);
+      },
+      {
+        maxAttempts: 30,
+        intervalMs: 2000,
+        description: `MinIO service: ${service.id}`,
+      },
+    );
   }
 
   getConnectionStats(_service: ServiceRow, _docker: Docker): Promise<ConnectionStats> {

@@ -1,5 +1,5 @@
 import type { ToolDef } from './types.js';
-import { ProjectNotFoundError } from '../../errors.js';
+import { getProjectByName, getProductionEnvironmentId } from './helpers.js';
 import {
   getEnvVarSchema,
   listEnvVarsSchema,
@@ -11,21 +11,6 @@ import {
   setGlobalSecretSchema,
   uploadSecretFileSchema,
 } from './schemas.js';
-
-function getProjectByName(appCtx: Parameters<ToolDef['execute']>[1]['appCtx'], name: string) {
-  const project = appCtx.db.getProjectByName(name);
-  if (!project) {
-    throw new ProjectNotFoundError(name);
-  }
-  return project;
-}
-
-function getProductionEnvironmentId(
-  appCtx: Parameters<ToolDef['execute']>[1]['appCtx'],
-  projectId: string,
-): string | undefined {
-  return appCtx.db.getEnvironmentsByProject(projectId).find((e) => e.type === 'production')?.id;
-}
 
 export const envToolDefs: ToolDef[] = [
   {

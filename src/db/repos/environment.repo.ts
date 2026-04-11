@@ -1,5 +1,6 @@
 import { asc, eq, sql } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { buildSetValues } from '../helpers.js';
 import { environments } from '../schema.drizzle.js';
 import type { EnvironmentRow } from '../types.js';
 
@@ -72,32 +73,16 @@ export class EnvironmentRepo {
       containerPort: number | null;
     }>,
   ): void {
-    const setValues: Partial<typeof environments.$inferInsert> = {};
-
-    if (updates.branch !== undefined) {
-      setValues.branch = updates.branch;
-    }
-    if (updates.status !== undefined) {
-      setValues.status = updates.status;
-    }
-    if (updates.assignedPort !== undefined) {
-      setValues.assigned_port = updates.assignedPort;
-    }
-    if (updates.containerId !== undefined) {
-      setValues.container_id = updates.containerId;
-    }
-    if (updates.imageTag !== undefined) {
-      setValues.image_tag = updates.imageTag;
-    }
-    if (updates.previousImageTag !== undefined) {
-      setValues.previous_image_tag = updates.previousImageTag;
-    }
-    if (updates.publicUrl !== undefined) {
-      setValues.public_url = updates.publicUrl;
-    }
-    if (updates.containerPort !== undefined) {
-      setValues.container_port = updates.containerPort;
-    }
+    const setValues = buildSetValues(updates, {
+      branch: 'branch',
+      status: 'status',
+      assignedPort: 'assigned_port',
+      containerId: 'container_id',
+      imageTag: 'image_tag',
+      previousImageTag: 'previous_image_tag',
+      publicUrl: 'public_url',
+      containerPort: 'container_port',
+    });
 
     if (Object.keys(setValues).length === 0) return;
 

@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { pickDefined } from '../helpers.js';
 import { circuitBreakerState } from '../schema.drizzle.js';
 import type { CircuitBreakerRow } from '../types.js';
 
@@ -26,23 +27,14 @@ export class CircuitBreakerRepo {
     const existing = this.getState(projectId);
 
     if (existing) {
-      const setValues: Record<string, unknown> = {};
-
-      if (data.failure_count !== undefined) {
-        setValues.failure_count = data.failure_count;
-      }
-      if (data.last_failure_at !== undefined) {
-        setValues.last_failure_at = data.last_failure_at;
-      }
-      if (data.opened_at !== undefined) {
-        setValues.opened_at = data.opened_at;
-      }
-      if (data.state !== undefined) {
-        setValues.state = data.state;
-      }
-      if (data.reset_at !== undefined) {
-        setValues.reset_at = data.reset_at;
-      }
+      const setValues = pickDefined(
+        data,
+        'failure_count',
+        'last_failure_at',
+        'opened_at',
+        'state',
+        'reset_at',
+      );
 
       if (Object.keys(setValues).length > 0) {
         this.db
