@@ -1,3 +1,5 @@
+import { apiGet, apiPostVoid } from './client';
+
 export interface AiUsageSummary {
   totalInputTokens: number;
   totalOutputTokens: number;
@@ -41,37 +43,16 @@ export interface PendingApproval {
 }
 
 export async function getPendingApprovals(): Promise<PendingApproval[]> {
-  const res = await fetch('/api/approvals/pending');
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to fetch pending approvals');
-  }
-  const data = await res.json();
+  const data = await apiGet<{ approvals: PendingApproval[] }>('/api/approvals/pending');
   return data.approvals;
 }
 
 export async function approveRecovery(projectId: string, actionRunId: string): Promise<void> {
-  const res = await fetch(`/api/projects/${projectId}/recovery/approve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ actionRunId }),
-  });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to approve recovery');
-  }
+  await apiPostVoid(`/api/projects/${projectId}/recovery/approve`, { actionRunId });
 }
 
 export async function rejectRecovery(projectId: string, actionRunId: string): Promise<void> {
-  const res = await fetch(`/api/projects/${projectId}/recovery/reject`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ actionRunId }),
-  });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to reject recovery');
-  }
+  await apiPostVoid(`/api/projects/${projectId}/recovery/reject`, { actionRunId });
 }
 
 export async function getAiUsageSummary(projectId?: string): Promise<AiUsageSummary> {
@@ -81,14 +62,7 @@ export async function getAiUsageSummary(projectId?: string): Promise<AiUsageSumm
   }
 
   const url = `/api/usage/summary${params.toString() ? `?${params.toString()}` : ''}`;
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to fetch AI usage summary');
-  }
-
-  return res.json();
+  return apiGet<AiUsageSummary>(url);
 }
 
 export async function getAiUsageRecent(opts?: {
@@ -113,12 +87,5 @@ export async function getAiUsageRecent(opts?: {
   }
 
   const url = `/api/usage/recent${params.toString() ? `?${params.toString()}` : ''}`;
-  const res = await fetch(url);
-
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error || 'Failed to fetch recent AI usage');
-  }
-
-  return res.json();
+  return apiGet<AiUsageRecent>(url);
 }

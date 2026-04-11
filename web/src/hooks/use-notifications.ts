@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { usePollingTask } from './use-polling-task';
 
 export interface Notification {
   id: string;
@@ -63,11 +64,7 @@ export function useNotifications(): UseNotificationsReturn {
     }
   }, []);
 
-  useEffect(() => {
-    void fetchAlerts();
-    const intervalId = setInterval(() => void fetchAlerts(), POLL_INTERVAL_MS);
-    return () => clearInterval(intervalId);
-  }, [fetchAlerts]);
+  usePollingTask(fetchAlerts, { intervalMs: POLL_INTERVAL_MS });
 
   const unreadCount = notifications.filter((n) => !n.dismissed).length;
 

@@ -1,11 +1,7 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
-import {
-  execInServiceContainer,
-  parseServiceCredentials,
-  quoteSqlLiteral,
-  sleep,
-} from './shared.js';
+import { waitUntilReady } from '../lib/retry.js';
+import { execInServiceContainer, parseServiceCredentials, quoteSqlLiteral } from './shared.js';
 import type {
   ConnectionStats,
   CreateDatabaseResult,
@@ -37,27 +33,23 @@ export class PostgresAdapter implements ServiceAdapter {
 
   async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
     const credentials = parseServiceCredentials(service);
-    let lastError = '';
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      try {
+    await waitUntilReady(
+      async () => {
         const result = await execInServiceContainer(
           docker,
           service,
           ['pg_isready', '-U', credentials.user, '-d', 'postgres'],
           { throwOnNonZeroExit: false },
         );
-        if (result.exitCode === 0) {
-          return;
+        if (result.exitCode !== 0) {
+          throw new Error(result.stderr.trim() || result.stdout.trim());
         }
-        lastError = result.stderr.trim() || result.stdout.trim();
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-      }
-      await sleep(1000);
-    }
-
-    throw new Error(
-      `PostgreSQL service is not ready: ${service.id}${lastError ? ` (${lastError})` : ''}`,
+      },
+      {
+        maxAttempts: 30,
+        intervalMs: 1000,
+        description: `PostgreSQL service: ${service.id}`,
+      },
     );
   }
 

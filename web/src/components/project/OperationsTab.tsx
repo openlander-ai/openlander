@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { usePollingTask } from '@/hooks/use-polling-task';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   fetchOpsIncidents,
@@ -99,11 +100,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
     }
   }, [projectId]);
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  usePollingTask(fetchData, { intervalMs: 10000 });
 
   const handleResetCircuitBreaker = async () => {
     try {

@@ -1,3 +1,5 @@
+import { apiGet, apiPost, apiPostVoid, apiDelete } from './client';
+
 export interface ServiceTemplate {
   id: string;
   name: string;
@@ -27,21 +29,15 @@ export interface Service {
 }
 
 export async function getServices(): Promise<Service[]> {
-  const res = await fetch('/api/services');
-  if (!res.ok) throw new Error('Failed to fetch services');
-  return res.json();
+  return apiGet<Service[]>('/api/services');
 }
 
 export async function getService(id: string): Promise<Service> {
-  const res = await fetch(`/api/services/${id}`);
-  if (!res.ok) throw new Error(`Failed to fetch service: ${res.status}`);
-  return res.json();
+  return apiGet<Service>(`/api/services/${id}`);
 }
 
 export async function getServiceTemplates(): Promise<ServiceTemplate[]> {
-  const res = await fetch('/api/services/templates');
-  if (!res.ok) throw new Error('Failed to fetch templates');
-  return res.json();
+  return apiGet<ServiceTemplate[]>('/api/services/templates');
 }
 
 export async function createService(opts: {
@@ -65,18 +61,15 @@ export async function createService(opts: {
 }
 
 export async function removeService(id: string): Promise<void> {
-  const res = await fetch(`/api/services/${id}`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to remove service');
+  return apiDelete(`/api/services/${id}`);
 }
 
 export async function startService(id: string): Promise<void> {
-  const res = await fetch(`/api/services/${id}/start`, { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to start service');
+  return apiPostVoid(`/api/services/${id}/start`);
 }
 
 export async function stopService(id: string): Promise<void> {
-  const res = await fetch(`/api/services/${id}/stop`, { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to stop service');
+  return apiPostVoid(`/api/services/${id}/stop`);
 }
 
 export interface ServiceStats {
@@ -95,15 +88,11 @@ export interface ConnectedProject {
 }
 
 export async function getServiceStats(id: string): Promise<ServiceStats> {
-  const res = await fetch(`/api/services/${id}/stats`);
-  if (!res.ok) throw new Error('Failed to fetch service stats');
-  return res.json();
+  return apiGet<ServiceStats>(`/api/services/${id}/stats`);
 }
 
 export async function getConnectedProjects(id: string): Promise<ConnectedProject[]> {
-  const res = await fetch(`/api/services/${id}/connected-projects`);
-  if (!res.ok) throw new Error('Failed to fetch connected projects');
-  return res.json();
+  return apiGet<ConnectedProject[]>(`/api/services/${id}/connected-projects`);
 }
 
 export async function getServiceLogs(id: string, lines: number = 100): Promise<string> {
@@ -133,13 +122,7 @@ export async function createServiceDatabase(
   id: string,
   name: string,
 ): Promise<{ connectionString: string }> {
-  const res = await fetch(`/api/services/${id}/databases`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) throw new Error('Failed to create service database');
-  return res.json();
+  return apiPost<{ connectionString: string }>(`/api/services/${id}/databases`, { name });
 }
 
 export async function getServiceUsers(id: string): Promise<ServiceUser[]> {
@@ -155,11 +138,9 @@ export async function createServiceUser(
   password?: string,
   database?: string,
 ): Promise<{ connectionString: string }> {
-  const res = await fetch(`/api/services/${id}/users`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, database }),
+  return apiPost<{ connectionString: string }>(`/api/services/${id}/users`, {
+    username,
+    password,
+    database,
   });
-  if (!res.ok) throw new Error('Failed to create service user');
-  return res.json();
 }

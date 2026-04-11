@@ -1,6 +1,6 @@
 import type { ServiceRow } from '../../db/index.js';
-import { sleep } from '../../lib/sleep.js';
 import type { Docker } from '../docker.js';
+import { waitUntilReady } from '../lib/retry.js';
 import { execInServiceContainer } from './shared.js';
 import type {
   ConnectionStats,
@@ -28,20 +28,16 @@ export class RabbitMqAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
-    const maxAttempts = 15;
-    for (let i = 0; i < maxAttempts; i++) {
-      try {
-        const result = await execInServiceContainer(docker, service, [
-          'rabbitmq-diagnostics',
-          'check_running',
-        ]);
-        if (result.exitCode === 0) return;
-      } catch {
-        // Not ready yet
-      }
-      await sleep(2000);
-    }
-    throw new Error('RabbitMQ failed to become ready within timeout');
+    await waitUntilReady(
+      async () => {
+        await execInServiceContainer(docker, service, ['rabbitmq-diagnostics', 'check_running']);
+      },
+      {
+        maxAttempts: 15,
+        intervalMs: 2000,
+        description: `RabbitMQ service: ${service.id}`,
+      },
+    );
   }
 
   async getConnectionStats(service: ServiceRow, docker: Docker): Promise<ConnectionStats> {

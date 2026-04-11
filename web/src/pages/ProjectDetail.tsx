@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
+import { usePollingTask } from '@/hooks/use-polling-task';
 import { useLanguage } from '@/i18n/context';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -75,11 +76,7 @@ export function ProjectDetail() {
     }
   }, [id]);
 
-  useEffect(() => {
-    fetchProject();
-    const interval = setInterval(fetchProject, 5000);
-    return () => clearInterval(interval);
-  }, [fetchProject]);
+  usePollingTask(fetchProject, { intervalMs: 5000 });
 
   const {
     items,

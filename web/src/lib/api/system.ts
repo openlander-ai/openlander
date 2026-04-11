@@ -1,4 +1,5 @@
 import type { SystemStats } from '../../types';
+import { apiGet, apiPost, apiPostVoid, apiPut } from './client';
 
 export interface NetworkIp {
   address: string;
@@ -21,9 +22,7 @@ export async function getAllIps(): Promise<NetworkIp[]> {
 }
 
 export async function getSystemStats(): Promise<SystemStats> {
-  const res = await fetch('/api/system/stats');
-  if (!res.ok) throw new Error('Failed to fetch system stats');
-  return res.json();
+  return apiGet<SystemStats>('/api/system/stats');
 }
 
 export interface SetupStatus {
@@ -37,18 +36,11 @@ export interface SetupStatus {
 }
 
 export async function setLanguage(language: string): Promise<void> {
-  const res = await fetch('/api/setup/language', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ language }),
-  });
-  if (!res.ok) throw new Error('Failed to set language');
+  return apiPostVoid('/api/setup/language', { language });
 }
 
 export async function getSetupStatus(): Promise<SetupStatus> {
-  const res = await fetch('/api/setup/status');
-  if (!res.ok) throw new Error('Failed to fetch setup status');
-  return res.json();
+  return apiGet<SetupStatus>('/api/setup/status');
 }
 
 export interface ProviderInfo {
@@ -64,9 +56,7 @@ export interface ProvidersResponse {
 }
 
 export async function getProviders(): Promise<ProvidersResponse> {
-  const res = await fetch('/api/setup/providers');
-  if (!res.ok) throw new Error('Failed to fetch providers');
-  return res.json();
+  return apiGet<ProvidersResponse>('/api/setup/providers');
 }
 
 export async function addProvider(data: {
@@ -121,13 +111,7 @@ export async function configureLLM(
     body.model = model;
   }
 
-  const res = await fetch('/api/setup/llm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error('Failed to configure LLM');
-  return res.json();
+  return apiPost<unknown>('/api/setup/llm', body);
 }
 
 export interface TestLlmConnectionParams {
@@ -172,17 +156,11 @@ export async function configureCloudflare(config: {
   accountId: string;
   tunnelId: string;
 }): Promise<unknown> {
-  const res = await fetch('/api/setup/cloudflare', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_token: config.apiToken,
-      account_id: config.accountId,
-      tunnel_id: config.tunnelId,
-    }),
+  return apiPost<unknown>('/api/setup/cloudflare', {
+    api_token: config.apiToken,
+    account_id: config.accountId,
+    tunnel_id: config.tunnelId,
   });
-  if (!res.ok) throw new Error('Failed to configure Cloudflare');
-  return res.json();
 }
 
 export async function connectCloudflare(
@@ -203,21 +181,15 @@ export async function connectCloudflare(
 }
 
 export async function getCloudflareStatus(): Promise<{ configured: boolean; accountId?: string }> {
-  const res = await fetch('/api/setup/cloudflare');
-  if (!res.ok) throw new Error('Failed to fetch Cloudflare status');
-  return res.json();
+  return apiGet<{ configured: boolean; accountId?: string }>('/api/setup/cloudflare');
 }
 
 export async function startTraefik(): Promise<unknown> {
-  const res = await fetch('/api/setup/traefik', { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to start Traefik');
-  return res.json();
+  return apiPost<unknown>('/api/setup/traefik');
 }
 
 export async function completeSetup(): Promise<unknown> {
-  const res = await fetch('/api/setup/complete', { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to complete setup');
-  return res.json();
+  return apiPost<unknown>('/api/setup/complete');
 }
 
 export interface GlobalSecret {
@@ -227,9 +199,7 @@ export interface GlobalSecret {
 }
 
 export async function getGlobalSecrets(): Promise<{ secrets: GlobalSecret[] }> {
-  const res = await fetch('/api/secrets');
-  if (!res.ok) throw new Error('Failed to fetch secrets');
-  return res.json();
+  return apiGet<{ secrets: GlobalSecret[] }>('/api/secrets');
 }
 
 export async function setGlobalSecret(
@@ -237,13 +207,7 @@ export async function setGlobalSecret(
   value: string,
   description?: string,
 ): Promise<unknown> {
-  const res = await fetch('/api/secrets', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value, description }),
-  });
-  if (!res.ok) throw new Error('Failed to save secret');
-  return res.json();
+  return apiPost<unknown>('/api/secrets', { key, value, description });
 }
 
 export async function deleteGlobalSecret(key: string): Promise<unknown> {
@@ -257,20 +221,15 @@ export interface OAuthStatus {
 }
 
 export async function getOAuthStatus(): Promise<OAuthStatus> {
-  const res = await fetch('/api/auth/status');
-  if (!res.ok) throw new Error('Failed to fetch OAuth status');
-  return res.json();
+  return apiGet<OAuthStatus>('/api/auth/status');
 }
 
 export async function startOAuthFlow(provider: string): Promise<{ url: string; state: string }> {
-  const res = await fetch(`/api/auth/start/${provider}`);
-  if (!res.ok) throw new Error('Failed to start OAuth flow');
-  return res.json();
+  return apiGet<{ url: string; state: string }>(`/api/auth/start/${provider}`);
 }
 
 export async function disconnectOAuth(provider: string): Promise<void> {
-  const res = await fetch(`/api/auth/disconnect/${provider}`, { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to disconnect');
+  return apiPostVoid(`/api/auth/disconnect/${provider}`);
 }
 
 export async function connectGithub(token: string): Promise<void> {
@@ -300,9 +259,13 @@ export async function startGithubDeviceFlow(): Promise<{
   interval: number;
   expires_in: number;
 }> {
-  const res = await fetch('/api/setup/github/device-code', { method: 'POST' });
-  if (!res.ok) throw new Error('Failed to start GitHub auth');
-  return res.json();
+  return apiPost<{
+    user_code: string;
+    verification_uri: string;
+    device_code: string;
+    interval: number;
+    expires_in: number;
+  }>('/api/setup/github/device-code');
 }
 
 export async function pollGithubDeviceFlow(
@@ -355,9 +318,7 @@ export interface AiFeaturesResponse {
 }
 
 export async function getAiFeatures(): Promise<AiFeaturesResponse> {
-  const res = await fetch('/api/setup/ai-features');
-  if (!res.ok) throw new Error('Failed to fetch AI features');
-  return res.json();
+  return apiGet<AiFeaturesResponse>('/api/setup/ai-features');
 }
 
 export async function updateAiFeatures(
@@ -368,11 +329,5 @@ export async function updateAiFeatures(
     >
   >,
 ): Promise<AiFeaturesResponse> {
-  const res = await fetch('/api/setup/ai-features', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
-  });
-  if (!res.ok) throw new Error('Failed to update AI features');
-  return res.json();
+  return apiPut<AiFeaturesResponse>('/api/setup/ai-features', updates);
 }

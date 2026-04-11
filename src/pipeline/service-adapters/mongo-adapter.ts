@@ -1,6 +1,7 @@
 import type { ServiceRow } from '../../db/index.js';
 import type { Docker } from '../docker.js';
-import { execInServiceContainer, sleep } from './shared.js';
+import { waitUntilReady } from '../lib/retry.js';
+import { execInServiceContainer } from './shared.js';
 import type {
   ConnectionStats,
   CreateDatabaseResult,
@@ -30,24 +31,20 @@ export class MongoAdapter implements ServiceAdapter {
   }
 
   async waitForReady(service: ServiceRow, docker: Docker): Promise<void> {
-    let lastError = '';
     const containerId = service.container_id ?? service.container_name;
-
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      try {
+    await waitUntilReady(
+      async () => {
         const logs = await docker.getLogs(containerId, 200);
-        if (logs.includes('Waiting for connections')) {
-          return;
+        if (!logs.includes('Waiting for connections')) {
+          throw new Error('Readiness log line not found yet');
         }
-        lastError = 'Readiness log line not found yet';
-      } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error);
-      }
-
-      await sleep(2000);
-    }
-
-    throw new Error(`MongoDB service is not ready: ${service.id} (${lastError})`);
+      },
+      {
+        maxAttempts: 30,
+        intervalMs: 2000,
+        description: `MongoDB service: ${service.id}`,
+      },
+    );
   }
 
   async getConnectionStats(service: ServiceRow, docker: Docker): Promise<ConnectionStats> {

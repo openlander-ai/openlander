@@ -5,6 +5,7 @@ import type { Duplex } from 'node:stream';
 import type { AppContext } from '../../app.js';
 import { AuthService } from '../../auth/auth-service.js';
 import { createModuleLogger } from '../../lib/logger.js';
+import { parseCookie } from '../middleware/cookies.js';
 import { getProjectOrThrow } from './helpers/project-helpers.js';
 
 const log = createModuleLogger('terminal');
@@ -12,12 +13,6 @@ const log = createModuleLogger('terminal');
 type TerminalExec = {
   resize: (opts: { w: number; h: number }) => Promise<void>;
 };
-
-function parseCookie(cookieHeader: string | undefined, name: string): string | null {
-  if (!cookieHeader) return null;
-  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match?.[1] ?? null;
-}
 
 export function createTerminalRoutes(
   ctx: AppContext,
@@ -116,8 +111,9 @@ export function createTerminalRoutes(
                 return;
               }
 
+              const containerInfo = await ctx.docker.inspectContainer(project.container_id);
+              // eslint-disable-next-line @typescript-eslint/no-deprecated -- interactive exec requires raw dockerode (PR3 migration)
               const container = ctx.docker.getClient().getContainer(project.container_id);
-              const containerInfo = await container.inspect();
               if (!containerInfo.State.Running) {
                 closeWithError(ws, 'Container is not running');
                 return;

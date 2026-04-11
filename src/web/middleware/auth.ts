@@ -1,10 +1,6 @@
 import type { Context, Next } from 'hono';
 import type { AuthService } from '../../auth/auth-service.js';
-
-function parseCookie(cookieHeader: string, name: string): string | null {
-  const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match?.[1] ?? null;
-}
+import { parseCookie } from './cookies.js';
 
 const EXEMPT_PREFIXES = [
   '/api/webhooks/',

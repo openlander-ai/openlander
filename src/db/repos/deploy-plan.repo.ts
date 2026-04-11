@@ -1,6 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm';
 
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { buildSetValues } from '../helpers.js';
 import { deployPlans } from '../schema.drizzle.js';
 import type { DeployPlanRow } from '../types.js';
 
@@ -58,32 +59,16 @@ export class DeployPlanRepo {
       projectId: string | null;
     }>,
   ): void {
-    const setValues: Partial<typeof deployPlans.$inferInsert> = {};
-
-    if (updates.status !== undefined) {
-      setValues.status = updates.status;
-    }
-    if (updates.complexity !== undefined) {
-      setValues.complexity = updates.complexity;
-    }
-    if (updates.errorMessage !== undefined) {
-      setValues.error_message = updates.errorMessage;
-    }
-    if (updates.executedAt !== undefined) {
-      setValues.executed_at = updates.executedAt;
-    }
-    if (updates.completedAt !== undefined) {
-      setValues.completed_at = updates.completedAt;
-    }
-    if (updates.planJson !== undefined) {
-      setValues.plan_json = updates.planJson;
-    }
-    if (updates.projectName !== undefined) {
-      setValues.project_name = updates.projectName;
-    }
-    if (updates.projectId !== undefined) {
-      setValues.project_id = updates.projectId;
-    }
+    const setValues = buildSetValues(updates, {
+      status: 'status',
+      complexity: 'complexity',
+      errorMessage: 'error_message',
+      executedAt: 'executed_at',
+      completedAt: 'completed_at',
+      planJson: 'plan_json',
+      projectName: 'project_name',
+      projectId: 'project_id',
+    });
 
     if (Object.keys(setValues).length === 0) return;
 

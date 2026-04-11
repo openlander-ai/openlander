@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePollingTask } from '@/hooks/use-polling-task';
 import { Menu, Cpu, MemoryStick, Bell, HardDrive } from 'lucide-react';
 import type { SystemStats } from '@/types';
 import type { Notification } from '@/hooks/use-notifications';
@@ -35,37 +36,31 @@ export function Header({
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const checkHealth = async () => {
-      try {
-        const res = await fetch('/health');
-        if (res.ok) {
-          const data = await res.json();
-          setLlmStatus(
-            (data.llmStatus as 'online' | 'offline' | 'error') ??
-              (data.llmConfigured ? 'online' : 'offline'),
-          );
-          if (data.version) setVersion(data.version);
-        }
-      } catch (e) {
-        console.error('Health check failed', e);
-        setLlmStatus('offline');
+  const checkHealth = useCallback(async () => {
+    try {
+      const res = await fetch('/health');
+      if (res.ok) {
+        const data = await res.json();
+        setLlmStatus(
+          (data.llmStatus as 'online' | 'offline' | 'error') ??
+            (data.llmConfigured ? 'online' : 'offline'),
+        );
+        if (data.version) setVersion(data.version);
       }
-    };
+    } catch (e) {
+      console.error('Health check failed', e);
+      setLlmStatus('offline');
+    }
+  }, []);
 
-    void checkHealth();
-    const interval = setInterval(() => {
-      void checkHealth();
-    }, 60000);
+  usePollingTask(checkHealth, { intervalMs: 60000 });
+
+  useEffect(() => {
     const unsubscribe = subscribeLlmChanged(() => {
       void checkHealth();
     });
-
-    return () => {
-      clearInterval(interval);
-      unsubscribe();
-    };
-  }, []);
+    return () => unsubscribe();
+  }, [checkHealth]);
 
   // Close notification dropdown on outside click or Escape key
   useEffect(() => {

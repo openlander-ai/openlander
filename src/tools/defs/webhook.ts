@@ -1,16 +1,8 @@
 import { nanoid } from 'nanoid';
 
-import { ProjectNotFoundError } from '../../errors.js';
 import type { ToolDef } from './types.js';
+import { getProjectByName } from './helpers.js';
 import { disableWebhookSchema, enableWebhookSchema, getWebhookConfigSchema } from './schemas.js';
-
-function getProjectByName(appCtx: Parameters<ToolDef['execute']>[1]['appCtx'], name: string) {
-  const project = appCtx.db.getProjectByName(name);
-  if (!project) {
-    throw new ProjectNotFoundError(name);
-  }
-  return project;
-}
 
 const enableWebhookTool: ToolDef = {
   name: 'enable_webhook',

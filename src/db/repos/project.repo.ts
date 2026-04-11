@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, isNotNull, isNull, or, sql } from 'drizzle-o
 import { OpenLanderError, ProjectAlreadyExistsError, ProjectNotFoundError } from '../../errors.js';
 import { createModuleLogger } from '../../lib/logger.js';
 import type { DrizzleClient, SqliteDatabase } from '../drizzle.js';
+import { buildSetValues } from '../helpers.js';
 import { projects } from '../schema.drizzle.js';
 import type { PendingFixRow, ProjectRow } from '../types.js';
 
@@ -116,73 +117,31 @@ export class ProjectRepo {
       branch: string;
     }>,
   ): void {
-    const setValues: Partial<typeof projects.$inferInsert> = {};
-
-    if (updates.status !== undefined) {
-      setValues.status = updates.status;
-    }
-    if (updates.visibility !== undefined) {
-      setValues.visibility = updates.visibility;
-    }
-    if (updates.assignedPort !== undefined) {
-      setValues.assigned_port = updates.assignedPort;
-    }
-    if (updates.containerId !== undefined) {
-      setValues.container_id = updates.containerId;
-    }
-    if (updates.imageTag !== undefined) {
-      setValues.image_tag = updates.imageTag;
-    }
-    if (updates.previousImageTag !== undefined) {
-      setValues.previous_image_tag = updates.previousImageTag;
-    }
-    if (updates.publicUrl !== undefined) {
-      setValues.public_url = updates.publicUrl;
-    }
-    if (updates.parentProjectId !== undefined) {
-      setValues.parent_project_id = updates.parentProjectId;
-    }
-    if (updates.dockerfilePath !== undefined) {
-      setValues.dockerfile_path = updates.dockerfilePath;
-    }
-    if (updates.dockerTarget !== undefined) {
-      setValues.docker_target = updates.dockerTarget;
-    }
-    if (updates.buildContext !== undefined) {
-      setValues.build_context = updates.buildContext;
-    }
-    if (updates.buildMethod !== undefined) {
-      setValues.build_method = updates.buildMethod;
-    }
-    if (updates.source !== undefined) {
-      setValues.source = updates.source;
-    }
-    if (updates.imageUrl !== undefined) {
-      setValues.image_url = updates.imageUrl;
-    }
+    const setValues = buildSetValues(updates, {
+      status: 'status',
+      visibility: 'visibility',
+      assignedPort: 'assigned_port',
+      containerId: 'container_id',
+      imageTag: 'image_tag',
+      previousImageTag: 'previous_image_tag',
+      publicUrl: 'public_url',
+      parentProjectId: 'parent_project_id',
+      dockerfilePath: 'dockerfile_path',
+      dockerTarget: 'docker_target',
+      buildContext: 'build_context',
+      buildMethod: 'build_method',
+      source: 'source',
+      imageUrl: 'image_url',
+      containerPort: 'container_port',
+      pendingFix: 'pending_fix',
+      accessCode: 'access_code',
+      accessCodeIv: 'access_code_iv',
+      isPreview: 'is_preview',
+      prNumber: 'pr_number',
+      branch: 'branch',
+    });
     if (updates.imageCmd !== undefined) {
       setValues.image_cmd = updates.imageCmd === null ? null : JSON.stringify(updates.imageCmd);
-    }
-    if (updates.containerPort !== undefined) {
-      setValues.container_port = updates.containerPort;
-    }
-    if (updates.pendingFix !== undefined) {
-      setValues.pending_fix = updates.pendingFix;
-    }
-    if (updates.accessCode !== undefined) {
-      setValues.access_code = updates.accessCode;
-    }
-    if (updates.accessCodeIv !== undefined) {
-      setValues.access_code_iv = updates.accessCodeIv;
-    }
-    if (updates.isPreview !== undefined) {
-      setValues.is_preview = updates.isPreview;
-    }
-    if (updates.prNumber !== undefined) {
-      setValues.pr_number = updates.prNumber;
-    }
-    if (updates.branch !== undefined) {
-      setValues.branch = updates.branch;
     }
     if (Object.keys(setValues).length === 0) return;
 
