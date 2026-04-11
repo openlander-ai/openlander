@@ -4,8 +4,10 @@ import { getPendingApprovals, approveRecovery, rejectRecovery } from '@/lib/api/
 import type { PendingApproval } from '@/lib/api/usage';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseTimestamp } from '@/lib/time';
+import { useLanguage } from '@/i18n/context';
 
 export function ApprovalsTab() {
+  const { t } = useLanguage();
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -63,10 +65,10 @@ export function ApprovalsTab() {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
         <ShieldCheck className="h-12 w-12 text-muted-ol mb-4" />
-        <h3 className="text-lg font-medium text-primary-ol mb-2">No pending approvals</h3>
-        <p className="text-sm text-muted-ol max-w-md">
-          Auto-recovery actions will appear here when they need your review.
-        </p>
+        <h3 className="text-lg font-medium text-primary-ol mb-2">
+          {t('approvalsTab.noPendingApprovals')}
+        </h3>
+        <p className="text-sm text-muted-ol max-w-md">{t('approvalsTab.emptyMessage')}</p>
       </div>
     );
   }
@@ -91,7 +93,7 @@ export function ApprovalsTab() {
                 </span>
               </div>
               <p className="text-sm text-muted-ol">
-                Requested {date ? date.toLocaleString() : 'Unknown time'}
+                {t('approvalsTab.requested')} {date ? date.toLocaleString() : 'Unknown time'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -101,7 +103,7 @@ export function ApprovalsTab() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-error hover:bg-error/10 rounded-md transition-colors disabled:opacity-50"
               >
                 <X className="h-4 w-4" />
-                Reject
+                {t('approvalsTab.reject')}
               </button>
               <button
                 onClick={() => handleApprove(projectId, actionRunId)}
@@ -113,7 +115,7 @@ export function ApprovalsTab() {
                 ) : (
                   <Check className="h-4 w-4" />
                 )}
-                Approve
+                {t('approvalsTab.approve')}
               </button>
             </div>
           </div>

@@ -4,12 +4,14 @@ import { fetchPostmortems } from '@/lib/api/operations';
 import type { PostmortemEntry } from '@/lib/api/operations';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseTimestamp } from '@/lib/time';
+import { useLanguage } from '@/i18n/context';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github-dark.css';
 
 export function PostmortemsTab() {
+  const { t } = useLanguage();
   const [postmortems, setPostmortems] = useState<PostmortemEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -46,11 +48,10 @@ export function PostmortemsTab() {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
         <FileText className="h-12 w-12 text-muted-ol mb-4" />
-        <h3 className="text-lg font-medium text-primary-ol mb-2">No postmortems yet</h3>
-        <p className="text-sm text-muted-ol max-w-md">
-          Reports are auto-generated after successful recoveries. They are kept in memory and reset
-          when the server restarts.
-        </p>
+        <h3 className="text-lg font-medium text-primary-ol mb-2">
+          {t('postmortemsTab.noPostmortems')}
+        </h3>
+        <p className="text-sm text-muted-ol max-w-md">{t('postmortemsTab.emptyMessage')}</p>
       </div>
     );
   }
@@ -74,11 +75,11 @@ export function PostmortemsTab() {
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-medium text-primary-ol">{postmortem.project_name}</span>
                   <span className="text-xs text-muted-ol px-2 py-0.5 rounded-full bg-bg-subtle border border-[hsl(var(--border))]">
-                    Postmortem
+                    {t('postmortemsTab.postmortem')}
                   </span>
                 </div>
                 <p className="text-sm text-muted-ol">
-                  Generated {date ? date.toLocaleString() : 'Unknown time'}
+                  {t('postmortemsTab.generated')} {date ? date.toLocaleString() : 'Unknown time'}
                 </p>
               </div>
               {isExpanded ? (

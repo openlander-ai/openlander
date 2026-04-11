@@ -83,7 +83,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
         <AlertTriangle className="h-8 w-8 mb-3 text-error" />
         <p className="text-sm font-medium text-primary-ol">{t(error)}</p>
         <Button variant="outline" className="mt-4" onClick={fetchData}>
-          {t('Retry')}
+          {t('recoveryTab.retry')}
         </Button>
       </div>
     );
@@ -149,7 +149,9 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
             {postmortems.map((pm) => (
               <Card key={pm.id} className="p-4 bg-bg-panel">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-primary-ol">Postmortem Report</span>
+                  <span className="text-sm font-medium text-primary-ol">
+                    {t('recoveryTab.postmortemReport')}
+                  </span>
                   <span className="text-xs text-muted-ol">
                     {parseTimestamp(String(pm.created_at))?.toLocaleString()}
                   </span>
@@ -187,7 +189,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
                     {approval.metadata.toolName}
                   </h3>
                   <p className="text-xs text-muted-ol">
-                    Attempt {approval.metadata.attempt} •{' '}
+                    {t('recoveryTab.attempt')} {approval.metadata.attempt} •{' '}
                     {parseTimestamp(String(approval.createdAt))?.toLocaleString()}
                   </p>
                 </div>
@@ -199,7 +201,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
                     onClick={() => handleReject(approval.metadata.actionRunId)}
                   >
                     <XCircle className="h-4 w-4 mr-1.5" />
-                    {t('Reject')}
+                    {t('recoveryTab.reject')}
                   </Button>
                   <Button
                     size="sm"
@@ -207,7 +209,7 @@ export function RecoveryTab({ projectId }: RecoveryTabProps) {
                     onClick={() => handleApprove(approval.metadata.actionRunId)}
                   >
                     <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                    {t('Approve')}
+                    {t('recoveryTab.approve')}
                   </Button>
                 </div>
               </Card>

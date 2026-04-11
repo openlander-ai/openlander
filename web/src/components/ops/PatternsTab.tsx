@@ -3,6 +3,7 @@ import { GitBranch } from 'lucide-react';
 import { apiGet } from '@/lib/api/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseTimestamp } from '@/lib/time';
+import { useLanguage } from '@/i18n/context';
 
 interface DeploymentPattern {
   id: string;
@@ -16,6 +17,7 @@ interface DeploymentPattern {
 }
 
 export function PatternsTab() {
+  const { t } = useLanguage();
   const [patterns, setPatterns] = useState<DeploymentPattern[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -50,10 +52,8 @@ export function PatternsTab() {
     return (
       <div className="p-12 flex flex-col items-center justify-center text-center border border-dashed border-[hsl(var(--border))] rounded-lg m-6 bg-bg-subtle/30">
         <GitBranch className="h-12 w-12 text-muted-ol mb-4" />
-        <h3 className="text-lg font-medium text-primary-ol mb-2">No patterns learned yet</h3>
-        <p className="text-sm text-muted-ol max-w-md">
-          Patterns accumulate as the platform encounters and resolves errors.
-        </p>
+        <h3 className="text-lg font-medium text-primary-ol mb-2">{t('patternsTab.noPatterns')}</h3>
+        <p className="text-sm text-muted-ol max-w-md">{t('patternsTab.emptyMessage')}</p>
       </div>
     );
   }
@@ -65,11 +65,13 @@ export function PatternsTab() {
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-muted-ol uppercase bg-bg-subtle border-b border-[hsl(var(--border))]">
               <tr>
-                <th className="px-4 py-3 font-medium">Pattern Type</th>
-                <th className="px-4 py-3 font-medium">Error Signature</th>
-                <th className="px-4 py-3 font-medium">Fix Action</th>
-                <th className="px-4 py-3 font-medium text-center">Success / Failure</th>
-                <th className="px-4 py-3 font-medium text-right">Last Seen</th>
+                <th className="px-4 py-3 font-medium">{t('patternsTab.patternType')}</th>
+                <th className="px-4 py-3 font-medium">{t('patternsTab.errorSignature')}</th>
+                <th className="px-4 py-3 font-medium">{t('patternsTab.fixAction')}</th>
+                <th className="px-4 py-3 font-medium text-center">
+                  {t('patternsTab.successFailure')}
+                </th>
+                <th className="px-4 py-3 font-medium text-right">{t('patternsTab.lastSeen')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[hsl(var(--border))]">
@@ -107,7 +109,7 @@ export function PatternsTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right text-muted-ol whitespace-nowrap">
-                      {date ? date.toLocaleDateString() : 'Unknown'}
+                      {date ? date.toLocaleDateString() : t('patternsTab.unknown')}
                     </td>
                   </tr>
                 );

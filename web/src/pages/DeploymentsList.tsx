@@ -36,12 +36,12 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
   if (status === 'success') {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
         <CheckCircle className="h-3.5 w-3.5" />
-        Success
+        {t('deploymentsList.success')}
       </span>
     );
   }
@@ -49,7 +49,7 @@ function StatusBadge({ status }: { status: string }) {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-error">
         <XCircle className="h-3.5 w-3.5" />
-        Failed
+        {t('deploymentsList.failed')}
       </span>
     );
   }
@@ -57,7 +57,7 @@ function StatusBadge({ status }: { status: string }) {
     return (
       <span className="inline-flex items-center gap-1 text-xs font-medium text-warning">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Building
+        {t('deploymentsList.building')}
       </span>
     );
   }
@@ -126,7 +126,7 @@ export function DeploymentsList() {
           <div className="flex items-center gap-3">
             <Rocket className="h-5 w-5 text-muted-foreground" />
             <h1 className="text-xl lg:text-2xl font-display font-semibold tracking-tight text-primary-ol">
-              {t('nav.deployments')}
+              {t('deploymentsList.title')}
             </h1>
           </div>
 
@@ -144,7 +144,7 @@ export function DeploymentsList() {
                       : 'text-muted-foreground hover:text-secondary-ol',
                   )}
                 >
-                  {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+                  {s === 'all' ? t('deploymentsList.all') : t(`deploymentsList.${s}`)}
                 </button>
               ))}
             </div>
@@ -154,7 +154,7 @@ export function DeploymentsList() {
                 onChange={(e) => setProjectFilter(e.target.value)}
                 className="text-xs rounded-md border border-[hsl(var(--border))] bg-bg-panel px-2 py-1.5 text-primary-ol"
               >
-                <option value="all">All projects</option>
+                <option value="all">{t('deploymentsList.allProjects')}</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -182,23 +182,23 @@ export function DeploymentsList() {
                 <Rocket className="h-10 w-10 text-muted-foreground mb-3 opacity-40" />
                 <p className="text-sm font-medium text-primary-ol">
                   {deployments.length === 0
-                    ? 'No deployments yet'
-                    : 'No deployments match the current filter'}
+                    ? t('deploymentsList.noDeployments')
+                    : t('deploymentsList.noDeploymentsFilter')}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {deployments.length === 0
-                    ? 'Deploy your first project to see history here.'
+                    ? t('deploymentsList.emptyHint')
                     : 'Try changing the filter above.'}
                 </p>
               </div>
             ) : (
               <div className="divide-y divide-[hsl(var(--border))]">
                 <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-2 text-xs font-medium text-muted-foreground bg-bg-subtle">
-                  <span>Project / Commit</span>
-                  <span>Status</span>
-                  <span>Trigger</span>
-                  <span>Duration</span>
-                  <span>Time</span>
+                  <span>{t('deploymentsList.projectCommit')}</span>
+                  <span>{t('deploymentsList.status')}</span>
+                  <span>{t('deploymentsList.trigger')}</span>
+                  <span>{t('deploymentsList.duration')}</span>
+                  <span>{t('deploymentsList.time')}</span>
                 </div>
                 {filtered.map((d) => (
                   <button
@@ -221,9 +221,9 @@ export function DeploymentsList() {
                         </span>
                       )}
                     </div>
-                    <StatusBadge status={d.status} />
+                    <StatusBadge status={d.status} t={t} />
                     <span className="text-xs text-muted-foreground capitalize">
-                      {d.trigger ?? 'manual'}
+                      {d.trigger ?? t('deploymentsList.manual')}
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       {formatDuration(d.durationMs)}
