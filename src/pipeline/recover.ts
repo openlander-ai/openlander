@@ -140,19 +140,9 @@ async function recoverService(
 
     const envVars: Record<string, string> = {};
     if (service.env_vars) {
-      const parsed: unknown = JSON.parse(service.env_vars);
-      if (Array.isArray(parsed)) {
-        for (const entry of parsed) {
-          if (typeof entry === 'string') {
-            const eqIdx = entry.indexOf('=');
-            if (eqIdx > 0) {
-              envVars[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
-            }
-          } else if (entry && typeof entry === 'object' && 'key' in entry && 'value' in entry) {
-            const kv = entry as { key: unknown; value: unknown };
-            envVars[String(kv.key)] = String(kv.value);
-          }
-        }
+      const parsed = JSON.parse(service.env_vars) as Array<{ key: string; value: string }>;
+      for (const { key, value } of parsed) {
+        envVars[key] = value;
       }
     }
 
