@@ -2,6 +2,9 @@ import type { DockerContext } from './context.js';
 import { DOCKER_LABELS } from '../../config/index.js';
 import { isDockerNotFoundError } from '../../errors.js';
 import type Dockerode from 'dockerode';
+import { createModuleLogger } from '../../lib/logger.js';
+
+const log = createModuleLogger('docker:volume');
 
 export class VolumeOps {
   constructor(private readonly ctx: DockerContext) {}
@@ -35,7 +38,10 @@ export class VolumeOps {
     try {
       await this.ctx.client.getVolume(name).remove();
     } catch (error) {
-      if (isDockerNotFoundError(error)) return;
+      if (isDockerNotFoundError(error)) {
+        log.debug({ name }, 'Volume not found during removal — already gone');
+        return;
+      }
       throw error;
     }
   }

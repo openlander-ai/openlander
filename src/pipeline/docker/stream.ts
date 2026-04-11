@@ -1,6 +1,9 @@
 import { ContainerNotFoundError, isDockerNotFoundError } from '../../errors.js';
 import type { DockerContext } from './context.js';
 import { stripDockerStreamHeaders } from './helpers.js';
+import { createModuleLogger } from '../../lib/logger.js';
+
+const log = createModuleLogger('docker:stream');
 
 export class StreamOps {
   constructor(private readonly ctx: DockerContext) {}
@@ -19,6 +22,7 @@ export class StreamOps {
       return stripDockerStreamHeaders(buffer);
     } catch (error) {
       if (isDockerNotFoundError(error)) {
+        log.debug({ containerId }, 'Container not found while fetching logs');
         throw new ContainerNotFoundError(containerId);
       }
       throw error;
