@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { parseTimestamp } from '@/lib/time';
 import type { Service } from '@/lib/api';
 
 interface ServiceSettingsTabProps {
@@ -30,7 +31,7 @@ export function ServiceSettingsTab({ service, onDeleteClick }: ServiceSettingsTa
           <div className="p-4 rounded-lg border border-[hsl(var(--border))] bg-bg-panel space-y-1">
             <div className="text-xs font-body text-secondary-ol">Created At</div>
             <div className="text-sm font-mono text-primary-ol">
-              {new Date(service.created_at).toLocaleString()}
+              {parseTimestamp(String(service.created_at))?.toLocaleString()}
             </div>
           </div>
         </div>

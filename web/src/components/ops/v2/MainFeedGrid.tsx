@@ -6,6 +6,7 @@ import { ChevronRight, ChevronDown, Clock, AlertCircle, FileText } from 'lucide-
 import { cn } from '../../../lib/utils.js';
 import { useLanguage } from '../../../i18n/context.js';
 import type { ActivityItem } from '../../../lib/api/operations.js';
+import { parseTimestamp } from '../../../lib/time.js';
 import { SeverityBadge } from '../SeverityBadge.js';
 import { relativeTime, humanizeEventType } from '../utils.js';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../ui/collapsible.js';
@@ -121,7 +122,7 @@ function groupIntoThreads(
   const orderKeys: string[] = [];
 
   for (const item of items) {
-    const tsBucket = Math.floor(new Date(item.timestamp).getTime() / 300_000);
+    const tsBucket = Math.floor((parseTimestamp(item.timestamp)?.getTime() ?? 0) / 300_000);
     const category = eventCategory(item.type);
     const key = item.correlationId || `${item.projectId}::${category}::${tsBucket}`;
 
@@ -139,7 +140,11 @@ function groupIntoThreads(
   for (const key of orderKeys) {
     const events = threadMap.get(key)!;
     // Sort events within thread: newest first
-    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    events.sort(
+      (a, b) =>
+        (parseTimestamp(b.timestamp)?.getTime() ?? 0) -
+        (parseTimestamp(a.timestamp)?.getTime() ?? 0),
+    );
 
     const head = events[0];
     const hasPendingApproval = events.some((e) => e.type === 'approval' && e.status === 'pending');
@@ -202,7 +207,11 @@ function groupIntoThreads(
   }
 
   // Sort threads: newest first by most recent event
-  threads.sort((a, b) => new Date(b.lastEventTime).getTime() - new Date(a.lastEventTime).getTime());
+  threads.sort(
+    (a, b) =>
+      (parseTimestamp(b.lastEventTime)?.getTime() ?? 0) -
+      (parseTimestamp(a.lastEventTime)?.getTime() ?? 0),
+  );
 
   return threads;
 }
@@ -297,7 +306,7 @@ const ThreadEventDenseRow = memo(function ThreadEventDenseRow({
 
         {/* Time */}
         <div className="text-muted-ol whitespace-nowrap">
-          {new Date(event.timestamp).toLocaleTimeString(language, {
+          {parseTimestamp(event.timestamp)?.toLocaleTimeString(language, {
             hour12: false,
             hour: '2-digit',
             minute: '2-digit',
@@ -620,7 +629,7 @@ export function MainFeedGrid({
                   </span>
 
                   <span role="cell" className="text-[11px] text-muted-ol">
-                    {relativeTime(new Date(thread.lastEventTime).getTime(), language)}
+                    {relativeTime(parseTimestamp(thread.lastEventTime)?.getTime() ?? 0, language)}
                   </span>
                 </button>
               </CollapsibleTrigger>

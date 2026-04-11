@@ -24,6 +24,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { parseTimestamp } from '@/lib/time';
 import { StatusHeroCard, type StatusType } from '../ops/StatusHeroCard.js';
 import { SeverityBadge } from '../ops/SeverityBadge.js';
 import { IncidentCard, type IncidentGroup } from '../ops/IncidentCard.js';
@@ -57,8 +58,12 @@ function groupIncidents(incidents: OpsIncident[], t: (key: string) => string): I
       label: humanizeEventType(typeKey, t),
       description: humanizeDescription(latest, t),
       count: incidents.length,
-      firstSeen: Math.min(...incidents.map((i) => new Date(i.created_at).getTime())),
-      lastSeen: Math.max(...incidents.map((i) => new Date(i.created_at).getTime())),
+      firstSeen: Math.min(
+        ...incidents.map((i) => parseTimestamp(String(i.created_at))?.getTime() ?? 0),
+      ),
+      lastSeen: Math.max(
+        ...incidents.map((i) => parseTimestamp(String(i.created_at))?.getTime() ?? 0),
+      ),
       latestIncident: latest,
       status: latest.status,
     };
@@ -87,7 +92,8 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
       setIncidents(
         (incidentsData.incidents || []).sort(
           (a: OpsIncident, b: OpsIncident) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+            (parseTimestamp(String(b.created_at))?.getTime() ?? 0) -
+            (parseTimestamp(String(a.created_at))?.getTime() ?? 0),
         ),
       );
       setCircuitBreaker(cbData);
@@ -176,7 +182,9 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
   const noiseSuppressed = activeIncidents.length - activeGroups.length;
   const lastEventTime =
     activeIncidents.length > 0
-      ? Math.max(...activeIncidents.map((i) => new Date(i.created_at).getTime()))
+      ? Math.max(
+          ...activeIncidents.map((i) => parseTimestamp(String(i.created_at))?.getTime() ?? 0),
+        )
       : null;
 
   return (
@@ -354,7 +362,7 @@ export function OperationsTab({ projectId, projectStatus }: OperationsTabProps) 
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-ol">
                     <span className="capitalize">{t(incident.status)}</span>
-                    <span>{new Date(incident.created_at).toLocaleString()}</span>
+                    <span>{parseTimestamp(String(incident.created_at))?.toLocaleString()}</span>
                   </div>
                 </div>
               ))}

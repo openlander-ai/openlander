@@ -1,5 +1,6 @@
 import type { OpsIncidentEvent } from '../../lib/api/operations.js';
 import { useLanguage } from '../../i18n/context.js';
+import { parseTimestamp } from '../../lib/time.js';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -49,7 +50,7 @@ export function IncidentTimeline({ events }: IncidentTimelineProps) {
                   : g.event.type.replace(/_/g, ' ')}
               </span>
               <span className="text-xs text-muted-ol">
-                {new Date(g.event.created_at).toLocaleTimeString()}
+                {parseTimestamp(String(g.event.created_at))?.toLocaleTimeString()}
               </span>
             </div>
             {g.event.message && (
