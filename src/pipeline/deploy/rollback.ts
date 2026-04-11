@@ -75,25 +75,15 @@ export class RollbackExecutor {
     const currentImageTag =
       productionEnvironment?.image_tag ?? target.target.project.image_tag ?? '';
 
-    const dockerWithClient = this.docker as unknown as {
-      getClient?: () => {
-        getImage: (imageTag: string) => {
-          inspect: () => Promise<unknown>;
-        };
+    try {
+      await this.docker.inspectImage(rollbackImageTag);
+    } catch {
+      return {
+        success: false,
+        projectId,
+        projectName: project.name,
+        error: 'No previous image available for rollback — the image may have been pruned',
       };
-    };
-    if (typeof dockerWithClient.getClient === 'function') {
-      const dockerClient = dockerWithClient.getClient();
-      try {
-        await dockerClient.getImage(rollbackImageTag).inspect();
-      } catch {
-        return {
-          success: false,
-          projectId,
-          projectName: project.name,
-          error: 'No previous image available for rollback — the image may have been pruned',
-        };
-      }
     }
 
     try {

@@ -52,12 +52,10 @@ export class TraefikManager {
 
   async isRunning(): Promise<boolean> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-      const client = this.docker.getClient();
-      const containers = await client.listContainers({
-        filters: { label: [`${DOCKER_LABELS.ROLE}=traefik`] },
-      });
-      return containers.length > 0;
+      const containers = await this.docker.listAllContainers();
+      return containers.some(
+        (c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik' && c.state === 'running',
+      );
     } catch (err) {
       log.warn({ err }, 'Failed to check Traefik running status');
       return false;
@@ -66,10 +64,7 @@ export class TraefikManager {
 
   private async hasCurrentConfig(): Promise<boolean> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-      const client = this.docker.getClient();
-      const container = client.getContainer(this.containerName);
-      const info = await container.inspect();
+      const info = await this.docker.inspectContainer(this.containerName);
       const cmd: string[] = (info.Config.Cmd as string[] | null) ?? [];
       const hasHttpProvider = cmd.some((arg: string) => arg.includes('providers.http.endpoint'));
       const hasCorrectNetwork = cmd.some(
@@ -113,29 +108,24 @@ export class TraefikManager {
   }
 
   private async tryAdoptExistingTraefik(): Promise<boolean> {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-    const client = this.docker.getClient();
-    const containers = await client.listContainers({
-      filters: { label: [`${DOCKER_LABELS.ROLE}=traefik`], status: ['running'] },
-    });
+    const containers = await this.docker.listAllContainers();
+    const running = containers.filter(
+      (c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik' && c.state === 'running',
+    );
 
-    const candidate = containers.find((c) => {
-      const name = (c.Names[0] ?? '').replace(/^\//, '');
-      return name !== this.containerName;
-    });
+    const candidate = running.find((c) => c.name !== this.containerName);
 
     if (!candidate) {
       return false;
     }
 
-    const candidateName = (candidate.Names[0] ?? '').replace(/^\//, '');
     log.info(
-      { existingContainer: candidateName, managedContainer: this.containerName },
+      { existingContainer: candidate.name, managedContainer: this.containerName },
       'Found legacy OpenLander Traefik — adopting',
     );
 
     const connected = await this.connectContainerToNetworkByName(
-      candidateName,
+      candidate.name,
       SHARED_NETWORK_NAME,
     );
     if (!connected) {
@@ -146,8 +136,7 @@ export class TraefikManager {
     }
 
     try {
-      const stale = client.getContainer(this.containerName);
-      await stale.remove({ force: true });
+      await this.docker.removeContainer(this.containerName);
       log.debug({ containerName: this.containerName }, 'Removed stale managed Traefik container');
     } catch {
       // Container doesn't exist — expected
@@ -157,19 +146,19 @@ export class TraefikManager {
   }
 
   private async ensureNetworkByName(name: string): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-    const client = this.docker.getClient();
-
     try {
-      await client.getNetwork(name).inspect();
+      await this.docker.getNetworkInfo(name);
       return;
     } catch (error) {
-      if (!isDockerNotFoundError(error)) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (!msg.includes('not found') && !isDockerNotFoundError(error)) {
         throw error;
       }
     }
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: createNetwork not yet in docker.ts wrapper
+      const client = this.docker.getClient();
       await client.createNetwork({
         Name: name,
         Driver: 'bridge',
@@ -198,20 +187,15 @@ export class TraefikManager {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- PR2: scheduled for docker.ts wrapper migration
-    const client = this.docker.getClient();
-
     try {
-      const existing = await client.listContainers({
-        all: true,
-        filters: { label: [`${DOCKER_LABELS.ROLE}=traefik`] },
-      });
-      for (const c of existing) {
-        await client.getContainer(c.Id).remove({ force: true });
+      const existing = await this.docker.listAllContainers();
+      const traefikContainers = existing.filter((c) => c.labels[DOCKER_LABELS.ROLE] === 'traefik');
+      for (const c of traefikContainers) {
+        await this.docker.removeContainer(c.id);
       }
-      if (existing.length > 0) {
+      if (traefikContainers.length > 0) {
         log.debug(
-          `Removed ${existing.length.toString()} existing Traefik container(s) before recreation`,
+          `Removed ${traefikContainers.length.toString()} existing Traefik container(s) before recreation`,
         );
       }
     } catch (_err) {
@@ -219,16 +203,7 @@ export class TraefikManager {
     }
 
     try {
-      const stream = await client.pull(TRAEFIK_IMAGE);
-      await new Promise<void>((resolve, reject) => {
-        client.modem.followProgress(stream, (err: Error | null) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
-        });
-      });
+      await this.docker.pullImage(TRAEFIK_IMAGE);
     } catch (err) {
       log.debug({ err }, 'Traefik image pull failed — may already exist locally');
     }

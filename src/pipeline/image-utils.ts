@@ -112,9 +112,7 @@ export async function getImageExposedPort(
   imageTag: string,
 ): Promise<number | null> {
   try {
-    const client = docker.getClient();
-    const image = client.getImage(imageTag);
-    const inspectData = await image.inspect();
+    const inspectData = await docker.inspectImage(imageTag);
 
     // ExposedPorts format: { "80/tcp": {}, "443/tcp": {} }
     const exposedPorts = inspectData.Config.ExposedPorts as

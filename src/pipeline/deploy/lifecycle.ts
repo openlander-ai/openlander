@@ -172,7 +172,7 @@ export class ContainerLifecycle {
 
     if (project.image_tag) {
       try {
-        await this.docker.getClient().getImage(project.image_tag).remove();
+        await this.docker.removeImage(project.image_tag);
       } catch (err) {
         log.debug({ err, projectId, imageTag: project.image_tag }, 'Archive remove image skipped');
       }

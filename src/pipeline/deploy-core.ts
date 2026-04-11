@@ -939,6 +939,11 @@ export class DeployPipeline {
   }
 
   private async markRollbackImage(imageTag: string): Promise<void> {
+    const [repo, tag] = imageTag.split(':');
+    if (!repo || !tag) {
+      return;
+    }
+
     const dockerWithClient = this.docker as unknown as {
       getClient?: () => {
         createContainer: (opts: {
@@ -957,11 +962,6 @@ export class DeployPipeline {
       return;
     }
     const client = getClient();
-
-    const [repo, tag] = imageTag.split(':');
-    if (!repo || !tag) {
-      return;
-    }
 
     const temp = await client.createContainer({
       Image: imageTag,
@@ -1568,8 +1568,7 @@ export class DeployPipeline {
 
       // Add Traefik labels to the green container so it receives traffic
       const canonicalName = projectContainerName(projectName);
-      const greenContainer = this.docker.getClient().getContainer(greenContainerId);
-      await greenContainer.rename({ name: canonicalName });
+      await this.docker.renameContainer(greenContainerId, canonicalName);
       shouldCleanupGreen = false;
 
       this.db.updateProject(projectId, {
@@ -1631,8 +1630,7 @@ export class DeployPipeline {
       let blueStillServing = false;
       if (blueContainerId) {
         try {
-          const container = this.docker.getClient().getContainer(blueContainerId);
-          const info = await container.inspect();
+          const info = await this.docker.inspectContainer(blueContainerId);
           blueStillServing = info.State.Running;
         } catch {
           blueStillServing = false;
@@ -1641,8 +1639,7 @@ export class DeployPipeline {
 
       if (!blueStillServing && blueContainerId) {
         try {
-          const blueContainer = this.docker.getClient().getContainer(blueContainerId);
-          await blueContainer.restart();
+          await this.docker.restartContainer(blueContainerId);
           blueStillServing = true;
           buildLog += '[recovery] Restarted blue container after failed promotion\n';
         } catch (restartErr) {
@@ -1736,8 +1733,7 @@ export class DeployPipeline {
 
   private async removeStaleGreenContainer(greenName: string): Promise<void> {
     try {
-      const container = this.docker.getClient().getContainer(greenName);
-      await container.inspect();
+      await this.docker.inspectContainer(greenName);
       log.warn({ greenName }, 'Removing stale green container from previous failed deploy');
       await this.docker.safeRemoveContainer(greenName);
     } catch {
