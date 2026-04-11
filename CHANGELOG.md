@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0-rc.8] — 2026-04-11
+
+### Added
+
+- **Overview landing page**: New `/overview` route with KPI dashboard (6 stats: active deploys, recoveries, approvals, incidents, unhealthy services, AI spend), live activity timeline, needs-attention queue, and project health grid
+- **Global Deployments page**: New `/deployments` route showing deployment history across all projects with status/project filters
+- **Activity Pulse header**: Real-time status chips in the header bar showing active deploys, recoveries, pending approvals, and AI spend — polling every 10 seconds
+- **Operations 6-tab layout**: Restructured from 2-view toggle to 6 tabs — Live, Incidents, Approvals, Postmortems, Patterns, Usage
+- **Approvals tab**: Pending recovery approval queue with Approve/Reject actions
+- **Postmortems tab**: Auto-generated postmortem reports viewer with markdown rendering
+- **Deployment Patterns tab**: Error signature → fix action mapping table with success/failure counts
+- **AI Usage tab**: Token usage summary, cost tracking, and recent AI activity log
+- **Deployment Detail Diagnosis Panel**: Sticky right panel showing error detection, AI diagnosis, and recovery attempts alongside build logs
+- **Recovery tab (Project Detail)**: Replaces Operations tab — incident/recovery history, postmortems, approval requests, and real-time agent progress card
+- **Runtime tab (Project Detail)**: Console tab renamed to Runtime for clarity
+- **3 new backend API endpoints**: `GET /api/ops/postmortems`, `GET /api/ops/patterns`, `GET /api/overview/stats`
+- **Sidebar navigation**: Added Overview and Deployments nav items with Lucide icons
+
+### Fixed
+
+- **UTC timezone parsing bug**: Created `parseDBTimestamp()` utility — fixes 9-hour offset on KST servers caused by SQLite `CURRENT_TIMESTAMP` (no TZ qualifier) being parsed as local time. Applied to 17 locations across backend (8) and frontend (9)
+- **Recovery restart policy**: `recoverProject()` now sets `restartPolicy: { Name: 'unless-stopped' }` matching normal deploy behavior — previously used default `on-failure(max 5)` which prevented Docker daemon restart recovery
+
+### Changed
+
+- **i18n**: 50+ new translation keys added to both `en.ts` and `ko.ts` for all new pages and components
+
 ## [1.0.0-rc.7] — 2026-04-07
 
 ### Added
