@@ -157,8 +157,9 @@ export class TraefikManager {
     }
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-deprecated -- TODO: createNetwork not yet in docker.ts wrapper
-      const client = this.docker.getClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- TODO: createNetwork not yet in docker.ts wrapper (PR3 deferred)
+      const client = (this.docker as any).getClient();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- PR3 deferred
       await client.createNetwork({
         Name: name,
         Driver: 'bridge',

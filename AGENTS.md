@@ -257,7 +257,7 @@ MCP exposes 4 composite tools, each accepting an `action` parameter (`action="he
 - **Inspection**: `inspectContainer`, `listContainers`, `getContainerInfo`
 - **Image operations**: `buildImage`, `pullImage`, `removeImage`
 
-**Deprecation**: `getClient()` is deprecated and will be removed after PR2 (read-path) and PR3 (special cases) migrate all 24 remaining callers. The deprecation is signaled via `@deprecated` JSDoc to guide developers away from raw dockerode calls.
+**Status**: `getClient()` has been removed. The only remaining callers are in PR3-deferred special cases (traefik.ts createNetwork, deploy-core.ts markRollbackImage), which will be migrated in a future PR.
 
 **Why**: Centralizing Docker operations in one module enables:
 

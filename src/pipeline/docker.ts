@@ -48,6 +48,20 @@ export interface RunContainerOptions {
   restartPolicy?: { Name: string; MaximumRetryCount?: number };
   /** Additional volume or bind mounts (e.g. `["vol:/data"]`). */
   extraBinds?: string[];
+  /** Docker healthcheck configuration (intervals in seconds). */
+  healthcheck?: {
+    test: string | string[];
+    interval?: number;
+    timeout?: number;
+    retries?: number;
+    start_period?: number;
+  };
+  /**
+   * When provided, replaces auto-generated labels entirely.
+   * By default, runContainer adds MANAGED + PROJECT + traefikLabels.
+   * Use this for non-project containers (e.g. services) that need different labels.
+   */
+  labels?: Record<string, string>;
 }
 
 export interface RunComposeServiceOptions {
@@ -1390,17 +1404,6 @@ export class Docker {
         await exec.resize(size);
       },
     };
-  }
-
-  /**
-   * @deprecated Use specific docker.ts methods instead.
-   * This method will be removed once all callers are migrated (PR2/PR3).
-   *
-   * Available methods: inspectContainer, execSimple, connectContainerToNetwork,
-   * restartContainer, getNetworkInfo, runContainer, safeRemoveContainer, etc.
-   */
-  getClient(): Dockerode {
-    return this.client;
   }
 }
 
