@@ -1114,6 +1114,13 @@ export const translations = {
     verifyFailed: 'Connection failed. Check your API key.',
   },
   project: {
+    tabs: {
+      overview: 'Overview',
+      deployments: 'Deployments',
+      recovery: 'Recovery',
+      runtime: 'Runtime',
+      settings: 'Settings',
+    },
     confirm: {
       stopTitle: 'Stop Project',
       stopDescription: 'Are you sure you want to stop this project?',
@@ -1143,6 +1150,16 @@ export const translations = {
   recovering: 'Recovering',
   'ai-running': 'AI Running',
   'ai-completed': 'AI Completed',
+
+  recovery: {
+    incidentHistory: 'Incident/Recovery History',
+    noIncidents: 'No incidents recorded.',
+    postmortems: 'Postmortems',
+    noPostmortems:
+      'Reports are auto-generated after successful recoveries. They are kept in memory and reset when the server restarts.',
+    pendingApprovals: 'Pending Approvals',
+    noApprovals: 'No pending approval requests.',
+  },
 } as const;
 
 export type TranslationType = typeof translations;

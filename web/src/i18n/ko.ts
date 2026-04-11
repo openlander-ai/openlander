@@ -1112,6 +1112,13 @@ export const translations = {
     verifyFailed: '연결 실패. API 키를 확인하세요.',
   },
   project: {
+    tabs: {
+      overview: '개요',
+      deployments: '배포',
+      recovery: '복구',
+      runtime: '런타임',
+      settings: '설정',
+    },
     confirm: {
       stopTitle: '프로젝트 중지',
       stopDescription: '이 프로젝트를 중지하시겠습니까?',
@@ -1140,4 +1147,14 @@ export const translations = {
   recovering: '복구 중',
   'ai-running': 'AI 실행 중',
   'ai-completed': 'AI 완료',
+
+  recovery: {
+    incidentHistory: '인시던트/복구 기록',
+    noIncidents: '기록된 인시던트가 없습니다.',
+    postmortems: '포스트모템',
+    noPostmortems:
+      '성공적인 복구 후 보고서가 자동 생성됩니다. 메모리에 보관되며 서버 재시작 시 초기화됩니다.',
+    pendingApprovals: '대기 중인 승인',
+    noApprovals: '대기 중인 승인 요청이 없습니다.',
+  },
 } as const;

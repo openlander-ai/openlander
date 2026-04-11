@@ -261,3 +261,18 @@ export async function updateProjectAutomation(
     automation,
   });
 }
+
+export interface PostmortemEntry {
+  id: string;
+  project_id: string;
+  project_name: string;
+  content: string;
+  created_at: string;
+}
+
+export async function fetchPostmortems(
+  projectId?: string,
+): Promise<{ postmortems: PostmortemEntry[]; total: number }> {
+  const url = projectId ? `/api/ops/postmortems/${projectId}` : '/api/ops/postmortems';
+  return apiGet(url);
+}
