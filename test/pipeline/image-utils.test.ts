@@ -70,8 +70,8 @@ describe('parseImageUrl', () => {
 
 describe('getImageExposedPort', () => {
   it('returns lowest exposed port from image', async () => {
-    const mockImage = {
-      inspect: vi.fn().mockResolvedValue({
+    const mockDocker = {
+      inspectImage: vi.fn().mockResolvedValue({
         Config: {
           ExposedPorts: {
             '80/tcp': {},
@@ -80,14 +80,6 @@ describe('getImageExposedPort', () => {
           },
         },
       }),
-    };
-
-    const mockClient = {
-      getImage: vi.fn().mockReturnValue(mockImage),
-    };
-
-    const mockDocker = {
-      getClient: vi.fn().mockReturnValue(mockClient),
     } as unknown as Docker;
 
     const result = await getImageExposedPort(mockDocker, 'nginx:latest');
@@ -95,8 +87,8 @@ describe('getImageExposedPort', () => {
   });
 
   it('filters out management ports', async () => {
-    const mockImage = {
-      inspect: vi.fn().mockResolvedValue({
+    const mockDocker = {
+      inspectImage: vi.fn().mockResolvedValue({
         Config: {
           ExposedPorts: {
             '9090/tcp': {},
@@ -105,14 +97,6 @@ describe('getImageExposedPort', () => {
           },
         },
       }),
-    };
-
-    const mockClient = {
-      getImage: vi.fn().mockReturnValue(mockImage),
-    };
-
-    const mockDocker = {
-      getClient: vi.fn().mockReturnValue(mockClient),
     } as unknown as Docker;
 
     const result = await getImageExposedPort(mockDocker, 'app:latest');
@@ -120,20 +104,12 @@ describe('getImageExposedPort', () => {
   });
 
   it('returns null when no exposed ports', async () => {
-    const mockImage = {
-      inspect: vi.fn().mockResolvedValue({
+    const mockDocker = {
+      inspectImage: vi.fn().mockResolvedValue({
         Config: {
           ExposedPorts: {},
         },
       }),
-    };
-
-    const mockClient = {
-      getImage: vi.fn().mockReturnValue(mockImage),
-    };
-
-    const mockDocker = {
-      getClient: vi.fn().mockReturnValue(mockClient),
     } as unknown as Docker;
 
     const result = await getImageExposedPort(mockDocker, 'scratch:latest');
@@ -141,18 +117,10 @@ describe('getImageExposedPort', () => {
   });
 
   it('returns null when ExposedPorts is undefined', async () => {
-    const mockImage = {
-      inspect: vi.fn().mockResolvedValue({
+    const mockDocker = {
+      inspectImage: vi.fn().mockResolvedValue({
         Config: {},
       }),
-    };
-
-    const mockClient = {
-      getImage: vi.fn().mockReturnValue(mockImage),
-    };
-
-    const mockDocker = {
-      getClient: vi.fn().mockReturnValue(mockClient),
     } as unknown as Docker;
 
     const result = await getImageExposedPort(mockDocker, 'app:latest');
@@ -160,16 +128,8 @@ describe('getImageExposedPort', () => {
   });
 
   it('returns null when image inspect fails', async () => {
-    const mockImage = {
-      inspect: vi.fn().mockRejectedValue(new Error('Image not found')),
-    };
-
-    const mockClient = {
-      getImage: vi.fn().mockReturnValue(mockImage),
-    };
-
     const mockDocker = {
-      getClient: vi.fn().mockReturnValue(mockClient),
+      inspectImage: vi.fn().mockRejectedValue(new Error('Image not found')),
     } as unknown as Docker;
 
     const result = await getImageExposedPort(mockDocker, 'nonexistent:latest');
@@ -177,22 +137,14 @@ describe('getImageExposedPort', () => {
   });
 
   it('handles single exposed port', async () => {
-    const mockImage = {
-      inspect: vi.fn().mockResolvedValue({
+    const mockDocker = {
+      inspectImage: vi.fn().mockResolvedValue({
         Config: {
           ExposedPorts: {
             '3000/tcp': {},
           },
         },
       }),
-    };
-
-    const mockClient = {
-      getImage: vi.fn().mockReturnValue(mockImage),
-    };
-
-    const mockDocker = {
-      getClient: vi.fn().mockReturnValue(mockClient),
     } as unknown as Docker;
 
     const result = await getImageExposedPort(mockDocker, 'app:latest');

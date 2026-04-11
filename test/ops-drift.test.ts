@@ -25,16 +25,14 @@ function makeService(partial?: Partial<ServiceRow>): ServiceRow {
 
 describe('DriftDetector', () => {
   let listServices: ReturnType<typeof vi.fn>;
-  let inspectFn: ReturnType<typeof vi.fn>;
-  let getContainerFn: ReturnType<typeof vi.fn>;
+  let inspectContainerFn: ReturnType<typeof vi.fn>;
   let sendAlert: ReturnType<typeof vi.fn>;
   let buildContextualAlert: ReturnType<typeof vi.fn>;
   let detector: DriftDetector;
 
   beforeEach(() => {
     listServices = vi.fn().mockReturnValue([]);
-    inspectFn = vi.fn();
-    getContainerFn = vi.fn().mockReturnValue({ inspect: inspectFn });
+    inspectContainerFn = vi.fn();
     sendAlert = vi.fn().mockResolvedValue(undefined);
     buildContextualAlert = vi.fn().mockImplementation((params) => ({
       severity: params.severity,
@@ -52,7 +50,7 @@ describe('DriftDetector', () => {
     const ctx = {
       db: { listServices },
       docker: {
-        getClient: () => ({ getContainer: getContainerFn }),
+        inspectContainer: inspectContainerFn,
       },
     } as unknown as AppContext;
 
@@ -68,7 +66,7 @@ describe('DriftDetector', () => {
 
   it('returns empty array when all services are running normally', async () => {
     listServices.mockReturnValue([makeService()]);
-    inspectFn.mockResolvedValue({
+    inspectContainerFn.mockResolvedValue({
       State: { Running: true, Status: 'running' },
       Config: { Image: 'postgres:16-alpine' },
     });
@@ -80,7 +78,7 @@ describe('DriftDetector', () => {
 
   it('detects container_stopped when container is not running', async () => {
     listServices.mockReturnValue([makeService()]);
-    inspectFn.mockResolvedValue({
+    inspectContainerFn.mockResolvedValue({
       State: { Running: false, Status: 'exited' },
       Config: { Image: 'postgres:16-alpine' },
     });
@@ -104,7 +102,7 @@ describe('DriftDetector', () => {
 
   it('detects container_stopped when container inspect fails (not found)', async () => {
     listServices.mockReturnValue([makeService()]);
-    inspectFn.mockRejectedValue(new Error('No such container'));
+    inspectContainerFn.mockRejectedValue(new Error('No such container'));
 
     const results = await detector.checkDrift();
     expect(results).toHaveLength(1);
@@ -118,7 +116,7 @@ describe('DriftDetector', () => {
 
   it('detects image_mismatch when running different image', async () => {
     listServices.mockReturnValue([makeService({ image: 'postgres:16-alpine' })]);
-    inspectFn.mockResolvedValue({
+    inspectContainerFn.mockResolvedValue({
       State: { Running: true, Status: 'running' },
       Config: { Image: 'postgres:15-alpine' },
     });
@@ -141,7 +139,7 @@ describe('DriftDetector', () => {
 
   it('does not flag image mismatch when images overlap (substring match)', async () => {
     listServices.mockReturnValue([makeService({ image: 'postgres' })]);
-    inspectFn.mockResolvedValue({
+    inspectContainerFn.mockResolvedValue({
       State: { Running: true, Status: 'running' },
       Config: { Image: 'postgres:16-alpine' },
     });
@@ -152,14 +150,14 @@ describe('DriftDetector', () => {
 
   it('falls back to container_name when container_id is null', async () => {
     listServices.mockReturnValue([makeService({ container_id: null })]);
-    inspectFn.mockResolvedValue({
+    inspectContainerFn.mockResolvedValue({
       State: { Running: true, Status: 'running' },
       Config: { Image: 'postgres:16-alpine' },
     });
 
     const results = await detector.checkDrift();
     expect(results).toEqual([]);
-    expect(getContainerFn).toHaveBeenCalledWith('ol-svc-my-postgres');
+    expect(inspectContainerFn).toHaveBeenCalledWith('ol-svc-my-postgres');
   });
 
   it('handles multiple services with mixed drift', async () => {
@@ -169,7 +167,7 @@ describe('DriftDetector', () => {
       makeService({ id: 'svc-3', name: 'mongo', container_id: 'c3', image: 'mongo:7' }),
     ]);
 
-    inspectFn
+    inspectContainerFn
       .mockResolvedValueOnce({
         State: { Running: true, Status: 'running' },
         Config: { Image: 'postgres:16-alpine' },
@@ -194,16 +192,10 @@ describe('DriftDetector', () => {
       makeService({ id: 'svc-2', name: 'redis', container_id: 'c2', image: 'redis:7-alpine' }),
     ]);
 
-    getContainerFn
-      .mockReturnValueOnce({
-        inspect: vi.fn().mockRejectedValue(new Error('daemon timeout')),
-      })
-      .mockReturnValueOnce({
-        inspect: vi.fn().mockResolvedValue({
-          State: { Running: true, Status: 'running' },
-          Config: { Image: 'redis:7-alpine' },
-        }),
-      });
+    inspectContainerFn.mockRejectedValueOnce(new Error('daemon timeout')).mockResolvedValueOnce({
+      State: { Running: true, Status: 'running' },
+      Config: { Image: 'redis:7-alpine' },
+    });
 
     const results = await detector.checkDrift();
     expect(results).toHaveLength(1);
@@ -212,7 +204,7 @@ describe('DriftDetector', () => {
 
   it('sends alert with restart suggestion for stopped containers', async () => {
     listServices.mockReturnValue([makeService()]);
-    inspectFn.mockResolvedValue({
+    inspectContainerFn.mockResolvedValue({
       State: { Running: false, Status: 'exited' },
       Config: { Image: 'postgres:16-alpine' },
     });
@@ -227,7 +219,7 @@ describe('DriftDetector', () => {
 
   it('sends alert with review suggestion for image mismatch', async () => {
     listServices.mockReturnValue([makeService({ image: 'postgres:16-alpine' })]);
-    inspectFn.mockResolvedValue({
+    inspectContainerFn.mockResolvedValue({
       State: { Running: true, Status: 'running' },
       Config: { Image: 'postgres:15-alpine' },
     });

@@ -27,6 +27,7 @@ function createMockDocker(): Docker {
     runContainer: vi.fn().mockResolvedValue('container-new-123456'),
     startContainer: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
+    inspectImage: vi.fn().mockResolvedValue({}),
     listContainers: vi.fn().mockResolvedValue([]),
     listAllContainers: vi.fn().mockResolvedValue([]),
     inspectContainer: vi.fn().mockResolvedValue(null),

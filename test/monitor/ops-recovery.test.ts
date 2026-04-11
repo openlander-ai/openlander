@@ -49,7 +49,8 @@ interface MockContext {
     listOpsIncidentsByProject: ReturnType<typeof vi.fn>;
   };
   docker: {
-    getClient: ReturnType<typeof vi.fn>;
+    inspectContainer: ReturnType<typeof vi.fn>;
+    restartContainer: ReturnType<typeof vi.fn>;
     getLogs: ReturnType<typeof vi.fn>;
     listAllContainers: ReturnType<typeof vi.fn>;
     stopContainer: ReturnType<typeof vi.fn>;
@@ -88,17 +89,13 @@ function createMockContext(): MockContext {
       listOpsIncidentsByProject: vi.fn(() => []),
     },
     docker: {
-      getClient: vi.fn(() => ({
-        getContainer: vi.fn(() => ({
-          restart: vi.fn(),
-          inspect: vi.fn(async () => ({
-            State: {
-              Running: true,
-              Restarting: false,
-            },
-          })),
-        })),
+      inspectContainer: vi.fn(async () => ({
+        State: {
+          Running: true,
+          Restarting: false,
+        },
       })),
+      restartContainer: vi.fn(async () => undefined),
       getLogs: vi.fn(async () => 'container logs'),
       listAllContainers: vi.fn(async () => []),
       stopContainer: vi.fn(async () => undefined),

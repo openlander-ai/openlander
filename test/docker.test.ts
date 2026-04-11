@@ -649,12 +649,6 @@ describeDocker('Docker core operations', () => {
         labels: {},
       },
     ]);
-
-    expect(docker.getClient()).toMatchObject({
-      ping: mockPing,
-      listContainers: mockListContainers,
-      buildImage: mockBuildImage,
-    });
   });
 });
 

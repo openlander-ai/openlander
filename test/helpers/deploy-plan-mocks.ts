@@ -96,9 +96,8 @@ export function createMockPlanContext(db?: Database): AppContext {
     } as unknown as AppContext['config'],
     db: mockDb,
     docker: {
-      getClient: vi.fn(() => ({
-        listContainers: vi.fn().mockResolvedValue([]),
-      })),
+      listAllContainers: vi.fn().mockResolvedValue([]),
+      inspectContainer: vi.fn(),
     } as unknown as AppContext['docker'],
     pipeline: {
       deploy: vi.fn().mockResolvedValue({ success: true, projectId: 'p1' }),

@@ -10,10 +10,6 @@ import { RollbackExecutor } from '../../../src/pipeline/deploy/rollback.js';
 import type { Docker } from '../../../src/pipeline/docker.js';
 
 function createMockDocker(): Docker {
-  const inspectImage = vi.fn().mockResolvedValue({});
-  const getImage = vi.fn().mockReturnValue({ inspect: inspectImage });
-  const getClient = vi.fn().mockReturnValue({ getImage });
-
   return {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     removeContainer: vi.fn().mockResolvedValue(undefined),
@@ -21,7 +17,7 @@ function createMockDocker(): Docker {
     runContainer: vi.fn().mockResolvedValue('container-rollback-new'),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
     listAllContainers: vi.fn().mockResolvedValue([]),
-    getClient,
+    inspectImage: vi.fn().mockResolvedValue({}),
   } as unknown as Docker;
 }
 
@@ -188,13 +184,9 @@ describe('RollbackExecutor', () => {
       previousImageTag: 'openlander/pruned-app:1712345600000',
     });
 
-    const getClientMock = docker.getClient as ReturnType<typeof vi.fn>;
-    const getImageMock = vi.fn().mockReturnValue({
-      inspect: vi
-        .fn()
-        .mockRejectedValue(new Error('No such image: openlander/pruned-app:1712345600000')),
-    });
-    getClientMock.mockReturnValueOnce({ getImage: getImageMock });
+    (docker.inspectImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('Image not found: openlander/pruned-app:1712345600000'),
+    );
 
     const result = await rollbackExecutor.rollbackToImage('p-pruned');
 

@@ -412,17 +412,14 @@ describe('reconcileServiceNetworks', () => {
       container_id: 'svc-migrate-container',
     });
 
-    const client = {
-      getContainer: () => ({
-        inspect: async () => ({
-          Id: 'container-123',
-          State: { Running: true },
-          NetworkSettings: { Networks: {} },
-        }),
+    const docker = {
+      inspectContainer: vi.fn().mockResolvedValue({
+        Id: 'container-123',
+        State: { Running: true },
+        NetworkSettings: { Networks: {} },
       }),
+      connectContainerToNetwork,
     };
-
-    const docker = { getClient: () => client, connectContainerToNetwork };
     const db = { listServices: () => [service] };
     const manager = new ServiceManager(
       docker as unknown as ConstructorParameters<typeof ServiceManager>[0],
@@ -447,24 +444,19 @@ describe('reconcileServiceNetworks', () => {
       container_id: 'svc-already-container',
     });
 
-    const client = {
-      getContainer: () => ({
-        inspect: async () => ({
-          Id: 'container-abc',
-          State: { Running: true },
-          NetworkSettings: {
-            Networks: {
-              [SHARED_NETWORK_NAME]: {
-                Aliases: ['shared-pg'],
-              },
+    const docker = {
+      inspectContainer: vi.fn().mockResolvedValue({
+        Id: 'container-abc',
+        State: { Running: true },
+        NetworkSettings: {
+          Networks: {
+            [SHARED_NETWORK_NAME]: {
+              Aliases: ['shared-pg'],
             },
           },
-        }),
+        },
       }),
-      getNetwork: () => ({ connect, disconnect }),
     };
-
-    const docker = { getClient: () => client };
     const db = { listServices: () => [service] };
     const manager = new ServiceManager(
       docker as unknown as ConstructorParameters<typeof ServiceManager>[0],
@@ -487,16 +479,11 @@ describe('reconcileServiceNetworks', () => {
       container_id: 'svc-missing-container',
     });
 
-    const client = {
-      getContainer: () => ({
-        inspect: async () => {
-          throw new Error('No such container: svc-missing-container');
-        },
-      }),
-      getNetwork: () => ({ connect, disconnect }),
+    const docker = {
+      inspectContainer: vi
+        .fn()
+        .mockRejectedValue(new Error('No such container: svc-missing-container')),
     };
-
-    const docker = { getClient: () => client };
     const db = { listServices: () => [service] };
     const manager = new ServiceManager(
       docker as unknown as ConstructorParameters<typeof ServiceManager>[0],
@@ -517,18 +504,13 @@ describe('reconcileServiceNetworks', () => {
       container_id: 'svc-stopped-container',
     });
 
-    const client = {
-      getContainer: () => ({
-        inspect: async () => ({
-          Id: 'container-stopped',
-          State: { Running: false },
-          NetworkSettings: { Networks: {} },
-        }),
+    const docker = {
+      inspectContainer: vi.fn().mockResolvedValue({
+        Id: 'container-stopped',
+        State: { Running: false },
+        NetworkSettings: { Networks: {} },
       }),
-      getNetwork: () => ({ connect, disconnect }),
     };
-
-    const docker = { getClient: () => client };
     const db = { listServices: () => [service] };
     const manager = new ServiceManager(
       docker as unknown as ConstructorParameters<typeof ServiceManager>[0],
@@ -555,32 +537,29 @@ describe('reconcileServiceNetworks', () => {
       container_id: 'svc-already-container',
     });
 
-    const client = {
-      getContainer: (containerRef: string) => ({
-        inspect: async () => {
-          if (containerRef === 'svc-migrate-container') {
-            return {
-              Id: 'container-migrate',
-              State: { Running: true },
-              NetworkSettings: { Networks: {} },
-            };
-          }
+    const docker = {
+      inspectContainer: vi.fn().mockImplementation(async (containerRef: string) => {
+        if (containerRef === 'svc-migrate-container') {
           return {
-            Id: 'container-already',
+            Id: 'container-migrate',
             State: { Running: true },
-            NetworkSettings: {
-              Networks: {
-                [SHARED_NETWORK_NAME]: {
-                  Aliases: ['already-db'],
-                },
+            NetworkSettings: { Networks: {} },
+          };
+        }
+        return {
+          Id: 'container-already',
+          State: { Running: true },
+          NetworkSettings: {
+            Networks: {
+              [SHARED_NETWORK_NAME]: {
+                Aliases: ['already-db'],
               },
             },
-          };
-        },
+          },
+        };
       }),
+      connectContainerToNetwork,
     };
-
-    const docker = { getClient: () => client, connectContainerToNetwork };
     const db = { listServices: () => [svcMigrated, svcAlready] };
     const manager = new ServiceManager(
       docker as unknown as ConstructorParameters<typeof ServiceManager>[0],

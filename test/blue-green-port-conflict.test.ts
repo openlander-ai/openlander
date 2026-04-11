@@ -36,19 +36,6 @@ function createMockDocker(options?: { blueRunning?: boolean }): {
     .mockResolvedValue({ State: { Running: options?.blueRunning ?? true } });
   const blueRestartMock = vi.fn().mockResolvedValue(undefined);
 
-  const promotedContainer = {
-    rename: promotedRenameMock,
-  };
-
-  const blueContainer = {
-    inspect: blueInspectMock,
-    restart: blueRestartMock,
-  };
-
-  const greenContainer = {
-    rename: promotedRenameMock,
-  };
-
   const docker = {
     buildImage: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
@@ -58,22 +45,14 @@ function createMockDocker(options?: { blueRunning?: boolean }): {
       .mockResolvedValueOnce('container-promoted'),
     stopContainer: vi.fn().mockResolvedValue(undefined),
     safeRemoveContainer: vi.fn().mockResolvedValue(undefined),
-    getClient: vi.fn().mockReturnValue({
-      getContainer: vi.fn().mockImplementation((containerId: string) => {
-        if (containerId === 'container-blue') {
-          return blueContainer;
-        }
-        if (containerId === 'container-green') {
-          return greenContainer;
-        }
-        if (containerId === 'container-promoted') {
-          return promotedContainer;
-        }
-        return {
-          inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
-        };
-      }),
+    inspectContainer: blueInspectMock.mockImplementation(async (containerId: string) => {
+      if (containerId === 'container-blue') {
+        return { State: { Running: options?.blueRunning ?? true } };
+      }
+      return { State: { Running: true } };
     }),
+    renameContainer: promotedRenameMock,
+    restartContainer: blueRestartMock,
   } as unknown as Docker;
 
   return {
@@ -176,7 +155,10 @@ describe('BUG-003: blue-green promotion avoids port conflicts', () => {
       1,
       expect.objectContaining({ name: 'ol-demo-app-green' }),
     );
-    expect(dockerControls.promotedRenameMock).toHaveBeenCalledWith({ name: 'ol-demo-app' });
+    expect(dockerControls.promotedRenameMock).toHaveBeenCalledWith(
+      'container-green',
+      'ol-demo-app',
+    );
   });
 
   it('keeps blue running when promoted container fails post-promotion health check', async () => {

@@ -244,7 +244,13 @@ export function createMockDockerHarness(containers: MockContainer[] = []): MockD
       waitForContainer: vi.fn().mockResolvedValue({ StatusCode: 0 }),
       connectContainerToNetwork: vi.fn().mockResolvedValue(undefined),
       pullImage: vi.fn().mockResolvedValue(undefined),
-      getClient: vi.fn().mockReturnValue(client),
+      inspectImage: vi.fn().mockResolvedValue({ Config: { ExposedPorts: {} } }),
+      removeImage: vi.fn().mockResolvedValue(undefined),
+      listVolumes: vi.fn().mockResolvedValue([]),
+      inspectVolume: vi.fn(),
+      getDiskUsage: vi.fn().mockResolvedValue({ Images: [], Containers: [], Volumes: [] }),
+      renameContainer: vi.fn().mockResolvedValue(undefined),
+      getContainerStats: vi.fn().mockResolvedValue({}),
       getNetworkName: vi.fn().mockReturnValue('openlander-prod'),
       execSimple: vi.fn(async (containerId: string, cmd: string[]) => {
         const cmds = execCommands.get(containerId) ?? [];

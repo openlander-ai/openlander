@@ -73,6 +73,7 @@ function createMockDocker(): Docker {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     startContainer: vi.fn().mockResolvedValue(undefined),
     getImageExposedPort: vi.fn().mockResolvedValue(3000),
+    inspectImage: vi.fn().mockResolvedValue({}),
     cleanupSecretFiles: vi.fn(),
     ensureProjectNetwork: vi.fn().mockResolvedValue('compose-network'),
     pullImage: vi.fn().mockResolvedValue(undefined),

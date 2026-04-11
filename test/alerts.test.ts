@@ -46,7 +46,6 @@ function createProject(partial?: Partial<ProjectRow>): ProjectRow {
 describe('AlertMonitor', () => {
   let emit: ReturnType<typeof vi.fn>;
   let listProjects: ReturnType<typeof vi.fn>;
-  let listImages: ReturnType<typeof vi.fn>;
   let docker: Docker;
   let db: Database;
   let events: EventBus;
@@ -62,13 +61,10 @@ describe('AlertMonitor', () => {
     );
     emit = vi.fn().mockResolvedValue(undefined);
     listProjects = vi.fn().mockReturnValue([]);
-    listImages = vi.fn().mockResolvedValue([]);
 
     docker = {
-      getClient: vi.fn().mockReturnValue({
-        getContainer: vi.fn(),
-        listImages,
-      }),
+      inspectContainer: vi.fn(),
+      getContainerStats: vi.fn(),
     } as unknown as Docker;
 
     db = {
@@ -163,7 +159,6 @@ describe('AlertMonitor', () => {
 describe('AlertMonitor - checkPortConflicts', () => {
   let emit: ReturnType<typeof vi.fn>;
   let listProjects: ReturnType<typeof vi.fn>;
-  let listImages: ReturnType<typeof vi.fn>;
   let docker: Docker;
   let db: Database;
   let events: EventBus;
@@ -176,13 +171,10 @@ describe('AlertMonitor - checkPortConflicts', () => {
   beforeEach(() => {
     emit = vi.fn().mockResolvedValue(undefined);
     listProjects = vi.fn().mockReturnValue([]);
-    listImages = vi.fn().mockResolvedValue([]);
 
     docker = {
-      getClient: vi.fn().mockReturnValue({
-        getContainer: vi.fn(),
-        listImages,
-      }),
+      inspectContainer: vi.fn(),
+      getContainerStats: vi.fn(),
     } as unknown as Docker;
 
     db = {

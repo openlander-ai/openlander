@@ -5,10 +5,8 @@ import { getLogBuffer } from '../../src/lib/log-buffer.js';
 import { platformDebugToolDefs } from '../../src/tools/defs/platform-debug.js';
 
 function createMockPlatformDebugContext() {
-  const inspect = vi.fn();
-  const getContainer = vi.fn(() => ({ inspect }));
-  const listContainers = vi.fn<(args: { all?: boolean }) => Promise<unknown[]>>(async () => []);
-
+  const inspectContainer = vi.fn();
+  const listAllContainers = vi.fn<() => Promise<unknown[]>>(async () => []);
   const listManagedContainers = vi.fn<() => Promise<unknown[]>>(async () => []);
 
   const listProjects = vi.fn<() => unknown[]>(() => []);
@@ -23,7 +21,8 @@ function createMockPlatformDebugContext() {
 
   const ctx = {
     docker: {
-      getClient: vi.fn(() => ({ getContainer, listContainers })),
+      inspectContainer,
+      listAllContainers,
       listManagedContainers,
     },
     db: {
@@ -42,9 +41,8 @@ function createMockPlatformDebugContext() {
   return {
     ctx,
     dockerMocks: {
-      inspect,
-      getContainer,
-      listContainers,
+      inspectContainer,
+      listAllContainers,
       listManagedContainers,
     },
     dbMocks: {
@@ -145,20 +143,20 @@ describe('platform-debug tools', () => {
 
   it('platform_docker_inspect returns raw inspect response', async () => {
     const { ctx, dockerMocks } = createMockPlatformDebugContext();
-    dockerMocks.inspect.mockResolvedValueOnce({ Id: 'abc123', State: { Running: true } });
+    dockerMocks.inspectContainer.mockResolvedValueOnce({ Id: 'abc123', State: { Running: true } });
 
     const result = await getTool('platform_docker_inspect').execute(
       { container_id: 'abc123' },
       { target: 'mcp', appCtx: ctx },
     );
 
-    expect(dockerMocks.getContainer).toHaveBeenCalledWith('abc123');
+    expect(dockerMocks.inspectContainer).toHaveBeenCalledWith('abc123');
     expect(result).toEqual({ Id: 'abc123', State: { Running: true } });
   });
 
   it('platform_docker_inspect throws CONTAINER_NOT_FOUND on missing container', async () => {
     const { ctx, dockerMocks } = createMockPlatformDebugContext();
-    dockerMocks.inspect.mockRejectedValueOnce(new Error('No such container: missing'));
+    dockerMocks.inspectContainer.mockRejectedValueOnce(new Error('No such container: missing'));
 
     await expect(
       getTool('platform_docker_inspect').execute(
@@ -190,7 +188,7 @@ describe('platform-debug tools', () => {
     };
 
     expect(dockerMocks.listManagedContainers).toHaveBeenCalledTimes(1);
-    expect(dockerMocks.listContainers).not.toHaveBeenCalled();
+    expect(dockerMocks.listAllContainers).not.toHaveBeenCalled();
     expect(result.count).toBe(1);
     expect(result.containers[0]).toEqual(
       expect.objectContaining({ id: 'm1', image: 'openlander/app:latest' }),
@@ -200,16 +198,16 @@ describe('platform-debug tools', () => {
 
   it('platform_docker_ps uses docker client listContainers when filter_managed=false', async () => {
     const { ctx, dockerMocks } = createMockPlatformDebugContext();
-    dockerMocks.listContainers.mockResolvedValueOnce([
+    dockerMocks.listAllContainers.mockResolvedValueOnce([
       {
-        Id: 'c1',
-        Names: ['/plain-container'],
-        Image: 'nginx:latest',
-        Status: 'Up 1 minute',
-        State: 'running',
-        Created: 123,
-        Labels: { a: 'b' },
-        Ports: [{ IP: '0.0.0.0', PublicPort: 80, PrivatePort: 80, Type: 'tcp' }],
+        id: 'c1',
+        name: 'plain-container',
+        image: 'nginx:latest',
+        status: 'Up 1 minute',
+        state: 'running',
+        created: 123,
+        labels: { a: 'b' },
+        ports: [{ IP: '0.0.0.0', PublicPort: 80, PrivatePort: 80, Type: 'tcp' }],
       },
     ]);
 
@@ -221,7 +219,7 @@ describe('platform-debug tools', () => {
       containers: Array<{ id: string; name: string; state: string }>;
     };
 
-    expect(dockerMocks.listContainers).toHaveBeenCalledWith({ all: true });
+    expect(dockerMocks.listAllContainers).toHaveBeenCalledTimes(1);
     expect(result.count).toBe(1);
     expect(result.containers[0]).toEqual(
       expect.objectContaining({ id: 'c1', name: 'plain-container', state: 'running' }),

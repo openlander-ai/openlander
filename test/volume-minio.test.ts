@@ -64,10 +64,6 @@ function createDbMock(services: ServiceRow[]): Database {
 
 function createMockContext(services: ServiceRow[] = []) {
   type BucketInfo = { name: string; createdAt: string };
-  type VolumeHandle = {
-    inspect: () => Promise<Record<string, unknown>>;
-    remove: () => Promise<void>;
-  };
 
   const serviceManager = {
     list: vi.fn(async () => services),
@@ -76,24 +72,22 @@ function createMockContext(services: ServiceRow[] = []) {
     deleteBucket: vi.fn(async () => undefined),
   };
 
-  const createVolume = vi.fn(async (_opts: Record<string, unknown>) => undefined);
-  const listVolumes = vi.fn<() => Promise<{ Volumes: unknown[] }>>(async () => ({ Volumes: [] }));
-  const df = vi.fn(async () => ({ Images: [], Containers: [], Volumes: [] }));
-
-  const getVolume = vi.fn<(name: string) => VolumeHandle>((name: string) => ({
-    inspect: vi.fn<() => Promise<Record<string, unknown>>>(async () => {
+  const inspectVolume = vi.fn<(name: string) => Promise<Record<string, unknown>>>(
+    async (name: string) => {
       throw new Error(`No such volume: ${name}`);
-    }),
-    remove: vi.fn(async () => undefined),
-  }));
+    },
+  );
+  const listVolumes = vi.fn<() => Promise<unknown[]>>(async () => []);
+  const createVolumeMock = vi.fn(async () => undefined);
+  const removeVolume = vi.fn(async () => undefined);
+  const getDiskUsage = vi.fn(async () => ({ Images: [], Containers: [], Volumes: [] }));
 
   const docker = {
-    getClient: vi.fn(() => ({
-      createVolume,
-      getVolume,
-      listVolumes,
-      df,
-    })),
+    inspectVolume,
+    listVolumes,
+    createVolume: createVolumeMock,
+    removeVolume,
+    getDiskUsage,
   };
 
   const ctx = {
@@ -104,11 +98,12 @@ function createMockContext(services: ServiceRow[] = []) {
   return {
     ctx,
     serviceManager,
-    dockerClient: {
-      createVolume,
-      getVolume,
+    docker: {
+      inspectVolume,
       listVolumes,
-      df,
+      createVolume: createVolumeMock,
+      removeVolume,
+      getDiskUsage,
     },
   };
 }
@@ -333,7 +328,7 @@ describe('MCP volume and bucket tools', () => {
   });
 
   it('add_volume returns created payload and surfaces duplicate managed volume error', async () => {
-    const { ctx, dockerClient } = createMockContext();
+    const { ctx, docker } = createMockContext();
     const addVolumeTool = getMcpTool(ctx, 'add_volume');
 
     await expect(
@@ -349,10 +344,9 @@ describe('MCP volume and bucket tools', () => {
       mount_path: '/app/uploads',
     });
 
-    expect(dockerClient.createVolume).toHaveBeenCalledWith({
-      Name: 'ol-vol-myapp-uploads',
-      Labels: {
-        'openlander.managed': 'true',
+    expect(docker.createVolume).toHaveBeenCalledWith({
+      name: 'ol-vol-myapp-uploads',
+      labels: {
         'openlander.role': 'volume',
         'openlander.project': 'myapp',
         'openlander.volume': 'uploads',
@@ -360,9 +354,8 @@ describe('MCP volume and bucket tools', () => {
       },
     });
 
-    dockerClient.getVolume.mockReturnValueOnce({
-      inspect: vi.fn(async () => ({ Labels: { 'openlander.managed': 'true' } })),
-      remove: vi.fn(async () => undefined),
+    docker.inspectVolume.mockResolvedValueOnce({
+      Labels: { 'openlander.managed': 'true' },
     });
 
     await expect(
@@ -375,23 +368,21 @@ describe('MCP volume and bucket tools', () => {
   });
 
   it('add_volume rejects duplicate mount_path within same project', async () => {
-    const { ctx, dockerClient } = createMockContext();
+    const { ctx, docker } = createMockContext();
     const addVolumeTool = getMcpTool(ctx, 'add_volume');
 
-    dockerClient.listVolumes.mockResolvedValueOnce({
-      Volumes: [
-        {
-          Name: 'ol-vol-myapp-data-a',
-          Labels: {
-            'openlander.managed': 'true',
-            'openlander.role': 'volume',
-            'openlander.project': 'myapp',
-            'openlander.volume': 'data-a',
-            'openlander.mount_path': '/app/data',
-          },
+    docker.listVolumes.mockResolvedValueOnce([
+      {
+        Name: 'ol-vol-myapp-data-a',
+        Labels: {
+          'openlander.managed': 'true',
+          'openlander.role': 'volume',
+          'openlander.project': 'myapp',
+          'openlander.volume': 'data-a',
+          'openlander.mount_path': '/app/data',
         },
-      ],
-    });
+      },
+    ]);
 
     await expect(
       addVolumeTool.execute({
@@ -403,27 +394,13 @@ describe('MCP volume and bucket tools', () => {
   });
 
   it('list_volumes maps labels and remove_volume rejects unmanaged then succeeds for managed volume', async () => {
-    const { ctx, dockerClient } = createMockContext();
+    const { ctx, docker } = createMockContext();
     const listVolumesTool = getMcpTool(ctx, 'list_volumes');
     const removeVolumeTool = getMcpTool(ctx, 'remove_volume');
 
-    dockerClient.listVolumes.mockResolvedValueOnce({
-      Volumes: [
-        {
-          Name: 'ol-vol-myapp-uploads',
-          Labels: {
-            'openlander.managed': 'true',
-            'openlander.role': 'volume',
-            'openlander.project': 'myapp',
-            'openlander.volume': 'uploads',
-            'openlander.mount_path': '/app/uploads',
-          },
-          UsageData: { Size: 512 },
-        },
-      ],
-    });
-    dockerClient.getVolume.mockReturnValueOnce({
-      inspect: vi.fn(async () => ({
+    docker.listVolumes.mockResolvedValueOnce([
+      {
+        Name: 'ol-vol-myapp-uploads',
         Labels: {
           'openlander.managed': 'true',
           'openlander.role': 'volume',
@@ -431,9 +408,18 @@ describe('MCP volume and bucket tools', () => {
           'openlander.volume': 'uploads',
           'openlander.mount_path': '/app/uploads',
         },
-        UsageData: { Size: 1024 },
-      })),
-      remove: vi.fn(async () => undefined),
+        UsageData: { Size: 512 },
+      },
+    ]);
+    docker.inspectVolume.mockResolvedValueOnce({
+      Labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'volume',
+        'openlander.project': 'myapp',
+        'openlander.volume': 'uploads',
+        'openlander.mount_path': '/app/uploads',
+      },
+      UsageData: { Size: 1024 },
     });
 
     await expect(listVolumesTool.execute({ project_name: 'myapp' })).resolves.toEqual({
@@ -449,23 +435,18 @@ describe('MCP volume and bucket tools', () => {
       ],
     });
 
-    dockerClient.getVolume.mockReturnValueOnce({
-      inspect: vi.fn(async () => ({ Labels: { 'openlander.managed': 'false' } })),
-      remove: vi.fn(async () => undefined),
+    docker.inspectVolume.mockResolvedValueOnce({
+      Labels: { 'openlander.managed': 'false' },
     });
     await expect(
       removeVolumeTool.execute({ project_name: 'myapp', volume_name: 'uploads' }),
     ).rejects.toThrow('not an OpenLander-managed volume');
 
-    const remove = vi.fn(async () => undefined);
-    dockerClient.getVolume.mockReturnValueOnce({
-      inspect: vi.fn(async () => ({
-        Labels: {
-          'openlander.managed': 'true',
-          'openlander.role': 'volume',
-        },
-      })),
-      remove,
+    docker.inspectVolume.mockResolvedValueOnce({
+      Labels: {
+        'openlander.managed': 'true',
+        'openlander.role': 'volume',
+      },
     });
     await expect(
       removeVolumeTool.execute({ project_name: 'myapp', volume_name: 'uploads' }),
@@ -474,6 +455,6 @@ describe('MCP volume and bucket tools', () => {
       volume: 'ol-vol-myapp-uploads',
       warning: 'All data in this volume has been permanently deleted.',
     });
-    expect(remove).toHaveBeenCalledTimes(1);
+    expect(docker.removeVolume).toHaveBeenCalledWith('ol-vol-myapp-uploads');
   });
 });

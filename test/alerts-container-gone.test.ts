@@ -61,12 +61,8 @@ describe('AlertMonitor missing container handling', () => {
     listProjects = vi.fn().mockReturnValue([createProject()]);
 
     docker = {
-      getClient: vi.fn().mockReturnValue({
-        getContainer: vi.fn().mockReturnValue({
-          inspect: vi.fn().mockRejectedValue(new Error('No such container')),
-        }),
-        listImages,
-      }),
+      inspectContainer: vi.fn().mockRejectedValue(new Error('No such container')),
+      getContainerStats: vi.fn(),
     } as unknown as Docker;
 
     db = {

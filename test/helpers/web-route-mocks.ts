@@ -10,23 +10,18 @@ import { DeployQueue } from '../../src/pipeline/deploy-queue.js';
 
 export function createMockDocker() {
   return {
-    getClient: vi.fn(() => ({
-      listContainers: vi.fn().mockResolvedValue([]),
-      getContainer: vi.fn().mockReturnValue({
-        stats: vi.fn().mockResolvedValue({
-          cpu_stats: {
-            cpu_usage: { total_usage: 100, percpu_usage: [100] },
-            system_cpu_usage: 1000,
-          },
-          precpu_stats: { cpu_usage: { total_usage: 0 } },
-          memory_stats: { usage: 1024 * 1024 * 100, limit: 1024 * 1024 * 1024 },
-        }),
-        start: vi.fn(),
-        logs: vi.fn().mockReturnValue({
-          on: vi.fn(),
-        }),
-      }),
-    })),
+    listAllContainers: vi.fn().mockResolvedValue([]),
+    inspectContainer: vi.fn(),
+    getContainerStats: vi.fn().mockResolvedValue({
+      cpu_stats: {
+        cpu_usage: { total_usage: 100, percpu_usage: [100] },
+        system_cpu_usage: 1000,
+      },
+      precpu_stats: { cpu_usage: { total_usage: 0 } },
+      memory_stats: { usage: 1024 * 1024 * 100, limit: 1024 * 1024 * 1024 },
+    }),
+    startContainer: vi.fn(),
+    getLogs: vi.fn().mockResolvedValue(''),
   };
 }
 

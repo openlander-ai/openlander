@@ -30,8 +30,7 @@ function createMockPlatformActionContext(overrides?: {
   const envMap = overrides?.environmentsByProject ?? {};
   const services = overrides?.services ?? [];
 
-  const inspect = vi.fn();
-  const getContainer = vi.fn(() => ({ inspect }));
+  const inspectContainer = vi.fn();
 
   const listManagedContainers = vi.fn(async () => containers);
   const stopContainer = vi.fn(async (_id: string) => undefined);
@@ -49,7 +48,7 @@ function createMockPlatformActionContext(overrides?: {
       stopContainer,
       removeContainer,
       safeRemoveContainer,
-      getClient: vi.fn(() => ({ getContainer })),
+      inspectContainer,
     },
     db: {
       listProjects,
@@ -66,8 +65,7 @@ function createMockPlatformActionContext(overrides?: {
       stopContainer,
       removeContainer,
       safeRemoveContainer,
-      getContainer,
-      inspect,
+      inspectContainer,
     },
     dbMocks: {
       listProjects,
@@ -217,7 +215,7 @@ describe('platform-action tools', () => {
       containers: [],
       projects: [{ id: 'p1', name: 'ghost-app', container_id: 'missing-c1', status: 'running' }],
     });
-    dockerMocks.inspect.mockRejectedValueOnce(new Error('No such container: missing-c1'));
+    dockerMocks.inspectContainer.mockRejectedValueOnce(new Error('No such container: missing-c1'));
 
     const result = (await getTool('platform_reconcile').execute(
       { confirm: true, dry_run: false },
@@ -239,7 +237,7 @@ describe('platform-action tools', () => {
       containers: [{ id: 'orphan-2', name: 'ol-orphan-2', image: 'img', status: 'running' }],
       projects: [{ id: 'p1', name: 'ghost-app', container_id: 'missing-c1', status: 'running' }],
     });
-    dockerMocks.inspect.mockRejectedValueOnce(new Error('No such container: missing-c1'));
+    dockerMocks.inspectContainer.mockRejectedValueOnce(new Error('No such container: missing-c1'));
 
     const result = (await getTool('platform_reconcile').execute(
       { confirm: true, dry_run: true },
@@ -282,7 +280,7 @@ describe('platform-action tools', () => {
 
   it('platform_force_remove protects infrastructure containers', async () => {
     const { ctx, dockerMocks } = createMockPlatformActionContext();
-    dockerMocks.inspect.mockResolvedValueOnce({
+    dockerMocks.inspectContainer.mockResolvedValueOnce({
       Name: '/ol-traefik',
       Config: { Labels: { 'openlander.role': 'proxy' } },
     });
@@ -300,7 +298,7 @@ describe('platform-action tools', () => {
 
   it('platform_force_remove returns not_found for missing container', async () => {
     const { ctx, dockerMocks } = createMockPlatformActionContext();
-    dockerMocks.inspect.mockRejectedValueOnce(new Error('No such container: missing-c1'));
+    dockerMocks.inspectContainer.mockRejectedValueOnce(new Error('No such container: missing-c1'));
 
     const result = await getTool('platform_force_remove').execute(
       { container_id: 'missing-c1', confirm: true },
@@ -314,7 +312,7 @@ describe('platform-action tools', () => {
 
   it('platform_force_remove stops and removes non-protected container', async () => {
     const { ctx, dockerMocks } = createMockPlatformActionContext();
-    dockerMocks.inspect.mockResolvedValueOnce({
+    dockerMocks.inspectContainer.mockResolvedValueOnce({
       Name: '/ol-app',
       Config: { Labels: { 'openlander.project': 'app' } },
     });

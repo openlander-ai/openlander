@@ -9,10 +9,6 @@ import { ContainerLifecycle } from '../../../src/pipeline/deploy/lifecycle.js';
 import type { Docker } from '../../../src/pipeline/docker.js';
 
 function createMockDocker(): Docker {
-  const removeImage = vi.fn().mockResolvedValue(undefined);
-  const getImage = vi.fn().mockReturnValue({ remove: removeImage });
-  const getClient = vi.fn().mockReturnValue({ getImage });
-
   return {
     stopContainer: vi.fn().mockResolvedValue(undefined),
     startContainer: vi.fn().mockResolvedValue(undefined),
@@ -22,7 +18,7 @@ function createMockDocker(): Docker {
     getLogs: vi.fn().mockResolvedValue(''),
     listManagedContainers: vi.fn().mockResolvedValue([]),
     cleanupSecretFiles: vi.fn(),
-    getClient,
+    removeImage: vi.fn().mockResolvedValue(undefined),
   } as unknown as Docker;
 }
 
@@ -212,10 +208,6 @@ describe('ContainerLifecycle', () => {
       assignedPort: 12001,
     });
     db.setEnvVar('archive-project', 'API_KEY', 'value-123');
-    const removeImage = vi.fn().mockResolvedValue(undefined);
-    const getImage = vi.fn().mockReturnValue({ remove: removeImage });
-    (docker.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ getImage });
-
     const tunnelManager = {
       close: vi.fn(),
     };
@@ -229,8 +221,9 @@ describe('ContainerLifecycle', () => {
     expect(docker.removeContainer as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       'container-archive',
     );
-    expect(getImage).toHaveBeenCalledWith('openlander/archive-app:latest');
-    expect(removeImage).toHaveBeenCalled();
+    expect(docker.removeImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'openlander/archive-app:latest',
+    );
     expect(tunnelManager.close).toHaveBeenCalledWith('archive-project');
     expect(db.getEnvVars('archive-project')).toEqual({ API_KEY: 'value-123' });
     expect(db.getProject('archive-project')?.archived_at).toBeTruthy();
@@ -288,15 +281,14 @@ describe('ContainerLifecycle', () => {
       status: 'running',
     });
 
-    const removeImage = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('image is referenced in multiple repositories'));
-    const getImage = vi.fn().mockReturnValue({ remove: removeImage });
-    (docker.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ getImage });
+    (docker.removeImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('image is referenced in multiple repositories'),
+    );
 
     await expect(lifecycle.archive('image-fail-project')).resolves.toBeUndefined();
-    expect(getImage).toHaveBeenCalledWith('openlander/image-fail-app:latest');
-    expect(removeImage).toHaveBeenCalled();
+    expect(docker.removeImage as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      'openlander/image-fail-app:latest',
+    );
     expect(db.getProject('image-fail-project')?.archived_at).toBeTruthy();
   });
 

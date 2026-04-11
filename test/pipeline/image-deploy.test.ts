@@ -76,8 +76,8 @@ describe('image deployment branching', () => {
   });
 
   it('detects lowest non-management EXPOSE port from inspect result', async () => {
-    const mockImage = {
-      inspect: vi.fn().mockResolvedValue({
+    const mockDocker = {
+      inspectImage: vi.fn().mockResolvedValue({
         Config: {
           ExposedPorts: {
             '9090/tcp': {},
@@ -86,14 +86,6 @@ describe('image deployment branching', () => {
           },
         },
       }),
-    };
-
-    const mockClient = {
-      getImage: vi.fn().mockReturnValue(mockImage),
-    };
-
-    const mockDocker = {
-      getClient: vi.fn().mockReturnValue(mockClient),
     } as unknown as Docker;
 
     const port = await getImageExposedPort(mockDocker, 'ghcr.io/openlander/web:v2');
