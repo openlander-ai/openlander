@@ -4,13 +4,13 @@ import type { ToolContext, ToolDef } from '../tools/defs/types.js';
 /**
  * MCP Composite Tool Mapping
  *
- * Maps all 69 non-platform MCP-exposed tools into 4 composite action groups.
+ * Maps all 70 non-platform MCP-exposed tools into 4 composite action groups.
  * Platform tools (11 total) are gated separately via config.mcp.platformTools.
  *
  * Mapping Principles:
  * - Each tool appears in exactly ONE composite
- * - 4 composites + 1 platform group = 80 total tools
- * - Non-platform total: 69 tools (verified by test/mcp/tool-registry-snapshot.test.ts)
+ * - 4 composites + 1 platform group = 81 total tools
+ * - Non-platform total: 70 tools (verified by test/mcp/tool-registry-snapshot.test.ts)
  * - Platform total: 11 tools (gated by config.mcp.platformTools)
  */
 
@@ -124,7 +124,8 @@ export const SERVICE_ACTIONS = [
  * - Health alerts & dismissal
  * - Project statistics
  * - Recovery automation policy
- * Total: 7 tools
+ * - Host/endpoint connectivity probing
+ * Total: 8 tools
  */
 export const MONITOR_ACTIONS = [
   'get_logs',
@@ -134,6 +135,7 @@ export const MONITOR_ACTIONS = [
   'get_project_stats',
   'get_automation_policy',
   'set_automation_policy',
+  'probe_host',
 ] as const;
 
 /**
@@ -165,11 +167,11 @@ export const PLATFORM_ACTIONS = [
  * - DEPLOY_ACTIONS: 20 tools
  * - PROJECT_ACTIONS: 21 tools
  * - SERVICE_ACTIONS: 20 tools
- * - MONITOR_ACTIONS: 7 tools
+ * - MONITOR_ACTIONS: 8 tools
  * - PLATFORM_ACTIONS: 11 tools (gated separately)
- * - Total non-platform: 69 tools (verified against test/mcp/tool-registry-snapshot.test.ts)
- * - Total with platform: 80 tools (11 platform)
- * Note: DEPLOY_ACTIONS(20) + PROJECT_ACTIONS(21) + SERVICE_ACTIONS(20) + MONITOR_ACTIONS(7) = 68, not 69
+ * - Total non-platform: 70 tools (verified against test/mcp/tool-registry-snapshot.test.ts)
+ * - Total with platform: 81 tools (11 platform)
+ * Note: DEPLOY_ACTIONS(20) + PROJECT_ACTIONS(21) + SERVICE_ACTIONS(20) + MONITOR_ACTIONS(8) = 69, not 70
  * The 1-off is because create_database / list_databases were not included (create_service_database merged into create_database, but create_database itself is service.ts:205-235 which targets 'agent')
  */
 
@@ -310,7 +312,7 @@ export function createOpenLanderServiceCompositeTool(toolDefs: ToolDef[]): Compo
 export function createOpenLanderMonitorCompositeTool(toolDefs: ToolDef[]): CompositeTool {
   return createCompositeTool(
     'openlander_monitor',
-    'Logs, system stats, alerts, project stats, and automation policy operations.',
+    'Logs, system stats, alerts, project stats, automation policy, and host connectivity probing.',
     toolDefs,
   );
 }

@@ -66,6 +66,7 @@ const EXPECTED_TOOLS = [
   'list_volumes',
   'map_domain',
   'preview_deploy',
+  'probe_host',
   'redeploy_project',
   'remove_secret_file',
   'remove_service',
@@ -123,11 +124,11 @@ describe('MCP Tool Registry Snapshot', () => {
     expect(mcpTools).toEqual(EXPECTED_TOOLS);
   });
 
-  it('maintains exactly 69 non-platform MCP tools', () => {
+  it('maintains exactly 70 non-platform MCP tools', () => {
     const toolDefs = getMcpToolDefs(false);
     const mcpTools = toolDefs.filter(isMcpTargeted);
 
-    expect(mcpTools).toHaveLength(69);
+    expect(mcpTools).toHaveLength(70);
   });
 
   it('all MCP tools have valid names (snake_case)', () => {

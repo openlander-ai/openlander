@@ -745,3 +745,31 @@ export const cleanupDockerSchema = z.object({
       'Cleanup intensity. soft: dangling (untagged) images only — fast, minimal impact. standard: dangling images + all build cache — frees more space but next build will be slower. aggressive: standard + all unused images older than 24h — frees the most space but may remove rollback images and cached base images.',
     ),
 });
+
+export const probeHostSchema = z.object({
+  target: z.string().min(1).describe('Hostname, IP, URL, or "container-name:port" to probe'),
+  port: z
+    .number()
+    .int()
+    .positive()
+    .max(65535)
+    .optional()
+    .describe('Port to probe (required for TCP mode, optional for HTTP)'),
+  protocol: z
+    .enum(['http', 'https', 'tcp'])
+    .optional()
+    .describe('Protocol to use (default: auto-detect from target)'),
+  path: z.string().optional().describe('HTTP path to probe (default: "/")'),
+  timeout_ms: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Timeout in milliseconds (default: 5000)'),
+  internal: z
+    .boolean()
+    .optional()
+    .describe(
+      'If true, probe from inside a running managed container (useful for container-to-container DNS). Default: false.',
+    ),
+});
