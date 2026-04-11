@@ -13,6 +13,7 @@ import { createSystemRoutes } from './system-routes.js';
 import { createAiUsageRoutes } from './ai-usage-routes.js';
 import { createApprovalRoutes } from './approval-routes.js';
 import { createOpsRoutes } from './ops-routes.js';
+import { createOverviewRoutes } from './overview-routes.js';
 import { containerName as projectContainerName } from '../../pipeline/helpers.js';
 import { getEnvironmentProjectHostname, getAllIps } from '../../pipeline/traefik.js';
 
@@ -517,6 +518,7 @@ export function createApiRoutes(ctx: AppContext): Hono {
   api.route('/', createAiUsageRoutes(ctx));
   api.route('/', createApprovalRoutes(ctx));
   api.route('/ops', createOpsRoutes(ctx));
+  api.route('/', createOverviewRoutes(ctx));
 
   return api;
 }
