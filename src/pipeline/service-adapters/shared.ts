@@ -25,13 +25,18 @@ export async function execInServiceContainer(
   let timedOut = false;
 
   try {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+      timer = setTimeout(() => {
         reject(new Error('exec timeout'));
       }, timeoutMs);
     });
 
-    execResult = await Promise.race([docker.execSimple(containerId, command), timeoutPromise]);
+    try {
+      execResult = await Promise.race([docker.execSimple(containerId, command), timeoutPromise]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   } catch (error) {
     if (error instanceof Error && error.message === 'exec timeout') {
       timedOut = true;

@@ -138,12 +138,21 @@ async function recoverService(
       await ctx.docker.pullImage(service.image);
     }
 
-    const rawEnvVars: string[] = service.env_vars ? (JSON.parse(service.env_vars) as string[]) : [];
     const envVars: Record<string, string> = {};
-    for (const entry of rawEnvVars) {
-      const eqIdx = entry.indexOf('=');
-      if (eqIdx > 0) {
-        envVars[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+    if (service.env_vars) {
+      const parsed: unknown = JSON.parse(service.env_vars);
+      if (Array.isArray(parsed)) {
+        for (const entry of parsed) {
+          if (typeof entry === 'string') {
+            const eqIdx = entry.indexOf('=');
+            if (eqIdx > 0) {
+              envVars[entry.slice(0, eqIdx)] = entry.slice(eqIdx + 1);
+            }
+          } else if (entry && typeof entry === 'object' && 'key' in entry && 'value' in entry) {
+            const kv = entry as { key: unknown; value: unknown };
+            envVars[String(kv.key)] = String(kv.value);
+          }
+        }
       }
     }
 
@@ -161,13 +170,16 @@ async function recoverService(
       containerPort,
       envVars,
       cmd: template?.cmd,
-      traefikLabels: {
+      labels: {
+        [DOCKER_LABELS.MANAGED]: 'true',
         [DOCKER_LABELS.ROLE]: 'service',
         [DOCKER_LABELS.SERVICE]: service.name,
       },
+      traefikLabels: {},
       network: SHARED_NETWORK_NAME,
       restartPolicy: { Name: 'unless-stopped' },
       extraBinds: [`${vName}:${dataMountPath}`],
+      healthcheck: template?.healthcheck,
     });
 
     ctx.db.updateService(service.id, { status: 'running', containerId });

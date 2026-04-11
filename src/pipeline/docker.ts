@@ -479,11 +479,32 @@ export class Docker {
     const volumeBinds = await this.getProjectVolumeBinds(projectName);
     const binds = [...secretBinds, ...volumeBinds, ...(options.extraBinds ?? [])];
 
+    const healthcheck = options.healthcheck
+      ? {
+          Test:
+            typeof options.healthcheck.test === 'string'
+              ? ['CMD-SHELL', options.healthcheck.test]
+              : options.healthcheck.test,
+          ...(options.healthcheck.interval !== undefined
+            ? { Interval: options.healthcheck.interval * 1_000_000_000 }
+            : {}),
+          ...(options.healthcheck.timeout !== undefined
+            ? { Timeout: options.healthcheck.timeout * 1_000_000_000 }
+            : {}),
+          ...(options.healthcheck.retries !== undefined
+            ? { Retries: options.healthcheck.retries }
+            : {}),
+          ...(options.healthcheck.start_period !== undefined
+            ? { StartPeriod: options.healthcheck.start_period * 1_000_000_000 }
+            : {}),
+        }
+      : undefined;
+
     const container = await this.client.createContainer({
       Image: options.imageTag,
       name: options.name,
       Env: envArray,
-      Labels: {
+      Labels: options.labels ?? {
         [DOCKER_LABELS.MANAGED]: 'true',
         [DOCKER_LABELS.PROJECT]: stripContainerPrefix(options.name),
         ...options.traefikLabels,
@@ -492,6 +513,7 @@ export class Docker {
         [`${String(cPort)}/tcp`]: {},
       },
       Cmd: options.cmd,
+      Healthcheck: healthcheck,
       NetworkingConfig: networkingConfig,
       HostConfig: {
         PortBindings: {
@@ -1219,14 +1241,9 @@ export class Docker {
     return await this.client.df();
   }
 
-  /** Inspect a volume. */
+  /** Inspect a volume. Throws the raw Docker 404 error if not found (use isDockerNotFoundError to check). */
   async inspectVolume(name: string): Promise<Dockerode.VolumeInspectInfo> {
-    try {
-      return await this.client.getVolume(name).inspect();
-    } catch (error) {
-      if (isDockerNotFoundError(error)) throw new Error(`Volume not found: ${name}`);
-      throw error;
-    }
+    return await this.client.getVolume(name).inspect();
   }
 
   /** List volumes with optional filters. */

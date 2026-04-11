@@ -536,14 +536,14 @@ describe('inspectVolume', () => {
     expect(mockGetVolume).toHaveBeenCalledWith('my-vol');
   });
 
-  it('throws "Volume not found" error when volume does not exist', async () => {
+  it('propagates Docker 404 error when volume does not exist', async () => {
     mockGetVolume.mockReturnValueOnce({
       inspect: vi.fn().mockRejectedValueOnce(new Error('No such volume: missing-vol')),
     });
 
     const docker = new Docker();
     await expect(docker.inspectVolume('missing-vol')).rejects.toThrow(
-      'Volume not found: missing-vol',
+      'No such volume: missing-vol',
     );
   });
 });
