@@ -22,6 +22,10 @@ import { CircuitBreakerWidget } from '@/components/ops/v2/CircuitBreakerWidget';
 import { IncidentDetailSlideover } from '@/components/ops/v2/IncidentDetailSlideover';
 import { KeyboardShortcutsHelp } from '@/components/ops/v2/KeyboardShortcutsHelp';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ApprovalsTab } from '@/components/ops/ApprovalsTab';
+import { PostmortemsTab } from '@/components/ops/PostmortemsTab';
+import { PatternsTab } from '@/components/ops/PatternsTab';
+import { UsageTab } from '@/components/ops/UsageTab';
 import { cn } from '@/lib/utils';
 import type { CircuitBreakerState, ActivityItem } from '@/lib/api/operations';
 
@@ -379,21 +383,19 @@ export function OpsCenterV2() {
               </TabsContent>
 
               <TabsContent value="approvals">
-                <div className="p-6 text-muted-foreground text-sm">Approvals view coming soon</div>
+                <ApprovalsTab />
               </TabsContent>
 
               <TabsContent value="postmortems">
-                <div className="p-6 text-muted-foreground text-sm">
-                  Postmortems view coming soon
-                </div>
+                <PostmortemsTab />
               </TabsContent>
 
               <TabsContent value="patterns">
-                <div className="p-6 text-muted-foreground text-sm">Patterns view coming soon</div>
+                <PatternsTab />
               </TabsContent>
 
               <TabsContent value="usage">
-                <div className="p-6 text-muted-foreground text-sm">Usage view coming soon</div>
+                <UsageTab />
               </TabsContent>
             </Tabs>
           </div>
