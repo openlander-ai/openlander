@@ -1,4 +1,14 @@
 export const translations = {
+  nav: {
+    overview: 'Overview',
+    deployments: 'Deployments',
+  },
+  pulse: {
+    deploying: 'Deploying',
+    recovery: 'Recovery',
+    approval: 'Approval',
+    aiSpend: 'AI Spend',
+  },
   setup: {
     welcome: {
       title: 'I am OpenLander',

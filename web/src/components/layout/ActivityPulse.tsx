@@ -4,6 +4,7 @@ import { Rocket, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { usePollingTask } from '@/hooks/use-polling-task';
 import { apiGet } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '../../i18n/context.js';
 
 interface OverviewStats {
   active_deploys: number;
@@ -16,6 +17,7 @@ interface OverviewStats {
 
 export function ActivityPulse() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [stats, setStats] = useState<OverviewStats | null>(null);
 
   const fetchStats = useCallback(async () => {
@@ -55,7 +57,7 @@ export function ActivityPulse() {
       >
         <Rocket className="h-3.5 w-3.5" />
         <span className="font-mono">{stats.active_deploys}</span>
-        <span className="hidden md:inline">Deploying</span>
+        <span className="hidden md:inline">{t('pulse.deploying')}</span>
       </button>
 
       {/* Active Recoveries */}
@@ -71,7 +73,7 @@ export function ActivityPulse() {
       >
         <RefreshCw className={cn('h-3.5 w-3.5', stats.active_recoveries > 0 && 'animate-spin')} />
         <span className="font-mono">{stats.active_recoveries}</span>
-        <span className="hidden md:inline">Recovery</span>
+        <span className="hidden md:inline">{t('pulse.recovery')}</span>
       </button>
 
       {/* Pending Approvals */}
@@ -87,7 +89,7 @@ export function ActivityPulse() {
       >
         <ShieldCheck className="h-3.5 w-3.5" />
         <span className="font-mono">{stats.pending_approvals}</span>
-        <span className="hidden md:inline">Approval</span>
+        <span className="hidden md:inline">{t('pulse.approval')}</span>
       </button>
 
       {/* AI Spend */}
@@ -99,10 +101,11 @@ export function ActivityPulse() {
             ? 'text-agent hover:bg-agent/10'
             : 'text-muted-foreground hover:bg-bg-subtle opacity-50',
         )}
-        title="AI Spend Today"
+        title={t('pulse.aiSpend')}
       >
         <Sparkles className="h-3.5 w-3.5" />
         <span className="font-mono">{formatSpend(stats.ai_spend_today)}</span>
+        <span className="hidden md:inline">{t('pulse.aiSpend')}</span>
       </button>
     </div>
   );

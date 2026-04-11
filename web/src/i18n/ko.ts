@@ -1,4 +1,14 @@
 export const translations = {
+  nav: {
+    overview: '개요',
+    deployments: '배포',
+  },
+  pulse: {
+    deploying: '배포 중',
+    recovery: '복구 중',
+    approval: '승인 대기',
+    aiSpend: 'AI 비용',
+  },
   setup: {
     welcome: {
       title: 'OpenLander입니다',
