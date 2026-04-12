@@ -48,7 +48,7 @@ export function ActivityPulse() {
       <button
         onClick={() => navigate('/deployments')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
           stats.active_deploys > 0
             ? 'bg-primary-ol/10 text-primary-ol hover:bg-primary-ol/20'
             : 'text-muted-foreground bg-muted/50 hover:bg-muted',
@@ -64,7 +64,7 @@ export function ActivityPulse() {
       <button
         onClick={() => navigate('/operations')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
           stats.active_recoveries > 0
             ? 'bg-warning/10 text-warning hover:bg-warning/20'
             : 'text-muted-foreground bg-muted/50 hover:bg-muted',
@@ -80,7 +80,7 @@ export function ActivityPulse() {
       <button
         onClick={() => navigate('/operations?tab=approvals')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
           stats.pending_approvals > 0
             ? 'bg-error/10 text-error hover:bg-error/20'
             : 'text-muted-foreground bg-muted/50 hover:bg-muted',
@@ -96,7 +96,7 @@ export function ActivityPulse() {
       <button
         onClick={() => navigate('/operations?tab=incidents')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
           stats.open_incidents > 0
             ? 'bg-error/10 text-error hover:bg-error/20'
             : 'text-muted-foreground bg-muted/50 hover:bg-muted',
@@ -112,14 +112,14 @@ export function ActivityPulse() {
       <button
         onClick={() => navigate('/operations?tab=usage')}
         className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors',
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
           stats.ai_spend_today > 0
             ? 'text-agent hover:bg-agent/10'
             : 'text-muted-foreground bg-muted/50 hover:bg-muted',
         )}
         title={t('pulse.aiSpend')}
       >
-        <DollarSign className="h-3.5 w-3.5" />
+        <DollarSign className="h-3.5 w-3.5 shrink-0" />
         <span className="font-mono">{formatSpend(stats.ai_spend_today)}</span>
         <span className="hidden md:inline">{t('pulse.aiSpend')}</span>
       </button>

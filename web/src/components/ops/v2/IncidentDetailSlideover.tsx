@@ -87,7 +87,7 @@ export function IncidentDetailSlideover({ incidentId, onClose }: IncidentDetailS
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
                     <SheetTitle className="text-lg font-display font-semibold text-primary-ol">
-                      {incident.title}
+                      {humanizeEventType(incident.title, t)}
                     </SheetTitle>
                     <SheetDescription className="text-sm text-secondary-ol">
                       {incident.projectName || incident.project_id}
